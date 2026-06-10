@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>BAZ BIOMEDIC — AS 처리 보고서</title>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
+<style>
+  :root{
+    --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+    --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+    --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    background:var(--gray-bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%;}
+  header{background:var(--navy);padding:14px 20px;display:flex;align-items:center;
+    justify-content:space-between;position:sticky;top:0;z-index:100;}
+  header .logo-area{display:flex;align-items:center;gap:10px;}
+  header .logo-area svg{width:36px;height:36px;}
+  header h1{font-size:15px;font-weight:700;color:#CADCFC;letter-spacing:.04em;}
+  header .subtitle{font-size:11px;color:rgba(202,220,252,.65);margin-top:1px;}
+  .progress-bar{height:3px;background:var(--gray-line);position:relative;}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--teal),#5BB8D8);
+    width:0%;transition:width .4s ease;}
+  .step-indicator{display:flex;justify-content:center;gap:8px;padding:16px 20px 4px;}
+  .step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-size:12px;font-weight:700;background:var(--gray-line);
+    color:var(--text-muted);transition:all .3s;}
+  .step-dot.active{background:var(--teal);color:#fff;box-shadow:0 2px 8px rgba(46,125,158,.4);}
+  .step-dot.done{background:var(--navy);color:#fff;}
+  .step-connector{width:24px;height:2px;background:var(--gray-line);align-self:center;
+    border-radius:2px;transition:background .3s;}
+  .step-connector.done{background:var(--navy);}
+  .step-label{text-align:center;font-size:11px;color:var(--text-muted);
+    padding:4px 20px 14px;font-weight:500;}
+  .card{background:#fff;border-radius:14px;margin:0 16px 14px;overflow:hidden;
+    box-shadow:0 1px 4px rgba(27,47,94,.08);}
+  .card-header{background:var(--navy);padding:11px 16px;display:flex;align-items:center;gap:8px;}
+  .card-header .badge-icon{width:22px;height:22px;background:rgba(202,220,252,.18);
+    border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;}
+  .card-header h2{font-size:13px;font-weight:700;color:#CADCFC;letter-spacing:.03em;}
+  .card-body{padding:16px;}
+  .field-group{margin-bottom:14px;} .field-group:last-child{margin-bottom:0;}
+  label{display:block;font-size:11px;font-weight:700;color:var(--navy);margin-bottom:6px;
+    letter-spacing:.02em;text-transform:uppercase;}
+  label .required{color:var(--red);margin-left:2px;}
+  input[type="text"],input[type="date"],select,textarea{width:100%;
+    border:1.5px solid var(--gray-line);border-radius:8px;padding:11px 13px;font-size:16px;
+    font-family:inherit;color:var(--text);background:#fff;outline:none;
+    transition:border-color .2s,box-shadow .2s;appearance:none;-webkit-appearance:none;}
+  input:focus,select:focus,textarea:focus{border-color:var(--teal);
+    box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  textarea{resize:vertical;min-height:80px;line-height:1.6;}
+  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .photo-zone{border:2px dashed var(--gray-line);border-radius:12px;padding:20px 14px;
+    display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:all .2s;
+    background:var(--gray-bg);position:relative;text-align:center;}
+  .photo-zone:hover,.photo-zone.dragover{border-color:var(--teal);background:var(--teal-soft);}
+  .photo-zone.video-zone{border-color:#B49ED8;background:#F3EEFA;}
+  .photo-zone.video-zone:hover{border-color:#8A5FC0;background:#EBE0F7;}
+  .photo-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;
+    width:100%;height:100%;}
+  .photo-zone .icon{font-size:30px;margin-bottom:6px;line-height:1;}
+  .photo-zone .primary-text{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:3px;}
+  .photo-zone .hint-text{font-size:11px;color:var(--text-muted);}
+  .photo-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+  .media-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
+  .photo-slot{display:flex;flex-direction:column;}
+  .photo-slot .slot-label{font-size:10px;font-weight:700;color:var(--text-muted);
+    text-align:center;margin-bottom:5px;}
+  .photo-slot .slot-label.video{color:#8A5FC0;}
+  .photo-preview{margin-top:8px;border-radius:8px;overflow:hidden;display:none;position:relative;}
+  .photo-preview img,.photo-preview video{width:100%;max-height:120px;object-fit:cover;display:block;}
+  .photo-preview .remove-btn{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);
+    color:#fff;border:none;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;}
+  .tag-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+  .tag{background:var(--teal-soft);border:1px solid #BCD9E8;color:var(--teal);
+    font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .15s;}
+  .tag:hover{background:var(--teal);color:#fff;border-color:var(--teal);}
+  .step-page{display:none;} .step-page.active{display:block;}
+  .nav-bar{padding:12px 16px 24px;display:flex;gap:10px;}
+  .btn-prev{flex:0 0 auto;padding:13px 20px;border-radius:10px;border:1.5px solid var(--gray-line);
+    background:#fff;color:var(--text-muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+  .btn-next{flex:1;padding:13px;border-radius:10px;border:none;background:var(--navy);color:#fff;
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em;
+    transition:background .2s;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .btn-next:active{background:var(--navy-light);}
+  .btn-generate{flex:1;padding:14px;border-radius:10px;border:none;
+    background:linear-gradient(135deg,var(--teal) 0%,var(--navy) 100%);color:#fff;
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em;
+    transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .btn-generate:active{opacity:.92;}
+  .preview-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .preview-table tr:not(:last-child) td{border-bottom:1px solid var(--gray-line);}
+  .preview-table td{padding:9px 12px;}
+  .preview-table td:first-child{font-weight:700;color:var(--navy);width:38%;
+    background:var(--gray-bg);font-size:12px;}
+  .preview-photos{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
+  .preview-photos img,.preview-photos video{width:100%;height:90px;object-fit:cover;border-radius:8px;display:block;}
+  .text-block{background:var(--gray-bg);border-radius:8px;padding:12px;font-size:13px;
+    line-height:1.65;color:var(--text);white-space:pre-wrap;}
+  .success-screen{text-align:center;padding:40px 24px 20px;}
+  .success-icon{font-size:56px;margin-bottom:16px;line-height:1;}
+  .success-screen h2{font-size:20px;font-weight:800;color:var(--navy);margin-bottom:8px;}
+  .success-screen p{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:28px;}
+  .btn-download{display:block;width:100%;padding:14px;border-radius:10px;background:var(--navy);
+    color:#fff;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-restart{display:block;width:100%;padding:13px;border-radius:10px;background:#fff;
+    color:var(--text-muted);font-size:14px;font-weight:600;border:1.5px solid var(--gray-line);
+    cursor:pointer;font-family:inherit;}
+  .btn-kakao{display:flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:10px;background:#FEE500;color:#3A1D1D;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-kakao:active{opacity:.85;}
+  .btn-copy{display:block;width:100%;padding:13px;border-radius:10px;background:#EAF4F8;color:#2E7D9E;font-size:14px;font-weight:700;border:1.5px solid #BCD9E8;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-copy:active{background:#D0EAF3;}
+  .btn-print{display:block;width:100%;padding:13px;border-radius:10px;background:#F5F7FA;color:#4A4A4A;font-size:14px;font-weight:700;border:1.5px solid #DDE3EE;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-print:active{background:#E8ECF2;}
+  @media print{header,.progress-bar,.step-indicator,.step-label,.nav-bar,.btn-kakao,.btn-copy,.btn-print,.btn-restart,.btn-download{display:none!important;} .step-page{display:block!important;} .card{box-shadow:none;margin:0 0 12px;} body{background:#fff;}}
+  button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
+  @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
+</style>
+<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
+</head>
+<body>
+<header>
+  <div class="logo-area">
+    <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
+      <text x="2"  y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
+      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
+      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
+    </svg>
+    <div><h1>AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
+  </div>
+</header>
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="step-indicator">
+  <div class="step-dot active" id="dot1">1</div><div class="step-connector" id="con1"></div>
+  <div class="step-dot" id="dot2">2</div><div class="step-connector" id="con2"></div>
+  <div class="step-dot" id="dot3">3</div><div class="step-connector" id="con3"></div>
+  <div class="step-dot" id="dot4">✓</div>
+</div>
+<div class="step-label" id="stepLabel">접수 정보 입력</div>
+
+<!-- STEP 1 -->
+<div class="step-page active" id="step1">
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">🏥</div><h2>AS 접수 정보</h2></div>
+    <div class="card-body">
+      <div class="field-group"><label>병원명 <span class="required">*</span></label>
+        <input type="text" id="hospital" placeholder="예) 미모드림의원 천호"></div>
+      <div class="row-2">
+        <div class="field-group"><label>장비 S/N <span class="required">*</span></label>
+          <input type="text" id="serialNo" placeholder="예) BYB018"></div>
+        <div class="field-group"><label>제조일</label>
+          <input type="text" id="mfgDate" placeholder="예) 2022년 11월"></div>
+      </div>
+      <div class="field-group"><label>UI / FW / H.P Ver</label>
+        <input type="text" id="version" placeholder="예) 2.1.1 / 2.6 / 1.2.2"></div>
+      <div class="row-2">
+        <div class="field-group"><label>발생 일자 <span class="required">*</span></label>
+          <input type="date" id="issueDate"></div>
+        <div class="field-group"><label>담당자 <span class="required">*</span></label>
+          <input type="text" id="engineer" placeholder="예) 홍 길 동"></div>
+      </div>
+      <div class="field-group"><label>요청사항 (토픽)</label>
+        <input type="text" id="requestDetail" placeholder="예) 노즐 인식 불가"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">🔧</div><h2>내부 수리 부품</h2></div>
+    <div class="card-body">
+      <div class="field-group"><label>부품명</label>
+        <input type="text" id="partName" placeholder="예) RFID Module A'ssy"></div>
+      <div class="field-group"><label>교체 사유</label>
+        <input type="text" id="partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건"></div>
+    </div>
+  </div>
+  <div class="nav-bar"><button type="button" class="btn-next" data-go="2">다음 — 사진 첨부 →</button></div>
+</div>
+
+<!-- STEP 2 -->
+<div class="step-page" id="step2">
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">📷</div><h2>접수 증상 사진 (좌측 · 최대 3컷)</h2></div>
+    <div class="card-body"><div class="photo-grid" id="symGrid"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">📸</div><h2>접수 현상 사진 3컷 + 동영상 1개 (우측)</h2></div>
+    <div class="card-body"><div class="media-grid" id="phenGrid"></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;">
+        💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 <b>30초 이내 짧은 영상</b>을 권장합니다.</div>
+    </div>
+  </div>
+  <div class="nav-bar">
+    <button type="button" class="btn-prev" data-go="1">← 이전</button>
+    <button type="button" class="btn-next" data-go="3">다음 — 원인 분석 →</button>
+  </div>
+</div>
+
+<!-- STEP 3 -->
+<div class="step-page" id="step3">
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">🔍</div><h2>고장 원인 분석</h2></div>
+    <div class="card-body">
+      <div class="field-group"><label>접수 증상 <span class="required">*</span></label>
+        <div class="tag-suggestions">
+          <span class="tag" data-field="symptom" data-text="노즐 인식 불가">노즐 인식 불가</span>
+          <span class="tag" data-field="symptom" data-text="USB 장치 인식 불량">USB 인식 불량</span>
+          <span class="tag" data-field="symptom" data-text="장비 전원 불량">전원 불량</span>
+          <span class="tag" data-field="symptom" data-text="분사 불량">분사 불량</span>
+          <span class="tag" data-field="symptom" data-text="화면 오류">화면 오류</span>
+        </div>
+        <textarea id="symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태."></textarea></div>
+      <div class="field-group"><label>불량 원인 <span class="required">*</span></label>
+        <div class="tag-suggestions">
+          <span class="tag" data-field="cause" data-text="USB 장치 인식 불량에 따른 동작 불가">USB 인식 불량</span>
+          <span class="tag" data-field="cause" data-text="약액 역분리로 인한 노즐 막힘">약액 역분리</span>
+          <span class="tag" data-field="cause" data-text="Luer-lock 체결 불량">Luer-lock 불량</span>
+          <span class="tag" data-field="cause" data-text="노즐 재사용으로 인한 멤브레인 손상">멤브레인 손상</span>
+        </div>
+        <textarea id="cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가"></textarea></div>
+      <div class="field-group"><label>해결 방법 <span class="required">*</span></label>
+        <div class="tag-suggestions">
+          <span class="tag" data-field="solution" data-text="RFID Module 내 USB 장치 교환">USB 장치 교환</span>
+          <span class="tag" data-field="solution" data-text="노즐 교체 후 프라이밍 진행">노즐 교체</span>
+          <span class="tag" data-field="solution" data-text="약액 재조제 후 재투여">약액 재조제</span>
+          <span class="tag" data-field="solution" data-text="Luer-lock 재체결">Luer-lock 재체결</span>
+        </div>
+        <textarea id="solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능"></textarea></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">💬</div><h2>처리 의견 / 피드백</h2></div>
+    <div class="card-body">
+      <div class="field-group"><label>엔지니어 처리 의견</label>
+        <textarea id="opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요."></textarea></div>
+      <div class="field-group"><label>고객 피드백</label>
+        <textarea id="feedback" placeholder="고객 피드백 내용을 입력하세요."></textarea></div>
+    </div>
+  </div>
+  <div class="nav-bar">
+    <button type="button" class="btn-prev" data-go="2">← 이전</button>
+    <button type="button" class="btn-next" data-go="4">다음 — 최종 확인 →</button>
+  </div>
+</div>
+
+<!-- STEP 4 -->
+<div class="step-page" id="step4">
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">📋</div><h2>AS 접수 정보 확인</h2></div>
+    <div class="card-body" style="padding:0;"><table class="preview-table" id="previewInfoTable"></table></div>
+  </div>
+  <div class="card" id="previewPhotoCard" style="display:none;">
+    <div class="card-header"><div class="badge-icon">📷</div><h2>첨부 미디어</h2></div>
+    <div class="card-body">
+      <label style="margin-bottom:6px;">접수 증상</label>
+      <div class="preview-photos" id="previewSymPhotos"></div>
+      <div style="height:12px;"></div>
+      <label style="margin-bottom:6px;">접수 현상 (사진 3 + 동영상)</label>
+      <div class="preview-photos" id="previewPhenPhotos"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="badge-icon">🔍</div><h2>고장 원인 분석</h2></div>
+    <div class="card-body">
+      <label style="margin-bottom:6px;">접수 증상</label><div class="text-block" id="previewSymptom"></div>
+      <div style="height:12px;"></div>
+      <label style="margin-bottom:6px;">불량 원인</label><div class="text-block" id="previewCause"></div>
+      <div style="height:12px;"></div>
+      <label style="margin-bottom:6px;">해결 방법</label><div class="text-block" id="previewSolution"></div>
+    </div>
+  </div>
+  <div class="nav-bar">
+    <button type="button" class="btn-prev" data-go="3">← 이전</button>
+    <button type="button" class="btn-generate" data-action="generate"><span>📊</span> PPT 생성 및 다운로드</button>
+  </div>
+</div>
+
+<!-- STEP 5 -->
+<div class="step-page" id="step5">
+  <div class="success-screen">
+    <div class="success-icon">✅</div>
+    <h2>보고서가 완성되었습니다</h2>
+    <p>AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
+  </div>
+  <div style="padding:0 16px 24px;">
+    <button type="button" class="btn-download" data-action="redownload">📥 다시 다운로드</button>
+    <button type="button" class="btn-kakao" data-action="kakaoShare">
+      <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;" alt="">카카오톡으로 공유
+    </button>
+    <button type="button" class="btn-copy" data-action="copyText">📋 보고서 내용 복사</button>
+    <button type="button" class="btn-print" data-action="printReport">🖨️ 인쇄 / PDF 저장</button>
+    <button type="button" class="btn-restart" data-action="restart">새 보고서 작성</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  if(typeof window.PptxGenJS==="undefined"&&typeof window.pptxgen!=="undefined") window.PptxGenJS=window.pptxgen;
+  if(typeof window.pptxgen==="undefined"&&typeof window.PptxGenJS!=="undefined") window.pptxgen=window.PptxGenJS;
+})();
+
+let currentStep=1;
+const symPhotos=[null,null,null];
+const phenPhotos=[null,null,null];
+// 동영상: {data:base64dataURL(video), poster:jpegDataURL, ext:'mp4'}
+let phenVideo=null;
+const STEP_LABELS=['접수 정보 입력','사진/영상 첨부','원인 분석','최종 확인'];
+const STEP_PROGRESS=['14%','38%','65%','90%'];
+
+function buildPhotoSlots(){
+  const symGrid=document.getElementById('symGrid');
+  const phenGrid=document.getElementById('phenGrid');
+  symGrid.innerHTML=''; phenGrid.innerHTML='';
+  for(let i=0;i<3;i++){ symGrid.appendChild(makeSlot('sym',i)); }
+  for(let i=0;i<3;i++){ phenGrid.appendChild(makeSlot('phen',i)); }
+  phenGrid.appendChild(makeVideoSlot());
+}
+function makeSlot(kind,idx){
+  const wrap=document.createElement('div'); wrap.className='photo-slot';
+  wrap.innerHTML=`
+    <div class="slot-label">${kind==='sym'?'증상':'현상'} ${idx+1}</div>
+    <div class="photo-zone" id="${kind}Zone${idx}">
+      <input type="file" accept="image/*" id="${kind}File${idx}">
+      <div class="icon">📸</div>
+      <div class="primary-text" style="font-size:11px;">사진</div>
+      <div class="hint-text">탭하여 추가</div>
+    </div>
+    <div class="photo-preview" id="${kind}Prev${idx}">
+      <img id="${kind}Img${idx}" src="" alt="">
+      <button type="button" class="remove-btn" data-remove="${kind}:${idx}">✕</button>
+    </div>`;
+  const inp=wrap.querySelector('input[type="file"]');
+  inp.addEventListener('change',(e)=>handlePhoto(kind,idx,e));
+  return wrap;
+}
+function makeVideoSlot(){
+  const wrap=document.createElement('div'); wrap.className='photo-slot';
+  wrap.innerHTML=`
+    <div class="slot-label video">🎬 동영상</div>
+    <div class="photo-zone video-zone" id="videoZone">
+      <input type="file" accept="video/*" id="videoFile">
+      <div class="icon">🎬</div>
+      <div class="primary-text" style="font-size:11px;">동영상</div>
+      <div class="hint-text">탭하여 추가</div>
+    </div>
+    <div class="photo-preview" id="videoPrev">
+      <video id="videoEl" src="" muted playsinline></video>
+      <button type="button" class="remove-btn" data-remove="video:0">✕</button>
+    </div>`;
+  const inp=wrap.querySelector('input[type="file"]');
+  inp.addEventListener('change',(e)=>handleVideo(e));
+  return wrap;
+}
+
+function goStep(n){
+  if(n>currentStep){ if(!validateStep(currentStep)) return; if(n===4) buildPreview(); }
+  document.getElementById('step'+currentStep).classList.remove('active');
+  currentStep=n;
+  document.getElementById('step'+n).classList.add('active');
+  updateIndicator();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function updateIndicator(){
+  for(let i=1;i<=4;i++){const d=document.getElementById('dot'+i);d.classList.remove('active','done');
+    if(i<currentStep)d.classList.add('done');else if(i===currentStep)d.classList.add('active');}
+  for(let i=1;i<=3;i++){document.getElementById('con'+i).classList.toggle('done',i<currentStep);}
+  if(currentStep<=4){document.getElementById('stepLabel').textContent=STEP_LABELS[currentStep-1];
+    document.getElementById('progressFill').style.width=STEP_PROGRESS[currentStep-1];}
+  else{document.getElementById('stepLabel').textContent='완료';
+    document.getElementById('progressFill').style.width='100%';}
+}
+function validateStep(step){
+  if(step===1){
+    const req=['hospital','serialNo','issueDate','engineer'];
+    const labels=['병원명','장비 S/N','발생 일자','담당자'];
+    for(let i=0;i<req.length;i++){if(!document.getElementById(req[i]).value.trim()){
+      alert(`"${labels[i]}"을(를) 입력해주세요.`);document.getElementById(req[i]).focus();return false;}}
+  }
+  if(step===3){
+    if(!v('symptom')){alert('접수 증상을 입력해주세요.');return false;}
+    if(!v('cause')){alert('불량 원인을 입력해주세요.');return false;}
+    if(!v('solution')){alert('해결 방법을 입력해주세요.');return false;}
+  }
+  return true;
+}
+
+const MAX_DIM=1600, JPEG_QUALITY=0.82;
+function fileToJpegDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(Math.max(w,h)>MAX_DIM){const r=MAX_DIM/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      try{resolve(canvas.toDataURL('image/jpeg',JPEG_QUALITY));}catch(e){reject(e);}
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('이미지를 불러올 수 없습니다. (HEIC인 경우 설정에서 "가장 호환성 높게" 촬영 권장)'));};
+    img.src=url;
+  });
+}
+
+async function handlePhoto(kind,idx,event){
+  const file=event.target.files[0]; if(!file) return;
+  const zone=document.getElementById(`${kind}Zone${idx}`);
+  zone.querySelector('.icon').textContent='⏳';
+  zone.querySelector('.hint-text').textContent='변환 중...';
+  try{
+    const jpeg=await fileToJpegDataURL(file);
+    (kind==='sym'?symPhotos:phenPhotos)[idx]=jpeg;
+    document.getElementById(`${kind}Img${idx}`).src=jpeg;
+    document.getElementById(`${kind}Prev${idx}`).style.display='block';
+    zone.querySelector('.icon').textContent='✅';
+    zone.querySelector('.primary-text').textContent='등록됨';
+    zone.querySelector('.hint-text').textContent='교체하려면 탭';
+  }catch(e){
+    alert('사진 처리 실패: '+e.message);
+    zone.querySelector('.icon').textContent='📸';
+    zone.querySelector('.primary-text').textContent='사진';
+    zone.querySelector('.hint-text').textContent='탭하여 추가';
+  }
+}
+
+// 동영상 처리: base64로 읽고 + 첫 프레임 포스터 캡처
+function fileToDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const fr=new FileReader();
+    fr.onload=()=>resolve(fr.result);
+    fr.onerror=()=>reject(new Error('파일 읽기 실패'));
+    fr.readAsDataURL(file);
+  });
+}
+function captureVideoPoster(file){
+  return new Promise((resolve)=>{
+    const url=URL.createObjectURL(file);
+    const video=document.createElement('video');
+    video.muted=true; video.playsInline=true; video.preload='metadata'; video.src=url;
+    let done=false;
+    const finish=(poster)=>{ if(done)return; done=true; URL.revokeObjectURL(url); resolve(poster); };
+    video.onloadeddata=()=>{ try{ video.currentTime=Math.min(0.1, (video.duration||1)/2); }catch(e){ grab(); } };
+    video.onseeked=grab;
+    video.onerror=()=>finish(null);
+    function grab(){
+      try{
+        let w=video.videoWidth||320,h=video.videoHeight||240;
+        if(Math.max(w,h)>MAX_DIM){const r=MAX_DIM/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
+        const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
+        ctx.drawImage(video,0,0,w,h);
+        finish(canvas.toDataURL('image/jpeg',0.8));
+      }catch(e){ finish(null); }
+    }
+    setTimeout(()=>{ if(!done) grab(); },2500); // iOS seek 안될 때 폴백
+  });
+}
+async function handleVideo(event){
+  const file=event.target.files[0]; if(!file) return;
+  const zone=document.getElementById('videoZone');
+  zone.querySelector('.icon').textContent='⏳';
+  zone.querySelector('.hint-text').textContent='처리 중...';
+  try{
+    const sizeMB=file.size/1048576;
+    if(sizeMB>60){
+      if(!confirm(`동영상 용량이 ${sizeMB.toFixed(0)}MB입니다. PPT 파일이 매우 커지고 기기에서 느려질 수 있습니다. 계속할까요?`)){
+        event.target.value='';
+        zone.querySelector('.icon').textContent='🎬';
+        zone.querySelector('.hint-text').textContent='탭하여 추가';
+        return;
+      }
+    }
+    const dataURL=await fileToDataURL(file);
+    const poster=await captureVideoPoster(file);
+    let ext=(file.name.split('.').pop()||'mp4').toLowerCase();
+    if(!['mp4','mov','m4v','webm'].includes(ext)) ext='mp4';
+    phenVideo={ data:dataURL, poster:poster, ext:ext, sizeMB:sizeMB };
+    const vEl=document.getElementById('videoEl');
+    vEl.src=dataURL; vEl.setAttribute('controls','');
+    document.getElementById('videoPrev').style.display='block';
+    zone.querySelector('.icon').textContent='✅';
+    zone.querySelector('.primary-text').textContent='등록됨';
+    zone.querySelector('.hint-text').textContent=`${sizeMB.toFixed(1)}MB · 교체하려면 탭`;
+  }catch(e){
+    alert('동영상 처리 실패: '+e.message);
+    zone.querySelector('.icon').textContent='🎬';
+    zone.querySelector('.primary-text').textContent='동영상';
+    zone.querySelector('.hint-text').textContent='탭하여 추가';
+  }
+}
+
+function removePhoto(kind,idx){
+  if(kind==='video'){
+    phenVideo=null;
+    const vEl=document.getElementById('videoEl'); vEl.removeAttribute('src'); vEl.load&&vEl.load();
+    document.getElementById('videoPrev').style.display='none';
+    const zone=document.getElementById('videoZone');
+    zone.querySelector('input').value='';
+    zone.querySelector('.icon').textContent='🎬';
+    zone.querySelector('.primary-text').textContent='동영상';
+    zone.querySelector('.hint-text').textContent='탭하여 추가';
+    return;
+  }
+  (kind==='sym'?symPhotos:phenPhotos)[idx]=null;
+  document.getElementById(`${kind}Img${idx}`).src='';
+  document.getElementById(`${kind}Prev${idx}`).style.display='none';
+  const zone=document.getElementById(`${kind}Zone${idx}`);
+  zone.querySelector('input').value='';
+  zone.querySelector('.icon').textContent='📸';
+  zone.querySelector('.primary-text').textContent='사진';
+  zone.querySelector('.hint-text').textContent='탭하여 추가';
+}
+function appendText(fieldId,text){
+  const el=document.getElementById(fieldId);const cur=el.value.trim();
+  el.value=cur?cur+'\n'+text:text;el.focus();
+}
+function buildPreview(){
+  const mfg=v('mfgDate')?'  ('+v('mfgDate')+')':'';
+  const rows=[
+    ['병원명',v('hospital')],['장비 S/N',v('serialNo')+mfg],
+    ['UI/FW/H.P Ver',v('version')||'—'],['요청사항',v('requestDetail')||'—'],
+    ['발생 일자',v('issueDate')],['담당자',v('engineer')],
+    ['교체 부품',(v('partName')||'—')+(v('partReason')?'\n'+v('partReason'):'')],
+  ];
+  document.getElementById('previewInfoTable').innerHTML=
+    rows.map(([k,val])=>`<tr><td>${k}</td><td>${val.replace(/\n/g,'<br>')}</td></tr>`).join('');
+  const symG=document.getElementById('previewSymPhotos');
+  const phenG=document.getElementById('previewPhenPhotos');
+  const hasMedia=symPhotos.concat(phenPhotos).some(p=>p)||phenVideo;
+  if(hasMedia){
+    symG.innerHTML=symPhotos.map(p=>p?`<img src="${p}">`:`<div style="height:90px;border-radius:8px;background:var(--gray-bg);"></div>`).join('');
+    let ph=phenPhotos.map(p=>p?`<img src="${p}">`:`<div style="height:90px;border-radius:8px;background:var(--gray-bg);"></div>`).join('');
+    ph+= phenVideo
+      ? `<video src="${phenVideo.data}" controls muted playsinline style="background:#000;"></video>`
+      : `<div style="height:90px;border-radius:8px;background:var(--gray-bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);">영상 없음</div>`;
+    phenG.innerHTML=ph;
+    document.getElementById('previewPhotoCard').style.display='block';
+  }else document.getElementById('previewPhotoCard').style.display='none';
+  document.getElementById('previewSymptom').textContent=v('symptom');
+  document.getElementById('previewCause').textContent=v('cause');
+  document.getElementById('previewSolution').textContent=v('solution');
+}
+function v(id){return (document.getElementById(id)?.value||'').trim();}
+
+async function generatePPT(){
+  const btn=document.querySelector('.btn-generate');
+  btn.disabled=true;btn.innerHTML='<span>⏳</span> 생성 중...';
+  const Lib=typeof window.PptxGenJS!=="undefined"?window.PptxGenJS:(typeof window.pptxgen!=="undefined"?window.pptxgen:null);
+  if(!Lib){alert("PPT 라이브러리를 불러오지 못했습니다. 네트워크 연결을 확인하세요.");
+    btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';return;}
+  try{ await buildPPTX(Lib); goStep(5); updateIndicator(); }
+  catch(e){console.error(e);alert('PPT 생성 중 오류: '+e.message);
+    btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';}
+}
+
+function imgData(dataUrl){
+  const mime=dataUrl.match(/data:([^;]+);/)?.[1]||'image/jpeg';
+  return `${mime};base64,${dataUrl.split(',')[1]}`;
+}
+
+async function buildPPTX(Pptx){
+  const pres=new Pptx();
+  pres.defineLayout({name:'BAZ',width:10,height:5.625});
+  pres.layout='BAZ';
+  const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',WHITE='FFFFFF',
+        LGRAY='F5F7FA',MGRAY='E8ECF2',DGRAY='4A4A4A',TTEXT='1A1A2E';
+  const FF='맑은 고딕';
+  const PX=10/960; const P=(px)=>px*PX;
+  const s=pres.addSlide(); s.background={color:WHITE};
+
+  s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(52),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('AS  처리 현황',{x:P(18),y:0,w:P(288),h:P(52),fontSize:18,bold:true,color:WHITE,fontFace:FF,valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(9),w:P(310),h:P(35),fill:{color:NAVY2},rectRadius:0.04,line:{color:'CADCFC',width:1}});
+  s.addText(v('requestDetail')||'AS 처리 보고서',{x:P(324),y:P(9),w:P(310),h:P(35),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(958),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'CADCFC',fontFace:FF,valign:'middle',margin:0});
+
+  const LX=17, LW=421;
+  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(62),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
+  s.addText('내부 수리 부품',{x:P(LX),y:P(62),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},line:{color:MGRAY,width:1}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:MGRAY},line:{color:MGRAY,width:1}});
+  s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('partReason')||'—',{x:P(153),y:P(89),w:P(284),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(133),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
+  s.addText('고장 원인 분석',{x:P(LX),y:P(133),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(161),w:P(72),h:P(26),fill:{color:'F0F4F8'},rectRadius:0.06,line:{color:MGRAY}});
+  s.addText('접수 증상',{x:P(LX),y:P(161),w:P(72),h:P(26),fontSize:9,bold:true,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(LW),h:P(26),fill:{color:LGRAY},line:{color:MGRAY,width:1}});
+  s.addText(v('symptom'),{x:P(24),y:P(161),w:P(414),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,4]});
+  const symPos=[[31,195],[169,195],[307,195]];
+  symPhotos.forEach((p,i)=>{const px=symPos[i][0],py=symPos[i][1];
+    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(123),h:P(94),sizing:{type:'cover',w:P(123),h:P(94)}});
+    else { s.addShape(pres.ShapeType.rect,{x:P(px),y:P(py),w:P(123),h:P(94),fill:{color:LGRAY},line:{color:MGRAY}});
+      s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(32),fill:{color:MGRAY},line:{color:MGRAY}});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(333),w:P(421),h:P(32),fill:{color:LGRAY},line:{color:MGRAY}});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(63),h:P(32),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('원  인',{x:P(16),y:P(299),w:P(63),h:P(32),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(333),w:P(63),h:P(32),fill:{color:NAVY2},line:{color:NAVY2}});
+  s.addText('해결 방법',{x:P(16),y:P(333),w:P(63),h:P(32),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('cause'),{x:P(81),y:P(299),w:P(356),h:P(32),fontSize:10,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,6]});
+  s.addText(v('solution'),{x:P(80),y:P(336),w:P(356),h:P(32),fontSize:10,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,6]});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(371),w:P(421),h:P(20),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('엔지니어 처리 의견',{x:P(16),y:P(371),w:P(421),h:P(20),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(391),w:P(421),h:P(132),fill:{color:LGRAY},line:{color:MGRAY}});
+  s.addText(v('opinion')||'엔지니어 처리 내용 및 의견을 여기에 작성하세요.',{x:P(24),y:P(396),w:P(405),h:P(122),fontSize:9,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,valign:'top',margin:0});
+
+  s.addShape(pres.ShapeType.line,{x:P(454),y:P(62),w:0,h:P(461),line:{color:MGRAY,width:1}});
+
+  const RX=469, RW=472;
+  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(62),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
+  s.addText('AS 접수 정보',{x:P(RX),y:P(62),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  const mfgStr=v('mfgDate')?`(${v('mfgDate')})`:'';
+  const infoRows=[
+    ['병  원  명',v('hospital')],['장비 S/N (제조일)',v('serialNo')+(mfgStr?'  '+mfgStr:'')],
+    ['UI/FW/H.P Ver',v('version')||'—'],['요청사항',v('requestDetail')||'—'],
+    ['발생 일자',v('issueDate')],['담  당  자',v('engineer')],
+  ];
+  const rowH=30, infoY=89, labelW=144;
+  infoRows.forEach((row,i)=>{const label=row[0],val=row[1];const rowY=infoY+i*rowH; const even=i%2===0;
+    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(RW),h:P(rowH),fill:{color:even?LGRAY:WHITE},line:{color:MGRAY,width:0.5}});
+    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fill:{color:even?MGRAY:'EEF2F8'},line:{color:MGRAY,width:0.5}});
+    s.addText(label,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fontSize:10,bold:true,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addText(val,{x:P(RX+labelW),y:P(rowY),w:P(RW-labelW),h:P(rowH),fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});});
+  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(281),w:P(180),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
+  s.addText('접수 현상 (사진/영상)',{x:P(RX),y:P(281),w:P(180),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  // 사진 3컷 + 동영상 1컷 균등 배치 (106폭, 간격 약 16)
+  const cellW=106, cellH=106, gap=16, startX=469, mediaY=307;
+  const mediaX=[startX, startX+cellW+gap, startX+2*(cellW+gap), startX+3*(cellW+gap)];
+  // 사진 3컷
+  phenPhotos.forEach((p,i)=>{const px=mediaX[i],py=mediaY;
+    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(cellW),h:P(cellH),sizing:{type:'cover',w:P(cellW),h:P(cellH)}});
+    else { s.addShape(pres.ShapeType.rect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fill:{color:LGRAY},line:{color:MGRAY}});
+      s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
+  // 동영상 1컷 (4번째 칸)
+  const vx=mediaX[3], vy=mediaY;
+  if(phenVideo){
+    const mediaOpt={ type:'video', x:P(vx), y:P(vy), w:P(cellW), h:P(cellH),
+      data:`video/${phenVideo.ext};base64,${phenVideo.data.split(',')[1]}` };
+    if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster); // 포스터(첫 프레임)
+    s.addMedia(mediaOpt);
+    // 영상 표시용 라벨 바
+    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fill:{color:NAVY},line:{type:'none'}});
+    s.addText('▶ 동영상',{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  }else{
+    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fill:{color:LGRAY},line:{color:MGRAY}});
+    s.addText('🎬 동영상',{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  }
+  s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(420),w:P(RW),h:P(20),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('고객 피드백',{x:P(RX),y:P(420),w:P(RW),h:P(20),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(440),w:P(RW),h:P(82),fill:{color:LGRAY},line:{color:MGRAY}});
+  s.addText(v('feedback')||'고객 피드백 내용을 여기에 작성하세요.',{x:P(RX+8),y:P(445),w:P(RW-16),h:P(72),fontSize:9,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,valign:'top',margin:0});
+
+  const fileName=`AS_처리_보고서_${v('hospital')||'미지정'}_${v('serialNo')||'no_sn'}`;
+  await pres.writeFile({fileName:fileName+'.pptx'});
+}
+
+// ── 카카오 초기화 ──
+(function(){
+  try{
+    Kakao.init('44dadb8113fce5e8188f03bbdcd27fc6');
+  }catch(e){ console.warn('Kakao SDK init failed:', e); }
+})();
+
+function kakaoShare(){
+  try{
+    if(typeof Kakao==='undefined'||!Kakao.isInitialized()){
+      alert('카카오 SDK를 불러오지 못했습니다.\n네트워크 연결을 확인하세요.');return;
+    }
+    const hospital = v('hospital')||'미지정';
+    const engineer = v('engineer')||'담당자';
+    const issueDate = v('issueDate')||'';
+    const sn = v('serialNo')||'';
+    const topic = v('requestDetail')||'AS 처리 보고서';
+
+    Kakao.Share.sendDefault({
+      objectType:'feed',
+      content:{
+        title:`[BAZ CS] ${hospital} AS 처리 보고서`,
+        description:`담당: ${engineer} | 장비 S/N: ${sn}\n요청: ${topic}\n발생일: ${issueDate}`,
+        imageUrl:'https://yuyoung-ai.github.io/YuYoung/og_image.png',
+        link:{
+          mobileWebUrl:'https://yuyoung-ai.github.io/YuYoung/',
+          webUrl:'https://yuyoung-ai.github.io/YuYoung/'
+        }
+      },
+      buttons:[{
+        title:'보고서 작성 앱 열기',
+        link:{
+          mobileWebUrl:'https://yuyoung-ai.github.io/YuYoung/',
+          webUrl:'https://yuyoung-ai.github.io/YuYoung/'
+        }
+      }]
+    });
+  }catch(e){
+    alert('카카오 공유 오류: '+e.message);
+  }
+}
+
+function copyText(){
+  const hospital=v('hospital')||'미지정';
+  const sn=v('serialNo')||'—';
+  const mfg=v('mfgDate')||'—';
+  const ver=v('version')||'—';
+  const dt=v('issueDate')||'—';
+  const eng=v('engineer')||'—';
+  const req=v('requestDetail')||'—';
+  const part=(v('partName')||'—')+(v('partReason')?' / '+v('partReason'):'');
+  const sym=v('symptom')||'—';
+  const cause=v('cause')||'—';
+  const sol=v('solution')||'—';
+  const op=v('opinion')||'—';
+  const fb=v('feedback')||'—';
+
+  const text=[
+    '═══════════════════════════',
+    ' BAZ BIOMEDIC AS 처리 보고서',
+    '═══════════════════════════',
+    `병원명    : ${hospital}`,
+    `장비 S/N  : ${sn} (${mfg})`,
+    `버전 정보 : ${ver}`,
+    `발생 일자 : ${dt}`,
+    `담당자    : ${eng}`,
+    `요청사항  : ${req}`,
+    `교체 부품 : ${part}`,
+    '───────────────────────────',
+    `▶ 접수 증상
+${sym}`,
+    `▶ 불량 원인
+${cause}`,
+    `▶ 해결 방법
+${sol}`,
+    '───────────────────────────',
+    `▶ 처리 의견
+${op}`,
+    `▶ 고객 피드백
+${fb}`,
+    '═══════════════════════════',
+    'BAZ BIOMEDIC Field Service',
+  ].join('\n');
+
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      const btn=document.querySelector('[data-action="copyText"]');
+      const orig=btn.textContent;
+      btn.textContent='✅ 복사됨!';
+      setTimeout(()=>btn.textContent=orig,2000);
+    }).catch(()=>fallbackCopy(text));
+  }else{ fallbackCopy(text); }
+}
+function fallbackCopy(text){
+  const ta=document.createElement('textarea');
+  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');alert('클립보드에 복사되었습니다.');}
+  catch(e){alert('복사에 실패했습니다.\n직접 선택하여 복사해주세요.');}
+  document.body.removeChild(ta);
+}
+
+function printReport(){
+  // 인쇄 전 step4(미리보기)로 이동 후 인쇄
+  const cur=currentStep;
+  document.getElementById('step'+cur).classList.remove('active');
+  document.getElementById('step4').classList.add('active');
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>{
+      document.getElementById('step4').classList.remove('active');
+      document.getElementById('step'+cur).classList.add('active');
+    },500);
+  },100);
+}
+
+function redownload(){ generatePPT(); }
+function restart(){
+  ['hospital','serialNo','mfgDate','version','issueDate','engineer','requestDetail',
+   'partName','partReason','symptom','cause','solution','feedback','opinion']
+    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  for(let i=0;i<3;i++){removePhoto('sym',i);removePhoto('phen',i);}
+  removePhoto('video',0);
+  const btn=document.querySelector('.btn-generate');
+  if(btn){btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';}
+  goStep(1);
+}
+
+document.addEventListener('click',function(e){
+  const goBtn=e.target.closest('[data-go]');
+  if(goBtn){goStep(parseInt(goBtn.getAttribute('data-go'),10));return;}
+  const actBtn=e.target.closest('[data-action]');
+  if(actBtn){const a=actBtn.getAttribute('data-action');
+    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();return;}
+  const tag=e.target.closest('.tag[data-field]');
+  if(tag){appendText(tag.getAttribute('data-field'),tag.getAttribute('data-text'));return;}
+  const rm=e.target.closest('[data-remove]');
+  if(rm){const parts=rm.getAttribute('data-remove').split(':');removePhoto(parts[0],parseInt(parts[1],10));return;}
+});
+
+buildPhotoSlots();
+</script>
+</body>
+</html>
