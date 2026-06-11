@@ -110,6 +110,8 @@
   .btn-restart{display:block;width:100%;padding:13px;border-radius:10px;background:#fff;
     color:var(--text-muted);font-size:14px;font-weight:600;border:1.5px solid var(--gray-line);
     cursor:pointer;font-family:inherit;}
+  .btn-fileshare{display:flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:10px;background:linear-gradient(135deg,#2E7D9E,#1B2F5E);color:#fff;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-fileshare:active{opacity:.85;}
   .btn-kakao{display:flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:10px;background:#FEE500;color:#3A1D1D;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
   .btn-kakao:active{opacity:.85;}
   .btn-copy{display:block;width:100%;padding:13px;border-radius:10px;background:#EAF4F8;color:#2E7D9E;font-size:14px;font-weight:700;border:1.5px solid #BCD9E8;cursor:pointer;font-family:inherit;margin-bottom:10px;}
@@ -133,6 +135,19 @@
 <script src="https://apis.google.com/js/api.js" async></script>
 </head>
 <body>
+<div id="langSelect" style="position:fixed;inset:0;z-index:9999;background:#1B2F5E;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;">
+  <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:72px;margin-bottom:8px;">
+    <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
+    <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
+    <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
+  </svg>
+  <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
+  <div style="color:#9EADCC;font-size:13px;margin-bottom:40px;">AS Service Report</div>
+  <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">언어를 선택하세요 · Select language · 言語を選択</div>
+  <button type="button" data-lang="ko" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:none;background:#fff;color:#1B2F5E;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇰🇷 국내 (한국어)</button>
+  <button type="button" data-lang="en" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🌐 Global (English)</button>
+  <button type="button" data-lang="ja" style="width:100%;max-width:280px;padding:16px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇯🇵 日本 (日本語)</button>
+</div>
 <header>
   <div class="logo-area">
     <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
@@ -140,7 +155,12 @@
       <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
       <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
     </svg>
-    <div><h1>AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
+    <div><h1 data-i18n="appTitle">AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
+  </div>
+  <div id="langSwitch" style="display:flex;gap:2px;background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.35);border-radius:16px;padding:2px;">
+    <button type="button" data-setlang="ko" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">한국어</button>
+    <button type="button" data-setlang="en" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">EN</button>
+    <button type="button" data-setlang="ja" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">日本語</button>
   </div>
 </header>
 <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -155,135 +175,135 @@
 <!-- STEP 1 -->
 <div class="step-page active" id="step1">
   <div class="card">
-    <div class="card-header"><div class="badge-icon">🏥</div><h2>AS 접수 정보</h2></div>
+    <div class="card-header"><div class="badge-icon">🏥</div><h2 data-i18n="h_svcInfo">AS 접수 정보</h2></div>
     <div class="card-body">
-      <div class="field-group"><label>병원명 <span class="required">*</span></label>
-        <input type="text" id="hospital" placeholder="예) 미모드림의원 천호" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_hospital">0/20</span></div>
+      <div class="field-group"><label><span data-i18n="l_hospital">병원명</span> <span class="required">*</span></label>
+        <input type="text" id="hospital" data-i18n-ph="ph_hospital" placeholder="예) 미모드림의원 천호" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_hospital">0/20</span></div>
       <div class="row-2">
-        <div class="field-group"><label>장비 S/N <span class="required">*</span></label>
-          <input type="text" id="serialNo" placeholder="예) BYB018" maxlength="15" oninput="updCounter(this)"><span class="char-counter" id="cc_serialNo">0/15</span></div>
-        <div class="field-group"><label>제조일</label>
-          <input type="text" id="mfgDate" placeholder="예) 2022년 11월" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_mfgDate">0/12</span></div>
+        <div class="field-group"><label><span data-i18n="l_serial">장비 S/N</span> <span class="required">*</span></label>
+          <input type="text" id="serialNo" data-i18n-ph="ph_serial" placeholder="예) BYB018" maxlength="15" oninput="updCounter(this)"><span class="char-counter" id="cc_serialNo">0/15</span></div>
+        <div class="field-group"><label data-i18n="l_mfg">제조일</label>
+          <input type="text" id="mfgDate" data-i18n-ph="ph_mfg" placeholder="예) 2022년 11월" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_mfgDate">0/12</span></div>
       </div>
       <div class="field-group"><label>UI / FW / H.P Ver</label>
-        <input type="text" id="version" placeholder="예) 2.1.1 / 2.6 / 1.2.2" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_version">0/20</span></div>
+        <input type="text" id="version" data-i18n-ph="ph_ver" placeholder="예) 2.1.1 / 2.6 / 1.2.2" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_version">0/20</span></div>
       <div class="row-2">
-        <div class="field-group"><label>발생 일자 <span class="required">*</span></label>
+        <div class="field-group"><label><span data-i18n="l_date">발생 일자</span> <span class="required">*</span></label>
           <input type="date" id="issueDate"></div>
-        <div class="field-group"><label>담당자 <span class="required">*</span></label>
-          <input type="text" id="engineer" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
+        <div class="field-group"><label><span data-i18n="l_eng">담당자</span> <span class="required">*</span></label>
+          <input type="text" id="engineer" data-i18n-ph="ph_eng" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
       </div>
-      <div class="field-group"><label>요청사항 (토픽)</label>
-        <input type="text" id="requestDetail" placeholder="예) 노즐 인식 불가" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_requestDetail">0/18</span></div>
+      <div class="field-group"><label data-i18n="l_req">요청사항 (토픽)</label>
+        <input type="text" id="requestDetail" data-i18n-ph="ph_req" placeholder="예) 노즐 인식 불가" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_requestDetail">0/18</span></div>
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="badge-icon">🔧</div><h2>내부 수리 부품</h2></div>
+    <div class="card-header"><div class="badge-icon">🔧</div><h2 data-i18n="h_parts">내부 수리 부품</h2></div>
     <div class="card-body">
-      <div class="field-group"><label>부품명</label>
-        <input type="text" id="partName" placeholder="예) RFID Module A'ssy" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_partName">0/18</span></div>
-      <div class="field-group"><label>교체 사유</label>
-        <input type="text" id="partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건" maxlength="28" oninput="updCounter(this)"><span class="char-counter" id="cc_partReason">0/28</span></div>
+      <div class="field-group"><label data-i18n="l_part">부품명</label>
+        <input type="text" id="partName" data-i18n-ph="ph_part" placeholder="예) RFID Module A'ssy" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_partName">0/18</span></div>
+      <div class="field-group"><label data-i18n="l_partReason">교체 사유</label>
+        <input type="text" id="partReason" data-i18n-ph="ph_partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건" maxlength="28" oninput="updCounter(this)"><span class="char-counter" id="cc_partReason">0/28</span></div>
     </div>
   </div>
-  <div class="nav-bar"><button type="button" class="btn-next" data-go="2">다음 — 사진 첨부 →</button></div>
+  <div class="nav-bar"><button type="button" class="btn-next" data-go="2" data-i18n="b_next2">다음 — 사진 첨부 →</button></div>
 </div>
 
 <!-- STEP 2 -->
 <div class="step-page" id="step2">
   <div class="card">
-    <div class="card-header"><div class="badge-icon">📷</div><h2>접수 증상 사진 (좌측 · 최대 3컷)</h2></div>
+    <div class="card-header"><div class="badge-icon">📷</div><h2 data-i18n="h_symPhotos">접수 증상 사진 (좌측 · 최대 3컷)</h2></div>
     <div class="card-body"><div class="photo-grid" id="symGrid"></div></div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="badge-icon">📸</div><h2>접수 현상 사진 3컷 + 동영상 1개 (우측)</h2></div>
+    <div class="card-header"><div class="badge-icon">📸</div><h2 data-i18n="h_phenPhotos">접수 현상 사진 3컷 + 동영상 1개 (우측)</h2></div>
     <div class="card-body"><div class="media-grid" id="phenGrid"></div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;">
-        💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 <b>30초 이내 짧은 영상</b>을 권장합니다.</div>
+        <span data-i18n="t_videoHint">💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.</span></div>
     </div>
   </div>
   <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="1">← 이전</button>
-    <button type="button" class="btn-next" data-go="3">다음 — 원인 분석 →</button>
+    <button type="button" class="btn-prev" data-go="1" data-i18n="b_prev">← 이전</button>
+    <button type="button" class="btn-next" data-go="3" data-i18n="b_next3">다음 — 원인 분석 →</button>
   </div>
 </div>
 
 <!-- STEP 3 -->
 <div class="step-page" id="step3">
   <div class="card">
-    <div class="card-header"><div class="badge-icon">🔍</div><h2>고장 원인 분석</h2></div>
+    <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis">고장 원인 분석</h2></div>
     <div class="card-body">
       <div class="field-group"><label>접수 증상 <span class="required">*</span></label>
         <div class="tag-suggestions">
-          <span class="tag" data-field="symptom" data-text="노즐 인식 불가">노즐 인식 불가</span>
-          <span class="tag" data-field="symptom" data-text="USB 장치 인식 불량">USB 인식 불량</span>
-          <span class="tag" data-field="symptom" data-text="장비 전원 불량">전원 불량</span>
-          <span class="tag" data-field="symptom" data-text="분사 불량">분사 불량</span>
-          <span class="tag" data-field="symptom" data-text="화면 오류">화면 오류</span>
+          <span class="tag" data-field="symptom" data-text="노즐 인식 불가" data-text-ko="노즐 인식 불가" data-text-ja="ノズル認識不可" data-label-ja="ノズル認識不可" data-text-en="Nozzle not recognized" data-label-ko="노즐 인식 불가" data-label-en="Nozzle not recognized">노즐 인식 불가</span>
+          <span class="tag" data-field="symptom" data-text="USB 장치 인식 불량" data-text-ko="USB 장치 인식 불량" data-text-ja="USBデバイス認識不良" data-label-ja="USB認識不良" data-text-en="USB recognition error" data-label-ko="USB 인식 불량" data-label-en="USB recognition error">USB 인식 불량</span>
+          <span class="tag" data-field="symptom" data-text="장비 전원 불량" data-text-ko="장비 전원 불량" data-text-ja="電源不良" data-label-ja="電源不良" data-text-en="Power failure" data-label-ko="전원 불량" data-label-en="Power failure">전원 불량</span>
+          <span class="tag" data-field="symptom" data-text="분사 불량" data-text-ko="분사 불량" data-text-ja="噴射不良" data-label-ja="噴射不良" data-text-en="Spray failure" data-label-ko="분사 불량" data-label-en="Spray failure">분사 불량</span>
+          <span class="tag" data-field="symptom" data-text="화면 오류" data-text-ko="화면 오류" data-text-ja="画面エラー" data-label-ja="画面エラー" data-text-en="Screen error" data-label-ko="화면 오류" data-label-en="Screen error">화면 오류</span>
         </div>
-        <textarea id="symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태." maxlength="40" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_symptom">0/40</span></div>
-      <div class="field-group"><label>불량 원인 <span class="required">*</span></label>
+        <textarea id="symptom" data-i18n-ph="ph_symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태." maxlength="40" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_symptom">0/40</span></div>
+      <div class="field-group"><label><span data-i18n="l_cause">불량 원인</span> <span class="required">*</span></label>
         <div class="tag-suggestions">
-          <span class="tag" data-field="cause" data-text="USB 장치 인식 불량에 따른 동작 불가">USB 인식 불량</span>
-          <span class="tag" data-field="cause" data-text="약액 역분리로 인한 노즐 막힘">약액 역분리</span>
-          <span class="tag" data-field="cause" data-text="Luer-lock 체결 불량">Luer-lock 불량</span>
-          <span class="tag" data-field="cause" data-text="노즐 재사용으로 인한 멤브레인 손상">멤브레인 손상</span>
+          <span class="tag" data-field="cause" data-text="USB 장치 인식 불량에 따른 동작 불가" data-text-ko="USB 장치 인식 불량에 따른 동작 불가" data-text-ja="USB認識不良による動作不能" data-label-ja="USB認識不良" data-text-en="Inoperable due to USB recognition failure" data-label-ko="USB 인식 불량" data-label-en="USB recognition error">USB 인식 불량</span>
+          <span class="tag" data-field="cause" data-text="약액 역분리로 인한 노즐 막힘" data-text-ko="약액 역분리로 인한 노즐 막힘" data-text-ja="薬液再分離によるノズル詰まり" data-label-ja="薬液再分離" data-text-en="Nozzle clogged by drug separation" data-label-ko="약액 역분리" data-label-en="Drug separation">약액 역분리</span>
+          <span class="tag" data-field="cause" data-text="Luer-lock 체결 불량" data-text-ko="Luer-lock 체결 불량" data-text-ja="Luer-lock締結不良" data-label-ja="Luer-lock不良" data-text-en="Luer-lock not fastened properly" data-label-ko="Luer-lock 불량" data-label-en="Luer-lock issue">Luer-lock 불량</span>
+          <span class="tag" data-field="cause" data-text="노즐 재사용으로 인한 멤브레인 손상" data-text-ko="노즐 재사용으로 인한 멤브레인 손상" data-text-ja="ノズル再使用によるメンブレン損傷" data-label-ja="メンブレン損傷" data-text-en="Membrane damage from nozzle reuse" data-label-ko="멤브레인 손상" data-label-en="Membrane damage">멤브레인 손상</span>
         </div>
-        <textarea id="cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_cause">0/32</span></div>
-      <div class="field-group"><label>해결 방법 <span class="required">*</span></label>
+        <textarea id="cause" data-i18n-ph="ph_cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_cause">0/32</span></div>
+      <div class="field-group"><label><span data-i18n="l_solution">해결 방법</span> <span class="required">*</span></label>
         <div class="tag-suggestions">
-          <span class="tag" data-field="solution" data-text="RFID Module 내 USB 장치 교환">USB 장치 교환</span>
-          <span class="tag" data-field="solution" data-text="노즐 교체 후 프라이밍 진행">노즐 교체</span>
-          <span class="tag" data-field="solution" data-text="약액 재조제 후 재투여">약액 재조제</span>
-          <span class="tag" data-field="solution" data-text="Luer-lock 재체결">Luer-lock 재체결</span>
+          <span class="tag" data-field="solution" data-text="RFID Module 내 USB 장치 교환" data-text-ko="RFID Module 내 USB 장치 교환" data-text-ja="RFIDモジュール内のUSBデバイスを交換" data-label-ja="USBデバイス交換" data-text-en="Replaced USB device in RFID module" data-label-ko="USB 장치 교환" data-label-en="Replace USB device">USB 장치 교환</span>
+          <span class="tag" data-field="solution" data-text="노즐 교체 후 프라이밍 진행" data-text-ko="노즐 교체 후 프라이밍 진행" data-text-ja="ノズル交換後プライミング実施" data-label-ja="ノズル交換" data-text-en="Replaced nozzle and primed" data-label-ko="노즐 교체" data-label-en="Replace nozzle">노즐 교체</span>
+          <span class="tag" data-field="solution" data-text="약액 재조제 후 재투여" data-text-ko="약액 재조제 후 재투여" data-text-ja="薬液を再調製し再投与" data-label-ja="薬液再調製" data-text-en="Re-prepared and re-administered drug" data-label-ko="약액 재조제" data-label-en="Re-prepare drug">약액 재조제</span>
+          <span class="tag" data-field="solution" data-text="Luer-lock 재체결" data-text-ko="Luer-lock 재체결" data-text-ja="Luer-lockを再締結" data-label-ja="Luer-lock再締結" data-text-en="Re-fastened Luer-lock" data-label-ko="Luer-lock 재체결" data-label-en="Re-fasten Luer-lock">Luer-lock 재체결</span>
         </div>
-        <textarea id="solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_solution">0/32</span></div>
+        <textarea id="solution" data-i18n-ph="ph_solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_solution">0/32</span></div>
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="badge-icon">💬</div><h2>처리 의견 / 피드백</h2></div>
+    <div class="card-header"><div class="badge-icon">💬</div><h2 data-i18n="h_opinionFb">처리 의견 / 피드백</h2></div>
     <div class="card-body">
-      <div class="field-group"><label>엔지니어 처리 의견</label>
-        <textarea id="opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_opinion">0/45</span></div>
-      <div class="field-group"><label>고객 피드백</label>
-        <textarea id="feedback" placeholder="고객 피드백 내용을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_feedback">0/45</span></div>
+      <div class="field-group"><label data-i18n="l_opinion">엔지니어 처리 의견</label>
+        <textarea id="opinion" data-i18n-ph="ph_opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_opinion">0/45</span></div>
+      <div class="field-group"><label data-i18n="l_feedback">고객 피드백</label>
+        <textarea id="feedback" data-i18n-ph="ph_feedback" placeholder="고객 피드백 내용을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_feedback">0/45</span></div>
     </div>
   </div>
   <div class="nav-bar">
     <button type="button" class="btn-prev" data-go="2">← 이전</button>
-    <button type="button" class="btn-next" data-go="4">다음 — 최종 확인 →</button>
+    <button type="button" class="btn-next" data-go="4" data-i18n="b_next4">다음 — 최종 확인 →</button>
   </div>
 </div>
 
 <!-- STEP 4 -->
 <div class="step-page" id="step4">
   <div class="card">
-    <div class="card-header"><div class="badge-icon">📋</div><h2>AS 접수 정보 확인</h2></div>
+    <div class="card-header"><div class="badge-icon">📋</div><h2 data-i18n="h_reviewInfo">AS 접수 정보 확인</h2></div>
     <div class="card-body" style="padding:0;"><table class="preview-table" id="previewInfoTable"></table></div>
   </div>
   <div class="card" id="previewPhotoCard" style="display:none;">
-    <div class="card-header"><div class="badge-icon">📷</div><h2>첨부 미디어</h2></div>
+    <div class="card-header"><div class="badge-icon">📷</div><h2 data-i18n="h_media">첨부 미디어</h2></div>
     <div class="card-body">
-      <label style="margin-bottom:6px;">접수 증상</label>
+      <label style="margin-bottom:6px;" data-i18n="l_symptom2">접수 증상</label>
       <div class="preview-photos" id="previewSymPhotos"></div>
       <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;">접수 현상 (사진 3 + 동영상)</label>
+      <label style="margin-bottom:6px;" data-i18n="l_phenMedia">접수 현상 (사진 3 + 동영상)</label>
       <div class="preview-photos" id="previewPhenPhotos"></div>
     </div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="badge-icon">🔍</div><h2>고장 원인 분석</h2></div>
+    <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis2">고장 원인 분석</h2></div>
     <div class="card-body">
       <label style="margin-bottom:6px;">접수 증상</label><div class="text-block" id="previewSymptom"></div>
       <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;">불량 원인</label><div class="text-block" id="previewCause"></div>
+      <label style="margin-bottom:6px;" data-i18n="l_cause2">불량 원인</label><div class="text-block" id="previewCause"></div>
       <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;">해결 방법</label><div class="text-block" id="previewSolution"></div>
+      <label style="margin-bottom:6px;" data-i18n="l_solution2">해결 방법</label><div class="text-block" id="previewSolution"></div>
     </div>
   </div>
   <div class="nav-bar">
     <button type="button" class="btn-prev" data-go="3">← 이전</button>
-    <button type="button" class="btn-generate" data-action="generate"><span>📊</span> PPT 생성 및 다운로드</button>
+    <button type="button" class="btn-generate" data-action="generate"><span>📊</span> <span data-i18n="b_generate">PPT 생성 및 다운로드</span></button>
   </div>
 </div>
 
@@ -291,19 +311,17 @@
 <div class="step-page" id="step5">
   <div class="success-screen">
     <div class="success-icon">✅</div>
-    <h2>보고서가 완성되었습니다</h2>
-    <p>AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
+    <h2 data-i18n="t_done">보고서가 완성되었습니다</h2>
+    <p data-i18n-html="t_doneSub">AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
   </div>
   <div style="padding:0 16px 24px;">
-    <button type="button" class="btn-download" data-action="redownload">📥 다시 다운로드</button>
+    <button type="button" class="btn-download" data-action="redownload" data-i18n="b_redown">📥 다시 다운로드</button>
+    <button type="button" class="btn-fileshare" data-action="sharePptx" data-i18n="b_share">📤 PPT 파일 공유 (카카오톡 등)</button>
     <button type="button" class="btn-gsheet" data-action="saveToSheet">📊 Google 시트에 기록</button>
     <div class="gsheet-status" id="gsheetStatus" style="display:none;"></div>
-    <button type="button" class="btn-kakao" data-action="kakaoShare">
-      <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;" alt="">카카오톡으로 공유
-    </button>
-    <button type="button" class="btn-copy" data-action="copyText">📋 보고서 내용 복사</button>
-    <button type="button" class="btn-print" data-action="printReport">🖨️ 인쇄 / PDF 저장</button>
-    <button type="button" class="btn-restart" data-action="restart">새 보고서 작성</button>
+    <button type="button" class="btn-copy" data-action="copyText" data-i18n="b_copy">📋 보고서 내용 복사</button>
+    <button type="button" class="btn-print" data-action="printReport" data-i18n="b_print">🖨️ 인쇄 / PDF 저장</button>
+    <button type="button" class="btn-restart" data-action="restart" data-i18n="b_restart">새 보고서 작성</button>
   </div>
 </div>
 
@@ -318,8 +336,163 @@ const symPhotos=[null,null,null];
 const phenPhotos=[null,null,null];
 // 동영상: {data:base64dataURL(video), poster:jpegDataURL, ext:'mp4'}
 let phenVideo=null;
-const STEP_LABELS=['접수 정보 입력','사진/영상 첨부','원인 분석','최종 확인'];
+
+// ===== 다국어(i18n) =====
+let LANG = localStorage.getItem('baz_lang') || '';
+const I18N = {
+  ko: {
+    appTitle:'AS 처리 보고서',
+    h_svcInfo:'AS 접수 정보', l_hospital:'병원명', ph_hospital:'예) 미모드림의원 천호',
+    l_serial:'장비 S/N', ph_serial:'예) BYB018', l_mfg:'제조일', ph_mfg:'예) 2022년 11월',
+    ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동',
+    l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
+    h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
+    l_partReason:'교체 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
+    b_next2:'다음 — 사진 첨부 →',
+    h_symPhotos:'접수 증상 사진 (좌측 · 최대 3컷)', h_phenPhotos:'접수 현상 사진 3컷 + 동영상 1개 (우측)',
+    t_videoHint:'💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.',
+    b_prev:'← 이전', b_next3:'다음 — 원인 분석 →',
+    h_analysis:'고장 원인 분석', l_symptom:'접수 증상',
+    ph_symptom:"예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태.",
+    l_cause:'불량 원인', ph_cause:'예) USB 장치 인식 불량에 따른 동작 불가',
+    l_solution:'해결 방법', ph_solution:'예) RFID Module 내 USB 장치 교환 시 수리 가능',
+    h_opinionFb:'처리 의견 / 피드백', l_opinion:'엔지니어 처리 의견', ph_opinion:'엔지니어 처리 내용 및 의견을 입력하세요.',
+    l_feedback:'고객 피드백', ph_feedback:'고객 피드백 내용을 입력하세요.', b_next4:'다음 — 최종 확인 →',
+    h_reviewInfo:'AS 접수 정보 확인', h_media:'첨부 미디어', l_symptom2:'접수 증상',
+    l_phenMedia:'접수 현상 (사진 3 + 동영상)', h_analysis2:'고장 원인 분석', l_symptom3:'접수 증상',
+    l_cause2:'불량 원인', l_solution2:'해결 방법', b_generate:'PPT 생성 및 다운로드',
+    t_done:'보고서가 완성되었습니다', t_doneSub:'AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.',
+    b_redown:'📥 다시 다운로드', b_share:'📤 PPT 파일 공유 (카카오톡 등)',
+    b_copy:'📋 보고서 내용 복사', b_print:'🖨️ 인쇄 / PDF 저장', b_restart:'새 보고서 작성',
+    steps:['접수 정보 입력','사진/영상 첨부','원인 분석','최종 확인'], done:'완료',
+    langBtn:'EN',
+    // PPT
+    p_title:'AS  처리 현황', p_topicDefault:'AS 처리 보고서', p_parts:'내부 수리 부품',
+    p_analysis:'고장 원인 분석', p_cause:'원  인', p_solution:'해결', p_opinion:'엔지니어 처리 의견',
+    p_opinionPh:'엔지니어 처리 내용 및 의견을 여기에 작성하세요.', p_svcInfo:'AS 접수 정보',
+    p_rowHospital:'병  원  명', p_rowSerial:'장비 S/N (제조일)', p_rowVer:'UI/FW/H.P Ver',
+    p_rowReq:'요청사항', p_rowDate:'발생 일자', p_rowEng:'담  당  자',
+    p_phen:'접수 현상 (사진/영상)', p_video:'동영상', p_feedback:'고객 피드백',
+    p_feedbackPh:'고객 피드백 내용을 여기에 작성하세요.', p_photo:'사진', p_fileName:'AS_처리_보고서',
+    val_req:(f)=>`"${f}"을(를) 입력해주세요.`, val_symptom:'접수 증상을 입력해주세요.',
+    val_cause:'불량 원인을 입력해주세요.', val_solution:'해결 방법을 입력해주세요.',
+  },
+  en: {
+    appTitle:'Field Service Report',
+    h_svcInfo:'Service Request', l_hospital:'Site / Account', ph_hospital:'e.g. Mimo Dream Clinic',
+    l_serial:'Device S/N', ph_serial:'e.g. BYB018', l_mfg:'Mfg. Date', ph_mfg:'e.g. Nov 2022',
+    ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name',
+    l_req:'Reported Issue', ph_req:'e.g. Nozzle not recognized',
+    h_parts:'Parts Replaced', l_part:'Part', ph_part:"e.g. RFID Module A'ssy",
+    l_partReason:'Reason', ph_partReason:'e.g. RFID recognition failure',
+    b_next2:'Next — Photos →',
+    h_symPhotos:'Symptom Photos (left · up to 3)', h_phenPhotos:'On-site Photos 3 + Video 1 (right)',
+    t_videoHint:'💡 Video is embedded as playable in the PPT. Keep it under 30 seconds to limit file size.',
+    b_prev:'← Back', b_next3:'Next — Diagnosis →',
+    h_analysis:'Diagnosis', l_symptom:'Symptom Found',
+    ph_symptom:"e.g. 'Can't find RFID the Device' on screen; nozzle not recognized",
+    l_cause:'Root Cause', ph_cause:'e.g. USB device recognition failure',
+    l_solution:'Action Taken', ph_solution:'e.g. Replaced USB device in RFID module',
+    h_opinionFb:'Engineer Comments / Feedback', l_opinion:'Engineer Comments', ph_opinion:'Your findings, work performed, follow-up needed',
+    l_feedback:'Customer Feedback', ph_feedback:'What the customer told you', b_next4:'Next — Review →',
+    h_reviewInfo:'Review', h_media:'Attached Media', l_symptom2:'Symptom',
+    l_phenMedia:'On-site (3 Photos + Video)', h_analysis2:'Diagnosis', l_symptom3:'Symptom Found',
+    l_cause2:'Root Cause', l_solution2:'Action Taken', b_generate:'Generate & Download PPT',
+    t_done:'Report ready', t_doneSub:'Your field service report PPT has been generated.<br>On iPhone, save it from the Files app or the share sheet.',
+    b_redown:'📥 Download Again', b_share:'📤 Share PPT File',
+    b_copy:'📋 Copy Report Text', b_print:'🖨️ Print / Save as PDF', b_restart:'New Report',
+    steps:['Request','Photos / Video','Diagnosis','Review'], done:'Done',
+    langBtn:'日本語',
+    // PPT
+    p_title:'Field Service Status', p_topicDefault:'Field Service Report', p_parts:'Parts Replaced',
+    p_analysis:'Diagnosis', p_cause:'Cause', p_solution:'Action', p_opinion:'Engineer Comments',
+    p_opinionPh:'Your findings, work performed, follow-up needed', p_svcInfo:'Service Request',
+    p_rowHospital:'Site', p_rowSerial:'Device S/N (Mfg.)', p_rowVer:'UI/FW/H.P Ver',
+    p_rowReq:'Reported Issue', p_rowDate:'Service Date', p_rowEng:'Engineer',
+    p_phen:'On-site (Photo/Video)', p_video:'Video', p_feedback:'Customer Feedback',
+    p_feedbackPh:'What the customer told you', p_photo:'Photo', p_fileName:'Field_Service_Report',
+    val_req:(f)=>`Please enter "${f}".`, val_symptom:'Please enter the symptom found.',
+    val_cause:'Please enter the root cause.', val_solution:'Please enter the action taken.',
+  },
+  ja: {
+    appTitle:'フィールドサービス報告書',
+    h_svcInfo:'受付情報', l_hospital:'施設名', ph_hospital:'例) ミモドリームクリニック',
+    l_serial:'装置S/N', ph_serial:'例) BYB018', l_mfg:'製造年月', ph_mfg:'例) 2022年11月',
+    ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力',
+    l_req:'申告内容', ph_req:'例) ノズル認識不可',
+    h_parts:'交換部品', l_part:'部品名', ph_part:"例) RFID Module A'ssy",
+    l_partReason:'交換理由', ph_partReason:'例) RFID認識機能の喪失による交換',
+    b_next2:'次へ — 写真添付 →',
+    h_symPhotos:'症状写真（左・最大3枚）', h_phenPhotos:'現場写真3枚 + 動画1本（右）',
+    t_videoHint:'💡 動画は再生可能な形式でPPTに埋め込まれます。ファイルサイズを抑えるため30秒以内を推奨します。',
+    b_prev:'← 戻る', b_next3:'次へ — 診断 →',
+    h_analysis:'故障診断', l_symptom:'確認した症状',
+    ph_symptom:"例) 画面に「Can't find RFID the Device」表示、ノズル認識不可",
+    l_cause:'原因', ph_cause:'例) USBデバイス認識不良',
+    l_solution:'処置内容', ph_solution:'例) RFIDモジュール内のUSBデバイスを交換',
+    h_opinionFb:'担当者コメント / フィードバック', l_opinion:'担当者コメント', ph_opinion:'所見、実施作業、フォローアップ事項を記入',
+    l_feedback:'顧客フィードバック', ph_feedback:'顧客から聞いた内容を記入', b_next4:'次へ — 最終確認 →',
+    h_reviewInfo:'内容確認', h_media:'添付メディア', l_symptom2:'症状',
+    l_phenMedia:'現場（写真3 + 動画）', h_analysis2:'故障診断', l_symptom3:'確認した症状',
+    l_cause2:'原因', l_solution2:'処置内容', b_generate:'PPT生成・ダウンロード',
+    t_done:'報告書が完成しました', t_doneSub:'フィールドサービス報告書のPPTを生成しました。<br>iPhoneでは「ファイル」アプリまたは共有シートから保存してください。',
+    b_redown:'📥 再ダウンロード', b_share:'📤 PPTファイルを共有',
+    b_copy:'📋 報告内容をコピー', b_print:'🖨️ 印刷 / PDF保存', b_restart:'新規作成',
+    steps:['受付情報','写真・動画','診断','確認'], done:'完了',
+    langBtn:'한국어',
+    // PPT
+    p_title:'フィールドサービス報告', p_topicDefault:'フィールドサービス報告書', p_parts:'交換部品',
+    p_analysis:'故障診断', p_cause:'原因', p_solution:'処置', p_opinion:'担当者コメント',
+    p_opinionPh:'所見、実施作業、フォローアップ事項を記入', p_svcInfo:'受付情報',
+    p_rowHospital:'施設名', p_rowSerial:'装置S/N（製造）', p_rowVer:'UI/FW/H.P Ver',
+    p_rowReq:'申告内容', p_rowDate:'対応日', p_rowEng:'担当者',
+    p_phen:'現場（写真/動画）', p_video:'動画', p_feedback:'顧客フィードバック',
+    p_feedbackPh:'顧客から聞いた内容を記入', p_photo:'写真', p_fileName:'Field_Service_Report',
+    val_req:(f)=>`「${f}」を入力してください。`, val_symptom:'確認した症状を入力してください。',
+    val_cause:'原因を入力してください。', val_solution:'処置内容を入力してください。',
+  }
+};
+function t(key){ return (I18N[LANG]||I18N.ko)[key]; }
+
+function applyLang(){
+  const dict = I18N[LANG]||I18N.ko;
+  document.documentElement.lang = LANG||'ko';
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n'); if(dict[k]!==undefined) el.textContent=dict[k];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
+    const k=el.getAttribute('data-i18n-html'); if(dict[k]!==undefined) el.innerHTML=dict[k];
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
+    const k=el.getAttribute('data-i18n-ph'); if(dict[k]!==undefined) el.setAttribute('placeholder',dict[k]);
+  });
+  // 언어 스위치: 현재 언어 강조
+  document.querySelectorAll('#langSwitch .lang-opt').forEach(b=>{
+    const active = b.getAttribute('data-setlang')===LANG;
+    b.style.background = active ? '#CADCFC' : 'transparent';
+    b.style.color = active ? '#1B2F5E' : '#CADCFC';
+  });
+  // 태그 버튼: 언어별 라벨/삽입값 전환
+  document.querySelectorAll('.tag[data-label-ko]').forEach(tg=>{
+    if(LANG==='en'){
+      tg.textContent=tg.getAttribute('data-label-en');
+      tg.setAttribute('data-text', tg.getAttribute('data-text-en'));
+    }else if(LANG==='ja'){
+      tg.textContent=tg.getAttribute('data-label-ja');
+      tg.setAttribute('data-text', tg.getAttribute('data-text-ja'));
+    }else{
+      tg.textContent=tg.getAttribute('data-label-ko');
+      tg.setAttribute('data-text', tg.getAttribute('data-text-ko'));
+    }
+  });
+  updateIndicator();
+}
+function setLang(l){ LANG=l; localStorage.setItem('baz_lang',l); applyLang(); }
+function toggleLang(){ const order=['ko','en','ja']; setLang(order[(order.indexOf(LANG)+1)%order.length]); }
+
 const STEP_PROGRESS=['14%','38%','65%','90%'];
+function stepLabels(){ return (I18N[LANG]||I18N.ko).steps; }
+function stepDone(){ return (I18N[LANG]||I18N.ko).done; }
 
 function buildPhotoSlots(){
   const symGrid=document.getElementById('symGrid');
@@ -378,22 +551,22 @@ function updateIndicator(){
   for(let i=1;i<=4;i++){const d=document.getElementById('dot'+i);d.classList.remove('active','done');
     if(i<currentStep)d.classList.add('done');else if(i===currentStep)d.classList.add('active');}
   for(let i=1;i<=3;i++){document.getElementById('con'+i).classList.toggle('done',i<currentStep);}
-  if(currentStep<=4){document.getElementById('stepLabel').textContent=STEP_LABELS[currentStep-1];
+  if(currentStep<=4){document.getElementById('stepLabel').textContent=stepLabels()[currentStep-1];
     document.getElementById('progressFill').style.width=STEP_PROGRESS[currentStep-1];}
-  else{document.getElementById('stepLabel').textContent='완료';
+  else{document.getElementById('stepLabel').textContent=stepDone();
     document.getElementById('progressFill').style.width='100%';}
 }
 function validateStep(step){
   if(step===1){
     const req=['hospital','serialNo','issueDate','engineer'];
-    const labels=['병원명','장비 S/N','발생 일자','담당자'];
+    const labels=[t('l_hospital'),t('l_serial'),t('l_date'),t('l_eng')];
     for(let i=0;i<req.length;i++){if(!document.getElementById(req[i]).value.trim()){
-      alert(`"${labels[i]}"을(를) 입력해주세요.`);document.getElementById(req[i]).focus();return false;}}
+      alert(t('val_req')(labels[i]));document.getElementById(req[i]).focus();return false;}}
   }
   if(step===3){
-    if(!v('symptom')){alert('접수 증상을 입력해주세요.');return false;}
-    if(!v('cause')){alert('불량 원인을 입력해주세요.');return false;}
-    if(!v('solution')){alert('해결 방법을 입력해주세요.');return false;}
+    if(!v('symptom')){alert(t('val_symptom'));return false;}
+    if(!v('cause')){alert(t('val_cause'));return false;}
+    if(!v('solution')){alert(t('val_solution'));return false;}
   }
   return true;
 }
@@ -596,7 +769,7 @@ async function buildPPTX(Pptx){
   pres.layout='BAZ';
   const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',ACCENT='4E9CC8',WHITE='FFFFFF',
         LGRAY='F7F9FC',MGRAY='E8ECF2',LINE='E2E7F0',DGRAY='6B7A99',TTEXT='3A3A4A';
-  const FF='맑은 고딕';
+  const FF=(LANG==='ja')?'Meiryo':'맑은 고딕';
   const PX=10/960; const P=(px)=>px*PX;
   const s=pres.addSlide(); s.background={color:WHITE};
 
@@ -608,10 +781,8 @@ async function buildPPTX(Pptx){
 
   // ── 헤더 띠 ──
   s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(52),fill:{color:NAVY},line:{color:NAVY}});
-  s.addShape(pres.ShapeType.rect,{x:P(18),y:P(15),w:P(4),h:P(22),fill:{color:ACCENT},line:{type:'none'}});
-  s.addText('AS  처리 현황',{x:P(28),y:0,w:P(280),h:P(52),fontSize:18,bold:true,color:WHITE,fontFace:FF,valign:'middle',margin:0});
   s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(11),w:P(310),h:P(31),fill:{color:'253A66'},rectRadius:0.05,line:{color:'CADCFC',width:0.75}});
-  s.addText(v('requestDetail')||'AS 처리 보고서',{x:P(324),y:P(11),w:P(310),h:P(31),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('requestDetail')||t('p_topicDefault'),{x:P(324),y:P(11),w:P(310),h:P(31),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
   s.addText('baz',{x:P(880),y:0,w:P(70),h:P(52),fontSize:16,bold:true,color:'9EADCC',fontFace:'Georgia',align:'right',valign:'middle',margin:0});
   s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(960),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
   s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'9EADCC',fontFace:FF,valign:'middle',margin:0});
@@ -619,14 +790,14 @@ async function buildPPTX(Pptx){
   const LX=17, LW=421;
 
   // ── 내부 수리 부품 ──
-  sectionHeader(LX,67,200,'내부 수리 부품',NAVY);
+  sectionHeader(LX,67,200,t('p_parts'),NAVY);
   s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},rectRadius:0.04,line:{color:LINE,width:1}});
   s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:'EEF2F8'},line:{color:LINE,width:1}});
   s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
   s.addText(v('partReason')||'—',{x:P(154),y:P(89),w:P(283),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
 
   // ── 고장 원인 분석 ──
-  sectionHeader(LX,138,200,'고장 원인 분석',TEAL);
+  sectionHeader(LX,138,200,t('p_analysis'),TEAL);
   s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(3),h:P(26),fill:{color:TEAL},line:{type:'none'}});
   s.addShape(pres.ShapeType.rect,{x:P(LX+3),y:P(161),w:P(LW-3),h:P(26),fill:{color:LGRAY},line:{color:LINE,width:0.75}});
   s.addText(v('symptom'),{x:P(LX+8),y:P(161),w:P(LW-12),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
@@ -635,23 +806,23 @@ async function buildPPTX(Pptx){
   symPhotos.forEach((p,i)=>{const px=symPos[i][0],py=symPos[i][1];
     if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(123),h:P(94),sizing:{type:'cover',w:P(123),h:P(94)}});
     else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(123),h:P(94),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
+      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
 
   // ── 원인 / 해결 (라벨 색 구분) ──
   s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(299),w:P(421),h:P(66),rectRadius:0.03,fill:{color:WHITE},line:{color:LINE,width:1}});
   s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(33),fill:{color:LGRAY},line:{color:LINE,width:0.5}});
   s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(421),h:P(33),fill:{color:WHITE},line:{color:LINE,width:0.5}});
   s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(58),h:P(33),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('원  인',{x:P(16),y:P(299),w:P(58),h:P(33),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(t('p_cause'),{x:P(16),y:P(299),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
   s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(58),h:P(33),fill:{color:TEAL},line:{color:TEAL}});
-  s.addText('해결',{x:P(16),y:P(332),w:P(58),h:P(33),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(t('p_solution'),{x:P(16),y:P(332),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
   s.addText(v('cause'),{x:P(80),y:P(299),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
   s.addText(v('solution'),{x:P(80),y:P(332),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
 
   // ── 엔지니어 처리 의견 ──
-  sectionHeader(16,374,200,'엔지니어 처리 의견',NAVY);
+  sectionHeader(16,374,200,t('p_opinion'),NAVY);
   s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(396),w:P(421),h:P(127),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('opinion')||'엔지니어 처리 내용 및 의견을 여기에 작성하세요.',{x:P(24),y:P(400),w:P(405),h:P(119),fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('opinion')||t('p_opinionPh'),{x:P(24),y:P(400),w:P(405),h:P(119),fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
 
   // ── 구분선 ──
   s.addShape(pres.ShapeType.line,{x:P(454),y:P(67),w:0,h:P(456),line:{color:MGRAY,width:1}});
@@ -659,12 +830,12 @@ async function buildPPTX(Pptx){
   const RX=469, RW=472;
 
   // ── AS 접수 정보 ──
-  sectionHeader(RX,67,200,'AS 접수 정보',NAVY);
+  sectionHeader(RX,67,200,t('p_svcInfo'),NAVY);
   const mfgStr=v('mfgDate')?`(${v('mfgDate')})`:'';
   const infoRows=[
-    ['병  원  명',v('hospital')],['장비 S/N (제조일)',v('serialNo')+(mfgStr?'  '+mfgStr:'')],
-    ['UI/FW/H.P Ver',v('version')||'—'],['요청사항',v('requestDetail')||'—'],
-    ['발생 일자',v('issueDate')],['담  당  자',v('engineer')],
+    [t('p_rowHospital'),v('hospital')],[t('p_rowSerial'),v('serialNo')+(mfgStr?'  '+mfgStr:'')],
+    [t('p_rowVer'),v('version')||'—'],[t('p_rowReq'),v('requestDetail')||'—'],
+    [t('p_rowDate'),v('issueDate')],[t('p_rowEng'),v('engineer')],
   ];
   const rowH=30, infoY=89, labelW=144;
   s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(infoY),w:P(RW),h:P(rowH*6),rectRadius:0.02,fill:{color:WHITE},line:{color:LINE,width:1}});
@@ -676,13 +847,13 @@ async function buildPPTX(Pptx){
     s.addText(val,{x:P(RX+labelW),y:P(rowY),w:P(RW-labelW),h:P(rowH),fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});});
 
   // ── 접수 현상 (사진/영상) ──
-  sectionHeader(RX,286,200,'접수 현상 (사진/영상)',TEAL);
+  sectionHeader(RX,286,200,t('p_phen'),TEAL);
   const cellW=106, cellH=106, gap=16, startX=469, mediaY=307;
   const mediaX=[startX, startX+cellW+gap, startX+2*(cellW+gap), startX+3*(cellW+gap)];
   phenPhotos.forEach((p,i)=>{const px=mediaX[i],py=mediaY;
     if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(cellW),h:P(cellH),sizing:{type:'cover',w:P(cellW),h:P(cellH)}});
     else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
+      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
   const vx=mediaX[3], vy=mediaY;
   if(phenVideo){
     const mediaOpt={ type:'video', x:P(vx), y:P(vy), w:P(cellW), h:P(cellH),
@@ -690,19 +861,26 @@ async function buildPPTX(Pptx){
     if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster);
     s.addMedia(mediaOpt);
     s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fill:{color:NAVY},line:{type:'none'}});
-    s.addText('동영상',{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addText(t('p_video'),{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
   }else{
     s.addShape(pres.ShapeType.roundRect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:'F3EEFA'},line:{color:'C4B0E0',dashType:'dash'}});
-    s.addText('동영상',{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addText(t('p_video'),{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
   }
 
   // ── 고객 피드백 ──
-  sectionHeader(RX,425,200,'고객 피드백',NAVY);
+  sectionHeader(RX,425,200,t('p_feedback'),NAVY);
   s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(447),w:P(RW),h:P(76),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('feedback')||'고객 피드백 내용을 여기에 작성하세요.',{x:P(RX+8),y:P(451),w:P(RW-16),h:P(68),fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('feedback')||t('p_feedbackPh'),{x:P(RX+8),y:P(451),w:P(RW-16),h:P(68),fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
 
-  const fileName=`AS_처리_보고서_${v('hospital')||'미지정'}_${v('serialNo')||'no_sn'}`;
-  await pres.writeFile({fileName:fileName+'.pptx'});
+  const fileName=`${t('p_fileName')}_${v('hospital')||'NA'}_${v('serialNo')||'no_sn'}`;
+  // blob 생성 → 공유용 보관 + 다운로드
+  const blob=await pres.write({outputType:'blob'});
+  window._lastPptx={blob:blob, name:fileName+'.pptx'};
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=fileName+'.pptx';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 
 // ── 카카오 초기화 ──
@@ -972,6 +1150,44 @@ function printReport(){
 }
 
 function redownload(){ generatePPT(); }
+
+async function sharePptx(){
+  try{
+    // PPT가 아직 없으면 먼저 생성
+    if(!window._lastPptx){
+      alert('먼저 PPT를 생성해주세요. 잠시 후 다시 시도합니다.');
+      const Lib=typeof window.PptxGenJS!=="undefined"?window.PptxGenJS:(typeof window.pptxgen!=="undefined"?window.pptxgen:null);
+      if(!Lib){alert('PPT 라이브러리를 불러오지 못했습니다.');return;}
+      await buildPPTX(Lib);
+    }
+    const {blob,name}=window._lastPptx;
+    const file=new File([blob],name,{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+
+    // 1순위: 파일 직접 공유 (모바일 — 카카오톡 선택 가능)
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({
+        files:[file],
+        title:name.replace('.pptx',''),
+        text:'BAZ BIOMEDIC AS 처리 보고서'
+      });
+      return;
+    }
+    // 2순위: 파일 공유 미지원 → 텍스트/링크만 공유
+    if(navigator.share){
+      await navigator.share({
+        title:'BAZ AS 처리 보고서',
+        text:`AS 처리 보고서 (${name})\n이 기기는 파일 직접 공유를 지원하지 않습니다. 다운로드한 파일을 카카오톡에서 첨부해주세요.`
+      });
+      return;
+    }
+    // 3순위: Web Share 자체 미지원 (구형 PC 브라우저)
+    alert('이 브라우저는 공유 기능을 지원하지 않습니다.\n\n[다시 다운로드] 후 카카오톡 채팅방에서 파일 첨부(+)로 전송해주세요.');
+  }catch(e){
+    if(e.name!=='AbortError'){
+      alert('공유 중 오류: '+e.message+'\n\n다운로드 후 카카오톡에서 직접 첨부해주세요.');
+    }
+  }
+}
 function restart(){
   ['hospital','serialNo','mfgDate','version','issueDate','engineer','requestDetail',
    'partName','partReason','symptom','cause','solution','feedback','opinion']
@@ -989,11 +1205,15 @@ function restart(){
 }
 
 document.addEventListener('click',function(e){
+  const langBtn=e.target.closest('[data-lang]');
+  if(langBtn){ setLang(langBtn.getAttribute('data-lang')); document.getElementById('langSelect').style.display='none'; return; }
+  const setLangBtn=e.target.closest('[data-setlang]');
+  if(setLangBtn){ setLang(setLangBtn.getAttribute('data-setlang')); return; }
   const goBtn=e.target.closest('[data-go]');
   if(goBtn){goStep(parseInt(goBtn.getAttribute('data-go'),10));return;}
   const actBtn=e.target.closest('[data-action]');
   if(actBtn){const a=actBtn.getAttribute('data-action');
-    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();else if(a==='saveToSheet')saveToSheet();return;}
+    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();else if(a==='saveToSheet')saveToSheet();else if(a==='sharePptx')sharePptx();return;}
   const tag=e.target.closest('.tag[data-field]');
   if(tag){appendText(tag.getAttribute('data-field'),tag.getAttribute('data-text'));return;}
   const rm=e.target.closest('[data-remove]');
@@ -1002,6 +1222,10 @@ document.addEventListener('click',function(e){
 
 buildPhotoSlots();
 initCounters();
+// 언어 초기화: 저장된 선택이 없으면 선택 화면 표시
+if(LANG){ applyLang(); }
+else { document.getElementById('langSelect').style.display='flex'; }
+
 </script>
 </body>
 </html>
