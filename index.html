@@ -116,11 +116,21 @@
   .btn-copy:active{background:#D0EAF3;}
   .btn-print{display:block;width:100%;padding:13px;border-radius:10px;background:#F5F7FA;color:#4A4A4A;font-size:14px;font-weight:700;border:1.5px solid #DDE3EE;cursor:pointer;font-family:inherit;margin-bottom:10px;}
   .btn-print:active{background:#E8ECF2;}
+  .btn-gsheet{display:block;width:100%;padding:13px;border-radius:10px;background:#E6F4EA;color:#137333;font-size:14px;font-weight:700;border:1.5px solid #A8DAB5;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-gsheet:active{background:#CEEAD6;}
+  .gsheet-status{font-size:11px;text-align:center;margin:-4px 0 10px;line-height:1.5;}
+  .gsheet-status.ok{color:#137333;}
+  .gsheet-status.err{color:#C0392B;}
   @media print{header,.progress-bar,.step-indicator,.step-label,.nav-bar,.btn-kakao,.btn-copy,.btn-print,.btn-restart,.btn-download{display:none!important;} .step-page{display:block!important;} .card{box-shadow:none;margin:0 0 12px;} body{background:#fff;}}
+  .char-counter{display:block;text-align:right;font-size:10px;color:var(--text-muted);margin-top:3px;font-weight:500;letter-spacing:.02em;}
+  .char-counter.warn{color:#C0392B;}
+  .field-group{position:relative;}
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script src="https://apis.google.com/js/api.js" async></script>
 </head>
 <body>
 <header>
@@ -148,32 +158,32 @@
     <div class="card-header"><div class="badge-icon">🏥</div><h2>AS 접수 정보</h2></div>
     <div class="card-body">
       <div class="field-group"><label>병원명 <span class="required">*</span></label>
-        <input type="text" id="hospital" placeholder="예) 미모드림의원 천호"></div>
+        <input type="text" id="hospital" placeholder="예) 미모드림의원 천호" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_hospital">0/20</span></div>
       <div class="row-2">
         <div class="field-group"><label>장비 S/N <span class="required">*</span></label>
-          <input type="text" id="serialNo" placeholder="예) BYB018"></div>
+          <input type="text" id="serialNo" placeholder="예) BYB018" maxlength="15" oninput="updCounter(this)"><span class="char-counter" id="cc_serialNo">0/15</span></div>
         <div class="field-group"><label>제조일</label>
-          <input type="text" id="mfgDate" placeholder="예) 2022년 11월"></div>
+          <input type="text" id="mfgDate" placeholder="예) 2022년 11월" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_mfgDate">0/12</span></div>
       </div>
       <div class="field-group"><label>UI / FW / H.P Ver</label>
-        <input type="text" id="version" placeholder="예) 2.1.1 / 2.6 / 1.2.2"></div>
+        <input type="text" id="version" placeholder="예) 2.1.1 / 2.6 / 1.2.2" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_version">0/20</span></div>
       <div class="row-2">
         <div class="field-group"><label>발생 일자 <span class="required">*</span></label>
           <input type="date" id="issueDate"></div>
         <div class="field-group"><label>담당자 <span class="required">*</span></label>
-          <input type="text" id="engineer" placeholder="예) 홍 길 동"></div>
+          <input type="text" id="engineer" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
       </div>
       <div class="field-group"><label>요청사항 (토픽)</label>
-        <input type="text" id="requestDetail" placeholder="예) 노즐 인식 불가"></div>
+        <input type="text" id="requestDetail" placeholder="예) 노즐 인식 불가" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_requestDetail">0/18</span></div>
     </div>
   </div>
   <div class="card">
     <div class="card-header"><div class="badge-icon">🔧</div><h2>내부 수리 부품</h2></div>
     <div class="card-body">
       <div class="field-group"><label>부품명</label>
-        <input type="text" id="partName" placeholder="예) RFID Module A'ssy"></div>
+        <input type="text" id="partName" placeholder="예) RFID Module A'ssy" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_partName">0/18</span></div>
       <div class="field-group"><label>교체 사유</label>
-        <input type="text" id="partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건"></div>
+        <input type="text" id="partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건" maxlength="28" oninput="updCounter(this)"><span class="char-counter" id="cc_partReason">0/28</span></div>
     </div>
   </div>
   <div class="nav-bar"><button type="button" class="btn-next" data-go="2">다음 — 사진 첨부 →</button></div>
@@ -211,7 +221,7 @@
           <span class="tag" data-field="symptom" data-text="분사 불량">분사 불량</span>
           <span class="tag" data-field="symptom" data-text="화면 오류">화면 오류</span>
         </div>
-        <textarea id="symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태."></textarea></div>
+        <textarea id="symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태." maxlength="40" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_symptom">0/40</span></div>
       <div class="field-group"><label>불량 원인 <span class="required">*</span></label>
         <div class="tag-suggestions">
           <span class="tag" data-field="cause" data-text="USB 장치 인식 불량에 따른 동작 불가">USB 인식 불량</span>
@@ -219,7 +229,7 @@
           <span class="tag" data-field="cause" data-text="Luer-lock 체결 불량">Luer-lock 불량</span>
           <span class="tag" data-field="cause" data-text="노즐 재사용으로 인한 멤브레인 손상">멤브레인 손상</span>
         </div>
-        <textarea id="cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가"></textarea></div>
+        <textarea id="cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_cause">0/32</span></div>
       <div class="field-group"><label>해결 방법 <span class="required">*</span></label>
         <div class="tag-suggestions">
           <span class="tag" data-field="solution" data-text="RFID Module 내 USB 장치 교환">USB 장치 교환</span>
@@ -227,16 +237,16 @@
           <span class="tag" data-field="solution" data-text="약액 재조제 후 재투여">약액 재조제</span>
           <span class="tag" data-field="solution" data-text="Luer-lock 재체결">Luer-lock 재체결</span>
         </div>
-        <textarea id="solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능"></textarea></div>
+        <textarea id="solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_solution">0/32</span></div>
     </div>
   </div>
   <div class="card">
     <div class="card-header"><div class="badge-icon">💬</div><h2>처리 의견 / 피드백</h2></div>
     <div class="card-body">
       <div class="field-group"><label>엔지니어 처리 의견</label>
-        <textarea id="opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요."></textarea></div>
+        <textarea id="opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_opinion">0/45</span></div>
       <div class="field-group"><label>고객 피드백</label>
-        <textarea id="feedback" placeholder="고객 피드백 내용을 입력하세요."></textarea></div>
+        <textarea id="feedback" placeholder="고객 피드백 내용을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_feedback">0/45</span></div>
     </div>
   </div>
   <div class="nav-bar">
@@ -286,6 +296,8 @@
   </div>
   <div style="padding:0 16px 24px;">
     <button type="button" class="btn-download" data-action="redownload">📥 다시 다운로드</button>
+    <button type="button" class="btn-gsheet" data-action="saveToSheet">📊 Google 시트에 기록</button>
+    <div class="gsheet-status" id="gsheetStatus" style="display:none;"></div>
     <button type="button" class="btn-kakao" data-action="kakaoShare">
       <img src="https://developers.kakao.com/assets/img/about/logos/kakaolink/kakaolink_btn_medium.png" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;" alt="">카카오톡으로 공유
     </button>
@@ -547,6 +559,21 @@ function buildPreview(){
 }
 function v(id){return (document.getElementById(id)?.value||'').trim();}
 
+function updCounter(el){
+  const max=parseInt(el.getAttribute('maxlength'),10);
+  const len=el.value.length;
+  const cc=document.getElementById('cc_'+el.id);
+  if(cc){
+    cc.textContent=len+'/'+max;
+    cc.classList.toggle('warn', len>=max);
+  }
+}
+function initCounters(){
+  document.querySelectorAll('[maxlength]').forEach(el=>{
+    if(el.id&&document.getElementById('cc_'+el.id)) updCounter(el);
+  });
+}
+
 async function generatePPT(){
   const btn=document.querySelector('.btn-generate');
   btn.disabled=true;btn.innerHTML='<span>⏳</span> 생성 중...';
@@ -567,55 +594,72 @@ async function buildPPTX(Pptx){
   const pres=new Pptx();
   pres.defineLayout({name:'BAZ',width:10,height:5.625});
   pres.layout='BAZ';
-  const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',WHITE='FFFFFF',
-        LGRAY='F5F7FA',MGRAY='E8ECF2',DGRAY='4A4A4A',TTEXT='1A1A2E';
+  const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',ACCENT='4E9CC8',WHITE='FFFFFF',
+        LGRAY='F7F9FC',MGRAY='E8ECF2',LINE='E2E7F0',DGRAY='6B7A99',TTEXT='3A3A4A';
   const FF='맑은 고딕';
   const PX=10/960; const P=(px)=>px*PX;
   const s=pres.addSlide(); s.background={color:WHITE};
 
+  // ── 섹션 헤더 헬퍼: 왼쪽 컬러 바 + 텍스트 (가벼운 스타일) ──
+  function sectionHeader(x,y,w,text,barColor){
+    s.addShape(pres.ShapeType.rect,{x:P(x),y:P(y),w:P(3),h:P(15),fill:{color:barColor||NAVY},line:{type:'none'}});
+    s.addText(text,{x:P(x+8),y:P(y-3),w:P(w),h:P(20),fontSize:11,bold:true,color:NAVY,fontFace:FF,valign:'middle',margin:0});
+  }
+
+  // ── 헤더 띠 ──
   s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(52),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('AS  처리 현황',{x:P(18),y:0,w:P(288),h:P(52),fontSize:18,bold:true,color:WHITE,fontFace:FF,valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(9),w:P(310),h:P(35),fill:{color:NAVY2},rectRadius:0.04,line:{color:'CADCFC',width:1}});
-  s.addText(v('requestDetail')||'AS 처리 보고서',{x:P(324),y:P(9),w:P(310),h:P(35),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(958),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'CADCFC',fontFace:FF,valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(18),y:P(15),w:P(4),h:P(22),fill:{color:ACCENT},line:{type:'none'}});
+  s.addText('AS  처리 현황',{x:P(28),y:0,w:P(280),h:P(52),fontSize:18,bold:true,color:WHITE,fontFace:FF,valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(11),w:P(310),h:P(31),fill:{color:'253A66'},rectRadius:0.05,line:{color:'CADCFC',width:0.75}});
+  s.addText(v('requestDetail')||'AS 처리 보고서',{x:P(324),y:P(11),w:P(310),h:P(31),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText('baz',{x:P(880),y:0,w:P(70),h:P(52),fontSize:16,bold:true,color:'9EADCC',fontFace:'Georgia',align:'right',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(960),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'9EADCC',fontFace:FF,valign:'middle',margin:0});
 
   const LX=17, LW=421;
-  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(62),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
-  s.addText('내부 수리 부품',{x:P(LX),y:P(62),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},line:{color:MGRAY,width:1}});
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:MGRAY},line:{color:MGRAY,width:1}});
-  s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('partReason')||'—',{x:P(153),y:P(89),w:P(284),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(133),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
-  s.addText('고장 원인 분석',{x:P(LX),y:P(133),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(161),w:P(72),h:P(26),fill:{color:'F0F4F8'},rectRadius:0.06,line:{color:MGRAY}});
-  s.addText('접수 증상',{x:P(LX),y:P(161),w:P(72),h:P(26),fontSize:9,bold:true,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(LW),h:P(26),fill:{color:LGRAY},line:{color:MGRAY,width:1}});
-  s.addText(v('symptom'),{x:P(24),y:P(161),w:P(414),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,4]});
+
+  // ── 내부 수리 부품 ──
+  sectionHeader(LX,67,200,'내부 수리 부품',NAVY);
+  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},rectRadius:0.04,line:{color:LINE,width:1}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:'EEF2F8'},line:{color:LINE,width:1}});
+  s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('partReason')||'—',{x:P(154),y:P(89),w:P(283),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+
+  // ── 고장 원인 분석 ──
+  sectionHeader(LX,138,200,'고장 원인 분석',TEAL);
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(3),h:P(26),fill:{color:TEAL},line:{type:'none'}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX+3),y:P(161),w:P(LW-3),h:P(26),fill:{color:LGRAY},line:{color:LINE,width:0.75}});
+  s.addText(v('symptom'),{x:P(LX+8),y:P(161),w:P(LW-12),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+
   const symPos=[[31,195],[169,195],[307,195]];
   symPhotos.forEach((p,i)=>{const px=symPos[i][0],py=symPos[i][1];
     if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(123),h:P(94),sizing:{type:'cover',w:P(123),h:P(94)}});
-    else { s.addShape(pres.ShapeType.rect,{x:P(px),y:P(py),w:P(123),h:P(94),fill:{color:LGRAY},line:{color:MGRAY}});
+    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(123),h:P(94),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
       s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(32),fill:{color:MGRAY},line:{color:MGRAY}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(333),w:P(421),h:P(32),fill:{color:LGRAY},line:{color:MGRAY}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(63),h:P(32),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('원  인',{x:P(16),y:P(299),w:P(63),h:P(32),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(333),w:P(63),h:P(32),fill:{color:NAVY2},line:{color:NAVY2}});
-  s.addText('해결 방법',{x:P(16),y:P(333),w:P(63),h:P(32),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('cause'),{x:P(81),y:P(299),w:P(356),h:P(32),fontSize:10,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,6]});
-  s.addText(v('solution'),{x:P(80),y:P(336),w:P(356),h:P(32),fontSize:10,color:TTEXT,fontFace:FF,valign:'middle',margin:[0,0,0,6]});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(371),w:P(421),h:P(20),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('엔지니어 처리 의견',{x:P(16),y:P(371),w:P(421),h:P(20),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(391),w:P(421),h:P(132),fill:{color:LGRAY},line:{color:MGRAY}});
-  s.addText(v('opinion')||'엔지니어 처리 내용 및 의견을 여기에 작성하세요.',{x:P(24),y:P(396),w:P(405),h:P(122),fontSize:9,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,valign:'top',margin:0});
 
-  s.addShape(pres.ShapeType.line,{x:P(454),y:P(62),w:0,h:P(461),line:{color:MGRAY,width:1}});
+  // ── 원인 / 해결 (라벨 색 구분) ──
+  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(299),w:P(421),h:P(66),rectRadius:0.03,fill:{color:WHITE},line:{color:LINE,width:1}});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(33),fill:{color:LGRAY},line:{color:LINE,width:0.5}});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(421),h:P(33),fill:{color:WHITE},line:{color:LINE,width:0.5}});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(58),h:P(33),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('원  인',{x:P(16),y:P(299),w:P(58),h:P(33),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(58),h:P(33),fill:{color:TEAL},line:{color:TEAL}});
+  s.addText('해결',{x:P(16),y:P(332),w:P(58),h:P(33),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('cause'),{x:P(80),y:P(299),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('solution'),{x:P(80),y:P(332),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+
+  // ── 엔지니어 처리 의견 ──
+  sectionHeader(16,374,200,'엔지니어 처리 의견',NAVY);
+  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(396),w:P(421),h:P(127),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
+  s.addText(v('opinion')||'엔지니어 처리 내용 및 의견을 여기에 작성하세요.',{x:P(24),y:P(400),w:P(405),h:P(119),fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+
+  // ── 구분선 ──
+  s.addShape(pres.ShapeType.line,{x:P(454),y:P(67),w:0,h:P(456),line:{color:MGRAY,width:1}});
 
   const RX=469, RW=472;
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(62),w:P(119),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
-  s.addText('AS 접수 정보',{x:P(RX),y:P(62),w:P(119),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+
+  // ── AS 접수 정보 ──
+  sectionHeader(RX,67,200,'AS 접수 정보',NAVY);
   const mfgStr=v('mfgDate')?`(${v('mfgDate')})`:'';
   const infoRows=[
     ['병  원  명',v('hospital')],['장비 S/N (제조일)',v('serialNo')+(mfgStr?'  '+mfgStr:'')],
@@ -623,39 +667,39 @@ async function buildPPTX(Pptx){
     ['발생 일자',v('issueDate')],['담  당  자',v('engineer')],
   ];
   const rowH=30, infoY=89, labelW=144;
+  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(infoY),w:P(RW),h:P(rowH*6),rectRadius:0.02,fill:{color:WHITE},line:{color:LINE,width:1}});
   infoRows.forEach((row,i)=>{const label=row[0],val=row[1];const rowY=infoY+i*rowH; const even=i%2===0;
-    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(RW),h:P(rowH),fill:{color:even?LGRAY:WHITE},line:{color:MGRAY,width:0.5}});
-    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fill:{color:even?MGRAY:'EEF2F8'},line:{color:MGRAY,width:0.5}});
-    s.addText(label,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fontSize:10,bold:true,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+    if(even) s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(RW),h:P(rowH),fill:{color:LGRAY},line:{type:'none'}});
+    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fill:{color:'EEF2F8'},line:{color:LINE,width:0.5}});
+    if(i<5) s.addShape(pres.ShapeType.line,{x:P(RX),y:P(rowY+rowH),w:P(RW),h:0,line:{color:LINE,width:0.5}});
+    s.addText(label,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
     s.addText(val,{x:P(RX+labelW),y:P(rowY),w:P(RW-labelW),h:P(rowH),fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});});
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(281),w:P(180),h:P(23),fill:{color:NAVY},rectRadius:0.08,line:{color:NAVY}});
-  s.addText('접수 현상 (사진/영상)',{x:P(RX),y:P(281),w:P(180),h:P(23),fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  // 사진 3컷 + 동영상 1컷 균등 배치 (106폭, 간격 약 16)
+
+  // ── 접수 현상 (사진/영상) ──
+  sectionHeader(RX,286,200,'접수 현상 (사진/영상)',TEAL);
   const cellW=106, cellH=106, gap=16, startX=469, mediaY=307;
   const mediaX=[startX, startX+cellW+gap, startX+2*(cellW+gap), startX+3*(cellW+gap)];
-  // 사진 3컷
   phenPhotos.forEach((p,i)=>{const px=mediaX[i],py=mediaY;
     if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(cellW),h:P(cellH),sizing:{type:'cover',w:P(cellW),h:P(cellH)}});
-    else { s.addShape(pres.ShapeType.rect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fill:{color:LGRAY},line:{color:MGRAY}});
+    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
       s.addText('사진 '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
-  // 동영상 1컷 (4번째 칸)
   const vx=mediaX[3], vy=mediaY;
   if(phenVideo){
     const mediaOpt={ type:'video', x:P(vx), y:P(vy), w:P(cellW), h:P(cellH),
       data:`video/${phenVideo.ext};base64,${phenVideo.data.split(',')[1]}` };
-    if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster); // 포스터(첫 프레임)
+    if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster);
     s.addMedia(mediaOpt);
-    // 영상 표시용 라벨 바
     s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fill:{color:NAVY},line:{type:'none'}});
-    s.addText('▶ 동영상',{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addText('동영상',{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
   }else{
-    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fill:{color:LGRAY},line:{color:MGRAY}});
-    s.addText('🎬 동영상',{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addShape(pres.ShapeType.roundRect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:'F3EEFA'},line:{color:'C4B0E0',dashType:'dash'}});
+    s.addText('동영상',{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
   }
-  s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(420),w:P(RW),h:P(20),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('고객 피드백',{x:P(RX),y:P(420),w:P(RW),h:P(20),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(440),w:P(RW),h:P(82),fill:{color:LGRAY},line:{color:MGRAY}});
-  s.addText(v('feedback')||'고객 피드백 내용을 여기에 작성하세요.',{x:P(RX+8),y:P(445),w:P(RW-16),h:P(72),fontSize:9,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,valign:'top',margin:0});
+
+  // ── 고객 피드백 ──
+  sectionHeader(RX,425,200,'고객 피드백',NAVY);
+  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(447),w:P(RW),h:P(76),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
+  s.addText(v('feedback')||'고객 피드백 내용을 여기에 작성하세요.',{x:P(RX+8),y:P(451),w:P(RW-16),h:P(68),fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
 
   const fileName=`AS_처리_보고서_${v('hospital')||'미지정'}_${v('serialNo')||'no_sn'}`;
   await pres.writeFile({fileName:fileName+'.pptx'});
@@ -667,6 +711,156 @@ async function buildPPTX(Pptx){
     Kakao.init('44dadb8113fce5e8188f03bbdcd27fc6');
   }catch(e){ console.warn('Kakao SDK init failed:', e); }
 })();
+
+// ═══════════════════════════════════════════
+// Google Sheets 연동
+// ═══════════════════════════════════════════
+const GOOGLE_CLIENT_ID='171916204257-e6ofaf41mu2dnnisrjskj2ncrpa3bu6p.apps.googleusercontent.com';
+const GOOGLE_SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+const SHEET_TITLE='BAZ_CS_AS접수현황';
+const SHEET_HEADERS=['기록일시','병원명','장비 S/N','제조일','버전','발생일자','담당자','요청사항','교체부품','교체사유','접수증상','불량원인','해결방법','처리의견','고객피드백'];
+
+let gapiReady=false, gisReady=false, tokenClient=null, googleToken=null;
+
+function loadGapiClient(){
+  return new Promise((resolve,reject)=>{
+    if(typeof gapi==='undefined'){reject(new Error('gapi 미로드'));return;}
+    gapi.load('client',async()=>{
+      try{
+        await gapi.client.init({discoveryDocs:[
+          'https://sheets.googleapis.com/$discovery/rest?version=v4',
+          'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
+        ]});
+        gapiReady=true;resolve();
+      }catch(e){reject(e);}
+    });
+  });
+}
+function initTokenClient(){
+  if(typeof google==='undefined'||!google.accounts){return false;}
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:GOOGLE_CLIENT_ID,
+    scope:GOOGLE_SCOPES,
+    callback:'', // 동적 지정
+  });
+  gisReady=true;
+  return true;
+}
+function ensureGoogleToken(){
+  return new Promise((resolve,reject)=>{
+    if(!gisReady && !initTokenClient()){reject(new Error('Google 로그인 모듈 미로드'));return;}
+    tokenClient.callback=(resp)=>{
+      if(resp.error){reject(new Error(resp.error));return;}
+      googleToken=resp.access_token;
+      gapi.client.setToken({access_token:googleToken});
+      resolve(googleToken);
+    };
+    // 이미 토큰 있으면 조용히, 없으면 동의창
+    tokenClient.requestAccessToken({prompt: googleToken?'':'consent'});
+  });
+}
+
+function setSheetStatus(msg, type){
+  const el=document.getElementById('gsheetStatus');
+  if(!el)return;
+  el.style.display='block';
+  el.textContent=msg;
+  el.className='gsheet-status'+(type?' '+type:'');
+}
+
+// 시트 ID는 localStorage 미지원 → 메모리 + URL 파라미터 대안 / 여기선 sessionStorage 불가하므로 변수+드라이브 검색
+let cachedSheetId=null;
+
+async function findOrCreateSheet(){
+  // 1) 캐시
+  if(cachedSheetId)return cachedSheetId;
+  // 2) Drive에서 기존 시트 검색
+  try{
+    const q=`name='${SHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`;
+    const res=await gapi.client.drive.files.list({q:q, fields:'files(id,name)', pageSize:1});
+    if(res.result.files && res.result.files.length){
+      cachedSheetId=res.result.files[0].id;
+      return cachedSheetId;
+    }
+  }catch(e){ /* 검색 실패시 새로 생성 */ }
+  // 3) 새 시트 생성
+  const createRes=await gapi.client.sheets.spreadsheets.create({
+    properties:{title:SHEET_TITLE}
+  });
+  cachedSheetId=createRes.result.spreadsheetId;
+  // 헤더 작성
+  await gapi.client.sheets.spreadsheets.values.update({
+    spreadsheetId:cachedSheetId,
+    range:'A1',
+    valueInputOption:'USER_ENTERED',
+    resource:{values:[SHEET_HEADERS]}
+  });
+  // 헤더 스타일 (네이비 배경 + 흰 글씨 + 굵게)
+  try{
+    await gapi.client.sheets.spreadsheets.batchUpdate({
+      spreadsheetId:cachedSheetId,
+      resource:{requests:[{
+        repeatCell:{
+          range:{sheetId:0,startRowIndex:0,endRowIndex:1},
+          cell:{userEnteredFormat:{
+            backgroundColor:{red:0.106,green:0.184,blue:0.369},
+            textFormat:{foregroundColor:{red:1,green:1,blue:1},bold:true},
+            horizontalAlignment:'CENTER'
+          }},
+          fields:'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
+        }
+      },{
+        updateSheetProperties:{
+          properties:{sheetId:0,gridProperties:{frozenRowCount:1}},
+          fields:'gridProperties.frozenRowCount'
+        }
+      }]}
+    });
+  }catch(e){ /* 스타일 실패해도 진행 */ }
+  return cachedSheetId;
+}
+
+async function saveToSheet(){
+  const btn=document.querySelector('[data-action="saveToSheet"]');
+  const origText=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent='⏳ 연동 중...';}
+  setSheetStatus('Google 계정 확인 중...','');
+  try{
+    if(!gapiReady)await loadGapiClient();
+    await ensureGoogleToken();
+    setSheetStatus('시트 확인 중...','');
+    const sheetId=await findOrCreateSheet();
+
+    // 데이터 한 줄 구성
+    const now=new Date();
+    const ts=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const row=[
+      ts, v('hospital'), v('serialNo'), v('mfgDate'), v('version'),
+      v('issueDate'), v('engineer'), v('requestDetail'),
+      v('partName'), v('partReason'),
+      v('symptom'), v('cause'), v('solution'), v('opinion'), v('feedback')
+    ];
+    await gapi.client.sheets.spreadsheets.values.append({
+      spreadsheetId:sheetId,
+      range:'A1',
+      valueInputOption:'USER_ENTERED',
+      insertDataOption:'INSERT_ROWS',
+      resource:{values:[row]}
+    });
+
+    const url=`https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    setSheetStatus('✅ 시트에 기록되었습니다. 탭하여 시트 열기','ok');
+    const statusEl=document.getElementById('gsheetStatus');
+    if(statusEl){statusEl.style.cursor='pointer';statusEl.onclick=()=>window.open(url,'_blank');}
+    if(btn){btn.textContent='✅ 기록 완료';}
+  }catch(e){
+    console.error(e);
+    let msg=e.message||'알 수 없는 오류';
+    if(msg.includes('popup')||msg.includes('access_denied'))msg='로그인이 취소되었습니다.';
+    setSheetStatus('❌ 기록 실패: '+msg,'err');
+    if(btn){btn.disabled=false;btn.textContent=origText;}
+  }
+}
 
 function kakaoShare(){
   try{
@@ -782,10 +976,15 @@ function restart(){
   ['hospital','serialNo','mfgDate','version','issueDate','engineer','requestDetail',
    'partName','partReason','symptom','cause','solution','feedback','opinion']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  initCounters();
   for(let i=0;i<3;i++){removePhoto('sym',i);removePhoto('phen',i);}
   removePhoto('video',0);
   const btn=document.querySelector('.btn-generate');
   if(btn){btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';}
+  const sheetBtn=document.querySelector('[data-action="saveToSheet"]');
+  if(sheetBtn){sheetBtn.disabled=false;sheetBtn.textContent='📊 Google 시트에 기록';}
+  const sheetStatus=document.getElementById('gsheetStatus');
+  if(sheetStatus){sheetStatus.style.display='none';sheetStatus.onclick=null;}
   goStep(1);
 }
 
@@ -794,7 +993,7 @@ document.addEventListener('click',function(e){
   if(goBtn){goStep(parseInt(goBtn.getAttribute('data-go'),10));return;}
   const actBtn=e.target.closest('[data-action]');
   if(actBtn){const a=actBtn.getAttribute('data-action');
-    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();return;}
+    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();else if(a==='saveToSheet')saveToSheet();return;}
   const tag=e.target.closest('.tag[data-field]');
   if(tag){appendText(tag.getAttribute('data-field'),tag.getAttribute('data-text'));return;}
   const rm=e.target.closest('[data-remove]');
@@ -802,6 +1001,7 @@ document.addEventListener('click',function(e){
 });
 
 buildPhotoSlots();
+initCounters();
 </script>
 </body>
 </html>
