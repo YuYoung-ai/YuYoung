@@ -135,6 +135,29 @@
   .date-wrap input[type="date"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;cursor:pointer;font-size:16px;}
   /* iOS에서 date input 우측 화살표 영역만 클릭되는 문제 방지 */
   .date-wrap input[type="date"]::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;}
+  .credit-card{position:relative;margin:8px 16px 28px;border-radius:18px;overflow:hidden;
+    background:linear-gradient(135deg,#1B2F5E 0%,#16264D 55%,#101D3D 100%);
+    padding:24px 24px 22px;box-shadow:0 8px 24px rgba(16,29,61,.28);}
+  .cc-glow{position:absolute;border-radius:50%;pointer-events:none;}
+  .cc-glow1{width:200px;height:200px;right:-50px;bottom:-70px;
+    background:radial-gradient(circle,rgba(78,156,200,.18) 0%,rgba(78,156,200,0) 70%);}
+  .cc-glow2{width:130px;height:130px;right:30px;bottom:-30px;
+    background:radial-gradient(circle,rgba(202,220,252,.10) 0%,rgba(202,220,252,0) 70%);}
+  .cc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;position:relative;z-index:1;}
+  .cc-team{font-size:10.5px;font-weight:700;letter-spacing:.12em;color:#7E91BE;}
+  .cc-ver{font-size:10px;font-weight:600;color:#8EA0C8;background:rgba(202,220,252,.10);
+    border:1px solid rgba(202,220,252,.18);border-radius:14px;padding:4px 11px;letter-spacing:.04em;}
+  .cc-name-row{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;position:relative;z-index:1;}
+  .cc-name{font-size:26px;font-weight:800;color:#fff;letter-spacing:.01em;}
+  .cc-pro{font-size:12px;font-weight:700;color:#6FA8D8;letter-spacing:.04em;}
+  .cc-role{font-size:12px;color:#8595BC;margin-bottom:20px;position:relative;z-index:1;}
+  .cc-divider{height:1px;background:linear-gradient(90deg,rgba(126,145,190,.35),rgba(126,145,190,.05));margin-bottom:16px;position:relative;z-index:1;}
+  .cc-meta{position:relative;z-index:1;}
+  .cc-meta-h{font-size:11px;font-weight:700;color:#9FB0D6;margin-bottom:2px;}
+  .cc-meta-h:not(:first-child){margin-top:11px;}
+  .cc-meta-v{font-size:11.5px;color:#6E80AB;}
+  .cc-watermark{position:absolute;right:22px;bottom:16px;font-size:22px;font-weight:800;
+    color:rgba(202,220,252,.10);letter-spacing:.08em;z-index:0;font-family:Georgia,serif;}
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
@@ -335,6 +358,28 @@
     <button type="button" class="btn-print" data-action="printReport" data-i18n="b_print">🖨️ 인쇄 / PDF 저장</button>
     <button type="button" class="btn-restart" data-action="restart" data-i18n="b_restart">새 보고서 작성</button>
   </div>
+
+  <div class="credit-card" id="creditCard">
+    <div class="cc-glow cc-glow1"></div>
+    <div class="cc-glow cc-glow2"></div>
+    <div class="cc-top">
+      <span class="cc-team" data-i18n="cr_team">BAZ BIOMEDIC · CS TEAM</span>
+      <span class="cc-ver" data-i18n="cr_ver">v1.0 · 2026</span>
+    </div>
+    <div class="cc-name-row">
+      <span class="cc-name" data-i18n="cr_name">지유영</span>
+      <span class="cc-pro" data-i18n="cr_pro">Pro</span>
+    </div>
+    <div class="cc-role" data-i18n="cr_role">CS팀 · 현장 대응 가이드 제작자</div>
+    <div class="cc-divider"></div>
+    <div class="cc-meta">
+      <div class="cc-meta-h" data-i18n="cr_h1">초판 제작</div>
+      <div class="cc-meta-v" data-i18n="cr_v1">2026 · 최초 배포본</div>
+      <div class="cc-meta-h" data-i18n="cr_h2">기반 문서</div>
+      <div class="cc-meta-v" data-i18n="cr_v2">CUREJET 장비 대응 매뉴얼</div>
+    </div>
+    <span class="cc-watermark">JYY</span>
+  </div>
 </div>
 
 <script>
@@ -356,6 +401,8 @@ const I18N = {
     appTitle:'AS 처리 보고서',
     h_svcInfo:'AS 접수 정보', l_hospital:'병원명', ph_hospital:'예) 미모드림의원 천호',
     l_serial:'장비 S/N', ph_serial:'예) BYB018', l_mfg:'제조일', ph_mfg:'예) 2022년 11월',
+    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'지유영', cr_pro:'Pro', cr_role:'CS팀 · 현장 대응 가이드 제작자',
+    cr_ver:'v1.0 · 2026', cr_h1:'초판 제작', cr_v1:'2026 · 최초 배포본', cr_h2:'기반 문서', cr_v2:'CUREJET 장비 대응 매뉴얼',
     ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동', d_placeholder:'날짜 선택',
     l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
     h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
@@ -397,6 +444,8 @@ const I18N = {
     appTitle:'Field Service Report',
     h_svcInfo:'Service Request', l_hospital:'Site / Account', ph_hospital:'e.g. Mimo Dream Clinic',
     l_serial:'Device S/N', ph_serial:'e.g. BYB018', l_mfg:'Mfg. Date', ph_mfg:'e.g. Nov 2022',
+    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'JI YUYOUNG', cr_pro:'Pro', cr_role:'CS Team · Field Response Guide Author',
+    cr_ver:'v1.0 · 2026', cr_h1:'First Edition', cr_v1:'2026 · Initial release', cr_h2:'Base Document', cr_v2:'CUREJET Device Response Manual',
     ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name', d_placeholder:'Select date',
     l_req:'Reported Issue', ph_req:'e.g. Nozzle not recognized',
     h_parts:'Parts Replaced', l_part:'Part', ph_part:"e.g. RFID Module A'ssy",
@@ -438,6 +487,8 @@ const I18N = {
     appTitle:'フィールドサービス報告書',
     h_svcInfo:'受付情報', l_hospital:'施設名', ph_hospital:'例) ミモドリームクリニック',
     l_serial:'装置S/N', ph_serial:'例) BYB018', l_mfg:'製造年月', ph_mfg:'例) 2022年11月',
+    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'ジ・ユヨン', cr_pro:'Pro', cr_role:'CSチーム · 現場対応ガイド制作者',
+    cr_ver:'v1.0 · 2026', cr_h1:'初版制作', cr_v1:'2026 · 初回配布版', cr_h2:'基盤ドキュメント', cr_v2:'CUREJET装置対応マニュアル',
     ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力', d_placeholder:'日付を選択',
     l_req:'申告内容', ph_req:'例) ノズル認識不可',
     h_parts:'交換部品', l_part:'部品名', ph_part:"例) RFID Module A'ssy",
