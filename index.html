@@ -127,6 +127,14 @@
   .char-counter{display:block;text-align:right;font-size:10px;color:var(--text-muted);margin-top:3px;font-weight:500;letter-spacing:.02em;}
   .char-counter.warn{color:#C0392B;}
   .field-group{position:relative;}
+  .date-wrap{position:relative;width:100%;border:1.5px solid var(--gray-line);border-radius:8px;height:46px;display:flex;align-items:center;padding:0 13px;background:#fff;cursor:pointer;}
+  .date-wrap:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  .date-display{flex:1;font-size:16px;color:var(--text);pointer-events:none;}
+  .date-display.placeholder{color:#9AA3B5;}
+  .date-icon{font-size:17px;pointer-events:none;margin-left:6px;}
+  .date-wrap input[type="date"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;cursor:pointer;font-size:16px;}
+  /* iOS에서 date input 우측 화살표 영역만 클릭되는 문제 방지 */
+  .date-wrap input[type="date"]::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;}
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
@@ -189,7 +197,11 @@
         <input type="text" id="version" data-i18n-ph="ph_ver" placeholder="예) 2.1.1 / 2.6 / 1.2.2" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_version">0/20</span></div>
       <div class="row-2">
         <div class="field-group"><label><span data-i18n="l_date">발생 일자</span> <span class="required">*</span></label>
-          <input type="date" id="issueDate"></div>
+          <div class="date-wrap" id="dateWrap">
+            <span class="date-display" id="dateDisplay"></span>
+            <span class="date-icon">📅</span>
+            <input type="date" id="issueDate" oninput="updDateDisplay()" onchange="updDateDisplay()">
+          </div></div>
         <div class="field-group"><label><span data-i18n="l_eng">담당자</span> <span class="required">*</span></label>
           <input type="text" id="engineer" data-i18n-ph="ph_eng" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
       </div>
@@ -233,7 +245,7 @@
   <div class="card">
     <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis">고장 원인 분석</h2></div>
     <div class="card-body">
-      <div class="field-group"><label>접수 증상 <span class="required">*</span></label>
+      <div class="field-group"><label><span data-i18n="l_symptomMain">접수 증상</span> <span class="required">*</span></label>
         <div class="tag-suggestions">
           <span class="tag" data-field="symptom" data-text="노즐 인식 불가" data-text-ko="노즐 인식 불가" data-text-ja="ノズル認識不可" data-label-ja="ノズル認識不可" data-text-en="Nozzle not recognized" data-label-ko="노즐 인식 불가" data-label-en="Nozzle not recognized">노즐 인식 불가</span>
           <span class="tag" data-field="symptom" data-text="USB 장치 인식 불량" data-text-ko="USB 장치 인식 불량" data-text-ja="USBデバイス認識不良" data-label-ja="USB認識不良" data-text-en="USB recognition error" data-label-ko="USB 인식 불량" data-label-en="USB recognition error">USB 인식 불량</span>
@@ -270,7 +282,7 @@
     </div>
   </div>
   <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="2">← 이전</button>
+    <button type="button" class="btn-prev" data-go="2" data-i18n="b_prev">← 이전</button>
     <button type="button" class="btn-next" data-go="4" data-i18n="b_next4">다음 — 최종 확인 →</button>
   </div>
 </div>
@@ -294,7 +306,7 @@
   <div class="card">
     <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis2">고장 원인 분석</h2></div>
     <div class="card-body">
-      <label style="margin-bottom:6px;">접수 증상</label><div class="text-block" id="previewSymptom"></div>
+      <label style="margin-bottom:6px;" data-i18n="l_symptomMain">접수 증상</label><div class="text-block" id="previewSymptom"></div>
       <div style="height:12px;"></div>
       <label style="margin-bottom:6px;" data-i18n="l_cause2">불량 원인</label><div class="text-block" id="previewCause"></div>
       <div style="height:12px;"></div>
@@ -302,7 +314,7 @@
     </div>
   </div>
   <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="3">← 이전</button>
+    <button type="button" class="btn-prev" data-go="3" data-i18n="b_prev">← 이전</button>
     <button type="button" class="btn-generate" data-action="generate"><span>📊</span> <span data-i18n="b_generate">PPT 생성 및 다운로드</span></button>
   </div>
 </div>
@@ -344,7 +356,7 @@ const I18N = {
     appTitle:'AS 처리 보고서',
     h_svcInfo:'AS 접수 정보', l_hospital:'병원명', ph_hospital:'예) 미모드림의원 천호',
     l_serial:'장비 S/N', ph_serial:'예) BYB018', l_mfg:'제조일', ph_mfg:'예) 2022년 11월',
-    ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동',
+    ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동', d_placeholder:'날짜 선택',
     l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
     h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
     l_partReason:'교체 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
@@ -364,6 +376,10 @@ const I18N = {
     t_done:'보고서가 완성되었습니다', t_doneSub:'AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.',
     b_redown:'📥 다시 다운로드', b_share:'📤 PPT 파일 공유 (카카오톡 등)',
     b_copy:'📋 보고서 내용 복사', b_print:'🖨️ 인쇄 / PDF 저장', b_restart:'새 보고서 작성',
+    sl_sym:'증상', sl_phen:'현상', sl_photo:'사진', sl_video:'동영상', sl_tap:'탭하여 추가',
+    sl_conv:'변환 중...', sl_done:'등록됨', sl_replace:'교체하려면 탭', sl_proc:'처리 중...', sl_replaceMB:'교체하려면 탭',
+    sh_pc:'PC에서는 공유가 제한됩니다.\n[다시 다운로드] 후 파일을 직접 첨부해 전송해주세요.', sh_err:'공유 중 오류가 발생했습니다.\n다운로드 후 파일을 직접 첨부해주세요.', sh_text:'BAZ BIOMEDIC 필드 서비스 보고서',
+    l_symptomMain:'접수 증상',
     steps:['접수 정보 입력','사진/영상 첨부','원인 분석','최종 확인'], done:'완료',
     langBtn:'EN',
     // PPT
@@ -371,7 +387,7 @@ const I18N = {
     p_analysis:'고장 원인 분석', p_cause:'원  인', p_solution:'해결', p_opinion:'엔지니어 처리 의견',
     p_opinionPh:'엔지니어 처리 내용 및 의견을 여기에 작성하세요.', p_svcInfo:'AS 접수 정보',
     p_rowHospital:'병  원  명', p_rowSerial:'장비 S/N (제조일)', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'요청사항', p_rowDate:'발생 일자', p_rowEng:'담  당  자',
+    p_rowReq:'요청사항', p_rowDate:'발생 일자', p_rowEng:'담  당  자', r_part:'교체 부품',
     p_phen:'접수 현상 (사진/영상)', p_video:'동영상', p_feedback:'고객 피드백',
     p_feedbackPh:'고객 피드백 내용을 여기에 작성하세요.', p_photo:'사진', p_fileName:'AS_처리_보고서',
     val_req:(f)=>`"${f}"을(를) 입력해주세요.`, val_symptom:'접수 증상을 입력해주세요.',
@@ -381,7 +397,7 @@ const I18N = {
     appTitle:'Field Service Report',
     h_svcInfo:'Service Request', l_hospital:'Site / Account', ph_hospital:'e.g. Mimo Dream Clinic',
     l_serial:'Device S/N', ph_serial:'e.g. BYB018', l_mfg:'Mfg. Date', ph_mfg:'e.g. Nov 2022',
-    ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name',
+    ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name', d_placeholder:'Select date',
     l_req:'Reported Issue', ph_req:'e.g. Nozzle not recognized',
     h_parts:'Parts Replaced', l_part:'Part', ph_part:"e.g. RFID Module A'ssy",
     l_partReason:'Reason', ph_partReason:'e.g. RFID recognition failure',
@@ -401,6 +417,10 @@ const I18N = {
     t_done:'Report ready', t_doneSub:'Your field service report PPT has been generated.<br>On iPhone, save it from the Files app or the share sheet.',
     b_redown:'📥 Download Again', b_share:'📤 Share PPT File',
     b_copy:'📋 Copy Report Text', b_print:'🖨️ Print / Save as PDF', b_restart:'New Report',
+    sl_sym:'Symptom', sl_phen:'On-site', sl_photo:'Photo', sl_video:'Video', sl_tap:'Tap to add',
+    sl_conv:'Converting...', sl_done:'Added', sl_replace:'Tap to replace', sl_proc:'Processing...', sl_replaceMB:'Tap to replace',
+    sh_pc:'Sharing is limited on PC.\nPlease use [Download Again] and attach the file manually.', sh_err:'A sharing error occurred.\nPlease download and attach the file manually.', sh_text:'BAZ BIOMEDIC Field Service Report',
+    l_symptomMain:'Symptom Found',
     steps:['Request','Photos / Video','Diagnosis','Review'], done:'Done',
     langBtn:'日本語',
     // PPT
@@ -408,7 +428,7 @@ const I18N = {
     p_analysis:'Diagnosis', p_cause:'Cause', p_solution:'Action', p_opinion:'Engineer Comments',
     p_opinionPh:'Your findings, work performed, follow-up needed', p_svcInfo:'Service Request',
     p_rowHospital:'Site', p_rowSerial:'Device S/N (Mfg.)', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'Reported Issue', p_rowDate:'Service Date', p_rowEng:'Engineer',
+    p_rowReq:'Reported Issue', p_rowDate:'Service Date', p_rowEng:'Engineer', r_part:'Parts Replaced',
     p_phen:'On-site (Photo/Video)', p_video:'Video', p_feedback:'Customer Feedback',
     p_feedbackPh:'What the customer told you', p_photo:'Photo', p_fileName:'Field_Service_Report',
     val_req:(f)=>`Please enter "${f}".`, val_symptom:'Please enter the symptom found.',
@@ -418,7 +438,7 @@ const I18N = {
     appTitle:'フィールドサービス報告書',
     h_svcInfo:'受付情報', l_hospital:'施設名', ph_hospital:'例) ミモドリームクリニック',
     l_serial:'装置S/N', ph_serial:'例) BYB018', l_mfg:'製造年月', ph_mfg:'例) 2022年11月',
-    ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力',
+    ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力', d_placeholder:'日付を選択',
     l_req:'申告内容', ph_req:'例) ノズル認識不可',
     h_parts:'交換部品', l_part:'部品名', ph_part:"例) RFID Module A'ssy",
     l_partReason:'交換理由', ph_partReason:'例) RFID認識機能の喪失による交換',
@@ -429,27 +449,31 @@ const I18N = {
     h_analysis:'故障診断', l_symptom:'確認した症状',
     ph_symptom:"例) 画面に「Can't find RFID the Device」表示、ノズル認識不可",
     l_cause:'原因', ph_cause:'例) USBデバイス認識不良',
-    l_solution:'処置内容', ph_solution:'例) RFIDモジュール内のUSBデバイスを交換',
+    l_solution:'対応内容', ph_solution:'例) RFIDモジュール内のUSBデバイスを交換',
     h_opinionFb:'担当者コメント / フィードバック', l_opinion:'担当者コメント', ph_opinion:'所見、実施作業、フォローアップ事項を記入',
     l_feedback:'顧客フィードバック', ph_feedback:'顧客から聞いた内容を記入', b_next4:'次へ — 最終確認 →',
     h_reviewInfo:'内容確認', h_media:'添付メディア', l_symptom2:'症状',
     l_phenMedia:'現場（写真3 + 動画）', h_analysis2:'故障診断', l_symptom3:'確認した症状',
-    l_cause2:'原因', l_solution2:'処置内容', b_generate:'PPT生成・ダウンロード',
+    l_cause2:'原因', l_solution2:'対応内容', b_generate:'PPT生成・ダウンロード',
     t_done:'報告書が完成しました', t_doneSub:'フィールドサービス報告書のPPTを生成しました。<br>iPhoneでは「ファイル」アプリまたは共有シートから保存してください。',
     b_redown:'📥 再ダウンロード', b_share:'📤 PPTファイルを共有',
     b_copy:'📋 報告内容をコピー', b_print:'🖨️ 印刷 / PDF保存', b_restart:'新規作成',
+    sl_sym:'症状', sl_phen:'現場', sl_photo:'写真', sl_video:'動画', sl_tap:'タップで追加',
+    sl_conv:'変換中...', sl_done:'登録済み', sl_replace:'タップで変更', sl_proc:'処理中...', sl_replaceMB:'タップで変更',
+    sh_pc:'PCでは共有が制限されます。\n[再ダウンロード] 後、ファイルを手動で添付してください。', sh_err:'共有中にエラーが発生しました。\nダウンロード後、ファイルを手動で添付してください。', sh_text:'BAZ BIOMEDIC フィールドサービス報告書',
+    l_symptomMain:'確認した症状',
     steps:['受付情報','写真・動画','診断','確認'], done:'完了',
     langBtn:'한국어',
     // PPT
     p_title:'フィールドサービス報告', p_topicDefault:'フィールドサービス報告書', p_parts:'交換部品',
-    p_analysis:'故障診断', p_cause:'原因', p_solution:'処置', p_opinion:'担当者コメント',
+    p_analysis:'故障診断', p_cause:'原因', p_solution:'対応', p_opinion:'担当者コメント',
     p_opinionPh:'所見、実施作業、フォローアップ事項を記入', p_svcInfo:'受付情報',
     p_rowHospital:'施設名', p_rowSerial:'装置S/N（製造）', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'申告内容', p_rowDate:'対応日', p_rowEng:'担当者',
+    p_rowReq:'申告内容', p_rowDate:'対応日', p_rowEng:'担当者', r_part:'交換部品',
     p_phen:'現場（写真/動画）', p_video:'動画', p_feedback:'顧客フィードバック',
     p_feedbackPh:'顧客から聞いた内容を記入', p_photo:'写真', p_fileName:'Field_Service_Report',
     val_req:(f)=>`「${f}」を入力してください。`, val_symptom:'確認した症状を入力してください。',
-    val_cause:'原因を入力してください。', val_solution:'処置内容を入力してください。',
+    val_cause:'原因を入力してください。', val_solution:'対応内容を入力してください。',
   }
 };
 function t(key){ return (I18N[LANG]||I18N.ko)[key]; }
@@ -457,6 +481,7 @@ function t(key){ return (I18N[LANG]||I18N.ko)[key]; }
 function applyLang(){
   const dict = I18N[LANG]||I18N.ko;
   document.documentElement.lang = LANG||'ko';
+  const dEl=document.getElementById('issueDate'); if(dEl) dEl.setAttribute('lang', LANG||'ko');
   document.querySelectorAll('[data-i18n]').forEach(el=>{
     const k=el.getAttribute('data-i18n'); if(dict[k]!==undefined) el.textContent=dict[k];
   });
@@ -485,6 +510,7 @@ function applyLang(){
       tg.setAttribute('data-text', tg.getAttribute('data-text-ko'));
     }
   });
+  updDateDisplay();
   updateIndicator();
 }
 function setLang(l){ LANG=l; localStorage.setItem('baz_lang',l); applyLang(); }
@@ -505,12 +531,12 @@ function buildPhotoSlots(){
 function makeSlot(kind,idx){
   const wrap=document.createElement('div'); wrap.className='photo-slot';
   wrap.innerHTML=`
-    <div class="slot-label">${kind==='sym'?'증상':'현상'} ${idx+1}</div>
+    <div class="slot-label"><span data-i18n="${kind==='sym'?'sl_sym':'sl_phen'}">${kind==='sym'?t('sl_sym'):t('sl_phen')}</span> ${idx+1}</div>
     <div class="photo-zone" id="${kind}Zone${idx}">
       <input type="file" accept="image/*" id="${kind}File${idx}">
       <div class="icon">📸</div>
-      <div class="primary-text" style="font-size:11px;">사진</div>
-      <div class="hint-text">탭하여 추가</div>
+      <div class="primary-text" data-i18n="sl_photo" style="font-size:11px;">${t('sl_photo')}</div>
+      <div class="hint-text" data-i18n="sl_tap">${t('sl_tap')}</div>
     </div>
     <div class="photo-preview" id="${kind}Prev${idx}">
       <img id="${kind}Img${idx}" src="" alt="">
@@ -523,12 +549,12 @@ function makeSlot(kind,idx){
 function makeVideoSlot(){
   const wrap=document.createElement('div'); wrap.className='photo-slot';
   wrap.innerHTML=`
-    <div class="slot-label video">🎬 동영상</div>
+    <div class="slot-label video">🎬 <span data-i18n="sl_video">${t('sl_video')}</span></div>
     <div class="photo-zone video-zone" id="videoZone">
       <input type="file" accept="video/*" id="videoFile">
       <div class="icon">🎬</div>
-      <div class="primary-text" style="font-size:11px;">동영상</div>
-      <div class="hint-text">탭하여 추가</div>
+      <div class="primary-text" data-i18n="sl_video" style="font-size:11px;">${t('sl_video')}</div>
+      <div class="hint-text" data-i18n="sl_tap">${t('sl_tap')}</div>
     </div>
     <div class="photo-preview" id="videoPrev">
       <video id="videoEl" src="" muted playsinline></video>
@@ -596,20 +622,20 @@ async function handlePhoto(kind,idx,event){
   const file=event.target.files[0]; if(!file) return;
   const zone=document.getElementById(`${kind}Zone${idx}`);
   zone.querySelector('.icon').textContent='⏳';
-  zone.querySelector('.hint-text').textContent='변환 중...';
+  zone.querySelector('.hint-text').textContent=t('sl_conv');
   try{
     const jpeg=await fileToJpegDataURL(file);
     (kind==='sym'?symPhotos:phenPhotos)[idx]=jpeg;
     document.getElementById(`${kind}Img${idx}`).src=jpeg;
     document.getElementById(`${kind}Prev${idx}`).style.display='block';
     zone.querySelector('.icon').textContent='✅';
-    zone.querySelector('.primary-text').textContent='등록됨';
-    zone.querySelector('.hint-text').textContent='교체하려면 탭';
+    zone.querySelector('.primary-text').textContent=t('sl_done');
+    zone.querySelector('.hint-text').textContent=t('sl_replace');
   }catch(e){
     alert('사진 처리 실패: '+e.message);
     zone.querySelector('.icon').textContent='📸';
-    zone.querySelector('.primary-text').textContent='사진';
-    zone.querySelector('.hint-text').textContent='탭하여 추가';
+    zone.querySelector('.primary-text').textContent=t('sl_photo');
+    zone.querySelector('.hint-text').textContent=t('sl_tap');
   }
 }
 
@@ -649,14 +675,14 @@ async function handleVideo(event){
   const file=event.target.files[0]; if(!file) return;
   const zone=document.getElementById('videoZone');
   zone.querySelector('.icon').textContent='⏳';
-  zone.querySelector('.hint-text').textContent='처리 중...';
+  zone.querySelector('.hint-text').textContent=t('sl_proc');
   try{
     const sizeMB=file.size/1048576;
     if(sizeMB>60){
       if(!confirm(`동영상 용량이 ${sizeMB.toFixed(0)}MB입니다. PPT 파일이 매우 커지고 기기에서 느려질 수 있습니다. 계속할까요?`)){
         event.target.value='';
         zone.querySelector('.icon').textContent='🎬';
-        zone.querySelector('.hint-text').textContent='탭하여 추가';
+        zone.querySelector('.hint-text').textContent=t('sl_tap');
         return;
       }
     }
@@ -669,13 +695,13 @@ async function handleVideo(event){
     vEl.src=dataURL; vEl.setAttribute('controls','');
     document.getElementById('videoPrev').style.display='block';
     zone.querySelector('.icon').textContent='✅';
-    zone.querySelector('.primary-text').textContent='등록됨';
-    zone.querySelector('.hint-text').textContent=`${sizeMB.toFixed(1)}MB · 교체하려면 탭`;
+    zone.querySelector('.primary-text').textContent=t('sl_done');
+    zone.querySelector('.hint-text').textContent=`${sizeMB.toFixed(1)}MB · ${t('sl_replaceMB')}`;
   }catch(e){
     alert('동영상 처리 실패: '+e.message);
     zone.querySelector('.icon').textContent='🎬';
-    zone.querySelector('.primary-text').textContent='동영상';
-    zone.querySelector('.hint-text').textContent='탭하여 추가';
+    zone.querySelector('.primary-text').textContent=t('sl_video');
+    zone.querySelector('.hint-text').textContent=t('sl_tap');
   }
 }
 
@@ -687,8 +713,8 @@ function removePhoto(kind,idx){
     const zone=document.getElementById('videoZone');
     zone.querySelector('input').value='';
     zone.querySelector('.icon').textContent='🎬';
-    zone.querySelector('.primary-text').textContent='동영상';
-    zone.querySelector('.hint-text').textContent='탭하여 추가';
+    zone.querySelector('.primary-text').textContent=t('sl_video');
+    zone.querySelector('.hint-text').textContent=t('sl_tap');
     return;
   }
   (kind==='sym'?symPhotos:phenPhotos)[idx]=null;
@@ -697,8 +723,8 @@ function removePhoto(kind,idx){
   const zone=document.getElementById(`${kind}Zone${idx}`);
   zone.querySelector('input').value='';
   zone.querySelector('.icon').textContent='📸';
-  zone.querySelector('.primary-text').textContent='사진';
-  zone.querySelector('.hint-text').textContent='탭하여 추가';
+  zone.querySelector('.primary-text').textContent=t('sl_photo');
+  zone.querySelector('.hint-text').textContent=t('sl_tap');
 }
 function appendText(fieldId,text){
   const el=document.getElementById(fieldId);const cur=el.value.trim();
@@ -707,10 +733,10 @@ function appendText(fieldId,text){
 function buildPreview(){
   const mfg=v('mfgDate')?'  ('+v('mfgDate')+')':'';
   const rows=[
-    ['병원명',v('hospital')],['장비 S/N',v('serialNo')+mfg],
-    ['UI/FW/H.P Ver',v('version')||'—'],['요청사항',v('requestDetail')||'—'],
-    ['발생 일자',v('issueDate')],['담당자',v('engineer')],
-    ['교체 부품',(v('partName')||'—')+(v('partReason')?'\n'+v('partReason'):'')],
+    [t('l_hospital'),v('hospital')],[t('l_serial'),v('serialNo')+mfg],
+    [t('p_rowVer'),v('version')||'—'],[t('l_req'),v('requestDetail')||'—'],
+    [t('l_date'),v('issueDate')],[t('l_eng'),v('engineer')],
+    [t('r_part'),(v('partName')||'—')+(v('partReason')?'\n'+v('partReason'):'')],
   ];
   document.getElementById('previewInfoTable').innerHTML=
     rows.map(([k,val])=>`<tr><td>${k}</td><td>${val.replace(/\n/g,'<br>')}</td></tr>`).join('');
@@ -731,6 +757,28 @@ function buildPreview(){
   document.getElementById('previewSolution').textContent=v('solution');
 }
 function v(id){return (document.getElementById(id)?.value||'').trim();}
+
+function updDateDisplay(){
+  const inp=document.getElementById('issueDate');
+  const disp=document.getElementById('dateDisplay');
+  if(!inp||!disp) return;
+  const val=inp.value; // YYYY-MM-DD
+  if(!val){
+    disp.textContent=t('d_placeholder');
+    disp.classList.add('placeholder');
+    return;
+  }
+  disp.classList.remove('placeholder');
+  const [y,m,d]=val.split('-');
+  if(LANG==='ja'){
+    disp.textContent=`${y}年${m}月${d}日`;
+  }else if(LANG==='en'){
+    const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    disp.textContent=`${mon[parseInt(m,10)-1]} ${parseInt(d,10)}, ${y}`;
+  }else{
+    disp.textContent=`${y}-${m}-${d}`;
+  }
+}
 
 function updCounter(el){
   const max=parseInt(el.getAttribute('maxlength'),10);
@@ -1163,28 +1211,28 @@ async function sharePptx(){
     const {blob,name}=window._lastPptx;
     const file=new File([blob],name,{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
 
-    // 1순위: 파일 직접 공유 (모바일 — 카카오톡 선택 가능)
+    // 1순위: 파일 직접 공유 (모바일)
     if(navigator.canShare&&navigator.canShare({files:[file]})){
       await navigator.share({
         files:[file],
         title:name.replace('.pptx',''),
-        text:'BAZ BIOMEDIC AS 처리 보고서'
+        text:t('sh_text')
       });
       return;
     }
     // 2순위: 파일 공유 미지원 → 텍스트/링크만 공유
     if(navigator.share){
       await navigator.share({
-        title:'BAZ AS 처리 보고서',
-        text:`AS 처리 보고서 (${name})\n이 기기는 파일 직접 공유를 지원하지 않습니다. 다운로드한 파일을 카카오톡에서 첨부해주세요.`
+        title:t('sh_text'),
+        text:`${name}`
       });
       return;
     }
-    // 3순위: Web Share 자체 미지원 (구형 PC 브라우저)
-    alert('이 브라우저는 공유 기능을 지원하지 않습니다.\n\n[다시 다운로드] 후 카카오톡 채팅방에서 파일 첨부(+)로 전송해주세요.');
+    // 3순위: Web Share 자체 미지원 (PC 브라우저)
+    alert(t('sh_pc'));
   }catch(e){
     if(e.name!=='AbortError'){
-      alert('공유 중 오류: '+e.message+'\n\n다운로드 후 카카오톡에서 직접 첨부해주세요.');
+      alert(t('sh_err'));
     }
   }
 }
