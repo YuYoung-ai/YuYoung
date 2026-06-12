@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CUREJET 현장 대응 가이드</title>
+<style>
+:root{
+  --navy:#16243f; --navy2:#1f3864; --blue:#2e5597; --sky:#e9eff8;
+  --ink:#1c2330; --sub:#5c6678; --line:#dfe4ec; --bg:#f4f6fa;
+  --warn-bg:#fff7e0; --warn-bd:#e6c662; --warn-ink:#7a5b00;
+  --s1:#2e5597; --s2:#0e7a6c; --s3:#8a4fbf;
+  --q-bg:#f0f4fb;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}
+header{background:var(--navy);color:#fff;padding:16px 16px 12px;position:sticky;top:0;z-index:30;box-shadow:0 2px 10px rgba(10,20,45,.25)}
+header h1{font-size:16px;font-weight:800;letter-spacing:-.2px}
+header .sub{font-size:11px;color:#aebbd6;margin-top:2px}
+.searchwrap{margin-top:10px;position:relative}
+.searchwrap input{width:100%;padding:10px 12px 10px 34px;border-radius:10px;border:none;font-size:14px;background:#fff;color:var(--ink)}
+.searchwrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:#8a93a6}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:10px 16px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:96px;z-index:25;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;padding:6px 13px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12.5px;color:var(--sub);font-weight:600;cursor:pointer}
+.chip.on{background:var(--navy2);border-color:var(--navy2);color:#fff}
+main{padding:12px 12px 60px;max-width:760px;margin:0 auto}
+.notice{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.notice>button{width:100%;text-align:left;background:none;border:none;padding:11px 14px;font-size:13px;font-weight:800;color:var(--warn-ink);display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.notice ul{display:none;padding:0 14px 12px 14px;list-style:none}
+.notice.open ul{display:block}
+.notice li{font-size:12.5px;color:#6b5410;padding:5px 0;border-top:1px dashed var(--warn-bd)}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.card>button.head{width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;background:none;border:none;text-align:left;cursor:pointer}
+.card .num{flex:0 0 auto;width:26px;height:26px;border-radius:8px;background:var(--sky);color:var(--blue);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.card .ttl{flex:1}
+.card .ttl b{font-size:15px;font-weight:800;display:block}
+.card .ttl span{font-size:11px;color:var(--sub)}
+.card .arrow{flex:0 0 auto;width:18px;height:18px;stroke:#9aa3b5;transition:transform .18s}
+.card.open .arrow{transform:rotate(180deg)}
+.card .body{display:none;border-top:1px solid var(--line);padding:12px 14px 14px}
+.card.open .body{display:block}
+.step{margin-bottom:14px}
+.step:last-child{margin-bottom:0}
+.step .stitle{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.step .badge{font-size:10.5px;font-weight:800;color:#fff;border-radius:6px;padding:3px 8px;letter-spacing:.3px}
+.step .sname{font-size:13.5px;font-weight:800}
+.step.s1 .badge{background:var(--s1)} .step.s2 .badge{background:var(--s2)} .step.s3 .badge{background:var(--s3)}
+.purpose{font-size:11.5px;color:var(--sub);margin-bottom:8px;padding-left:2px}
+.script{background:var(--q-bg);border-left:3px solid var(--s1);border-radius:0 10px 10px 0;padding:9px 11px;margin-bottom:7px;font-size:13px;white-space:pre-wrap;word-break:keep-all}
+.step.s2 .script{border-left-color:var(--s2)}
+.step.s3 .script{border-left-color:var(--s3)}
+.script .label{display:block;font-size:11px;font-weight:800;color:var(--blue);margin-bottom:3px}
+.step.s2 .script .label{color:var(--s2)} .step.s3 .script .label{color:var(--s3)}
+.qline{display:flex;gap:7px;padding:6px 2px;font-size:13px}
+.qline .qmark{flex:0 0 auto;font-weight:800;color:var(--s1)}
+.warnbox{background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--warn-ink);white-space:pre-wrap;word-break:keep-all}
+.tipbox{background:#f2fbf6;border:1px solid #bfe5cd;border-radius:10px;padding:9px 11px;font-size:12.5px;color:#1d6b43;white-space:pre-wrap;word-break:keep-all}
+.tipbox b{display:block;font-size:11px;margin-bottom:3px;letter-spacing:.3px}
+.empty{text-align:center;color:var(--sub);padding:40px 0;font-size:13px;display:none}
+.foot{padding:24px 12px 48px;max-width:760px;margin:0 auto}
+.credit-card{background:linear-gradient(135deg,var(--navy2) 0%,#0d1e3a 100%);border-radius:18px;padding:22px 22px 18px;color:#fff;box-shadow:0 8px 28px rgba(16,30,60,.22);position:relative;overflow:hidden}
+.credit-card::before{content:'';position:absolute;top:-30px;right:-30px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.05)}
+.credit-card::after{content:'';position:absolute;bottom:-50px;right:20px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.04)}
+.credit-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}
+.credit-brand{font-size:11px;font-weight:800;letter-spacing:1.2px;color:#aebbd6;text-transform:uppercase}
+.credit-ver{font-size:11px;color:#5e7ab0;background:rgba(255,255,255,.08);padding:3px 9px;border-radius:20px;font-weight:700;letter-spacing:.5px}
+.credit-name{font-size:21px;font-weight:900;letter-spacing:-.3px;line-height:1.2;margin-bottom:4px;position:relative;z-index:1}
+.credit-name span{color:#7ca8f0;font-size:13px;font-weight:600;margin-left:4px;vertical-align:middle}
+.credit-title{font-size:12px;color:#7a92b8;margin-bottom:18px;position:relative;z-index:1}
+.credit-bottom{display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid rgba(255,255,255,.1);padding-top:13px}
+.credit-meta{font-size:11px;color:#5e7ab0;line-height:1.7}
+.credit-meta b{display:block;color:#aebbd6;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;margin-bottom:1px}
+.credit-sig{font-size:17px;color:rgba(255,255,255,.15);font-weight:900;letter-spacing:1px;text-align:right;line-height:1;user-select:none}
+@media(min-width:600px){body{font-size:15px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>CUREJET 현장 대응 가이드</h1>
+  <div class="sub">증상 확인 → 점검·결과 안내 → 처리 안내 · 장비 대응 메뉴얼 연계</div>
+  <div class="searchwrap">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="search" type="search" placeholder="증상 검색 (예: 누수, 노즐, 출력)">
+  </div>
+</header>
+<div class="chips" id="chips"></div>
+<main>
+  <div class="notice" id="notice">
+    <button onclick="this.parentElement.classList.toggle('open')">⚠ 전 증상 공통 준수 사항 <span>▾</span></button>
+    <ul id="rules"></ul>
+  </div>
+  <div id="list"></div>
+  <div class="empty" id="empty">검색 결과가 없습니다.</div>
+  <div class="foot">
+    <div class="credit-card">
+      <div class="credit-top">
+        <div class="credit-brand">BAZ BIOMEDIC · CS Team</div>
+        <div class="credit-ver">v1.0 · 2026</div>
+      </div>
+      <div class="credit-name">지유영 <span>Pro</span></div>
+      <div class="credit-title">CS팀 · 현장 대응 가이드 제작자</div>
+      <div class="credit-bottom">
+        <div class="credit-meta">
+          <b>초판 제작</b>2026 · 최초 배포본
+          <br><b>기반 문서</b>CUREJET 장비 대응 메뉴얼
+        </div>
+        <div class="credit-sig">JYY</div>
+      </div>
+    </div>
+  </div>
+</main>
+<script>
+const DATA = {"common": {"intro": "본 가이드는 「장비 대응 메뉴얼」의 증상별 조치 내용을 현장 고객 응대 스크립트로 변환한 자료입니다.\n각 증상은 ①증상 확인(고객) → ②장비 점검 및 결과 안내 → ③처리 사항 안내 3단계로 구성됩니다.", "rules": ["※ N-care 가입처, 워런티 기간 등 무상 교체 대상 병원의 경우 교체 비용 안내는 생략한다.", "※ 문제 발생 부분은 반드시 시각적으로 담당자에게 확인 조치할 것.", "※ 조치 완료 후 정상적으로 장비가 동작하고 있음을 담당자에게 시각적으로 확인시킬 것.", "※ 증상 재현이 안 될 경우 해당 부분에 대한 안전함을 확인시켜주는 행동과 안내를 진행할 것.", "※ 사용 미숙으로 판단되는 경우 교육 담당자에게 해당 내용을 공유한다.", "※ 공장 입고 진행 시 영업 담당자에게 상황 공유 및 병원 담당자에게 수리 지연 안내(필요 시 데모 장비 제공).", "※ 노즐 누수 확인 시 병원 담당자에게 사용 중지 및 새 노즐 사용을 즉시 요청할 것(매우 중요).", "※ 노즐 재사용 여부는 직접 묻지 않는다. '교체 주기·사용 횟수·마지막 교체 시점' 등 사용 현황 질문으로 우회 확인하고, 결과 안내 시에도 '재사용'이라는 표현 대신 '사용 횟수 누적', '노즐의 1회 시술용 설계 특성'으로 표현할 것."], "step1_purpose": "정확한 발생 시점 및 상황 파악", "step2_purpose": "점검 과정을 투명하게 공개하고 비용 발생에 대한 신뢰를 형성하기 위함\n※ 해당 문제 발생 부분에 대한 사항을 시각적으로 담당자에게 확인 조치할 것", "step3_purpose": "조치 완료를 알리고 재발 방지 팁을 전달\n※ 조치 완료 후 정상적으로 장비가 동작하고 있음을 담당자에게 시각적으로 확인시킬 것!!", "closing": "확인해 주신 내용을 바탕으로 장비 점검을 시작하겠습니다.\n시간은 대략 OO분 소요될 예정입니다.\n점검 이후 처리 결과 내용을 안내해 드리려고 하는데, 어느 분께 어떻게 전달드리면 될까요?", "ncare": "※ N-care 가입처, 워런티 기간 등 무상 교체 대상 병원의 경우 교체 비용 안내는 생략한다."}, "symptoms": [{"name": "메인보드 동작 불능", "cat": "전원·제어", "q": ["장비 전원을 켰을 때 화면·램프가 전혀 들어오지 않나요? 아니면 일부만 동작하나요?", "Water pump 소리나 터치스크린은 정상적으로 동작하나요?", "장비를 켜자마자 발생했나요? 아니면 사용 중에 발생했나요?"], "check": ["[메인보드 LED 점등 불량 확인 시]\n점검 결과 메인보드 내 LED 점등 불량으로 메인보드 자체 불량이 확인되었습니다. 현장 수리가 불가하여 메인보드 교체가 필요하며, 교체 비용이 발생될 것 같습니다.", "[F/W·UI 버전 문제 확인 시]\n점검 결과 장비 소프트웨어(F/W·UI) 버전 문제로 확인되어, 병원에 맞는 동일 F/W 버전으로 업데이트를 진행하겠습니다. 별도 부품 교체 비용은 발생하지 않습니다."], "done": ["[교체 진행 시]\n메인보드 교체 후 약 10분간 에이징 진행 및 JET TEST를 실시하였으며 정상 동작을 확인하였습니다. 교체 부위를 직접 보여드리겠습니다.", "[교체 불필요 시]\nF/W 업데이트 후 성능 점검 테스트를 실시하였으며 정상 동작을 확인하였습니다."], "tip": "전원 동작 후 약 10분 에이징 + JET TEST로 정상 동작 확인 후 인계. 동일 증상 재발 시 즉시 접수 요청 안내."}, {"name": "풋 스위치 동작 불능", "cat": "전원·제어", "q": ["풋스위치를 밟았을 때 장비가 전혀 반응하지 않나요? 아니면 간헐적으로만 동작하나요?", "풋스위치 동작 시 '삑~' 같은 이상 소음이 발생했나요?", "핸드피스 출력(분사)은 정상적으로 나오고 있었나요?"], "check": ["[메인보드 내 LED 신호 미발생 확인 시]\n풋스위치 신호가 장비에 전달되지 않는 것이 확인되어 풋스위치 교체가 필요하며, 교체 비용이 발생될 것 같습니다.", "[풋스위치 신호 정상·핸드피스 미동작 확인 시]\n풋스위치 신호는 정상이나 핸드피스가 동작하지 않아 핸드피스 A'ssy 교체가 필요할 것 같습니다.", "[이상 소음 발생 시]\n약 15~30초 대기 후 정상 작동 여부를 확인하겠습니다. 3회 반복 후에도 동일 증상이 발생하면 핸드피스 A'ssy 교체가 필요합니다."], "done": ["[교체 진행 시]\n해당 부품 교체 후 반복 테스트를 실시하였으며 정상 작동을 확인하였습니다.", "[교체 불필요 시]\n점검 결과 일시적 현상으로 확인되었으며, 반복 테스트 상 정상 작동을 확인하였습니다. 동일 증상 재발 시 바로 접수 부탁드립니다."], "tip": "반복 테스트로 정상 작동 확인 후 인계."}, {"name": "장비 출력 저하", "cat": "노즐·출력", "q": ["출력이 약하다고 판단하신 기준이 어떤 부분일까요? (분사 모양, 시술 체감 등)", "현재 사용 중인 노즐과 주사기는 마지막으로 언제 교체하셨을까요? 보통 어떤 주기로 교체하고 계신지도 함께 여쭤봐도 될까요?", "핸드피스 쪽에서 누수나 녹물 같은 게 보인 적이 있을까요?"], "check": ["[노즐·소모품 원인 확인 시]\n기존 사용 노즐 상태 점검 결과, 신규 노즐 및 주사기 적용 시 정상 출력이 확인되었습니다. 소모품 상태에 따른 출력 차이로 보이며 장비 자체 이상은 아닙니다.", "[핸드피스 내부 녹물·누수 확인 시]\n핸드피스 내부 녹물·누수가 확인되어 핸드피스 A'ssy 교체가 필요하며, 교체 비용이 발생될 것 같습니다."], "done": ["[교체 진행 시]\n교체 후 신규 노즐·주사기 적용 상태에서 젯 퀄리티를 확인하였으며 정상 출력을 확인하였습니다. 분사 상태를 직접 확인 부탁드립니다.", "[교체 불필요 시]\n신규 노즐·주사기 적용 후 정상 젯 퀄리티 상태를 확인하였습니다. 노즐은 1회 시술용으로 설계되어 있어 사용 횟수가 누적되면 출력이 점차 떨어질 수 있는데요, 시술마다 새 노즐을 사용하시면 일정한 출력을 유지하실 수 있습니다."], "tip": "신규 노즐·주사기 적용 후 정상 젯 퀄리티를 병원 담당자에게 직접 확인시킬 것. ※ Handpiece·Nozzle 교환에도 개선이 안 될 시 공장 입고 진행(필요 시 데모 장비 제공)."}, {"name": "RFID 스캔 불량", "cat": "전원·제어", "q": ["노즐 스캔 시 인식음이 발생하나요?", "'RFID Device not recognized', 'Check connection' 같은 팝업이 떴을까요?", "새 노즐로 바꿔도 'Please scan again'이 반복해서 나타났나요?"], "check": ["[케이블 연결 불량 확인 시]\nRFID 케이블 연결 상태 불량이 확인되어 재연결 후 정상 동작을 확인하겠습니다. 별도 비용은 발생하지 않습니다.", "[UI 문제 확인 시]\nPlease scan again 반복 발생의 원인이 소프트웨어로 확인되어 UI 재업데이트를 실시하겠습니다.", "[RFID 인식율 미달 확인 시]\nRFID 모듈 인식율이 기준에 미달하여 RFID A'ssy 교체가 필요하며, 교체 비용이 발생될 것 같습니다."], "done": ["[교체·업데이트 진행 시]\n조치 후 약 10분 에이징 진행 및 RFID TAG 테스트를 실시하였으며 정상 인식을 확인하였습니다. 직접 스캔해 보시겠어요?", "[교체 불필요 시]\n케이블 재연결 및 신규 노즐 적용 후 정상 인식을 확인하였습니다."], "tip": "전원 동작 후 약 10분 에이징 → RFID TAG 테스트로 정상 인식 확인 후 인계."}, {"name": "냉각수 누수", "cat": "누수·냉각", "q": ["장비를 켜자마자 발생했나요? 아니면 시술 중에 발생했을까요?", "누수가 발견된 지점은 어디일까요? (장비 본체 아래쪽, 핸드피스 등)"], "check": ["[핸드피스 내 냉각수 라인 누수 확인 시]\n핸드피스 내 냉각수 순환부 막힘이 원인으로 누수가 발생하였고, 수리가 불가하여 교체 비용이 발생될 것 같습니다.", "[장비 내부 누수 확인 시]\n내부 누수 확인 뒤에 내부 부품 손상 유/무를 확인하였으며 이상 없음을 확인하였지만, 핸드피스 내 냉각수 순환부가 파손되어 교체 비용이 발생될 것 같습니다."], "done": ["[교체 필요]\n해당 부품 교체 후 성능 점검 테스트를 실시하였으며 정상 동작을 확인하였습니다. 냉각수도 정상 수준(700~800ml)으로 보충 완료하였습니다.", "[교체 불필요]\n점검 결과 누수가 일관되지 않았으며 냉각수량이 기준치 이내 미세 보충 수준인 것으로 확인되어, 예상 지점 누수 예방 조치하였습니다."], "tip": "누수 지점 주변 물기 제거 후 약 10분 에이징하여 추가 누수 여부 확인. 냉각수 정상 보유량 700~800ml."}, {"name": "UI 업그레이드", "cat": "S/W·교육", "q": ["현재 사용 중인 화면(UI) 버전에서 불편하셨던 부분이 있을까요?", "기존에 사용하시던 시술 출력 데이터(설정값)는 그대로 유지가 필요하실까요?", "업그레이드 후 사용법 교육이 필요하시면 교육 담당자 방문 일정도 함께 잡아드릴까요?"], "check": ["[업그레이드 진행 안내]\n기존 병원 내 UI·F/W 버전을 확인하였고, 요청하신 버전으로 업그레이드를 진행하겠습니다. 기존 시술 출력 데이터는 사진·메모로 보관 후 동일하게 적용해 드리겠습니다."], "done": ["[완료 안내]\n업그레이드 완료 후 약 10분 에이징 및 JET TEST를 실시하였으며 정상 동작을 확인하였습니다. 기존 출력 데이터가 적용된 위치를 직접 안내해 드리겠습니다."], "tip": "데이터 적용 위치 및 변경 내용을 담당자에게 안내 조치. 교육 담당자에게 관련 내용 공유. ※ 현장 실시간 교육 진행 시 후속 조치 후 안내할 것."}, {"name": "팝업 불량(에러 팝업)", "cat": "전원·제어", "q": ["화면에 어떤 팝업(에러 문구)이 표시되었을까요? 가능하시면 사진으로 보여주실 수 있을까요?", "팝업이 뜨는 시점이 언제인가요? (부팅 시, 시술 중, 특정 동작 시)"], "check": ["[점검 안내]\nA/S Manual 기준에 따라 해당 팝업 코드에 대한 점검을 진행하겠습니다. 점검 결과에 따라 조치 내용과 비용 발생 여부를 안내드리겠습니다."], "done": ["[조치 완료]\nA/S Manual 기준 조치 완료 후 반복 테스트를 실시하였으며, 팝업 재발 없이 정상 작동을 확인하였습니다."], "tip": "A/S Manual을 참조하여 증상 확인 및 조치. 반복 테스트로 정상 작동 확인 후 인계."}, {"name": "Touch Screen 동작 불능", "cat": "전원·제어", "q": ["화면 전체가 안 눌리나요? 아니면 특정 위치만 반응이 없을까요?", "어떤 상황에서 동작 불능이 발생했는지 기억나실까요? (부팅 직후, 시술 중 등)", "터치 반응이 늦게 나타나는(지연) 증상도 있었을까요?"], "check": ["[특정 위치·간헐적 동작 확인 시]\n특정 위치 또는 간헐적 터치 불량이 확인되어 SD CARD 교체를 진행하겠습니다(동일한 UI 버전 적용). 터치 반응 지연 증상도 함께 점검하겠습니다.", "[화면 전체 미동작 확인 시]\n터치스크린 자체 불량이 확인되어 Touch Screen A'ssy 교체가 필요하며, 교체 비용이 발생될 것 같습니다."], "done": ["[교체 진행 시]\n교체 후 약 10분 에이징 진행 및 전체 위치 터치 테스트를 실시하였으며 정상 반응을 확인하였습니다. 직접 조작해 보시겠어요?", "[교체 불필요 시]\nSD CARD 교체 및 UI 점검 후 정상 터치 반응을 확인하였습니다."], "tip": "전원 동작 후 약 10분 에이징 진행 후 증상 재현 여부 확인. SD CARD 교체 시 기존과 동일한 UI 버전인지 확인할 것."}, {"name": "이상 소음", "cat": "구조·기타", "q": ["소음이 어떤 종류였을까요? (팬 소리, 모터 소리, '삑' 같은 경고음 등)", "전원을 켜자마자 발생하나요? 아니면 시술(분사) 중에만 발생하나요?"], "check": ["[발생 지점 특정 시]\n내부(FAN, Water pump, Power supply) 점검 및 Air remover 기능 활용 JET TEST 결과, ○○ 부품에서 소음이 확인되었습니다. 해당 부품 교체가 필요하며 교체 비용이 발생될 것 같습니다.", "[현장 수리 불가 시]\nFAN, Power supply 등 전원부 내 현장 수리가 불가한 부분으로 확인되어 공장 입고 수리가 필요합니다. 수리 기간 동안 필요 시 데모 장비 제공을 협의드리겠습니다."], "done": ["[교체 진행 시]\n부품 교체 후 정상 젯 퀄리티 상태 및 이상 소음 개선됨을 확인하였습니다. 직접 들어보시고 확인 부탁드립니다.", "[공장 입고 시]\n공장 입고 일정과 예상 수리 기간을 안내드리겠습니다. 영업 담당자에게도 상황을 공유하겠습니다."], "tip": "정상 젯 퀄리티 및 소음 개선을 병원 담당자에게 직접 확인시킬 것. ※ 공장 입고 시 영업 담당자 공유 + 수리 지연 안내(필요 시 데모 장비 제공)."}, {"name": "피팅 불량(기포 발생)", "cat": "누수·냉각", "q": ["냉각수 라인에 기포가 보이거나 분사가 불안정한 증상이 있었을까요?", "증상이 전원을 켠 직후에 심한가요? 사용 중에도 계속되나요?"], "check": ["[기포 지속 발생 확인 시]\n약 10분 에이징 테스트 후에도 기포 발생량이 지속적으로 많은 것이 확인되어 피팅 교체가 필요하며, 교체 비용이 발생될 것 같습니다. (육안 확인이 어려운 경우 주사기를 활용한 누설 테스트로 확인)", "[튜브 길이·연결 문제 확인 시]\nWater tank 피팅 연결 Tube(In&Out) 길이 점검 결과 연결 상태 문제로 확인되어 재정비하겠습니다. ※ Out Tube(Water tank→Handpiece)가 더 긴 것이 정상입니다."], "done": ["[교체 진행 시]\n피팅 교체 후 약 10분 에이징하여 기포 발생량 정상 및 JET TEST 정상 동작을 확인하였습니다.", "[교체 불필요 시]\n에이징 초기의 일시적 기포로 확인되었으며, 안정화 후 기포 발생 없이 정상 동작함을 확인하였습니다."], "tip": "에이징 진행 이후 기포 발생 여부를 기준으로 판단. 육안 확인 어려울 시 주사기 활용 누설 테스트 진행."}, {"name": "파워서플라이 불량", "cat": "전원·제어", "q": ["전원을 켰을 때 장비가 전혀 켜지지 않았나요?", "장비 뒤쪽 팬(FAN) 소리가 들리지 않거나, 평소와 다른 점이 있었을까요?"], "check": ["[불량 확인 시]\nPower supply 내 LED(초록색) 미점등 및 후면 FAN 미동작이 확인되었습니다. 해당 부분은 현장 수리가 불가하여 공장 입고 수리가 필요합니다. 수리 기간 동안 필요 시 데모 장비 제공을 협의드리겠습니다."], "done": ["[공장 입고 안내]\n공장 입고 일정과 예상 수리 기간을 안내드리고, 진행 상황은 ○○님께 계속 공유드리겠습니다. 영업 담당자에게도 상황을 공유하겠습니다."], "tip": "현장 수리 불가 항목 → 공장 입고 수리 조치. ※ 영업 담당자 상황 공유 + 병원 담당자에게 수리 지연 안내(필요 시 데모 장비 제공)."}, {"name": "구동 키 파손", "cat": "구조·기타", "q": ["구동 키가 부러진 상태인가요? 키 조각이 스위치 안에 남아있을까요?", "혹시 스페어 키를 보유하고 계실까요?"], "check": ["[점검 안내]\n스위치 내부 이물(부러진 키 조각) 유무를 확인하고, 있을 경우 분해하여 제거하겠습니다. 구동 키는 추가 제공해 드리겠습니다."], "done": ["[조치 완료]\n이물 제거 및 구동 키 제공 완료 후 전원 동작을 실시하여 정상 동작을 확인하였습니다."], "tip": "※ 영업 담당자에게 상황 공유 및 병원 담당자에게 처리 결과 안내 조치(필요 시 구동 키 추가 제공)."}, {"name": "거치대 파손", "cat": "구조·기타", "q": ["파손된 부위가 어디일까요? 사용 중 불편하셨던 부분이 있을까요?", "거치대 교체를 원하실까요? (구형/신형 TYPE 확인 필요)"], "check": ["[점검 안내]\n거치대 TYPE(구형/신형)을 확인하였습니다. 파손 확인 결과와 함께 교체 진행 시 비용을 안내드리겠습니다."], "done": ["[조치 완료]\n요청 사항에 따라 거치대 교체를 완료하였습니다. 고정 상태를 직접 확인 부탁드립니다."], "tip": "파손 확인 후 요청 사항에 따라 교체. ※ 영업 담당자 상황 공유 및 병원 담당자에게 처리 결과 안내 조치."}, {"name": "ARM 파손", "cat": "구조·기타", "q": ["ARM의 어느 부위가 파손되었을까요? (관절부, 고정부 등)", "고정 나사가 빠지거나 분실된 상태일까요?"], "check": ["[현장 수리 가능 시]\n고정 나사 분실로 확인되어 나사 교환을 실시하겠습니다. 간단한 조치로 비용 부담은 크지 않습니다.", "[고정부 기능 상실·파손 시]\n고정부 기능 상실 및 파손으로 확인되어 A'ssy 교체가 필요하며, 교체 비용이 발생될 것 같습니다. ※ 고정부 파손은 현장 수리 대상에서 제외됩니다."], "done": ["[조치 완료]\n나사 교환(또는 A'ssy 교체) 후 고정 상태 및 동작을 확인하였습니다. 직접 움직여 보시고 확인 부탁드립니다."], "tip": "고정부 파손은 현장 수리 대상 제외 → A'ssy 교체. ※ 영업 담당자 상황 공유 및 병원 담당자에게 처리 결과 안내 조치."}, {"name": "케이블 불량", "cat": "전원·제어", "q": ["화면에 연결 관련 팝업이 표시되었을까요?", "케이블을 만지거나 움직일 때 증상이 나타나거나 사라지는 경우가 있었을까요?"], "check": ["[접촉 불량 확인 시]\n해당 팝업 관련 케이블 체결 상태 점검 및 BW-100 세척 작업으로 접촉 불량을 조치하겠습니다. 별도 비용은 발생하지 않습니다.", "[단선 확인 시]\n테스터기 점검 결과 케이블 단선이 확인되어 케이블 교체가 필요하며, 교체 비용이 발생될 것 같습니다. ※ 교체 후에도 동일 증상 발생 시 A'ssy 교환이 필요할 수 있습니다."], "done": ["[조치 완료]\n케이블 조치 후 약 10분 에이징 진행 및 JET TEST를 실시하였으며 정상 동작을 확인하였습니다.", "[A'ssy 교환 시]\n케이블 교체 후에도 동일 증상이 확인되어 A'ssy 교환을 진행하였고, 정상 동작을 확인하였습니다."], "tip": "체결 점검 → BW-100 세척 → 단선 확인 → 케이블 교체 → (재발 시) A'ssy 교환 순으로 진행."}, {"name": "재현 안됨", "cat": "구조·기타", "q": ["증상이 발생했을 당시 상황을 최대한 자세히 말씀해 주실 수 있을까요? (시점, 빈도, 화면 표시 등)", "증상 발생 시 촬영해 두신 사진이나 영상이 있을까요?"], "check": ["[점검 안내]\n현재는 증상이 재현되지 않아, 정기 점검 체크리스트를 활용하여 장비 전체 점검을 진행하겠습니다. 점검 과정을 함께 봐주시면 좋겠습니다."], "done": ["[종결 안내]\n전체 점검 결과 이상 없음을 확인하여 종결 처리하겠습니다. 동일 증상이 다시 발생하면 가능한 사진·영상을 촬영해 주시고 바로 접수 부탁드립니다.\n※ 증상 재현이 안 될 경우 해당 부분에 대한 안전함을 확인시켜주는 행동과 안내를 진행할 것"], "tip": "정기 점검 체크리스트 활용 전체 점검 → 이상 없음 확인 후 종결. ※ 영업 담당자 상황 공유 및 병원 담당자에게 점검 사항 안내 조치."}, {"name": "냉각 호스 파손", "cat": "누수·냉각", "q": ["누수가 발견된 지점이 어디일까요?", "장비 아래나 핸드피스 연결부에 물이 고여 있었을까요?"], "check": ["[파손 확인 시]\n냉각 호스 파손에 의한 누수가 확인되어 핸드피스 교체가 필요하며, 교체 비용이 발생될 것 같습니다. 파손 부위를 직접 보여드리겠습니다."], "done": ["[조치 완료]\n핸드피스 교체, 냉각수 보충(정상 700~800ml), 발생 지점 주변 물기 제거를 완료하였고, 전원 동작 하 주요 부품(메인보드, Water pump, Touch screen, Power supply 등) 정상 동작을 확인하였습니다."], "tip": "물기 제거는 추가 누수 유/무 확인 목적. 전원 동작 후 약 10분 에이징 진행 후 추가 누수 발생 여부 확인."}, {"name": "노즐 누수/녹물", "cat": "노즐·출력", "q": ["정확한 원인 파악을 위해 노즐 사용 현황을 함께 확인해 봐도 될까요? (모든 병원에 동일하게 확인드리는 점검 절차입니다)", "노즐 교체는 보통 어떤 주기로 하고 계실까요? 현재 노즐로는 시술을 몇 회 정도 진행하셨을까요?", "누수가 노즐 쪽인가요, 핸드피스 쪽인가요?"], "check": ["[노즐 손상 확인 시]\n사용 중인 노즐에서 멤브레인 파손/녹물/생리식염수 누수가 확인되었습니다. 즉시 사용을 중지해 주시고 새 노즐로 교체 부탁드립니다. (※ 매우 중요: 누수 노즐 계속 사용 금지)", "[핸드피스 내부 녹물 확인 시]\n핸드피스 내부 녹물이 확인되어 세척을 진행하겠습니다. 세척·수리가 불가할 경우 A'ssy 교체가 필요하며 교체 비용이 발생될 것 같습니다.", "[냉각수 부족 확인 시]\nWater tank 냉각수가 기준치(정상 700~800ml) 미만으로 확인되어 추가 누수 여부 점검 후 보충하겠습니다."], "done": ["[조치 완료]\n조치 후 약 10분 에이징 진행 및 JET TEST를 실시하였으며 정상 동작을 확인하였습니다. 새 노즐 기준 분사 상태를 직접 확인 부탁드립니다.", "[추가 누수 발견 시]\n추가 누수 지점이 확인되어 해당 부분 교체 후 냉각수 보충을 완료하였습니다."], "tip": "※ 노즐 누수 확인 시 사용 중지 + 새 노즐 사용 요청(매우 중요). ※ 사용 미숙(재사용 등)으로 판단되는 경우 교육 담당자에게 내용 공유."}, {"name": "노즐 체결 강함", "cat": "노즐·출력", "q": ["노즐 체결(잠금) 시 어느 정도로 조이고 계신지 보여주실 수 있을까요?", "노즐 스패너는 사용하고 계실까요?"], "check": ["[체결 방법 안내]\n현재 사용 노즐의 체결력을 확인하였습니다. 노즐 스패너를 제공해 드리고 올바른 사용 방법을 안내드리겠습니다."], "done": ["[안내 완료]\n노즐 스패너 제공 및 사용 방법 안내를 완료하였습니다. 직접 한 번 체결해 보시겠어요?\n※ 체결력을 임의로 조정할 경우 신규 노즐 사용 시 체결력 변화가 생길 수 있으며, 체결력 저하 시 시술 중 노즐 이탈 가능성이 있어 주의가 필요합니다."], "tip": "체결력 임의 조정 시 신규 노즐 체결력 변화 위험성 안내. ※ 체결력 저하에 따른 시술 중 노즐 이탈 가능성 위험 안내."}, {"name": "노즐 체결 약함", "cat": "노즐·출력", "q": ["체결이 약하다고 느끼신 게 특정 노즐에서만인가요? 모든 노즐에서인가요?", "사용 중인 노즐의 제조일을 함께 확인해 봐도 될까요? (오래된 노즐일 경우 최신 제조 노즐과 비교 테스트 진행)", "노즐 스패너는 사용하고 계실까요?"], "check": ["[Permanent-Holder 마모 확인 시]\n사용 노즐 체결력이 동일하게 약함이 확인되어 Permanent-Holder 교체를 진행하겠습니다. 교체 비용이 발생될 것 같습니다.\n※ 최신 노즐이 아닌 경우, 추가 구매 시 체결력 변화 가능성을 함께 안내드립니다.", "[노즐 제조일 문제 확인 시]\n오래된 제조일의 노즐로 인한 체결력 차이로 확인됩니다. 최신 제조 노즐과 비교 테스트 결과를 보여드리겠습니다."], "done": ["[교체 완료]\nPermanent-Holder 교체 후 체결 상태를 확인하였습니다. 교체 직후에는 체결이 다소 강하게 느껴질 수 있어, 노즐 스패너 제공 및 사용을 권장드립니다."], "tip": "교체 후 체결력 변화(강해짐)에 따른 어려움 호소를 예상 → 노즐 스패너 제공 및 사용 권장."}, {"name": "발열", "cat": "누수·냉각", "q": ["발열이 느껴진 부위가 핸드피스인가요, 장비 본체인가요?", "시술 몇 회차쯤부터 뜨거워지는 느낌이 있었을까요?"], "check": ["[누수 확인 시]\n장비 누수가 확인되어 해당 부분에 대한 교체 또는 수리를 진행하겠습니다. 비용 발생 여부를 함께 안내드리겠습니다.", "[냉각수 부족·순환 장애 확인 시]\nWater tank 냉각수 부족에 의한 순환 장애가 확인되어 기준치(정상 700~800ml) 이상으로 보충하겠습니다.", "[누수 없음·순환 정상 시]\n누수 미발생 및 냉각수 순환이 정상 범위로 확인되어, 발열 원인인 핸드피스 교체가 필요하며 교체 비용이 발생될 것 같습니다."], "done": ["[조치 완료]\n조치 후 약 10분 에이징 진행 및 JET TEST를 실시하였으며 발열 재발 없이 정상 동작을 확인하였습니다. 직접 만져보시고 확인 부탁드립니다."], "tip": "누수 → 냉각수량(700~800ml) → 순환 상태 순으로 원인 확인. 에이징 + JET TEST로 발열 재발 유/무 확인 후 인계."}, {"name": "동작 불능(시술 중)", "cat": "노즐·출력", "q": ["사용 중인 노즐 상태(멤브레인 파손, 녹물, 생리식염수 누수)를 함께 확인해 봐도 될까요?", "풋스위치를 밟았을 때 장비 화면이나 소리 반응은 있었을까요?"], "check": ["[풋스위치 신호 미발생 확인 시]\n풋스위치 동작 신호가 발생하지 않아 케이블 단선 점검 후 수리를 진행하겠습니다.", "[풋스위치 정상·핸드피스 미동작 시]\n풋스위치는 정상이나 핸드피스가 동작하지 않아 핸드피스 A'ssy 교체가 필요하며, 교체 비용이 발생될 것 같습니다.", "[노즐 누수 확인 시]\n노즐 누수가 확인되어 즉시 사용 중지 및 새 노즐 사용을 부탁드립니다. (※ 매우 중요)"], "done": ["[조치 완료]\n조치 후 약 10분 에이징 진행 및 JET TEST를 실시하였으며 정상 동작을 확인하였습니다."], "tip": "JET TEST로 풋스위치·핸드피스 동작 확인. 풋스위치는 메인보드 내 동작 신호 발생 유/무로 판단."}, {"name": "출력 약함", "cat": "노즐·출력", "q": ["출력이 약하다고 판단하신 기준이 어떤 부분일까요?", "현재 노즐로 시술을 몇 회 정도 진행하셨을까요? 노즐 상태(멤브레인, 녹물, 누수)도 함께 확인해 봐도 될까요?"], "check": ["[소모품 원인 확인 시]\n신규 노즐 및 주사기 적용 시 정상 출력이 확인되었습니다. 노즐은 1회 시술용으로 설계되어 있어 사용 횟수가 누적되면 멤브레인 특성상 출력이 떨어질 수 있는데요, 이번 증상도 그 영향으로 보입니다. (누수 노즐은 즉시 사용 중지 부탁드립니다)", "[핸드피스 내부 문제 확인 시]\n핸드피스 내부 잔재가 확인되어 제거 및 세척을 진행하겠습니다. 내부품 제거 불가로 세척·수리가 어려울 경우 A'ssy 교체가 필요하며 교체 비용이 발생될 것 같습니다."], "done": ["[조치 완료]\n신규 노즐·주사기 적용 상태에서 정상 젯 퀄리티를 확인하였습니다. 분사 상태를 직접 확인 부탁드립니다."], "tip": "신규 노즐·주사기 적용 후 정상 젯 퀄리티를 담당자에게 직접 확인시킬 것. ※ Handpiece·Nozzle 교환에도 개선 안 될 시 공장 입고(필요 시 데모 장비 제공)."}, {"name": "젯팅 불량", "cat": "노즐·출력", "q": ["젯팅 불량이라고 판단하신 기준이 어떤 부분일까요? (분사 모양 흐트러짐, 약물 침투 불량 등)", "현재 노즐로 시술을 몇 회 정도 진행하셨을까요? 노즐 상태(멤브레인, 녹물, 누수)도 함께 확인해 봐도 될까요?"], "check": ["[소모품 원인 확인 시]\n신규 노즐 및 주사기 적용 시 정상 분사가 확인되었습니다. 노즐은 사용 횟수가 누적되면 멤브레인 특성상 분사 형태가 달라질 수 있는데요, 이번 증상도 노즐 상태에 따른 영향으로 보입니다. (누수 노즐은 즉시 사용 중지 부탁드립니다)", "[핸드피스 내부 문제 확인 시]\n핸드피스 내부 잔재·세척 필요 상태가 확인되었습니다. 내부품 제거 불가로 세척·수리가 어려울 경우 A'ssy 교체가 필요하며 교체 비용이 발생될 것 같습니다."], "done": ["[조치 완료]\n신규 노즐·주사기 적용 상태에서 정상 젯 퀄리티를 확인하였습니다. 분사 상태를 직접 확인 부탁드립니다."], "tip": "신규 노즐·주사기 적용 후 정상 젯 퀄리티를 담당자에게 직접 확인시킬 것. ※ Handpiece·Nozzle 교환에도 개선 안 될 시 공장 입고(필요 시 데모 장비 제공)."}, {"name": "노즐 막힘", "cat": "노즐·출력", "q": ["현재 노즐을 마지막으로 교체하신 시점이 언제쯤일까요?", "노즐 교체는 보통 어떤 주기로 하고 계실까요? 노즐 상태(멤브레인, 녹물, 생리식염수 누수)도 함께 확인해 봐도 될까요?"], "check": ["[노즐 사용 횟수 누적 확인 시]\n노즐은 1회 시술용으로 설계되어 있어, 사용 횟수가 누적되면 내부 멤브레인이 약해지면서 막힘이 발생할 수 있습니다. 이번 증상도 그 영향으로 확인됩니다. 시술마다 새 노즐을 사용하시면 동일 증상을 예방하실 수 있습니다.", "[핸드피스 내부 문제 확인 시]\n핸드피스 내부 잔재가 확인되어 제거 및 세척을 진행하겠습니다. 내부품 제거 불가로 세척·수리가 어려울 경우 A'ssy 교체가 필요하며 교체 비용이 발생될 것 같습니다."], "done": ["[조치 완료]\n신규 노즐·주사기 적용 후 정상 출력 및 젯 퀄리티를 확인하였습니다. 분사 상태를 직접 확인 부탁드립니다."], "tip": "※ 막힘 원인 안내 시 '재사용' 표현 대신 '사용 횟수 누적·1회 시술용 설계 특성'으로 표현할 것. ※ 사용 미숙으로 판단 시 교육 담당자에게 공유. ※ 교환에도 개선 안 될 시 공장 입고(필요 시 데모 장비 제공)."}]};
+const rulesEl=document.getElementById('rules');
+DATA.common.rules.forEach(r=>{const li=document.createElement('li');li.textContent=r;rulesEl.appendChild(li);});
+
+const cats=['전체',...new Set(DATA.symptoms.map(s=>s.cat))];
+let curCat='전체', curQ='';
+const chipsEl=document.getElementById('chips');
+cats.forEach(c=>{
+  const b=document.createElement('button');b.className='chip'+(c==='전체'?' on':'');b.textContent=c;
+  b.onclick=()=>{curCat=c;document.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));b.classList.add('on');render();};
+  chipsEl.appendChild(b);
+});
+document.getElementById('search').addEventListener('input',e=>{curQ=e.target.value.trim();render();});
+
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function scriptBlock(t,cls){
+  const m=t.match(/^\[(.+?)\]\n([\s\S]*)$/);
+  if(m) return `<div class="script"><span class="label">${esc(m[1])}</span>${esc(m[2])}</div>`;
+  return `<div class="script">${esc(t)}</div>`;
+}
+function render(){
+  const list=document.getElementById('list');list.innerHTML='';
+  let shown=0;
+  DATA.symptoms.forEach((s,i)=>{
+    if(curCat!=='전체'&&s.cat!==curCat)return;
+    if(curQ){
+      const hay=(s.name+s.cat+s.q.join('')+s.check.join('')+s.done.join('')+s.tip).toLowerCase();
+      if(!hay.includes(curQ.toLowerCase()))return;
+    }
+    shown++;
+    const card=document.createElement('div');card.className='card';
+    const qs=s.q.map(q=>`<div class="qline"><span class="qmark">Q.</span><span>${esc(q)}</span></div>`).join('');
+    card.innerHTML=`
+      <button class="head">
+        <span class="num">${String(i+1).padStart(2,'0')}</span>
+        <span class="ttl"><b>${esc(s.name)}</b><span>${esc(s.cat)}</span></span>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="body">
+        <div class="step s1">
+          <div class="stitle"><span class="badge">STEP 1</span><span class="sname">증상 확인 (고객)</span></div>
+          <div class="purpose">목적: ${esc(DATA.common.step1_purpose)}</div>
+          <div class="script">"「${esc(s.name)}」 문제로 시술에 불편을 드려 죄송합니다.\n증상 확인을 위해 몇 가지 질문 드려도 될까요?"</div>
+          ${qs}
+          <div class="script">${esc(DATA.common.closing)}</div>
+        </div>
+        <div class="step s2">
+          <div class="stitle"><span class="badge">STEP 2</span><span class="sname">장비 점검 및 결과 안내</span></div>
+          <div class="purpose">목적: 점검 과정 투명 공개 · 비용 신뢰 형성 / ※ 문제 부위를 시각적으로 담당자에게 확인 조치</div>
+          ${s.check.map(scriptBlock).join('')}
+          <div class="warnbox">${esc(DATA.common.ncare)}</div>
+        </div>
+        <div class="step s3">
+          <div class="stitle"><span class="badge">STEP 3</span><span class="sname">처리 사항 안내</span></div>
+          <div class="purpose">목적: 조치 완료 알림 · 재발 방지 팁 / ※ 정상 동작을 시각적으로 확인시킬 것!!</div>
+          ${s.done.map(scriptBlock).join('')}
+          <div class="tipbox"><b>후속 조치 · 주의</b>${esc(s.tip)}</div>
+        </div>
+      </div>`;
+    card.querySelector('.head').onclick=()=>card.classList.toggle('open');
+    list.appendChild(card);
+  });
+  document.getElementById('empty').style.display=shown?'none':'block';
+}
+render();
+</script>
+</body>
+</html>
