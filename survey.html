@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>BAZ BIOMEDIC — 고객 만족도 조사</title>
+<style>
+  :root{
+    --navy:#1B2F5E; --navy2:#16264D; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+    --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E; --text-muted:#6B7A99;
+    --star:#F5A623; --red:#C0392B; --green:#1E7E4E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    background:var(--gray-bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%;
+    display:flex;justify-content:center;}
+  .wrap{width:100%;max-width:440px;background:#fff;min-height:100vh;}
+
+  header{background:var(--navy);padding:20px 20px 18px;text-align:center;position:relative;}
+  header .langsw{position:absolute;top:14px;right:14px;display:flex;gap:2px;
+    background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.3);border-radius:14px;padding:2px;}
+  header .langsw button{border:none;background:transparent;color:#cfdbf0;font-size:10px;font-weight:700;
+    padding:4px 8px;border-radius:11px;cursor:pointer;font-family:inherit;}
+  .brand{color:#9EADCC;font-size:15px;font-weight:700;font-family:Georgia,serif;margin-bottom:8px;letter-spacing:.04em;}
+  .brand b{color:#4E9CC8;}
+  header h1{color:#fff;font-size:17px;font-weight:700;margin-bottom:4px;}
+  header .sub{color:#9EADCC;font-size:11.5px;}
+
+  .body{padding:18px 18px 28px;}
+
+  .meta{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:10px;
+    padding:11px 13px;margin-bottom:22px;display:flex;flex-wrap:wrap;gap:8px 18px;font-size:12px;}
+  .meta .mlabel{color:var(--text-muted);}
+  .meta .mval{color:var(--navy);font-weight:700;margin-left:5px;}
+
+  .overall{text-align:center;margin-bottom:8px;}
+  .overall .q{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:3px;}
+  .overall .hint{font-size:11.5px;color:#9AA3B5;}
+  .stars{display:flex;justify-content:center;gap:8px;margin:10px 0 6px;}
+  .stars.big .star{font-size:38px;}
+  .star{font-size:26px;color:#D6DCE6;cursor:pointer;transition:transform .1s,color .15s;line-height:1;
+    -webkit-user-select:none;user-select:none;}
+  .star:active{transform:scale(1.15);}
+  .star.on{color:var(--star);}
+  .star-err{text-align:center;font-size:11.5px;color:var(--red);min-height:16px;margin-bottom:14px;}
+
+  .divider{height:1px;background:var(--gray-line);margin:6px 0 18px;}
+
+  .section-label{font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:14px;}
+  .item{margin-bottom:16px;}
+  .item .ihead{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .item .ico{font-size:15px;}
+  .item .iname{font-size:12.5px;color:var(--text);font-weight:600;}
+  .item .stars{justify-content:flex-start;gap:5px;margin:0;}
+  .item .star{font-size:24px;}
+
+  .field{margin-top:6px;}
+  .field label{display:block;font-size:12.5px;font-weight:700;color:var(--navy);margin-bottom:8px;}
+  .field label span{color:#9AA3B5;font-weight:400;}
+  textarea{width:100%;border:1px solid var(--gray-line);border-radius:9px;padding:11px 13px;
+    font-size:15px;font-family:inherit;color:var(--text);background:#fff;outline:none;resize:vertical;
+    min-height:84px;line-height:1.6;transition:border-color .2s,box-shadow .2s;}
+  textarea:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  .counter{text-align:right;font-size:10.5px;color:var(--text-muted);margin-top:4px;font-weight:500;}
+  .counter.warn{color:var(--red);}
+
+  .btn-submit{width:100%;margin-top:18px;padding:15px;border:none;border-radius:11px;
+    background:var(--navy);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;gap:7px;transition:background .2s;}
+  .btn-submit:active{background:var(--navy2);}
+
+  /* 완료 화면 */
+  .done-screen{display:none;flex-direction:column;align-items:center;text-align:center;padding:50px 24px 30px;}
+  .done-screen.show{display:flex;}
+  .done-icon{font-size:60px;margin-bottom:18px;line-height:1;}
+  .done-screen h2{font-size:20px;font-weight:800;color:var(--navy);margin-bottom:10px;}
+  .done-screen p{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:26px;}
+  .done-summary{width:100%;background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:12px;
+    padding:16px;margin-bottom:22px;text-align:left;}
+  .done-summary .drow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;}
+  .done-summary .drow:not(:last-child){border-bottom:1px solid var(--gray-line);}
+  .done-summary .dlabel{color:var(--text-muted);}
+  .done-summary .dstars{color:var(--star);letter-spacing:1px;}
+  .done-summary .dtext{font-size:12.5px;color:var(--text);line-height:1.6;padding-top:8px;white-space:pre-wrap;}
+  .btn-copy{width:100%;padding:13px;border-radius:10px;background:var(--teal-soft);color:var(--teal);
+    font-size:14px;font-weight:700;border:1.5px solid #BCD9E8;cursor:pointer;font-family:inherit;margin-bottom:10px;}
+  .btn-again{width:100%;padding:12px;border-radius:10px;background:#fff;color:var(--text-muted);
+    font-size:13.5px;font-weight:600;border:1.5px solid var(--gray-line);cursor:pointer;font-family:inherit;}
+
+  button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
+  @media(max-width:440px){.body{padding-bottom:env(safe-area-inset-bottom,28px);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="langsw" id="langSw">
+      <button type="button" data-slang="ko">한국어</button>
+      <button type="button" data-slang="en">EN</button>
+      <button type="button" data-slang="ja">日本語</button>
+    </div>
+    <div class="brand">ba<b>z</b> BIOMEDIC</div>
+    <h1 id="sTitle">AS 서비스 만족도 조사</h1>
+    <div class="sub" id="sSub">소중한 의견을 들려주세요</div>
+  </header>
+
+  <!-- 설문 화면 -->
+  <div class="body" id="formScreen">
+    <div class="meta" id="metaBox" style="display:none;">
+      <div><span class="mlabel" id="mHospitalL">병원</span><span class="mval" id="mHospital"></span></div>
+      <div><span class="mlabel" id="mEngL">담당</span><span class="mval" id="mEng"></span></div>
+    </div>
+
+    <div class="overall">
+      <div class="q" id="ovQ">전반적인 만족도는 어떠셨나요?</div>
+      <div class="hint" id="ovHint">별을 눌러 평가해주세요</div>
+    </div>
+    <div class="stars big" data-rate="overall">
+      <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+      <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+      <span class="star" data-v="5">★</span>
+    </div>
+    <div class="star-err" id="ovErr"></div>
+
+    <div class="divider"></div>
+
+    <div class="section-label" id="itemsLabel">항목별 평가</div>
+
+    <div class="item">
+      <div class="ihead"><span class="ico">🙂</span><span class="iname" id="i1name">친절도</span></div>
+      <div class="stars" data-rate="kindness">
+        <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+        <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+        <span class="star" data-v="5">★</span>
+      </div>
+    </div>
+    <div class="item">
+      <div class="ihead"><span class="ico">⚡</span><span class="iname" id="i2name">신속성</span></div>
+      <div class="stars" data-rate="speed">
+        <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+        <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+        <span class="star" data-v="5">★</span>
+      </div>
+    </div>
+    <div class="item">
+      <div class="ihead"><span class="ico">🛠️</span><span class="iname" id="i3name">전문성</span></div>
+      <div class="stars" data-rate="expertise">
+        <span class="star" data-v="1">★</span><span class="star" data-v="2">★</span>
+        <span class="star" data-v="3">★</span><span class="star" data-v="4">★</span>
+        <span class="star" data-v="5">★</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="field">
+      <label id="fbLabel">추가 의견 <span id="fbOpt">(선택)</span></label>
+      <textarea id="comment" maxlength="200" oninput="updCounter()"></textarea>
+      <div class="counter" id="cmCounter">0/200</div>
+    </div>
+
+    <button class="btn-submit" id="submitBtn" onclick="submitSurvey()">
+      <span>✓</span> <span id="submitLabel">제출하기</span>
+    </button>
+  </div>
+
+  <!-- 완료 화면 -->
+  <div class="done-screen" id="doneScreen">
+    <div class="done-icon">✅</div>
+    <h2 id="doneTitle">소중한 의견 감사합니다</h2>
+    <p id="doneSub">제출이 완료되었습니다.<br>더 나은 서비스로 보답하겠습니다.</p>
+    <div class="done-summary" id="doneSummary"></div>
+    <button class="btn-copy" id="copyBtn" onclick="copyResult()">📋 응답 내용 복사</button>
+    <button class="btn-again" id="againBtn" onclick="resetSurvey()">새로 작성</button>
+  </div>
+</div>
+
+<script>
+// ── i18n ──
+const I18N = {
+  ko: {
+    title:'AS 서비스 만족도 조사', sub:'소중한 의견을 들려주세요',
+    hospitalL:'병원', engL:'담당',
+    ovQ:'전반적인 만족도는 어떠셨나요?', ovHint:'별을 눌러 평가해주세요',
+    itemsLabel:'항목별 평가', i1:'친절도', i2:'신속성', i3:'전문성',
+    fbLabel:'추가 의견', fbOpt:'(선택)', fbPh:'개선할 점이나 칭찬하고 싶은 점을 자유롭게 적어주세요',
+    submit:'제출하기', errOverall:'전반적인 만족도를 선택해주세요',
+    doneTitle:'소중한 의견 감사합니다', doneSub:'제출이 완료되었습니다.<br>더 나은 서비스로 보답하겠습니다.',
+    overall:'전반적 만족도', copy:'📋 응답 내용 복사', copied:'✅ 복사됨!', again:'새로 작성',
+    sumTitle:'BAZ BIOMEDIC AS 서비스 만족도', sumComment:'추가 의견',
+    langBtn:'한국어'
+  },
+  en: {
+    title:'AS Service Satisfaction Survey', sub:'We value your feedback',
+    hospitalL:'Site', engL:'Engineer',
+    ovQ:'How satisfied were you overall?', ovHint:'Tap a star to rate',
+    itemsLabel:'Rate by category', i1:'Courtesy', i2:'Speed', i3:'Expertise',
+    fbLabel:'Additional comments', fbOpt:'(optional)', fbPh:'Feel free to share suggestions or compliments',
+    submit:'Submit', errOverall:'Please rate your overall satisfaction',
+    doneTitle:'Thank you for your feedback', doneSub:'Your response has been submitted.<br>We\u2019ll strive to serve you better.',
+    overall:'Overall', copy:'📋 Copy Response', copied:'✅ Copied!', again:'Start over',
+    sumTitle:'BAZ BIOMEDIC AS Service Satisfaction', sumComment:'Comments',
+    langBtn:'한국어'
+  },
+  ja: {
+    title:'ASサービス満足度調査', sub:'貴重なご意見をお聞かせください',
+    hospitalL:'施設', engL:'担当',
+    ovQ:'全体的な満足度はいかがでしたか？', ovHint:'星をタップして評価してください',
+    itemsLabel:'項目別評価', i1:'親切さ', i2:'迅速さ', i3:'専門性',
+    fbLabel:'追加のご意見', fbOpt:'（任意）', fbPh:'改善点やお褒めの言葉など、自由にご記入ください',
+    submit:'送信する', errOverall:'全体的な満足度を選択してください',
+    doneTitle:'貴重なご意見ありがとうございます', doneSub:'送信が完了しました。<br>より良いサービスでお応えいたします。',
+    overall:'全体満足度', copy:'📋 回答内容をコピー', copied:'✅ コピーしました！', again:'新規作成',
+    sumTitle:'BAZ BIOMEDIC ASサービス満足度', sumComment:'追加のご意見',
+    langBtn:'한국어'
+  }
+};
+
+let LANG = localStorage.getItem('baz_lang') || 'ko';
+if(!I18N[LANG]) LANG='ko';
+function t(k){ return I18N[LANG][k]; }
+
+// URL 파라미터에서 병원/담당자 정보 (?h=병원명&e=담당자)
+const params = new URLSearchParams(location.search);
+const pHospital = params.get('h') || '';
+const pEng = params.get('e') || '';
+
+const ratings = { overall:0, kindness:0, speed:0, expertise:0 };
+
+function applyLang(){
+  document.documentElement.lang = LANG;
+  document.getElementById('sTitle').textContent = t('title');
+  document.getElementById('sSub').textContent = t('sub');
+  document.getElementById('mHospitalL').textContent = t('hospitalL');
+  document.getElementById('mEngL').textContent = t('engL');
+  document.getElementById('ovQ').textContent = t('ovQ');
+  document.getElementById('ovHint').textContent = t('ovHint');
+  document.getElementById('itemsLabel').textContent = t('itemsLabel');
+  document.getElementById('i1name').textContent = t('i1');
+  document.getElementById('i2name').textContent = t('i2');
+  document.getElementById('i3name').textContent = t('i3');
+  document.getElementById('fbLabel').childNodes[0].textContent = t('fbLabel') + ' ';
+  document.getElementById('fbOpt').textContent = t('fbOpt');
+  document.getElementById('comment').setAttribute('placeholder', t('fbPh'));
+  document.getElementById('submitLabel').textContent = t('submit');
+  document.getElementById('doneTitle').textContent = t('doneTitle');
+  document.getElementById('doneSub').innerHTML = t('doneSub');
+  document.getElementById('copyBtn').textContent = t('copy');
+  document.getElementById('againBtn').textContent = t('again');
+  // 언어 스위치 강조
+  document.querySelectorAll('#langSw button').forEach(b=>{
+    const on = b.getAttribute('data-slang')===LANG;
+    b.style.background = on ? '#cfdbf0' : 'transparent';
+    b.style.color = on ? '#16264D' : '#cfdbf0';
+  });
+  // 에러 메시지가 떠있으면 갱신
+  const ovErr = document.getElementById('ovErr');
+  if(ovErr.textContent) ovErr.textContent = t('errOverall');
+}
+
+function setLang(l){ LANG=l; localStorage.setItem('baz_lang',l); applyLang(); }
+
+function paintStars(group){
+  document.querySelectorAll(`.stars[data-rate="${group}"] .star`).forEach(st=>{
+    st.classList.toggle('on', parseInt(st.getAttribute('data-v'),10) <= ratings[group]);
+  });
+}
+
+document.addEventListener('click', e=>{
+  const lb = e.target.closest('[data-slang]');
+  if(lb){ setLang(lb.getAttribute('data-slang')); return; }
+  const star = e.target.closest('.star');
+  if(star){
+    const group = star.closest('.stars').getAttribute('data-rate');
+    ratings[group] = parseInt(star.getAttribute('data-v'),10);
+    paintStars(group);
+    if(group==='overall') document.getElementById('ovErr').textContent='';
+    return;
+  }
+});
+
+function updCounter(){
+  const el=document.getElementById('comment');
+  const cc=document.getElementById('cmCounter');
+  cc.textContent = el.value.length + '/200';
+  cc.classList.toggle('warn', el.value.length>=200);
+}
+
+function starStr(n){ return '★★★★★'.slice(0,n) + '☆☆☆☆☆'.slice(0,5-n); }
+
+function submitSurvey(){
+  if(ratings.overall===0){
+    document.getElementById('ovErr').textContent = t('errOverall');
+    window.scrollTo({top:0,behavior:'smooth'});
+    return;
+  }
+  // 요약 작성
+  const comment = document.getElementById('comment').value.trim();
+  const rows = [
+    [t('overall'), ratings.overall],
+    [t('i1'), ratings.kindness],
+    [t('i2'), ratings.speed],
+    [t('i3'), ratings.expertise],
+  ];
+  let html = rows.map(([k,v])=> v>0
+    ? `<div class="drow"><span class="dlabel">${k}</span><span class="dstars">${starStr(v)}</span></div>`
+    : '').join('');
+  if(comment){
+    html += `<div class="dtext"><b>${t('sumComment')}</b><br>${comment.replace(/</g,'&lt;')}</div>`;
+  }
+  document.getElementById('doneSummary').innerHTML = html;
+
+  document.getElementById('formScreen').style.display='none';
+  document.getElementById('doneScreen').classList.add('show');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function copyResult(){
+  const comment = document.getElementById('comment').value.trim();
+  const lines = [
+    '─────────────',
+    ' ' + t('sumTitle'),
+    '─────────────',
+  ];
+  if(pHospital) lines.push(`${t('hospitalL')}: ${pHospital}`);
+  if(pEng) lines.push(`${t('engL')}: ${pEng}`);
+  lines.push(
+    `${t('overall')}: ${starStr(ratings.overall)} (${ratings.overall}/5)`,
+    `${t('i1')}: ${starStr(ratings.kindness)} (${ratings.kindness}/5)`,
+    `${t('i2')}: ${starStr(ratings.speed)} (${ratings.speed}/5)`,
+    `${t('i3')}: ${starStr(ratings.expertise)} (${ratings.expertise}/5)`
+  );
+  if(comment) lines.push('─────────────', `${t('sumComment')}: ${comment}`);
+  lines.push('─────────────');
+  const text = lines.join('\n');
+
+  const btn = document.getElementById('copyBtn');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      btn.textContent = t('copied');
+      setTimeout(()=>btn.textContent = t('copy'), 2000);
+    }).catch(()=>fallbackCopy(text,btn));
+  } else { fallbackCopy(text,btn); }
+}
+function fallbackCopy(text,btn){
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');btn.textContent=t('copied');setTimeout(()=>btn.textContent=t('copy'),2000);}
+  catch(e){alert(text);}
+  document.body.removeChild(ta);
+}
+
+function resetSurvey(){
+  ratings.overall=ratings.kindness=ratings.speed=ratings.expertise=0;
+  ['overall','kindness','speed','expertise'].forEach(paintStars);
+  document.getElementById('comment').value='';
+  updCounter();
+  document.getElementById('ovErr').textContent='';
+  document.getElementById('doneScreen').classList.remove('show');
+  document.getElementById('formScreen').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// 초기화
+if(pHospital || pEng){
+  document.getElementById('metaBox').style.display='flex';
+  document.getElementById('mHospital').textContent = pHospital || '—';
+  document.getElementById('mEng').textContent = pEng || '—';
+}
+applyLang();
+updCounter();
+</script>
+</body>
+</html>
