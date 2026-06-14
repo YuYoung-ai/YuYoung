@@ -173,11 +173,36 @@
     <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
   </svg>
   <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
-  <div style="color:#9EADCC;font-size:13px;margin-bottom:40px;">AS Service Report</div>
-  <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">언어를 선택하세요 · Select language · 言語を選択</div>
-  <button type="button" data-lang="ko" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:none;background:#fff;color:#1B2F5E;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇰🇷 국내 (한국어)</button>
-  <button type="button" data-lang="en" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🌐 Global (English)</button>
-  <button type="button" data-lang="ja" style="width:100%;max-width:280px;padding:16px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇯🇵 日本 (日本語)</button>
+  <div style="color:#9EADCC;font-size:13px;margin-bottom:40px;">CS Field Tools</div>
+
+  <!-- 1단계: 앱 선택 -->
+  <div id="appSelectStage" style="display:flex;flex-direction:column;align-items:center;width:100%;">
+    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">사용할 도구를 선택하세요</div>
+    <button type="button" id="appBtnReport" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">📋</span>
+      <span style="flex:1;">AS 처리 보고서<br><span style="font-size:11px;font-weight:500;color:#6B7A99;">현장 보고서 작성 → PPT 자동 생성</span></span>
+      <span style="color:#9AA3B5;">→</span>
+    </button>
+    <button type="button" id="appBtnGuide" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">📖</span>
+      <span style="flex:1;">현장 대응 가이드<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">CUREJET 증상별 진단·조치 매뉴얼</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+    <button type="button" id="appBtnSurvey" style="width:100%;max-width:300px;padding:18px 16px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">⭐</span>
+      <span style="flex:1;">고객 만족도 조사<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">AS 서비스 평가 · 별점/항목별 피드백</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+  </div>
+
+  <!-- 2단계: 언어 선택 (AS 보고서 선택 시) -->
+  <div id="langSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;">
+    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">언어를 선택하세요 · Select language · 言語を選択</div>
+    <button type="button" data-lang="ko" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:none;background:#fff;color:#1B2F5E;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇰🇷 국내 (한국어)</button>
+    <button type="button" data-lang="en" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🌐 Global (English)</button>
+    <button type="button" data-lang="ja" style="width:100%;max-width:280px;padding:16px;margin-bottom:14px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇯🇵 日本 (日本語)</button>
+    <button type="button" id="backToApps" style="background:none;border:none;color:#8EA0C8;font-size:12px;cursor:pointer;font-family:inherit;">← 도구 선택으로 돌아가기</button>
+  </div>
 </div>
 <header>
   <div class="logo-area">
@@ -1322,8 +1347,31 @@ document.addEventListener('click',function(e){
 buildPhotoSlots();
 initCounters();
 // 언어 초기화: 저장된 선택이 없으면 선택 화면 표시
-if(LANG){ applyLang(); }
-else { document.getElementById('langSelect').style.display='flex'; }
+// 초기 진입: 항상 도구 선택 화면 표시
+document.getElementById('langSelect').style.display='flex';
+if(LANG) applyLang(); // 저장된 언어가 있으면 본 화면은 미리 적용해둠
+
+// 앱 선택: AS 보고서 → 언어 선택 단계로 (저장된 언어 있으면 바로 진입)
+document.getElementById('appBtnReport').addEventListener('click', function(){
+  if(LANG){
+    document.getElementById('langSelect').style.display='none';
+  }else{
+    document.getElementById('appSelectStage').style.display='none';
+    document.getElementById('langSelectStage').style.display='flex';
+  }
+});
+// 앱 선택: 현장 대응 가이드 → guide.html로 이동
+document.getElementById('appBtnGuide').addEventListener('click', function(){
+  location.href='guide.html';
+});
+document.getElementById('appBtnSurvey').addEventListener('click', function(){
+  location.href='survey.html';
+});
+// 언어 선택 단계에서 뒤로
+document.getElementById('backToApps').addEventListener('click', function(){
+  document.getElementById('langSelectStage').style.display='none';
+  document.getElementById('appSelectStage').style.display='flex';
+});
 
 </script>
 </body>
