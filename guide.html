@@ -170,7 +170,7 @@ body.editing .del-symptom{display:inline-flex;align-items:center;gap:3px;font-si
   <div class="admin-box">
     <h3 id="pwTitle">관리자 모드</h3>
     <p id="pwDesc">가이드 내용을 편집하려면 비밀번호를 입력하세요.</p>
-    <input type="password" id="pwInput" autocomplete="off" placeholder="••••••">
+    <input type="password" id="pwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호">
     <div class="err" id="pwErr"></div>
     <div class="admin-row">
       <button class="abtn ghost" id="pwCancel">취소</button>
@@ -697,5 +697,15 @@ document.getElementById('delConfirmBtn').onclick=doDelete;
 </script>
 
 
+<script>
+// 오프라인 사용을 위한 서비스 워커 등록
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW 등록 실패:', e);
+    });
+  });
+}
+</script>
 </body>
 </html>
