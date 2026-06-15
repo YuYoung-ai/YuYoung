@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>BAZ BIOMEDIC — 정기 검검 내역서</title>
+<title>BAZ BIOMEDIC — A/S 점검 내역서</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BAZ CS">
+<link rel="apple-touch-icon" href="icon-192.png">
+
 <style>
   :root{
     --navy:#1B2F5E; --navy2:#16264D; --teal:#2E7D9E; --teal-soft:#EAF4F8;
@@ -76,10 +83,31 @@
 
   /* 서명 */
   .sig-wrap{margin-top:4px;}
-  .sig-box{position:relative;border:1.5px dashed var(--gray-line);border-radius:10px;background:#fff;height:120px;overflow:hidden;touch-action:none;}
+  .sig-box{position:relative;border:1.5px dashed var(--gray-line);border-radius:10px;background:#fff;height:120px;overflow:hidden;cursor:pointer;}
   .sig-box canvas{display:block;width:100%;height:100%;}
-  .sig-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#B0BAC8;font-size:13px;pointer-events:none;}
+  .sig-box .sig-preview-img{width:100%;height:100%;object-fit:contain;display:none;}
+  .sig-box.has-sign .sig-preview-img{display:block;}
+  .sig-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;color:#9AB0C8;font-size:13px;pointer-events:none;}
+  .sig-box.has-sign .sig-placeholder{display:none;}
+  .sig-placeholder .sig-tap-ico{font-size:22px;}
   .sig-clear{margin-top:6px;font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--gray-line);border-radius:7px;padding:6px 11px;cursor:pointer;font-family:inherit;font-weight:600;}
+
+  /* 가로 전체화면 서명 패드 */
+  .sigpad-overlay{position:fixed;inset:0;z-index:500;background:#1B2F5E;display:none;flex-direction:column;}
+  .sigpad-overlay.show{display:flex;}
+  .sigpad-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;color:#fff;flex:0 0 auto;}
+  .sigpad-head .sigpad-title{font-size:15px;font-weight:700;}
+  .sigpad-head .sigpad-hint{font-size:11px;color:#9EADCC;margin-top:2px;}
+  .sigpad-canvas-wrap{flex:1;margin:0 14px;background:#fff;border-radius:12px;position:relative;overflow:hidden;}
+  .sigpad-canvas-wrap canvas{display:block;width:100%;height:100%;touch-action:none;}
+  .sigpad-guide{position:absolute;left:5%;right:5%;bottom:28%;border-bottom:2px dashed #D6DCE6;pointer-events:none;}
+  .sigpad-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#C8D0DE;font-size:16px;pointer-events:none;}
+  .sigpad-ph.hide{display:none;}
+  .sigpad-foot{display:flex;gap:10px;padding:12px 16px;flex:0 0 auto;}
+  .sigpad-foot button{flex:1;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .sigpad-clear{background:rgba(255,255,255,.15);color:#fff;}
+  .sigpad-cancel{background:rgba(255,255,255,.15);color:#fff;}
+  .sigpad-save{background:#fff;color:var(--navy);flex:1.6;}
 
   /* 하단 고정 버튼 */
   .bottom-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--gray-line);
@@ -124,7 +152,7 @@
   <header>
     <div class="logo-area">
       <div>
-        <h1>정기 검검 내역서</h1>
+        <h1>A/S 점검 내역서</h1>
         <div class="subtitle">BAZ BIOMEDIC Field Service</div>
       </div>
     </div>
@@ -156,7 +184,7 @@
           </div>
           <div class="field-group">
             <label>접수처 (고객센터/담당자)</label>
-            <input type="text" id="receiver" placeholder="예) 고객센터 / ○○○ 프로" maxlength="30">
+            <input type="text" id="receiver" placeholder="예) 고객센터/ooo 프로" maxlength="30">
           </div>
         </div>
         <div class="row-2">
@@ -172,7 +200,7 @@
         <div class="row-2">
           <div class="field-group">
             <label>구독 서비스</label>
-            <input type="text" id="subscription" placeholder="예) Basic / 미가입" maxlength="20">
+            <input type="text" id="subscription" placeholder="예) Basic/미가입" maxlength="20">
           </div>
           <div class="field-group">
             <label>장비 Ver. (UI/FW)</label>
@@ -242,9 +270,9 @@
             <label>CS 담당자 <span class="req">*</span></label>
             <input type="text" id="csName" placeholder="이름" maxlength="12" style="margin-bottom:8px;">
             <div class="sig-wrap">
-              <div class="sig-box" id="csSigBox">
-                <canvas id="csSig"></canvas>
-                <div class="sig-placeholder" id="csPlaceholder">여기에 서명</div>
+              <div class="sig-box" id="csSigBox" data-sig="cs">
+                <img class="sig-preview-img" id="csSigPreview" alt="">
+                <div class="sig-placeholder"><span class="sig-tap-ico">✍️</span>터치하여 서명</div>
               </div>
               <button type="button" class="sig-clear" data-clear="cs">지우기</button>
             </div>
@@ -253,9 +281,9 @@
             <label>병원 담당자</label>
             <input type="text" id="hospitalName" placeholder="이름" maxlength="12" style="margin-bottom:8px;">
             <div class="sig-wrap">
-              <div class="sig-box" id="hsSigBox">
-                <canvas id="hsSig"></canvas>
-                <div class="sig-placeholder" id="hsPlaceholder">여기에 서명</div>
+              <div class="sig-box" id="hsSigBox" data-sig="hs">
+                <img class="sig-preview-img" id="hsSigPreview" alt="">
+                <div class="sig-placeholder"><span class="sig-tap-ico">✍️</span>터치하여 서명</div>
               </div>
               <button type="button" class="sig-clear" data-clear="hs">지우기</button>
             </div>
@@ -278,12 +306,33 @@
   <div class="done-card">
     <div class="ico">✅</div>
     <h3>점검 내역서 완성</h3>
-    <p>정기 검검 내역서 PDF가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
+    <p>A/S 점검 내역서 PDF가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
     <div class="fname" id="doneFname"></div>
     <div class="done-row">
       <button class="done-dl" id="doneDl">📥 다시 다운로드</button>
+      <button class="done-survey" id="doneSurvey" style="padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid #BCD9E8;background:#EAF4F8;color:#2E7D9E;">⭐ 고객 만족도 조사 보내기</button>
       <button class="done-new" id="doneNew">새 점검 내역서</button>
     </div>
+  </div>
+</div>
+
+<!-- 가로 전체화면 서명 패드 -->
+<div class="sigpad-overlay" id="sigpadOverlay">
+  <div class="sigpad-head">
+    <div>
+      <div class="sigpad-title" id="sigpadTitle">CS 담당자 서명</div>
+      <div class="sigpad-hint">아래 칸에 서명해주세요</div>
+    </div>
+  </div>
+  <div class="sigpad-canvas-wrap">
+    <canvas id="sigpadCanvas"></canvas>
+    <div class="sigpad-guide"></div>
+    <div class="sigpad-ph" id="sigpadPh">여기에 서명</div>
+  </div>
+  <div class="sigpad-foot">
+    <button type="button" class="sigpad-cancel" id="sigpadCancel">취소</button>
+    <button type="button" class="sigpad-clear" id="sigpadClear">지우기</button>
+    <button type="button" class="sigpad-save" id="sigpadSave">서명 완료</button>
   </div>
 </div>
 
@@ -791,53 +840,108 @@ function bindCounter(id, ccId){
 bindCounter('actionDetail','cc_action');
 bindCounter('recommend','cc_recommend');
 
-// ===== 서명 캔버스 =====
-function setupSignature(canvasId, boxId, placeholderId){
-  const canvas=document.getElementById(canvasId);
-  const box=document.getElementById(boxId);
-  const ph=document.getElementById(placeholderId);
-  const ctx=canvas.getContext('2d');
-  let drawing=false, hasInk=false, lastX=0, lastY=0;
+// ===== 서명: 가로 전체화면 패드 =====
+const sigStore = { cs:null, hs:null };  // dataURL 저장
+const sigLabels = { cs:'CS 담당자 서명', hs:'병원 담당자 서명' };
 
-  function resize(){
-    const r=box.getBoundingClientRect();
-    const dpr=window.devicePixelRatio||1;
-    // 기존 그림 보존
-    const prev=hasInk?canvas.toDataURL():null;
-    canvas.width=r.width*dpr; canvas.height=r.height*dpr;
-    ctx.scale(dpr,dpr);
-    ctx.strokeStyle='#1B2F5E'; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round';
-    if(prev){ const img=new Image(); img.onload=()=>ctx.drawImage(img,0,0,r.width,r.height); img.src=prev; }
-  }
-  setTimeout(resize, 50);
+const sigpadOverlay = document.getElementById('sigpadOverlay');
+const sigpadCanvas = document.getElementById('sigpadCanvas');
+const sigpadPh = document.getElementById('sigpadPh');
+const sigpadTitle = document.getElementById('sigpadTitle');
+let sigCtx=null, sigDrawing=false, sigHasInk=false, sigLastX=0, sigLastY=0, sigTarget=null;
 
-  function pos(e){
-    const r=canvas.getBoundingClientRect();
-    const t=e.touches?e.touches[0]:e;
-    return {x:t.clientX-r.left, y:t.clientY-r.top};
-  }
-  function start(e){ e.preventDefault(); drawing=true; const p=pos(e); lastX=p.x; lastY=p.y;
-    if(!hasInk){ hasInk=true; ph.style.display='none'; } }
-  function move(e){ if(!drawing) return; e.preventDefault(); const p=pos(e);
-    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke(); lastX=p.x; lastY=p.y; }
-  function end(){ drawing=false; }
-
-  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move);
-  window.addEventListener('mouseup',end);
-  canvas.addEventListener('touchstart',start,{passive:false});
-  canvas.addEventListener('touchmove',move,{passive:false});
-  canvas.addEventListener('touchend',end);
-
-  return {
-    clear:()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); hasInk=false; ph.style.display='flex'; },
-    isEmpty:()=>!hasInk,
-    dataURL:()=>hasInk?canvas.toDataURL('image/png'):null
-  };
+function sizeSigCanvas(){
+  const wrap=sigpadCanvas.parentElement;
+  const r=wrap.getBoundingClientRect();
+  const dpr=window.devicePixelRatio||1;
+  sigpadCanvas.width=r.width*dpr;
+  sigpadCanvas.height=r.height*dpr;
+  sigCtx=sigpadCanvas.getContext('2d');
+  sigCtx.scale(dpr,dpr);
+  sigCtx.strokeStyle='#16264D';
+  sigCtx.lineWidth=2.8; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
 }
-const csSig=setupSignature('csSig','csSigBox','csPlaceholder');
-const hsSig=setupSignature('hsSig','hsSigBox','hsPlaceholder');
+function sigPos(e){
+  const r=sigpadCanvas.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return {x:t.clientX-r.left, y:t.clientY-r.top};
+}
+function sigStart(e){ e.preventDefault(); sigDrawing=true; const p=sigPos(e); sigLastX=p.x; sigLastY=p.y;
+  if(!sigHasInk){ sigHasInk=true; sigpadPh.classList.add('hide'); } }
+function sigMove(e){ if(!sigDrawing) return; e.preventDefault(); const p=sigPos(e);
+  sigCtx.beginPath(); sigCtx.moveTo(sigLastX,sigLastY); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); sigLastX=p.x; sigLastY=p.y; }
+function sigEnd(){ sigDrawing=false; }
+sigpadCanvas.addEventListener('mousedown',sigStart);
+sigpadCanvas.addEventListener('mousemove',sigMove);
+window.addEventListener('mouseup',sigEnd);
+sigpadCanvas.addEventListener('touchstart',sigStart,{passive:false});
+sigpadCanvas.addEventListener('touchmove',sigMove,{passive:false});
+sigpadCanvas.addEventListener('touchend',sigEnd);
+
+function openSigPad(which){
+  sigTarget=which;
+  sigpadTitle.textContent=sigLabels[which];
+  sigpadOverlay.classList.add('show');
+  sigHasInk=false; sigpadPh.classList.remove('hide');
+  // 가로 회전 유도 (지원 기기에서만)
+  if(screen.orientation && screen.orientation.lock){
+    screen.orientation.lock('landscape').catch(()=>{});
+  }
+  setTimeout(()=>{
+    sizeSigCanvas();
+    // 기존 서명 있으면 불러와서 이어그리기 가능하게 표시
+    if(sigStore[which]){
+      const img=new Image();
+      img.onload=()=>{
+        const r=sigpadCanvas.parentElement.getBoundingClientRect();
+        sigCtx.drawImage(img,0,0,r.width,r.height);
+        sigHasInk=true; sigpadPh.classList.add('hide');
+      };
+      img.src=sigStore[which];
+    }
+  },120);
+}
+function closeSigPad(){
+  sigpadOverlay.classList.remove('show');
+  if(screen.orientation && screen.orientation.unlock){
+    try{ screen.orientation.unlock(); }catch(e){}
+  }
+}
+function clearSigPad(){
+  if(sigCtx) sigCtx.clearRect(0,0,sigpadCanvas.width,sigpadCanvas.height);
+  sigHasInk=false; sigpadPh.classList.remove('hide');
+}
+function saveSigPad(){
+  if(!sigHasInk){ closeSigPad(); return; }
+  const dataURL=sigpadCanvas.toDataURL('image/png');
+  sigStore[sigTarget]=dataURL;
+  // 미리보기 반영
+  const box=document.getElementById(sigTarget+'SigBox');
+  const prev=document.getElementById(sigTarget+'SigPreview');
+  prev.src=dataURL; box.classList.add('has-sign');
+  closeSigPad();
+}
+// 서명란 터치 → 패드 열기
+document.querySelectorAll('.sig-box').forEach(box=>{
+  box.addEventListener('click',()=>openSigPad(box.getAttribute('data-sig')));
+});
+document.getElementById('sigpadCancel').addEventListener('click',closeSigPad);
+document.getElementById('sigpadClear').addEventListener('click',clearSigPad);
+document.getElementById('sigpadSave').addEventListener('click',saveSigPad);
+
+// 호환용 객체 (기존 코드가 csSig/hsSig.dataURL/isEmpty/clear 사용)
+const csSig = {
+  dataURL:()=>sigStore.cs,
+  isEmpty:()=>!sigStore.cs,
+  clear:()=>{ sigStore.cs=null; const b=document.getElementById('csSigBox'); b.classList.remove('has-sign'); document.getElementById('csSigPreview').src=''; }
+};
+const hsSig = {
+  dataURL:()=>sigStore.hs,
+  isEmpty:()=>!sigStore.hs,
+  clear:()=>{ sigStore.hs=null; const b=document.getElementById('hsSigBox'); b.classList.remove('has-sign'); document.getElementById('hsSigPreview').src=''; }
+};
 document.querySelectorAll('.sig-clear').forEach(b=>{
-  b.addEventListener('click',()=>{ b.getAttribute('data-clear')==='cs'?csSig.clear():hsSig.clear(); });
+  b.addEventListener('click',(e)=>{ e.stopPropagation(); b.getAttribute('data-clear')==='cs'?csSig.clear():hsSig.clear(); });
 });
 
 // ===== 날짜 기본값: 오늘 =====
@@ -888,7 +992,7 @@ function buildSheetHTML(){
   <div style="width:794px;padding:32px 30px;font-family:'Noto Sans KR',sans-serif;color:#1a1a2e;background:#fff;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
       <div style="font-size:22px;font-weight:900;font-family:Georgia,serif;color:#1B2F5E;">ba<span style="color:#4E9CC8;">z</span> <span style="font-size:11px;color:#888;font-family:'Noto Sans KR';font-weight:500;">BIOMEDIC</span></div>
-      <div style="font-size:22px;font-weight:800;letter-spacing:4px;">정기 검검 내역서</div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:4px;">A/S 점검 내역서</div>
       <div style="width:90px;"></div>
     </div>
 
@@ -977,7 +1081,7 @@ function buildSheetHTML(){
       </tr>
     </table>
 
-    <div style="margin-top:14px;text-align:right;font-size:10px;color:#999;">BAZ BIOMEDIC · CS TEAM &nbsp;|&nbsp; 정기 검검 내역서</div>
+    <div style="margin-top:14px;text-align:right;font-size:10px;color:#999;">BAZ BIOMEDIC · CS TEAM &nbsp;|&nbsp; A/S 점검 내역서</div>
   </div>`;
 }
 
@@ -1019,7 +1123,7 @@ async function generatePDF(preview){
     const hosp=v('hospital')||'병원';
     const cs=v('csName')||'담당자';
     const dt=v('inspectDate')||today;
-    _lastFname=`정기점검_${hosp}_${cs}_${dt}.pdf`;
+    _lastFname=`AS점검_${hosp}_${cs}_${dt}.pdf`;
     _lastPdf=pdf;
 
     sheet.innerHTML='';
@@ -1043,6 +1147,12 @@ async function generatePDF(preview){
 document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
 document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
 document.getElementById('doneDl').addEventListener('click',()=>{ if(_lastPdf) _lastPdf.save(_lastFname); });
+document.getElementById('doneSurvey').addEventListener('click',()=>{
+  const hosp=encodeURIComponent(v('hospital')||'');
+  const cs=encodeURIComponent(v('csName')||'');
+  // 만족도 페이지로 병원명·담당자 자동 전달
+  location.href=`survey.html?h=${hosp}&e=${cs}`;
+});
 document.getElementById('doneNew').addEventListener('click',()=>{ location.reload(); });
 
 // 초기화
