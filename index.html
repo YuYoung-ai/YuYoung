@@ -188,9 +188,14 @@
       <span style="flex:1;">현장 대응 가이드<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">CUREJET 증상별 진단·조치 매뉴얼</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnSurvey" style="width:100%;max-width:300px;padding:18px 16px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnSurvey" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
       <span style="flex:1;">고객 만족도 조사<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">AS 서비스 평가 · 별점/항목별 피드백</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+    <button type="button" id="appBtnInspection" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;">
+      <span style="font-size:24px;">🔧</span>
+      <span style="flex:1;">정기 검검 내역서<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">정기점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
   </div>
@@ -1366,6 +1371,9 @@ document.getElementById('appBtnGuide').addEventListener('click', function(){
 });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){
   location.href='survey.html';
+});
+document.getElementById('appBtnInspection').addEventListener('click', function(){
+  location.href='inspection.html';
 });
 // 언어 선택 단계에서 뒤로
 document.getElementById('backToApps').addEventListener('click', function(){
