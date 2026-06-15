@@ -256,10 +256,13 @@
     </svg>
     <div><h1 data-i18n="appTitle">AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
   </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+  <button type="button" id="reportBackToMenu" style="background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.35);color:#CADCFC;font-size:10px;font-weight:700;padding:5px 10px;border-radius:13px;cursor:pointer;font-family:inherit;">← 메뉴</button>
   <div id="langSwitch" style="display:flex;gap:2px;background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.35);border-radius:16px;padding:2px;">
     <button type="button" data-setlang="ko" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">한국어</button>
     <button type="button" data-setlang="en" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">EN</button>
     <button type="button" data-setlang="ja" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">日本語</button>
+  </div>
   </div>
 </header>
 <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -1444,6 +1447,8 @@ let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자
 
 function unlockTools(level){
   unlockLevel=level;
+  // 도구에서 돌아왔을 때 잠금 없이 복원되도록 세션에 저장 (탭 닫으면 소멸)
+  try{ sessionStorage.setItem('baz_unlock', String(level)); }catch(e){}
   document.getElementById('lockHint').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
   // 숨김 도구는 관리자(2)에서만 노출
@@ -1472,10 +1477,15 @@ document.getElementById('hubPwOk').addEventListener('click', checkHubPw);
 document.getElementById('hubPwCancel').addEventListener('click', closeHubPw);
 document.getElementById('hubPwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkHubPw(); });
 
-// ===== 초기 진입: 잠긴 상태로 시작 =====
+// ===== 초기 진입: 잠긴 상태로 시작 (단, 도구에서 돌아온 경우 해제 복원) =====
 document.getElementById('langSelect').style.display='flex';
 applyHubLang();
 if(LANG) applyLang();
+// 도구에서 메뉴로 돌아온 경우: 세션에 저장된 해제 레벨 복원 (탭 닫으면 소멸 → 다시 잠김)
+try{
+  const saved=parseInt(sessionStorage.getItem('baz_unlock')||'0',10);
+  if(saved>=1) unlockTools(saved);
+}catch(e){}
 
 // ===== 도구 이동 =====
 document.getElementById('appBtnReport').addEventListener('click', function(){
@@ -1488,6 +1498,16 @@ document.getElementById('appBtnInspection').addEventListener('click', function()
 document.getElementById('backToApps').addEventListener('click', function(){
   document.getElementById('langSelectStage').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
+});
+// AS 보고서 작성 화면에서 메뉴로 복귀 (해제 상태 유지하여 잠금 재입력 불필요)
+document.getElementById('reportBackToMenu').addEventListener('click', function(){
+  document.getElementById('langSelect').style.display='flex';
+  // 이미 해제된 상태이므로 도구 목록이 바로 보임
+  if(unlockLevel>=1){
+    document.getElementById('lockHint').style.display='none';
+    document.getElementById('appSelectStage').style.display='flex';
+    document.getElementById('langSelectStage').style.display='none';
+  }
 });
 
 
