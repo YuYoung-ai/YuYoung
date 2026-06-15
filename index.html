@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>BAZ BIOMEDIC — AS 처리 보고서</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BAZ CS">
+<link rel="apple-touch-icon" href="icon-192.png">
+
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
 <style>
@@ -166,47 +173,78 @@
 <script src="https://apis.google.com/js/api.js" async></script>
 </head>
 <body>
-<div id="langSelect" style="position:fixed;inset:0;z-index:9999;background:#1B2F5E;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;">
-  <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:72px;margin-bottom:8px;">
-    <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
-    <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
-    <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
-  </svg>
-  <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
-  <div style="color:#9EADCC;font-size:13px;margin-bottom:40px;">CS Field Tools</div>
+<div id="langSelect" style="position:fixed;inset:0;z-index:9999;background:#1B2F5E;display:none;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 32px 40px;overflow-y:auto;">
+  <!-- 언어 스위치 (우상단) -->
+  <div id="hubLangSwitch" style="position:absolute;top:16px;right:16px;display:flex;gap:2px;background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.3);border-radius:14px;padding:2px;">
+    <button type="button" data-hublang="ko" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">한국어</button>
+    <button type="button" data-hublang="en" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">EN</button>
+    <button type="button" data-hublang="ja" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">日本語</button>
+  </div>
 
-  <!-- 1단계: 앱 선택 -->
-  <div id="appSelectStage" style="display:flex;flex-direction:column;align-items:center;width:100%;">
-    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">사용할 도구를 선택하세요</div>
-    <button type="button" id="appBtnReport" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+  <div style="margin-top:24px;"></div>
+  <!-- BAZ 로고 (클릭 → 잠금 해제) -->
+  <button type="button" id="hubLogo" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;padding:8px 16px;border-radius:14px;font-family:inherit;-webkit-tap-highlight-color:transparent;">
+    <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:72px;margin-bottom:8px;">
+      <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
+      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
+      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
+    </svg>
+    <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
+    <div style="color:#9EADCC;font-size:13px;" id="hubSubtitle">CS Field Tools</div>
+  </button>
+
+  <!-- 잠금 안내 (잠긴 상태) -->
+  <div id="lockHint" style="margin-top:18px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;gap:6px;">
+    <div style="color:#CADCFC;font-size:13px;display:flex;align-items:center;gap:6px;"><span>🔒</span><span id="lockHintText">로고를 눌러 잠금을 해제하세요</span></div>
+  </div>
+
+  <!-- 도구 선택 안내 (해제 후) -->
+  <div id="appSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;margin-top:14px;">
+    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;" id="chooseToolText">사용할 도구를 선택하세요</div>
+    <button type="button" id="appBtnReport" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
       <span style="font-size:24px;">📋</span>
-      <span style="flex:1;">AS 처리 보고서<br><span style="font-size:11px;font-weight:500;color:#6B7A99;">현장 보고서 작성 → PPT 자동 생성</span></span>
+      <span style="flex:1;"><span class="tool-name" data-tool="report-name">AS 처리 보고서</span><br><span style="font-size:11px;font-weight:500;color:#6B7A99;" class="tool-desc" data-tool="report-desc">현장 보고서 작성 → PPT 자동 생성</span></span>
       <span style="color:#9AA3B5;">→</span>
     </button>
-    <button type="button" id="appBtnGuide" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnGuide" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
       <span style="font-size:24px;">📖</span>
-      <span style="flex:1;">현장 대응 가이드<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">CUREJET 증상별 진단·조치 매뉴얼</span></span>
+      <span style="flex:1;"><span class="tool-name" data-tool="guide-name">현장 대응 가이드</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="guide-desc">CUREJET 증상별 진단·조치 매뉴얼</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnSurvey" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:24px;">⭐</span>
-      <span style="flex:1;">고객 만족도 조사<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">AS 서비스 평가 · 별점/항목별 피드백</span></span>
-      <span style="color:#8EA0C8;">→</span>
-    </button>
-    <button type="button" id="appBtnInspection" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;">
+    <button type="button" id="appBtnInspection" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🔧</span>
-      <span style="flex:1;">정기 검검 내역서<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">정기점검 체크리스트 · PDF 기록</span></span>
+      <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
+    </button>
+    <!-- 숨김 도구: 880821 입력 시에만 표시 -->
+    <button type="button" id="appBtnSurvey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+      <span style="font-size:24px;">⭐</span>
+      <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
+      <span style="color:#E0C088;">🔒→</span>
     </button>
   </div>
 
   <!-- 2단계: 언어 선택 (AS 보고서 선택 시) -->
-  <div id="langSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;">
+  <div id="langSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;margin-top:14px;">
     <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">언어를 선택하세요 · Select language · 言語を選択</div>
     <button type="button" data-lang="ko" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:none;background:#fff;color:#1B2F5E;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇰🇷 국내 (한국어)</button>
     <button type="button" data-lang="en" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🌐 Global (English)</button>
     <button type="button" data-lang="ja" style="width:100%;max-width:280px;padding:16px;margin-bottom:14px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇯🇵 日本 (日本語)</button>
     <button type="button" id="backToApps" style="background:none;border:none;color:#8EA0C8;font-size:12px;cursor:pointer;font-family:inherit;">← 도구 선택으로 돌아가기</button>
+  </div>
+
+  <!-- 비밀번호 입력 모달 -->
+  <div id="hubPwModal" style="position:fixed;inset:0;z-index:10000;background:rgba(10,20,45,.6);display:none;align-items:center;justify-content:center;padding:24px;">
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:24px 22px;">
+      <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;" id="hubPwTitle">잠금 해제</h3>
+      <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">비밀번호를 입력하세요.</p>
+      <input type="password" id="hubPwInput" inputmode="numeric" autocomplete="off" placeholder="••••••" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:3px;">
+      <div id="hubPwErr" style="color:#C0392B;font-size:12px;min-height:16px;margin-top:6px;text-align:center;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button type="button" id="hubPwCancel" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #DDE3EE;background:#fff;color:#6B7A99;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">취소</button>
+        <button type="button" id="hubPwOk" style="flex:1;padding:12px;border-radius:9px;border:none;background:#1B2F5E;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
+      </div>
+    </div>
   </div>
 </div>
 <header>
@@ -1352,34 +1390,106 @@ document.addEventListener('click',function(e){
 buildPhotoSlots();
 initCounters();
 // 언어 초기화: 저장된 선택이 없으면 선택 화면 표시
-// 초기 진입: 항상 도구 선택 화면 표시
-document.getElementById('langSelect').style.display='flex';
-if(LANG) applyLang(); // 저장된 언어가 있으면 본 화면은 미리 적용해둠
+// ===== 허브: 다국어 =====
+const HUB_I18N = {
+  ko:{ subtitle:'CS Field Tools', lockHint:'로고를 눌러 잠금을 해제하세요', chooseTool:'사용할 도구를 선택하세요',
+    pwTitle:'잠금 해제', pwDesc:'비밀번호를 입력하세요.', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.',
+    'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
+    'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
+    'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
+    'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
+  en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
+    pwTitle:'Unlock', pwDesc:'Enter the password.', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.',
+    'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
+    'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
+    'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
+    'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
+  ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
+    pwTitle:'ロック解除', pwDesc:'パスワードを入力してください。', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。',
+    'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
+    'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
+    'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
+    'survey-name':'顧客満足度調査','survey-desc':'ASサービス評価・フィードバック' }
+};
+let HUBLANG = localStorage.getItem('baz_lang') || 'ko';
+if(!HUB_I18N[HUBLANG]) HUBLANG='ko';
 
-// 앱 선택: AS 보고서 → 언어 선택 단계로 (저장된 언어 있으면 바로 진입)
+function applyHubLang(){
+  const d=HUB_I18N[HUBLANG];
+  document.getElementById('hubSubtitle').textContent=d.subtitle;
+  document.getElementById('lockHintText').textContent=d.lockHint;
+  document.getElementById('chooseToolText').textContent=d.chooseTool;
+  document.getElementById('hubPwTitle').textContent=d.pwTitle;
+  document.getElementById('hubPwDesc').textContent=d.pwDesc;
+  document.getElementById('hubPwCancel').textContent=d.cancel;
+  document.getElementById('hubPwOk').textContent=d.ok;
+  document.querySelectorAll('[data-tool]').forEach(el=>{
+    const k=el.getAttribute('data-tool'); if(d[k]) el.textContent=d[k];
+  });
+  document.querySelectorAll('#hubLangSwitch .hublang-opt').forEach(b=>{
+    const on=b.getAttribute('data-hublang')===HUBLANG;
+    b.style.background=on?'#cfdbf0':'transparent';
+    b.style.color=on?'#16264D':'#cfdbf0';
+  });
+}
+function setHubLang(l){ HUBLANG=l; localStorage.setItem('baz_lang',l); if(typeof LANG!=='undefined'){ try{setLang(l);}catch(e){} } applyHubLang(); }
+document.getElementById('hubLangSwitch').addEventListener('click',e=>{
+  const b=e.target.closest('[data-hublang]'); if(b) setHubLang(b.getAttribute('data-hublang'));
+});
+
+// ===== 허브: 잠금 =====
+const PW_NORMAL='baz2026';   // 일반 도구 활성화
+const PW_ADMIN='880821';     // 숨김 도구까지 활성화
+let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자
+
+function unlockTools(level){
+  unlockLevel=level;
+  document.getElementById('lockHint').style.display='none';
+  document.getElementById('appSelectStage').style.display='flex';
+  // 숨김 도구는 관리자(2)에서만 노출
+  document.getElementById('appBtnSurvey').style.display = (level>=2)?'flex':'none';
+}
+
+const hubPwModal=document.getElementById('hubPwModal');
+function openHubPw(){
+  applyHubLang();
+  document.getElementById('hubPwInput').value='';
+  document.getElementById('hubPwErr').textContent='';
+  hubPwModal.style.display='flex';
+  setTimeout(()=>document.getElementById('hubPwInput').focus(),50);
+}
+function closeHubPw(){ hubPwModal.style.display='none'; }
+function checkHubPw(){
+  const v=document.getElementById('hubPwInput').value.trim();
+  if(v===PW_ADMIN){ closeHubPw(); unlockTools(2); }
+  else if(v===PW_NORMAL){ closeHubPw(); unlockTools(1); }
+  else { document.getElementById('hubPwErr').textContent=HUB_I18N[HUBLANG].wrongPw; }
+}
+document.getElementById('hubLogo').addEventListener('click', ()=>{
+  if(unlockLevel===0) openHubPw();
+});
+document.getElementById('hubPwOk').addEventListener('click', checkHubPw);
+document.getElementById('hubPwCancel').addEventListener('click', closeHubPw);
+document.getElementById('hubPwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkHubPw(); });
+
+// ===== 초기 진입: 잠긴 상태로 시작 =====
+document.getElementById('langSelect').style.display='flex';
+applyHubLang();
+if(LANG) applyLang();
+
+// ===== 도구 이동 =====
 document.getElementById('appBtnReport').addEventListener('click', function(){
-  if(LANG){
-    document.getElementById('langSelect').style.display='none';
-  }else{
-    document.getElementById('appSelectStage').style.display='none';
-    document.getElementById('langSelectStage').style.display='flex';
-  }
+  if(LANG){ document.getElementById('langSelect').style.display='none'; }
+  else{ document.getElementById('appSelectStage').style.display='none'; document.getElementById('langSelectStage').style.display='flex'; }
 });
-// 앱 선택: 현장 대응 가이드 → guide.html로 이동
-document.getElementById('appBtnGuide').addEventListener('click', function(){
-  location.href='guide.html';
-});
-document.getElementById('appBtnSurvey').addEventListener('click', function(){
-  location.href='survey.html';
-});
-document.getElementById('appBtnInspection').addEventListener('click', function(){
-  location.href='inspection.html';
-});
-// 언어 선택 단계에서 뒤로
+document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
+document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
+document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
 document.getElementById('backToApps').addEventListener('click', function(){
   document.getElementById('langSelectStage').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
 });
+
 
 </script>
 </body>
