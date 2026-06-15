@@ -126,7 +126,7 @@ body.editing .del-symptom{display:inline-flex;align-items:center;gap:3px;font-si
       <div class="sub" id="gSub">증상 확인 → 점검·결과 안내 → 처리 안내 · 장비 대응 메뉴얼 연계</div>
     </div>
     <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-      <a href="index.html" id="gReportBtn" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#cfdbf0;font-size:11px;font-weight:700;padding:7px 11px;border-radius:18px;text-decoration:none;white-space:nowrap;">📋 AS 보고서</a>
+      <a href="index.html" id="gReportBtn" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#cfdbf0;font-size:11px;font-weight:700;padding:7px 11px;border-radius:18px;text-decoration:none;white-space:nowrap;">← 메뉴</a>
       <div id="gLangSwitch" style="display:flex;gap:2px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:2px;">
         <button type="button" data-glang="ko" class="glang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:10px;font-weight:700;padding:4px 8px;border-radius:11px;cursor:pointer;font-family:inherit;">한국어</button>
         <button type="button" data-glang="en" class="glang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:10px;font-weight:700;padding:4px 8px;border-radius:11px;cursor:pointer;font-family:inherit;">EN</button>
@@ -335,7 +335,7 @@ try{
 
 const GSTR = {
 ko: {title:'CUREJET 현장 대응 가이드', sub:'증상 확인 → 점검·결과 안내 → 처리 안내 · 장비 대응 메뉴얼 연계',
-  search:'증상 검색 (예: 누수, 노즐, 출력)', report:'📋 AS 보고서', notice:'⚠ 전 증상 공통 준수 사항',
+  search:'증상 검색 (예: 누수, 노즐, 출력)', report:'← 메뉴', notice:'⚠ 전 증상 공통 준수 사항',
   empty:'검색 결과가 없습니다.', all:'전체',
   s1:'증상 확인 (고객)', s2:'장비 점검 및 결과 안내', s3:'처리 사항 안내', purposePrefix:'목적: ',
   p2:'목적: 점검 과정 투명 공개 · 비용 신뢰 형성 / ※ 문제 부위를 시각적으로 담당자에게 확인 조치',
@@ -344,7 +344,7 @@ ko: {title:'CUREJET 현장 대응 가이드', sub:'증상 확인 → 점검·결
   tipLabel:'후속 조치 · 주의',
   crName:'지유영', crRole:'CS팀 · 현장 대응 가이드 제작자', crH1:'초판 제작', crV1:'2026 · 최초 배포본', crH2:'기반 문서', crV2:'CUREJET 장비 대응 메뉴얼'},
 en: {title:'CUREJET Field Response Guide', sub:'Confirm symptom → Inspect & explain → Explain actions · Linked to Device Response Manual',
-  search:'Search symptoms (e.g. leak, nozzle, output)', report:'📋 AS Report', notice:'⚠ Common Rules for All Symptoms',
+  search:'Search symptoms (e.g. leak, nozzle, output)', report:'← Menu', notice:'⚠ Common Rules for All Symptoms',
   empty:'No results found.', all:'All',
   s1:'Confirm Symptom (Customer)', s2:'Inspect & Explain Findings', s3:'Explain Actions Taken', purposePrefix:'Purpose: ',
   p2:'Purpose: transparent inspection · build cost trust / ※ Visually show the problem area to the staff',
@@ -353,7 +353,7 @@ en: {title:'CUREJET Field Response Guide', sub:'Confirm symptom → Inspect & ex
   tipLabel:'Follow-up · Caution',
   crName:'JI YUYOUNG', crRole:'CS Team · Field Response Guide Author', crH1:'First Edition', crV1:'2026 · Initial release', crH2:'Base Document', crV2:'CUREJET Device Response Manual'},
 ja: {title:'CUREJET 現場対応ガイド', sub:'症状確認 → 点検・結果説明 → 対応案内 · 装置対応マニュアル連携',
-  search:'症状検索（例：漏れ、ノズル、出力）', report:'📋 ASレポート', notice:'⚠ 全症状共通の遵守事項',
+  search:'症状検索（例：漏れ、ノズル、出力）', report:'← メニュー', notice:'⚠ 全症状共通の遵守事項',
   empty:'検索結果がありません。', all:'すべて',
   s1:'症状確認（顧客）', s2:'装置点検・結果説明', s3:'対応内容の説明', purposePrefix:'目的：',
   p2:'目的：点検過程の透明な公開・費用への信頼形成 / ※ 問題箇所を担当者に目視で確認',
