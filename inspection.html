@@ -129,6 +129,10 @@
   .done-card .fname{background:var(--gray-bg);border-radius:8px;padding:10px;font-size:12px;color:var(--navy);font-weight:600;margin-bottom:18px;word-break:break-all;}
   .done-row{display:flex;flex-direction:column;gap:9px;}
   .done-row button{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none;}
+  .flow-guide{background:#F0F6FB;border:1px solid #D4E6F2;border-radius:10px;padding:12px 14px;margin-bottom:14px;text-align:left;}
+  .flow-guide .fg-title{font-size:12.5px;font-weight:800;color:#2E7D9E;margin-bottom:7px;display:flex;align-items:center;gap:5px;}
+  .flow-guide .fg-steps{font-size:12px;color:#4A5C78;line-height:1.7;margin:0;padding-left:2px;}
+  .flow-guide .fg-steps .fg-num{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2E7D9E;color:#fff;font-size:10px;font-weight:700;margin-right:6px;vertical-align:middle;}
   .done-dl{background:var(--navy);color:#fff;}
   .done-new{background:#fff;color:var(--text-muted);border:1.5px solid var(--gray-line);}
 
@@ -306,8 +310,16 @@
   <div class="done-card">
     <div class="ico">✅</div>
     <h3>점검 내역서 완성</h3>
-    <p>A/S 점검 내역서 PDF가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
+    <p>A/S 점검 내역서 PDF가 저장되었습니다.</p>
     <div class="fname" id="doneFname"></div>
+    <div class="flow-guide">
+      <div class="fg-title">📎 Flow 앱에 첨부하세요</div>
+      <p class="fg-steps">
+        <span class="fg-num">1</span>Flow 앱에서 해당 병원 처리내역 열기<br>
+        <span class="fg-num">2</span>파일 첨부 → "파일 선택"<br>
+        <span class="fg-num">3</span>다운로드 폴더에서 위 파일명 선택
+      </p>
+    </div>
     <div class="done-row">
       <button class="done-dl" id="doneDl">📥 다시 다운로드</button>
       <button class="done-survey" id="doneSurvey" style="padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid #BCD9E8;background:#EAF4F8;color:#2E7D9E;">⭐ 고객 만족도 조사 보내기</button>
@@ -1123,7 +1135,10 @@ async function generatePDF(preview){
     const hosp=v('hospital')||'병원';
     const cs=v('csName')||'담당자';
     const dt=v('inspectDate')||today;
-    _lastFname=`AS점검_${hosp}_${cs}_${dt}.pdf`;
+    // 같은 날 같은 병원 점검 시 파일명 충돌 방지: 현재 시각(HHMM) 추가
+    const now=new Date();
+    const hhmm=String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
+    _lastFname=`AS점검_${hosp}_${cs}_${dt}_${hhmm}.pdf`;
     _lastPdf=pdf;
 
     sheet.innerHTML='';
@@ -1157,6 +1172,16 @@ document.getElementById('doneNew').addEventListener('click',()=>{ location.reloa
 
 // 초기화
 buildInspList();
+</script>
+<script>
+// 오프라인 사용을 위한 서비스 워커 등록
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW 등록 실패:', e);
+    });
+  });
+}
 </script>
 </body>
 </html>
