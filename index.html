@@ -238,7 +238,7 @@
     <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:24px 22px;">
       <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;" id="hubPwTitle">잠금 해제</h3>
       <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">비밀번호를 입력하세요.</p>
-      <input type="password" id="hubPwInput" inputmode="numeric" autocomplete="off" placeholder="••••••" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:3px;">
+      <input type="password" id="hubPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:2px;">
       <div id="hubPwErr" style="color:#C0392B;font-size:12px;min-height:16px;margin-top:6px;text-align:center;"></div>
       <div style="display:flex;gap:8px;margin-top:12px;">
         <button type="button" id="hubPwCancel" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #DDE3EE;background:#fff;color:#6B7A99;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">취소</button>
@@ -1511,6 +1511,16 @@ document.getElementById('reportBackToMenu').addEventListener('click', function()
 });
 
 
+</script>
+<script>
+// 오프라인 사용을 위한 서비스 워커 등록
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (e) {
+      console.warn('SW 등록 실패:', e);
+    });
+  });
+}
 </script>
 </body>
 </html>
