@@ -2,1385 +2,630 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>BAZ BIOMEDIC — AS 처리 보고서</title>
-<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>BAZ BIOMEDIC — 정기 검검 내역서</title>
 <style>
   :root{
-    --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
-    --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
-    --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E;
+    --navy:#1B2F5E; --navy2:#16264D; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+    --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --gray-cell:#EDF0F5;
+    --text:#1A1A2E; --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --amber:#B8860B;
   }
-  *{box-sizing:border-box;margin:0;padding:0;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-    background:var(--gray-bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%;}
-  header{background:var(--navy);padding:14px 20px;display:flex;align-items:center;
-    justify-content:space-between;position:sticky;top:0;z-index:100;}
+    background:var(--gray-bg);color:var(--text);-webkit-text-size-adjust:100%;padding-bottom:80px;}
+  .wrap{max-width:560px;margin:0 auto;}
+
+  header{background:var(--navy);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
   header .logo-area{display:flex;align-items:center;gap:10px;}
-  header .logo-area svg{width:36px;height:36px;}
-  header h1{font-size:15px;font-weight:700;color:#CADCFC;letter-spacing:.04em;}
-  header .subtitle{font-size:11px;color:rgba(202,220,252,.65);margin-top:1px;}
-  .progress-bar{height:3px;background:var(--gray-line);position:relative;}
-  .progress-fill{height:100%;background:linear-gradient(90deg,var(--teal),#5BB8D8);
-    width:0%;transition:width .4s ease;}
-  .step-indicator{display:flex;justify-content:center;gap:8px;padding:16px 20px 4px;}
-  .step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;
-    justify-content:center;font-size:12px;font-weight:700;background:var(--gray-line);
-    color:var(--text-muted);transition:all .3s;}
-  .step-dot.active{background:var(--teal);color:#fff;box-shadow:0 2px 8px rgba(46,125,158,.4);}
-  .step-dot.done{background:var(--navy);color:#fff;}
-  .step-connector{width:24px;height:2px;background:var(--gray-line);align-self:center;
-    border-radius:2px;transition:background .3s;}
-  .step-connector.done{background:var(--navy);}
-  .step-label{text-align:center;font-size:11px;color:var(--text-muted);
-    padding:4px 20px 14px;font-weight:500;}
-  .card{background:#fff;border-radius:14px;margin:0 16px 14px;overflow:hidden;
-    box-shadow:0 1px 4px rgba(27,47,94,.08);}
-  .card-header{background:var(--navy);padding:11px 16px;display:flex;align-items:center;gap:8px;}
-  .card-header .badge-icon{width:22px;height:22px;background:rgba(202,220,252,.18);
-    border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;}
-  .card-header h2{font-size:13px;font-weight:700;color:#CADCFC;letter-spacing:.03em;}
-  .card-body{padding:16px;}
-  .field-group{margin-bottom:14px;} .field-group:last-child{margin-bottom:0;}
-  label{display:block;font-size:11px;font-weight:700;color:var(--navy);margin-bottom:6px;
-    letter-spacing:.02em;text-transform:uppercase;}
-  label .required{color:var(--red);margin-left:2px;}
-  input[type="text"],input[type="date"],select,textarea{width:100%;
-    border:1.5px solid var(--gray-line);border-radius:8px;padding:11px 13px;font-size:16px;
-    font-family:inherit;color:var(--text);background:#fff;outline:none;
-    transition:border-color .2s,box-shadow .2s;appearance:none;-webkit-appearance:none;}
-  input:focus,select:focus,textarea:focus{border-color:var(--teal);
-    box-shadow:0 0 0 3px rgba(46,125,158,.12);}
-  textarea{resize:vertical;min-height:80px;line-height:1.6;}
-  .row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .photo-zone{border:2px dashed var(--gray-line);border-radius:12px;padding:20px 14px;
-    display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:all .2s;
-    background:var(--gray-bg);position:relative;text-align:center;}
-  .photo-zone:hover,.photo-zone.dragover{border-color:var(--teal);background:var(--teal-soft);}
-  .photo-zone.video-zone{border-color:#B49ED8;background:#F3EEFA;}
-  .photo-zone.video-zone:hover{border-color:#8A5FC0;background:#EBE0F7;}
-  .photo-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;
-    width:100%;height:100%;}
-  .photo-zone .icon{font-size:30px;margin-bottom:6px;line-height:1;}
-  .photo-zone .primary-text{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:3px;}
-  .photo-zone .hint-text{font-size:11px;color:var(--text-muted);}
-  .photo-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-  .media-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
-  .photo-slot{display:flex;flex-direction:column;}
-  .photo-slot .slot-label{font-size:10px;font-weight:700;color:var(--text-muted);
-    text-align:center;margin-bottom:5px;}
-  .photo-slot .slot-label.video{color:#8A5FC0;}
-  .photo-preview{margin-top:8px;border-radius:8px;overflow:hidden;display:none;position:relative;}
-  .photo-preview img,.photo-preview video{width:100%;max-height:120px;object-fit:cover;display:block;}
-  .photo-preview .remove-btn{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);
-    color:#fff;border:none;border-radius:20px;padding:3px 8px;font-size:10px;font-weight:700;cursor:pointer;}
-  .tag-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
-  .tag{background:var(--teal-soft);border:1px solid #BCD9E8;color:var(--teal);
-    font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .15s;}
-  .tag:hover{background:var(--teal);color:#fff;border-color:var(--teal);}
-  .step-page{display:none;} .step-page.active{display:block;}
-  .nav-bar{padding:12px 16px 24px;display:flex;gap:10px;}
-  .btn-prev{flex:0 0 auto;padding:13px 20px;border-radius:10px;border:1.5px solid var(--gray-line);
-    background:#fff;color:var(--text-muted);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
-  .btn-next{flex:1;padding:13px;border-radius:10px;border:none;background:var(--navy);color:#fff;
-    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em;
-    transition:background .2s;display:flex;align-items:center;justify-content:center;gap:6px;}
-  .btn-next:active{background:var(--navy-light);}
-  .btn-generate{flex:1;padding:14px;border-radius:10px;border:none;
-    background:linear-gradient(135deg,var(--teal) 0%,var(--navy) 100%);color:#fff;
-    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em;
-    transition:opacity .2s;display:flex;align-items:center;justify-content:center;gap:8px;}
-  .btn-generate:active{opacity:.92;}
-  .preview-table{width:100%;border-collapse:collapse;font-size:13px;}
-  .preview-table tr:not(:last-child) td{border-bottom:1px solid var(--gray-line);}
-  .preview-table td{padding:9px 12px;}
-  .preview-table td:first-child{font-weight:700;color:var(--navy);width:38%;
-    background:var(--gray-bg);font-size:12px;}
-  .preview-photos{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
-  .preview-photos img,.preview-photos video{width:100%;height:90px;object-fit:cover;border-radius:8px;display:block;}
-  .text-block{background:var(--gray-bg);border-radius:8px;padding:12px;font-size:13px;
-    line-height:1.65;color:var(--text);white-space:pre-wrap;}
-  .success-screen{text-align:center;padding:40px 24px 20px;}
-  .success-icon{font-size:56px;margin-bottom:16px;line-height:1;}
-  .success-screen h2{font-size:20px;font-weight:800;color:var(--navy);margin-bottom:8px;}
-  .success-screen p{font-size:13px;color:var(--text-muted);line-height:1.7;margin-bottom:28px;}
-  .btn-download{display:block;width:100%;padding:14px;border-radius:10px;background:var(--navy);
-    color:#fff;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-restart{display:block;width:100%;padding:13px;border-radius:10px;background:#fff;
-    color:var(--text-muted);font-size:14px;font-weight:600;border:1.5px solid var(--gray-line);
-    cursor:pointer;font-family:inherit;}
-  .btn-fileshare{display:flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:10px;background:linear-gradient(135deg,#2E7D9E,#1B2F5E);color:#fff;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-fileshare:active{opacity:.85;}
-  .btn-kakao{display:flex;align-items:center;justify-content:center;width:100%;padding:14px;border-radius:10px;background:#FEE500;color:#3A1D1D;font-size:15px;font-weight:700;border:none;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-kakao:active{opacity:.85;}
-  .btn-copy{display:block;width:100%;padding:13px;border-radius:10px;background:#EAF4F8;color:#2E7D9E;font-size:14px;font-weight:700;border:1.5px solid #BCD9E8;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-copy:active{background:#D0EAF3;}
-  .btn-print{display:block;width:100%;padding:13px;border-radius:10px;background:#F5F7FA;color:#4A4A4A;font-size:14px;font-weight:700;border:1.5px solid #DDE3EE;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-print:active{background:#E8ECF2;}
-  .btn-gsheet{display:block;width:100%;padding:13px;border-radius:10px;background:#E6F4EA;color:#137333;font-size:14px;font-weight:700;border:1.5px solid #A8DAB5;cursor:pointer;font-family:inherit;margin-bottom:10px;}
-  .btn-gsheet:active{background:#CEEAD6;}
-  .gsheet-status{font-size:11px;text-align:center;margin:-4px 0 10px;line-height:1.5;}
-  .gsheet-status.ok{color:#137333;}
-  .gsheet-status.err{color:#C0392B;}
-  @media print{header,.progress-bar,.step-indicator,.step-label,.nav-bar,.btn-kakao,.btn-copy,.btn-print,.btn-restart,.btn-download{display:none!important;} .step-page{display:block!important;} .card{box-shadow:none;margin:0 0 12px;} body{background:#fff;}}
-  .char-counter{display:block;text-align:right;font-size:10px;color:var(--text-muted);margin-top:3px;font-weight:500;letter-spacing:.02em;}
-  .char-counter.warn{color:#C0392B;}
-  .field-group{position:relative;}
-  .date-wrap{position:relative;width:100%;border:1.5px solid var(--gray-line);border-radius:8px;height:46px;display:flex;align-items:center;padding:0 13px;background:#fff;cursor:pointer;}
-  .date-wrap:focus-within{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
-  .date-display{flex:1;font-size:16px;color:var(--text);pointer-events:none;}
-  .date-display.placeholder{color:#9AA3B5;}
-  .date-icon{font-size:17px;pointer-events:none;margin-left:6px;}
-  .date-wrap input[type="date"]{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;cursor:pointer;font-size:16px;}
-  /* iOS에서 date input 우측 화살표 영역만 클릭되는 문제 방지 */
-  .date-wrap input[type="date"]::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;}
-  .credit-card{position:relative;margin:8px 16px 28px;border-radius:18px;overflow:hidden;
-    background:linear-gradient(135deg,#1B2F5E 0%,#16264D 55%,#101D3D 100%);
-    padding:24px 24px 22px;box-shadow:0 8px 24px rgba(16,29,61,.28);}
-  .cc-glow{position:absolute;border-radius:50%;pointer-events:none;}
-  .cc-glow1{width:200px;height:200px;right:-50px;bottom:-70px;
-    background:radial-gradient(circle,rgba(78,156,200,.18) 0%,rgba(78,156,200,0) 70%);}
-  .cc-glow2{width:130px;height:130px;right:30px;bottom:-30px;
-    background:radial-gradient(circle,rgba(202,220,252,.10) 0%,rgba(202,220,252,0) 70%);}
-  .cc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;position:relative;z-index:1;}
-  .cc-team{font-size:10.5px;font-weight:700;letter-spacing:.12em;color:#7E91BE;}
-  .cc-ver{font-size:10px;font-weight:600;color:#8EA0C8;background:rgba(202,220,252,.10);
-    border:1px solid rgba(202,220,252,.18);border-radius:14px;padding:4px 11px;letter-spacing:.04em;}
-  .cc-name-row{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;position:relative;z-index:1;}
-  .cc-name{font-size:26px;font-weight:800;color:#fff;letter-spacing:.01em;}
-  .cc-pro{font-size:12px;font-weight:700;color:#6FA8D8;letter-spacing:.04em;}
-  .cc-role{font-size:12px;color:#8595BC;margin-bottom:20px;position:relative;z-index:1;}
-  .cc-divider{height:1px;background:linear-gradient(90deg,rgba(126,145,190,.35),rgba(126,145,190,.05));margin-bottom:16px;position:relative;z-index:1;}
-  .cc-meta{position:relative;z-index:1;}
-  .cc-meta-h{font-size:11px;font-weight:700;color:#9FB0D6;margin-bottom:2px;}
-  .cc-meta-h:not(:first-child){margin-top:11px;}
-  .cc-meta-v{font-size:11.5px;color:#6E80AB;}
-  .cc-watermark{position:absolute;right:22px;bottom:16px;font-size:22px;font-weight:800;
-    color:rgba(202,220,252,.10);letter-spacing:.08em;z-index:0;font-family:Georgia,serif;}
-  button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
-  @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
+  header h1{color:#fff;font-size:16px;font-weight:700;}
+  header .subtitle{color:#9EADCC;font-size:11px;margin-top:2px;}
+  .home-link{background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.4);color:#CADCFC;
+    font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none;}
+
+  .body{padding:16px;}
+
+  .card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;margin-bottom:14px;overflow:hidden;}
+  .card-header{background:var(--navy);padding:11px 15px;display:flex;align-items:center;gap:8px;}
+  .card-header .badge-icon{font-size:15px;}
+  .card-header h2{color:#fff;font-size:14px;font-weight:700;}
+  .card-body{padding:14px 15px;}
+
+  .field-group{margin-bottom:13px;}
+  .field-group:last-child{margin-bottom:0;}
+  .row-2{display:flex;gap:10px;}
+  .row-2 .field-group{flex:1;}
+  label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;}
+  label .req{color:var(--red);}
+  input[type=text],input[type=date],textarea,select{width:100%;border:1.5px solid var(--gray-line);
+    border-radius:8px;padding:11px 12px;font-size:15px;font-family:inherit;color:var(--text);background:#fff;outline:none;}
+  input:focus,textarea:focus,select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  textarea{resize:vertical;min-height:60px;line-height:1.55;}
+  select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7A99' stroke-width='3'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
+
+  /* 구분 체크박스들 */
+  .chk-group{display:flex;flex-wrap:wrap;gap:8px;}
+  .chk{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--gray-line);border-radius:8px;
+    padding:8px 12px;font-size:13px;cursor:pointer;background:#fff;user-select:none;color:var(--text-muted);font-weight:600;}
+  .chk.on{border-color:var(--teal);background:var(--teal-soft);color:var(--navy);}
+  .chk .box{width:15px;height:15px;border:1.5px solid var(--gray-line);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:transparent;}
+  .chk.on .box{background:var(--teal);border-color:var(--teal);color:#fff;}
+
+  /* 날짜 표시 */
+  .date-wrap{position:relative;}
+  .date-wrap input[type=date]{padding-right:38px;}
+  .date-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:16px;}
+
+  /* 점검 항목 테이블 */
+  .insp-item{border:1px solid var(--gray-line);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+  .insp-head{display:flex;align-items:center;gap:9px;padding:11px 13px;background:var(--gray-bg);}
+  .insp-num{flex:0 0 auto;width:22px;height:22px;border-radius:6px;background:var(--navy);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .insp-titles{flex:1;min-width:0;}
+  .insp-name{font-size:13.5px;font-weight:700;color:var(--navy);}
+  .insp-desc{font-size:11px;color:var(--text-muted);margin-top:1px;line-height:1.4;}
+  .insp-body{padding:11px 13px;}
+  .result-group{display:flex;gap:7px;margin-bottom:9px;}
+  .result-btn{flex:1;padding:9px;border:1.5px solid var(--gray-line);border-radius:8px;background:#fff;
+    font-size:13px;font-weight:700;cursor:pointer;color:var(--text-muted);font-family:inherit;transition:.12s;}
+  .result-btn[data-r="정상"].on{border-color:var(--green);background:#E8F5EE;color:var(--green);}
+  .result-btn[data-r="수리"].on{border-color:var(--amber);background:#FBF3E0;color:var(--amber);}
+  .result-btn[data-r="교체"].on{border-color:var(--red);background:#FBEAE8;color:var(--red);}
+  .insp-memo{width:100%;border:1.5px solid var(--gray-line);border-radius:8px;padding:9px 11px;
+    font-size:14px;font-family:inherit;color:var(--text);outline:none;}
+  .insp-memo:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  .insp-memo::placeholder{color:#B0BAC8;font-size:13px;}
+
+  /* 서명 */
+  .sig-wrap{margin-top:4px;}
+  .sig-box{position:relative;border:1.5px dashed var(--gray-line);border-radius:10px;background:#fff;height:120px;overflow:hidden;touch-action:none;}
+  .sig-box canvas{display:block;width:100%;height:100%;}
+  .sig-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#B0BAC8;font-size:13px;pointer-events:none;}
+  .sig-clear{margin-top:6px;font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--gray-line);border-radius:7px;padding:6px 11px;cursor:pointer;font-family:inherit;font-weight:600;}
+
+  /* 하단 고정 버튼 */
+  .bottom-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--gray-line);
+    padding:12px 16px;display:flex;gap:10px;z-index:60;max-width:560px;margin:0 auto;}
+  .btn{flex:1;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-secondary{background:#fff;color:var(--navy);border:1.5px solid var(--navy);}
+  .btn:active{opacity:.85;}
+
+  .char-counter{font-size:10.5px;color:var(--text-muted);text-align:right;margin-top:3px;}
+
+  /* 완료 오버레이 */
+  .done-overlay{position:fixed;inset:0;z-index:200;background:rgba(16,29,61,.55);display:none;align-items:center;justify-content:center;padding:24px;}
+  .done-overlay.show{display:flex;}
+  .done-card{background:#fff;border-radius:16px;width:100%;max-width:360px;padding:28px 24px;text-align:center;}
+  .done-card .ico{font-size:52px;margin-bottom:14px;}
+  .done-card h3{font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;}
+  .done-card p{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:22px;}
+  .done-card .fname{background:var(--gray-bg);border-radius:8px;padding:10px;font-size:12px;color:var(--navy);font-weight:600;margin-bottom:18px;word-break:break-all;}
+  .done-row{display:flex;flex-direction:column;gap:9px;}
+  .done-row button{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none;}
+  .done-dl{background:var(--navy);color:#fff;}
+  .done-new{background:#fff;color:var(--text-muted);border:1.5px solid var(--gray-line);}
+
+  /* PDF 렌더용 숨김 영역 */
+  #pdfSheet{position:fixed;left:-9999px;top:0;width:794px;background:#fff;}
+
+  /* 토스트 */
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--navy);color:#fff;
+    font-size:13px;font-weight:600;padding:11px 20px;border-radius:22px;z-index:300;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
+  .toast.show{opacity:1;}
+
+  .loading{position:fixed;inset:0;z-index:250;background:rgba(255,255,255,.85);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+  .loading.show{display:flex;}
+  .spinner{width:38px;height:38px;border:4px solid var(--gray-line);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loading p{font-size:13px;color:var(--text-muted);font-weight:600;}
 </style>
-<script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
-<script src="https://accounts.google.com/gsi/client" async></script>
-<script src="https://apis.google.com/js/api.js" async></script>
 </head>
 <body>
-<div id="langSelect" style="position:fixed;inset:0;z-index:9999;background:#1B2F5E;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px;">
-  <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:72px;margin-bottom:8px;">
-    <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
-    <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
-    <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
-  </svg>
-  <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
-  <div style="color:#9EADCC;font-size:13px;margin-bottom:40px;">CS Field Tools</div>
-
-  <!-- 1단계: 앱 선택 -->
-  <div id="appSelectStage" style="display:flex;flex-direction:column;align-items:center;width:100%;">
-    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">사용할 도구를 선택하세요</div>
-    <button type="button" id="appBtnReport" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:24px;">📋</span>
-      <span style="flex:1;">AS 처리 보고서<br><span style="font-size:11px;font-weight:500;color:#6B7A99;">현장 보고서 작성 → PPT 자동 생성</span></span>
-      <span style="color:#9AA3B5;">→</span>
-    </button>
-    <button type="button" id="appBtnGuide" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:24px;">📖</span>
-      <span style="flex:1;">현장 대응 가이드<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">CUREJET 증상별 진단·조치 매뉴얼</span></span>
-      <span style="color:#8EA0C8;">→</span>
-    </button>
-    <button type="button" id="appBtnSurvey" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:24px;">⭐</span>
-      <span style="flex:1;">고객 만족도 조사<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">AS 서비스 평가 · 별점/항목별 피드백</span></span>
-      <span style="color:#8EA0C8;">→</span>
-    </button>
-    <button type="button" id="appBtnInspection" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;">
-      <span style="font-size:24px;">🔧</span>
-      <span style="flex:1;">정기 검검 내역서<br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">정기점검 체크리스트 · PDF 기록</span></span>
-      <span style="color:#8EA0C8;">→</span>
-    </button>
-  </div>
-
-  <!-- 2단계: 언어 선택 (AS 보고서 선택 시) -->
-  <div id="langSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;">
-    <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;">언어를 선택하세요 · Select language · 言語を選択</div>
-    <button type="button" data-lang="ko" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:none;background:#fff;color:#1B2F5E;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇰🇷 국내 (한국어)</button>
-    <button type="button" data-lang="en" style="width:100%;max-width:280px;padding:16px;margin-bottom:12px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🌐 Global (English)</button>
-    <button type="button" data-lang="ja" style="width:100%;max-width:280px;padding:16px;margin-bottom:14px;border-radius:12px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">🇯🇵 日本 (日本語)</button>
-    <button type="button" id="backToApps" style="background:none;border:none;color:#8EA0C8;font-size:12px;cursor:pointer;font-family:inherit;">← 도구 선택으로 돌아가기</button>
-  </div>
-</div>
-<header>
-  <div class="logo-area">
-    <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
-      <text x="2"  y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
-      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
-      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
-    </svg>
-    <div><h1 data-i18n="appTitle">AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
-  </div>
-  <div id="langSwitch" style="display:flex;gap:2px;background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.35);border-radius:16px;padding:2px;">
-    <button type="button" data-setlang="ko" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">한국어</button>
-    <button type="button" data-setlang="en" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">EN</button>
-    <button type="button" data-setlang="ja" class="lang-opt" style="border:none;background:transparent;color:#CADCFC;font-size:10px;font-weight:700;padding:5px 9px;border-radius:13px;cursor:pointer;font-family:inherit;">日本語</button>
-  </div>
-</header>
-<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-<div class="step-indicator">
-  <div class="step-dot active" id="dot1">1</div><div class="step-connector" id="con1"></div>
-  <div class="step-dot" id="dot2">2</div><div class="step-connector" id="con2"></div>
-  <div class="step-dot" id="dot3">3</div><div class="step-connector" id="con3"></div>
-  <div class="step-dot" id="dot4">✓</div>
-</div>
-<div class="step-label" id="stepLabel">접수 정보 입력</div>
-
-<!-- STEP 1 -->
-<div class="step-page active" id="step1">
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">🏥</div><h2 data-i18n="h_svcInfo">AS 접수 정보</h2></div>
-    <div class="card-body">
-      <div class="field-group"><label><span data-i18n="l_hospital">병원명</span> <span class="required">*</span></label>
-        <input type="text" id="hospital" data-i18n-ph="ph_hospital" placeholder="예) 미모드림의원 천호" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_hospital">0/20</span></div>
-      <div class="row-2">
-        <div class="field-group"><label><span data-i18n="l_serial">장비 S/N</span> <span class="required">*</span></label>
-          <input type="text" id="serialNo" data-i18n-ph="ph_serial" placeholder="예) BYB018" maxlength="15" oninput="updCounter(this)"><span class="char-counter" id="cc_serialNo">0/15</span></div>
-        <div class="field-group"><label data-i18n="l_mfg">제조일</label>
-          <input type="text" id="mfgDate" data-i18n-ph="ph_mfg" placeholder="예) 2022년 11월" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_mfgDate">0/12</span></div>
+<div class="wrap">
+  <header>
+    <div class="logo-area">
+      <div>
+        <h1>정기 검검 내역서</h1>
+        <div class="subtitle">BAZ BIOMEDIC Field Service</div>
       </div>
-      <div class="field-group"><label>UI / FW / H.P Ver</label>
-        <input type="text" id="version" data-i18n-ph="ph_ver" placeholder="예) 2.1.1 / 2.6 / 1.2.2" maxlength="20" oninput="updCounter(this)"><span class="char-counter" id="cc_version">0/20</span></div>
-      <div class="row-2">
-        <div class="field-group"><label><span data-i18n="l_date">발생 일자</span> <span class="required">*</span></label>
-          <div class="date-wrap" id="dateWrap">
-            <span class="date-display" id="dateDisplay"></span>
-            <span class="date-icon">📅</span>
-            <input type="date" id="issueDate" oninput="updDateDisplay()" onchange="updDateDisplay()">
-          </div></div>
-        <div class="field-group"><label><span data-i18n="l_eng">담당자</span> <span class="required">*</span></label>
-          <input type="text" id="engineer" data-i18n-ph="ph_eng" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
+    </div>
+    <a href="index.html" class="home-link">← 메뉴</a>
+  </header>
+
+  <div class="body">
+    <!-- 접수 정보 -->
+    <div class="card">
+      <div class="card-header"><span class="badge-icon">📋</span><h2>접수 정보</h2></div>
+      <div class="card-body">
+        <div class="field-group">
+          <label>구분 <span class="req">*</span></label>
+          <div class="chk-group" id="payGroup" style="margin-bottom:8px;">
+            <div class="chk" data-pay="유상"><span class="box">✓</span>유상</div>
+            <div class="chk" data-pay="무상"><span class="box">✓</span>무상</div>
+          </div>
+          <div class="chk-group" id="typeGroup">
+            <div class="chk" data-type="A/S"><span class="box">✓</span>A/S</div>
+            <div class="chk" data-type="장비 점검"><span class="box">✓</span>장비 점검</div>
+            <div class="chk" data-type="장비 교체"><span class="box">✓</span>장비 교체</div>
+            <div class="chk" data-type="장비 업그레이드"><span class="box">✓</span>장비 업그레이드</div>
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field-group">
+            <label>접수 일자 <span class="req">*</span></label>
+            <div class="date-wrap"><input type="date" id="receiveDate"><span class="date-icon">📅</span></div>
+          </div>
+          <div class="field-group">
+            <label>접수처 (대리점/병원)</label>
+            <input type="text" id="receiver" placeholder="예) ○○대리점 / ○○의원" maxlength="30">
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field-group">
+            <label>제품명</label>
+            <input type="text" id="product" placeholder="예) CUREJET" maxlength="20">
+          </div>
+          <div class="field-group">
+            <label>장비 S/N <span class="req">*</span></label>
+            <input type="text" id="serialNo" placeholder="예) BYB018" maxlength="15">
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field-group">
+            <label>구독 서비스</label>
+            <input type="text" id="subscription" placeholder="예) N-CARE 가입 / 미가입" maxlength="20">
+          </div>
+          <div class="field-group">
+            <label>장비 Ver. (UI/FW)</label>
+            <input type="text" id="version" placeholder="예) 2.1.1 / 2.6" maxlength="20">
+          </div>
+        </div>
+        <div class="row-2">
+          <div class="field-group">
+            <label>병원명 <span class="req">*</span></label>
+            <input type="text" id="hospital" placeholder="예) 미모드림의원 천호" maxlength="25">
+          </div>
+        </div>
       </div>
-      <div class="field-group"><label data-i18n="l_req">요청사항 (토픽)</label>
-        <input type="text" id="requestDetail" data-i18n-ph="ph_req" placeholder="예) 노즐 인식 불가" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_requestDetail">0/18</span></div>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">🔧</div><h2 data-i18n="h_parts">내부 수리 부품</h2></div>
-    <div class="card-body">
-      <div class="field-group"><label data-i18n="l_part">부품명</label>
-        <input type="text" id="partName" data-i18n-ph="ph_part" placeholder="예) RFID Module A'ssy" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_partName">0/18</span></div>
-      <div class="field-group"><label data-i18n="l_partReason">교체 사유</label>
-        <input type="text" id="partReason" data-i18n-ph="ph_partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건" maxlength="28" oninput="updCounter(this)"><span class="char-counter" id="cc_partReason">0/28</span></div>
-    </div>
-  </div>
-  <div class="nav-bar"><button type="button" class="btn-next" data-go="2" data-i18n="b_next2">다음 — 사진 첨부 →</button></div>
-</div>
 
-<!-- STEP 2 -->
-<div class="step-page" id="step2">
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">📷</div><h2 data-i18n="h_symPhotos">접수 증상 사진 (좌측 · 최대 3컷)</h2></div>
-    <div class="card-body"><div class="photo-grid" id="symGrid"></div></div>
-  </div>
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">📸</div><h2 data-i18n="h_phenPhotos">접수 현상 사진 3컷 + 동영상 1개 (우측)</h2></div>
-    <div class="card-body"><div class="media-grid" id="phenGrid"></div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.5;">
-        <span data-i18n="t_videoHint">💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.</span></div>
+    <!-- 점검 항목 -->
+    <div class="card">
+      <div class="card-header"><span class="badge-icon">🔧</span><h2>점검 항목</h2></div>
+      <div class="card-body">
+        <div id="inspList"></div>
+      </div>
     </div>
-  </div>
-  <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="1" data-i18n="b_prev">← 이전</button>
-    <button type="button" class="btn-next" data-go="3" data-i18n="b_next3">다음 — 원인 분석 →</button>
-  </div>
-</div>
 
-<!-- STEP 3 -->
-<div class="step-page" id="step3">
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis">고장 원인 분석</h2></div>
-    <div class="card-body">
-      <div class="field-group"><label><span data-i18n="l_symptomMain">접수 증상</span> <span class="required">*</span></label>
-        <div class="tag-suggestions">
-          <span class="tag" data-field="symptom" data-text="노즐 인식 불가" data-text-ko="노즐 인식 불가" data-text-ja="ノズル認識不可" data-label-ja="ノズル認識不可" data-text-en="Nozzle not recognized" data-label-ko="노즐 인식 불가" data-label-en="Nozzle not recognized">노즐 인식 불가</span>
-          <span class="tag" data-field="symptom" data-text="USB 장치 인식 불량" data-text-ko="USB 장치 인식 불량" data-text-ja="USBデバイス認識不良" data-label-ja="USB認識不良" data-text-en="USB recognition error" data-label-ko="USB 인식 불량" data-label-en="USB recognition error">USB 인식 불량</span>
-          <span class="tag" data-field="symptom" data-text="장비 전원 불량" data-text-ko="장비 전원 불량" data-text-ja="電源不良" data-label-ja="電源不良" data-text-en="Power failure" data-label-ko="전원 불량" data-label-en="Power failure">전원 불량</span>
-          <span class="tag" data-field="symptom" data-text="분사 불량" data-text-ko="분사 불량" data-text-ja="噴射不良" data-label-ja="噴射不良" data-text-en="Spray failure" data-label-ko="분사 불량" data-label-en="Spray failure">분사 불량</span>
-          <span class="tag" data-field="symptom" data-text="화면 오류" data-text-ko="화면 오류" data-text-ja="画面エラー" data-label-ja="画面エラー" data-text-en="Screen error" data-label-ko="화면 오류" data-label-en="Screen error">화면 오류</span>
+    <!-- 조치 / 마무리 -->
+    <div class="card">
+      <div class="card-header"><span class="badge-icon">📝</span><h2>조치 내용 / 마무리</h2></div>
+      <div class="card-body">
+        <div class="field-group">
+          <label>조치 내용</label>
+          <textarea id="actionDetail" placeholder="점검 결과에 따른 조치 내용을 입력하세요." maxlength="200"></textarea>
+          <div class="char-counter"><span id="cc_action">0</span>/200</div>
         </div>
-        <textarea id="symptom" data-i18n-ph="ph_symptom" placeholder="예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태." maxlength="40" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_symptom">0/40</span></div>
-      <div class="field-group"><label><span data-i18n="l_cause">불량 원인</span> <span class="required">*</span></label>
-        <div class="tag-suggestions">
-          <span class="tag" data-field="cause" data-text="USB 장치 인식 불량에 따른 동작 불가" data-text-ko="USB 장치 인식 불량에 따른 동작 불가" data-text-ja="USB認識不良による動作不能" data-label-ja="USB認識不良" data-text-en="Inoperable due to USB recognition failure" data-label-ko="USB 인식 불량" data-label-en="USB recognition error">USB 인식 불량</span>
-          <span class="tag" data-field="cause" data-text="약액 역분리로 인한 노즐 막힘" data-text-ko="약액 역분리로 인한 노즐 막힘" data-text-ja="薬液再分離によるノズル詰まり" data-label-ja="薬液再分離" data-text-en="Nozzle clogged by drug separation" data-label-ko="약액 역분리" data-label-en="Drug separation">약액 역분리</span>
-          <span class="tag" data-field="cause" data-text="Luer-lock 체결 불량" data-text-ko="Luer-lock 체결 불량" data-text-ja="Luer-lock締結不良" data-label-ja="Luer-lock不良" data-text-en="Luer-lock not fastened properly" data-label-ko="Luer-lock 불량" data-label-en="Luer-lock issue">Luer-lock 불량</span>
-          <span class="tag" data-field="cause" data-text="노즐 재사용으로 인한 멤브레인 손상" data-text-ko="노즐 재사용으로 인한 멤브레인 손상" data-text-ja="ノズル再使用によるメンブレン損傷" data-label-ja="メンブレン損傷" data-text-en="Membrane damage from nozzle reuse" data-label-ko="멤브레인 손상" data-label-en="Membrane damage">멤브레인 손상</span>
+        <div class="field-group">
+          <label>권고 사항</label>
+          <textarea id="recommend" placeholder="병원에 안내할 권고 사항을 입력하세요." maxlength="150"></textarea>
+          <div class="char-counter"><span id="cc_recommend">0</span>/150</div>
         </div>
-        <textarea id="cause" data-i18n-ph="ph_cause" placeholder="예) USB 장치 인식 불량에 따른 동작 불가" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_cause">0/32</span></div>
-      <div class="field-group"><label><span data-i18n="l_solution">해결 방법</span> <span class="required">*</span></label>
-        <div class="tag-suggestions">
-          <span class="tag" data-field="solution" data-text="RFID Module 내 USB 장치 교환" data-text-ko="RFID Module 내 USB 장치 교환" data-text-ja="RFIDモジュール内のUSBデバイスを交換" data-label-ja="USBデバイス交換" data-text-en="Replaced USB device in RFID module" data-label-ko="USB 장치 교환" data-label-en="Replace USB device">USB 장치 교환</span>
-          <span class="tag" data-field="solution" data-text="노즐 교체 후 프라이밍 진행" data-text-ko="노즐 교체 후 프라이밍 진행" data-text-ja="ノズル交換後プライミング実施" data-label-ja="ノズル交換" data-text-en="Replaced nozzle and primed" data-label-ko="노즐 교체" data-label-en="Replace nozzle">노즐 교체</span>
-          <span class="tag" data-field="solution" data-text="약액 재조제 후 재투여" data-text-ko="약액 재조제 후 재투여" data-text-ja="薬液を再調製し再投与" data-label-ja="薬液再調製" data-text-en="Re-prepared and re-administered drug" data-label-ko="약액 재조제" data-label-en="Re-prepare drug">약액 재조제</span>
-          <span class="tag" data-field="solution" data-text="Luer-lock 재체결" data-text-ko="Luer-lock 재체결" data-text-ja="Luer-lockを再締結" data-label-ja="Luer-lock再締結" data-text-en="Re-fastened Luer-lock" data-label-ko="Luer-lock 재체결" data-label-en="Re-fasten Luer-lock">Luer-lock 재체결</span>
+        <div class="row-2">
+          <div class="field-group">
+            <label>점검 일자</label>
+            <div class="date-wrap"><input type="date" id="inspectDate"><span class="date-icon">📅</span></div>
+          </div>
+          <div class="field-group">
+            <label>희망 점검 예정일</label>
+            <div class="date-wrap"><input type="date" id="nextDate"><span class="date-icon">📅</span></div>
+          </div>
         </div>
-        <textarea id="solution" data-i18n-ph="ph_solution" placeholder="예) RFID Module 내 USB 장치 교환 시 수리 가능" maxlength="32" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_solution">0/32</span></div>
+        <div class="row-2">
+          <div class="field-group">
+            <label>교환품</label>
+            <input type="text" id="replacedPart" placeholder="예) RFID Module" maxlength="20">
+          </div>
+          <div class="field-group">
+            <label>비용 (원)</label>
+            <input type="text" id="cost" placeholder="예) 150,000" maxlength="15" inputmode="numeric">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 서명 -->
+    <div class="card">
+      <div class="card-header"><span class="badge-icon">✍️</span><h2>서명</h2></div>
+      <div class="card-body">
+        <div class="row-2" style="gap:14px;">
+          <div class="field-group" style="flex:1;">
+            <label>CS 담당자 <span class="req">*</span></label>
+            <input type="text" id="csName" placeholder="이름" maxlength="12" style="margin-bottom:8px;">
+            <div class="sig-wrap">
+              <div class="sig-box" id="csSigBox">
+                <canvas id="csSig"></canvas>
+                <div class="sig-placeholder" id="csPlaceholder">여기에 서명</div>
+              </div>
+              <button type="button" class="sig-clear" data-clear="cs">지우기</button>
+            </div>
+          </div>
+          <div class="field-group" style="flex:1;">
+            <label>병원 담당자</label>
+            <input type="text" id="hospitalName" placeholder="이름" maxlength="12" style="margin-bottom:8px;">
+            <div class="sig-wrap">
+              <div class="sig-box" id="hsSigBox">
+                <canvas id="hsSig"></canvas>
+                <div class="sig-placeholder" id="hsPlaceholder">여기에 서명</div>
+              </div>
+              <button type="button" class="sig-clear" data-clear="hs">지우기</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">💬</div><h2 data-i18n="h_opinionFb">처리 의견 / 피드백</h2></div>
-    <div class="card-body">
-      <div class="field-group"><label data-i18n="l_opinion">엔지니어 처리 의견</label>
-        <textarea id="opinion" data-i18n-ph="ph_opinion" placeholder="엔지니어 처리 내용 및 의견을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_opinion">0/45</span></div>
-      <div class="field-group"><label data-i18n="l_feedback">고객 피드백</label>
-        <textarea id="feedback" data-i18n-ph="ph_feedback" placeholder="고객 피드백 내용을 입력하세요." maxlength="45" oninput="updCounter(this)"></textarea><span class="char-counter" id="cc_feedback">0/45</span></div>
-    </div>
-  </div>
-  <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="2" data-i18n="b_prev">← 이전</button>
-    <button type="button" class="btn-next" data-go="4" data-i18n="b_next4">다음 — 최종 확인 →</button>
+
+  <div class="bottom-bar">
+    <button type="button" class="btn btn-secondary" id="previewBtn">미리보기</button>
+    <button type="button" class="btn btn-primary" id="generateBtn">PDF 생성</button>
   </div>
 </div>
 
-<!-- STEP 4 -->
-<div class="step-page" id="step4">
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">📋</div><h2 data-i18n="h_reviewInfo">AS 접수 정보 확인</h2></div>
-    <div class="card-body" style="padding:0;"><table class="preview-table" id="previewInfoTable"></table></div>
-  </div>
-  <div class="card" id="previewPhotoCard" style="display:none;">
-    <div class="card-header"><div class="badge-icon">📷</div><h2 data-i18n="h_media">첨부 미디어</h2></div>
-    <div class="card-body">
-      <label style="margin-bottom:6px;" data-i18n="l_symptom2">접수 증상</label>
-      <div class="preview-photos" id="previewSymPhotos"></div>
-      <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;" data-i18n="l_phenMedia">접수 현상 (사진 3 + 동영상)</label>
-      <div class="preview-photos" id="previewPhenPhotos"></div>
+<div class="toast" id="toast"></div>
+<div class="loading" id="loading"><div class="spinner"></div><p id="loadingMsg">PDF 생성 중...</p></div>
+
+<div class="done-overlay" id="doneOverlay">
+  <div class="done-card">
+    <div class="ico">✅</div>
+    <h3>점검 내역서 완성</h3>
+    <p>정기 검검 내역서 PDF가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
+    <div class="fname" id="doneFname"></div>
+    <div class="done-row">
+      <button class="done-dl" id="doneDl">📥 다시 다운로드</button>
+      <button class="done-new" id="doneNew">새 점검 내역서</button>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-header"><div class="badge-icon">🔍</div><h2 data-i18n="h_analysis2">고장 원인 분석</h2></div>
-    <div class="card-body">
-      <label style="margin-bottom:6px;" data-i18n="l_symptomMain">접수 증상</label><div class="text-block" id="previewSymptom"></div>
-      <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;" data-i18n="l_cause2">불량 원인</label><div class="text-block" id="previewCause"></div>
-      <div style="height:12px;"></div>
-      <label style="margin-bottom:6px;" data-i18n="l_solution2">해결 방법</label><div class="text-block" id="previewSolution"></div>
-    </div>
-  </div>
-  <div class="nav-bar">
-    <button type="button" class="btn-prev" data-go="3" data-i18n="b_prev">← 이전</button>
-    <button type="button" class="btn-generate" data-action="generate"><span>📊</span> <span data-i18n="b_generate">PPT 생성 및 다운로드</span></button>
   </div>
 </div>
 
-<!-- STEP 5 -->
-<div class="step-page" id="step5">
-  <div class="success-screen">
-    <div class="success-icon">✅</div>
-    <h2 data-i18n="t_done">보고서가 완성되었습니다</h2>
-    <p data-i18n-html="t_doneSub">AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.</p>
-  </div>
-  <div style="padding:0 16px 24px;">
-    <button type="button" class="btn-download" data-action="redownload" data-i18n="b_redown">📥 다시 다운로드</button>
-    <button type="button" class="btn-fileshare" data-action="sharePptx" data-i18n="b_share">📤 PPT 파일 공유 (카카오톡 등)</button>
-    <button type="button" class="btn-gsheet" data-action="saveToSheet">📊 Google 시트에 기록</button>
-    <div class="gsheet-status" id="gsheetStatus" style="display:none;"></div>
-    <button type="button" class="btn-copy" data-action="copyText" data-i18n="b_copy">📋 보고서 내용 복사</button>
-    <button type="button" class="btn-print" data-action="printReport" data-i18n="b_print">🖨️ 인쇄 / PDF 저장</button>
-    <button type="button" class="btn-restart" data-action="restart" data-i18n="b_restart">새 보고서 작성</button>
-  </div>
+<!-- PDF 렌더용 (화면 밖) -->
+<div id="pdfSheet"></div>
 
-  <div class="credit-card" id="creditCard">
-    <div class="cc-glow cc-glow1"></div>
-    <div class="cc-glow cc-glow2"></div>
-    <div class="cc-top">
-      <span class="cc-team" data-i18n="cr_team">BAZ BIOMEDIC · CS TEAM</span>
-      <span class="cc-ver" data-i18n="cr_ver">v1.0 · 2026</span>
-    </div>
-    <div class="cc-name-row">
-      <span class="cc-name" data-i18n="cr_name">지유영</span>
-      <span class="cc-pro" data-i18n="cr_pro">Pro</span>
-    </div>
-    <div class="cc-role" data-i18n="cr_role">CS팀 · 현장 대응 가이드 제작자</div>
-    <div class="cc-divider"></div>
-    <div class="cc-meta">
-      <div class="cc-meta-h" data-i18n="cr_h1">초판 제작</div>
-      <div class="cc-meta-v" data-i18n="cr_v1">2026 · 최초 배포본</div>
-      <div class="cc-meta-h" data-i18n="cr_h2">기반 문서</div>
-      <div class="cc-meta-v" data-i18n="cr_v2">CUREJET 장비 대응 매뉴얼</div>
-    </div>
-    <span class="cc-watermark">JYY</span>
-  </div>
-</div>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-(function(){
-  if(typeof window.PptxGenJS==="undefined"&&typeof window.pptxgen!=="undefined") window.PptxGenJS=window.pptxgen;
-  if(typeof window.pptxgen==="undefined"&&typeof window.PptxGenJS!=="undefined") window.pptxgen=window.PptxGenJS;
-})();
+// ===== 점검 항목 정의 (양식 그대로) =====
+const INSP_ITEMS = [
+  {n:1, name:'본체 외관', desc:'외관 및 내부 먼지 제거, 소독 처리'},
+  {n:2, name:'핸드피스 기능 검사', desc:'정상 동작(Piston&Plunger) 확인 및 내부 누수 확인'},
+  {n:3, name:'풋 스위치 기능 검사', desc:'메인보드 & 핸드피스 동작 인식 확인'},
+  {n:4, name:'디스플레이 기능 검사', desc:'화면 출력상태 및 터치 인식 반응 확인'},
+  {n:5, name:'버튼/스위치 기능', desc:'전원 스위치 및 비상 전원 스위치 동작 확인'},
+  {n:7, name:'냉각 시스템', desc:'증류수 보충 여부 및 센서 동작 확인(수위,온도)'},
+  {n:8, name:'AC 코드 외관 검사', desc:'케이블 손상 및 접촉 불량 확인'},
+  {n:9, name:'RFID 기능 검사', desc:'RFID 동작 확인'},
+  {n:10, name:'에러 코드 유무', desc:'테스트 시 상시 확인'},
+  {n:11, name:'SW 업그레이드', desc:'최신 버전 확인 및 펌웨어 업데이트'},
+];
 
-let currentStep=1;
-const symPhotos=[null,null,null];
-const phenPhotos=[null,null,null];
-// 동영상: {data:base64dataURL(video), poster:jpegDataURL, ext:'mp4'}
-let phenVideo=null;
-
-// ===== 다국어(i18n) =====
-let LANG = localStorage.getItem('baz_lang') || '';
-const I18N = {
-  ko: {
-    appTitle:'AS 처리 보고서',
-    h_svcInfo:'AS 접수 정보', l_hospital:'병원명', ph_hospital:'예) 미모드림의원 천호',
-    l_serial:'장비 S/N', ph_serial:'예) BYB018', l_mfg:'제조일', ph_mfg:'예) 2022년 11월',
-    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'지유영', cr_pro:'Pro', cr_role:'CS팀 · 현장 대응 가이드 제작자',
-    cr_ver:'v1.0 · 2026', cr_h1:'초판 제작', cr_v1:'2026 · 최초 배포본', cr_h2:'기반 문서', cr_v2:'CUREJET 장비 대응 매뉴얼',
-    ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동', d_placeholder:'날짜 선택',
-    l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
-    h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
-    l_partReason:'교체 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
-    b_next2:'다음 — 사진 첨부 →',
-    h_symPhotos:'접수 증상 사진 (좌측 · 최대 3컷)', h_phenPhotos:'접수 현상 사진 3컷 + 동영상 1개 (우측)',
-    t_videoHint:'💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.',
-    b_prev:'← 이전', b_next3:'다음 — 원인 분석 →',
-    h_analysis:'고장 원인 분석', l_symptom:'접수 증상',
-    ph_symptom:"예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태.",
-    l_cause:'불량 원인', ph_cause:'예) USB 장치 인식 불량에 따른 동작 불가',
-    l_solution:'해결 방법', ph_solution:'예) RFID Module 내 USB 장치 교환 시 수리 가능',
-    h_opinionFb:'처리 의견 / 피드백', l_opinion:'엔지니어 처리 의견', ph_opinion:'엔지니어 처리 내용 및 의견을 입력하세요.',
-    l_feedback:'고객 피드백', ph_feedback:'고객 피드백 내용을 입력하세요.', b_next4:'다음 — 최종 확인 →',
-    h_reviewInfo:'AS 접수 정보 확인', h_media:'첨부 미디어', l_symptom2:'접수 증상',
-    l_phenMedia:'접수 현상 (사진 3 + 동영상)', h_analysis2:'고장 원인 분석', l_symptom3:'접수 증상',
-    l_cause2:'불량 원인', l_solution2:'해결 방법', b_generate:'PPT 생성 및 다운로드',
-    t_done:'보고서가 완성되었습니다', t_doneSub:'AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.',
-    b_redown:'📥 다시 다운로드', b_share:'📤 PPT 파일 공유 (카카오톡 등)',
-    b_copy:'📋 보고서 내용 복사', b_print:'🖨️ 인쇄 / PDF 저장', b_restart:'새 보고서 작성',
-    sl_sym:'증상', sl_phen:'현상', sl_photo:'사진', sl_video:'동영상', sl_tap:'탭하여 추가',
-    sl_conv:'변환 중...', sl_done:'등록됨', sl_replace:'교체하려면 탭', sl_proc:'처리 중...', sl_replaceMB:'교체하려면 탭',
-    sh_pc:'PC에서는 공유가 제한됩니다.\n[다시 다운로드] 후 파일을 직접 첨부해 전송해주세요.', sh_err:'공유 중 오류가 발생했습니다.\n다운로드 후 파일을 직접 첨부해주세요.', sh_text:'BAZ BIOMEDIC 필드 서비스 보고서',
-    l_symptomMain:'접수 증상',
-    steps:['접수 정보 입력','사진/영상 첨부','원인 분석','최종 확인'], done:'완료',
-    langBtn:'EN',
-    // PPT
-    p_title:'AS  처리 현황', p_topicDefault:'AS 처리 보고서', p_parts:'내부 수리 부품',
-    p_analysis:'고장 원인 분석', p_cause:'원  인', p_solution:'해결', p_opinion:'엔지니어 처리 의견',
-    p_opinionPh:'엔지니어 처리 내용 및 의견을 여기에 작성하세요.', p_svcInfo:'AS 접수 정보',
-    p_rowHospital:'병  원  명', p_rowSerial:'장비 S/N (제조일)', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'요청사항', p_rowDate:'발생 일자', p_rowEng:'담  당  자', r_part:'교체 부품',
-    p_phen:'접수 현상 (사진/영상)', p_video:'동영상', p_feedback:'고객 피드백',
-    p_feedbackPh:'고객 피드백 내용을 여기에 작성하세요.', p_photo:'사진', p_fileName:'AS_처리_보고서',
-    val_req:(f)=>`"${f}"을(를) 입력해주세요.`, val_symptom:'접수 증상을 입력해주세요.',
-    val_cause:'불량 원인을 입력해주세요.', val_solution:'해결 방법을 입력해주세요.',
-  },
-  en: {
-    appTitle:'Field Service Report',
-    h_svcInfo:'Service Request', l_hospital:'Site / Account', ph_hospital:'e.g. Mimo Dream Clinic',
-    l_serial:'Device S/N', ph_serial:'e.g. BYB018', l_mfg:'Mfg. Date', ph_mfg:'e.g. Nov 2022',
-    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'JI YUYOUNG', cr_pro:'Pro', cr_role:'CS Team · Field Response Guide Author',
-    cr_ver:'v1.0 · 2026', cr_h1:'First Edition', cr_v1:'2026 · Initial release', cr_h2:'Base Document', cr_v2:'CUREJET Device Response Manual',
-    ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name', d_placeholder:'Select date',
-    l_req:'Reported Issue', ph_req:'e.g. Nozzle not recognized',
-    h_parts:'Parts Replaced', l_part:'Part', ph_part:"e.g. RFID Module A'ssy",
-    l_partReason:'Reason', ph_partReason:'e.g. RFID recognition failure',
-    b_next2:'Next — Photos →',
-    h_symPhotos:'Symptom Photos (left · up to 3)', h_phenPhotos:'On-site Photos 3 + Video 1 (right)',
-    t_videoHint:'💡 Video is embedded as playable in the PPT. Keep it under 30 seconds to limit file size.',
-    b_prev:'← Back', b_next3:'Next — Diagnosis →',
-    h_analysis:'Diagnosis', l_symptom:'Symptom Found',
-    ph_symptom:"e.g. 'Can't find RFID the Device' on screen; nozzle not recognized",
-    l_cause:'Root Cause', ph_cause:'e.g. USB device recognition failure',
-    l_solution:'Action Taken', ph_solution:'e.g. Replaced USB device in RFID module',
-    h_opinionFb:'Engineer Comments / Feedback', l_opinion:'Engineer Comments', ph_opinion:'Your findings, work performed, follow-up needed',
-    l_feedback:'Customer Feedback', ph_feedback:'What the customer told you', b_next4:'Next — Review →',
-    h_reviewInfo:'Review', h_media:'Attached Media', l_symptom2:'Symptom',
-    l_phenMedia:'On-site (3 Photos + Video)', h_analysis2:'Diagnosis', l_symptom3:'Symptom Found',
-    l_cause2:'Root Cause', l_solution2:'Action Taken', b_generate:'Generate & Download PPT',
-    t_done:'Report ready', t_doneSub:'Your field service report PPT has been generated.<br>On iPhone, save it from the Files app or the share sheet.',
-    b_redown:'📥 Download Again', b_share:'📤 Share PPT File',
-    b_copy:'📋 Copy Report Text', b_print:'🖨️ Print / Save as PDF', b_restart:'New Report',
-    sl_sym:'Symptom', sl_phen:'On-site', sl_photo:'Photo', sl_video:'Video', sl_tap:'Tap to add',
-    sl_conv:'Converting...', sl_done:'Added', sl_replace:'Tap to replace', sl_proc:'Processing...', sl_replaceMB:'Tap to replace',
-    sh_pc:'Sharing is limited on PC.\nPlease use [Download Again] and attach the file manually.', sh_err:'A sharing error occurred.\nPlease download and attach the file manually.', sh_text:'BAZ BIOMEDIC Field Service Report',
-    l_symptomMain:'Symptom Found',
-    steps:['Request','Photos / Video','Diagnosis','Review'], done:'Done',
-    langBtn:'日本語',
-    // PPT
-    p_title:'Field Service Status', p_topicDefault:'Field Service Report', p_parts:'Parts Replaced',
-    p_analysis:'Diagnosis', p_cause:'Cause', p_solution:'Action', p_opinion:'Engineer Comments',
-    p_opinionPh:'Your findings, work performed, follow-up needed', p_svcInfo:'Service Request',
-    p_rowHospital:'Site', p_rowSerial:'Device S/N (Mfg.)', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'Reported Issue', p_rowDate:'Service Date', p_rowEng:'Engineer', r_part:'Parts Replaced',
-    p_phen:'On-site (Photo/Video)', p_video:'Video', p_feedback:'Customer Feedback',
-    p_feedbackPh:'What the customer told you', p_photo:'Photo', p_fileName:'Field_Service_Report',
-    val_req:(f)=>`Please enter "${f}".`, val_symptom:'Please enter the symptom found.',
-    val_cause:'Please enter the root cause.', val_solution:'Please enter the action taken.',
-  },
-  ja: {
-    appTitle:'フィールドサービス報告書',
-    h_svcInfo:'受付情報', l_hospital:'施設名', ph_hospital:'例) ミモドリームクリニック',
-    l_serial:'装置S/N', ph_serial:'例) BYB018', l_mfg:'製造年月', ph_mfg:'例) 2022年11月',
-    cr_team:'BAZ BIOMEDIC · CS TEAM', cr_name:'ジ・ユヨン', cr_pro:'Pro', cr_role:'CSチーム · 現場対応ガイド制作者',
-    cr_ver:'v1.0 · 2026', cr_h1:'初版制作', cr_v1:'2026 · 初回配布版', cr_h2:'基盤ドキュメント', cr_v2:'CUREJET装置対応マニュアル',
-    ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力', d_placeholder:'日付を選択',
-    l_req:'申告内容', ph_req:'例) ノズル認識不可',
-    h_parts:'交換部品', l_part:'部品名', ph_part:"例) RFID Module A'ssy",
-    l_partReason:'交換理由', ph_partReason:'例) RFID認識機能の喪失による交換',
-    b_next2:'次へ — 写真添付 →',
-    h_symPhotos:'症状写真（左・最大3枚）', h_phenPhotos:'現場写真3枚 + 動画1本（右）',
-    t_videoHint:'💡 動画は再生可能な形式でPPTに埋め込まれます。ファイルサイズを抑えるため30秒以内を推奨します。',
-    b_prev:'← 戻る', b_next3:'次へ — 診断 →',
-    h_analysis:'故障診断', l_symptom:'確認した症状',
-    ph_symptom:"例) 画面に「Can't find RFID the Device」表示、ノズル認識不可",
-    l_cause:'原因', ph_cause:'例) USBデバイス認識不良',
-    l_solution:'対応内容', ph_solution:'例) RFIDモジュール内のUSBデバイスを交換',
-    h_opinionFb:'担当者コメント / フィードバック', l_opinion:'担当者コメント', ph_opinion:'所見、実施作業、フォローアップ事項を記入',
-    l_feedback:'顧客フィードバック', ph_feedback:'顧客から聞いた内容を記入', b_next4:'次へ — 最終確認 →',
-    h_reviewInfo:'内容確認', h_media:'添付メディア', l_symptom2:'症状',
-    l_phenMedia:'現場（写真3 + 動画）', h_analysis2:'故障診断', l_symptom3:'確認した症状',
-    l_cause2:'原因', l_solution2:'対応内容', b_generate:'PPT生成・ダウンロード',
-    t_done:'報告書が完成しました', t_doneSub:'フィールドサービス報告書のPPTを生成しました。<br>iPhoneでは「ファイル」アプリまたは共有シートから保存してください。',
-    b_redown:'📥 再ダウンロード', b_share:'📤 PPTファイルを共有',
-    b_copy:'📋 報告内容をコピー', b_print:'🖨️ 印刷 / PDF保存', b_restart:'新規作成',
-    sl_sym:'症状', sl_phen:'現場', sl_photo:'写真', sl_video:'動画', sl_tap:'タップで追加',
-    sl_conv:'変換中...', sl_done:'登録済み', sl_replace:'タップで変更', sl_proc:'処理中...', sl_replaceMB:'タップで変更',
-    sh_pc:'PCでは共有が制限されます。\n[再ダウンロード] 後、ファイルを手動で添付してください。', sh_err:'共有中にエラーが発生しました。\nダウンロード後、ファイルを手動で添付してください。', sh_text:'BAZ BIOMEDIC フィールドサービス報告書',
-    l_symptomMain:'確認した症状',
-    steps:['受付情報','写真・動画','診断','確認'], done:'完了',
-    langBtn:'한국어',
-    // PPT
-    p_title:'フィールドサービス報告', p_topicDefault:'フィールドサービス報告書', p_parts:'交換部品',
-    p_analysis:'故障診断', p_cause:'原因', p_solution:'対応', p_opinion:'担当者コメント',
-    p_opinionPh:'所見、実施作業、フォローアップ事項を記入', p_svcInfo:'受付情報',
-    p_rowHospital:'施設名', p_rowSerial:'装置S/N（製造）', p_rowVer:'UI/FW/H.P Ver',
-    p_rowReq:'申告内容', p_rowDate:'対応日', p_rowEng:'担当者', r_part:'交換部品',
-    p_phen:'現場（写真/動画）', p_video:'動画', p_feedback:'顧客フィードバック',
-    p_feedbackPh:'顧客から聞いた内容を記入', p_photo:'写真', p_fileName:'Field_Service_Report',
-    val_req:(f)=>`「${f}」を入力してください。`, val_symptom:'確認した症状を入力してください。',
-    val_cause:'原因を入力してください。', val_solution:'対応内容を入力してください。',
-  }
+// 상태 저장
+const state = {
+  pay:'', types:new Set(), results:{}, memos:{},
 };
-function t(key){ return (I18N[LANG]||I18N.ko)[key]; }
 
-function applyLang(){
-  const dict = I18N[LANG]||I18N.ko;
-  document.documentElement.lang = LANG||'ko';
-  const dEl=document.getElementById('issueDate'); if(dEl) dEl.setAttribute('lang', LANG||'ko');
-  document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const k=el.getAttribute('data-i18n'); if(dict[k]!==undefined) el.textContent=dict[k];
-  });
-  document.querySelectorAll('[data-i18n-html]').forEach(el=>{
-    const k=el.getAttribute('data-i18n-html'); if(dict[k]!==undefined) el.innerHTML=dict[k];
-  });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
-    const k=el.getAttribute('data-i18n-ph'); if(dict[k]!==undefined) el.setAttribute('placeholder',dict[k]);
-  });
-  // 언어 스위치: 현재 언어 강조
-  document.querySelectorAll('#langSwitch .lang-opt').forEach(b=>{
-    const active = b.getAttribute('data-setlang')===LANG;
-    b.style.background = active ? '#CADCFC' : 'transparent';
-    b.style.color = active ? '#1B2F5E' : '#CADCFC';
-  });
-  // 태그 버튼: 언어별 라벨/삽입값 전환
-  document.querySelectorAll('.tag[data-label-ko]').forEach(tg=>{
-    if(LANG==='en'){
-      tg.textContent=tg.getAttribute('data-label-en');
-      tg.setAttribute('data-text', tg.getAttribute('data-text-en'));
-    }else if(LANG==='ja'){
-      tg.textContent=tg.getAttribute('data-label-ja');
-      tg.setAttribute('data-text', tg.getAttribute('data-text-ja'));
-    }else{
-      tg.textContent=tg.getAttribute('data-label-ko');
-      tg.setAttribute('data-text', tg.getAttribute('data-text-ko'));
-    }
-  });
-  updDateDisplay();
-  updateIndicator();
-}
-function setLang(l){ LANG=l; localStorage.setItem('baz_lang',l); applyLang(); }
-function toggleLang(){ const order=['ko','en','ja']; setLang(order[(order.indexOf(LANG)+1)%order.length]); }
-
-const STEP_PROGRESS=['14%','38%','65%','90%'];
-function stepLabels(){ return (I18N[LANG]||I18N.ko).steps; }
-function stepDone(){ return (I18N[LANG]||I18N.ko).done; }
-
-function buildPhotoSlots(){
-  const symGrid=document.getElementById('symGrid');
-  const phenGrid=document.getElementById('phenGrid');
-  symGrid.innerHTML=''; phenGrid.innerHTML='';
-  for(let i=0;i<3;i++){ symGrid.appendChild(makeSlot('sym',i)); }
-  for(let i=0;i<3;i++){ phenGrid.appendChild(makeSlot('phen',i)); }
-  phenGrid.appendChild(makeVideoSlot());
-}
-function makeSlot(kind,idx){
-  const wrap=document.createElement('div'); wrap.className='photo-slot';
-  wrap.innerHTML=`
-    <div class="slot-label"><span data-i18n="${kind==='sym'?'sl_sym':'sl_phen'}">${kind==='sym'?t('sl_sym'):t('sl_phen')}</span> ${idx+1}</div>
-    <div class="photo-zone" id="${kind}Zone${idx}">
-      <input type="file" accept="image/*" id="${kind}File${idx}">
-      <div class="icon">📸</div>
-      <div class="primary-text" data-i18n="sl_photo" style="font-size:11px;">${t('sl_photo')}</div>
-      <div class="hint-text" data-i18n="sl_tap">${t('sl_tap')}</div>
+// ===== 점검 항목 렌더 =====
+function buildInspList(){
+  const wrap=document.getElementById('inspList');
+  wrap.innerHTML = INSP_ITEMS.map(it=>`
+    <div class="insp-item" data-n="${it.n}">
+      <div class="insp-head">
+        <div class="insp-num">${it.n}</div>
+        <div class="insp-titles">
+          <div class="insp-name">${it.name}</div>
+          <div class="insp-desc">${it.desc}</div>
+        </div>
+      </div>
+      <div class="insp-body">
+        <div class="result-group">
+          <button type="button" class="result-btn" data-r="정상" data-n="${it.n}">정상</button>
+          <button type="button" class="result-btn" data-r="수리" data-n="${it.n}">수리</button>
+          <button type="button" class="result-btn" data-r="교체" data-n="${it.n}">교체</button>
+        </div>
+        <input type="text" class="insp-memo" data-n="${it.n}" placeholder="메모 (선택)" maxlength="40">
+      </div>
     </div>
-    <div class="photo-preview" id="${kind}Prev${idx}">
-      <img id="${kind}Img${idx}" src="" alt="">
-      <button type="button" class="remove-btn" data-remove="${kind}:${idx}">✕</button>
-    </div>`;
-  const inp=wrap.querySelector('input[type="file"]');
-  inp.addEventListener('change',(e)=>handlePhoto(kind,idx,e));
-  return wrap;
-}
-function makeVideoSlot(){
-  const wrap=document.createElement('div'); wrap.className='photo-slot';
-  wrap.innerHTML=`
-    <div class="slot-label video">🎬 <span data-i18n="sl_video">${t('sl_video')}</span></div>
-    <div class="photo-zone video-zone" id="videoZone">
-      <input type="file" accept="video/*" id="videoFile">
-      <div class="icon">🎬</div>
-      <div class="primary-text" data-i18n="sl_video" style="font-size:11px;">${t('sl_video')}</div>
-      <div class="hint-text" data-i18n="sl_tap">${t('sl_tap')}</div>
-    </div>
-    <div class="photo-preview" id="videoPrev">
-      <video id="videoEl" src="" muted playsinline></video>
-      <button type="button" class="remove-btn" data-remove="video:0">✕</button>
-    </div>`;
-  const inp=wrap.querySelector('input[type="file"]');
-  inp.addEventListener('change',(e)=>handleVideo(e));
-  return wrap;
+  `).join('');
 }
 
-function goStep(n){
-  if(n>currentStep){ if(!validateStep(currentStep)) return; if(n===4) buildPreview(); }
-  document.getElementById('step'+currentStep).classList.remove('active');
-  currentStep=n;
-  document.getElementById('step'+n).classList.add('active');
-  updateIndicator();
-  window.scrollTo({top:0,behavior:'smooth'});
+// ===== 이벤트: 구분 체크 =====
+document.getElementById('payGroup').addEventListener('click', e=>{
+  const c=e.target.closest('[data-pay]'); if(!c) return;
+  document.querySelectorAll('#payGroup .chk').forEach(x=>x.classList.remove('on'));
+  c.classList.add('on'); state.pay=c.getAttribute('data-pay');
+});
+document.getElementById('typeGroup').addEventListener('click', e=>{
+  const c=e.target.closest('[data-type]'); if(!c) return;
+  const t=c.getAttribute('data-type');
+  if(state.types.has(t)){ state.types.delete(t); c.classList.remove('on'); }
+  else{ state.types.add(t); c.classList.add('on'); }
+});
+
+// ===== 이벤트: 점검 결과/메모 =====
+document.getElementById('inspList').addEventListener('click', e=>{
+  const b=e.target.closest('.result-btn'); if(!b) return;
+  const n=b.getAttribute('data-n'), r=b.getAttribute('data-r');
+  const grp=b.closest('.result-group');
+  grp.querySelectorAll('.result-btn').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); state.results[n]=r;
+});
+document.getElementById('inspList').addEventListener('input', e=>{
+  const m=e.target.closest('.insp-memo'); if(!m) return;
+  state.memos[m.getAttribute('data-n')]=m.value;
+});
+
+// ===== 글자수 카운터 =====
+function bindCounter(id, ccId){
+  const el=document.getElementById(id), cc=document.getElementById(ccId);
+  el.addEventListener('input', ()=>{ cc.textContent=el.value.length; });
 }
-function updateIndicator(){
-  for(let i=1;i<=4;i++){const d=document.getElementById('dot'+i);d.classList.remove('active','done');
-    if(i<currentStep)d.classList.add('done');else if(i===currentStep)d.classList.add('active');}
-  for(let i=1;i<=3;i++){document.getElementById('con'+i).classList.toggle('done',i<currentStep);}
-  if(currentStep<=4){document.getElementById('stepLabel').textContent=stepLabels()[currentStep-1];
-    document.getElementById('progressFill').style.width=STEP_PROGRESS[currentStep-1];}
-  else{document.getElementById('stepLabel').textContent=stepDone();
-    document.getElementById('progressFill').style.width='100%';}
+bindCounter('actionDetail','cc_action');
+bindCounter('recommend','cc_recommend');
+
+// ===== 서명 캔버스 =====
+function setupSignature(canvasId, boxId, placeholderId){
+  const canvas=document.getElementById(canvasId);
+  const box=document.getElementById(boxId);
+  const ph=document.getElementById(placeholderId);
+  const ctx=canvas.getContext('2d');
+  let drawing=false, hasInk=false, lastX=0, lastY=0;
+
+  function resize(){
+    const r=box.getBoundingClientRect();
+    const dpr=window.devicePixelRatio||1;
+    // 기존 그림 보존
+    const prev=hasInk?canvas.toDataURL():null;
+    canvas.width=r.width*dpr; canvas.height=r.height*dpr;
+    ctx.scale(dpr,dpr);
+    ctx.strokeStyle='#1B2F5E'; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round';
+    if(prev){ const img=new Image(); img.onload=()=>ctx.drawImage(img,0,0,r.width,r.height); img.src=prev; }
+  }
+  setTimeout(resize, 50);
+
+  function pos(e){
+    const r=canvas.getBoundingClientRect();
+    const t=e.touches?e.touches[0]:e;
+    return {x:t.clientX-r.left, y:t.clientY-r.top};
+  }
+  function start(e){ e.preventDefault(); drawing=true; const p=pos(e); lastX=p.x; lastY=p.y;
+    if(!hasInk){ hasInk=true; ph.style.display='none'; } }
+  function move(e){ if(!drawing) return; e.preventDefault(); const p=pos(e);
+    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(p.x,p.y); ctx.stroke(); lastX=p.x; lastY=p.y; }
+  function end(){ drawing=false; }
+
+  canvas.addEventListener('mousedown',start); canvas.addEventListener('mousemove',move);
+  window.addEventListener('mouseup',end);
+  canvas.addEventListener('touchstart',start,{passive:false});
+  canvas.addEventListener('touchmove',move,{passive:false});
+  canvas.addEventListener('touchend',end);
+
+  return {
+    clear:()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); hasInk=false; ph.style.display='flex'; },
+    isEmpty:()=>!hasInk,
+    dataURL:()=>hasInk?canvas.toDataURL('image/png'):null
+  };
 }
-function validateStep(step){
-  if(step===1){
-    const req=['hospital','serialNo','issueDate','engineer'];
-    const labels=[t('l_hospital'),t('l_serial'),t('l_date'),t('l_eng')];
-    for(let i=0;i<req.length;i++){if(!document.getElementById(req[i]).value.trim()){
-      alert(t('val_req')(labels[i]));document.getElementById(req[i]).focus();return false;}}
-  }
-  if(step===3){
-    if(!v('symptom')){alert(t('val_symptom'));return false;}
-    if(!v('cause')){alert(t('val_cause'));return false;}
-    if(!v('solution')){alert(t('val_solution'));return false;}
-  }
+const csSig=setupSignature('csSig','csSigBox','csPlaceholder');
+const hsSig=setupSignature('hsSig','hsSigBox','hsPlaceholder');
+document.querySelectorAll('.sig-clear').forEach(b=>{
+  b.addEventListener('click',()=>{ b.getAttribute('data-clear')==='cs'?csSig.clear():hsSig.clear(); });
+});
+
+// ===== 날짜 기본값: 오늘 =====
+const today=new Date().toISOString().slice(0,10);
+document.getElementById('receiveDate').value=today;
+document.getElementById('inspectDate').value=today;
+
+// ===== 유틸 =====
+function v(id){ return (document.getElementById(id)?.value||'').trim(); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1900); }
+function esc(s){ return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function fmtDate(d){ if(!d) return ''; const [y,m,day]=d.split('-'); return `${y}-${m}-${day}`; }
+
+// ===== 검증 =====
+function validate(){
+  if(!state.pay){ showToast('구분(유상/무상)을 선택해주세요'); return false; }
+  if(!v('receiveDate')){ showToast('접수 일자를 입력해주세요'); return false; }
+  if(!v('serialNo')){ showToast('장비 S/N을 입력해주세요'); window.scrollTo({top:0,behavior:'smooth'}); return false; }
+  if(!v('hospital')){ showToast('병원명을 입력해주세요'); window.scrollTo({top:0,behavior:'smooth'}); return false; }
+  if(!v('csName')){ showToast('CS 담당자 이름을 입력해주세요'); return false; }
+  if(csSig.isEmpty()){ showToast('CS 담당자 서명을 입력해주세요'); return false; }
   return true;
 }
 
-const MAX_DIM=1600, JPEG_QUALITY=0.82;
-function fileToJpegDataURL(file){
-  return new Promise((resolve,reject)=>{
-    const url=URL.createObjectURL(file);
-    const img=new Image();
-    img.onload=()=>{
-      let w=img.width,h=img.height;
-      if(Math.max(w,h)>MAX_DIM){const r=MAX_DIM/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
-      const canvas=document.createElement('canvas');
-      canvas.width=w;canvas.height=h;
-      const ctx=canvas.getContext('2d');
-      ctx.fillStyle='#FFFFFF';ctx.fillRect(0,0,w,h);
-      ctx.drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      try{resolve(canvas.toDataURL('image/jpeg',JPEG_QUALITY));}catch(e){reject(e);}
-    };
-    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('이미지를 불러올 수 없습니다. (HEIC인 경우 설정에서 "가장 호환성 높게" 촬영 권장)'));};
-    img.src=url;
-  });
+// ===== PDF용 HTML 양식 생성 =====
+function buildSheetHTML(){
+  const typeStr=[...state.types].join(', ')||'—';
+  const rows=INSP_ITEMS.map(it=>{
+    const r=state.results[it.n]||'';
+    const memo=state.memos[it.n]||'';
+    const mark=(x)=> r===x ? '<span style="color:#1B2F5E;font-weight:900;">■</span>' : '<span style="color:#bbb;">□</span>';
+    return `<tr>
+      <td style="text-align:center;border:1px solid #888;padding:6px 4px;font-size:12px;">${it.n}</td>
+      <td style="border:1px solid #888;padding:6px 8px;font-size:12px;font-weight:700;">${esc(it.name)}</td>
+      <td style="border:1px solid #888;padding:6px 8px;font-size:11px;color:#333;">${esc(it.desc)}</td>
+      <td style="text-align:center;border:1px solid #888;padding:6px 4px;font-size:11.5px;white-space:nowrap;">${mark('정상')} 정상 &nbsp;${mark('수리')} 수리 &nbsp;${mark('교체')} 교체</td>
+      <td style="border:1px solid #888;padding:6px 8px;font-size:11px;">${esc(memo)}</td>
+    </tr>`;
+  }).join('');
+
+  const payChk=(x)=> state.pay===x ? '■' : '□';
+  const typeChk=(x)=> state.types.has(x) ? '■' : '□';
+
+  const csSigImg=csSig.dataURL();
+  const hsSigImg=hsSig.dataURL();
+
+  return `
+  <div style="width:794px;padding:32px 30px;font-family:'Noto Sans KR',sans-serif;color:#1a1a2e;background:#fff;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:22px;font-weight:900;font-family:Georgia,serif;color:#1B2F5E;">ba<span style="color:#4E9CC8;">z</span> <span style="font-size:11px;color:#888;font-family:'Noto Sans KR';font-weight:500;">BIOMEDIC</span></div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:4px;">정기 검검 내역서</div>
+      <div style="width:90px;"></div>
+    </div>
+
+    <!-- 상단 정보 표 -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <tr>
+        <td style="width:13%;background:#E8E8E8;border:1px solid #888;padding:8px;font-size:12px;font-weight:700;text-align:center;">구분</td>
+        <td style="border:1px solid #888;padding:8px 12px;font-size:12px;">
+          ${payChk('유상')} 유상 &nbsp;&nbsp; ${payChk('무상')} 무상<br>
+          <span style="display:inline-block;margin-top:4px;">${typeChk('A/S')} A/S &nbsp; ${typeChk('장비 점검')} 장비 점검 &nbsp; ${typeChk('장비 교체')} 장비 교체 &nbsp; ${typeChk('장비 업그레이드')} 장비 업그레이드</span>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:8px;font-size:12px;font-weight:700;text-align:center;">접수 일자</td>
+        <td style="border:1px solid #888;padding:8px 12px;font-size:12px;">
+          <table style="width:100%;border:none;"><tr style="border:none;">
+            <td style="border:none;padding:0;">${fmtDate(v('receiveDate'))}</td>
+            <td style="border:none;padding:0;width:30%;text-align:right;color:#555;font-weight:700;">접수처: </td>
+            <td style="border:none;padding:0;width:30%;">${esc(v('receiver'))||'—'}</td>
+          </tr></table>
+        </td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:8px;font-size:12px;font-weight:700;text-align:center;">제품명 / S/N</td>
+        <td style="border:1px solid #888;padding:8px 12px;font-size:12px;">${esc(v('product'))||'—'} &nbsp;/&nbsp; <b>${esc(v('serialNo'))}</b></td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:8px;font-size:12px;font-weight:700;text-align:center;">병원명</td>
+        <td style="border:1px solid #888;padding:8px 12px;font-size:12px;font-weight:700;">${esc(v('hospital'))}</td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:8px;font-size:12px;font-weight:700;text-align:center;">구독 / Ver.</td>
+        <td style="border:1px solid #888;padding:8px 12px;font-size:12px;">${esc(v('subscription'))||'—'} &nbsp;/&nbsp; ${esc(v('version'))||'—'}</td>
+      </tr>
+    </table>
+
+    <!-- 점검 항목 표 -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <thead><tr style="background:#1B2F5E;color:#fff;">
+        <th style="border:1px solid #888;padding:7px 4px;font-size:11.5px;width:6%;">번호</th>
+        <th style="border:1px solid #888;padding:7px 4px;font-size:11.5px;width:18%;">점검 항목</th>
+        <th style="border:1px solid #888;padding:7px 4px;font-size:11.5px;width:30%;">점검 내용 상세</th>
+        <th style="border:1px solid #888;padding:7px 4px;font-size:11.5px;width:26%;">점검 결과</th>
+        <th style="border:1px solid #888;padding:7px 4px;font-size:11.5px;width:20%;">비고</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+
+    <!-- 조치 / 서명 -->
+    <table style="width:100%;border-collapse:collapse;">
+      <tr>
+        <td style="width:13%;background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;vertical-align:top;">조치 내용</td>
+        <td colspan="3" style="border:1px solid #888;padding:10px 12px;font-size:12px;min-height:48px;vertical-align:top;line-height:1.6;">${esc(v('actionDetail')).replace(/\n/g,'<br>')||'—'}</td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;vertical-align:top;">권고 사항</td>
+        <td colspan="3" style="border:1px solid #888;padding:10px 12px;font-size:12px;vertical-align:top;line-height:1.6;">${esc(v('recommend')).replace(/\n/g,'<br>')||'—'}</td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">점검 일자</td>
+        <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(v('inspectDate'))||'—'}</td>
+        <td style="width:13%;background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">교환품 / 비용</td>
+        <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${esc(v('replacedPart'))||'—'} ${v('cost')?'/ '+esc(v('cost'))+'원':''}</td>
+      </tr>
+      <tr>
+        <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">희망 점검<br>예정일</td>
+        <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(v('nextDate'))||'—'}</td>
+        <td colspan="2" style="border:1px solid #888;padding:0;">
+          <table style="width:100%;border-collapse:collapse;height:100%;">
+            <tr>
+              <td style="width:50%;border-right:1px solid #888;border-bottom:1px solid #888;padding:6px;font-size:11px;font-weight:700;text-align:center;background:#F4F4F4;">CS 담당자</td>
+              <td style="width:50%;border-bottom:1px solid #888;padding:6px;font-size:11px;font-weight:700;text-align:center;background:#F4F4F4;">병원 담당자</td>
+            </tr>
+            <tr>
+              <td style="border-right:1px solid #888;padding:4px;text-align:center;height:60px;vertical-align:middle;">
+                <div style="font-size:11px;color:#333;">${esc(v('csName'))}</div>
+                ${csSigImg?`<img src="${csSigImg}" style="max-height:42px;max-width:90%;">`:''}
+              </td>
+              <td style="padding:4px;text-align:center;height:60px;vertical-align:middle;">
+                <div style="font-size:11px;color:#333;">${esc(v('hospitalName'))||''}</div>
+                ${hsSigImg?`<img src="${hsSigImg}" style="max-height:42px;max-width:90%;">`:''}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div style="margin-top:14px;text-align:right;font-size:10px;color:#999;">BAZ BIOMEDIC · CS TEAM &nbsp;|&nbsp; 정기 검검 내역서</div>
+  </div>`;
 }
 
-async function handlePhoto(kind,idx,event){
-  const file=event.target.files[0]; if(!file) return;
-  const zone=document.getElementById(`${kind}Zone${idx}`);
-  zone.querySelector('.icon').textContent='⏳';
-  zone.querySelector('.hint-text').textContent=t('sl_conv');
-  try{
-    const jpeg=await fileToJpegDataURL(file);
-    (kind==='sym'?symPhotos:phenPhotos)[idx]=jpeg;
-    document.getElementById(`${kind}Img${idx}`).src=jpeg;
-    document.getElementById(`${kind}Prev${idx}`).style.display='block';
-    zone.querySelector('.icon').textContent='✅';
-    zone.querySelector('.primary-text').textContent=t('sl_done');
-    zone.querySelector('.hint-text').textContent=t('sl_replace');
-  }catch(e){
-    alert('사진 처리 실패: '+e.message);
-    zone.querySelector('.icon').textContent='📸';
-    zone.querySelector('.primary-text').textContent=t('sl_photo');
-    zone.querySelector('.hint-text').textContent=t('sl_tap');
-  }
-}
+// ===== PDF 생성 =====
+let _lastPdf=null, _lastFname='';
+async function generatePDF(preview){
+  if(!validate()) return;
+  const loading=document.getElementById('loading');
+  document.getElementById('loadingMsg').textContent = preview?'미리보기 생성 중...':'PDF 생성 중...';
+  loading.classList.add('show');
+  await new Promise(r=>setTimeout(r,50));
 
-// 동영상 처리: base64로 읽고 + 첫 프레임 포스터 캡처
-function fileToDataURL(file){
-  return new Promise((resolve,reject)=>{
-    const fr=new FileReader();
-    fr.onload=()=>resolve(fr.result);
-    fr.onerror=()=>reject(new Error('파일 읽기 실패'));
-    fr.readAsDataURL(file);
-  });
-}
-function captureVideoPoster(file){
-  return new Promise((resolve)=>{
-    const url=URL.createObjectURL(file);
-    const video=document.createElement('video');
-    video.muted=true; video.playsInline=true; video.preload='metadata'; video.src=url;
-    let done=false;
-    const finish=(poster)=>{ if(done)return; done=true; URL.revokeObjectURL(url); resolve(poster); };
-    video.onloadeddata=()=>{ try{ video.currentTime=Math.min(0.1, (video.duration||1)/2); }catch(e){ grab(); } };
-    video.onseeked=grab;
-    video.onerror=()=>finish(null);
-    function grab(){
-      try{
-        let w=video.videoWidth||320,h=video.videoHeight||240;
-        if(Math.max(w,h)>MAX_DIM){const r=MAX_DIM/Math.max(w,h);w=Math.round(w*r);h=Math.round(h*r);}
-        const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-        const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);
-        ctx.drawImage(video,0,0,w,h);
-        finish(canvas.toDataURL('image/jpeg',0.8));
-      }catch(e){ finish(null); }
-    }
-    setTimeout(()=>{ if(!done) grab(); },2500); // iOS seek 안될 때 폴백
-  });
-}
-async function handleVideo(event){
-  const file=event.target.files[0]; if(!file) return;
-  const zone=document.getElementById('videoZone');
-  zone.querySelector('.icon').textContent='⏳';
-  zone.querySelector('.hint-text').textContent=t('sl_proc');
   try{
-    const sizeMB=file.size/1048576;
-    if(sizeMB>60){
-      if(!confirm(`동영상 용량이 ${sizeMB.toFixed(0)}MB입니다. PPT 파일이 매우 커지고 기기에서 느려질 수 있습니다. 계속할까요?`)){
-        event.target.value='';
-        zone.querySelector('.icon').textContent='🎬';
-        zone.querySelector('.hint-text').textContent=t('sl_tap');
-        return;
+    const sheet=document.getElementById('pdfSheet');
+    sheet.innerHTML=buildSheetHTML();
+    await new Promise(r=>setTimeout(r,120)); // 이미지 로드 대기
+
+    const target=sheet.firstElementChild;
+    const canvas=await html2canvas(target,{scale:2,backgroundColor:'#fff',useCORS:true,logging:false,
+      width:794, windowWidth:794});
+    const img=canvas.toDataURL('image/jpeg',0.92);
+
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pw=210, ph=pw*canvas.height/canvas.width;
+    const pageH=297;
+    if(ph<=pageH){
+      pdf.addImage(img,'JPEG',0,0,pw,ph);
+    }else{
+      // 여러 페이지 분할
+      let remaining=ph, pos=0;
+      while(remaining>0){
+        pdf.addImage(img,'JPEG',0,pos,pw,ph);
+        remaining-=pageH;
+        if(remaining>0){ pdf.addPage(); pos-=pageH; }
       }
     }
-    const dataURL=await fileToDataURL(file);
-    const poster=await captureVideoPoster(file);
-    let ext=(file.name.split('.').pop()||'mp4').toLowerCase();
-    if(!['mp4','mov','m4v','webm'].includes(ext)) ext='mp4';
-    phenVideo={ data:dataURL, poster:poster, ext:ext, sizeMB:sizeMB };
-    const vEl=document.getElementById('videoEl');
-    vEl.src=dataURL; vEl.setAttribute('controls','');
-    document.getElementById('videoPrev').style.display='block';
-    zone.querySelector('.icon').textContent='✅';
-    zone.querySelector('.primary-text').textContent=t('sl_done');
-    zone.querySelector('.hint-text').textContent=`${sizeMB.toFixed(1)}MB · ${t('sl_replaceMB')}`;
-  }catch(e){
-    alert('동영상 처리 실패: '+e.message);
-    zone.querySelector('.icon').textContent='🎬';
-    zone.querySelector('.primary-text').textContent=t('sl_video');
-    zone.querySelector('.hint-text').textContent=t('sl_tap');
-  }
-}
 
-function removePhoto(kind,idx){
-  if(kind==='video'){
-    phenVideo=null;
-    const vEl=document.getElementById('videoEl'); vEl.removeAttribute('src'); vEl.load&&vEl.load();
-    document.getElementById('videoPrev').style.display='none';
-    const zone=document.getElementById('videoZone');
-    zone.querySelector('input').value='';
-    zone.querySelector('.icon').textContent='🎬';
-    zone.querySelector('.primary-text').textContent=t('sl_video');
-    zone.querySelector('.hint-text').textContent=t('sl_tap');
-    return;
-  }
-  (kind==='sym'?symPhotos:phenPhotos)[idx]=null;
-  document.getElementById(`${kind}Img${idx}`).src='';
-  document.getElementById(`${kind}Prev${idx}`).style.display='none';
-  const zone=document.getElementById(`${kind}Zone${idx}`);
-  zone.querySelector('input').value='';
-  zone.querySelector('.icon').textContent='📸';
-  zone.querySelector('.primary-text').textContent=t('sl_photo');
-  zone.querySelector('.hint-text').textContent=t('sl_tap');
-}
-function appendText(fieldId,text){
-  const el=document.getElementById(fieldId);const cur=el.value.trim();
-  el.value=cur?cur+'\n'+text:text;el.focus();
-}
-function buildPreview(){
-  const mfg=v('mfgDate')?'  ('+v('mfgDate')+')':'';
-  const rows=[
-    [t('l_hospital'),v('hospital')],[t('l_serial'),v('serialNo')+mfg],
-    [t('p_rowVer'),v('version')||'—'],[t('l_req'),v('requestDetail')||'—'],
-    [t('l_date'),v('issueDate')],[t('l_eng'),v('engineer')],
-    [t('r_part'),(v('partName')||'—')+(v('partReason')?'\n'+v('partReason'):'')],
-  ];
-  document.getElementById('previewInfoTable').innerHTML=
-    rows.map(([k,val])=>`<tr><td>${k}</td><td>${val.replace(/\n/g,'<br>')}</td></tr>`).join('');
-  const symG=document.getElementById('previewSymPhotos');
-  const phenG=document.getElementById('previewPhenPhotos');
-  const hasMedia=symPhotos.concat(phenPhotos).some(p=>p)||phenVideo;
-  if(hasMedia){
-    symG.innerHTML=symPhotos.map(p=>p?`<img src="${p}">`:`<div style="height:90px;border-radius:8px;background:var(--gray-bg);"></div>`).join('');
-    let ph=phenPhotos.map(p=>p?`<img src="${p}">`:`<div style="height:90px;border-radius:8px;background:var(--gray-bg);"></div>`).join('');
-    ph+= phenVideo
-      ? `<video src="${phenVideo.data}" controls muted playsinline style="background:#000;"></video>`
-      : `<div style="height:90px;border-radius:8px;background:var(--gray-bg);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-muted);">영상 없음</div>`;
-    phenG.innerHTML=ph;
-    document.getElementById('previewPhotoCard').style.display='block';
-  }else document.getElementById('previewPhotoCard').style.display='none';
-  document.getElementById('previewSymptom').textContent=v('symptom');
-  document.getElementById('previewCause').textContent=v('cause');
-  document.getElementById('previewSolution').textContent=v('solution');
-}
-function v(id){return (document.getElementById(id)?.value||'').trim();}
+    const hosp=v('hospital')||'병원';
+    const cs=v('csName')||'담당자';
+    const dt=v('inspectDate')||today;
+    _lastFname=`정기점검_${hosp}_${cs}_${dt}.pdf`;
+    _lastPdf=pdf;
 
-function updDateDisplay(){
-  const inp=document.getElementById('issueDate');
-  const disp=document.getElementById('dateDisplay');
-  if(!inp||!disp) return;
-  const val=inp.value; // YYYY-MM-DD
-  if(!val){
-    disp.textContent=t('d_placeholder');
-    disp.classList.add('placeholder');
-    return;
-  }
-  disp.classList.remove('placeholder');
-  const [y,m,d]=val.split('-');
-  if(LANG==='ja'){
-    disp.textContent=`${y}年${m}月${d}日`;
-  }else if(LANG==='en'){
-    const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    disp.textContent=`${mon[parseInt(m,10)-1]} ${parseInt(d,10)}, ${y}`;
-  }else{
-    disp.textContent=`${y}-${m}-${d}`;
-  }
-}
+    sheet.innerHTML='';
+    loading.classList.remove('show');
 
-function updCounter(el){
-  const max=parseInt(el.getAttribute('maxlength'),10);
-  const len=el.value.length;
-  const cc=document.getElementById('cc_'+el.id);
-  if(cc){
-    cc.textContent=len+'/'+max;
-    cc.classList.toggle('warn', len>=max);
-  }
-}
-function initCounters(){
-  document.querySelectorAll('[maxlength]').forEach(el=>{
-    if(el.id&&document.getElementById('cc_'+el.id)) updCounter(el);
-  });
-}
-
-async function generatePPT(){
-  const btn=document.querySelector('.btn-generate');
-  btn.disabled=true;btn.innerHTML='<span>⏳</span> 생성 중...';
-  const Lib=typeof window.PptxGenJS!=="undefined"?window.PptxGenJS:(typeof window.pptxgen!=="undefined"?window.pptxgen:null);
-  if(!Lib){alert("PPT 라이브러리를 불러오지 못했습니다. 네트워크 연결을 확인하세요.");
-    btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';return;}
-  try{ await buildPPTX(Lib); goStep(5); updateIndicator(); }
-  catch(e){console.error(e);alert('PPT 생성 중 오류: '+e.message);
-    btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';}
-}
-
-function imgData(dataUrl){
-  const mime=dataUrl.match(/data:([^;]+);/)?.[1]||'image/jpeg';
-  return `${mime};base64,${dataUrl.split(',')[1]}`;
-}
-
-async function buildPPTX(Pptx){
-  const pres=new Pptx();
-  pres.defineLayout({name:'BAZ',width:10,height:5.625});
-  pres.layout='BAZ';
-  const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',ACCENT='4E9CC8',WHITE='FFFFFF',
-        LGRAY='F7F9FC',MGRAY='E8ECF2',LINE='E2E7F0',DGRAY='6B7A99',TTEXT='3A3A4A';
-  const FF=(LANG==='ja')?'Meiryo':'맑은 고딕';
-  const PX=10/960; const P=(px)=>px*PX;
-  const s=pres.addSlide(); s.background={color:WHITE};
-
-  // ── 섹션 헤더 헬퍼: 왼쪽 컬러 바 + 텍스트 (가벼운 스타일) ──
-  function sectionHeader(x,y,w,text,barColor){
-    s.addShape(pres.ShapeType.rect,{x:P(x),y:P(y),w:P(3),h:P(15),fill:{color:barColor||NAVY},line:{type:'none'}});
-    s.addText(text,{x:P(x+8),y:P(y-3),w:P(w),h:P(20),fontSize:11,bold:true,color:NAVY,fontFace:FF,valign:'middle',margin:0});
-  }
-
-  // ── 헤더 띠 ──
-  s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(52),fill:{color:NAVY},line:{color:NAVY}});
-  s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(11),w:P(310),h:P(31),fill:{color:'253A66'},rectRadius:0.05,line:{color:'CADCFC',width:0.75}});
-  s.addText(v('requestDetail')||t('p_topicDefault'),{x:P(324),y:P(11),w:P(310),h:P(31),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText('baz',{x:P(880),y:0,w:P(70),h:P(52),fontSize:16,bold:true,color:'9EADCC',fontFace:'Georgia',align:'right',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(960),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'9EADCC',fontFace:FF,valign:'middle',margin:0});
-
-  const LX=17, LW=421;
-
-  // ── 내부 수리 부품 ──
-  sectionHeader(LX,67,200,t('p_parts'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},rectRadius:0.04,line:{color:LINE,width:1}});
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:'EEF2F8'},line:{color:LINE,width:1}});
-  s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('partReason')||'—',{x:P(154),y:P(89),w:P(283),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-
-  // ── 고장 원인 분석 ──
-  sectionHeader(LX,138,200,t('p_analysis'),TEAL);
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(3),h:P(26),fill:{color:TEAL},line:{type:'none'}});
-  s.addShape(pres.ShapeType.rect,{x:P(LX+3),y:P(161),w:P(LW-3),h:P(26),fill:{color:LGRAY},line:{color:LINE,width:0.75}});
-  s.addText(v('symptom'),{x:P(LX+8),y:P(161),w:P(LW-12),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-
-  const symPos=[[31,195],[169,195],[307,195]];
-  symPhotos.forEach((p,i)=>{const px=symPos[i][0],py=symPos[i][1];
-    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(123),h:P(94),sizing:{type:'cover',w:P(123),h:P(94)}});
-    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(123),h:P(94),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
-
-  // ── 원인 / 해결 (라벨 색 구분) ──
-  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(299),w:P(421),h:P(66),rectRadius:0.03,fill:{color:WHITE},line:{color:LINE,width:1}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(33),fill:{color:LGRAY},line:{color:LINE,width:0.5}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(421),h:P(33),fill:{color:WHITE},line:{color:LINE,width:0.5}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(58),h:P(33),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText(t('p_cause'),{x:P(16),y:P(299),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(58),h:P(33),fill:{color:TEAL},line:{color:TEAL}});
-  s.addText(t('p_solution'),{x:P(16),y:P(332),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
-  s.addText(v('cause'),{x:P(80),y:P(299),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('solution'),{x:P(80),y:P(332),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-
-  // ── 엔지니어 처리 의견 ──
-  sectionHeader(16,374,200,t('p_opinion'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(396),w:P(421),h:P(127),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('opinion')||t('p_opinionPh'),{x:P(24),y:P(400),w:P(405),h:P(119),fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
-
-  // ── 구분선 ──
-  s.addShape(pres.ShapeType.line,{x:P(454),y:P(67),w:0,h:P(456),line:{color:MGRAY,width:1}});
-
-  const RX=469, RW=472;
-
-  // ── AS 접수 정보 ──
-  sectionHeader(RX,67,200,t('p_svcInfo'),NAVY);
-  const mfgStr=v('mfgDate')?`(${v('mfgDate')})`:'';
-  const infoRows=[
-    [t('p_rowHospital'),v('hospital')],[t('p_rowSerial'),v('serialNo')+(mfgStr?'  '+mfgStr:'')],
-    [t('p_rowVer'),v('version')||'—'],[t('p_rowReq'),v('requestDetail')||'—'],
-    [t('p_rowDate'),v('issueDate')],[t('p_rowEng'),v('engineer')],
-  ];
-  const rowH=30, infoY=89, labelW=144;
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(infoY),w:P(RW),h:P(rowH*6),rectRadius:0.02,fill:{color:WHITE},line:{color:LINE,width:1}});
-  infoRows.forEach((row,i)=>{const label=row[0],val=row[1];const rowY=infoY+i*rowH; const even=i%2===0;
-    if(even) s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(RW),h:P(rowH),fill:{color:LGRAY},line:{type:'none'}});
-    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fill:{color:'EEF2F8'},line:{color:LINE,width:0.5}});
-    if(i<5) s.addShape(pres.ShapeType.line,{x:P(RX),y:P(rowY+rowH),w:P(RW),h:0,line:{color:LINE,width:0.5}});
-    s.addText(label,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
-    s.addText(val,{x:P(RX+labelW),y:P(rowY),w:P(RW-labelW),h:P(rowH),fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});});
-
-  // ── 접수 현상 (사진/영상) ──
-  sectionHeader(RX,286,200,t('p_phen'),TEAL);
-  const cellW=106, cellH=106, gap=16, startX=469, mediaY=307;
-  const mediaX=[startX, startX+cellW+gap, startX+2*(cellW+gap), startX+3*(cellW+gap)];
-  phenPhotos.forEach((p,i)=>{const px=mediaX[i],py=mediaY;
-    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(cellW),h:P(cellH),sizing:{type:'cover',w:P(cellW),h:P(cellH)}});
-    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
-  const vx=mediaX[3], vy=mediaY;
-  if(phenVideo){
-    const mediaOpt={ type:'video', x:P(vx), y:P(vy), w:P(cellW), h:P(cellH),
-      data:`video/${phenVideo.ext};base64,${phenVideo.data.split(',')[1]}` };
-    if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster);
-    s.addMedia(mediaOpt);
-    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fill:{color:NAVY},line:{type:'none'}});
-    s.addText(t('p_video'),{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
-  }else{
-    s.addShape(pres.ShapeType.roundRect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:'F3EEFA'},line:{color:'C4B0E0',dashType:'dash'}});
-    s.addText(t('p_video'),{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
-  }
-
-  // ── 고객 피드백 ──
-  sectionHeader(RX,425,200,t('p_feedback'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(447),w:P(RW),h:P(76),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('feedback')||t('p_feedbackPh'),{x:P(RX+8),y:P(451),w:P(RW-16),h:P(68),fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
-
-  const fileName=`${t('p_fileName')}_${v('hospital')||'NA'}_${v('serialNo')||'no_sn'}`;
-  // blob 생성 → 공유용 보관 + 다운로드
-  const blob=await pres.write({outputType:'blob'});
-  window._lastPptx={blob:blob, name:fileName+'.pptx'};
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=fileName+'.pptx';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),3000);
-}
-
-// ── 카카오 초기화 ──
-(function(){
-  try{
-    Kakao.init('44dadb8113fce5e8188f03bbdcd27fc6');
-  }catch(e){ console.warn('Kakao SDK init failed:', e); }
-})();
-
-// ═══════════════════════════════════════════
-// Google Sheets 연동
-// ═══════════════════════════════════════════
-const GOOGLE_CLIENT_ID='171916204257-e6ofaf41mu2dnnisrjskj2ncrpa3bu6p.apps.googleusercontent.com';
-const GOOGLE_SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
-const SHEET_TITLE='BAZ_CS_AS접수현황';
-const SHEET_HEADERS=['기록일시','병원명','장비 S/N','제조일','버전','발생일자','담당자','요청사항','교체부품','교체사유','접수증상','불량원인','해결방법','처리의견','고객피드백'];
-
-let gapiReady=false, gisReady=false, tokenClient=null, googleToken=null;
-
-function loadGapiClient(){
-  return new Promise((resolve,reject)=>{
-    if(typeof gapi==='undefined'){reject(new Error('gapi 미로드'));return;}
-    gapi.load('client',async()=>{
-      try{
-        await gapi.client.init({discoveryDocs:[
-          'https://sheets.googleapis.com/$discovery/rest?version=v4',
-          'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
-        ]});
-        gapiReady=true;resolve();
-      }catch(e){reject(e);}
-    });
-  });
-}
-function initTokenClient(){
-  if(typeof google==='undefined'||!google.accounts){return false;}
-  tokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:GOOGLE_CLIENT_ID,
-    scope:GOOGLE_SCOPES,
-    callback:'', // 동적 지정
-  });
-  gisReady=true;
-  return true;
-}
-function ensureGoogleToken(){
-  return new Promise((resolve,reject)=>{
-    if(!gisReady && !initTokenClient()){reject(new Error('Google 로그인 모듈 미로드'));return;}
-    tokenClient.callback=(resp)=>{
-      if(resp.error){reject(new Error(resp.error));return;}
-      googleToken=resp.access_token;
-      gapi.client.setToken({access_token:googleToken});
-      resolve(googleToken);
-    };
-    // 이미 토큰 있으면 조용히, 없으면 동의창
-    tokenClient.requestAccessToken({prompt: googleToken?'':'consent'});
-  });
-}
-
-function setSheetStatus(msg, type){
-  const el=document.getElementById('gsheetStatus');
-  if(!el)return;
-  el.style.display='block';
-  el.textContent=msg;
-  el.className='gsheet-status'+(type?' '+type:'');
-}
-
-// 시트 ID는 localStorage 미지원 → 메모리 + URL 파라미터 대안 / 여기선 sessionStorage 불가하므로 변수+드라이브 검색
-let cachedSheetId=null;
-
-async function findOrCreateSheet(){
-  // 1) 캐시
-  if(cachedSheetId)return cachedSheetId;
-  // 2) Drive에서 기존 시트 검색
-  try{
-    const q=`name='${SHEET_TITLE}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`;
-    const res=await gapi.client.drive.files.list({q:q, fields:'files(id,name)', pageSize:1});
-    if(res.result.files && res.result.files.length){
-      cachedSheetId=res.result.files[0].id;
-      return cachedSheetId;
+    if(preview){
+      const url=pdf.output('bloburl');
+      window.open(url,'_blank');
+    }else{
+      pdf.save(_lastFname);
+      document.getElementById('doneFname').textContent=_lastFname;
+      document.getElementById('doneOverlay').classList.add('show');
     }
-  }catch(e){ /* 검색 실패시 새로 생성 */ }
-  // 3) 새 시트 생성
-  const createRes=await gapi.client.sheets.spreadsheets.create({
-    properties:{title:SHEET_TITLE}
-  });
-  cachedSheetId=createRes.result.spreadsheetId;
-  // 헤더 작성
-  await gapi.client.sheets.spreadsheets.values.update({
-    spreadsheetId:cachedSheetId,
-    range:'A1',
-    valueInputOption:'USER_ENTERED',
-    resource:{values:[SHEET_HEADERS]}
-  });
-  // 헤더 스타일 (네이비 배경 + 흰 글씨 + 굵게)
-  try{
-    await gapi.client.sheets.spreadsheets.batchUpdate({
-      spreadsheetId:cachedSheetId,
-      resource:{requests:[{
-        repeatCell:{
-          range:{sheetId:0,startRowIndex:0,endRowIndex:1},
-          cell:{userEnteredFormat:{
-            backgroundColor:{red:0.106,green:0.184,blue:0.369},
-            textFormat:{foregroundColor:{red:1,green:1,blue:1},bold:true},
-            horizontalAlignment:'CENTER'
-          }},
-          fields:'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
-        }
-      },{
-        updateSheetProperties:{
-          properties:{sheetId:0,gridProperties:{frozenRowCount:1}},
-          fields:'gridProperties.frozenRowCount'
-        }
-      }]}
-    });
-  }catch(e){ /* 스타일 실패해도 진행 */ }
-  return cachedSheetId;
-}
-
-async function saveToSheet(){
-  const btn=document.querySelector('[data-action="saveToSheet"]');
-  const origText=btn?btn.textContent:'';
-  if(btn){btn.disabled=true;btn.textContent='⏳ 연동 중...';}
-  setSheetStatus('Google 계정 확인 중...','');
-  try{
-    if(!gapiReady)await loadGapiClient();
-    await ensureGoogleToken();
-    setSheetStatus('시트 확인 중...','');
-    const sheetId=await findOrCreateSheet();
-
-    // 데이터 한 줄 구성
-    const now=new Date();
-    const ts=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    const row=[
-      ts, v('hospital'), v('serialNo'), v('mfgDate'), v('version'),
-      v('issueDate'), v('engineer'), v('requestDetail'),
-      v('partName'), v('partReason'),
-      v('symptom'), v('cause'), v('solution'), v('opinion'), v('feedback')
-    ];
-    await gapi.client.sheets.spreadsheets.values.append({
-      spreadsheetId:sheetId,
-      range:'A1',
-      valueInputOption:'USER_ENTERED',
-      insertDataOption:'INSERT_ROWS',
-      resource:{values:[row]}
-    });
-
-    const url=`https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
-    setSheetStatus('✅ 시트에 기록되었습니다. 탭하여 시트 열기','ok');
-    const statusEl=document.getElementById('gsheetStatus');
-    if(statusEl){statusEl.style.cursor='pointer';statusEl.onclick=()=>window.open(url,'_blank');}
-    if(btn){btn.textContent='✅ 기록 완료';}
   }catch(e){
+    loading.classList.remove('show');
+    showToast('생성 중 오류: '+e.message);
     console.error(e);
-    let msg=e.message||'알 수 없는 오류';
-    if(msg.includes('popup')||msg.includes('access_denied'))msg='로그인이 취소되었습니다.';
-    setSheetStatus('❌ 기록 실패: '+msg,'err');
-    if(btn){btn.disabled=false;btn.textContent=origText;}
   }
 }
 
-function kakaoShare(){
-  try{
-    if(typeof Kakao==='undefined'||!Kakao.isInitialized()){
-      alert('카카오 SDK를 불러오지 못했습니다.\n네트워크 연결을 확인하세요.');return;
-    }
-    const hospital = v('hospital')||'미지정';
-    const engineer = v('engineer')||'담당자';
-    const issueDate = v('issueDate')||'';
-    const sn = v('serialNo')||'';
-    const topic = v('requestDetail')||'AS 처리 보고서';
+document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
+document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
+document.getElementById('doneDl').addEventListener('click',()=>{ if(_lastPdf) _lastPdf.save(_lastFname); });
+document.getElementById('doneNew').addEventListener('click',()=>{ location.reload(); });
 
-    Kakao.Share.sendDefault({
-      objectType:'feed',
-      content:{
-        title:`[BAZ CS] ${hospital} AS 처리 보고서`,
-        description:`담당: ${engineer} | 장비 S/N: ${sn}\n요청: ${topic}\n발생일: ${issueDate}`,
-        imageUrl:'https://yuyoung-ai.github.io/YuYoung/og_image.png',
-        link:{
-          mobileWebUrl:'https://yuyoung-ai.github.io/YuYoung/',
-          webUrl:'https://yuyoung-ai.github.io/YuYoung/'
-        }
-      },
-      buttons:[{
-        title:'보고서 작성 앱 열기',
-        link:{
-          mobileWebUrl:'https://yuyoung-ai.github.io/YuYoung/',
-          webUrl:'https://yuyoung-ai.github.io/YuYoung/'
-        }
-      }]
-    });
-  }catch(e){
-    alert('카카오 공유 오류: '+e.message);
-  }
-}
-
-function copyText(){
-  const hospital=v('hospital')||'미지정';
-  const sn=v('serialNo')||'—';
-  const mfg=v('mfgDate')||'—';
-  const ver=v('version')||'—';
-  const dt=v('issueDate')||'—';
-  const eng=v('engineer')||'—';
-  const req=v('requestDetail')||'—';
-  const part=(v('partName')||'—')+(v('partReason')?' / '+v('partReason'):'');
-  const sym=v('symptom')||'—';
-  const cause=v('cause')||'—';
-  const sol=v('solution')||'—';
-  const op=v('opinion')||'—';
-  const fb=v('feedback')||'—';
-
-  const text=[
-    '═══════════════════════════',
-    ' BAZ BIOMEDIC AS 처리 보고서',
-    '═══════════════════════════',
-    `병원명    : ${hospital}`,
-    `장비 S/N  : ${sn} (${mfg})`,
-    `버전 정보 : ${ver}`,
-    `발생 일자 : ${dt}`,
-    `담당자    : ${eng}`,
-    `요청사항  : ${req}`,
-    `교체 부품 : ${part}`,
-    '───────────────────────────',
-    `▶ 접수 증상
-${sym}`,
-    `▶ 불량 원인
-${cause}`,
-    `▶ 해결 방법
-${sol}`,
-    '───────────────────────────',
-    `▶ 처리 의견
-${op}`,
-    `▶ 고객 피드백
-${fb}`,
-    '═══════════════════════════',
-    'BAZ BIOMEDIC Field Service',
-  ].join('\n');
-
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(()=>{
-      const btn=document.querySelector('[data-action="copyText"]');
-      const orig=btn.textContent;
-      btn.textContent='✅ 복사됨!';
-      setTimeout(()=>btn.textContent=orig,2000);
-    }).catch(()=>fallbackCopy(text));
-  }else{ fallbackCopy(text); }
-}
-function fallbackCopy(text){
-  const ta=document.createElement('textarea');
-  ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
-  document.body.appendChild(ta);ta.select();
-  try{document.execCommand('copy');alert('클립보드에 복사되었습니다.');}
-  catch(e){alert('복사에 실패했습니다.\n직접 선택하여 복사해주세요.');}
-  document.body.removeChild(ta);
-}
-
-function printReport(){
-  // 인쇄 전 step4(미리보기)로 이동 후 인쇄
-  const cur=currentStep;
-  document.getElementById('step'+cur).classList.remove('active');
-  document.getElementById('step4').classList.add('active');
-  setTimeout(()=>{
-    window.print();
-    setTimeout(()=>{
-      document.getElementById('step4').classList.remove('active');
-      document.getElementById('step'+cur).classList.add('active');
-    },500);
-  },100);
-}
-
-function redownload(){ generatePPT(); }
-
-async function sharePptx(){
-  try{
-    // PPT가 아직 없으면 먼저 생성
-    if(!window._lastPptx){
-      alert('먼저 PPT를 생성해주세요. 잠시 후 다시 시도합니다.');
-      const Lib=typeof window.PptxGenJS!=="undefined"?window.PptxGenJS:(typeof window.pptxgen!=="undefined"?window.pptxgen:null);
-      if(!Lib){alert('PPT 라이브러리를 불러오지 못했습니다.');return;}
-      await buildPPTX(Lib);
-    }
-    const {blob,name}=window._lastPptx;
-    const file=new File([blob],name,{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
-
-    // 1순위: 파일 직접 공유 (모바일)
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({
-        files:[file],
-        title:name.replace('.pptx',''),
-        text:t('sh_text')
-      });
-      return;
-    }
-    // 2순위: 파일 공유 미지원 → 텍스트/링크만 공유
-    if(navigator.share){
-      await navigator.share({
-        title:t('sh_text'),
-        text:`${name}`
-      });
-      return;
-    }
-    // 3순위: Web Share 자체 미지원 (PC 브라우저)
-    alert(t('sh_pc'));
-  }catch(e){
-    if(e.name!=='AbortError'){
-      alert(t('sh_err'));
-    }
-  }
-}
-function restart(){
-  ['hospital','serialNo','mfgDate','version','issueDate','engineer','requestDetail',
-   'partName','partReason','symptom','cause','solution','feedback','opinion']
-    .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  initCounters();
-  for(let i=0;i<3;i++){removePhoto('sym',i);removePhoto('phen',i);}
-  removePhoto('video',0);
-  const btn=document.querySelector('.btn-generate');
-  if(btn){btn.disabled=false;btn.innerHTML='<span>📊</span> PPT 생성 및 다운로드';}
-  const sheetBtn=document.querySelector('[data-action="saveToSheet"]');
-  if(sheetBtn){sheetBtn.disabled=false;sheetBtn.textContent='📊 Google 시트에 기록';}
-  const sheetStatus=document.getElementById('gsheetStatus');
-  if(sheetStatus){sheetStatus.style.display='none';sheetStatus.onclick=null;}
-  goStep(1);
-}
-
-document.addEventListener('click',function(e){
-  const langBtn=e.target.closest('[data-lang]');
-  if(langBtn){ setLang(langBtn.getAttribute('data-lang')); document.getElementById('langSelect').style.display='none'; return; }
-  const setLangBtn=e.target.closest('[data-setlang]');
-  if(setLangBtn){ setLang(setLangBtn.getAttribute('data-setlang')); return; }
-  const goBtn=e.target.closest('[data-go]');
-  if(goBtn){goStep(parseInt(goBtn.getAttribute('data-go'),10));return;}
-  const actBtn=e.target.closest('[data-action]');
-  if(actBtn){const a=actBtn.getAttribute('data-action');
-    if(a==='generate')generatePPT();else if(a==='redownload')redownload();else if(a==='restart')restart();else if(a==='kakaoShare')kakaoShare();else if(a==='copyText')copyText();else if(a==='printReport')printReport();else if(a==='saveToSheet')saveToSheet();else if(a==='sharePptx')sharePptx();return;}
-  const tag=e.target.closest('.tag[data-field]');
-  if(tag){appendText(tag.getAttribute('data-field'),tag.getAttribute('data-text'));return;}
-  const rm=e.target.closest('[data-remove]');
-  if(rm){const parts=rm.getAttribute('data-remove').split(':');removePhoto(parts[0],parseInt(parts[1],10));return;}
-});
-
-buildPhotoSlots();
-initCounters();
-// 언어 초기화: 저장된 선택이 없으면 선택 화면 표시
-// 초기 진입: 항상 도구 선택 화면 표시
-document.getElementById('langSelect').style.display='flex';
-if(LANG) applyLang(); // 저장된 언어가 있으면 본 화면은 미리 적용해둠
-
-// 앱 선택: AS 보고서 → 언어 선택 단계로 (저장된 언어 있으면 바로 진입)
-document.getElementById('appBtnReport').addEventListener('click', function(){
-  if(LANG){
-    document.getElementById('langSelect').style.display='none';
-  }else{
-    document.getElementById('appSelectStage').style.display='none';
-    document.getElementById('langSelectStage').style.display='flex';
-  }
-});
-// 앱 선택: 현장 대응 가이드 → guide.html로 이동
-document.getElementById('appBtnGuide').addEventListener('click', function(){
-  location.href='guide.html';
-});
-document.getElementById('appBtnSurvey').addEventListener('click', function(){
-  location.href='survey.html';
-});
-document.getElementById('appBtnInspection').addEventListener('click', function(){
-  location.href='inspection.html';
-});
-// 언어 선택 단계에서 뒤로
-document.getElementById('backToApps').addEventListener('click', function(){
-  document.getElementById('langSelectStage').style.display='none';
-  document.getElementById('appSelectStage').style.display='flex';
-});
-
+// 초기화
+buildInspList();
 </script>
 </body>
 </html>
