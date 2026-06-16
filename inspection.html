@@ -1173,7 +1173,7 @@ function buildSheetHTML(){
     return `<tr>
       <td style="text-align:center;border:1px solid #888;padding:6px 4px;font-size:12px;">${it.n}</td>
       <td style="border:1px solid #888;padding:6px 8px;font-size:12px;font-weight:700;">${esc(it.name)}</td>
-      <td style="border:1px solid #888;padding:6px 8px;font-size:11px;color:#333;line-height:1.45;word-break:keep-all;">${esc(it.desc)}</td>
+      <td style="border:1px solid #888;padding:6px 8px;font-size:11px;color:#333;line-height:1.45;word-break:break-all;">${esc(it.desc)}</td>
       <td style="text-align:center;border:1px solid #888;padding:6px 4px;font-size:11.5px;white-space:nowrap;">${mark('정상')} 정상 &nbsp;${mark('수리')} 수리 &nbsp;${mark('교체')} 교체</td>
       <td style="border:1px solid #888;padding:6px 8px;font-size:11px;">${esc(memo)}</td>
     </tr>`;
