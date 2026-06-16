@@ -317,7 +317,7 @@ function cardHTML(h){
   const asTag = h.as ? `<span class="h-tag as">${escapeHtml(h.as)}</span>` : '';
   const dealerTag = h.d ? `<span class="h-tag dealer">${escapeHtml(h.d)}</span>` : '';
   const distHtml = (h._dist!=null) ? `<div class="h-dist show">📍 ${h._dist.toFixed(1)}km</div>` : '';
-  const naverUrl = 'https://map.naver.com/v5/search/'+encodeURIComponent(h.n);
+  const naverUrl = 'https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
   const inspUrl = 'inspection.html';
   const survUrl = 'survey.html?h='+encodeURIComponent(h.n)+'&e='+encodeURIComponent(h.sa||'');
 
@@ -341,7 +341,7 @@ function cardHTML(h){
     </div>
     <div class="h-tags">${ncareTag}${asTag}${dealerTag}</div>
     <div class="h-actions">
-      <button class="nmap" onclick="window.open('${naverUrl}','_blank')">🗺️ ${t('nmap')}</button>
+      <button class="nmap" onclick="window.open('${naverUrl}','bazNaverMap')">🗺️ ${t('nmap')}</button>
       <button class="insp" onclick="location.href='${inspUrl}'">📋 ${t('insp')}</button>
       <button class="surv" onclick="location.href='${survUrl}'">⭐ ${t('surv')}</button>
     </div>
@@ -448,9 +448,13 @@ nearbyBtn.addEventListener('click',()=>{
 updateStats();
 applyLang();
 
-// 서비스워커
+// 서비스워커 (등록 시 최신 버전 강제 확인)
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      reg.update(); // 새 sw.js가 있으면 즉시 갱신 확인
+    }).catch(()=>{});
+  });
 }
 </script>
 </body>
