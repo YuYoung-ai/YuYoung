@@ -217,6 +217,11 @@
       <span style="color:#8EA0C8;">→</span>
     </button>
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
+    <button type="button" id="appBtnHospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+      <span style="font-size:24px;">🏥</span>
+      <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터 센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검현황 · 근처 N-CARE</span></span>
+      <span style="color:#E0C088;">🔒→</span>
+    </button>
     <button type="button" id="appBtnSurvey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
@@ -1400,18 +1405,21 @@ const HUB_I18N = {
     'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
+    'hosp-name':'병원 데이터 센터','hosp-desc':'병원 검색 · 점검현황 · 근처 N-CARE',
     'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
     pwTitle:'Unlock', pwDesc:'Enter the password.', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.',
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
+    'hosp-name':'Hospital Data Center','hosp-desc':'Search · Inspection · Nearby N-CARE',
     'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
     pwTitle:'ロック解除', pwDesc:'パスワードを入力してください。', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。',
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
+    'hosp-name':'病院データセンター','hosp-desc':'病院検索 · 点検状況 · 近隣N-CARE',
     'survey-name':'顧客満足度調査','survey-desc':'ASサービス評価・フィードバック' }
 };
 let HUBLANG = localStorage.getItem('baz_lang') || 'ko';
@@ -1453,6 +1461,7 @@ function unlockTools(level){
   document.getElementById('appSelectStage').style.display='flex';
   // 숨김 도구는 관리자(2)에서만 노출
   document.getElementById('appBtnSurvey').style.display = (level>=2)?'flex':'none';
+  document.getElementById('appBtnHospital').style.display = (level>=2)?'flex':'none';
 }
 
 const hubPwModal=document.getElementById('hubPwModal');
@@ -1495,6 +1504,7 @@ document.getElementById('appBtnReport').addEventListener('click', function(){
 document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
+document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
 document.getElementById('backToApps').addEventListener('click', function(){
   document.getElementById('langSelectStage').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
