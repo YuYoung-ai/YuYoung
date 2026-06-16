@@ -81,6 +81,7 @@
   .st-badge.권고{background:#FBF3E0;color:var(--st-warn);}
   .st-badge.경고{background:#FBEAE8;color:var(--st-danger);}
   .st-badge.미점검{background:#EEF0F4;color:var(--st-none);}
+  .st-badge.비대상{background:#F0F0F2;color:#9AA3B2;font-weight:600;}
 
   .h-meta{font-size:12.5px;color:var(--text-muted);line-height:1.7;}
   .h-meta .line{display:flex;align-items:flex-start;gap:6px;}
@@ -162,7 +163,8 @@ const I18N = {
     locating:'현재 위치 확인 중...', locFail:'위치를 가져올 수 없습니다. 권한을 확인하세요.',
     nearbyResult:'주변 5km 내 N-CARE 병원 {n}곳',
     resultN:'{n}곳', nmap:'네이버지도', insp:'점검접수', surv:'만족도',
-    lastInsp:'최근 점검', noInsp:'점검 이력 없음', sales:'영업', sn:'장비',
+    lastInsp:'최근 점검', lastVisit:'최근 방문', noInsp:'점검 이력 없음', noVisit:'방문 이력 없음', sales:'영업', sn:'장비',
+    notTarget:'점검 비대상',
     empty:'검색 결과가 없습니다', emptyNear:'주변 5km 내 N-CARE 가입 병원이 없습니다',
     stTotal:'전체', stNcare:'N-CARE', stDue:'점검필요', more:'더 보기',
     dayAgo:'{d}일 경과', noCoord:'좌표 없음' },
@@ -172,7 +174,8 @@ const I18N = {
     locating:'Getting location...', locFail:'Cannot get location. Check permission.',
     nearbyResult:'{n} N-CARE within 5km',
     resultN:'{n} found', nmap:'Naver Map', insp:'Inspect', surv:'Survey',
-    lastInsp:'Last', noInsp:'No record', sales:'Sales', sn:'Unit',
+    lastInsp:'Last insp.', lastVisit:'Last visit', noInsp:'No record', noVisit:'No visit', sales:'Sales', sn:'Unit',
+    notTarget:'Not inspected',
     empty:'No results', emptyNear:'No N-CARE hospitals within 5km',
     stTotal:'Total', stNcare:'N-CARE', stDue:'Due', more:'Load more',
     dayAgo:'{d}d ago', noCoord:'No coords' },
@@ -182,7 +185,8 @@ const I18N = {
     locating:'現在地確認中...', locFail:'位置情報を取得できません。権限を確認してください。',
     nearbyResult:'周辺5km以内のN-CARE病院 {n}件',
     resultN:'{n}件', nmap:'NAVER地図', insp:'点検受付', surv:'満足度',
-    lastInsp:'最終点検', noInsp:'点検履歴なし', sales:'営業', sn:'機器',
+    lastInsp:'最終点検', lastVisit:'最終訪問', noInsp:'点検履歴なし', noVisit:'訪問履歴なし', sales:'営業', sn:'機器',
+    notTarget:'点検対象外',
     empty:'検索結果がありません', emptyNear:'周辺5km以内のN-CARE加入病院がありません',
     stTotal:'全体', stNcare:'N-CARE', stDue:'要点検', more:'もっと見る',
     dayAgo:'{d}日経過', noCoord:'座標なし' },
@@ -223,7 +227,8 @@ let showCount=20;
 // ===== 유틸 =====
 function normalize(s){ return (s||'').toLowerCase().replace(/\s+/g,''); }
 function isNcare(h){ return h.nc && h.nc!=='미가입'; }
-function isDue(h){ return ['점검대상','권고','경고','미점검'].includes(h.st); }
+// 점검 대상은 N-CARE 가입 병원만. 미가입은 방문 이력일 뿐 점검 주기 관리 대상 아님.
+function isDue(h){ return isNcare(h) && ['점검대상','권고','경고','미점검'].includes(h.st); }
 
 // 거리 계산 (Haversine, km)
 function distKm(lat1,lng1,lat2,lng2){
@@ -274,12 +279,20 @@ function getFiltered(){
       const nq=normalize(searchQ);
       list=list.filter(h=>normalize(h.n).includes(nq) || normalize(h.a).includes(nq) || normalize(h.s).includes(nq));
     }
-    // 정렬: 점검 시급도(미점검>경고>권고>점검대상>정상), 그 다음 최근점검일 오래된 순
+    // 정렬: N-CARE 점검 대상 우선(시급도순), 그 다음 미가입은 방문일 최신순
     const stOrder={'미점검':0,'경고':1,'권고':2,'점검대상':3,'정상':4};
     list.sort((a,b)=>{
-      const sa=stOrder[a.st]??5, sb=stOrder[b.st]??5;
-      if(sa!==sb) return sa-sb;
-      return (a.li||'').localeCompare(b.li||'');
+      const na=isNcare(a), nb=isNcare(b);
+      // N-CARE 가입 병원을 먼저
+      if(na!==nb) return na?-1:1;
+      if(na && nb){
+        // 둘 다 N-CARE: 점검 시급도순, 같으면 점검일 오래된 순
+        const sa=stOrder[a.st]??5, sb=stOrder[b.st]??5;
+        if(sa!==sb) return sa-sb;
+        return (a.li||'').localeCompare(b.li||'');
+      }
+      // 둘 다 미가입: 최근 방문일 최신순
+      return (b.li||'').localeCompare(a.li||'');
     });
   }
   return list;
@@ -288,10 +301,13 @@ function getFiltered(){
 // ===== 렌더 =====
 function statusDays(h){
   const dd=daysSince(h.li);
+  const ncare=isNcare(h);
+  const label = ncare ? t('lastInsp') : t('lastVisit');
+  const noLabel = ncare ? t('noInsp') : t('noVisit');
   if(h.li && dd!=null){
-    return `${t('lastInsp')} ${h.li} · ${t('dayAgo').replace('{d}',dd)}`;
+    return `${label} ${h.li} · ${t('dayAgo').replace('{d}',dd)}`;
   }
-  return t('noInsp');
+  return noLabel;
 }
 
 function cardHTML(h){
@@ -305,13 +321,18 @@ function cardHTML(h){
   const inspUrl = 'inspection.html';
   const survUrl = 'survey.html?h='+encodeURIComponent(h.n)+'&e='+encodeURIComponent(h.sa||'');
 
+  // N-CARE 가입 병원만 점검 상태 배지 표시. 미가입은 점검 비대상으로 표시.
+  const badge = isNcare(h)
+    ? `<span class="st-badge ${h.st||'미점검'}">${escapeHtml(h.st||'미점검')}</span>`
+    : `<span class="st-badge 비대상">${t('notTarget')}</span>`;
+
   return `<div class="h-card">
     <div class="h-card-head">
       <div style="min-width:0;">
         <div class="h-name">${escapeHtml(h.n)}</div>
         ${distHtml}
       </div>
-      <span class="st-badge ${h.st||'미점검'}">${escapeHtml(h.st||'미점검')}</span>
+      ${badge}
     </div>
     <div class="h-meta">
       ${h.a?`<div class="line"><span class="ico">📍</span><span>${escapeHtml(h.a)}</span></div>`:''}
