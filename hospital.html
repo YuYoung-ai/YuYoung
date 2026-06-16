@@ -318,7 +318,10 @@ function cardHTML(h){
   const dealerTag = h.d ? `<span class="h-tag dealer">${escapeHtml(h.d)}</span>` : '';
   const distHtml = (h._dist!=null) ? `<div class="h-dist show">📍 ${h._dist.toFixed(1)}km</div>` : '';
   const naverUrl = 'https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
-  const inspUrl = 'inspection.html';
+  const inspUrl = 'inspection.html?h='+encodeURIComponent(h.n)
+    +'&sn='+encodeURIComponent(h.s||'')
+    +'&nc='+encodeURIComponent(h.nc||'')
+    +'&e='+encodeURIComponent(h.sa||'');
   const survUrl = 'survey.html?h='+encodeURIComponent(h.n)+'&e='+encodeURIComponent(h.sa||'');
 
   // N-CARE 가입 병원만 점검 상태 배지 표시. 미가입은 점검 비대상으로 표시.
