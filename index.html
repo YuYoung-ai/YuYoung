@@ -300,7 +300,7 @@
         <div class="field-group"><label><span data-i18n="l_eng">담당자</span> <span class="required">*</span></label>
           <input type="text" id="engineer" data-i18n-ph="ph_eng" placeholder="예) 홍 길 동" maxlength="12" oninput="updCounter(this)"><span class="char-counter" id="cc_engineer">0/12</span></div>
       </div>
-      <div class="field-group"><label data-i18n="l_req">요청사항 (토픽)</label>
+      <div class="field-group"><label data-i18n="l_req">부품명</label>
         <input type="text" id="requestDetail" data-i18n-ph="ph_req" placeholder="예) 노즐 인식 불가" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_requestDetail">0/18</span></div>
     </div>
   </div>
@@ -478,19 +478,19 @@ const I18N = {
     ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동', d_placeholder:'날짜 선택',
     l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
     h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
-    l_partReason:'교체 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
+    l_partReason:'점검 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
     b_next2:'다음 — 사진 첨부 →',
     h_symPhotos:'접수 증상 사진 (좌측 · 최대 3컷)', h_phenPhotos:'접수 현상 사진 3컷 + 동영상 1개 (우측)',
     t_videoHint:'💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.',
     b_prev:'← 이전', b_next3:'다음 — 원인 분석 →',
-    h_analysis:'고장 원인 분석', l_symptom:'접수 증상',
+    h_analysis:'불량 원인 분석', l_symptom:'접수 증상',
     ph_symptom:"예) 장비 화면에 'Can't find RFID the Device' 오류 표시되며 노즐 인식 불가 상태.",
     l_cause:'불량 원인', ph_cause:'예) USB 장치 인식 불량에 따른 동작 불가',
     l_solution:'해결 방법', ph_solution:'예) RFID Module 내 USB 장치 교환 시 수리 가능',
     h_opinionFb:'처리 의견 / 피드백', l_opinion:'엔지니어 처리 의견', ph_opinion:'엔지니어 처리 내용 및 의견을 입력하세요.',
     l_feedback:'고객 피드백', ph_feedback:'고객 피드백 내용을 입력하세요.', b_next4:'다음 — 최종 확인 →',
     h_reviewInfo:'AS 접수 정보 확인', h_media:'첨부 미디어', l_symptom2:'접수 증상',
-    l_phenMedia:'접수 현상 (사진 3 + 동영상)', h_analysis2:'고장 원인 분석', l_symptom3:'접수 증상',
+    l_phenMedia:'접수 현상 (사진 3 + 동영상)', h_analysis2:'불 원인 분석', l_symptom3:'접수 증상',
     l_cause2:'불량 원인', l_solution2:'해결 방법', b_generate:'PPT 생성 및 다운로드',
     t_done:'보고서가 완성되었습니다', t_doneSub:'AS 처리 보고서 PPT가 생성되었습니다.<br>아이폰은 "파일" 앱 또는 공유 시트에서 저장하세요.',
     b_redown:'📥 다시 다운로드', b_share:'📤 PPT 파일 공유 (카카오톡 등)',
@@ -503,7 +503,7 @@ const I18N = {
     langBtn:'EN',
     // PPT
     p_title:'AS  처리 현황', p_topicDefault:'AS 처리 보고서', p_parts:'내부 수리 부품',
-    p_analysis:'고장 원인 분석', p_cause:'원  인', p_solution:'해결', p_opinion:'엔지니어 처리 의견',
+    p_analysis:'불량 원인 분석', p_cause:'원  인', p_solution:'해  결', p_opinion:'엔지니어 처리 의견',
     p_opinionPh:'엔지니어 처리 내용 및 의견을 여기에 작성하세요.', p_svcInfo:'AS 접수 정보',
     p_rowHospital:'병  원  명', p_rowSerial:'장비 S/N (제조일)', p_rowVer:'UI/FW/H.P Ver',
     p_rowReq:'요청사항', p_rowDate:'발생 일자', p_rowEng:'담  당  자', r_part:'교체 부품',
