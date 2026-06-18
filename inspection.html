@@ -1339,6 +1339,19 @@ async function generatePDF(preview){
       pdf.save(_lastFname);
       document.getElementById('doneFname').textContent=_lastFname;
       document.getElementById('doneOverlay').classList.add('show');
+      // ── 구글시트 방문 기록 전송 (백그라운드) ──
+      (function(){
+        var GAS_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
+        var payload={
+          hospital:v('hospital')||'',
+          visitDate:v('inspectDate')||today,
+          type:(v('subscription')&&v('subscription')!=='미가입')?'점검':'AS',
+          handler:v('csName')||v('receiver')||'',
+          serial:v('serialNo')||''
+        };
+        fetch(GAS_URL,{method:'POST',body:JSON.stringify(payload)})
+          .catch(function(e){console.warn('[방문로그] 전송 실패:',e);});
+      })();
     }
   }catch(e){
     loading.classList.remove('show');
@@ -1360,40 +1373,6 @@ document.getElementById('doneNew').addEventListener('click',()=>{ location.reloa
 
 // 초기화
 buildInspList();
-
-// ===== 병원 데이터 센터에서 넘어온 정보 자동 입력 =====
-(function(){
-  const params = new URLSearchParams(location.search);
-  const h = params.get('h');   // 병원명
-  const sn = params.get('sn'); // 장비 S/N
-  const nc = params.get('nc'); // N-CARE 구독
-  const e = params.get('e');   // 접수자(영업담당)
-  if(h){
-    const hospEl = document.getElementById('hospital');
-    if(hospEl) hospEl.value = h;
-  }
-  if(sn){
-    const snEl = document.getElementById('serialNo');
-    if(snEl) snEl.value = sn;
-  }
-  if(nc){
-    const subEl = document.getElementById('subscription');
-    if(subEl) subEl.value = nc;
-  }
-  if(e){
-    const rcvEl = document.getElementById('receiver');
-    if(rcvEl) rcvEl.value = e;
-  }
-  // 점검 일자는 오늘로 자동 설정 (비어있을 때만)
-  if(h || sn){
-    const dateEl = document.getElementById('inspectDate');
-    if(dateEl && !dateEl.value){
-      const t = new Date();
-      dateEl.value = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
-    }
-  }
-})();
-
 </script>
 <script>
 // 오프라인 사용을 위한 서비스 워커 등록
