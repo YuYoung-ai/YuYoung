@@ -1140,15 +1140,22 @@ populateFilters();
 updateStats();
 applyLang();
 
-// ── 구글시트 동기화 (백그라운드) ──
-// 1) 병원정보DB 전체 동기화  2) 방문로그 최근 방문일 동기화
+// ── 구글시트 동기화 (백그라운드, 안전모드) ──
 (function(){
-  // [1] 병원정보DB (doGet → success/data 형식)
   var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
-  // [2] 방문로그 (doPost 기록 시트, 최근 방문일용 doGet)
   var VISIT_LOG_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
 
-  // 시트 컬럼명 → HOSPITALS 필드 매핑
+  // 날짜를 yyyy-MM-dd로 정규화 (깨진 형식 방어)
+  function cleanDate(v){
+    if(!v) return '';
+    var s=String(v).trim();
+    var m=s.match(/(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/);
+    if(m) return m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2);
+    var d=new Date(s);
+    if(!isNaN(d)) return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+    return '';
+  }
+
   function applyDB(rows){
     if(!rows||!rows.length) return false;
     var updated=false;
@@ -1156,21 +1163,19 @@ applyLang();
       if(!r.name) return;
       var h=HOSPITALS.find(function(x){return x.n===r.name;});
       if(h){
-        // 기존 항목 갱신 (좌표 lat/lng는 코드값 유지)
         if(r.sn)        h.s=r.sn;
         if(r.region)    h.rg=r.region;
         if(r.address)   h.a=r.address;
-        if(r.lastVisit) h.li=r.lastVisit;
+        if(r.lastVisit) h.li=cleanDate(r.lastVisit);
         if(r.status)    h.st=r.status;
         if(r.sales)     h.sa=r.sales;
         if(r.asType)    h.as=r.asType;
         if(r.ncare)     h.nc=r.ncare;
         updated=true;
       }else{
-        // 신규 병원 추가 (좌표 없음 → 지도/근처조회 제외)
         HOSPITALS.push({
           n:r.name, s:r.sn||'', rg:r.region||'', a:r.address||'',
-          li:r.lastVisit||'', st:r.status||'미점검', sa:r.sales||'',
+          li:cleanDate(r.lastVisit), st:r.status||'미점검', sa:r.sales||'',
           as:r.asType||'', nc:r.ncare||'미가입', d:r.client||'',
           lat:null, lng:null
         });
@@ -1180,31 +1185,32 @@ applyLang();
     return updated;
   }
 
-  // [1] 병원정보DB fetch
   fetch(HOSPITAL_DB_URL,{method:'GET'})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.success||!d.data) return;
-      if(applyDB(d.data)){
-        populateFilters && updateStats(); // 필터는 중복추가 방지 위해 stats만 갱신
-        updateStats(); render();
-        if(curTab==='dash') renderDash();
-        console.log('[병원정보DB] '+d.data.length+'건 동기화 완료');
-      }
+      if(!d.success||!d.data||!d.data.length) return;
+      try{
+        if(applyDB(d.data)){
+          updateStats(); render();
+          if(curTab==='dash') renderDash();
+          console.log('[병원정보DB] '+d.data.length+'건 동기화');
+        }
+      }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
     })
     .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
 
-  // [2] 방문로그 최근 방문일 동기화 (기존 기능 유지)
   fetch(VISIT_LOG_URL,{method:'GET'})
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.ok||!d.visits) return;
-      var updated=false;
-      HOSPITALS.forEach(function(h){
-        var v=d.visits[h.n];
-        if(v&&v.date&&v.date>=(h.li||'')){ h.li=v.date; updated=true; }
-      });
-      if(updated){ updateStats(); render(); }
+      try{
+        var updated=false;
+        HOSPITALS.forEach(function(h){
+          var v=d.visits[h.n];
+          if(v&&v.date&&cleanDate(v.date)>=(h.li||'')){ h.li=cleanDate(v.date); updated=true; }
+        });
+        if(updated){ updateStats(); render(); }
+      }catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
     })
     .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
 })();
