@@ -811,7 +811,8 @@ function renderVocAnalysis(){
     return html;
   }
 
-  const topSym=vocCount(recs,'fc',1)[0]||['',0];
+  const fcList=vocCount(recs,'fc',5).filter(x=>x[0]!=='이상없음')
+  const topSym=fcList[0]||['',0];
   html += '<div class="stats" style="margin:4px 0 12px;">'+
     '<div class="s"><div class="num" style="color:var(--navy)">'+recs.length+'</div><div class="lbl">'+escapeHtml(periodLabel)+'</div></div>'+
     '<div class="s"><div class="num" style="color:var(--red)">'+topSym[1]+'</div><div class="lbl">'+escapeHtml(topSym[0])+'</div></div>'+
