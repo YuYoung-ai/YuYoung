@@ -1140,47 +1140,15 @@ populateFilters();
 updateStats();
 applyLang();
 
-// ── 구글시트 동기화 (백그라운드, 안전모드 + 5분캐시 + 표시배너) ──
+// ── 구글시트 동기화 (안전모드 + 저장본 유지 + 5분캐시 + 표시배너) ──
 (function(){
   var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
   var VISIT_LOG_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
-  var SYNC_INTERVAL=5*60*1000; // 5분: 같은 탭 재방문 시 이 시간 안이면 동기화 생략
+  var SYNC_INTERVAL=5*60*1000;       // 5분: 이 시간 안이면 새 동기화 생략
+  var CACHE_KEY='bazHospDBCache';     // 시트에서 받아온 데이터 저장 키
+  var CACHE_TS_KEY='bazHospDBCacheTs';
 
-  // 5분 이내 재방문이면 동기화 건너뛰기 (콜드스타트 딜레이 회피)
-  var last=0;
-  try{ last=parseInt(sessionStorage.getItem('bazLastSync')||'0'); }catch(e){}
-  if(Date.now()-last < SYNC_INTERVAL){
-    console.log('[동기화] 최근 동기화됨, 생략 (5분 캐시)');
-    return;
-  }
-  try{ sessionStorage.setItem('bazLastSync', String(Date.now())); }catch(e){}
-
-  // ── 동기화 표시 배너 ──
-  function showBanner(){
-    if(document.getElementById('syncBanner')) return;
-    var b=document.createElement('div');
-    b.id='syncBanner';
-    b.style.cssText='position:fixed;bottom:16px;right:16px;background:#1B2F5E;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:20px;z-index:999;box-shadow:0 4px 14px rgba(16,29,61,.3);display:flex;align-items:center;gap:7px;opacity:.95;transition:opacity .4s;';
-    b.innerHTML='<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:bazSpin .7s linear infinite;"></span>시트 동기화 중...';
-    document.body.appendChild(b);
-    if(!document.getElementById('bazSpinStyle')){
-      var s=document.createElement('style'); s.id='bazSpinStyle';
-      s.textContent='@keyframes bazSpin{to{transform:rotate(360deg)}}';
-      document.head.appendChild(s);
-    }
-  }
-  function bannerDone(msg, ok){
-    var b=document.getElementById('syncBanner');
-    if(!b) return;
-    b.innerHTML=(ok?'✅ ':'⚠️ ')+msg;
-    b.style.background=ok?'#1E7E4E':'#B8860B';
-    setTimeout(function(){ b.style.opacity='0'; setTimeout(function(){ if(b.parentNode) b.remove(); },400); }, 1600);
-  }
-  var pending=2; // DB + 방문로그 두 fetch
-  function oneDone(){ pending--; if(pending<=0) bannerDone('동기화 완료', true); }
-  showBanner();
-
-  // 날짜를 yyyy-MM-dd로 정규화 (깨진 형식 방어)
+  // 날짜를 yyyy-MM-dd로 정규화
   function cleanDate(v){
     if(!v) return '';
     var s=String(v).trim();
@@ -1220,6 +1188,53 @@ applyLang();
     return updated;
   }
 
+  // 1) 먼저 저장본(캐시)이 있으면 즉시 적용 → 동기화 건너뛰어도 데이터 유지됨
+  try{
+    var cached=localStorage.getItem(CACHE_KEY);
+    if(cached){
+      var rows=JSON.parse(cached);
+      if(applyDB(rows)){
+        updateStats(); render();
+        if(curTab==='dash') renderDash();
+        console.log('[병원정보DB] 저장본 '+rows.length+'건 적용');
+      }
+    }
+  }catch(e){ console.warn('[병원정보DB] 저장본 적용 오류(무시):',e); }
+
+  // 2) 5분 이내 재방문이면 새 동기화는 생략 (저장본은 위에서 이미 반영됨)
+  var lastTs=0;
+  try{ lastTs=parseInt(localStorage.getItem(CACHE_TS_KEY)||'0'); }catch(e){}
+  if(Date.now()-lastTs < SYNC_INTERVAL){
+    console.log('[동기화] 최근 동기화됨, 새 호출 생략 (저장본 사용)');
+    return;
+  }
+
+  // ── 동기화 표시 배너 ──
+  function showBanner(){
+    if(document.getElementById('syncBanner')) return;
+    var b=document.createElement('div');
+    b.id='syncBanner';
+    b.style.cssText='position:fixed;bottom:16px;right:16px;background:#1B2F5E;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:20px;z-index:999;box-shadow:0 4px 14px rgba(16,29,61,.3);display:flex;align-items:center;gap:7px;opacity:.95;transition:opacity .4s;';
+    b.innerHTML='<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:bazSpin .7s linear infinite;"></span>시트 동기화 중...';
+    document.body.appendChild(b);
+    if(!document.getElementById('bazSpinStyle')){
+      var s=document.createElement('style'); s.id='bazSpinStyle';
+      s.textContent='@keyframes bazSpin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(s);
+    }
+  }
+  function bannerDone(msg, ok){
+    var b=document.getElementById('syncBanner');
+    if(!b) return;
+    b.innerHTML=(ok?'✅ ':'⚠️ ')+msg;
+    b.style.background=ok?'#1E7E4E':'#B8860B';
+    setTimeout(function(){ b.style.opacity='0'; setTimeout(function(){ if(b.parentNode) b.remove(); },400); }, 1600);
+  }
+  var pending=2;
+  function oneDone(){ pending--; if(pending<=0) bannerDone('동기화 완료', true); }
+  showBanner();
+
+  // 3) 새 동기화: 받아온 데이터를 저장본으로 갱신
   fetch(HOSPITAL_DB_URL,{method:'GET'})
     .then(function(r){return r.json();})
     .then(function(d){
@@ -1230,7 +1245,10 @@ applyLang();
           if(curTab==='dash') renderDash();
           console.log('[병원정보DB] '+d.data.length+'건 동기화');
         }
-      }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
+        // 저장본 갱신
+        localStorage.setItem(CACHE_KEY, JSON.stringify(d.data));
+        localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
+      }catch(e){ console.warn('[병원정보DB] 적용/저장 오류(무시):',e); }
       oneDone();
     })
     .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e); bannerDone('동기화 실패', false); pending=0;});
