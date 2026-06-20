@@ -86,6 +86,15 @@
   .tag{background:var(--teal-soft);border:1px solid #BCD9E8;color:var(--teal);
     font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;cursor:pointer;transition:all .15s;}
   .tag:hover{background:var(--teal);color:#fff;border-color:var(--teal);}
+  /* 처리 구분 세그먼트 버튼 */
+  .seg-group{display:flex;gap:8px;}
+  .seg-btn{flex:1;padding:11px 8px;border-radius:9px;border:1.5px solid var(--gray-line);
+    background:#fff;color:var(--text-muted);font-size:13px;font-weight:700;cursor:pointer;
+    font-family:inherit;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px;}
+  .seg-btn:hover{border-color:var(--teal);}
+  .seg-btn.on[data-proc="교체"]{background:#FBEAE8;border-color:#E08B80;color:#C0392B;}
+  .seg-btn.on[data-proc="수리"]{background:#FBF3E0;border-color:#D9B85C;color:#B8860B;}
+  .seg-btn.on[data-proc="정상"]{background:#E8F5EE;border-color:#7FC79B;color:#1E7E4E;}
   .step-page{display:none;} .step-page.active{display:block;}
   .nav-bar{padding:12px 16px 24px;display:flex;gap:10px;}
   .btn-prev{flex:0 0 auto;padding:13px 20px;border-radius:10px;border:1.5px solid var(--gray-line);
@@ -227,12 +236,6 @@
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
-    <!-- 사용자 가이드 버튼 -->
-    <button type="button" id="appBtnUserGuide" onclick="window.location.href='user_guide.html'" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.3);background:rgba(202,220,252,.07);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
-      <span style="font-size:24px;">📘</span>
-      <span style="flex:1;"><span>사용자 가이드</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">PWA 도구 사용법 안내</span></span>
-      <span style="color:#8EA0C8;">→</span>
-    </button>
   </div>
 
   <!-- 2단계: 언어 선택 (AS 보고서 선택 시) -->
@@ -320,8 +323,13 @@
     <div class="card-body">
       <div class="field-group"><label data-i18n="l_part">부품명</label>
         <input type="text" id="partName" data-i18n-ph="ph_part" placeholder="예) RFID Module A'ssy" maxlength="18" oninput="updCounter(this)"><span class="char-counter" id="cc_partName">0/18</span></div>
-      <div class="field-group"><label data-i18n="l_partReason">교체 사유</label>
-        <input type="text" id="partReason" data-i18n-ph="ph_partReason" placeholder="예) 노즐 인식 불가에 의한 교체 처리 진행 건" maxlength="28" oninput="updCounter(this)"><span class="char-counter" id="cc_partReason">0/28</span></div>
+      <div class="field-group"><label data-i18n="l_partProc">처리 구분</label>
+        <div class="seg-group" id="partProcGroup">
+          <button type="button" class="seg-btn" data-proc="교체" onclick="selectProc(this)">🔄 <span data-i18n="proc_replace">교체</span></button>
+          <button type="button" class="seg-btn" data-proc="수리" onclick="selectProc(this)">🔧 <span data-i18n="proc_repair">수리</span></button>
+          <button type="button" class="seg-btn" data-proc="정상" onclick="selectProc(this)">✓ <span data-i18n="proc_normal">정상</span></button>
+        </div>
+        <input type="hidden" id="partProc" value=""></div>
     </div>
   </div>
   <div class="nav-bar"><button type="button" class="btn-next" data-go="2" data-i18n="b_next2">다음 — 사진 첨부 →</button></div>
@@ -489,7 +497,7 @@ const I18N = {
     ph_ver:'예) 2.1.1 / 2.6 / 1.2.2', l_date:'발생 일자', l_eng:'담당자', ph_eng:'예) 홍 길 동', d_placeholder:'날짜 선택',
     l_req:'요청사항 (토픽)', ph_req:'예) 노즐 인식 불가',
     h_parts:'내부 수리 부품', l_part:'부품명', ph_part:"예) RFID Module A'ssy",
-    l_partReason:'교체 사유', ph_partReason:'예) 노즐 인식 불가에 의한 교체 처리 진행 건',
+    l_partProc:'처리 구분', proc_replace:'교체', proc_repair:'수리', proc_normal:'정상',
     b_next2:'다음 — 사진 첨부 →',
     h_symPhotos:'접수 증상 사진 (좌측 · 최대 3컷)', h_phenPhotos:'접수 현상 사진 3컷 + 동영상 1개 (우측)',
     t_videoHint:'💡 동영상은 재생 가능한 형태로 PPT에 삽입됩니다. 용량이 커질 수 있으니 30초 이내 짧은 영상을 권장합니다.',
@@ -532,7 +540,7 @@ const I18N = {
     ph_ver:'e.g. 2.1.1 / 2.6 / 1.2.2', l_date:'Service Date', l_eng:'Engineer', ph_eng:'Your name', d_placeholder:'Select date',
     l_req:'Reported Issue', ph_req:'e.g. Nozzle not recognized',
     h_parts:'Parts Replaced', l_part:'Part', ph_part:"e.g. RFID Module A'ssy",
-    l_partReason:'Reason', ph_partReason:'e.g. RFID recognition failure',
+    l_partProc:'Action', proc_replace:'Replace', proc_repair:'Repair', proc_normal:'Normal',
     b_next2:'Next — Photos →',
     h_symPhotos:'Symptom Photos (left · up to 3)', h_phenPhotos:'On-site Photos 3 + Video 1 (right)',
     t_videoHint:'💡 Video is embedded as playable in the PPT. Keep it under 30 seconds to limit file size.',
@@ -575,7 +583,7 @@ const I18N = {
     ph_ver:'例) 2.1.1 / 2.6 / 1.2.2', l_date:'対応日', l_eng:'担当者', ph_eng:'氏名を入力', d_placeholder:'日付を選択',
     l_req:'申告内容', ph_req:'例) ノズル認識不可',
     h_parts:'交換部品', l_part:'部品名', ph_part:"例) RFID Module A'ssy",
-    l_partReason:'交換理由', ph_partReason:'例) RFID認識機能の喪失による交換',
+    l_partProc:'処理区分', proc_replace:'交換', proc_repair:'修理', proc_normal:'正常',
     b_next2:'次へ — 写真添付 →',
     h_symPhotos:'症状写真（左・最大3枚）', h_phenPhotos:'現場写真3枚 + 動画1本（右）',
     t_videoHint:'💡 動画は再生可能な形式でPPTに埋め込まれます。ファイルサイズを抑えるため30秒以内を推奨します。',
@@ -870,7 +878,7 @@ function buildPreview(){
     [t('l_hospital'),v('hospital')],[t('l_serial'),v('serialNo')+mfg],
     [t('p_rowVer'),v('version')||'—'],[t('l_req'),v('requestDetail')||'—'],
     [t('l_date'),v('issueDate')],[t('l_eng'),v('engineer')],
-    [t('r_part'),(v('partName')||'—')+(v('partReason')?'\n'+v('partReason'):'')],
+    [t('r_part'),(v('partName')||'—')+(v('partProc')?'\n['+procLabel(v('partProc'))+']':'')],
   ];
   document.getElementById('previewInfoTable').innerHTML=
     rows.map(([k,val])=>`<tr><td>${k}</td><td>${val.replace(/\n/g,'<br>')}</td></tr>`).join('');
@@ -929,6 +937,17 @@ function initCounters(){
   });
 }
 
+function procLabel(val){
+  const map={'교체':'proc_replace','수리':'proc_repair','정상':'proc_normal'};
+  return map[val]?t(map[val]):val;
+}
+function selectProc(btn){
+  const group=document.getElementById('partProcGroup');
+  group.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('partProc').value=btn.getAttribute('data-proc');
+}
+
 async function generatePPT(){
   const btn=document.querySelector('.btn-generate');
   btn.disabled=true;btn.innerHTML='<span>⏳</span> 생성 중...';
@@ -947,115 +966,299 @@ function imgData(dataUrl){
 
 async function buildPPTX(Pptx){
   const pres=new Pptx();
+  // 슬라이드 크기: 가로 25.4cm × 세로 14.29cm (16:9 widescreen)
   pres.defineLayout({name:'BAZ',width:10,height:5.625});
   pres.layout='BAZ';
-  const NAVY='1B2F5E',NAVY2='2A4080',TEAL='2E7D9E',ACCENT='4E9CC8',WHITE='FFFFFF',
-        LGRAY='F7F9FC',MGRAY='E8ECF2',LINE='E2E7F0',DGRAY='6B7A99',TTEXT='3A3A4A';
+
+  // ── 색상 팔레트 (사진 기준) ──
+  const NAVY='1B2F5E';   // 헤더·라벨 진남색
+  const TEAL='2E7D9E';   // 강조 틸
+  const WHITE='FFFFFF';
+  const LGRAY='F5F7FA';  // 셀 연배경
+  const LINE='DDE3EE';   // 테두리
+  const DGRAY='6B7A99';  // 비어있을 때 글자
+  const TTEXT='1A1A2E';  // 본문 텍스트
+  const LBLUE='EEF2F8';  // 라벨 셀 배경
+
   const FF=(LANG==='ja')?'Meiryo':'맑은 고딕';
-  const PX=10/960; const P=(px)=>px*PX;
-  const s=pres.addSlide(); s.background={color:WHITE};
 
-  // ── 섹션 헤더 헬퍼: 왼쪽 컬러 바 + 텍스트 (가벼운 스타일) ──
-  function sectionHeader(x,y,w,text,barColor){
-    s.addShape(pres.ShapeType.rect,{x:P(x),y:P(y),w:P(3),h:P(15),fill:{color:barColor||NAVY},line:{type:'none'}});
-    s.addText(text,{x:P(x+8),y:P(y-3),w:P(w),h:P(20),fontSize:11,bold:true,color:NAVY,fontFace:FF,valign:'middle',margin:0});
+  // 기준 캔버스: 960 × 540 px → 인치 변환
+  const PX=10/960;
+  const P=(px)=>Math.round(px*PX*10000)/10000;
+
+  const s=pres.addSlide();
+  s.background={color:WHITE};
+
+  // ════════════════════════════════════════════
+  // 1. 헤더 띠 (상단 네이비 바)
+  // ════════════════════════════════════════════
+  const HDR_H=52;
+  s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(HDR_H),fill:{color:NAVY},line:{color:NAVY}});
+
+  // 중앙 제목 박스 (테두리 둥근 직사각형)
+  s.addShape(pres.ShapeType.roundRect,{
+    x:P(290),y:P(10),w:P(380),h:P(32),
+    fill:{color:'243560'},rectRadius:0.06,
+    line:{color:'CADCFC',width:0.75}
+  });
+  s.addText(v('partName')||t('p_topicDefault'),{
+    x:P(290),y:P(10),w:P(380),h:P(32),
+    fontSize:14,bold:true,color:'CADCFC',fontFace:FF,
+    align:'center',valign:'middle',margin:0
+  });
+
+  // 우상단 'baz' 워터마크
+  s.addText('baz',{
+    x:P(876),y:0,w:P(76),h:P(HDR_H),
+    fontSize:17,bold:true,color:'8EA0C8',fontFace:'Georgia',
+    align:'right',valign:'middle',margin:0
+  });
+
+  // ════════════════════════════════════════════
+  // 2. 하단 푸터 띠
+  // ════════════════════════════════════════════
+  const FTR_Y=527, FTR_H=13;
+  s.addShape(pres.ShapeType.rect,{x:0,y:P(FTR_Y),w:P(960),h:P(FTR_H),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText('BAZ BIOMEDIC Field Service Report',{
+    x:P(14),y:P(FTR_Y),w:P(500),h:P(FTR_H),
+    fontSize:7,color:'9EADCC',fontFace:FF,valign:'middle',margin:0
+  });
+
+  // ════════════════════════════════════════════
+  // 섹션 헤더 헬퍼: ▌굵은 왼쪽 바 + 텍스트
+  // ════════════════════════════════════════════
+  function secHdr(x,y,w,text,color){
+    color=color||NAVY;
+    s.addShape(pres.ShapeType.rect,{x:P(x),y:P(y),w:P(4),h:P(18),fill:{color},line:{type:'none'}});
+    s.addText(text,{x:P(x+8),y:P(y-1),w:P(w),h:P(18),
+      fontSize:11,bold:true,color:NAVY,fontFace:FF,valign:'middle',margin:0});
   }
 
-  // ── 헤더 띠 ──
-  s.addShape(pres.ShapeType.rect,{x:0,y:0,w:P(960),h:P(52),fill:{color:NAVY},line:{color:NAVY}});
-  s.addShape(pres.ShapeType.roundRect,{x:P(324),y:P(11),w:P(310),h:P(31),fill:{color:'253A66'},rectRadius:0.05,line:{color:'CADCFC',width:0.75}});
-  s.addText(v('requestDetail')||t('p_topicDefault'),{x:P(324),y:P(11),w:P(310),h:P(31),fontSize:13,bold:true,color:'CADCFC',fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText('baz',{x:P(880),y:0,w:P(70),h:P(52),fontSize:16,bold:true,color:'9EADCC',fontFace:'Georgia',align:'right',valign:'middle',margin:0});
-  s.addShape(pres.ShapeType.rect,{x:0,y:P(527),w:P(960),h:P(13),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText('BAZ BIOMEDIC Field Service Report',{x:P(18),y:P(527),w:P(400),h:P(13),fontSize:7,color:'9EADCC',fontFace:FF,valign:'middle',margin:0});
+  // ════════════════════════════════════════════
+  // 좌측 영역  LX=16  LW=432
+  // ════════════════════════════════════════════
+  const LX=16, LW=432, CONTENT_Y=HDR_H+14;
 
-  const LX=17, LW=421;
+  // ── A. 내부 수리 부품 ──────────────────────
+  const PA_Y=CONTENT_Y;           // 66
+  secHdr(LX,PA_Y,220,t('p_parts'),NAVY);
 
-  // ── 내부 수리 부품 ──
-  sectionHeader(LX,67,200,t('p_parts'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(LX),y:P(89),w:P(LW),h:P(40),fill:{color:LGRAY},rectRadius:0.04,line:{color:LINE,width:1}});
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(89),w:P(137),h:P(40),fill:{color:'EEF2F8'},line:{color:LINE,width:1}});
-  s.addText(v('partName')||'—',{x:P(LX),y:P(89),w:P(137),h:P(40),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('partReason')||'—',{x:P(154),y:P(89),w:P(283),h:P(40),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  const PA_ROW_Y=PA_Y+20;         // 86
+  const PA_ROW_H=38;
+  const PA_LABEL_W=142;
+  // 배경
+  s.addShape(pres.ShapeType.roundRect,{
+    x:P(LX),y:P(PA_ROW_Y),w:P(LW),h:P(PA_ROW_H),
+    fill:{color:WHITE},rectRadius:0.03,line:{color:LINE,width:0.75}
+  });
+  // 라벨 셀
+  s.addShape(pres.ShapeType.rect,{
+    x:P(LX),y:P(PA_ROW_Y),w:P(PA_LABEL_W),h:P(PA_ROW_H),
+    fill:{color:LBLUE},line:{color:LINE,width:0.75}
+  });
+  s.addText(v('partName')||'—',{
+    x:P(LX),y:P(PA_ROW_Y),w:P(PA_LABEL_W),h:P(PA_ROW_H),
+    fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0
+  });
+  // 처리 구분: 색상 구분 텍스트
+  const procVal=v('partProc');
+  const procColorMap={'교체':'C0392B','수리':'B8860B','정상':'1E7E4E'};
+  const procColor=procColorMap[procVal]||TTEXT;
+  s.addText(procVal?procLabel(procVal):'—',{
+    x:P(LX+PA_LABEL_W),y:P(PA_ROW_Y),w:P(LW-PA_LABEL_W),h:P(PA_ROW_H),
+    fontSize:11,bold:!!procVal,color:procColor,fontFace:FF,align:'center',valign:'middle',margin:0
+  });
 
-  // ── 고장 원인 분석 ──
-  sectionHeader(LX,138,200,t('p_analysis'),TEAL);
-  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(161),w:P(3),h:P(26),fill:{color:TEAL},line:{type:'none'}});
-  s.addShape(pres.ShapeType.rect,{x:P(LX+3),y:P(161),w:P(LW-3),h:P(26),fill:{color:LGRAY},line:{color:LINE,width:0.75}});
-  s.addText(v('symptom'),{x:P(LX+8),y:P(161),w:P(LW-12),h:P(26),fontSize:9,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  // ── B. 문제 원인 분석 ───────────────────────
+  const PB_Y=PA_ROW_Y+PA_ROW_H+12;   // 136
+  secHdr(LX,PB_Y,220,t('p_analysis'),TEAL);
 
-  const symPos=[[31,195],[169,195],[307,195]];
-  symPhotos.forEach((p,i)=>{const px=symPos[i][0],py=symPos[i][1];
-    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(123),h:P(94),sizing:{type:'cover',w:P(123),h:P(94)}});
-    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(123),h:P(94),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(123),h:P(94),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
+  // 증상 텍스트 행
+  const PB_SYM_Y=PB_Y+20;            // 156
+  const PB_SYM_H=28;
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(PB_SYM_Y),w:P(5),h:P(PB_SYM_H),fill:{color:TEAL},line:{type:'none'}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX+5),y:P(PB_SYM_Y),w:P(LW-5),h:P(PB_SYM_H),fill:{color:LGRAY},line:{color:LINE,width:0.5}});
+  s.addText(v('symptom'),{
+    x:P(LX+12),y:P(PB_SYM_Y),w:P(LW-16),h:P(PB_SYM_H),
+    fontSize:9.5,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0
+  });
 
-  // ── 원인 / 해결 (라벨 색 구분) ──
-  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(299),w:P(421),h:P(66),rectRadius:0.03,fill:{color:WHITE},line:{color:LINE,width:1}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(421),h:P(33),fill:{color:LGRAY},line:{color:LINE,width:0.5}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(421),h:P(33),fill:{color:WHITE},line:{color:LINE,width:0.5}});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(299),w:P(58),h:P(33),fill:{color:NAVY},line:{color:NAVY}});
-  s.addText(t('p_cause'),{x:P(16),y:P(299),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
-  s.addShape(pres.ShapeType.rect,{x:P(16),y:P(332),w:P(58),h:P(33),fill:{color:TEAL},line:{color:TEAL}});
-  s.addText(t('p_solution'),{x:P(16),y:P(332),w:P(58),h:P(33),fontSize:9,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
-  s.addText(v('cause'),{x:P(80),y:P(299),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
-  s.addText(v('solution'),{x:P(80),y:P(332),w:P(353),h:P(33),fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+  // 증상 사진 3장
+  const PB_IMG_Y=PB_SYM_Y+PB_SYM_H+6;  // 190
+  const PB_IMG_H=96;
+  const PB_IMG_W=Math.floor((LW-8)/3);  // ~140
+  const PB_IMG_GAP=4;
+  symPhotos.forEach((p,i)=>{
+    const ix=LX+i*(PB_IMG_W+PB_IMG_GAP);
+    const iy=PB_IMG_Y;
+    if(p){
+      s.addImage({data:imgData(p),x:P(ix),y:P(iy),w:P(PB_IMG_W),h:P(PB_IMG_H),
+        sizing:{type:'cover',w:P(PB_IMG_W),h:P(PB_IMG_H)}});
+    }else{
+      s.addShape(pres.ShapeType.rect,{x:P(ix),y:P(iy),w:P(PB_IMG_W),h:P(PB_IMG_H),
+        fill:{color:LGRAY},line:{color:LINE,width:0.75}});
+      s.addText(t('p_photo')+' '+(i+1),{x:P(ix),y:P(iy),w:P(PB_IMG_W),h:P(PB_IMG_H),
+        fontSize:8.5,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+    }
+  });
 
-  // ── 엔지니어 처리 의견 ──
-  sectionHeader(16,374,200,t('p_opinion'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(16),y:P(396),w:P(421),h:P(127),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('opinion')||t('p_opinionPh'),{x:P(24),y:P(400),w:P(405),h:P(119),fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  // ── C. 원인 / 해결 행 ──────────────────────
+  const PC_Y=PB_IMG_Y+PB_IMG_H+8;    // 300
+  const PC_ROW_H=32;
+  const PC_LABEL_W=60;
 
-  // ── 구분선 ──
-  s.addShape(pres.ShapeType.line,{x:P(454),y:P(67),w:0,h:P(456),line:{color:MGRAY,width:1}});
+  // 원인 행
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(PC_Y),w:P(LW),h:P(PC_ROW_H),fill:{color:LGRAY},line:{color:LINE,width:0.75}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(PC_Y),w:P(PC_LABEL_W),h:P(PC_ROW_H),fill:{color:NAVY},line:{color:NAVY}});
+  s.addText(t('p_cause'),{x:P(LX),y:P(PC_Y),w:P(PC_LABEL_W),h:P(PC_ROW_H),
+    fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('cause'),{x:P(LX+PC_LABEL_W),y:P(PC_Y),w:P(LW-PC_LABEL_W),h:P(PC_ROW_H),
+    fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
 
-  const RX=469, RW=472;
+  // 구분선
+  s.addShape(pres.ShapeType.line,{x:P(LX),y:P(PC_Y+PC_ROW_H),w:P(LW),h:0,line:{color:LINE,width:0.5}});
 
-  // ── AS 접수 정보 ──
-  sectionHeader(RX,67,200,t('p_svcInfo'),NAVY);
-  const mfgStr=v('mfgDate')?`(${v('mfgDate')})`:'';
+  // 해결 행
+  const PCS_Y=PC_Y+PC_ROW_H;
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(PCS_Y),w:P(LW),h:P(PC_ROW_H),fill:{color:WHITE},line:{color:LINE,width:0.75}});
+  s.addShape(pres.ShapeType.rect,{x:P(LX),y:P(PCS_Y),w:P(PC_LABEL_W),h:P(PC_ROW_H),fill:{color:TEAL},line:{color:TEAL}});
+  s.addText(t('p_solution'),{x:P(LX),y:P(PCS_Y),w:P(PC_LABEL_W),h:P(PC_ROW_H),
+    fontSize:10,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+  s.addText(v('solution'),{x:P(LX+PC_LABEL_W),y:P(PCS_Y),w:P(LW-PC_LABEL_W),h:P(PC_ROW_H),
+    fontSize:10,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});
+
+  // ── D. 엔지니어 처리 의견 ──────────────────
+  const PD_Y=PCS_Y+PC_ROW_H+12;      // ~380
+  secHdr(LX,PD_Y,220,t('p_opinion'),NAVY);
+
+  const PD_BOX_Y=PD_Y+20;
+  const PD_BOX_H=FTR_Y-PD_BOX_Y-4;  // 하단 푸터까지 꽉 채움
+  s.addShape(pres.ShapeType.roundRect,{
+    x:P(LX),y:P(PD_BOX_Y),w:P(LW),h:P(PD_BOX_H),
+    fill:{color:LGRAY},rectRadius:0.03,line:{color:LINE,width:0.75}
+  });
+  s.addText(v('opinion')||t('p_opinionPh'),{
+    x:P(LX+8),y:P(PD_BOX_Y+4),w:P(LW-16),h:P(PD_BOX_H-8),
+    fontSize:9.5,color:v('opinion')?TTEXT:DGRAY,fontFace:FF,
+    align:'center',valign:'middle',margin:0,wrap:true
+  });
+
+  // ════════════════════════════════════════════
+  // 세로 구분선
+  // ════════════════════════════════════════════
+  const DIV_X=LX+LW+10;   // 458
+  s.addShape(pres.ShapeType.line,{
+    x:P(DIV_X),y:P(HDR_H+10),w:0,h:P(FTR_Y-HDR_H-16),
+    line:{color:LINE,width:1}
+  });
+
+  // ════════════════════════════════════════════
+  // 우측 영역  RX=472  RW=472
+  // ════════════════════════════════════════════
+  const RX=DIV_X+10;  // 468
+  const RW=960-RX-8;  // 484
+
+  // ── E. AS 접수 정보 테이블 ─────────────────
+  secHdr(RX,CONTENT_Y,220,t('p_svcInfo'),NAVY);
+
+  const mfgStr=v('mfgDate')?`  (${v('mfgDate')})`:'';
   const infoRows=[
-    [t('p_rowHospital'),v('hospital')],[t('p_rowSerial'),v('serialNo')+(mfgStr?'  '+mfgStr:'')],
-    [t('p_rowVer'),v('version')||'—'],[t('p_rowReq'),v('requestDetail')||'—'],
-    [t('p_rowDate'),v('issueDate')],[t('p_rowEng'),v('engineer')],
+    [t('p_rowHospital'), v('hospital')||'—'],
+    [t('p_rowSerial'),   (v('serialNo')||'—')+mfgStr],
+    [t('p_rowVer'),      v('version')||'—'],
+    [t('p_rowReq'),      v('requestDetail')||'—'],
+    [t('p_rowDate'),     v('issueDate')||'—'],
+    [t('p_rowEng'),      v('engineer')||'—'],
   ];
-  const rowH=30, infoY=89, labelW=144;
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(infoY),w:P(RW),h:P(rowH*6),rectRadius:0.02,fill:{color:WHITE},line:{color:LINE,width:1}});
-  infoRows.forEach((row,i)=>{const label=row[0],val=row[1];const rowY=infoY+i*rowH; const even=i%2===0;
-    if(even) s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(RW),h:P(rowH),fill:{color:LGRAY},line:{type:'none'}});
-    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fill:{color:'EEF2F8'},line:{color:LINE,width:0.5}});
-    if(i<5) s.addShape(pres.ShapeType.line,{x:P(RX),y:P(rowY+rowH),w:P(RW),h:0,line:{color:LINE,width:0.5}});
-    s.addText(label,{x:P(RX),y:P(rowY),w:P(labelW),h:P(rowH),fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0});
-    s.addText(val,{x:P(RX+labelW),y:P(rowY),w:P(RW-labelW),h:P(rowH),fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0});});
+  const ROW_H=30, INFO_Y=CONTENT_Y+20, LBL_W=132;
+  const INFO_H=ROW_H*6;
 
-  // ── 접수 현상 (사진/영상) ──
-  sectionHeader(RX,286,200,t('p_phen'),TEAL);
-  const cellW=106, cellH=106, gap=16, startX=469, mediaY=307;
-  const mediaX=[startX, startX+cellW+gap, startX+2*(cellW+gap), startX+3*(cellW+gap)];
-  phenPhotos.forEach((p,i)=>{const px=mediaX[i],py=mediaY;
-    if(p) s.addImage({data:imgData(p),x:P(px),y:P(py),w:P(cellW),h:P(cellH),sizing:{type:'cover',w:P(cellW),h:P(cellH)}});
-    else { s.addShape(pres.ShapeType.roundRect,{x:P(px),y:P(py),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:LGRAY},line:{color:LINE}});
-      s.addText(t('p_photo')+' '+(i+1),{x:P(px),y:P(py),w:P(cellW),h:P(cellH),fontSize:9,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0}); }});
-  const vx=mediaX[3], vy=mediaY;
+  // 테이블 외곽선
+  s.addShape(pres.ShapeType.roundRect,{
+    x:P(RX),y:P(INFO_Y),w:P(RW),h:P(INFO_H),
+    fill:{color:WHITE},rectRadius:0.02,line:{color:LINE,width:0.75}
+  });
+
+  infoRows.forEach((row,i)=>{
+    const [label,val]=row;
+    const ry=INFO_Y+i*ROW_H;
+    // 짝수 행 배경
+    if(i%2===0) s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(ry),w:P(RW),h:P(ROW_H),fill:{color:LGRAY},line:{type:'none'}});
+    // 라벨 셀
+    s.addShape(pres.ShapeType.rect,{x:P(RX),y:P(ry),w:P(LBL_W),h:P(ROW_H),fill:{color:LBLUE},line:{color:LINE,width:0.5}});
+    // 행 구분선 (마지막 제외)
+    if(i<5) s.addShape(pres.ShapeType.line,{x:P(RX),y:P(ry+ROW_H),w:P(RW),h:0,line:{color:LINE,width:0.5}});
+    // 라벨 텍스트
+    s.addText(label,{x:P(RX),y:P(ry),w:P(LBL_W),h:P(ROW_H),
+      fontSize:10,bold:true,color:NAVY,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
+    // 값 텍스트
+    s.addText(val,{x:P(RX+LBL_W),y:P(ry),w:P(RW-LBL_W),h:P(ROW_H),
+      fontSize:11,color:TTEXT,fontFace:FF,align:'center',valign:'middle',margin:0,fit:'shrink'});
+  });
+
+  // ── F. 접수 현상 (사진 3 + 동영상) ──────────
+  const PF_Y=INFO_Y+INFO_H+14;   // ~286
+  secHdr(RX,PF_Y,220,t('p_phen'),TEAL);
+
+  const PF_IMG_Y=PF_Y+20;
+  // 4칸 균등 분배 (사진3 + 동영상1)
+  const MEDIA_GAP=8;
+  const CELL_W=Math.floor((RW-MEDIA_GAP*3)/4);
+  const CELL_H=CELL_W;  // 정사각형
+
+  phenPhotos.forEach((p,i)=>{
+    const cx=RX+i*(CELL_W+MEDIA_GAP);
+    const cy=PF_IMG_Y;
+    if(p){
+      s.addImage({data:imgData(p),x:P(cx),y:P(cy),w:P(CELL_W),h:P(CELL_H),
+        sizing:{type:'cover',w:P(CELL_W),h:P(CELL_H)}});
+    }else{
+      s.addShape(pres.ShapeType.roundRect,{x:P(cx),y:P(cy),w:P(CELL_W),h:P(CELL_H),
+        fill:{color:LGRAY},rectRadius:0.04,line:{color:LINE,width:0.75}});
+      s.addText(t('p_photo')+' '+(i+1),{x:P(cx),y:P(cy),w:P(CELL_W),h:P(CELL_H),
+        fontSize:8,color:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+    }
+  });
+
+  // 동영상 칸
+  const vx=RX+3*(CELL_W+MEDIA_GAP);
+  const vy=PF_IMG_Y;
   if(phenVideo){
-    const mediaOpt={ type:'video', x:P(vx), y:P(vy), w:P(cellW), h:P(cellH),
-      data:`video/${phenVideo.ext};base64,${phenVideo.data.split(',')[1]}` };
-    if(phenVideo.poster) mediaOpt.cover = imgData(phenVideo.poster);
+    const mediaOpt={type:'video',x:P(vx),y:P(vy),w:P(CELL_W),h:P(CELL_H),
+      data:`video/${phenVideo.ext};base64,${phenVideo.data.split(',')[1]}`};
+    if(phenVideo.poster) mediaOpt.cover=imgData(phenVideo.poster);
     s.addMedia(mediaOpt);
-    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fill:{color:NAVY},line:{type:'none'}});
-    s.addText(t('p_video'),{x:P(vx),y:P(vy+cellH-16),w:P(cellW),h:P(16),fontSize:8,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
+    s.addShape(pres.ShapeType.rect,{x:P(vx),y:P(vy+CELL_H-16),w:P(CELL_W),h:P(16),fill:{color:NAVY},line:{type:'none'}});
+    s.addText(t('p_video'),{x:P(vx),y:P(vy+CELL_H-16),w:P(CELL_W),h:P(16),
+      fontSize:7.5,bold:true,color:WHITE,fontFace:FF,align:'center',valign:'middle',margin:0});
   }else{
-    s.addShape(pres.ShapeType.roundRect,{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),rectRadius:0.04,fill:{color:'F3EEFA'},line:{color:'C4B0E0',dashType:'dash'}});
-    s.addText(t('p_video'),{x:P(vx),y:P(vy),w:P(cellW),h:P(cellH),fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
+    // 사진과 동일 크기, 점선 보라 테두리
+    s.addShape(pres.ShapeType.roundRect,{x:P(vx),y:P(vy),w:P(CELL_W),h:P(CELL_H),
+      fill:{color:'F3EEFA'},rectRadius:0.04,line:{color:'C4B0E0',dashType:'dash',width:0.75}});
+    s.addText(t('p_video'),{x:P(vx),y:P(vy),w:P(CELL_W),h:P(CELL_H),
+      fontSize:9,color:'8A5FC0',fontFace:FF,align:'center',valign:'middle',margin:0});
   }
 
-  // ── 고객 피드백 ──
-  sectionHeader(RX,425,200,t('p_feedback'),NAVY);
-  s.addShape(pres.ShapeType.roundRect,{x:P(RX),y:P(447),w:P(RW),h:P(76),rectRadius:0.03,fill:{color:LGRAY},line:{color:LINE,width:1}});
-  s.addText(v('feedback')||t('p_feedbackPh'),{x:P(RX+8),y:P(451),w:P(RW-16),h:P(68),fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,align:'center',valign:'middle',margin:0});
+  // ── G. 고객 피드백 ──────────────────────────
+  const PG_Y=PF_IMG_Y+CELL_H+14;
+  secHdr(RX,PG_Y,220,t('p_feedback'),NAVY);
 
+  const PG_BOX_Y=PG_Y+20;
+  const PG_BOX_H=FTR_Y-PG_BOX_Y-4;
+  s.addShape(pres.ShapeType.roundRect,{
+    x:P(RX),y:P(PG_BOX_Y),w:P(RW),h:P(PG_BOX_H),
+    fill:{color:LGRAY},rectRadius:0.03,line:{color:LINE,width:0.75}
+  });
+  s.addText(v('feedback')||t('p_feedbackPh'),{
+    x:P(RX+8),y:P(PG_BOX_Y+4),w:P(RW-16),h:P(PG_BOX_H-8),
+    fontSize:9.5,color:v('feedback')?TTEXT:DGRAY,fontFace:FF,
+    align:'center',valign:'middle',margin:0,wrap:true
+  });
+
+  // ════════════════════════════════════════════
+  // 파일 저장
+  // ════════════════════════════════════════════
   const fileName=`${t('p_fileName')}_${v('hospital')||'NA'}_${v('serialNo')||'no_sn'}`;
-  // blob 생성 → 공유용 보관 + 다운로드
   const blob=await pres.write({outputType:'blob'});
   window._lastPptx={blob:blob, name:fileName+'.pptx'};
   const url=URL.createObjectURL(blob);
@@ -1078,7 +1281,7 @@ async function buildPPTX(Pptx){
 const GOOGLE_CLIENT_ID='171916204257-e6ofaf41mu2dnnisrjskj2ncrpa3bu6p.apps.googleusercontent.com';
 const GOOGLE_SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const SHEET_TITLE='BAZ_CS_AS접수현황';
-const SHEET_HEADERS=['기록일시','병원명','장비 S/N','제조일','버전','발생일자','담당자','요청사항','교체부품','교체사유','접수증상','불량원인','해결방법','처리의견','고객피드백'];
+const SHEET_HEADERS=['기록일시','병원명','장비 S/N','제조일','버전','발생일자','담당자','요청사항','교체부품','처리구분','접수증상','불량원인','해결방법','처리의견','고객피드백'];
 
 let gapiReady=false, gisReady=false, tokenClient=null, googleToken=null;
 
@@ -1197,7 +1400,7 @@ async function saveToSheet(){
     const row=[
       ts, v('hospital'), v('serialNo'), v('mfgDate'), v('version'),
       v('issueDate'), v('engineer'), v('requestDetail'),
-      v('partName'), v('partReason'),
+      v('partName'), v('partProc'),
       v('symptom'), v('cause'), v('solution'), v('opinion'), v('feedback')
     ];
     await gapi.client.sheets.spreadsheets.values.append({
@@ -1265,7 +1468,7 @@ function copyText(){
   const dt=v('issueDate')||'—';
   const eng=v('engineer')||'—';
   const req=v('requestDetail')||'—';
-  const part=(v('partName')||'—')+(v('partReason')?' / '+v('partReason'):'');
+  const part=(v('partName')||'—')+(v('partProc')?' / '+v('partProc'):'');
   const sym=v('symptom')||'—';
   const cause=v('cause')||'—';
   const sol=v('solution')||'—';
@@ -1372,8 +1575,10 @@ async function sharePptx(){
 }
 function restart(){
   ['hospital','serialNo','mfgDate','version','issueDate','engineer','requestDetail',
-   'partName','partReason','symptom','cause','solution','feedback','opinion']
+   'partName','partProc','symptom','cause','solution','feedback','opinion']
     .forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const pg=document.getElementById('partProcGroup');
+  if(pg) pg.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('on'));
   initCounters();
   for(let i=0;i<3;i++){removePhoto('sym',i);removePhoto('phen',i);}
   removePhoto('video',0);
