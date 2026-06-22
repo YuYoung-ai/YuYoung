@@ -1269,6 +1269,84 @@ applyLang();
     })
     .catch(function(e){console.warn('[방문로그] 읽기 실패:',e); oneDone();});
 })();
+
+// ── 병원 점검 현황(2026-06 이후 이슈) → 이력(HISTORY) 동기화 ──
+(function(){
+  // ▼▼ "병원 점검 현황" 탭 배포(/exec) URL을 여기에 입력하세요 ▼▼
+  var ISSUE_HISTORY_URL='https://script.google.com/macros/s/AKfycbxyX3a9dr3rDPK89RFj09C6zmdFExbLO5KnifliH25_Fl7unt4vfpzyoszdrARXSZU/exec';
+  // ▲▲ 위 URL 입력 전에는 이슈 동기화가 동작하지 않습니다 ▲▲
+
+  var I_CACHE='bazIssueHistCache', I_TS='bazIssueHistCacheTs';
+  var I_INTERVAL=5*60*1000;   // 5분 이내면 새 호출 생략
+
+  function keyOf(name,r){ return name+'|'+(r.d||'')+'|'+(r.sy||'')+'|'+String(r.fx||'').slice(0,40); }
+
+  function mergeIssues(rows){
+    if(!rows||!rows.length) return false;
+    // 기존 HISTORY 전체의 중복키 집합 (이미 반영된 항목은 다시 안 넣음)
+    var seen={};
+    Object.keys(HISTORY).forEach(function(nm){
+      (HISTORY[nm]||[]).forEach(function(rec){ seen[keyOf(nm,rec)]=1; });
+    });
+    var changed=false;
+    rows.forEach(function(r){
+      if(!r.name) return;
+      var k=keyOf(r.name,r);
+      if(seen[k]) return;
+      seen[k]=1;
+      var rec={d:r.d, f:r.f, t:r.t||'A/S', pt:r.pt, sy:r.sy, fx:r.fx, pay:r.pay||'무상'};
+      if(r.p) rec.p=r.p;
+      if(!HISTORY[r.name]) HISTORY[r.name]=[];
+      HISTORY[r.name].push(rec);
+      changed=true;
+    });
+    if(changed){
+      Object.keys(HISTORY).forEach(function(nm){
+        HISTORY[nm].sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+      });
+    }
+    return changed;
+  }
+
+  function afterMerge(){
+    try{ render(); }catch(e){}
+    try{
+      var m=document.getElementById('histModal');
+      if(m && m.classList.contains('show') && typeof renderHistBody==='function') renderHistBody();
+    }catch(e){}
+  }
+
+  // 1) 저장본 즉시 적용 → 오프라인/동기화 생략 시에도 6월 이슈 유지
+  try{
+    var c=localStorage.getItem(I_CACHE);
+    if(c){ if(mergeIssues(JSON.parse(c))) afterMerge(); }
+  }catch(e){ console.warn('[이슈이력] 저장본 적용 오류(무시):',e); }
+
+  // URL 미입력이면 종료 (저장본만 사용)
+  if(!ISSUE_HISTORY_URL || ISSUE_HISTORY_URL.indexOf('script.google.com')<0){
+    console.log('[이슈이력] 배포 URL 미입력 — 새 동기화 생략');
+    return;
+  }
+
+  // 2) 5분 이내 재방문이면 새 호출 생략
+  var lastTs=0;
+  try{ lastTs=parseInt(localStorage.getItem(I_TS)||'0'); }catch(e){}
+  if(Date.now()-lastTs < I_INTERVAL){ console.log('[이슈이력] 최근 동기화됨, 생략'); return; }
+
+  // 3) 새 동기화: 받아온 데이터를 저장본으로 갱신
+  fetch(ISSUE_HISTORY_URL,{method:'GET'})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d.success||!d.data) return;
+      try{
+        if(mergeIssues(d.data)) afterMerge();
+        localStorage.setItem(I_CACHE, JSON.stringify(d.data));
+        localStorage.setItem(I_TS, String(Date.now()));
+        console.log('[이슈이력] '+d.data.length+'건 동기화');
+      }catch(e){ console.warn('[이슈이력] 적용/저장 오류(무시):',e); }
+    })
+    .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
+})();
 </script>
 </body>
 </html>
