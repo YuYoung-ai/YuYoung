@@ -1140,15 +1140,89 @@ populateFilters();
 updateStats();
 applyLang();
 
-// ── 구글시트 동기화 (안전모드 + 저장본 유지 + 5분캐시 + 표시배너) ──
+// ── 구글시트 동기화 (백그라운드, 안전모드) ──
 (function(){
   var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
   var VISIT_LOG_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
-  var SYNC_INTERVAL=5*60*1000;       // 5분: 이 시간 안이면 새 동기화 생략
-  var CACHE_KEY='bazHospDBCache';     // 시트에서 받아온 데이터 저장 키
-  var CACHE_TS_KEY='bazHospDBCacheTs';
+  // ⬇️ 병원 점검 현황 → 이슈이력(HISTORY) 동기화 배포 URL을 여기에 입력
+  var ISSUE_HIST_URL='https://script.google.com/macros/s/AKfycbxxUilWbM4DkNu_W8DBIXIyAQmPBexYrZjbL8E36XC7yl0DknCx_yI1Dm1LN4wtDiH5/exec';
 
-  // 날짜를 yyyy-MM-dd로 정규화
+  var ISSUE_CACHE_KEY='bazIssueHistCache';
+  var ISSUE_CACHE_TS='bazIssueHistCacheTs';
+  var ISSUE_CACHE_TTL=5*60*1000; // 5분
+
+  // 시트 이슈이력을 HISTORY에 병합 + 현장 편집본(localStorage) 재적용
+  function applyIssueHist(data){
+    if(!data || typeof data!=='object') return false;
+    var names=Object.keys(data);
+    if(!names.length) return false;
+    names.forEach(function(name){
+      if(Array.isArray(data[name])) HISTORY[name]=data[name];
+    });
+    // 현장에서 추가/수정한 편집본이 시트 데이터를 덮어쓰도록 재적용
+    try{
+      var saved=localStorage.getItem('baz_hosp_history');
+      if(saved){
+        var edits=JSON.parse(saved);
+        Object.keys(edits).forEach(function(n){ HISTORY[n]=edits[n]; });
+      }
+    }catch(e){}
+    return true;
+  }
+
+  function refreshHistViews(){
+    try{ if(typeof render==='function') render(); }catch(e){}
+    // 이력 모달이 열려있으면 본문 갱신
+    try{
+      var modal=document.getElementById('histModal');
+      if(modal && modal.classList.contains('show') && typeof renderHistBody==='function'){
+        renderHistBody();
+      }
+    }catch(e){}
+  }
+
+  (function syncIssueHist(){
+    if(ISSUE_HIST_URL.indexOf('여기에_')===0) return; // URL 미입력 시 중단
+
+    // 1) 캐시 먼저 적용 (즉시 화면 반영)
+    try{
+      var cached=localStorage.getItem(ISSUE_CACHE_KEY);
+      var ts=parseInt(localStorage.getItem(ISSUE_CACHE_TS)||'0',10);
+      if(cached){
+        if(applyIssueHist(JSON.parse(cached))){
+          refreshHistViews();
+          console.log('[이슈이력] 캐시 적용');
+        }
+      }
+      // 캐시가 신선하면 네트워크 호출 생략
+      if(cached && (Date.now()-ts)<ISSUE_CACHE_TTL){
+        console.log('[이슈이력] 캐시 신선 — 동기화 생략');
+        return;
+      }
+    }catch(e){ console.warn('[이슈이력] 캐시 읽기 오류(무시):',e); }
+
+    // 2) 시트에서 최신 데이터 fetch
+    fetch(ISSUE_HIST_URL,{method:'GET'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.success || !d.data){
+          console.warn('[이슈이력] 응답 형식 이상:',d);
+          return;
+        }
+        try{
+          localStorage.setItem(ISSUE_CACHE_KEY, JSON.stringify(d.data));
+          localStorage.setItem(ISSUE_CACHE_TS, String(Date.now()));
+        }catch(e){}
+        if(applyIssueHist(d.data)){
+          refreshHistViews();
+          var cnt=Object.keys(d.data).length;
+          console.log('[이슈이력] '+cnt+'개 병원 동기화');
+        }
+      })
+      .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
+  })();
+
+  // 날짜를 yyyy-MM-dd로 정규화 (깨진 형식 방어)
   function cleanDate(v){
     if(!v) return '';
     var s=String(v).trim();
@@ -1188,75 +1262,24 @@ applyLang();
     return updated;
   }
 
-  // 1) 먼저 저장본(캐시)이 있으면 즉시 적용 → 동기화 건너뛰어도 데이터 유지됨
-  try{
-    var cached=localStorage.getItem(CACHE_KEY);
-    if(cached){
-      var rows=JSON.parse(cached);
-      if(applyDB(rows)){
-        updateStats(); render();
-        if(curTab==='dash') renderDash();
-        console.log('[병원정보DB] 저장본 '+rows.length+'건 적용');
-      }
-    }
-  }catch(e){ console.warn('[병원정보DB] 저장본 적용 오류(무시):',e); }
-
-  // 2) 5분 이내 재방문이면 새 동기화는 생략 (저장본은 위에서 이미 반영됨)
-  var lastTs=0;
-  try{ lastTs=parseInt(localStorage.getItem(CACHE_TS_KEY)||'0'); }catch(e){}
-  if(Date.now()-lastTs < SYNC_INTERVAL){
-    console.log('[동기화] 최근 동기화됨, 새 호출 생략 (저장본 사용)');
-    return;
-  }
-
-  // ── 동기화 표시 배너 ──
-  function showBanner(){
-    if(document.getElementById('syncBanner')) return;
-    var b=document.createElement('div');
-    b.id='syncBanner';
-    b.style.cssText='position:fixed;bottom:16px;right:16px;background:#1B2F5E;color:#fff;font-size:12px;font-weight:600;padding:8px 14px;border-radius:20px;z-index:999;box-shadow:0 4px 14px rgba(16,29,61,.3);display:flex;align-items:center;gap:7px;opacity:.95;transition:opacity .4s;';
-    b.innerHTML='<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:bazSpin .7s linear infinite;"></span>시트 동기화 중...';
-    document.body.appendChild(b);
-    if(!document.getElementById('bazSpinStyle')){
-      var s=document.createElement('style'); s.id='bazSpinStyle';
-      s.textContent='@keyframes bazSpin{to{transform:rotate(360deg)}}';
-      document.head.appendChild(s);
-    }
-  }
-  function bannerDone(msg, ok){
-    var b=document.getElementById('syncBanner');
-    if(!b) return;
-    b.innerHTML=(ok?'✅ ':'⚠️ ')+msg;
-    b.style.background=ok?'#1E7E4E':'#B8860B';
-    setTimeout(function(){ b.style.opacity='0'; setTimeout(function(){ if(b.parentNode) b.remove(); },400); }, 1600);
-  }
-  var pending=2;
-  function oneDone(){ pending--; if(pending<=0) bannerDone('동기화 완료', true); }
-  showBanner();
-
-  // 3) 새 동기화: 받아온 데이터를 저장본으로 갱신
   fetch(HOSPITAL_DB_URL,{method:'GET'})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.success||!d.data||!d.data.length){ oneDone(); return; }
+      if(!d.success||!d.data||!d.data.length) return;
       try{
         if(applyDB(d.data)){
           updateStats(); render();
           if(curTab==='dash') renderDash();
           console.log('[병원정보DB] '+d.data.length+'건 동기화');
         }
-        // 저장본 갱신
-        localStorage.setItem(CACHE_KEY, JSON.stringify(d.data));
-        localStorage.setItem(CACHE_TS_KEY, String(Date.now()));
-      }catch(e){ console.warn('[병원정보DB] 적용/저장 오류(무시):',e); }
-      oneDone();
+      }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
     })
-    .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e); bannerDone('동기화 실패', false); pending=0;});
+    .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
 
   fetch(VISIT_LOG_URL,{method:'GET'})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.ok||!d.visits){ oneDone(); return; }
+      if(!d.ok||!d.visits) return;
       try{
         var updated=false;
         HOSPITALS.forEach(function(h){
@@ -1265,88 +1288,10 @@ applyLang();
         });
         if(updated){ updateStats(); render(); }
       }catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
-      oneDone();
     })
-    .catch(function(e){console.warn('[방문로그] 읽기 실패:',e); oneDone();});
+    .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
 })();
 
-// ── 병원 점검 현황(2026-06 이후 이슈) → 이력(HISTORY) 동기화 ──
-(function(){
-  // ▼▼ "병원 점검 현황" 탭 배포(/exec) URL을 여기에 입력하세요 ▼▼
-  var ISSUE_HISTORY_URL='https://script.google.com/macros/s/AKfycbxyX3a9dr3rDPK89RFj09C6zmdFExbLO5KnifliH25_Fl7unt4vfpzyoszdrARXSZU/exec';
-  // ▲▲ 위 URL 입력 전에는 이슈 동기화가 동작하지 않습니다 ▲▲
-
-  var I_CACHE='bazIssueHistCache', I_TS='bazIssueHistCacheTs';
-  var I_INTERVAL=5*60*1000;   // 5분 이내면 새 호출 생략
-
-  function keyOf(name,r){ return name+'|'+(r.d||'')+'|'+(r.sy||'')+'|'+String(r.fx||'').slice(0,40); }
-
-  function mergeIssues(rows){
-    if(!rows||!rows.length) return false;
-    // 기존 HISTORY 전체의 중복키 집합 (이미 반영된 항목은 다시 안 넣음)
-    var seen={};
-    Object.keys(HISTORY).forEach(function(nm){
-      (HISTORY[nm]||[]).forEach(function(rec){ seen[keyOf(nm,rec)]=1; });
-    });
-    var changed=false;
-    rows.forEach(function(r){
-      if(!r.name) return;
-      var k=keyOf(r.name,r);
-      if(seen[k]) return;
-      seen[k]=1;
-      var rec={d:r.d, f:r.f, t:r.t||'A/S', pt:r.pt, sy:r.sy, fx:r.fx, pay:r.pay||'무상'};
-      if(r.p) rec.p=r.p;
-      if(!HISTORY[r.name]) HISTORY[r.name]=[];
-      HISTORY[r.name].push(rec);
-      changed=true;
-    });
-    if(changed){
-      Object.keys(HISTORY).forEach(function(nm){
-        HISTORY[nm].sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
-      });
-    }
-    return changed;
-  }
-
-  function afterMerge(){
-    try{ render(); }catch(e){}
-    try{
-      var m=document.getElementById('histModal');
-      if(m && m.classList.contains('show') && typeof renderHistBody==='function') renderHistBody();
-    }catch(e){}
-  }
-
-  // 1) 저장본 즉시 적용 → 오프라인/동기화 생략 시에도 6월 이슈 유지
-  try{
-    var c=localStorage.getItem(I_CACHE);
-    if(c){ if(mergeIssues(JSON.parse(c))) afterMerge(); }
-  }catch(e){ console.warn('[이슈이력] 저장본 적용 오류(무시):',e); }
-
-  // URL 미입력이면 종료 (저장본만 사용)
-  if(!ISSUE_HISTORY_URL || ISSUE_HISTORY_URL.indexOf('script.google.com')<0){
-    console.log('[이슈이력] 배포 URL 미입력 — 새 동기화 생략');
-    return;
-  }
-
-  // 2) 5분 이내 재방문이면 새 호출 생략
-  var lastTs=0;
-  try{ lastTs=parseInt(localStorage.getItem(I_TS)||'0'); }catch(e){}
-  if(Date.now()-lastTs < I_INTERVAL){ console.log('[이슈이력] 최근 동기화됨, 생략'); return; }
-
-  // 3) 새 동기화: 받아온 데이터를 저장본으로 갱신
-  fetch(ISSUE_HISTORY_URL,{method:'GET'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.success||!d.data) return;
-      try{
-        if(mergeIssues(d.data)) afterMerge();
-        localStorage.setItem(I_CACHE, JSON.stringify(d.data));
-        localStorage.setItem(I_TS, String(Date.now()));
-        console.log('[이슈이력] '+d.data.length+'건 동기화');
-      }catch(e){ console.warn('[이슈이력] 적용/저장 오류(무시):',e); }
-    })
-    .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
-})();
 </script>
 </body>
 </html>
