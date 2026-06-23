@@ -225,10 +225,10 @@
       <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnHospital" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🏥</span>
-      <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
-      <span style="color:#8EA0C8;">→</span>
+      <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
+      <span style="color:#E0C088;">🔒→</span>
     </button>
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
     <button type="button" id="appBtnSurvey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
@@ -1673,6 +1673,7 @@ function unlockTools(level){
   document.getElementById('appSelectStage').style.display='flex';
   // 숨김 도구는 관리자(2)에서만 노출
   document.getElementById('appBtnSurvey').style.display = (level>=2)?'flex':'none';
+  document.getElementById('appBtnHospital').style.display = (level>=2)?'flex':'none';
 }
 
 const hubPwModal=document.getElementById('hubPwModal');
