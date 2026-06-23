@@ -111,6 +111,8 @@
   .h-tag.ncare.none{background:#EEF0F4;color:var(--text-muted);}
   .h-tag.as{background:var(--gray-bg);color:var(--text-muted);}
   .h-tag.sales{background:#F3EEFA;color:#534AB7;}
+  .h-tag.hpver{background:#E8F5EE;color:#1B7A47;border:1px solid #BFE6CF;}
+  .h-tag.uiver{background:#E8F0FB;color:#1B5FAF;border:1px solid #C2D7F0;}
 
   .h-actions{display:flex;gap:6px;margin-top:11px;}
   .h-actions button{flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:8px;cursor:pointer;font-family:inherit;border:1.5px solid var(--gray-line);background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;gap:4px;}
@@ -505,10 +507,72 @@ function statusDays(h){
   if(h.li&&dd!=null) return label+' '+h.li+' · '+t('dayAgo').replace('{d}',dd);
   return noLabel;
 }
+// 각 병원의 마지막 핸드피스 교체 버전 추출 (이력 기반, 실시간 동기화 반영)
+// 핸드피스 버전은 1.x 대역만 존재 (FW/UI의 2.x·3.x와 구분)
+function getLastHpVer(name){
+  var recs=HISTORY[name];
+  if(!recs||!recs.length) return '';
+  function pickHp(s){
+    if(!s) return '';
+    // (구버전→신버전) 패턴 중 신버전이 1.x인 것만
+    var re=/(\d\.\d(?:\.\d)?)\s*(?:→|▶|->|~>)\s*(1\.\d(?:\.\d)?)/g, m, last='';
+    while((m=re.exec(s))!==null){ last=m[2]; }
+    if(last) return last;
+    // HP 1.x.x 명시
+    m=s.match(/HP\s*(1\.\d(?:\.\d)?)/);
+    if(m) return m[1];
+    return '';
+  }
+  for(var i=0;i<recs.length;i++){ // 이력은 최신순 정렬
+    var r=recs[i];
+    var pt=r.pt||'', p=r.p||'', fx=r.fx||'';
+    var isHp=(pt.indexOf('핸드피스')>=0)||(p.indexOf('Handpiece')>=0)||(p.indexOf('HP')>=0)||(fx.indexOf('HP A')>=0)||(fx.indexOf('HP 교체')>=0)||(fx.indexOf('핸드피스')>=0&&fx.indexOf('교체')>=0);
+    if(!isHp) continue;
+    // p(부품) 먼저, 그 다음 fx(내용)
+    var ver=pickHp(p) || pickHp(fx);
+    if(ver) return ver;
+  }
+  return '';
+}
+
+// 각 병원의 마지막 UI 버전 추출 (FW는 제외, UI만)
+// UI 버전은 2.x~3.x 대역, 'UI' 라벨로 FW와 구분
+function getLastUiVer(name){
+  var recs=HISTORY[name];
+  if(!recs||!recs.length) return '';
+  function pickUI(s){
+    if(!s) return '';
+    var re=/UI\s*\(?\s*(\d\.\d(?:\.\d+)?)\s*(?:→|▶|->|~>)\s*(\d\.\d(?:\.\d+)?)/g, m, last='';
+    while((m=re.exec(s))!==null){ last=m[2]; }
+    if(last) return last;
+    var m2=s.match(/UI[\s\(]*(\d\.\d(?:\.\d+)?)/);
+    if(m2) return m2[1];
+    return '';
+  }
+  // 'x.x.0' 또는 'x.x.02' 같은 잘림은 'x.x'로 정규화
+  function norm(v){ var m=v.match(/^(\d\.\d)(?:\.\d+)?$/); return m?m[1]:v; }
+  // 1순위: sy(유형)에 업그레이드/UI 표기된 건
+  for(var i=0;i<recs.length;i++){
+    var sy=recs[i].sy||'', fx=recs[i].fx||'';
+    if(sy.indexOf('업그레이드')>=0 || sy.indexOf('UI')>=0){
+      var v=pickUI(fx); if(v) return norm(v);
+    }
+  }
+  // 2순위: 아무 이력의 fx에서 UI 버전
+  for(var i=0;i<recs.length;i++){
+    var v=pickUI(recs[i].fx||''); if(v) return norm(v);
+  }
+  return '';
+}
+
 function cardHTML(h){
   const ncareTag=isNcare(h)?'<span class="h-tag ncare">N-CARE '+escapeHtml(h.nc)+'</span>':'<span class="h-tag ncare none">미가입</span>';
   const asTag=h.as?'<span class="h-tag as">'+escapeHtml(h.as)+'</span>':'';
   const salesTag=h.sa?'<span class="h-tag sales">'+escapeHtml(h.sa)+'</span>':'';
+  const hpVer=(h.hpv||'').trim()||getLastHpVer(h.n);
+  const hpTag=hpVer?'<span class="h-tag hpver">HP '+escapeHtml(hpVer)+'</span>':'';
+  const uiVer=(h.uiv||'').trim()||getLastUiVer(h.n);
+  const uiTag=uiVer?'<span class="h-tag uiver">UI '+escapeHtml(uiVer)+'</span>':'';
   const distHtml=(h._dist!=null)?'<div class="h-dist show">📍 '+h._dist.toFixed(1)+'km</div>':'';
   const naverUrl='https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
   const inspUrl='inspection.html?h='+encodeURIComponent(h.n)+'&sn='+encodeURIComponent(h.s||'')+'&nc='+encodeURIComponent(h.nc||'')+'&e='+encodeURIComponent(h.sa||'');
@@ -531,7 +595,7 @@ function cardHTML(h){
       '<div class="line"><span class="ico">🔧</span><span>'+escapeHtml(h.s||'-')+' · '+t('sales')+' '+escapeHtml(h.sa||'-')+'</span></div>'+
       '<div class="line"><span class="ico">📅</span><span>'+statusDays(h)+'</span></div>'+
     '</div>'+ (warnTag?'<div>'+warnTag+'</div>':'') +
-    '<div class="h-tags">'+ncareTag+asTag+salesTag+'</div>'+
+    '<div class="h-tags">'+ncareTag+asTag+salesTag+hpTag+uiTag+'</div>'+
     '<div class="h-actions">'+
       '<button class="nmap" onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
       '<button class="insp" onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
@@ -1250,12 +1314,15 @@ applyLang();
         if(r.sales)     h.sa=r.sales;
         if(r.asType)    h.as=r.asType;
         if(r.ncare)     h.nc=r.ncare;
+        if(r.hpVer)     h.hpv=r.hpVer;
+        if(r.uiVer)     h.uiv=r.uiVer;
         updated=true;
       }else{
         HOSPITALS.push({
           n:r.name, s:r.sn||'', rg:r.region||'', a:r.address||'',
           li:cleanDate(r.lastVisit), st:r.status||'미점검', sa:r.sales||'',
           as:r.asType||'', nc:r.ncare||'미가입', d:r.client||'',
+          hpv:r.hpVer||'', uiv:r.uiVer||'',
           lat:null, lng:null
         });
         updated=true;
