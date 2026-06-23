@@ -1,13 +1,14 @@
-const CACHE_NAME = 'baz-cs-v17';   // v16 → v17
 // BAZ BIOMEDIC CS Field Tools - Service Worker
 // 오프라인 사용을 위한 캐시. 파일을 수정해 새로 배포할 때는 아래 CACHE_VERSION 숫자를 올리세요.
-const CACHE_VERSION = 'baz-cs-v17';
+const CACHE_VERSION = 'baz-cs-v18';
 const ASSETS = [
   './',
   './index.html',
   './guide.html',
+  './hospital.html',
   './survey.html',
   './inspection.html',
+  './user_guide.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
