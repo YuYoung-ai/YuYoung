@@ -1264,34 +1264,95 @@ applyLang();
     return updated;
   }
 
-  fetch(HOSPITAL_DB_URL,{method:'GET'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.success||!d.data||!d.data.length) return;
-      try{
-        if(applyDB(d.data)){
-          updateStats(); render();
-          if(curTab==='dash') renderDash();
-          console.log('[병원정보DB] '+d.data.length+'건 동기화');
-        }
-      }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
-    })
-    .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
+  // ── 병원정보DB 동기화 (5분 캐시) ──
+  var HDB_CACHE_KEY='bazHospDBCache';
+  var HDB_CACHE_TS='bazHospDBCacheTs';
+  var HDB_CACHE_TTL=5*60*1000; // 5분
 
-  fetch(VISIT_LOG_URL,{method:'GET'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.ok||!d.visits) return;
-      try{
-        var updated=false;
-        HOSPITALS.forEach(function(h){
-          var v=d.visits[h.n];
-          if(v&&v.date&&cleanDate(v.date)>=(h.li||'')){ h.li=cleanDate(v.date); updated=true; }
-        });
-        if(updated){ updateStats(); render(); }
-      }catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
-    })
-    .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
+  function applyHospDB(rows){
+    if(applyDB(rows)){
+      updateStats(); render();
+      if(curTab==='dash') renderDash();
+      return true;
+    }
+    return false;
+  }
+
+  (function syncHospDB(){
+    // 1) 캐시 먼저 적용 (즉시 반영)
+    try{
+      var cached=localStorage.getItem(HDB_CACHE_KEY);
+      var ts=parseInt(localStorage.getItem(HDB_CACHE_TS)||'0',10);
+      if(cached){
+        var arr=JSON.parse(cached);
+        if(arr && arr.length && applyHospDB(arr)){
+          console.log('[병원정보DB] 캐시 적용 '+arr.length+'건');
+        }
+      }
+      if(cached && (Date.now()-ts)<HDB_CACHE_TTL){
+        console.log('[병원정보DB] 캐시 신선 — 동기화 생략');
+        return;
+      }
+    }catch(e){ console.warn('[병원정보DB] 캐시 읽기 오류(무시):',e); }
+
+    // 2) 시트에서 최신 fetch
+    fetch(HOSPITAL_DB_URL,{method:'GET'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.success||!d.data||!d.data.length) return;
+        try{
+          localStorage.setItem(HDB_CACHE_KEY, JSON.stringify(d.data));
+          localStorage.setItem(HDB_CACHE_TS, String(Date.now()));
+        }catch(e){}
+        try{
+          if(applyHospDB(d.data)){
+            console.log('[병원정보DB] '+d.data.length+'건 동기화');
+          }
+        }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
+      })
+      .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
+  })();
+
+  // ── 방문로그 동기화 (5분 캐시) ──
+  var VLOG_CACHE_KEY='bazVisitLogCache';
+  var VLOG_CACHE_TS='bazVisitLogCacheTs';
+  var VLOG_CACHE_TTL=5*60*1000;
+
+  function applyVisits(visits){
+    if(!visits) return false;
+    var updated=false;
+    HOSPITALS.forEach(function(h){
+      var v=visits[h.n];
+      if(v&&v.date&&cleanDate(v.date)>=(h.li||'')){ h.li=cleanDate(v.date); updated=true; }
+    });
+    if(updated){ updateStats(); render(); }
+    return updated;
+  }
+
+  (function syncVisitLog(){
+    try{
+      var cached=localStorage.getItem(VLOG_CACHE_KEY);
+      var ts=parseInt(localStorage.getItem(VLOG_CACHE_TS)||'0',10);
+      if(cached){ applyVisits(JSON.parse(cached)); }
+      if(cached && (Date.now()-ts)<VLOG_CACHE_TTL){
+        console.log('[방문로그] 캐시 신선 — 동기화 생략');
+        return;
+      }
+    }catch(e){ console.warn('[방문로그] 캐시 읽기 오류(무시):',e); }
+
+    fetch(VISIT_LOG_URL,{method:'GET'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.ok||!d.visits) return;
+        try{
+          localStorage.setItem(VLOG_CACHE_KEY, JSON.stringify(d.visits));
+          localStorage.setItem(VLOG_CACHE_TS, String(Date.now()));
+        }catch(e){}
+        try{ applyVisits(d.visits); }
+        catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
+      })
+      .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
+  })();
 })();
 
 </script>
