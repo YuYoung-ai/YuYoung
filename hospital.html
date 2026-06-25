@@ -811,9 +811,10 @@ function guideMatched(){
   });
 }
 
+// 검색창·카테고리는 한 번만 그리고, 결과 목록(#guideResults)만 갱신한다.
+// (한글 IME 조합 중 전체 재렌더 시 자모가 분리되는 버그 방지)
 function renderGuideSearch(){
   const cats = guideCats();
-  const matched = guideMatched();
   let h = '<div class="dash-card" style="grid-column:1/-1;">';
   h += '<div class="dash-title">🔧 현장 대응 가이드 검색</div>';
   h += '<div style="font-size:12px;color:#6B7A99;margin:-2px 0 12px;">증상을 검색해 가이드에 있는지 확인하세요 · 가이드에 없거나 조치대로 해결되지 않으면 신규 이슈로 AS 보고서 작성 대상입니다</div>';
@@ -825,24 +826,29 @@ function renderGuideSearch(){
   h += '<button class="g-cat'+(guideCat===''?' on':'')+'" data-cat="" style="'+gCatStyle(guideCat==='')+'">전체</button>';
   cats.forEach(c=>{ h += '<button class="g-cat'+(guideCat===c?' on':'')+'" data-cat="'+escapeHtml(c)+'" style="'+gCatStyle(guideCat===c)+'">'+escapeHtml(c)+'</button>'; });
   h += '</div>';
-  // 결과
+  // 결과 컨테이너 (이 안만 갱신)
+  h += '<div id="guideResults">'+renderGuideResults()+'</div>';
+  h += '</div>';
+  return h;
+}
+
+function renderGuideResults(){
+  const matched = guideMatched();
   if(!matched.length){
-    h += '<div style="text-align:center;padding:24px;color:#9aa5b8;font-size:13px;">검색 결과가 없습니다. 가이드에 없는 증상이라면 신규 이슈일 수 있습니다.</div>';
-  }else{
-    h += '<div style="display:flex;flex-direction:column;gap:8px;">';
-    matched.forEach((s,i)=>{
-      const open = (guideOpen===s.name);
-      h += '<div style="border:1px solid #e6e9f0;border-radius:10px;overflow:hidden;">';
-      h += '<button class="g-row" data-name="'+escapeHtml(s.name)+'" style="width:100%;text-align:left;background:'+(open?'#F1F6FB':'#fff')+';border:none;padding:11px 13px;cursor:pointer;display:flex;align-items:center;gap:8px;">';
-      h += '<span style="font-size:11px;padding:2px 7px;border-radius:6px;background:#E6F1FB;color:#185FA5;flex:0 0 auto;">'+escapeHtml(s.cat)+'</span>';
-      h += '<span style="font-weight:600;font-size:14px;color:#1B2F5E;flex:1;">'+escapeHtml(s.name)+'</span>';
-      h += '<span style="color:#9aa5b8;font-size:12px;">'+(open?'▲':'▼')+'</span>';
-      h += '</button>';
-      if(open){ h += guideDetail(s); }
-      h += '</div>';
-    });
-    h += '</div>';
+    return '<div style="text-align:center;padding:24px;color:#9aa5b8;font-size:13px;">검색 결과가 없습니다. 가이드에 없는 증상이라면 신규 이슈일 수 있습니다.</div>';
   }
+  let h = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  matched.forEach((s,i)=>{
+    const open = (guideOpen===s.name);
+    h += '<div style="border:1px solid #e6e9f0;border-radius:10px;overflow:hidden;">';
+    h += '<button class="g-row" data-name="'+escapeHtml(s.name)+'" style="width:100%;text-align:left;background:'+(open?'#F1F6FB':'#fff')+';border:none;padding:11px 13px;cursor:pointer;display:flex;align-items:center;gap:8px;">';
+    h += '<span style="font-size:11px;padding:2px 7px;border-radius:6px;background:#E6F1FB;color:#185FA5;flex:0 0 auto;">'+escapeHtml(s.cat)+'</span>';
+    h += '<span style="font-weight:600;font-size:14px;color:#1B2F5E;flex:1;">'+escapeHtml(s.name)+'</span>';
+    h += '<span style="color:#9aa5b8;font-size:12px;">'+(open?'▲':'▼')+'</span>';
+    h += '</button>';
+    if(open){ h += guideDetail(s); }
+    h += '</div>';
+  });
   h += '</div>';
   return h;
 }
@@ -871,17 +877,34 @@ function guideDetail(s){
 function bindGuideSearch(){
   const sec = document.getElementById('guideSection');
   if(!sec) return;
-  function refresh(){ sec.innerHTML = renderGuideSearch(); bindGuideSearch(); }
   const q = sec.querySelector('#guideQ');
+  const results = sec.querySelector('#guideResults');
+
+  // 결과 목록만 갱신 (검색창·칩은 그대로 두어 IME 조합 유지)
+  function refreshResults(){
+    if(results){ results.innerHTML = renderGuideResults(); bindGuideRows(); }
+  }
+  // 행(증상) 클릭 바인딩 — 결과 갱신 때마다 다시 연결
+  function bindGuideRows(){
+    sec.querySelectorAll('.g-row').forEach(b=>{
+      b.addEventListener('click', ()=>{ const n=b.getAttribute('data-name'); guideOpen=(guideOpen===n)?null:n; refreshResults(); });
+    });
+  }
+
   if(q){
-    q.addEventListener('input', ()=>{ guideQuery = q.value; const pos=q.selectionStart; refresh(); const nq=document.querySelector('#guideQ'); if(nq){ nq.focus(); try{nq.setSelectionRange(pos,pos);}catch(e){} } });
+    let composing = false;
+    q.addEventListener('compositionstart', ()=>{ composing = true; });
+    q.addEventListener('compositionend', ()=>{ composing = false; guideQuery=q.value; refreshResults(); });
+    q.addEventListener('input', ()=>{
+      guideQuery = q.value;
+      if(composing) return;     // 한글 조합 중에는 갱신하지 않음
+      refreshResults();
+    });
   }
   sec.querySelectorAll('.g-cat').forEach(b=>{
-    b.addEventListener('click', ()=>{ guideCat = b.getAttribute('data-cat'); refresh(); });
+    b.addEventListener('click', ()=>{ guideCat = b.getAttribute('data-cat'); sec.innerHTML = renderGuideSearch(); bindGuideSearch(); });
   });
-  sec.querySelectorAll('.g-row').forEach(b=>{
-    b.addEventListener('click', ()=>{ const n=b.getAttribute('data-name'); guideOpen = (guideOpen===n)?null:n; refresh(); });
-  });
+  bindGuideRows();
 }
 
 // ===== 점검 이력 모달 =====
