@@ -193,6 +193,7 @@
   .hist-editbar .save{background:var(--navy);color:#fff;}
   .hist-editbar .cancel{background:var(--gray-bg);color:var(--text-muted);}
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -908,7 +909,7 @@ function bindGuideSearch(){
 }
 
 // ===== 점검 이력 모달 =====
-const HIST_ADMIN_PW = 'baz2026';
+// 이력 편집은 관리자(레벨2) 권한. 비밀번호는 서버(auth.js)가 검증합니다.
 let histEditing = false;
 let histCurName = null;
 
@@ -1091,13 +1092,29 @@ document.getElementById('histLock').addEventListener('click', ()=>{
   document.getElementById('histPwModal').classList.add('show');
   setTimeout(()=>document.getElementById('histPwInput').focus(),50);
 });
-function histCheckPw(){
+async function histCheckPw(){
   const v=document.getElementById('histPwInput').value;
-  if(v===HIST_ADMIN_PW){
-    document.getElementById('histPwModal').classList.remove('show');
-    histEnterEdit();
-  }else{
-    document.getElementById('histPwErr').textContent=t('histWrongPw');
+  if(!v) return;
+  const okBtn=document.getElementById('histPwOk');
+  const prev=okBtn.textContent;
+  okBtn.disabled=true; okBtn.textContent='...';
+  try{
+    const r=await BazAuth.login(v);
+    if(r.ok && r.level>=2){
+      document.getElementById('histPwModal').classList.remove('show');
+      histEnterEdit();
+    }else if(r.ok && r.level<2){
+      // 일반 비번으로는 편집 불가 (관리자 전용)
+      document.getElementById('histPwErr').textContent=t('histWrongPw');
+    }else if(r.error==='auth_url_missing'){
+      document.getElementById('histPwErr').textContent='인증 서버 미설정 (auth.js의 AUTH_URL 입력)';
+    }else if(r.error==='network'){
+      document.getElementById('histPwErr').textContent='네트워크 오류. 연결을 확인해 주세요.';
+    }else{
+      document.getElementById('histPwErr').textContent=t('histWrongPw');
+    }
+  }finally{
+    okBtn.disabled=false; okBtn.textContent=prev;
   }
 }
 document.getElementById('histPwOk').addEventListener('click', histCheckPw);
