@@ -117,6 +117,7 @@ body.editing .del-symptom{display:inline-flex;align-items:center;gap:3px;font-si
 .toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:20px;z-index:1100;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
 <header>
@@ -500,7 +501,7 @@ function render(){
 applyGuideLang(); buildRules(); buildChips(); render();
 
 /* ════════ 관리자 모드 ════════ */
-const ADMIN_PW = 'baz2026';
+// 가이드 편집은 관리자(레벨2) 권한. 비밀번호는 서버(auth.js)가 검증합니다.
 
 const ADM = {
   ko:{title:'관리자 모드',desc:'가이드 내용을 편집하려면 비밀번호를 입력하세요.',cancel:'취소',ok:'확인',
@@ -569,13 +570,28 @@ function openPw(){
 document.getElementById('pwCancel').onclick=()=>document.getElementById('pwModal').classList.remove('show');
 document.getElementById('pwOk').onclick=checkPw;
 document.getElementById('pwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPw();});
-function checkPw(){
+async function checkPw(){
   const v=document.getElementById('pwInput').value;
-  if(v===ADMIN_PW){
-    document.getElementById('pwModal').classList.remove('show');
-    enterEdit();
-  }else{
-    document.getElementById('pwErr').textContent=A('wrongpw');
+  if(!v) return;
+  const okBtn=document.getElementById('pwOk');
+  const prev=okBtn?okBtn.textContent:'';
+  if(okBtn){ okBtn.disabled=true; okBtn.textContent='...'; }
+  try{
+    const r=await BazAuth.login(v);
+    if(r.ok && r.level>=2){
+      document.getElementById('pwModal').classList.remove('show');
+      enterEdit();
+    }else if(r.ok && r.level<2){
+      document.getElementById('pwErr').textContent=A('wrongpw');
+    }else if(r.error==='auth_url_missing'){
+      document.getElementById('pwErr').textContent='인증 서버 미설정 (auth.js의 AUTH_URL 입력)';
+    }else if(r.error==='network'){
+      document.getElementById('pwErr').textContent='네트워크 오류. 연결을 확인해 주세요.';
+    }else{
+      document.getElementById('pwErr').textContent=A('wrongpw');
+    }
+  }finally{
+    if(okBtn){ okBtn.disabled=false; okBtn.textContent=prev; }
   }
 }
 
