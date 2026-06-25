@@ -97,6 +97,7 @@
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:440px){.body{padding-bottom:env(safe-area-inset-bottom,28px);}}
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -184,6 +185,25 @@
 </div>
 
 <script>
+// ── 진입 가드: 관리자(레벨2) 전용 ──
+// survey.html은 관리자 전용 화면입니다. 토큰이 없거나 레벨이 낮으면 메뉴로 보냅니다.
+// (고객 응답용으로 공개하려면 아래 SURVEY_REQUIRE_ADMIN 을 false 로 바꾸세요)
+const SURVEY_REQUIRE_ADMIN = true;
+(async function(){
+  if(!SURVEY_REQUIRE_ADMIN) return;
+  try{
+    if(!BazAuth.isConfigured()){
+      // 인증 서버 미설정 단계에서는 차단하지 않음(개발/배포 준비 중)
+      return;
+    }
+    const lv = await BazAuth.currentLevel();
+    if(lv < 2){
+      alert('관리자 전용 화면입니다. 메뉴에서 관리자 비밀번호로 접속해 주세요.');
+      location.href='index.html';
+    }
+  }catch(e){}
+})();
+
 // ── i18n ──
 const I18N = {
   ko: {
