@@ -485,6 +485,7 @@ code {
 }
 .ov-card { position: relative; }
 </style>
+<script src="auth.js"></script>
 </head>
 <body>
 
@@ -520,10 +521,13 @@ code {
   <div class="pw-banner">
     <div class="pw-icon">🔑</div>
     <div>
-      <div class="pw-title">접속 비밀번호</div>
+      <div class="pw-title">접속 권한 안내</div>
       <div class="pw-list">
-        <div class="pw-item">메뉴 허브 <b>baz2026</b></div>
-        <div class="pw-item" id="pw-locked-hint" style="display:none;">병원DB · 가이드 <b id="pw-hidden-text">880821</b></div>
+        <div class="pw-item">일반 도구 — <b>일반 비밀번호</b> (FSE)</div>
+        <div class="pw-item">병원DB · 가이드 편집 — <b>관리자 비밀번호</b> (팀장)</div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:8px;line-height:1.5;">
+        비밀번호는 보안을 위해 별도 관리됩니다. CS 팀장에게 문의하세요.
       </div>
     </div>
   </div>
@@ -626,7 +630,7 @@ code {
   <!-- 비밀번호 -->
   <div class="warn-box">
     <span class="tb-label">🔑 접속</span>
-    메뉴 허브에서 <b>AS 보고서</b> 선택 → 언어 선택 → 비밀번호 <code>baz2026</code> 입력
+    메뉴 허브에서 <b>AS 보고서</b> 선택 → 언어 선택 → <b>일반 비밀번호</b> 입력
   </div>
 
   <!-- 전체 플로우 -->
@@ -802,7 +806,7 @@ code {
 
   <div class="tip-box" style="margin-bottom:14px;">
     <span class="tb-label">📌 접속</span>
-    메뉴 허브 → <b>점검 내역서</b> 탭 → 비밀번호 <code>880821</code> 입력 (또는 기존 세션 유지 시 바로 진입)
+    메뉴 허브 → <b>점검 내역서</b> 탭 → <b>관리자 비밀번호</b> 입력 (또는 기존 세션 유지 시 바로 진입)
   </div>
 
   <div class="step-list">
@@ -901,7 +905,7 @@ code {
 
   <div class="warn-box">
     <span class="tb-label">🔑 접속</span>
-    메뉴 허브 → <b>병원 데이터센터</b> → 비밀번호 <code>880821</code> 입력
+    메뉴 허브 → <b>병원 데이터센터</b> → <b>관리자 비밀번호</b> 입력
   </div>
 
   <!-- 탭 2종 -->
@@ -1015,7 +1019,7 @@ code {
       <div class="sc-body">
         <ul class="check-list">
           <li><span class="ck-icon">📅</span><span>병원 카드의 <span class="btn-ref purple" style="font-size:11px;padding:2px 7px;">이력</span> 버튼 클릭 → 방문 이력 타임라인 모달</span></li>
-          <li><span class="ck-icon">🔒</span><span>우상단 자물쇠 아이콘 클릭 → 비밀번호 <code>880821</code> 입력 → <b>편집 모드</b> 활성화</span></li>
+          <li><span class="ck-icon">🔒</span><span>우상단 자물쇠 아이콘 클릭 → <b>관리자 비밀번호</b> 입력 → <b>편집 모드</b> 활성화</span></li>
           <li><span class="ck-icon">✏️</span><span>각 이력 항목 날짜, 구분, 담당자, 메모 수정 가능</span></li>
           <li><span class="ck-icon">➕</span><span>하단 [이력 추가] 버튼으로 새 방문 기록 삽입</span></li>
           <li><span class="ck-icon">🗑️</span><span>이력 항목 삭제 (삭제 후 저장 필요)</span></li>
@@ -1040,7 +1044,7 @@ code {
 
   <div class="warn-box">
     <span class="tb-label">🔑 접속</span>
-    메뉴 허브 → <b>현장 가이드</b> → 비밀번호 <code>880821</code> 입력
+    메뉴 허브 → <b>현장 가이드</b> → <b>관리자 비밀번호</b> 입력
   </div>
 
   <!-- 3단계 구조 -->
@@ -1251,8 +1255,8 @@ code {
           <div>
             <div class="pw-title">비밀번호 정리</div>
             <div class="pw-list">
-              <div class="pw-item">메뉴 허브 <b>baz2026</b></div>
-              <div class="pw-item" id="faq-pw-row" style="display:none;">병원DB · 가이드 <b id="faq-pw-text">880821</b></div>
+              <div class="pw-item">일반 도구 — <b>일반 비밀번호</b> (FSE)</div>
+              <div class="pw-item">병원DB · 가이드 편집 — <b>관리자 비밀번호</b> (팀장)</div>
             </div>
           </div>
         </div>
@@ -1296,7 +1300,7 @@ code {
 </div>
 
 <script>
-var LOCK_PW = '880821';
+// 잠금 패널은 관리자(레벨2) 권한. 비밀번호는 서버(auth.js)가 검증합니다.
 var LOCKED_PANELS = ['hospital', 'guide'];
 var unlocked = false;
 var pendingPanel = null;
@@ -1340,28 +1344,40 @@ function openLock(id) {
   setTimeout(function(){ document.getElementById('lockInput').focus(); }, 80);
 }
 
-function lockConfirm() {
+async function lockConfirm() {
   var val = document.getElementById('lockInput').value.trim();
-  if (val === LOCK_PW) {
-    unlocked = true;
-    document.getElementById('lockOverlay').style.display = 'none';
-    // 잠금 탭에서 🔒 배지 제거
-    document.querySelectorAll('.lock-badge').forEach(function(b){ b.style.display = 'none'; });
-    document.querySelectorAll('.tab-btn.locked').forEach(function(b){ b.classList.remove('locked'); });
-    document.querySelectorAll('.ov-card .lock-mark').forEach(function(m){ m.style.display = 'none'; });
-    // 비밀번호 배너에 실제 비밀번호 표시
-    var h1 = document.getElementById('pw-locked-hint');
-    if (h1) h1.style.display = '';
-    var h2 = document.getElementById('faq-pw-row');
-    if (h2) h2.style.display = '';
-    if (pendingPanel) {
-      showPanel(pendingPanel);
-      pendingPanel = null;
+  if (!val) return;
+  var okBtn = document.querySelector('#lockOverlay .primary');
+  var prev = okBtn ? okBtn.textContent : '';
+  if (okBtn) { okBtn.disabled = true; okBtn.textContent = '...'; }
+  try {
+    var r = await BazAuth.login(val);
+    if (r.ok && r.level >= 2) {
+      unlocked = true;
+      document.getElementById('lockOverlay').style.display = 'none';
+      // 잠금 탭에서 🔒 배지 제거
+      document.querySelectorAll('.lock-badge').forEach(function(b){ b.style.display = 'none'; });
+      document.querySelectorAll('.tab-btn.locked').forEach(function(b){ b.classList.remove('locked'); });
+      document.querySelectorAll('.ov-card .lock-mark').forEach(function(m){ m.style.display = 'none'; });
+      if (pendingPanel) {
+        showPanel(pendingPanel);
+        pendingPanel = null;
+      }
+    } else if (r.ok && r.level < 2) {
+      document.getElementById('lockErr').textContent = '관리자 비밀번호가 필요합니다.';
+      document.getElementById('lockInput').value = '';
+      document.getElementById('lockInput').focus();
+    } else if (r.error === 'auth_url_missing') {
+      document.getElementById('lockErr').textContent = '인증 서버 미설정 (auth.js의 AUTH_URL 입력)';
+    } else if (r.error === 'network') {
+      document.getElementById('lockErr').textContent = '네트워크 오류. 연결을 확인해 주세요.';
+    } else {
+      document.getElementById('lockErr').textContent = '비밀번호가 올바르지 않습니다.';
+      document.getElementById('lockInput').value = '';
+      document.getElementById('lockInput').focus();
     }
-  } else {
-    document.getElementById('lockErr').textContent = '비밀번호가 올바르지 않습니다.';
-    document.getElementById('lockInput').value = '';
-    document.getElementById('lockInput').focus();
+  } finally {
+    if (okBtn) { okBtn.disabled = false; okBtn.textContent = prev; }
   }
 }
 
