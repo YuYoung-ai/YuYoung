@@ -21,6 +21,7 @@
 
   var TOKEN_KEY = 'baz_auth_token';
   var LEVEL_KEY = 'baz_auth_level';
+  var NAME_KEY  = 'baz_auth_name';
   var EXP_KEY   = 'baz_auth_expires';
 
   // Apps Script는 프리플라이트(CORS preflight)를 싫어하므로
@@ -33,11 +34,12 @@
     }).then(function (res) { return res.json(); });
   }
 
-  function saveSession(token, level, expires) {
+  function saveSession(token, level, expires, name) {
     try {
       sessionStorage.setItem(TOKEN_KEY, token);
       sessionStorage.setItem(LEVEL_KEY, String(level));
       sessionStorage.setItem(EXP_KEY, expires || '');
+      sessionStorage.setItem(NAME_KEY, name || '');
     } catch (e) {}
   }
 
@@ -45,6 +47,7 @@
     try {
       sessionStorage.removeItem(TOKEN_KEY);
       sessionStorage.removeItem(LEVEL_KEY);
+      sessionStorage.removeItem(NAME_KEY);
       sessionStorage.removeItem(EXP_KEY);
     } catch (e) {}
   }
@@ -64,7 +67,7 @@
       return postJSON({ action: 'login', password: password })
         .then(function (r) {
           if (r && r.ok) {
-            saveSession(r.token, r.level, r.expires);
+            saveSession(r.token, r.level, r.expires, r.name);
           }
           return r || { ok: false, error: 'no_response' };
         })
@@ -86,7 +89,10 @@
       return postJSON({ action: 'verify', token: token })
         .then(function (r) {
           if (r && r.ok) {
-            try { sessionStorage.setItem(LEVEL_KEY, String(r.level)); } catch (e) {}
+            try {
+              sessionStorage.setItem(LEVEL_KEY, String(r.level));
+              if (r.name) sessionStorage.setItem(NAME_KEY, r.name);
+            } catch (e) {}
             return r.level;
           }
           clearSession();
@@ -111,6 +117,11 @@
 
     expires: function () {
       try { return sessionStorage.getItem(EXP_KEY) || ''; } catch (e) { return ''; }
+    },
+
+    // 로그인한 사람 이름 (서버 Credentials의 name)
+    name: function () {
+      try { return sessionStorage.getItem(NAME_KEY) || ''; } catch (e) { return ''; }
     },
 
     logout: function () {
