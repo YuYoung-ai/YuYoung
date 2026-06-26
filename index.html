@@ -177,7 +177,6 @@
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
-<script src="auth.js"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://apis.google.com/js/api.js" async></script>
@@ -231,7 +230,7 @@
       <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
-    <!-- 숨김 도구: 관리자 권한(레벨2)에서만 표시 -->
+    <!-- 숨김 도구: 880821 입력 시에만 표시 -->
     <button type="button" id="appBtnSurvey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
@@ -1260,13 +1259,45 @@ async function buildPPTX(Pptx){
   // 파일 저장
   // ════════════════════════════════════════════
   const fileName=`${t('p_fileName')}_${v('hospital')||'NA'}_${v('serialNo')||'no_sn'}`;
-  const blob=await pres.write({outputType:'blob'});
+  const PPTX_MIME='application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  let blob=await pres.write({outputType:'blob'});
+  // pptxgenjs가 만든 blob은 type이 비어 있을 수 있어, 모바일 브라우저가 .zip 으로
+  // 오인하지 않도록 정확한 pptx MIME 타입을 명시적으로 다시 입힌다.
+  if(!blob.type || blob.type!==PPTX_MIME){
+    blob=new Blob([blob], {type:PPTX_MIME});
+  }
   window._lastPptx={blob:blob, name:fileName+'.pptx'};
+
+  // 모바일(특히 카카오톡/네이버 인앱 브라우저)은 a[download]가 막혀 있어
+  // 파일명을 못 붙이거나 .zip 으로 떨어진다. 이 경우 Web Share(파일 공유)로 우회한다.
+  const ua=navigator.userAgent||'';
+  const isInApp=/KAKAOTALK|NAVER|Instagram|FBAN|FBAV|Line/i.test(ua);
+  const isMobile=/Android|iPhone|iPad|iPod/i.test(ua);
+  const file=new File([blob], fileName+'.pptx', {type:PPTX_MIME});
+
+  // 파일 공유가 지원되면(대부분의 모바일) 공유 시트로 — 이름·확장자가 보존된다
+  if(isMobile && navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:fileName});
+      return;
+    }catch(err){
+      // 사용자가 공유를 취소했거나 실패 → 아래 일반 다운로드로 폴백
+      if(err && err.name==='AbortError') return;
+    }
+  }
+
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url; a.download=fileName+'.pptx';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),3000);
+
+  // 인앱 브라우저는 다운로드가 아예 막히는 경우가 많아 안내
+  if(isInApp){
+    setTimeout(()=>{
+      alert('카카오톡/인앱 브라우저에서는 파일 저장이 제한될 수 있습니다.\n오른쪽 위 메뉴(⋮ 또는 공유)에서 "다른 브라우저로 열기"를 선택한 뒤 다시 시도해 주세요.');
+    },300);
+  }
 }
 
 // ── 카카오 초기화 ──
@@ -1661,8 +1692,9 @@ document.getElementById('hubLangSwitch').addEventListener('click',e=>{
   const b=e.target.closest('[data-hublang]'); if(b) setHubLang(b.getAttribute('data-hublang'));
 });
 
-// ===== 허브: 잠금 (서버 토큰 인증) =====
-// 비밀번호는 더 이상 코드에 없습니다. 서버(auth.js)가 검증합니다.
+// ===== 허브: 잠금 =====
+const PW_NORMAL='baz2026';   // 일반 도구 활성화
+const PW_ADMIN='880821';     // 숨김 도구까지 활성화
 let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자
 
 function unlockTools(level){
@@ -1685,25 +1717,11 @@ function openHubPw(){
   setTimeout(()=>document.getElementById('hubPwInput').focus(),50);
 }
 function closeHubPw(){ hubPwModal.style.display='none'; }
-async function checkHubPw(){
+function checkHubPw(){
   const v=document.getElementById('hubPwInput').value.trim();
-  if(!v) return;
-  const okBtn=document.getElementById('hubPwOk');
-  const prev=okBtn.textContent;
-  okBtn.disabled=true; okBtn.textContent='...';
-  try{
-    const r=await BazAuth.login(v);
-    if(r.ok){ closeHubPw(); unlockTools(r.level); }
-    else if(r.error==='auth_url_missing'){
-      document.getElementById('hubPwErr').textContent='인증 서버 미설정 (auth.js의 AUTH_URL을 입력하세요)';
-    }
-    else if(r.error==='network'){
-      document.getElementById('hubPwErr').textContent='네트워크 오류. 연결을 확인해 주세요.';
-    }
-    else{ document.getElementById('hubPwErr').textContent=HUB_I18N[HUBLANG].wrongPw; }
-  }finally{
-    okBtn.disabled=false; okBtn.textContent=prev;
-  }
+  if(v===PW_ADMIN){ closeHubPw(); unlockTools(2); }
+  else if(v===PW_NORMAL){ closeHubPw(); unlockTools(1); }
+  else { document.getElementById('hubPwErr').textContent=HUB_I18N[HUBLANG].wrongPw; }
 }
 document.getElementById('hubLogo').addEventListener('click', ()=>{
   if(unlockLevel===0) openHubPw();
@@ -1716,14 +1734,11 @@ document.getElementById('hubPwInput').addEventListener('keydown', e=>{ if(e.key=
 document.getElementById('langSelect').style.display='flex';
 applyHubLang();
 if(LANG) applyLang();
-// 도구에서 메뉴로 돌아온 경우: 서버에 토큰을 검증해 유효할 때만 해제 복원
-// (탭을 닫으면 sessionStorage가 비워져 다시 잠김)
-(async function(){
-  try{
-    const lv = await BazAuth.currentLevel();   // 0=미인증/만료, 1=일반, 2=관리자
-    if(lv>=1) unlockTools(lv);
-  }catch(e){}
-})();
+// 도구에서 메뉴로 돌아온 경우: 세션에 저장된 해제 레벨 복원 (탭 닫으면 소멸 → 다시 잠김)
+try{
+  const saved=parseInt(sessionStorage.getItem('baz_unlock')||'0',10);
+  if(saved>=1) unlockTools(saved);
+}catch(e){}
 
 // ===== 도구 이동 =====
 document.getElementById('appBtnReport').addEventListener('click', function(){
