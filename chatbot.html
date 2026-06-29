@@ -43,6 +43,13 @@
   .suggest-chip:active{background:var(--teal);border-color:var(--teal);color:#fff;}
   .suggest-chip .sc-cat{font-size:10px;color:#9EADCC;margin-left:4px;}
   .suggest-chip:active .sc-cat{color:rgba(255,255,255,.7);}
+  /* 전송 중 입력창 비활성화 */
+  .input-bar.disabled{opacity:.5;pointer-events:none;}
+  /* 모바일: 추천 패널 폭 축소 */
+  @media (max-width:480px){
+    .suggest-bar{width:170px;max-width:52vw;bottom:120px;border-radius:12px 0 0 12px;}
+    .suggest-chip{padding:10px 11px;font-size:13px;}
+  }
 
   /* ── 채팅 영역 ── */
   .chat-area{flex:1;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:12px;}
@@ -1021,11 +1028,10 @@ function updateSuggest(){
 
 // 칩 선택 → 입력창에 증상명 채우고 바로 검색 실행 (신입이 빠르게 답을 찾도록)
 function pickSuggest(name){
+  document.getElementById('suggestBar').classList.remove('show');  // 패널 먼저 닫기
   msgInput.value = name;
   autoResize(msgInput);
-  sendBtn.disabled = false;
-  document.getElementById('suggestBar').classList.remove('show');
-  sendMessage();   // 바로 전송
+  sendMessage();   // 바로 전송 (전송 중 입력창 비활성화는 sendMessage가 처리)
 }
 
 // 속성값 안전 처리 (작은따옴표 이스케이프)
@@ -1265,6 +1271,9 @@ async function sendMessage(){
 
   isBusy = true;
   sendBtn.disabled = true;
+  msgInput.disabled = true;                    // 전송 중 입력창 비활성화
+  document.getElementById('askBar').classList.add('disabled');
+  document.getElementById('suggestBar').classList.remove('show');  // 추천 패널 닫기
 
   msgInput.value='';
   autoResize(msgInput);
@@ -1336,6 +1345,8 @@ async function sendMessage(){
   } finally{
     isBusy = false;
     sendBtn.disabled = false;
+    msgInput.disabled = false;                   // 입력창 다시 활성화
+    document.getElementById('askBar').classList.remove('disabled');
     msgInput.focus();
   }
 }
