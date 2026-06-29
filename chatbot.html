@@ -385,9 +385,9 @@ const CS_KB_BUILTIN = [
 // ══════════════════════════════════════════════
 const CONFIG = {
   // GAS 웹앱 URL (배포 후 입력)
-  GAS_LOG_URL: '',   // 로그·해결공유 기록 (POST)
-  GAS_KB_URL:  '',   // 지식베이스 조회 (GET, ?action=chatbot_kb)
-  GAS_AI_URL:  '',   // Claude API 프록시 (POST) — 권장. 비우면 브라우저가 직접 호출(키 노출 위험)
+  GAS_LOG_URL: 'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // 로그·해결공유 기록 (POST)
+  GAS_KB_URL:  'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // 지식베이스 조회 (GET, ?action=chatbot_kb)
+  GAS_AI_URL:  'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // Claude API 프록시 (POST) — 권장. 비우면 브라우저가 직접 호출(키 노출 위험)
 
   // 캐시
   KB_CACHE_TTL: 10 * 60 * 1000,   // 지식베이스 캐시 유효시간 (10분)
