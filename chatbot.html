@@ -26,6 +26,16 @@
   .qtag{display:inline-block;background:rgba(255,255,255,.1);border:1px solid rgba(202,220,252,.3);border-radius:20px;padding:5px 11px;font-size:12px;color:#CADCFC;cursor:pointer;margin-right:6px;-webkit-tap-highlight-color:transparent;transition:background .15s;}
   .qtag:active,.qtag.active{background:var(--teal);border-color:var(--teal);color:#fff;}
 
+  /* ── 증상 추천 칩 (자동완성) ── */
+  .suggest-bar{background:var(--white);border-top:1px solid var(--gray-line);padding:8px 12px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none;display:none;}
+  .suggest-bar::-webkit-scrollbar{display:none;}
+  .suggest-bar.show{display:block;}
+  .suggest-label{color:#9EADCC;font-size:10px;font-weight:700;display:block;margin-bottom:5px;}
+  .suggest-chip{display:inline-block;background:#F0F5FA;border:1px solid var(--gray-line);border-radius:16px;padding:6px 12px;font-size:13px;color:var(--navy);cursor:pointer;margin-right:6px;margin-bottom:2px;-webkit-tap-highlight-color:transparent;transition:all .12s;}
+  .suggest-chip:active{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .suggest-chip .sc-cat{font-size:10px;color:#9EADCC;margin-left:4px;}
+  .suggest-chip:active .sc-cat{color:rgba(255,255,255,.7);}
+
   /* ── 채팅 영역 ── */
   .chat-area{flex:1;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:12px;}
 
@@ -166,10 +176,16 @@
   </div>
 </div>
 
+<!-- 증상 추천 칩 (입력 중=실시간 추천 / 비어있으면=전체 목록) -->
+<div class="suggest-bar" id="suggestBar">
+  <span class="suggest-label" id="suggestLabel">자주 묻는 증상</span>
+  <div id="suggestChips"></div>
+</div>
+
 <div class="input-bar" id="askBar">
   <button class="send-btn" id="photoBtn" onclick="document.getElementById('imgInput').click()" style="background:var(--teal-soft);color:var(--teal);" title="사진 첨부">📷</button>
   <input type="file" id="imgInput" accept="image/*" style="display:none;" onchange="onImageSelected(event)">
-  <textarea id="msgInput" placeholder="증상을 자유롭게 입력하세요. 예) E-04 에러가 뜨고 타는 냄새가 나요" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+  <textarea id="msgInput" placeholder="증상을 자유롭게 입력하세요. 예) E-04 에러가 뜨고 타는 냄새가 나요" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this);updateSuggest()" onfocus="updateSuggest()"></textarea>
   <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>↑</button>
 </div>
 
@@ -548,6 +564,38 @@ function cleanText(raw){
 // ④ 증상 매칭 — 의미 기반 다중 스코어링
 // ══════════════════════════════════════════════
 
+// 신입·저연차가 칠 법한 "완성형 구어체 표현" → 증상명 매핑.
+// 매뉴얼 용어를 몰라도 자연어로 검색·자동완성되도록 각 증상에 보강한다.
+// (rebuildKBIndex에서 해당 증상의 keywords에 자동 병합됨)
+// 운영 중엔 시트 키워드로도 확장 가능 — 여긴 기본 제공 세트.
+const COLLOQUIAL = {
+  '메인보드 동작 불능': ['전원이 안 들어와요','전원이 안 켜져요','기계가 안 켜져요','장비가 안 켜져요','전원 버튼 눌러도 반응이 없어요','아무 반응이 없어요','화면이 아예 안 켜져요','먹통이 됐어요','죽었어요'],
+  '풋 스위치 동작 불능': ['발판을 밟아도 안 나와요','페달 밟아도 반응이 없어요','발판이 작동을 안 해요','풋스위치를 눌러도 안 돼요','발로 밟아도 분사가 안 돼요'],
+  '장비 출력 저하': ['출력이 약해졌어요','예전보다 약하게 나와요','힘이 없어요','젯이 약해요','분사력이 떨어졌어요'],
+  'RFID 스캔 불량': ['노즐 인식이 안 돼요','노즐을 못 읽어요','스캔이 안 돼요','노즐 끼웠는데 인식을 안 해요','please scan again 떠요','인식음이 안 나요'],
+  '냉각수 누수': ['물이 새요','바닥에 물이 있어요','물이 줄줄 새요','냉각수가 새요','밑에 물이 고여요'],
+  'UI 업그레이드': ['업데이트 하고 싶어요','버전 올리고 싶어요','펌웨어 업데이트','UI 바꾸고 싶어요','최신 버전으로'],
+  '팝업 불량': ['에러창이 떠요','경고창이 떠요','이상한 메시지가 떠요','알림이 계속 떠요','오류 코드가 나와요'],
+  'Touch Screen 동작 불능': ['터치가 안 돼요','화면을 눌러도 반응이 없어요','터치가 헛눌러져요','화면 터치가 먹통이에요','엉뚱한 데가 눌려요'],
+  '이상 소음': ['이상한 소리가 나요','소리가 시끄러워요','웅웅거려요','덜덜거려요','갈리는 소리가 나요','팬 소리가 커요'],
+  '피팅 불량': ['기포가 계속 나와요','에어가 섞여 나와요','공기가 들어가요','거품이 나와요'],
+  '파워서플라이불량': ['전원 공급이 안 돼요','파워가 안 들어와요','전원부 문제 같아요','LED가 초록색이 안 떠요'],
+  '구동 키 파손': ['키가 헐거워요','키가 부러졌어요','키가 안 돌아가요','키가 빠졌어요','전원 키가 망가졌어요','키를 잃어버렸어요','열쇠가 부러졌어요'],
+  '거치대 파손': ['거치대가 부러졌어요','받침대가 망가졌어요','스탠드가 깨졌어요'],
+  'ARM 파손': ['암이 부러졌어요','팔 부분이 망가졌어요','관절이 고정이 안 돼요','arm이 헐거워요'],
+  '케이블 불량': ['선이 끊어진 것 같아요','케이블이 헐거워요','연결이 안 돼요','접촉이 불량이에요','선을 흔들면 됐다 안 됐다 해요'],
+  '재현 안됨': ['증상이 안 나타나요','다시 해보니 괜찮아요','뭐가 문제인지 모르겠어요','이상이 없어 보여요'],
+  '냉각 호수 파손': ['호스가 터졌어요','냉각 호스에서 물이 새요','튜브가 찢어졌어요','물 호스가 망가졌어요'],
+  '노즐 누수/녹물': ['노즐에서 물이 새요','노즐에서 녹물이 나와요','노즐 끝에서 물이 떨어져요','생리식염수가 새요','노즐 색이 이상해요'],
+  '노즐 체결 강함': ['노즐이 안 빠져요','노즐이 너무 빡빡해요','노즐 조이기가 힘들어요','노즐이 잘 안 돌아가요'],
+  '노즐 체결 약함': ['노즐이 헐거워요','노즐이 자꾸 빠져요','노즐이 흔들려요','노즐 체결이 느슨해요'],
+  '발열': ['너무 뜨거워요','핸드피스가 뜨거워요','과열되는 것 같아요','열이 많이 나요'],
+  '동작 불능': ['아예 작동을 안 해요','전원은 들어오는데 동작을 안 해요','핸드피스가 안 움직여요','분사가 전혀 안 돼요'],
+  '출력약함': ['출력이 약하게 나와요','셀라인 젯이 약해요','분사가 약해요','힘이 약하게 나와요'],
+  '젯팅 불량': ['젯이 안 잡혀요','물줄기가 계속 나와요','젯이 풀려요','분사가 일정하지 않아요','줄기가 흩어져요'],
+  '노즐 막힘': ['노즐이 막혔어요','약물이 안 나와요','분사가 안 돼요','노즐이 이상해요','뭔가 막힌 것 같아요']
+};
+
 // 동의어 사전: 현장 표현 → 표준어로 정규화
 const SYNONYMS = {
   '풋스위치':['풋스위치','풋 스위치','발판','페달','풋','pedal','foot switch','foot'],
@@ -591,6 +639,12 @@ function normalizeTokens(text){
 // 증상별 토큰 인덱스 (재)계산 — 시트 동기화로 CS_KB가 바뀔 때마다 호출
 function rebuildKBIndex(){
   CS_KB.forEach(item=>{
+    // 신입 구어체 표현을 해당 증상 키워드에 병합 (중복 제외)
+    const extra = COLLOQUIAL[item.name];
+    if(extra){
+      item.keywords = item.keywords || [];
+      extra.forEach(p=>{ if(!item.keywords.includes(p)) item.keywords.push(p); });
+    }
     const corpus = [item.name, ...(item.keywords||[]), item.check, item.fix, item.followup].join(' ');
     item._tokens = normalizeTokens(corpus);
     item._fulltext = corpus.toLowerCase();
@@ -886,6 +940,80 @@ const emptyState = document.getElementById('emptyState');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msgInput');
 
+// ── 증상 추천 칩 (자동완성) ──────────────────
+// 입력 중이면 rankSymptoms로 관련 증상을, 비어 있으면 전체 목록을 보여준다.
+// 칩을 누르면 해당 증상명이 입력창에 채워져 바로 질문할 수 있다.
+let suggestEnabled = true;  // 해결공유 모드 등에선 끔
+function updateSuggest(){
+  const bar = document.getElementById('suggestBar');
+  const chipsBox = document.getElementById('suggestChips');
+  const label = document.getElementById('suggestLabel');
+  if(!bar || !chipsBox) return;
+
+  // 질문 모드가 아니거나(해결공유), 사진 첨부 중이면 숨김
+  if(!suggestEnabled || inputMode==='share' || pendingImage){
+    bar.classList.remove('show');
+    return;
+  }
+
+  const q = msgInput.value.trim();
+  let items, labelText;
+
+  if(!q){
+    // 입력창이 비면 → 전체 증상 목록 (카테고리 순)
+    items = CS_KB.slice();
+    labelText = '증상 선택 또는 직접 입력';
+  }else{
+    // 입력 중 → 자동완성 전용 점수로 정렬 (부분일치 우선)
+    // 신입이 정확한 표현을 몰라도, 증상명·키워드·구어체에 입력어가
+    // 닿기만 하면 후보로 올린다. 검색(rankSymptoms)과 분리해 더 관대하게.
+    const ql = q.toLowerCase();
+    const qlNoSpace = ql.replace(/\s/g,'');
+    const scored = CS_KB.map(it=>{
+      let s = 0;
+      const name = it.name.toLowerCase();
+      const kws = (it.keywords||[]).map(k=>k.toLowerCase());
+
+      // 증상명에 입력어 포함 → 최우선
+      if(name.includes(ql) || name.replace(/\s/g,'').includes(qlNoSpace)) s += 100;
+      // 키워드(구어체 포함) 중 입력어를 포함하는 것 → 강한 가점
+      for(const k of kws){
+        if(k.includes(ql) || k.replace(/\s/g,'').includes(qlNoSpace)){ s += 40; break; }
+      }
+      // 입력어가 키워드의 앞부분과 겹치면(접두) 추가 가점 → "뜨"→"뜨거워요"
+      for(const k of kws){
+        if(k.startsWith(ql) || k.replace(/\s/g,'').startsWith(qlNoSpace)){ s += 20; break; }
+      }
+      // 의미 매칭 점수도 약하게 반영 (동의어로 잡히는 경우)
+      const r = rankSymptoms(q).find(x=>x.item.name===it.name);
+      if(r) s += Math.min(r.score, 30);
+      return { it, s };
+    }).filter(x=>x.s>0).sort((a,b)=>b.s-a.s);
+
+    items = scored.slice(0, 6).map(x=>x.it);
+    if(!items.length){ bar.classList.remove('show'); return; }
+    labelText = '관련 증상 (눌러서 선택)';
+  }
+
+  label.textContent = labelText;
+  chipsBox.innerHTML = items.map(it=>
+    `<span class="suggest-chip" onclick="pickSuggest('${escAttr(it.name)}')">${escHtml(it.name)}${it.cat?`<span class="sc-cat">${escHtml(it.cat)}</span>`:''}</span>`
+  ).join('');
+  bar.classList.add('show');
+}
+
+// 칩 선택 → 입력창에 증상명 채우고 바로 검색 실행 (신입이 빠르게 답을 찾도록)
+function pickSuggest(name){
+  msgInput.value = name;
+  autoResize(msgInput);
+  sendBtn.disabled = false;
+  document.getElementById('suggestBar').classList.remove('show');
+  sendMessage();   // 바로 전송
+}
+
+// 속성값 안전 처리 (작은따옴표 이스케이프)
+function escAttr(s){ return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+
 function hideEmpty(){ emptyState.style.display='none'; }
 
 function appendUserBubble(text, imgDataUrl){
@@ -1029,6 +1157,7 @@ function onImageSelected(e){
       document.getElementById('imgPreviewThumb').src = compressed;
       document.getElementById('imgPreview').style.display = 'block';
       sendBtn.disabled = false;  // 사진만으로도 전송 가능
+      document.getElementById('suggestBar').classList.remove('show'); // 사진 첨부 시 추천 숨김
     });
   };
   reader.readAsDataURL(file);
@@ -1057,6 +1186,7 @@ function clearImage(){
   pendingImage = null;
   document.getElementById('imgPreview').style.display = 'none';
   sendBtn.disabled = !msgInput.value.trim();
+  updateSuggest();  // 사진 해제 시 추천 다시 표시 여부 갱신
 }
 
 // 모드 전환
@@ -1070,6 +1200,7 @@ function setMode(mode){
   const shareForm = document.getElementById('shareForm');
 
   if(mode==='share'){
+    document.getElementById('suggestBar').classList.remove('show'); // 공유 모드는 추천 숨김
     askBar.style.display='none';
     shareForm.style.display='flex';
     document.getElementById('logNotice').textContent='✅ 공유한 해결책은 관리자 승인 후 매뉴얼에 반영됩니다';
@@ -1120,6 +1251,7 @@ async function sendMessage(){
 
   msgInput.value='';
   autoResize(msgInput);
+  document.getElementById('suggestBar').classList.remove('show'); // 전송 시 추천 닫기
   appendUserBubble(text, img?.dataUrl);
   clearImage();
 
