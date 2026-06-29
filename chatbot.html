@@ -384,10 +384,9 @@ const CS_KB_BUILTIN = [
 // ② 설정 (CONFIG) — 운영 시 이 부분만 수정
 // ══════════════════════════════════════════════
 const CONFIG = {
-  // GAS 웹앱 URL (배포 후 입력)
-  GAS_LOG_URL: 'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // 로그·해결공유 기록 (POST)
-  GAS_KB_URL:  'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // 지식베이스 조회 (GET, ?action=chatbot_kb)
-  GAS_AI_URL:  'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',   // Claude API 프록시 (POST) — 권장. 비우면 브라우저가 직접 호출(키 노출 위험)
+  // GAS 웹앱 URL — 하나의 웹앱이 POST(type)·GET(action)을 모두 라우팅.
+  // 세 기능(로그/지식베이스/AI프록시)이 같은 주소를 씁니다.
+  GAS_BASE_URL: 'https://script.google.com/macros/s/AKfycbwTTd0YWNnChmeTKRcy8SIpJfpY_Dvzsx1zduBg6cYXvWX_VH1JIOqiZDLysKqPqTo/exec',
 
   // 캐시
   KB_CACHE_TTL: 10 * 60 * 1000,   // 지식베이스 캐시 유효시간 (10분)
@@ -419,9 +418,9 @@ let convoContext = [];
 // { name:병원명, serial:장비번호, status:상태, ncare:N-Care등급, pay:유무상, lastInspect:최종점검일, history:[정비이력] }
 let deviceContext = null;
 
-// ── 하위 호환 별칭 (기존 코드가 참조) ──
-const GAS_LOG_URL = CONFIG.GAS_LOG_URL;
-const GAS_KB_URL  = CONFIG.GAS_KB_URL;
+// ── 하위 호환 별칭 (기존 코드가 참조) — 모두 단일 BASE URL ──
+const GAS_LOG_URL = CONFIG.GAS_BASE_URL;
+const GAS_KB_URL  = CONFIG.GAS_BASE_URL;
 
 // 운영 지식베이스: 시트에서 불러오면 교체됨. 초기값은 내장 폴백 데이터.
 let CS_KB = CS_KB_BUILTIN.slice();
@@ -466,7 +465,7 @@ function applyKB(kbArr){
 }
 
 function syncKB(){
-  if(!CONFIG.GAS_KB_URL){
+  if(!CONFIG.GAS_BASE_URL){
     // 시트 URL 미설정 → 내장 데이터로만 동작
     rebuildKBIndex();
     return;
@@ -489,7 +488,7 @@ function syncKB(){
   }catch(e){ console.warn('[챗봇 KB] 캐시 읽기 오류(무시):', e); }
 
   // 2) 시트에서 최신 fetch
-  fetchWithTimeout(CONFIG.GAS_KB_URL, {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+  fetchWithTimeout(CONFIG.GAS_BASE_URL + '?action=chatbot_kb', {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
     .then(r=>r.json())
     .then(d=>{
       if(!d.success || !d.data || !d.data.length) return;
@@ -756,17 +755,34 @@ async function callClaude(systemPrompt, messages, maxTokens){
   };
 
   // 프록시(GAS) 우선 — API 키를 서버에 보관. 미설정 시 직접 호출.
-  const url = CONFIG.GAS_AI_URL || 'https://api.anthropic.com/v1/messages';
+  const useProxy = !!CONFIG.GAS_BASE_URL;
+  const url = useProxy ? CONFIG.GAS_BASE_URL : 'https://api.anthropic.com/v1/messages';
+  const payload = JSON.stringify(useProxy ? {type:'ai_proxy', payload:body} : body);
 
-  const resp = await fetchWithTimeout(url, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(CONFIG.GAS_AI_URL ? {type:'ai_proxy', payload:body} : body)
-  }, CONFIG.FETCH_TIMEOUT);
+  // GAS 콜드스타트로 첫 호출이 실패/타임아웃할 수 있어 1회 재시도.
+  let lastErr;
+  for(let attempt = 0; attempt < 2; attempt++){
+    try{
+      const resp = await fetchWithTimeout(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: payload,
+        redirect: 'follow'
+      }, CONFIG.FETCH_TIMEOUT);
 
-  const data = await resp.json();
-  if(data.text) return data.text;
-  return data.content?.[0]?.text || '답변을 생성할 수 없습니다.';
+      const data = await resp.json();
+      if(data.text) return data.text;
+      const txt = data.content?.[0]?.text;
+      if(txt) return txt;
+      // 프록시가 에러 객체를 돌려준 경우
+      throw new Error(data.message || data.error?.message || '빈 응답');
+    }catch(e){
+      lastErr = e;
+      // 첫 시도 실패 시 잠깐 쉬고 재시도 (콜드스타트 대비)
+      if(attempt === 0) await new Promise(r=>setTimeout(r, 600));
+    }
+  }
+  throw lastErr || new Error('AI 응답 실패');
 }
 
 // ══════════════════════════════════════════════
@@ -790,13 +806,13 @@ function writeQueue(arr){
 
 // 단건 전송 시도 (성공 시 true)
 async function sendOne(item){
-  if(!CONFIG.GAS_LOG_URL) return false;
+  if(!CONFIG.GAS_BASE_URL) return false;
   try{
     // GAS 웹앱 전송 시 주의점:
     //  - Content-Type을 text/plain으로 보내야 CORS preflight(OPTIONS)를 피함
     //    (application/json이면 preflight가 발생하는데 GAS는 OPTIONS를 처리 못 해 실패)
     //  - GAS는 POST에 302 리다이렉트로 응답 → fetch가 자동 추종(redirect:'follow')
-    const resp = await fetchWithTimeout(CONFIG.GAS_LOG_URL, {
+    const resp = await fetchWithTimeout(CONFIG.GAS_BASE_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify(item),
@@ -831,7 +847,7 @@ async function logToGAS(payload){
   // 큐에 보관 (전송 실패해도 유실 방지)
   const q = readQueue(); q.push(item); writeQueue(q);
 
-  if(!CONFIG.GAS_LOG_URL){
+  if(!CONFIG.GAS_BASE_URL){
     return false;   // URL 미설정 — 큐에만 보관됨
   }
   await flushQueue();
@@ -842,7 +858,7 @@ async function logToGAS(payload){
 // 큐 비우기 — 순서대로 재전송, 실패하면 남겨둠
 let flushing = false;
 async function flushQueue(){
-  if(flushing || !CONFIG.GAS_LOG_URL) return;
+  if(flushing || !CONFIG.GAS_BASE_URL) return;
   if(!navigator.onLine) return;   // 오프라인이면 대기
   flushing = true;
   try{
@@ -901,8 +917,36 @@ function removeTyping(){
   if(el) el.remove();
 }
 
+// ── 즉시 응답: 매칭 신뢰도 높을 때 내장 KB 카드를 먼저 보여주고
+//    AI 답변이 완성되면 자연스럽게 교체한다. (체감 속도 대폭 개선) ──
+function showInstantKB(item){
+  hideEmpty();
+  removeTyping();
+  const wrap = document.createElement('div');
+  wrap.className = 'ai-row';
+  wrap.id = 'instantKB';
+  wrap.innerHTML = `
+    <div class="ai-avatar">🤖</div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+      ${renderStepCard('s1','1','문제 확인',item.check)}
+      ${renderStepCard('s2','2','문제 해결',item.fix)}
+      ${renderStepCard('s3','3','후속 조치',item.followup)}
+      <span class="bubble-time" id="instantKBNote" style="color:var(--teal);display:flex;align-items:center;gap:5px;">
+        <span class="typing" style="display:inline-flex;padding:0;gap:3px;"><span></span><span></span><span></span></span>
+        ${escHtml(item.name)} · AI가 더 정확한 답변을 준비 중…
+      </span>
+    </div>`;
+  chatArea.appendChild(wrap);
+  scrollBottom();
+}
+function removeInstantKB(){
+  const el = document.getElementById('instantKB');
+  if(el) el.remove();
+}
+
 function appendAIResponse(text, symptomName){
   removeTyping();
+  removeInstantKB();   // 즉답 카드가 있으면 제거 후 정식 답변으로 교체
   const t = now();
   const clean = cleanText(text);
 
@@ -1077,13 +1121,20 @@ async function sendMessage(){
   autoResize(msgInput);
   appendUserBubble(text, img?.dataUrl);
   clearImage();
-  showTyping();
 
   // 매칭 랭킹 산출 — 신뢰도 판정에 사용 (사진만 있으면 텍스트 매칭 생략)
   const ranked = text ? rankSymptoms(text) : [];
   const top    = ranked[0] || null;
   // 신뢰도: 최고 점수 기준 (50 이상=확실, 20~50=보통, 그 미만=낮음)
   const confidence = top ? (top.score>=50?'high':top.score>=20?'mid':'low') : 'none';
+
+  // 매칭 신뢰도가 높고 이미지가 없으면 → 내장 KB 답변을 즉시 표시(체감 속도 ↑)
+  // AI 답변이 오면 자연스럽게 교체됨. 그 전까지는 빈 화면 대신 실질 정보를 제공.
+  if(top && !img && (confidence==='high' || confidence==='mid')){
+    showInstantKB(top.item);
+  } else {
+    showTyping();
+  }
 
   try{
     const answer = await askClaude(text, ranked, img);
@@ -1100,8 +1151,14 @@ async function sendMessage(){
     });
   } catch(e){
     removeTyping();
-    // 오프라인 폴백: 지식베이스 직접 응답
-    if(top){
+    const instant = document.getElementById('instantKB');
+    if(instant && top){
+      // 즉답 KB 카드가 이미 떠 있으면 → 그대로 확정 (보강 표시만 정리)
+      const note = document.getElementById('instantKBNote');
+      if(note){ note.style.color=''; note.innerHTML = `${now()} · ${escHtml(top.item.name)} (오프라인 · 매뉴얼 답변)`; }
+      instant.id = '';  // 더 이상 즉답 카드로 취급하지 않음
+      logToGAS({query:text, symptomName:top.item.name, answer:'(오프라인 KB 응답)', confidence, score:top.score, resolved:true, source:'offline'});
+    } else if(top){
       const m = top.item;
       chatArea.insertAdjacentHTML('beforeend',`
         <div class="ai-row">
@@ -1115,6 +1172,7 @@ async function sendMessage(){
         </div>`);
       logToGAS({query:text, symptomName:m.name, answer:'(오프라인 KB 응답)', confidence, score:top.score, resolved:true, source:'offline'});
     } else {
+      removeInstantKB();
       chatArea.insertAdjacentHTML('beforeend',`
         <div class="ai-row">
           <div class="ai-avatar">🤖</div>
@@ -1233,7 +1291,7 @@ async function submitShareForm(){
   if(sent){
     statusMsg = '✅ 승인 대기로 등록했습니다. 관리자 확인 후 매뉴얼에 반영됩니다.';
     statusColor = 'var(--green)';
-  } else if(!CONFIG.GAS_LOG_URL){
+  } else if(!CONFIG.GAS_BASE_URL){
     statusMsg = '⚠️ 서버 URL이 설정되지 않아 임시 저장만 됐습니다. (관리자 문의)';
     statusColor = 'var(--amber)';
   } else {
@@ -1427,7 +1485,19 @@ function buildDeviceContextText(){
   return txt;
 }
 
+// ── GAS 콜드스타트 예열 ──────────────────────
+// 첫 AI 호출의 지연(콜드스타트)을 줄이기 위해, 페이지 로드 시
+// 가벼운 GET을 미리 보내 GAS 인스턴스를 깨워둔다. 결과는 무시.
+function warmUpGAS(){
+  if(!CONFIG.GAS_BASE_URL) return;
+  try{
+    fetch(CONFIG.GAS_BASE_URL + '?action=ping', {method:'GET', keepalive:true})
+      .catch(()=>{});  // 실패해도 무시 (예열 목적)
+  }catch(e){}
+}
+
 // ── 초기화 ──────────────────────────────────
+warmUpGAS();        // GAS 인스턴스 예열 (콜드스타트 완화)
 loadDeviceContext(); // 병원·장비 컨텍스트 (URL 파라미터)
 syncKB();          // 지식베이스 동기화 (시트 우선, 실패 시 내장)
 restoreHistory();  // 이전 대화 복원
