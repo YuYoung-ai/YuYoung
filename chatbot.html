@@ -974,8 +974,8 @@ function updateSuggest(){
   const label = document.getElementById('suggestLabel');
   if(!bar || !chipsBox) return;
 
-  // 질문 모드가 아니거나(해결공유), 사진 첨부 중이면 숨김
-  if(!suggestEnabled || inputMode==='share' || pendingImage){
+  // 질문 모드가 아니거나(해결공유), 사진 첨부 중이거나, 전송 중이면 숨김
+  if(!suggestEnabled || inputMode==='share' || pendingImage || isBusy || msgInput.disabled){
     bar.classList.remove('show');
     return;
   }
@@ -1347,6 +1347,7 @@ async function sendMessage(forceAsk){
     msgInput.disabled = false;                   // 입력창 다시 활성화
     document.getElementById('askBar').classList.remove('disabled');
     msgInput.focus();
+    document.getElementById('suggestBar').classList.remove('show'); // 답변 후 패널 닫힌 상태 유지
   }
 }
 
