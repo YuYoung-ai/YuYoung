@@ -293,6 +293,7 @@
         <div class="hn" id="histName"></div>
         <div class="hsub" id="histSub"></div>
       </div>
+      <button class="hist-lock" id="histAiBtn" title="이 장비 AI 문의" style="background:none;border:none;font-size:18px;cursor:pointer;padding:4px;">🤖</button>
       <button class="hist-lock" id="histLock" title="편집">🔒</button>
       <button class="hist-close" id="histClose">✕</button>
     </div>
@@ -1300,6 +1301,38 @@ function closeHist(){
 document.getElementById('histClose').addEventListener('click', closeHist);
 document.getElementById('histModal').addEventListener('click', e=>{
   if(e.target.id==='histModal') closeHist();
+});
+
+// 🤖 AI 문의 버튼 → 현재 장비 정보·이력을 챗봇으로 전달
+document.getElementById('histAiBtn').addEventListener('click', ()=>{
+  const name = histCurName;
+  if(!name) return;
+  const hosp = HOSPITALS.find(h=>h.n===name) || {};
+  const recs = (HISTORY[name] || []).slice(0, 12);  // 최근 12건만 전달
+
+  // 이력을 챗봇이 읽는 최소 필드로 압축
+  const slim = recs.map(r=>({
+    d: r.d || '', sy: r.sy || '', fx: r.fx || '',
+    p: r.p || '', pt: r.pt || ''
+  }));
+
+  // base64(JSON)로 인코딩 — 한글·특수문자 URL 안전 전달
+  let ctxParam = '';
+  try{
+    ctxParam = btoa(unescape(encodeURIComponent(JSON.stringify(slim))));
+  }catch(e){ ctxParam = ''; }
+
+  const params = new URLSearchParams({
+    hosp: name,
+    serial: hosp.s || '',
+    status: hosp.st || '',
+    ncare: hosp.nc || '',
+    pay: hosp.as || '',
+    li: hosp.li || ''
+  });
+  if(ctxParam) params.set('ctx', ctxParam);
+
+  location.href = 'chatbot.html?' + params.toString();
 });
 
 // 잠금 버튼 → 비밀번호 모달
