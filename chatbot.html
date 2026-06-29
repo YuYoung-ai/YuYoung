@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>AI 트러블슈팅 — BAZ BIOMEDIC CS</title>
+<style>
+  :root{
+    --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+    --green:#1A8A5A; --amber:#B87800; --red:#C0392B;
+    --gray-bg:#F4F6FA; --gray-line:#DDE3EE; --white:#fff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--gray-bg);min-height:100dvh;display:flex;flex-direction:column;}
+
+  /* ── 헤더 ── */
+  header{background:var(--navy);padding:13px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
+  .back-btn{background:none;border:none;color:rgba(255,255,255,.7);font-size:20px;cursor:pointer;padding:4px;line-height:1;-webkit-tap-highlight-color:transparent;}
+  .header-title{color:#fff;font-size:16px;font-weight:800;flex:1;}
+  .header-badge{background:rgba(46,125,158,.4);border:1px solid rgba(46,125,158,.6);border-radius:20px;padding:3px 10px;font-size:11px;color:#A8D4E8;font-weight:600;}
+
+  /* ── 빠른 태그 ── */
+  .tag-bar{background:var(--navy-light);padding:10px 14px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;}
+  .tag-bar::-webkit-scrollbar{display:none;}
+  .tag-bar-label{color:#8EA0C8;font-size:10px;font-weight:700;letter-spacing:.05em;display:block;margin-bottom:6px;}
+  .qtag{display:inline-block;background:rgba(255,255,255,.1);border:1px solid rgba(202,220,252,.3);border-radius:20px;padding:5px 11px;font-size:12px;color:#CADCFC;cursor:pointer;margin-right:6px;-webkit-tap-highlight-color:transparent;transition:background .15s;}
+  .qtag:active,.qtag.active{background:var(--teal);border-color:var(--teal);color:#fff;}
+
+  /* ── 채팅 영역 ── */
+  .chat-area{flex:1;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:12px;}
+
+  /* 말풍선 공통 */
+  .bubble-wrap{display:flex;flex-direction:column;gap:3px;}
+  .bubble-wrap.user{align-items:flex-end;}
+  .bubble-wrap.ai{align-items:flex-start;}
+  .bubble{max-width:84%;padding:11px 14px;border-radius:16px;font-size:14px;line-height:1.6;word-break:break-word;}
+  .bubble.user{background:var(--navy);color:#fff;border-bottom-right-radius:4px;}
+  .bubble.ai{background:var(--white);color:#1A1A2E;border-bottom-left-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+  .bubble-time{font-size:10px;color:#A0ACBF;padding:0 4px;}
+
+  /* AI 아바타 */
+  .ai-row{display:flex;align-items:flex-end;gap:8px;}
+  .ai-avatar{width:28px;height:28px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+
+  /* 3단계 카드 */
+  .step-card{background:var(--white);border-radius:14px;box-shadow:0 1px 6px rgba(0,0,0,.09);overflow:hidden;max-width:88%;margin-top:4px;}
+  .step-card-header{padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--gray-line);}
+  .step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;}
+  .step-num.s1{background:#E67E22;}
+  .step-num.s2{background:var(--teal);}
+  .step-num.s3{background:var(--green);}
+  .step-card-title{font-size:12px;font-weight:800;color:var(--navy);}
+  .step-card-body{padding:10px 14px;font-size:13px;line-height:1.65;color:#2C3A50;}
+  .step-card-body ul{padding-left:16px;}
+  .step-card-body li{margin-bottom:4px;}
+  .tip-badge{display:inline-flex;align-items:center;gap:4px;background:#FFF8EC;border:1px solid #F0C060;border-radius:8px;padding:5px 9px;font-size:11px;color:#8A5800;margin-top:8px;}
+
+  /* 로딩 */
+  .typing{display:flex;gap:4px;padding:12px 14px;align-items:center;}
+  .typing span{width:7px;height:7px;border-radius:50%;background:#B0BDD0;animation:bounce .9s infinite;}
+  .typing span:nth-child(2){animation-delay:.15s;}
+  .typing span:nth-child(3){animation-delay:.3s;}
+  @keyframes bounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-6px);}}
+
+  /* ── 입력창 ── */
+  .input-bar{background:var(--white);border-top:1px solid var(--gray-line);padding:10px 12px;display:flex;align-items:flex-end;gap:8px;position:sticky;bottom:0;}
+  .input-bar textarea{flex:1;border:1.5px solid var(--gray-line);border-radius:12px;padding:10px 13px;font-size:16px;font-family:inherit;resize:none;outline:none;max-height:100px;min-height:42px;line-height:1.5;color:#1A1A2E;transition:border-color .2s;}
+  .input-bar textarea:focus{border-color:var(--teal);}
+  .send-btn{width:42px;height:42px;border-radius:12px;border:none;background:var(--navy);color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;-webkit-tap-highlight-color:transparent;transition:background .15s;}
+  .send-btn:active{background:var(--teal);}
+  .send-btn:disabled{background:#C0C8D8;cursor:not-allowed;}
+
+  /* 저장 기록 로그 안내 */
+  .log-notice{font-size:11px;color:#9EADCC;text-align:center;padding:6px 0 2px;}
+
+  /* 입력 모드 토글 */
+  .mode-bar{background:var(--white);border-top:1px solid var(--gray-line);padding:8px 12px 0;display:flex;gap:8px;}
+  .mode-btn{flex:1;padding:8px;border-radius:10px 10px 0 0;border:1.5px solid var(--gray-line);border-bottom:none;background:#F4F6FA;color:#8090A8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:all .15s;}
+  .mode-btn.active{background:var(--white);color:var(--navy);border-color:var(--teal);}
+  .mode-btn#modeShare.active{color:var(--green);border-color:var(--green);}
+  /* 해결 공유 모드일 때 입력창 강조 */
+  body.share-mode .input-bar textarea{border-color:var(--green);background:#F4FBF7;}
+  body.share-mode .send-btn{background:var(--green);}
+
+  /* 해결 보고 확인 버튼 */
+  .rep-btn{flex:1;padding:11px;border-radius:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;}
+  .rep-btn.ok{background:var(--green);color:#fff;}
+  .rep-btn.ok:active{background:#147A4C;}
+  .rep-btn.cancel{background:#EEF1F6;color:#8090A8;flex:0 0 70px;}
+
+  /* 해결 공유 3칸 폼 */
+  .share-form{background:var(--white);border-top:1px solid var(--gray-line);padding:12px;display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;}
+  .share-field{display:flex;flex-direction:column;gap:5px;}
+  .share-field label{font-size:12px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:6px;}
+  .share-field .req{color:var(--red);font-size:11px;}
+  .share-field .sn{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;}
+  .share-field .sn.s1{background:#E67E22;}
+  .share-field .sn.s2{background:var(--teal);}
+  .share-field .sn.s3{background:var(--green);}
+  .share-field input,.share-field textarea{border:1.5px solid var(--gray-line);border-radius:10px;padding:9px 11px;font-size:16px;font-family:inherit;outline:none;color:#1A1A2E;resize:none;line-height:1.5;transition:border-color .15s;}
+  .share-field input:focus,.share-field textarea:focus{border-color:var(--green);}
+  .share-submit{padding:13px;border-radius:11px;border:none;background:var(--green);color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;}
+  .share-submit:active{background:#147A4C;}
+  .share-submit:disabled{background:#C0C8D8;cursor:not-allowed;}
+
+  /* 빈 상태 */
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:10px;padding:32px 24px;text-align:center;}
+  .empty-icon{font-size:48px;}
+  .empty-title{font-size:16px;font-weight:800;color:var(--navy);}
+  .empty-sub{font-size:13px;color:#6B7A99;line-height:1.6;}
+
+  /* 히스토리 초기화 버튼 */
+  .clear-btn{background:none;border:none;color:#9EADCC;font-size:11px;cursor:pointer;padding:4px 8px;border-radius:8px;font-family:inherit;}
+  .clear-btn:active{background:var(--gray-line);}
+</style>
+</head>
+<body>
+
+<header>
+  <button class="back-btn" onclick="history.back()">←</button>
+  <span class="header-title">🤖 AI 트러블슈팅</span>
+  <button class="back-btn" onclick="clearHistory()" title="대화 초기화" style="font-size:17px;">🗑</button>
+  <span class="header-badge">BAZ CS 매니저</span>
+</header>
+
+<!-- 빠른 증상 태그 -->
+<div class="tag-bar">
+  <span class="tag-bar-label">⚡ 빠른 증상 선택</span>
+  <span class="qtag" onclick="quickAsk(this,'메인보드 동작 불능')">메인보드 불능</span>
+  <span class="qtag" onclick="quickAsk(this,'RFID 스캔 불량')">RFID 인식 불량</span>
+  <span class="qtag" onclick="quickAsk(this,'냉각수 누수')">냉각수 누수</span>
+  <span class="qtag" onclick="quickAsk(this,'장비 출력 저하')">출력 저하</span>
+  <span class="qtag" onclick="quickAsk(this,'Touch Screen 동작 불능')">터치 불량</span>
+  <span class="qtag" onclick="quickAsk(this,'풋 스위치 동작 불능')">풋스위치 불량</span>
+  <span class="qtag" onclick="quickAsk(this,'이상 소음')">이상 소음</span>
+  <span class="qtag" onclick="quickAsk(this,'노즐 누수/녹물')">노즐 누수</span>
+  <span class="qtag" onclick="quickAsk(this,'피팅 불량')">피팅 불량</span>
+  <span class="qtag" onclick="quickAsk(this,'발열')">발열</span>
+  <span class="qtag" onclick="quickAsk(this,'UI 업그레이드')">UI 업그레이드</span>
+  <span class="qtag" onclick="quickAsk(this,'재현 안됨')">재현 안됨</span>
+  <span class="qtag" onclick="quickAsk(this,'파워서플라이불량')">파워서플라이 불량</span>
+  <span class="qtag" onclick="quickAsk(this,'케이블 불량')">케이블 불량</span>
+</div>
+
+<!-- 채팅 영역 -->
+<div class="chat-area" id="chatArea">
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🔧</div>
+    <div class="empty-title">바즈 CS AI 매니저</div>
+    <div class="empty-sub">증상을 평소 말투로 적어도 됩니다.<br>예) "풋스위치 눌러도 신호가 안 가"<br><br>현장에서 해결했다면 위 <b>✅ 해결 공유</b>로<br>매뉴얼에 등록할 수 있습니다.</div>
+  </div>
+</div>
+
+<!-- 입력 모드 토글 -->
+<div class="mode-bar">
+  <button type="button" class="mode-btn active" id="modeAsk" onclick="setMode('ask')">💬 질문하기</button>
+  <button type="button" class="mode-btn" id="modeShare" onclick="setMode('share')">✅ 해결 공유</button>
+</div>
+
+<!-- 입력창 (질문 모드) -->
+<!-- 사진 미리보기 (선택 시 표시) -->
+<div id="imgPreview" style="display:none;padding:8px 12px 0;background:var(--white);">
+  <div style="position:relative;display:inline-block;">
+    <img id="imgPreviewThumb" style="height:64px;border-radius:8px;border:1.5px solid var(--gray-line);" alt="첨부 사진">
+    <button onclick="clearImage()" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:none;background:var(--red);color:#fff;font-size:13px;cursor:pointer;line-height:1;">×</button>
+  </div>
+</div>
+
+<div class="input-bar" id="askBar">
+  <button class="send-btn" id="photoBtn" onclick="document.getElementById('imgInput').click()" style="background:var(--teal-soft);color:var(--teal);" title="사진 첨부">📷</button>
+  <input type="file" id="imgInput" accept="image/*" style="display:none;" onchange="onImageSelected(event)">
+  <textarea id="msgInput" placeholder="증상을 자유롭게 입력하세요. 예) E-04 에러가 뜨고 타는 냄새가 나요" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+  <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>↑</button>
+</div>
+
+<!-- 해결 공유 폼 (3단계 양식) -->
+<div class="share-form" id="shareForm" style="display:none;">
+  <div class="share-field">
+    <label>증상 <span class="req">*</span></label>
+    <input type="text" id="shSymptom" placeholder="예) 노즐 태그(RFID) 인식 불량" autocomplete="off" autocapitalize="off" enterkeyhint="next" oninput="checkShareForm()">
+  </div>
+  <div class="share-field">
+    <label><span class="sn s1">1</span> 문제 확인</label>
+    <textarea id="shCheck" rows="2" placeholder="어떻게 원인을 파악했는지. 예) 노즐 인식음·팝업 발생 여부 확인" oninput="autoResizeEl(this);checkShareForm()"></textarea>
+  </div>
+  <div class="share-field">
+    <label><span class="sn s2">2</span> 문제 해결 <span class="req">*</span></label>
+    <textarea id="shFix" rows="2" placeholder="실제로 어떻게 해결했는지. 예) 새 노즐로 교체 후 정상 인식 확인" oninput="autoResizeEl(this);checkShareForm()"></textarea>
+  </div>
+  <div class="share-field">
+    <label><span class="sn s3">3</span> 후속 조치</label>
+    <textarea id="shFollow" rows="2" placeholder="정상 확인 방법·재발 방지 팁. 예) 10분 에이징 후 RFID TAG 테스트" oninput="autoResizeEl(this)"></textarea>
+  </div>
+  <button class="share-submit" id="shareSubmit" onclick="submitShareForm()" disabled>📤 승인 대기로 등록</button>
+</div>
+<div class="log-notice" id="logNotice">질문 이력은 GAS 시트에 자동 기록됩니다</div>
+
+
+<script>
+// ══════════════════════════════════════════════
+// ① 지식베이스 (폴백용 내장 데이터)
+//    실제 운영 시 구글 시트에서 최신본을 불러와 덮어씀.
+//    시트 연결 실패/오프라인 시 이 내장 데이터로 동작.
+// ══════════════════════════════════════════════
+const CS_KB_BUILTIN = [
+  {
+    name:'메인보드 동작 불능',
+    keywords:['메인보드','메인 보드','mainboard','전원 안','켜지지','화면 안','LED 빨간'],
+    check:'1) 전원 동작 여부 확인\n2) 전원 동작 시 메인보드 LED 빨간색 점등 여부 확인\n3) Water pump / TouchScreen 정상 동작 여부 확인',
+    fix:'1) 메인보드 교체\n2) F/W & UI Ver 확인 (필요 시 병원과 동일한 F/W Ver 업데이트)',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 정상 동작 확인\n※ 동일 증상 재발 시 즉시 보고'
+  },
+  {
+    name:'풋 스위치 동작 불능',
+    keywords:['풋스위치','풋 스위치','foot switch','foot','발판','pedal'],
+    check:'1) 풋스위치 동작 시 메인보드 내 LED 신호 발생 유/무 확인\n2) 풋스위치 동작 시 Handpiece 정상 동작 유/무 확인 (플런저 동작 등)\n3) 풋스위치 동작 시 이상 소음(삐~ 소음) 발생 여부 확인',
+    fix:'1) LED 신호 미발생 → 풋스위치 A\'ssy 교체\n2) Handpiece 동작 불능 → 풋스위치 or Handpiece A\'ssy 교체\n3) 이상 소음 → 15~30초 대기 후 재확인, 동일 증상 시 Handpiece A\'ssy 교체',
+    followup:'반복 테스트 실시하여 정상 작동 최종 확인'
+  },
+  {
+    name:'장비 출력 저하',
+    keywords:['출력 저하','출력저하','출력이 약','출력 약','output low','약함','출력','젯 퀄리티'],
+    check:'1) 출력 저하 원인 담당자에게 확인\n2) 신규 노즐 및 주사기 적용 후 정상 출력 유/무 확인\n3) Handpiece 내부 녹물 & 누수 유/무 확인',
+    fix:'1) 평소와 다른 출력음 → 기존 노즐 상태 점검 후 신규 노즐·주사기 적용\n2) Handpiece 내부 녹물·누수 → Handpiece A\'ssy 교체\n※ 노즐·Handpiece 교환 후에도 개선 안 될 시 공장 입고 (데모 장비 제공)',
+    followup:'신규 노즐·주사기 적용하여 정상 JET 퀄리티 상태를 병원 담당자에게 직접 확인시킬 것'
+  },
+  {
+    name:'RFID 스캔 불량',
+    keywords:['rfid','RFID','노즐 인식','nozzle recognition','스캔','scan','인식 불가','please scan again','device not recognized'],
+    check:'1) RFID 인식음 발생 유/무 확인\n2) "RFID Device not recognized, Check connection" 팝업 발생 여부 확인\n3) 신규 노즐 적용 시 "Please scan again" 반복 발생 여부 확인',
+    fix:'1) RFID Cable 연결 상태 확인\n2) 신규 노즐 적용 후 정상 동작 확인\n3) "Please scan again" 반복 → UI 재업데이트\n※ RFID 인식음 미발생 시 RFID A\'ssy 교체',
+    followup:'전원 동작 후 약 10분 에이징 → RFID TAG 테스트 → 정상 인식 확인'
+  },
+  {
+    name:'냉각수 누수',
+    keywords:['냉각수','누수','water leak','물 새','water tank','쿨런트','coolant'],
+    check:'1) 장비 내부(냉각수 순환부) & Handpiece 등 누수 발생 지점 확인\n2) Water tank 내 냉각수 보유량 확인 (정상 700~800ml)',
+    fix:'1) 누수 발생 원인 제거 및 해당 부품 교체\n2) Water tank 냉각수 보충 (정상 700~800ml)\n3) 발생 지점 주변 물기 제거 (추가 누수 확인 목적)',
+    followup:'전원 동작 후 약 10분 에이징 → 추가 누수 발생 여부 최종 확인'
+  },
+  {
+    name:'UI 업그레이드',
+    keywords:['UI','ui','업그레이드','upgrade','버전','version','f/w','fw','화면 업','소프트웨어'],
+    check:'1) 기존 병원 내 UI & F/W 버전 확인\n2) 기존 시술 출력 데이터 보관 (휴대폰 사진, 메모)\n3) 교육 담당자 방문 일정 확인',
+    fix:'1) 요청 버전으로 UI & F/W 업그레이드 실시\n2) 기존 시술 출력 데이터 동일 적용\n※ 데이터 적용 위치 및 변경 내용 담당자에게 안내\n※ 교육 담당자에게 관련 내용 공유',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 정상 동작 확인\n※ 현장 실시간 교육 진행 시 후속 조치 완료 후 인계'
+  },
+  {
+    name:'팝업 불량',
+    keywords:['팝업','popup','에러 코드','error code','경고창','알림창','오류 팝업'],
+    check:'A/S Manual을 참조하여 해당 팝업 코드 증상 확인\n어떤 팝업인지 (화면 사진 요청), 언제 발생하는지 확인',
+    fix:'A/S Manual 기준에 따라 해당 팝업 코드 조치 실시\n※ 팝업 코드별 대응 절차가 다르므로 Manual 필수 참조',
+    followup:'반복 테스트 실시 → 팝업 재발 없이 정상 작동 최종 확인'
+  },
+  {
+    name:'Touch Screen 동작 불능',
+    keywords:['터치','touch','터치스크린','touch screen','화면 반응','스크린 불량'],
+    check:'1) 특정 위치 반복 터치로 동작 여부 확인\n2) 어떤 상황에서 동작 불능이 발생했는지 담당자에게 확인',
+    fix:'1) 특정 위치 or 간헐적 동작 불량 → SD CARD 교체 (동일 UI 버전 적용 필수)\n   ※ 터치 인식 시간 지연도 SD CARD 교체 대상\n2) 화면 전체 미동작 → Touch Screen A\'ssy 교체',
+    followup:'전원 동작 후 약 10분 에이징 → 전 위치 터치 테스트 → 증상 재현 여부 확인'
+  },
+  {
+    name:'이상 소음',
+    keywords:['소음','노이즈','noise','소리','FAN','팬','웅웅','덜덜','이상한 소리'],
+    check:'1) 전원 동작 후 내부 (FAN, Water pump, Power supply) 소음 확인\n2) JET TEST 실시 후 이상 소음 여부 확인',
+    fix:'1) 이상 소음 발생 부품 교체\n※ FAN, Power Supply 등 현장 수리 불가 시 공장 입고\n※ 공장 입고 시 영업 담당자 공유, 병원 담당자에게 수리 지연 안내 (필요 시 데모 장비 제공)',
+    followup:'정상 JET 퀄리티 및 이상 소음 개선을 병원 담당자가 직접 확인하도록 시연할 것'
+  },
+  {
+    name:'피팅 불량',
+    keywords:['피팅','fitting','기포','bubble','에어','air','에어 제거','에어 섞임'],
+    check:'1) 전원 동작 후 약 10분 에이징 테스트 → 기포 발생량 확인\n   ※ 에이징: 일정한 상태로 안정될 때까지 보존하는 것',
+    fix:'1) 에이징 후에도 기포 지속 발생 → Air Remover 활용 조치\n2) Air Remover 조치 후에도 기포 지속 시 → Handpiece 교체',
+    followup:'전원 동작 후 약 10분 에이징 → 기포 발생량 확인 및 JET TEST → 발열 해소 여부도 함께 확인'
+  },
+  {
+    name:'파워서플라이불량',
+    keywords:['파워서플라이','power supply','파워 서플라이','전원 공급','PS 불량','LED 초록'],
+    check:'1) 전원 동작 시 Power supply 내 LED 초록색 점등 여부 확인\n2) Power supply 정상 동작 유/무 확인',
+    fix:'※ 현장 내 수리 불가 → 공장 입고 수리 조치',
+    followup:'※ 공장 입고 시 영업 담당자에게 상황 공유\n※ 병원 담당자에게 수리 지연 안내 (필요 시 데모 장비 제공)'
+  },
+  {
+    name:'구동 키 파손',
+    keywords:['구동 키','key','키 파손','키 분실','스위치 키'],
+    check:'1) 스페어 키 보유 유/무 확인\n2) 파손 키 제거 가능 여부 확인',
+    fix:'1) 스위치 내부 이물 발견 시 분해하여 제거\n2) 구동 키 추가 제공\n3) 제거 불가 시 스위치 교체',
+    followup:'※ 영업 담당자에게 상황 공유\n※ 병원 담당자에게 처리 결과 안내 (필요 시 구동 키 추가 비치 안내)'
+  },
+  {
+    name:'거치대 파손',
+    keywords:['거치대','stand','holder','거치','파손'],
+    check:'거치대 파손 시 TYPE (구형 / 신형) 확인',
+    fix:'파손 확인 후 요청 사항에 따라 교체',
+    followup:'※ 영업 담당자에게 상황 공유\n※ 병원 담당자에게 처리 결과 안내'
+  },
+  {
+    name:'ARM 파손',
+    keywords:['arm','ARM','암 파손','암파손','관절','팔 부분','arm 파손'],
+    check:'1) Arm 파손 부위 확인\n2) 현장 수리 가능 여부 확인\n※ 고정부 기능 상실 여부 확인',
+    fix:'1) 고정 나사 분실 → 나사 교환\n2) 고정부 기능 상실 or 파손 → A\'ssy 교체',
+    followup:'※ 영업 담당자에게 상황 공유\n※ 병원 담당자에게 처리 결과 안내'
+  },
+  {
+    name:'케이블 불량',
+    keywords:['케이블','cable','단선','연결 불량','케이블 불량','cable 불량'],
+    check:'1) 관련 팝업 발생 유/무 확인\n2) 연결 상태 확인\n3) BW-100 활용하여 세척 및 단선 여부 확인',
+    fix:'1) 해당 팝업 관련 케이블 체결 상태 점검\n2) BW-100 활용 세척\n3) 단선 확인 시 케이블 교체\n※ 교체 후 동일 증상 지속 시 A\'ssy 교체',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 정상 동작 확인'
+  },
+  {
+    name:'재현 안됨',
+    keywords:['재현','재현 안','증상 없','증상없','모르겠','확인 안','확인안'],
+    check:'정기 점검 체크리스트 활용하여 전체 장비 점검 실시',
+    fix:'이상 없음 확인 후 종결 처리\n※ 증상이 재현되지 않을 경우, 해당 부위가 안전함을 확인하는 동작 및 설명 실시',
+    followup:'※ 영업 담당자에게 상황 공유\n※ 병원 담당자에게 점검 사항 안내\n※ 재발 시 사진/영상 촬영 후 즉시 보고 요청'
+  },
+  {
+    name:'냉각 호수 파손',
+    keywords:['냉각 호스','호스','hose','냉각 튜브','튜브 파손','물호스'],
+    check:'1) 누수 발생 지점 확인\n2) Water tank 내 냉각수 보유량 확인',
+    fix:'1) 핸드피스 교체\n2) Water tank 냉각수 보충 (정상 700~800ml)\n3) 발생 지점 주변 물기 제거',
+    followup:'전원 동작 후 약 10분 에이징 → 추가 누수 발생 여부 최종 확인'
+  },
+  {
+    name:'노즐 누수/녹물',
+    keywords:['노즐 누수','노즐누수','녹물','nozzle leak','멤브레인','membrane','생리식염수 누수','노즐 손상'],
+    check:'1) 기존 사용 노즐 손상 정도 확인 (멤브레인 파손, 녹물 발생, 생리식염수 누수)\n※ 노즐 재사용 여부는 직접 묻지 말 것 — 사용 횟수·교체 주기로 간접 확인\n2) Handpiece 내부 녹물 여부 확인',
+    fix:'1) 노즐 손상에 의한 누수 확인 → 즉시 사용 중지 및 신규 노즐로 교체 (폐기 or 교환 접수)\n   ⚠️ 누수 노즐 계속 사용 절대 금지\n2) Handpiece 내부 녹물 → 세척 or 수리 불가 시 A\'ssy 교체',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 노즐 교체 후 정상 동작 확인'
+  },
+  {
+    name:'노즐 체결 강함',
+    keywords:['체결 강','체결강','노즐 안 빠','노즐이 안 빠','노즐 조임','뻑뻑','tight'],
+    check:'1) 병원 담당자의 체결 어려움 정도 확인\n2) 현재 사용 노즐의 체결력 확인',
+    fix:'노즐 스패너 제공 및 사용 방법 안내',
+    followup:'체결력 임의 조정 시 신규 노즐 사용에 따른 체결력 변화 위험성 안내\n※ 스패너 제공 내역 담당자에게 공유'
+  },
+  {
+    name:'노즐 체결 약함',
+    keywords:['체결 약','체결약','노즐 헐','노즐이 헐','loose','풀림','체결력 약'],
+    check:'1) 현재 사용 노즐의 체결력 확인\n※ 병원 내 사용 노즐의 제조일 확인',
+    fix:'1) 체결력 동일하게 약함 → Permanent-Holder 교체\n2) 특정 노즐만 약함 → 해당 노즐 교체',
+    followup:'체결력 변화 어려움 예방을 위해 노즐 스패너 제공 및 사용 권장'
+  },
+  {
+    name:'발열',
+    keywords:['발열','heat','뜨거','온도','과열','overheat','열'],
+    check:'1) 장비 누수 발생 유/무 확인\n2) Water tank 내 냉각수 부족 여부 확인',
+    fix:'1) 장비 누수 발생 시 해당 부분 교체 or 수리\n2) 냉각수 부족 시 보충 (정상 700~800ml)\n3) 냉각수 정상 시 Handpiece 교체 검토',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 발열 해소 및 정상 동작 확인'
+  },
+  {
+    name:'동작 불능',
+    keywords:['동작 불능','동작불능','작동 안','작동안','안 켜','전원 불'],
+    check:'1) 기존 사용 노즐 손상 정도 확인 (멤브레인 파손, 녹물, 생리식염수 누수)\n2) 풋스위치 동작 신호 여부 확인',
+    fix:'1) 풋스위치 동작 신호 미발생 → 케이블 단선 확인 후 수리\n2) 동작 신호 정상이나 Handpiece 동작 불능 → Handpiece A\'ssy 교체',
+    followup:'전원 동작 후 약 10분 에이징 → JET TEST → 정상 동작 확인'
+  },
+  {
+    name:'출력약함',
+    keywords:['출력약','출력 약','output weak','분사 약','약하게 나'],
+    check:'1) 출력 저하 판단 원인을 담당자에게 확인\n2) 기존 사용 노즐 손상 정도 확인\n3) 신규 노즐 및 주사기 적용 후 정상 출력 여부 확인',
+    fix:'1) 신규 노즐·주사기 적용 → 정상 출력 확인\n2) Handpiece 내부 이상 → Handpiece A\'ssy 교체\n※ 교체 후에도 개선 안 될 시 공장 입고 (데모 장비 제공)',
+    followup:'신규 노즐·주사기 적용하여 정상 JET 퀄리티 상태를 병원 담당자에게 확인시킬 것'
+  },
+  {
+    name:'젯팅 불량',
+    keywords:['젯팅','jetting','젯 불량','jet 불량','분사 불량','분사불량','spray'],
+    check:'1) 젯팅 불량 판단 원인을 담당자에게 확인\n2) 기존 사용 노즐 손상 정도 확인\n3) Handpiece 내부 녹물 & 누수 여부 확인',
+    fix:'1) 신규 노즐·주사기 적용 → 정상 출력 확인\n2) Handpiece 내부 이상 → Handpiece A\'ssy 교체',
+    followup:'신규 노즐·주사기 적용하여 정상 JET 퀄리티를 병원 담당자에게 확인시킬 것'
+  },
+  {
+    name:'노즐 막힘',
+    keywords:['노즐 막','노즐막','막힘','clog','blocked','막혀','분사 안'],
+    check:'1) 기존 사용 노즐 재사용 여부 확인\n※ 재사용에 의한 노즐 막힘 현상을 담당자에게 설명\n2) Handpiece 내부 확인',
+    fix:'1) 신규 노즐·주사기 적용 → 정상 출력 확인\n2) Handpiece 내부 이상 → Handpiece A\'ssy 교체',
+    followup:'신규 노즐·주사기 적용하여 정상 JET 퀄리티를 병원 담당자에게 확인시킬 것'
+  }
+];
+
+// ══════════════════════════════════════════════
+// ② 설정 (CONFIG) — 운영 시 이 부분만 수정
+// ══════════════════════════════════════════════
+const CONFIG = {
+  // GAS 웹앱 URL (배포 후 입력)
+  GAS_LOG_URL: '',   // 로그·해결공유 기록 (POST)
+  GAS_KB_URL:  '',   // 지식베이스 조회 (GET, ?action=chatbot_kb)
+  GAS_AI_URL:  '',   // Claude API 프록시 (POST) — 권장. 비우면 브라우저가 직접 호출(키 노출 위험)
+
+  // 캐시
+  KB_CACHE_TTL: 10 * 60 * 1000,   // 지식베이스 캐시 유효시간 (10분)
+
+  // 매칭 신뢰도 임계값
+  CONF_HIGH: 50,
+  CONF_MID:  20,
+
+  // 네트워크
+  FETCH_TIMEOUT: 20000,           // API 응답 타임아웃 (20초)
+  LOG_FETCH_TIMEOUT: 10000,       // 로그 전송 타임아웃 (10초)
+
+  // 오프라인 큐
+  QUEUE_KEY: 'bazChatbotQueue',   // 미전송 로그 보관
+  QUEUE_MAX: 100,                 // 큐 최대 건수
+
+  // 대화 이력
+  HISTORY_KEY: 'bazChatbotHistory',
+  HISTORY_MAX: 50,                // 저장할 최근 메시지 수
+
+  // 대화 맥락 (후속 질문)
+  CONTEXT_TURNS: 4               // AI에게 넘길 직전 대화 턴 수 (질문+답변 쌍)
+};
+
+// 대화 맥락 — AI에게 넘길 최근 메시지 배열 [{role, content}]
+let convoContext = [];
+
+// 병원·장비 컨텍스트 — hospital.html에서 URL 파라미터로 전달받음
+// { name:병원명, serial:장비번호, status:상태, ncare:N-Care등급, pay:유무상, lastInspect:최종점검일, history:[정비이력] }
+let deviceContext = null;
+
+// ── 하위 호환 별칭 (기존 코드가 참조) ──
+const GAS_LOG_URL = CONFIG.GAS_LOG_URL;
+const GAS_KB_URL  = CONFIG.GAS_KB_URL;
+
+// 운영 지식베이스: 시트에서 불러오면 교체됨. 초기값은 내장 폴백 데이터.
+let CS_KB = CS_KB_BUILTIN.slice();
+
+// ── 지식베이스 시트 동기화 (캐시 우선 → 시트 fetch) ──
+const KB_CACHE_KEY = 'bazChatbotKB';
+const KB_CACHE_TS  = 'bazChatbotKBTs';
+const KB_CACHE_TTL = CONFIG.KB_CACHE_TTL;
+
+// ── fetch 타임아웃 래퍼 (AbortController) ──
+function fetchWithTimeout(url, options, timeout){
+  const controller = new AbortController();
+  const id = setTimeout(()=>controller.abort(), timeout || CONFIG.FETCH_TIMEOUT);
+  return fetch(url, Object.assign({}, options, {signal: controller.signal}))
+    .finally(()=>clearTimeout(id));
+}
+
+// 시트 행({증상,문제확인,문제해결,후속조치})을 CS_KB 포맷으로 변환
+function mapSheetRowsToKB(rows){
+  return rows.map(r=>{
+    // 시트 컬럼명 유연 대응 (한글/영문 키 모두 허용)
+    const name     = r['증상'] || r.name || r.symptom || '';
+    const check    = r['문제 확인'] || r['문제확인'] || r.check || '';
+    const fix      = r['문제 해결'] || r['문제해결'] || r.fix || '';
+    const followup = r['후속 조치'] || r['후속조치'] || r.followup || '';
+    // 키워드 컬럼이 있으면 사용, 없으면 증상명에서 자동 생성
+    let keywords = r['키워드'] || r.keywords || '';
+    if(typeof keywords === 'string'){
+      keywords = keywords.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
+    }
+    if(!keywords.length) keywords = [name];
+    return { name, keywords, check, fix, followup };
+  }).filter(item=>item.name && (item.check || item.fix));
+}
+
+// 시트 데이터 적용 + 매칭 인덱스 재구성
+function applyKB(kbArr){
+  if(!kbArr || !kbArr.length) return false;
+  CS_KB = kbArr;
+  rebuildKBIndex();   // 토큰 인덱스 다시 계산
+  return true;
+}
+
+function syncKB(){
+  if(!CONFIG.GAS_KB_URL){
+    // 시트 URL 미설정 → 내장 데이터로만 동작
+    rebuildKBIndex();
+    return;
+  }
+  // 1) 캐시 먼저 적용 (즉시 반영)
+  try{
+    const cached = localStorage.getItem(KB_CACHE_KEY);
+    const ts = parseInt(localStorage.getItem(KB_CACHE_TS) || '0', 10);
+    if(cached){
+      const arr = JSON.parse(cached);
+      if(arr && arr.length){
+        applyKB(arr);
+        console.log('[챗봇 KB] 캐시 적용 ' + arr.length + '건');
+      }
+    }
+    if(cached && (Date.now() - ts) < KB_CACHE_TTL){
+      console.log('[챗봇 KB] 캐시 신선 — 동기화 생략');
+      return;
+    }
+  }catch(e){ console.warn('[챗봇 KB] 캐시 읽기 오류(무시):', e); }
+
+  // 2) 시트에서 최신 fetch
+  fetchWithTimeout(CONFIG.GAS_KB_URL, {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.success || !d.data || !d.data.length) return;
+      const kbArr = mapSheetRowsToKB(d.data);
+      if(!kbArr.length) return;
+      try{
+        localStorage.setItem(KB_CACHE_KEY, JSON.stringify(kbArr));
+        localStorage.setItem(KB_CACHE_TS, String(Date.now()));
+      }catch(e){}
+      if(applyKB(kbArr)){
+        console.log('[챗봇 KB] 시트 ' + kbArr.length + '건 동기화');
+      }
+    })
+    .catch(e=>{ console.warn('[챗봇 KB] 시트 읽기 실패 — 내장 데이터 사용:', e); });
+}
+
+// ══════════════════════════════════════════════
+// ③ 유틸리티
+// ══════════════════════════════════════════════
+function now(){
+  return new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+}
+function escHtml(t){
+  return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function nl2br(t){
+  return (t||'').replace(/\n/g,'<br>');
+}
+
+// AI 답변의 마크다운 기호를 깔끔한 HTML로 정리
+function cleanText(raw){
+  let t = (raw||'').trim();
+
+  // 1) **볼드** / *이탤릭* 기호 제거 (강조는 그냥 일반 텍스트로)
+  t = t.replace(/\*\*(.+?)\*\*/g, '$1');
+  t = t.replace(/\*(.+?)\*/g, '$1');
+
+  // 2) 마크다운 헤더(#) 제거
+  t = t.replace(/^#{1,6}\s*/gm, '');
+
+  // 3) 라인별 정리
+  const lines = t.split('\n').map(line=>{
+    let s = line.trim();
+    if(!s) return '';
+    // "- 항목", "* 항목" → "· 항목"
+    s = s.replace(/^[-*•]\s+/, '· ');
+    // "1) 항목", "1. 항목" 같은 번호는 그대로 유지 (현장 매뉴얼 스타일)
+    return s;
+  });
+
+  // 4) 연속 빈 줄 1개로 축소
+  let out = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out;
+}
+
+// ══════════════════════════════════════════════
+// ④ 증상 매칭 — 의미 기반 다중 스코어링
+// ══════════════════════════════════════════════
+
+// 동의어 사전: 현장 표현 → 표준어로 정규화
+const SYNONYMS = {
+  '풋스위치':['풋스위치','풋 스위치','발판','페달','풋','pedal','foot switch','foot'],
+  '신호':['신호','시그널','signal','전달','감지'],
+  '안돼':['안돼','안 돼','안돼요','안되','안 되','동작 안','작동 안','반응 안','안 나','안나','먹통','먹어','죽','멈춰','안 움직','꿈쩍'],
+  '전원':['전원','파워 안','켜지지','켜져','켜져요','안 켜','안켜','부팅','power on','전원 불','꺼져','꺼짐','화면 안','화면이 안'],
+  '메인보드':['메인보드','메인 보드','main board','mainboard','보드','기판'],
+  '노즐':['노즐','nozzle','팁','tip'],
+  '누수':['누수','물 새','물새','물이 새','새요','leak','물이 나','물 나','물 떨어','물방울'],
+  '냉각수':['냉각수','쿨런트','coolant','물탱크','water tank'],
+  '출력':['출력','파워','분사','젯','jet','세기','강도'],
+  '약함':['약','약해','약하','약하게','weak','힘이 없','세지 않'],
+  '소음':['소음','소리','노이즈','noise','웅웅','덜덜','삐','시끄','잡음'],
+  '터치':['터치','touch','화면','스크린','screen','액정'],
+  '발열':['발열','뜨거','열','과열','heat','더워','타는 냄새','탄 냄새','연기'],
+  '에러':['에러','오류','error','팝업','popup','경고','메시지','코드','code','뜨','떠요','떴'],
+  'rfid':['rfid','스캔','scan','인식'],
+  '케이블':['케이블','선','cable','단선','연결','커넥터'],
+  '파워서플라이':['파워서플라이','power supply','전원공급','전원 공급'],
+  '교체':['교체','바꿔','갈아','replace','수리','고쳐'],
+  'led':['led','불','램프','점등','빨간불','초록','녹색'],
+  '소음삐':['삐','beep','경고음','알림음'],
+  '기포':['기포','버블','bubble','거품','공기'],
+  '피팅':['피팅','fitting'],
+  '발판신호':['발판신호']
+};
+
+// 텍스트를 표준 토큰 집합으로 정규화
+function normalizeTokens(text){
+  const t = text.toLowerCase();
+  const tokens = new Set();
+  for(const [std, variants] of Object.entries(SYNONYMS)){
+    for(const v of variants){
+      if(t.includes(v.toLowerCase())){ tokens.add(std); break; }
+    }
+  }
+  return tokens;
+}
+
+// 증상별 토큰 인덱스 (재)계산 — 시트 동기화로 CS_KB가 바뀔 때마다 호출
+function rebuildKBIndex(){
+  CS_KB.forEach(item=>{
+    const corpus = [item.name, ...(item.keywords||[]), item.check, item.fix, item.followup].join(' ');
+    item._tokens = normalizeTokens(corpus);
+    item._fulltext = corpus.toLowerCase();
+  });
+}
+
+/**
+ * 질문과 가장 관련 높은 증상을 점수순으로 반환.
+ * @returns {{item, score}[]} 상위 매칭 배열 (없으면 빈 배열)
+ */
+function rankSymptoms(query){
+  const q = query.toLowerCase();
+  const qTokens = normalizeTokens(query);
+
+  const scored = CS_KB.map(item=>{
+    let score = 0;
+
+    // (1) 정규화 토큰 교집합 — 의미 단위 일치 (가중치 높음)
+    for(const tok of qTokens){
+      if(item._tokens.has(tok)) score += 10;
+    }
+
+    // (2) 키워드 직접 포함 — 정확 일치 보너스
+    for(const kw of (item.keywords||[])){
+      if(q.includes(kw.toLowerCase())) score += kw.length * 2;
+    }
+
+    // (3) 증상명 직접 언급 — 최우선
+    if(q.includes(item.name.toLowerCase())) score += 50;
+
+    // (3-b) 증상명의 핵심 어절이 질문에 등장 — '풋스위치 안해'→풋스위치 우선
+    //       증상명을 어절로 쪼개 2글자 이상 단어가 질문에 있으면 강가점
+    const nameWords = item.name.toLowerCase().replace(/[^가-힣a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=2);
+    for(const nw of nameWords){
+      // 질문 텍스트를 공백 제거 후 비교 (풋스위치 vs 풋 스위치)
+      if(q.replace(/\s/g,'').includes(nw.replace(/\s/g,''))) score += 15;
+    }
+
+    // (4) 본문 키워드가 질문에 등장 — 풋스위치 본문의 "메인보드 신호" 같은 케이스
+    //     질문의 명사성 어절이 증상 본문에 있으면 가점
+    const qWords = q.replace(/[^가-힣a-z0-9 ]/g,' ').split(/\s+/).filter(w=>w.length>=2);
+    for(const w of qWords){
+      if(item._fulltext.includes(w)) score += 2;
+    }
+
+    return {item, score};
+  }).filter(r=>r.score>0)
+    .sort((a,b)=>b.score-a.score);
+
+  return scored;
+}
+
+// 기존 호환용 단일 반환
+function findSymptom(query){
+  const ranked = rankSymptoms(query);
+  return ranked.length ? ranked[0].item : null;
+}
+
+// ══════════════════════════════════════════════
+// ⑤ Claude API 호출 (지식베이스 RAG)
+// ══════════════════════════════════════════════
+async function askClaude(userQuery, rankedMatches, image){
+  // 상위 3개 관련 증상을 컨텍스트로 제공 (질문이 여러 증상에 걸칠 수 있으므로)
+  let kbContext;
+  if(rankedMatches && rankedMatches.length){
+    const top = rankedMatches.slice(0,3);
+    kbContext = top.map((r,i)=>
+      `[관련 증상 ${i+1}: ${r.item.name}]\n`+
+      `문제 확인: ${r.item.check}\n`+
+      `문제 해결: ${r.item.fix}\n`+
+      `후속 조치: ${r.item.followup}`
+    ).join('\n\n---\n\n');
+  } else {
+    // 매칭 실패 시 전체 지식베이스 제공
+    kbContext = CS_KB.map(s=>`증상: ${s.name}\n확인: ${s.check}\n해결: ${s.fix}\n후속: ${s.followup}`).join('\n\n---\n\n');
+  }
+
+  const systemPrompt = `당신은 바즈바이오메딕 CS팀의 수석 매니저이자 개발자입니다.
+현장 엔지니어가 CUREJET 장비 관련 시스템·행정 질문을 하면, 아래 매뉴얼 지식을 바탕으로 반드시 다음 3단계 원칙에 따라 답변하세요.
+
+[답변 원칙]
+1. 문제 확인: 정확한 발생 시점·상황을 파악하기 위한 확인 사항
+2. 문제 해결: 구체적인 조치 방법 (부품명, 절차 포함)
+3. 후속 조치: 정상 작동 확인 방법 및 재발 방지 팁
+
+[매칭 판단 규칙]
+- 질문이 자연어/구어체여도 의미를 파악해 가장 관련 높은 증상으로 안내하세요.
+- 예) "풋스위치 동작 시 메인보드에 신호가 안 간다" → '풋 스위치 동작 불능' 증상의 'LED 신호 발생 유/무 확인' 절차로 안내
+- 여러 증상이 관련되면 가장 가능성 높은 것을 먼저, 대안을 그 다음에 안내하세요.
+- 제공된 지식에 명확한 답이 없으면, 솔직히 "매뉴얼에 정확히 일치하는 항목이 없다"고 말하고 가장 가까운 절차를 제안하세요. 절대 지어내지 마세요.
+
+[현장 응대 규칙]
+- 노즐 재사용 여부는 절대 직접 묻지 말고, 교체 주기·사용 횟수로 간접 확인하도록 안내
+- 비용 발생 시 담당자 승인 후 진행
+- N-CARE/보증 병원은 비용 설명 생략
+- 현장 수리 불가 시 공장 입고 안내 (영업 담당자 공유 + 데모 장비 제공)
+- 답변은 한국어로, 실용적이고 명확하게
+
+[출력 형식] — 반드시 아래 3개 라벨을 그대로 사용
+문제 확인: ...
+문제 해결: ...
+후속 조치: ...
+
+[형식 규칙 — 매우 중요]
+- 마크다운 기호를 절대 쓰지 마세요. **별표**, *기울임*, #제목, 표(|) 모두 금지.
+- 강조가 필요하면 그냥 평범한 문장으로 쓰세요.
+- 여러 항목은 "1) 2) 3)" 번호 형식만 사용하세요. "-"나 "*" 불릿 금지.
+- 현장 엔지니어가 폰으로 읽기 쉽게 짧고 명확하게.
+
+[매뉴얼 지식]
+${kbContext}
+
+[대화 맥락]
+이전 대화가 있으면 맥락을 이어서 답하세요. "그건", "그 부품", "아까 그거" 같은 표현은 직전 대화를 가리킵니다.${buildDeviceContextText()}`;
+
+  // 이번 사용자 메시지 — 이미지가 있으면 복합 content 배열로 구성
+  let userContent;
+  if(image && image.base64){
+    userContent = [
+      {type:'image', source:{type:'base64', media_type:image.mediaType||'image/jpeg', data:image.base64}},
+      {type:'text', text: userQuery || '이 사진을 보고 어떤 증상인지, 어떻게 조치해야 하는지 알려주세요.'}
+    ];
+  } else {
+    userContent = userQuery;
+  }
+
+  // 직전 대화 맥락 + 이번 질문(+이미지)을 함께 전달
+  const messages = convoContext.concat([{role:'user', content: userContent}]);
+  const answer = await callClaude(systemPrompt, messages, 1000);
+
+  // 맥락 갱신 (최근 N턴만 유지) — 이미지는 텍스트 설명만 맥락에 남김
+  pushContext('user', userQuery || '(사진 첨부)');
+  pushContext('assistant', answer);
+
+  return answer;
+}
+
+// 대화 맥락에 추가 (최근 CONTEXT_TURNS*2 메시지만 유지)
+function pushContext(role, content){
+  // 이미지 등 복합 content는 텍스트만 맥락에 저장 (토큰 절약)
+  const text = (typeof content === 'string') ? content
+             : (Array.isArray(content) ? content.filter(c=>c.type==='text').map(c=>c.text).join(' ') : '');
+  convoContext.push({role, content: text});
+  const maxMsgs = CONFIG.CONTEXT_TURNS * 2;
+  if(convoContext.length > maxMsgs){
+    convoContext = convoContext.slice(-maxMsgs);
+  }
+}
+
+// ── Claude API 공통 호출 (프록시 우선, 타임아웃, 대화맥락·이미지 지원) ──
+// messages: 단일 문자열이면 user 메시지 1개로 변환,
+//           배열이면 그대로 사용(대화 맥락/이미지 포함).
+async function callClaude(systemPrompt, messages, maxTokens){
+  const msgArray = (typeof messages === 'string')
+    ? [{role:'user', content: messages}]
+    : messages;
+
+  const body = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: maxTokens || 1000,
+    system: systemPrompt,
+    messages: msgArray
+  };
+
+  // 프록시(GAS) 우선 — API 키를 서버에 보관. 미설정 시 직접 호출.
+  const url = CONFIG.GAS_AI_URL || 'https://api.anthropic.com/v1/messages';
+
+  const resp = await fetchWithTimeout(url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(CONFIG.GAS_AI_URL ? {type:'ai_proxy', payload:body} : body)
+  }, CONFIG.FETCH_TIMEOUT);
+
+  const data = await resp.json();
+  if(data.text) return data.text;
+  return data.content?.[0]?.text || '답변을 생성할 수 없습니다.';
+}
+
+// ══════════════════════════════════════════════
+// ⑥ GAS 로그 전송 — 데이터 자산화 + 오프라인 큐
+// 전송 실패(오프라인 등) 시 localStorage 큐에 쌓아두고
+// 온라인 복귀하면 자동 재전송. 데이터 유실 방지.
+// ══════════════════════════════════════════════
+
+// 큐에서 읽기/쓰기
+function readQueue(){
+  try{ return JSON.parse(localStorage.getItem(CONFIG.QUEUE_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function writeQueue(arr){
+  try{
+    // 최대 건수 초과 시 오래된 것부터 버림
+    const trimmed = arr.slice(-CONFIG.QUEUE_MAX);
+    localStorage.setItem(CONFIG.QUEUE_KEY, JSON.stringify(trimmed));
+  }catch(e){ console.warn('[큐] 저장 실패:', e); }
+}
+
+// 단건 전송 시도 (성공 시 true)
+async function sendOne(item){
+  if(!CONFIG.GAS_LOG_URL) return false;
+  try{
+    // GAS 웹앱 전송 시 주의점:
+    //  - Content-Type을 text/plain으로 보내야 CORS preflight(OPTIONS)를 피함
+    //    (application/json이면 preflight가 발생하는데 GAS는 OPTIONS를 처리 못 해 실패)
+    //  - GAS는 POST에 302 리다이렉트로 응답 → fetch가 자동 추종(redirect:'follow')
+    const resp = await fetchWithTimeout(CONFIG.GAS_LOG_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(item),
+      redirect:'follow'
+    }, CONFIG.LOG_FETCH_TIMEOUT);
+
+    // 응답 본문을 읽어 GAS가 정상 처리했는지 확인
+    // (GAS는 {ok:true} 또는 {success:true} 형태로 응답)
+    let ok = resp.ok;   // HTTP 2xx
+    try{
+      const txt = await resp.text();
+      if(txt){
+        const j = JSON.parse(txt);
+        // 명시적으로 실패(ok:false)면 재시도 대상으로 본다
+        if(j && (j.ok === false || j.success === false)) ok = false;
+      }
+    }catch(e){ /* 응답 파싱 실패는 무시 — HTTP 상태만으로 판정 */ }
+
+    return ok;
+  }catch(e){
+    console.warn('[큐] 전송 실패(재시도 예정):', e && e.message);
+    return false;
+  }
+}
+
+// 로그 적재 — 항상 큐에 넣고 즉시 비우기 시도
+// 반환: Promise<boolean> — 이번 전송이 실제로 성공했는지 (UI 피드백용)
+async function logToGAS(payload){
+  const item = Object.assign({ ts: new Date().toISOString() }, payload);
+  if(!item.type) item.type = 'chatbot_log';
+
+  // 큐에 보관 (전송 실패해도 유실 방지)
+  const q = readQueue(); q.push(item); writeQueue(q);
+
+  if(!CONFIG.GAS_LOG_URL){
+    return false;   // URL 미설정 — 큐에만 보관됨
+  }
+  await flushQueue();
+  // 큐가 비었으면 방금 것까지 전송 성공
+  return readQueue().length === 0;
+}
+
+// 큐 비우기 — 순서대로 재전송, 실패하면 남겨둠
+let flushing = false;
+async function flushQueue(){
+  if(flushing || !CONFIG.GAS_LOG_URL) return;
+  if(!navigator.onLine) return;   // 오프라인이면 대기
+  flushing = true;
+  try{
+    let q = readQueue();
+    while(q.length){
+      const ok = await sendOne(q[0]);
+      if(!ok) break;              // 실패 시 중단 (다음 기회에 재시도)
+      q = q.slice(1);
+      writeQueue(q);
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
+// 온라인 복귀 시 자동 재전송
+window.addEventListener('online', flushQueue);
+
+// ══════════════════════════════════════════════
+// ⑦ UI: 메시지 렌더링
+// ══════════════════════════════════════════════
+const chatArea = document.getElementById('chatArea');
+const emptyState = document.getElementById('emptyState');
+const sendBtn = document.getElementById('sendBtn');
+const msgInput = document.getElementById('msgInput');
+
+function hideEmpty(){ emptyState.style.display='none'; }
+
+function appendUserBubble(text, imgDataUrl){
+  hideEmpty();
+  const t = now();
+  const imgHtml = imgDataUrl
+    ? `<img src="${imgDataUrl}" style="max-width:200px;border-radius:12px;margin-bottom:${text?'4px':'0'};display:block;" alt="첨부 사진">`
+    : '';
+  const textHtml = text ? `<div class="bubble user">${escHtml(text)}</div>` : '';
+  chatArea.insertAdjacentHTML('beforeend',`
+    <div class="bubble-wrap user">
+      ${imgHtml}
+      ${textHtml}
+      <span class="bubble-time">${t}</span>
+    </div>`);
+  scrollBottom();
+  saveHistory();
+}
+
+function showTyping(){
+  hideEmpty();
+  const el = document.createElement('div');
+  el.className='ai-row'; el.id='typingIndicator';
+  el.innerHTML=`<div class="ai-avatar">🤖</div><div class="bubble ai"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  chatArea.appendChild(el);
+  scrollBottom();
+}
+function removeTyping(){
+  const el=document.getElementById('typingIndicator');
+  if(el) el.remove();
+}
+
+function appendAIResponse(text, symptomName){
+  removeTyping();
+  const t = now();
+  const clean = cleanText(text);
+
+  // 3단계 파싱 시도
+  const s1 = parseStep(clean,'1단계','문제 확인','step1','❶');
+  const s2 = parseStep(clean,'2단계','문제 해결','step2','❷');
+  const s3 = parseStep(clean,'3단계','후속 조치','step3','❸');
+
+  let content='';
+  if(s1||s2||s3){
+    if(s1) content+=renderStepCard('s1','1','문제 확인',s1);
+    if(s2) content+=renderStepCard('s2','2','문제 해결',s2);
+    if(s3) content+=renderStepCard('s3','3','후속 조치',s3);
+  } else {
+    // 카드 형식이 아니면 그냥 버블로 출력
+    content=`<div class="bubble ai">${nl2br(escHtml(clean))}</div>`;
+  }
+
+  chatArea.insertAdjacentHTML('beforeend',`
+    <div class="ai-row">
+      <div class="ai-avatar">🤖</div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+        ${content}
+        <span class="bubble-time">${t}${symptomName?' · '+symptomName:''}</span>
+      </div>
+    </div>`);
+  scrollBottom();
+  saveHistory();
+}
+
+function renderStepCard(cls, num, title, body){
+  // 본문도 한 번 더 정리 (라벨 잔여물 제거)
+  const cleanBody = cleanText(body).replace(/^[:\-\s]+/, '');
+  return `<div class="step-card">
+    <div class="step-card-header">
+      <div class="step-num ${cls}">${num}</div>
+      <div class="step-card-title">${title}</div>
+    </div>
+    <div class="step-card-body">${nl2br(escHtml(cleanBody))}</div>
+  </div>`;
+}
+
+function parseStep(text, ...labels){
+  // "1단계", "문제 확인", "❶" 등 여러 패턴 시도
+  for(const lbl of labels){
+    const re = new RegExp(lbl+'[:\\s\\-]*(.*?)(?=(?:1단계|2단계|3단계|문제 확인|문제 해결|후속 조치|❶|❷|❸|$))', 'si');
+    const m = text.match(re);
+    if(m && m[1].trim()) return m[1].trim();
+  }
+  return null;
+}
+
+function scrollBottom(){
+  chatArea.scrollTo({top:chatArea.scrollHeight, behavior:'smooth'});
+}
+
+// ══════════════════════════════════════════════
+// ⑧ 메시지 전송 로직
+// ══════════════════════════════════════════════
+let isBusy = false;
+let inputMode = 'ask';  // 'ask'(질문) | 'share'(해결 공유)
+let pendingImage = null;  // {dataUrl, mediaType, base64} — 첨부 대기 이미지
+
+// ── 사진 첨부 ──────────────────────────────────
+function onImageSelected(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  if(!file.type.startsWith('image/')){ alert('이미지 파일만 첨부할 수 있습니다.'); return; }
+
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    // 큰 사진은 리사이즈해서 전송 (토큰·용량 절약)
+    compressImage(reader.result, 1024, (compressed)=>{
+      pendingImage = {
+        dataUrl: compressed,
+        mediaType: 'image/jpeg',
+        base64: compressed.split(',')[1]
+      };
+      document.getElementById('imgPreviewThumb').src = compressed;
+      document.getElementById('imgPreview').style.display = 'block';
+      sendBtn.disabled = false;  // 사진만으로도 전송 가능
+    });
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';  // 같은 파일 재선택 가능하게
+}
+
+// 긴 변을 maxSize로 줄여 JPEG로 압축
+function compressImage(dataUrl, maxSize, cb){
+  const img = new Image();
+  img.onload = ()=>{
+    let {width, height} = img;
+    if(width > maxSize || height > maxSize){
+      if(width > height){ height = Math.round(height*maxSize/width); width = maxSize; }
+      else { width = Math.round(width*maxSize/height); height = maxSize; }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    cb(canvas.toDataURL('image/jpeg', 0.8));
+  };
+  img.onerror = ()=>cb(dataUrl);
+  img.src = dataUrl;
+}
+
+function clearImage(){
+  pendingImage = null;
+  document.getElementById('imgPreview').style.display = 'none';
+  sendBtn.disabled = !msgInput.value.trim();
+}
+
+// 모드 전환
+function setMode(mode){
+  inputMode = mode;
+  document.getElementById('modeAsk').classList.toggle('active', mode==='ask');
+  document.getElementById('modeShare').classList.toggle('active', mode==='share');
+  document.body.classList.toggle('share-mode', mode==='share');
+
+  const askBar    = document.getElementById('askBar');
+  const shareForm = document.getElementById('shareForm');
+
+  if(mode==='share'){
+    askBar.style.display='none';
+    shareForm.style.display='flex';
+    document.getElementById('logNotice').textContent='✅ 공유한 해결책은 관리자 승인 후 매뉴얼에 반영됩니다';
+    document.getElementById('shSymptom').focus();
+  } else {
+    askBar.style.display='flex';
+    shareForm.style.display='none';
+    document.getElementById('logNotice').textContent='질문 이력은 GAS 시트에 자동 기록됩니다';
+    msgInput.focus();
+  }
+}
+
+// 해결 공유 폼 필수값 검증 (증상 + 문제해결)
+function checkShareForm(){
+  const sym = document.getElementById('shSymptom').value.trim();
+  const fix = document.getElementById('shFix').value.trim();
+  document.getElementById('shareSubmit').disabled = !(sym && fix);
+}
+
+// 폼 내 textarea 자동 높이
+function autoResizeEl(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+// 해결 보고 자동 감지 — "교체하니 정상", "~해서 됐어" 등의 패턴
+function looksLikeResolution(text){
+  const t = text.replace(/\s/g,'');
+  // 해결 동작 + 결과 표현이 함께 있으면 해결 보고로 판단
+  const actionPat  = /(교체|바꾸|바꿔|갈아|재연결|재부팅|업데이트|청소|세척|점검|수리|조치|풀고|조여|껐다|재시작)/;
+  const resultPat  = /(정상|해결|됐|됨|작동|동작|복구|고쳤|좋아졌|괜찮아|돌아왔|나왔|성공)/;
+  return actionPat.test(t) && resultPat.test(t);
+}
+
+async function sendMessage(){
+  const text = msgInput.value.trim();
+  const img = pendingImage;
+  if((!text && !img) || isBusy) return;
+
+  // 해결 공유 모드이거나, AI가 해결 보고로 감지하면 → 해결 보고 처리
+  // (사진 첨부 시엔 일반 질문으로 처리)
+  if(!img && (inputMode==='share' || (inputMode==='ask' && looksLikeResolution(text)))){
+    return handleResolutionReport(text);
+  }
+
+  isBusy = true;
+  sendBtn.disabled = true;
+
+  msgInput.value='';
+  autoResize(msgInput);
+  appendUserBubble(text, img?.dataUrl);
+  clearImage();
+  showTyping();
+
+  // 매칭 랭킹 산출 — 신뢰도 판정에 사용 (사진만 있으면 텍스트 매칭 생략)
+  const ranked = text ? rankSymptoms(text) : [];
+  const top    = ranked[0] || null;
+  // 신뢰도: 최고 점수 기준 (50 이상=확실, 20~50=보통, 그 미만=낮음)
+  const confidence = top ? (top.score>=50?'high':top.score>=20?'mid':'low') : 'none';
+
+  try{
+    const answer = await askClaude(text, ranked, img);
+    appendAIResponse(answer, top?.item.name||null);
+    logToGAS({
+      query: text || '(사진 문의)',
+      symptomName: top?.item.name || '미분류',
+      answer,
+      confidence,
+      score: top?.score || 0,
+      resolved: confidence !== 'none' && confidence !== 'low',
+      source: img ? 'ai_image' : 'ai',
+      hasImage: !!img
+    });
+  } catch(e){
+    removeTyping();
+    // 오프라인 폴백: 지식베이스 직접 응답
+    if(top){
+      const m = top.item;
+      chatArea.insertAdjacentHTML('beforeend',`
+        <div class="ai-row">
+          <div class="ai-avatar">🤖</div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+            ${renderStepCard('s1','1','문제 확인',m.check)}
+            ${renderStepCard('s2','2','문제 해결',m.fix)}
+            ${renderStepCard('s3','3','후속 조치',m.followup)}
+            <span class="bubble-time">${now()} · ${m.name} (오프라인)</span>
+          </div>
+        </div>`);
+      logToGAS({query:text, symptomName:m.name, answer:'(오프라인 KB 응답)', confidence, score:top.score, resolved:true, source:'offline'});
+    } else {
+      chatArea.insertAdjacentHTML('beforeend',`
+        <div class="ai-row">
+          <div class="ai-avatar">🤖</div>
+          <div class="bubble ai">⚠️ 매뉴얼에서 일치하는 증상을 찾지 못했습니다.<br>위 빠른 태그를 이용하거나, 증상을 조금 더 구체적으로 적어주세요.<br><span style="font-size:11px;color:#9EADCC;">(이 질문은 '미해결'로 기록되어 매뉴얼 보강에 반영됩니다)</span></div>
+        </div>`);
+      // ★ 미해결 질문 = 가장 가치 있는 데이터. 별도 플래그로 기록
+      logToGAS({query:text, symptomName:'미해결', answer:'', confidence:'none', score:0, resolved:false, source:'unmatched'});
+    }
+    scrollBottom();
+    saveHistory();
+  } finally{
+    isBusy = false;
+    sendBtn.disabled = false;
+    msgInput.focus();
+  }
+}
+
+// ══════════════════════════════════════════════
+// ⑧-b 현장 해결책 공유 처리
+//   엔지니어가 보고한 해결 사례를 구조화해 '승인 대기'로 저장
+// ══════════════════════════════════════════════
+async function handleResolutionReport(text){
+  isBusy = true;
+  sendBtn.disabled = true;
+  msgInput.value='';
+  autoResize(msgInput);
+  appendUserBubble(text);
+  showTyping();
+
+  // 관련 증상 추정
+  const ranked = rankSymptoms(text);
+  const guessSymptom = ranked[0]?.item.name || '';
+
+  let structured = null;
+  try{
+    structured = await structureResolution(text, guessSymptom);
+  }catch(e){
+    structured = { symptom: guessSymptom || text.slice(0,20), check:'', fix:text, followup:'' };
+  }
+
+  removeTyping();
+
+  // 안내 메시지
+  chatArea.insertAdjacentHTML('beforeend',`
+    <div class="ai-row">
+      <div class="ai-avatar">🤖</div>
+      <div class="bubble ai">해결 사례로 정리해 아래 양식에 채웠습니다.<br>내용을 확인·수정한 뒤 <b>승인 대기로 등록</b>해 주세요.</div>
+    </div>`);
+  scrollBottom();
+
+  // 해결 공유 폼을 열고 AI 구조화 결과를 미리 채움
+  setMode('share');
+  document.getElementById('shSymptom').value = structured.symptom || guessSymptom || '';
+  document.getElementById('shCheck').value   = structured.check || '';
+  document.getElementById('shFix').value     = structured.fix || text;
+  document.getElementById('shFollow').value  = structured.followup || '';
+  // textarea 높이 갱신
+  ['shCheck','shFix','shFollow'].forEach(id=>autoResizeEl(document.getElementById(id)));
+  checkShareForm();
+
+  isBusy = false;
+  sendBtn.disabled = false;
+}
+
+// AI로 해결 사례를 매뉴얼 형식으로 구조화
+async function structureResolution(text, guessSymptom){
+  const sys = `당신은 바즈바이오메딕 CS팀 수석 매니저입니다.
+현장 엔지니어가 보고한 해결 사례를 매뉴얼 형식으로 정리하세요.
+반드시 아래 JSON 형식으로만 응답하세요. 다른 말, 마크다운, 코드블록 절대 금지.
+
+{"symptom":"증상명(짧게)","check":"문제 확인 절차","fix":"문제 해결 방법","followup":"후속 조치"}
+
+규칙:
+- 보고에 없는 내용은 빈 문자열("")로 두세요. 지어내지 마세요.
+- symptom은 검색되기 쉬운 짧은 증상명으로 (예: "노즐 인식 불량")
+- 참고로 추정되는 관련 증상: ${guessSymptom||'없음'}`;
+
+  let raw = (await callClaude(sys, text, 600)).trim();
+  raw = raw.replace(/```json|```/g,'').trim();
+  return JSON.parse(raw);
+}
+
+// ══════════════════════════════════════════════
+// ⑧-c 3칸 폼 제출 — 양식대로 입력한 해결책을 바로 승인 대기로 등록
+// ══════════════════════════════════════════════
+async function submitShareForm(){
+  const submitBtn = document.getElementById('shareSubmit');
+  if(submitBtn.disabled) return;        // 이미 처리 중/비활성 → 무시 (연타 방지)
+
+  const symptom  = document.getElementById('shSymptom').value.trim();
+  const check    = document.getElementById('shCheck').value.trim();
+  const fix      = document.getElementById('shFix').value.trim();
+  const followup = document.getElementById('shFollow').value.trim();
+  if(!symptom || !fix) return;
+
+  submitBtn.disabled = true;            // 즉시 잠금 (중복 제출 방지)
+  submitBtn.textContent = '전송 중…';
+
+  // 관련 증상 추정 (검색 보강용)
+  const ranked = rankSymptoms(symptom + ' ' + fix);
+  const matchedSymptom = ranked[0]?.item.name || '';
+
+  const payload = {
+    type:'resolution_report',
+    symptom, check, fix, followup,
+    rawText:`[증상] ${symptom}\n[문제확인] ${check}\n[문제해결] ${fix}\n[후속조치] ${followup}`,
+    matchedSymptom,
+    status:'승인대기'
+  };
+
+  // 실제 전송 + 성공 여부 받기
+  const sent = await logToGAS(payload);
+
+  // 전송 결과에 따른 상태 메시지
+  let statusMsg, statusColor;
+  if(sent){
+    statusMsg = '✅ 승인 대기로 등록했습니다. 관리자 확인 후 매뉴얼에 반영됩니다.';
+    statusColor = 'var(--green)';
+  } else if(!CONFIG.GAS_LOG_URL){
+    statusMsg = '⚠️ 서버 URL이 설정되지 않아 임시 저장만 됐습니다. (관리자 문의)';
+    statusColor = 'var(--amber)';
+  } else {
+    statusMsg = '📡 네트워크 불안정 — 임시 저장됨. 연결되면 자동 전송됩니다.';
+    statusColor = 'var(--amber)';
+  }
+
+  // 채팅 영역에 등록 결과 카드 표시
+  hideEmpty();
+  chatArea.insertAdjacentHTML('beforeend',`
+    <div class="ai-row">
+      <div class="ai-avatar">🤖</div>
+      <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+        <div class="step-card">
+          <div class="step-card-header">
+            <div class="step-num" style="background:var(--green);">✓</div>
+            <div class="step-card-title">${escHtml(symptom)}</div>
+          </div>
+          <div class="step-card-body">
+            ${check?('<b>1 · 문제 확인</b><br>'+nl2br(escHtml(check))+'<br><br>'):''}
+            <b>2 · 문제 해결</b><br>${nl2br(escHtml(fix))}
+            ${followup?('<br><br><b>3 · 후속 조치</b><br>'+nl2br(escHtml(followup))):''}
+          </div>
+        </div>
+        <div style="font-size:13px;color:${statusColor};font-weight:700;padding:2px 4px;">${statusMsg}</div>
+        <span class="bubble-time">${now()}</span>
+      </div>
+    </div>`);
+
+  // 버튼 텍스트 복구
+  submitBtn.textContent = '📤 승인 대기로 등록';
+
+  // 폼 초기화 + 질문 모드 복귀
+  document.getElementById('shSymptom').value='';
+  document.getElementById('shCheck').value='';
+  document.getElementById('shFix').value='';
+  document.getElementById('shFollow').value='';
+  document.getElementById('shareSubmit').disabled=true;
+  setMode('ask');
+  scrollBottom();
+  saveHistory();
+}
+
+function quickAsk(el, symptom){
+  // 태그 활성화 표시
+  document.querySelectorAll('.qtag').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  msgInput.value = symptom;
+  autoResize(msgInput);
+  sendBtn.disabled = false;
+  sendMessage();
+}
+
+function handleKey(e){
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,100)+'px';
+  sendBtn.disabled = !el.value.trim();
+}
+
+msgInput.addEventListener('input', ()=>{ sendBtn.disabled = !msgInput.value.trim(); });
+
+// ══════════════════════════════════════════════
+// ⑩ 대화 이력 저장/복원 (세션 연속성)
+// ══════════════════════════════════════════════
+let saveTimer = null;
+function saveHistory(){
+  // 디바운스 — 연속 추가 시 마지막 한 번만 저장
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    try{
+      // 빈 상태(emptyState)는 제외하고 실제 메시지 노드만 저장
+      const empty = document.getElementById('emptyState');
+      const wasEmpty = empty && empty.style.display !== 'none';
+      if(wasEmpty) return;
+      // 너무 길어지지 않게 최근 N개 메시지만 보관
+      const html = chatArea.innerHTML;
+      localStorage.setItem(CONFIG.HISTORY_KEY, html);
+    }catch(e){ /* 용량 초과 등 무시 */ }
+  }, 400);
+}
+
+function restoreHistory(){
+  try{
+    const html = localStorage.getItem(CONFIG.HISTORY_KEY);
+    if(html && html.trim()){
+      chatArea.innerHTML = html;
+      hideEmpty();
+      // 복원된 인터랙티브 버튼(_payload 등)은 복구되지 않으므로
+      // 등록 버튼이 남아있다면 비활성화 처리
+      chatArea.querySelectorAll('.rep-btn, .share-submit').forEach(b=>{ b.disabled = true; });
+      scrollBottom();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+// 대화 초기화 버튼용
+function clearHistory(){
+  if(!confirm('대화 내용을 모두 지울까요?')) return;
+  localStorage.removeItem(CONFIG.HISTORY_KEY);
+  convoContext = [];   // 대화 맥락도 초기화
+  chatArea.innerHTML='';
+  location.reload();
+}
+
+// ══════════════════════════════════════════════
+// ⑪ 병원·장비 연동 (hospital.html → 챗봇)
+// hospital.html에서 "이 장비 문의" 버튼으로 넘어올 때
+// URL 파라미터(?hosp=병원명&serial=장비번호&ctx=base64이력)로 전달.
+// ══════════════════════════════════════════════
+function loadDeviceContext(){
+  try{
+    const params = new URLSearchParams(location.search);
+    const hosp = params.get('hosp');
+    if(!hosp) return;   // 병원 정보 없으면 일반 챗봇으로 동작
+
+    const ctx = {
+      name: hosp,
+      serial: params.get('serial') || '',
+      status: params.get('status') || '',
+      ncare: params.get('ncare') || '',
+      pay: params.get('pay') || '',
+      lastInspect: params.get('li') || '',
+      history: []
+    };
+
+    // 정비 이력은 base64(JSON)로 전달 (한글·특수문자 안전)
+    const histRaw = params.get('ctx');
+    if(histRaw){
+      try{
+        const json = decodeURIComponent(escape(atob(histRaw)));
+        const arr = JSON.parse(json);
+        if(Array.isArray(arr)) ctx.history = arr;
+      }catch(e){ console.warn('[장비연동] 이력 파싱 실패:', e); }
+    }
+
+    deviceContext = ctx;
+    renderDeviceBanner();
+  }catch(e){ console.warn('[장비연동] 로딩 실패:', e); }
+}
+
+// 화면 상단에 "지금 보는 장비" 배너 표시
+function renderDeviceBanner(){
+  if(!deviceContext) return;
+  const d = deviceContext;
+  const statusColor = d.status==='경고' ? 'var(--red)'
+                    : d.status==='권고'||d.status==='점검대상' ? 'var(--amber)'
+                    : 'var(--teal)';
+  const banner = document.createElement('div');
+  banner.style.cssText = 'background:#F4F9FC;border-bottom:1px solid var(--gray-line);padding:8px 14px;font-size:12px;color:#5A6B8C;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+  banner.innerHTML = `
+    <span style="font-weight:700;color:var(--navy);">🏥 ${escHtml(d.name)}</span>
+    ${d.serial?`<span style="background:#fff;border:1px solid var(--gray-line);border-radius:6px;padding:1px 6px;">${escHtml(d.serial)}</span>`:''}
+    ${d.status?`<span style="color:${statusColor};font-weight:600;">●${escHtml(d.status)}</span>`:''}
+    ${d.ncare&&d.ncare!=='미가입'?`<span style="color:var(--green);">N-Care ${escHtml(d.ncare)}</span>`:''}
+    ${d.history.length?`<span style="margin-left:auto;color:#9EADCC;">정비이력 ${d.history.length}건 연동됨</span>`:''}
+  `;
+  const header = document.querySelector('.input-bar')?.parentElement;
+  const chatArea2 = document.getElementById('chatArea');
+  if(chatArea2 && chatArea2.parentElement){
+    chatArea2.parentElement.insertBefore(banner, chatArea2);
+  }
+}
+
+// AI에게 넘길 장비 컨텍스트 텍스트 생성
+function buildDeviceContextText(){
+  if(!deviceContext) return '';
+  const d = deviceContext;
+  let txt = `\n\n[현재 문의 장비 정보]\n병원: ${d.name}`;
+  if(d.serial) txt += ` / 장비번호: ${d.serial}`;
+  if(d.status) txt += ` / 상태: ${d.status}`;
+  if(d.ncare && d.ncare!=='미가입') txt += ` / N-Care: ${d.ncare}(무상 대상)`;
+  else if(d.pay) txt += ` / ${d.pay}`;
+  if(d.lastInspect) txt += ` / 최종점검일: ${d.lastInspect}`;
+
+  if(d.history.length){
+    txt += `\n\n[이 장비의 최근 정비 이력] (최신순, 최대 8건)\n`;
+    txt += d.history.slice(0,8).map(h=>{
+      const parts = [h.d, h.pt, h.sy].filter(Boolean).join(' · ');
+      const fix = h.fx ? ` → ${h.fx}` : '';
+      const part = h.p ? ` [부품:${h.p}]` : '';
+      return `· ${parts}${fix}${part}`;
+    }).join('\n');
+    txt += `\n\n위 이력을 참고해, 이 장비에서 반복되는 문제나 과거 조치를 고려한 답변을 제공하세요. 같은 증상이 반복되면 그 점을 짚어주세요.`;
+  }
+  return txt;
+}
+
+// ── 초기화 ──────────────────────────────────
+loadDeviceContext(); // 병원·장비 컨텍스트 (URL 파라미터)
+syncKB();          // 지식베이스 동기화 (시트 우선, 실패 시 내장)
+restoreHistory();  // 이전 대화 복원
+flushQueue();      // 미전송 로그 재전송 시도
+
+</script>
+</body>
+</html>
