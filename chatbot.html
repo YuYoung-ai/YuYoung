@@ -27,11 +27,19 @@
   .qtag:active,.qtag.active{background:var(--teal);border-color:var(--teal);color:#fff;}
 
   /* ── 증상 추천 칩 (자동완성) ── */
-  .suggest-bar{background:var(--white);border-top:1px solid var(--gray-line);padding:8px 12px 0;overflow-x:auto;white-space:nowrap;scrollbar-width:none;display:none;}
-  .suggest-bar::-webkit-scrollbar{display:none;}
-  .suggest-bar.show{display:block;}
-  .suggest-label{color:#9EADCC;font-size:10px;font-weight:700;display:block;margin-bottom:5px;}
-  .suggest-chip{display:inline-block;background:#F0F5FA;border:1px solid var(--gray-line);border-radius:16px;padding:6px 12px;font-size:13px;color:var(--navy);cursor:pointer;margin-right:6px;margin-bottom:2px;-webkit-tap-highlight-color:transparent;transition:all .12s;}
+  .bottom-dock{background:var(--white);}
+  .input-zone{position:relative;}
+  /* 증상 추천 — 우측 세로 패널 (입력 중 슬라이드 인) */
+  .suggest-bar{position:fixed;right:0;bottom:130px;top:auto;max-height:60vh;width:230px;max-width:62vw;background:var(--white);border:1px solid var(--gray-line);border-right:none;border-radius:14px 0 0 14px;box-shadow:-8px 0 24px rgba(16,29,61,.14);padding:12px 0 12px 12px;display:none;z-index:60;flex-direction:column;}
+  .suggest-bar.show{display:flex;}
+  .suggest-label{color:#9EADCC;font-size:11px;font-weight:700;display:block;}
+  .suggest-head{display:flex;align-items:center;justify-content:space-between;margin:0 12px 8px 0;flex:0 0 auto;}
+  .suggest-close{color:#C0CAD8;cursor:pointer;font-size:14px;padding:2px 4px;-webkit-tap-highlight-color:transparent;}
+  .suggest-close:active{color:var(--navy);}
+  .suggest-bar.show .suggest-chips{display:flex;flex-direction:column;gap:6px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:8px;}
+  .suggest-bar .suggest-chips::-webkit-scrollbar{width:3px;}
+  .suggest-bar .suggest-chips::-webkit-scrollbar-thumb{background:var(--gray-line);border-radius:3px;}
+  .suggest-chip{display:block;background:#F0F5FA;border:1px solid var(--gray-line);border-radius:10px;padding:11px 13px;font-size:14px;color:var(--navy);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s;line-height:1.3;white-space:normal;}
   .suggest-chip:active{background:var(--teal);border-color:var(--teal);color:#fff;}
   .suggest-chip .sc-cat{font-size:10px;color:#9EADCC;margin-left:4px;}
   .suggest-chip:active .sc-cat{color:rgba(255,255,255,.7);}
@@ -161,6 +169,8 @@
   </div>
 </div>
 
+<!-- 입력 영역 전체 (하단 고정) -->
+<div class="bottom-dock" id="bottomDock">
 <!-- 입력 모드 토글 -->
 <div class="mode-bar">
   <button type="button" class="mode-btn active" id="modeAsk" onclick="setMode('ask')">💬 질문하기</button>
@@ -176,10 +186,15 @@
   </div>
 </div>
 
-<!-- 증상 추천 칩 (입력 중=실시간 추천 / 비어있으면=전체 목록) -->
+<!-- 입력창 + 추천칩 (칩은 입력창 바로 위로 떠오름) -->
+<div class="input-zone">
+<!-- 증상 추천 (우측 세로 패널) -->
 <div class="suggest-bar" id="suggestBar">
-  <span class="suggest-label" id="suggestLabel">자주 묻는 증상</span>
-  <div id="suggestChips"></div>
+  <div class="suggest-head">
+    <span class="suggest-label" id="suggestLabel">자주 묻는 증상</span>
+    <span class="suggest-close" onclick="document.getElementById('suggestBar').classList.remove('show')">✕</span>
+  </div>
+  <div class="suggest-chips" id="suggestChips"></div>
 </div>
 
 <div class="input-bar" id="askBar">
@@ -188,6 +203,7 @@
   <textarea id="msgInput" placeholder="증상을 자유롭게 입력하세요. 예) E-04 에러가 뜨고 타는 냄새가 나요" rows="1" onkeydown="handleKey(event)" oninput="autoResize(this);updateSuggest()" onfocus="updateSuggest()"></textarea>
   <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>↑</button>
 </div>
+</div><!-- /input-zone -->
 
 <!-- 해결 공유 폼 (3단계 양식) -->
 <div class="share-form" id="shareForm" style="display:none;">
@@ -210,6 +226,7 @@
   <button class="share-submit" id="shareSubmit" onclick="submitShareForm()" disabled>📤 승인 대기로 등록</button>
 </div>
 <div class="log-notice" id="logNotice">질문 이력은 GAS 시트에 자동 기록됩니다</div>
+</div><!-- /bottom-dock -->
 
 
 <script>
