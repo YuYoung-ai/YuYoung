@@ -19,6 +19,11 @@
   .header-title{color:#fff;font-size:16px;font-weight:800;flex:1;}
   .header-badge{background:rgba(46,125,158,.4);border:1px solid rgba(46,125,158,.6);border-radius:20px;padding:3px 10px;font-size:11px;color:#A8D4E8;font-weight:600;}
 
+  /* ── 카테고리 탭 ── */
+  .cat-tabs{display:flex;background:var(--navy);border-bottom:1px solid rgba(255,255,255,.08);}
+  .cat-tab{flex:1;background:none;border:none;color:#8EA0C8;font-size:14px;font-weight:700;padding:12px 8px;cursor:pointer;font-family:inherit;border-bottom:3px solid transparent;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+  .cat-tab.active{color:#fff;border-bottom-color:var(--teal);}
+
   /* ── 빠른 태그 ── */
   .tag-bar{background:var(--navy-light);padding:10px 14px;overflow-x:auto;white-space:nowrap;scrollbar-width:none;}
   .tag-bar::-webkit-scrollbar{display:none;}
@@ -148,23 +153,16 @@
   <span class="header-badge">BAZ CS 매니저</span>
 </header>
 
-<!-- 빠른 증상 태그 -->
+<!-- 카테고리 탭 -->
+<div class="cat-tabs">
+  <button type="button" class="cat-tab active" id="catCs" onclick="setCategory('cs')">🔧 장비 트러블슈팅</button>
+  <button type="button" class="cat-tab" id="catAdmin" onclick="setCategory('admin')">📋 사내 행정</button>
+</div>
+
+<!-- 빠른 태그 (카테고리에 따라 동적 렌더링) -->
 <div class="tag-bar">
-  <span class="tag-bar-label">⚡ 빠른 증상 선택</span>
-  <span class="qtag" onclick="quickAsk(this,'메인보드 동작 불능')">메인보드 불능</span>
-  <span class="qtag" onclick="quickAsk(this,'RFID 스캔 불량')">RFID 인식 불량</span>
-  <span class="qtag" onclick="quickAsk(this,'냉각수 누수')">냉각수 누수</span>
-  <span class="qtag" onclick="quickAsk(this,'장비 출력 저하')">출력 저하</span>
-  <span class="qtag" onclick="quickAsk(this,'Touch Screen 동작 불능')">터치 불량</span>
-  <span class="qtag" onclick="quickAsk(this,'풋 스위치 동작 불능')">풋스위치 불량</span>
-  <span class="qtag" onclick="quickAsk(this,'이상 소음')">이상 소음</span>
-  <span class="qtag" onclick="quickAsk(this,'노즐 누수/녹물')">노즐 누수</span>
-  <span class="qtag" onclick="quickAsk(this,'피팅 불량')">피팅 불량</span>
-  <span class="qtag" onclick="quickAsk(this,'발열')">발열</span>
-  <span class="qtag" onclick="quickAsk(this,'UI 업그레이드')">UI 업그레이드</span>
-  <span class="qtag" onclick="quickAsk(this,'재현 안됨')">재현 안됨</span>
-  <span class="qtag" onclick="quickAsk(this,'파워서플라이불량')">파워서플라이 불량</span>
-  <span class="qtag" onclick="quickAsk(this,'케이블 불량')">케이블 불량</span>
+  <span class="tag-bar-label" id="tagBarLabel">⚡ 빠른 증상 선택</span>
+  <div id="quickTags" style="display:inline;"></div>
 </div>
 
 <!-- 채팅 영역 -->
@@ -462,8 +460,87 @@ let deviceContext = null;
 const GAS_LOG_URL = CONFIG.GAS_BASE_URL;
 const GAS_KB_URL  = CONFIG.GAS_BASE_URL;
 
+// ══════════════════════════════════════════════
+// 사내 행정 지식베이스 (질문→답변·절차 형식)
+// 실제 내용은 회사 규정에 맞게 시트(📋 행정지식베이스)에서 채워 운영.
+// 아래는 형식 예시용 시드. q=질문/제목, keywords=검색어,
+// answer=답변 본문, steps=절차(선택), link=관련 링크/위치(선택)
+// ══════════════════════════════════════════════
+const ADMIN_KB_BUILTIN = [
+  {
+    name: '월급일·급여 지급일',
+    keywords: ['월급', '급여일', '월급날', '급여 지급', '봉급', '페이데이', '월급 언제'],
+    answer: '급여는 매월 25일에 지급됩니다. (25일이 주말·공휴일이면 직전 영업일 지급)',
+    steps: '',
+    link: '※ 정확한 지급 내역은 ERP > 급여명세서에서 확인'
+  },
+  {
+    name: '연차·휴가 신청 방법',
+    keywords: ['연차', '휴가', '월차', '반차', '휴가 신청', '연차 신청', '쉬는', '휴무'],
+    answer: '연차는 전자결재 시스템에서 최소 3일 전 상신해야 합니다. 팀장 승인 후 확정됩니다.',
+    steps: '1) 전자결재 접속\n2) [휴가신청서] 양식 선택\n3) 기간·사유 입력 후 상신\n4) 팀장 승인 확인',
+    link: '※ 잔여 연차는 ERP > 근태관리에서 확인'
+  },
+  {
+    name: '전자결재 상신 방법',
+    keywords: ['전자결재', '결재', '상신', '품의', '기안', '결재 올리', '전자 결재'],
+    answer: '전자결재는 사내 그룹웨어에서 양식을 선택해 작성·상신합니다. 결재선은 팀 규정에 따라 지정하세요.',
+    steps: '1) 그룹웨어 > 전자결재\n2) 결재 양식 선택\n3) 내용 작성\n4) 결재선 지정 후 상신',
+    link: '※ 결재선 문의는 팀 어시스턴트에게'
+  },
+  {
+    name: 'ERP 비용 처리·경비 청구',
+    keywords: ['erp', '경비', '비용 처리', '지출', '청구', '법인카드', '영수증', '정산'],
+    answer: 'ERP의 경비청구 메뉴에서 영수증을 첨부해 등록합니다. 매월 말일까지 등록분이 익월 급여와 함께 정산됩니다.',
+    steps: '1) ERP > 경비청구\n2) 사용 항목·금액 입력\n3) 영수증 스캔 첨부\n4) 상신 후 승인 대기',
+    link: '※ 계정과목 문의는 재무팀'
+  },
+  {
+    name: '출장 신청·정산',
+    keywords: ['출장', '출장비', '출장 신청', '출장 정산', '여비', '교통비'],
+    answer: '출장은 사전에 전자결재로 출장신청서를 상신하고, 복귀 후 ERP에서 출장비를 정산합니다.',
+    steps: '1) 출장 전: 전자결재 [출장신청서] 상신\n2) 출장 후: ERP > 출장정산\n3) 영수증·교통비 입력',
+    link: '※ 출장 규정(일비·숙박 한도)은 사내 규정집 참조'
+  }
+];
+
 // 운영 지식베이스: 시트에서 불러오면 교체됨. 초기값은 내장 폴백 데이터.
 let CS_KB = CS_KB_BUILTIN.slice();
+let ADMIN_KB = ADMIN_KB_BUILTIN.slice();
+
+// 현재 활성 카테고리: 'cs'(장비 트러블슈팅) | 'admin'(사내 행정)
+let activeCategory = 'cs';
+
+// 활성 카테고리의 지식베이스 반환
+function activeKB(){ return activeCategory==='admin' ? ADMIN_KB : CS_KB; }
+
+// 카테고리 전환
+function setCategory(cat){
+  if(activeCategory===cat) return;
+  activeCategory = cat;
+  document.getElementById('catCs').classList.toggle('active', cat==='cs');
+  document.getElementById('catAdmin').classList.toggle('active', cat==='admin');
+  document.getElementById('tagBarLabel').textContent =
+    cat==='admin' ? '⚡ 자주 묻는 행정 질문' : '⚡ 빠른 증상 선택';
+  // 입력창 안내문구도 카테고리에 맞게
+  const ph = cat==='admin'
+    ? '궁금한 행정·총무 질문을 입력하세요. 예) 연차 신청 어떻게 해요?'
+    : '증상을 자유롭게 입력하세요. 예) E-04 에러가 뜨고 타는 냄새가 나요';
+  if(typeof msgInput!=='undefined' && msgInput) msgInput.placeholder = ph;
+  renderQuickTags();
+  document.getElementById('suggestBar').classList.remove('show');
+  rebuildKBIndex();   // 활성 KB 인덱스 보장
+}
+
+// 빠른 태그를 활성 카테고리 기준으로 렌더 (상위 항목 일부)
+function renderQuickTags(){
+  const box = document.getElementById('quickTags');
+  if(!box) return;
+  const items = activeKB().slice(0, 14);
+  box.innerHTML = items.map(it=>
+    `<span class="qtag" onclick="quickAsk(this,'${escAttr(it.name)}')">${escHtml(it.name)}</span>`
+  ).join('');
+}
 
 // ── 지식베이스 시트 동기화 (캐시 우선 → 시트 fetch) ──
 const KB_CACHE_KEY = 'bazChatbotKB';
@@ -543,6 +620,53 @@ function syncKB(){
       }
     })
     .catch(e=>{ console.warn('[챗봇 KB] 시트 읽기 실패 — 내장 데이터 사용:', e); });
+
+  // 행정 KB도 함께 동기화
+  syncAdminKB();
+}
+
+// 행정 지식베이스 시트 동기화 (필드: 증상/키워드/답변/절차/링크)
+const ADMIN_CACHE_KEY = 'bazAdminKB';
+const ADMIN_CACHE_TS  = 'bazAdminKBTs';
+function syncAdminKB(){
+  if(!CONFIG.GAS_BASE_URL) return;
+  // 캐시 우선
+  try{
+    const cached = localStorage.getItem(ADMIN_CACHE_KEY);
+    const ts = parseInt(localStorage.getItem(ADMIN_CACHE_TS) || '0', 10);
+    if(cached){
+      const arr = JSON.parse(cached);
+      if(arr && arr.length){ ADMIN_KB = arr; rebuildKBIndex(); }
+    }
+    if(cached && (Date.now() - ts) < KB_CACHE_TTL) return;
+  }catch(e){}
+
+  fetchWithTimeout(CONFIG.GAS_BASE_URL + '?action=admin_kb', {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.success || !d.data || !d.data.length) return;
+      const arr = d.data.map(r=>{
+        let kw = r['키워드'] || r.keywords || '';
+        if(typeof kw === 'string') kw = kw.split(/[,，、]/).map(s=>s.trim()).filter(Boolean);
+        return {
+          name:   r['증상'] || r.name || '',
+          keywords: kw.length ? kw : [r['증상']||''],
+          answer: r['답변'] || r.answer || '',
+          steps:  r['절차'] || r.steps || '',
+          link:   r['링크'] || r.link || ''
+        };
+      }).filter(it=>it.name && it.answer);
+      if(!arr.length) return;
+      try{
+        localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify(arr));
+        localStorage.setItem(ADMIN_CACHE_TS, String(Date.now()));
+      }catch(e){}
+      ADMIN_KB = arr;
+      rebuildKBIndex();
+      if(activeCategory==='admin') renderQuickTags();
+      console.log('[행정 KB] 시트 ' + arr.length + '건 동기화');
+    })
+    .catch(e=>{ console.warn('[행정 KB] 시트 읽기 실패 — 내장 사용:', e); });
 }
 
 // ══════════════════════════════════════════════
@@ -660,16 +784,23 @@ function normalizeTokens(text){
   return tokens;
 }
 
-// 증상별 토큰 인덱스 (재)계산 — 시트 동기화로 CS_KB가 바뀔 때마다 호출
+// 증상별 토큰 인덱스 (재)계산 — 시트 동기화로 KB가 바뀔 때마다 호출.
+// CS(장비)·ADMIN(행정) 두 지식베이스를 모두 인덱싱한다.
 function rebuildKBIndex(){
+  // 장비 트러블슈팅 KB
   CS_KB.forEach(item=>{
-    // 신입 구어체 표현을 해당 증상 키워드에 병합 (중복 제외)
     const extra = COLLOQUIAL[item.name];
     if(extra){
       item.keywords = item.keywords || [];
       extra.forEach(p=>{ if(!item.keywords.includes(p)) item.keywords.push(p); });
     }
     const corpus = [item.name, ...(item.keywords||[]), item.check, item.fix, item.followup].join(' ');
+    item._tokens = normalizeTokens(corpus);
+    item._fulltext = corpus.toLowerCase();
+  });
+  // 사내 행정 KB (필드 구조가 다름: answer/steps/link)
+  ADMIN_KB.forEach(item=>{
+    const corpus = [item.name, ...(item.keywords||[]), item.answer, item.steps, item.link].join(' ');
     item._tokens = normalizeTokens(corpus);
     item._fulltext = corpus.toLowerCase();
   });
@@ -683,7 +814,7 @@ function rankSymptoms(query){
   const q = query.toLowerCase();
   const qTokens = normalizeTokens(query);
 
-  const scored = CS_KB.map(item=>{
+  const scored = activeKB().map(item=>{
     let score = 0;
 
     // (1) 정규화 토큰 교집합 — 의미 단위 일치 (가중치 높음)
@@ -984,16 +1115,16 @@ function updateSuggest(){
   let items, labelText;
 
   if(!q){
-    // 입력창이 비면 → 전체 증상 목록 (카테고리 순)
-    items = CS_KB.slice();
-    labelText = '증상 선택 또는 직접 입력';
+    // 입력창이 비면 → 전체 목록
+    items = activeKB().slice();
+    labelText = activeCategory==='admin' ? '질문 선택 또는 직접 입력' : '증상 선택 또는 직접 입력';
   }else{
     // 입력 중 → 자동완성 전용 점수로 정렬 (부분일치 우선)
     // 신입이 정확한 표현을 몰라도, 증상명·키워드·구어체에 입력어가
     // 닿기만 하면 후보로 올린다. 검색(rankSymptoms)과 분리해 더 관대하게.
     const ql = q.toLowerCase();
     const qlNoSpace = ql.replace(/\s/g,'');
-    const scored = CS_KB.map(it=>{
+    const scored = activeKB().map(it=>{
       let s = 0;
       const name = it.name.toLowerCase();
       const kws = (it.keywords||[]).map(k=>k.toLowerCase());
@@ -1069,8 +1200,7 @@ function removeTyping(){
   if(el) el.remove();
 }
 
-// ── 즉시 응답: 매칭 신뢰도 높을 때 내장 KB 카드를 먼저 보여주고
-//    AI 답변이 완성되면 자연스럽게 교체한다. (체감 속도 대폭 개선) ──
+// ── 즉시 응답: 매칭된 KB 내용을 카드로 표시 ──
 function showInstantKB(item){
   hideEmpty();
   removeTyping();
@@ -1080,13 +1210,8 @@ function showInstantKB(item){
   wrap.innerHTML = `
     <div class="ai-avatar">🤖</div>
     <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
-      ${renderStepCard('s1','1','문제 확인',item.check)}
-      ${renderStepCard('s2','2','문제 해결',item.fix)}
-      ${renderStepCard('s3','3','후속 조치',item.followup)}
-      <span class="bubble-time" id="instantKBNote" style="color:var(--teal);display:flex;align-items:center;gap:5px;">
-        <span class="typing" style="display:inline-flex;padding:0;gap:3px;"><span></span><span></span><span></span></span>
-        ${escHtml(item.name)} · AI가 더 정확한 답변을 준비 중…
-      </span>
+      ${renderKBCards(item)}
+      <span class="bubble-time" id="instantKBNote">${now()} · ${escHtml(item.name)}</span>
     </div>`;
   chatArea.appendChild(wrap);
   scrollBottom();
@@ -1139,6 +1264,36 @@ function renderStepCard(cls, num, title, body){
     </div>
     <div class="step-card-body">${nl2br(escHtml(cleanBody))}</div>
   </div>`;
+}
+
+// 행정 답변 카드 (질문→답변·절차·링크 형식)
+function renderAdminCard(item){
+  let html = `<div class="step-card">
+    <div class="step-card-header">
+      <div class="step-num s2">📋</div>
+      <div class="step-card-title">${escHtml(item.name)}</div>
+    </div>
+    <div class="step-card-body">${nl2br(escHtml(item.answer||''))}`;
+  if(item.steps && String(item.steps).trim()){
+    html += `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--gray-line);">
+      <div style="font-weight:700;color:var(--teal);font-size:12px;margin-bottom:5px;">📌 절차</div>
+      ${nl2br(escHtml(item.steps))}</div>`;
+  }
+  if(item.link && String(item.link).trim()){
+    html += `<div style="margin-top:8px;font-size:12px;color:#9EADCC;">${nl2br(escHtml(item.link))}</div>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+// 카테고리에 맞는 KB 답변 카드 묶음 HTML 반환
+function renderKBCards(item){
+  if(activeCategory==='admin'){
+    return renderAdminCard(item);
+  }
+  return renderStepCard('s1','1','문제 확인',item.check)
+       + renderStepCard('s2','2','문제 해결',item.fix)
+       + renderStepCard('s3','3','후속 조치',item.followup);
 }
 
 function parseStep(text, ...labels){
@@ -1286,69 +1441,41 @@ async function sendMessage(forceAsk){
   // 신뢰도: 최고 점수 기준 (50 이상=확실, 20~50=보통, 그 미만=낮음)
   const confidence = top ? (top.score>=50?'high':top.score>=20?'mid':'low') : 'none';
 
-  // 매칭 신뢰도가 높고 이미지가 없으면 → 내장 KB 답변을 즉시 표시(체감 속도 ↑)
-  // AI 답변이 오면 자연스럽게 교체됨. 그 전까지는 빈 화면 대신 실질 정보를 제공.
-  if(top && !img && (confidence==='high' || confidence==='mid')){
+  // 매칭되면 즉시 KB 카드 표시 (AI 미사용 — 키워드 매칭 기반)
+  if(top && (confidence==='high' || confidence==='mid' || confidence==='low')){
     showInstantKB(top.item);
-  } else {
-    showTyping();
-  }
-
-  try{
-    const answer = await askClaude(text, ranked, img);
-    appendAIResponse(answer, top?.item.name||null);
     logToGAS({
       query: text || '(사진 문의)',
-      symptomName: top?.item.name || '미분류',
-      answer,
+      symptomName: top.item.name,
+      answer: '(KB 매칭 응답)',
       confidence,
-      score: top?.score || 0,
-      resolved: confidence !== 'none' && confidence !== 'low',
-      source: img ? 'ai_image' : 'ai',
+      score: top.score || 0,
+      resolved: true,
+      source: activeCategory==='admin' ? 'admin' : 'cs',
       hasImage: !!img
     });
-  } catch(e){
+  } else {
+    // 매칭 실패 → 미해결로 기록 (보강 대상)
+    removeInstantKB();
     removeTyping();
-    const instant = document.getElementById('instantKB');
-    if(instant && top){
-      // 즉답 KB 카드가 이미 떠 있으면 → 그대로 확정 (보강 표시만 정리)
-      const note = document.getElementById('instantKBNote');
-      if(note){ note.style.color=''; note.innerHTML = `${now()} · ${escHtml(top.item.name)} (오프라인 · 매뉴얼 답변)`; }
-      instant.id = '';  // 더 이상 즉답 카드로 취급하지 않음
-      logToGAS({query:text, symptomName:top.item.name, answer:'(오프라인 KB 응답)', confidence, score:top.score, resolved:true, source:'offline'});
-    } else if(top){
-      const m = top.item;
-      chatArea.insertAdjacentHTML('beforeend',`
-        <div class="ai-row">
-          <div class="ai-avatar">🤖</div>
-          <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
-            ${renderStepCard('s1','1','문제 확인',m.check)}
-            ${renderStepCard('s2','2','문제 해결',m.fix)}
-            ${renderStepCard('s3','3','후속 조치',m.followup)}
-            <span class="bubble-time">${now()} · ${m.name} (오프라인)</span>
-          </div>
-        </div>`);
-      logToGAS({query:text, symptomName:m.name, answer:'(오프라인 KB 응답)', confidence, score:top.score, resolved:true, source:'offline'});
-    } else {
-      removeInstantKB();
-      chatArea.insertAdjacentHTML('beforeend',`
-        <div class="ai-row">
-          <div class="ai-avatar">🤖</div>
-          <div class="bubble ai">⚠️ 매뉴얼에서 일치하는 증상을 찾지 못했습니다.<br>위 빠른 태그를 이용하거나, 증상을 조금 더 구체적으로 적어주세요.<br><span style="font-size:11px;color:#9EADCC;">(이 질문은 '미해결'로 기록되어 매뉴얼 보강에 반영됩니다)</span></div>
-        </div>`);
-      // ★ 미해결 질문 = 가장 가치 있는 데이터. 별도 플래그로 기록
-      logToGAS({query:text, symptomName:'미해결', answer:'', confidence:'none', score:0, resolved:false, source:'unmatched'});
-    }
-    scrollBottom();
-    saveHistory();
-  } finally{
-    isBusy = false;
-    sendBtn.disabled = false;
-    msgInput.disabled = false;                   // 입력창 다시 활성화
-    document.getElementById('askBar').classList.remove('disabled');
-    msgInput.focus();
-    document.getElementById('suggestBar').classList.remove('show'); // 답변 후 패널 닫힌 상태 유지
+    const guide = activeCategory==='admin'
+      ? '오른쪽 추천 목록에서 비슷한 항목을 골라보거나, 질문을 조금 더 구체적으로 적어주세요.'
+      : '오른쪽 추천 목록을 이용하거나, 증상을 조금 더 구체적으로 적어주세요.';
+    chatArea.insertAdjacentHTML('beforeend',`
+      <div class="ai-row">
+        <div class="ai-avatar">🤖</div>
+        <div class="bubble ai">⚠️ 일치하는 항목을 찾지 못했습니다.<br>${guide}<br><span style="font-size:11px;color:#9EADCC;">(이 질문은 '미해결'로 기록되어 보강에 반영됩니다)</span></div>
+      </div>`);
+    logToGAS({query:text, symptomName:'미해결', answer:'', confidence:'none', score:0, resolved:false, source: activeCategory==='admin'?'admin_unmatched':'unmatched'});
   }
+  scrollBottom();
+  saveHistory();
+  isBusy = false;
+  sendBtn.disabled = false;
+  msgInput.disabled = false;
+  document.getElementById('askBar').classList.remove('disabled');
+  msgInput.focus();
+  document.getElementById('suggestBar').classList.remove('show');
 }
 
 // ══════════════════════════════════════════════
@@ -1661,6 +1788,7 @@ function warmUpGAS(){
 warmUpGAS();        // GAS 인스턴스 예열 (콜드스타트 완화)
 loadDeviceContext(); // 병원·장비 컨텍스트 (URL 파라미터)
 syncKB();          // 지식베이스 동기화 (시트 우선, 실패 시 내장)
+renderQuickTags(); // 카테고리별 빠른 태그 렌더
 restoreHistory();  // 이전 대화 복원
 flushQueue();      // 미전송 로그 재전송 시도
 
