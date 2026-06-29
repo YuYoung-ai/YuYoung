@@ -1031,7 +1031,7 @@ function pickSuggest(name){
   document.getElementById('suggestBar').classList.remove('show');  // 패널 먼저 닫기
   msgInput.value = name;
   autoResize(msgInput);
-  sendMessage();   // 바로 전송 (전송 중 입력창 비활성화는 sendMessage가 처리)
+  sendMessage(true);   // 질문으로 강제 전송 (해결공유 감지 우회)
 }
 
 // 속성값 안전 처리 (작은따옴표 이스케이프)
@@ -1258,14 +1258,15 @@ function looksLikeResolution(text){
   return actionPat.test(t) && resultPat.test(t);
 }
 
-async function sendMessage(){
+async function sendMessage(forceAsk){
+  document.getElementById('suggestBar').classList.remove('show');  // 추천 패널 먼저 닫기
   const text = msgInput.value.trim();
   const img = pendingImage;
   if((!text && !img) || isBusy) return;
 
   // 해결 공유 모드이거나, AI가 해결 보고로 감지하면 → 해결 보고 처리
-  // (사진 첨부 시엔 일반 질문으로 처리)
-  if(!img && (inputMode==='share' || (inputMode==='ask' && looksLikeResolution(text)))){
+  // (사진 첨부 시, 또는 칩 선택(forceAsk) 시엔 일반 질문으로 처리)
+  if(!img && !forceAsk && (inputMode==='share' || (inputMode==='ask' && looksLikeResolution(text)))){
     return handleResolutionReport(text);
   }
 
@@ -1273,11 +1274,9 @@ async function sendMessage(){
   sendBtn.disabled = true;
   msgInput.disabled = true;                    // 전송 중 입력창 비활성화
   document.getElementById('askBar').classList.add('disabled');
-  document.getElementById('suggestBar').classList.remove('show');  // 추천 패널 닫기
 
   msgInput.value='';
   autoResize(msgInput);
-  document.getElementById('suggestBar').classList.remove('show'); // 전송 시 추천 닫기
   appendUserBubble(text, img?.dataUrl);
   clearImage();
 
