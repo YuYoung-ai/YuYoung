@@ -226,6 +226,11 @@
       <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
+    <button type="button" id="appBtnHandover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(46,125,158,.5);background:rgba(46,125,158,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">📤</span>
+      <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#7EC8E0;">처리 내용 → 카톡 공유 · 시트 자동 기록</span></span>
+      <span style="color:#7EC8E0;">→</span>
+    </button>
     <!-- AI 트러블슈팅 챗봇 -->
     <button type="button" id="appBtnChatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(46,125,158,.5);background:rgba(46,125,158,.1);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🤖</span>
@@ -1785,6 +1790,7 @@ document.getElementById('appBtnReport').addEventListener('click', function(){
 document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
+document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
 document.getElementById('appBtnChatbot').addEventListener('click', function(){ location.href='chatbot.html'; });
 document.getElementById('backToApps').addEventListener('click', function(){
