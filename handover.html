@@ -402,7 +402,7 @@ function fillParts(){ var s=document.getElementById('part'); PARTS.forEach(funct
 function todayISO(){ var d=new Date(),z=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
 
 /* ▼▼ 현장 처리 현황(handover) 확장 웹앱 URL — handover_gas.gs 배포 후 붙여넣기 ▼▼ */
-var HANDOVER_URL='';   /* 예) 'https://script.google.com/macros/s/XXXX/exec' */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* 예) 'https://script.google.com/macros/s/XXXX/exec' */
 /* 기존 기록용 URL (HANDOVER_URL 미설정 시 폴백) */
 var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 function postUrl(){ return HANDOVER_URL || AS_URL; }
