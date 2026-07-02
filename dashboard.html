@@ -125,7 +125,8 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
       <div class="mhint">시트 처리일 기준 최근 8주</div>
     </div>
     <div class="mrow">
-      <label>재고 현황 <span style="font-weight:400;color:var(--text-muted)">· 시트에 없는 값, 직접 입력</span></label>
+      <label>재고 현황 <span style="font-weight:400;color:var(--text-muted)">· 재고 시트 자동 연동, 수정 가능</span></label>
+      <div class="mhint" id="invStatus" style="margin:0 0 6px">재고 시트 조회 중…</div>
       <div class="inv-grid">
         <div><label>Handpiece (Repair)</label><input id="inv1" inputmode="numeric" placeholder="0"></div>
         <div><label>Handpiece (새제품)</label><input id="inv2" inputmode="numeric" placeholder="0"></div>
@@ -229,7 +230,17 @@ function loadData(force){
   fetch(HANDOVER_URL+'?action=all')
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.success){ toast('❌ '+(d.error||'로드 실패')); return; }
+      if(!d.success){
+        toast('❌ '+(d.error||'로드 실패'));
+        if(!RAW.length){
+          document.getElementById('loading').innerHTML=
+            '❌ '+esc(d.error||'로드 실패')+'<br><br>'
+            +'<b>"알 수 없는 action"</b> 오류라면 GAS가 구버전입니다.<br>'
+            +'Apps Script → 배포 → 배포 관리 → ✏️ → <b>버전: 새 버전</b> → 배포 후<br>'
+            +'이 페이지를 새로고침하세요.';
+        }
+        return;
+      }
       try{ localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }catch(e){}
       boot(d, false);
       if(force) toast('🔄 최신 데이터로 갱신됨');
@@ -405,10 +416,32 @@ function openWeekly(){
     var m=new Date(k+'T00:00:00');
     return '<option value="'+k+'">'+wkLabel(m)+' ('+wkRange(m)+')</option>';
   }).join('');
+  /* 1) 직전 입력값 복원 → 2) 재고 시트 자동 조회로 덮어쓰기 */
   try{ var inv=JSON.parse(localStorage.getItem('baz_dash_inv')||'{}');
     ['inv1','inv2','inv3','inv4'].forEach(function(id){ if(inv[id]!=null) document.getElementById(id).value=inv[id]; });
   }catch(e){}
   document.getElementById('wkModal').classList.add('show');
+  loadInventory();
+}
+function loadInventory(){
+  var st=document.getElementById('invStatus');
+  st.textContent='재고 시트 조회 중…'; st.style.color='';
+  gv('inventory',{}).then(function(d){
+    if(!d.success){ st.textContent='⚠️ '+(d.error||'재고 시트 연동 실패')+' — 직접 입력하세요'; st.style.color='var(--red)'; return; }
+    var s=d.summary||{};
+    if(s.hpRepair   != null) document.getElementById('inv1').value = s.hpRepair;
+    if(s.hpNew      != null) document.getElementById('inv2').value = s.hpNew;
+    if(s.footNew    != null) document.getElementById('inv3').value = s.footNew;
+    if(s.footRepair != null) document.getElementById('inv4').value = s.footRepair;
+    var ok=['hpRepair','hpNew','footNew','footRepair'].filter(function(k){return s[k]!=null;}).length;
+    st.textContent = ok===4
+      ? '✅ 재고 시트 연동 — 4/4 항목 자동 입력 ('+d.updated+')'
+      : (ok? '✅ '+ok+'/4 항목 자동 입력 — 나머지는 직접 입력 ('+d.updated+')'
+           : '⚠️ 자동 매칭 실패 — inspectInventory 로그 확인 필요, 직접 입력하세요');
+    st.style.color = ok? 'var(--green)' : 'var(--red)';
+  }).catch(function(){
+    st.textContent='⚠️ 네트워크 오류 — 직접 입력하세요'; st.style.color='var(--red)';
+  });
 }
 function closeWeekly(){ document.getElementById('wkModal').classList.remove('show'); }
 document.getElementById('wkModal').addEventListener('click',function(e){ if(e.target.id==='wkModal') closeWeekly(); });
@@ -546,6 +579,11 @@ async function makeWeeklyPPT(){
     s.addShape(pptx.shapes.LINE,{x:9.7,y:3.72,w:3.15,h:0,line:{color:C.line,width:1}});
     tx('총 합계',{x:9.8,y:3.8,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
     tx(String(partTot),{x:12.15,y:3.8,w:0.7,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+    /* 유상=새제품 SN 투입 · 무상=리페어 SN 투입 규칙 반영 */
+    var partRows=cur.filter(function(r){return r.part&&r.part!=='없음';});
+    var newCnt=partRows.filter(function(r){return r.paid==='유상'||r._cost>0;}).length;
+    tx('유상(새제품) '+newCnt+'건 · 무상(리페어) '+(partRows.length-newCnt)+'건',
+       {x:9.7,y:4.06,w:3.2,h:0.2,fontSize:8,color:C.mut,align:'right'});
 
     /* ④ 고장 상세 */
     card(0.25,4.45,4.5,2.6);
