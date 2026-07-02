@@ -15,8 +15,8 @@ const ASSETS = [
   './user_guide.html',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
-  './dashboard.html'
+  './icon-512.png',
+  './dashboard.html',
 ];
 
 // 설치: 모든 도구 파일을 캐시에 저장하고 즉시 활성화 대기 해제
