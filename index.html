@@ -12,7 +12,6 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js"></script>
 <style>
   :root{
     --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
@@ -1824,6 +1823,11 @@ document.getElementById('appBtnSurvey').addEventListener('click', function(){ lo
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
+document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
+document.getElementById('appBtnDashboard').addEventListener('click', function(){
+  if(unlockLevel<3){ alert('보안레벨 3(수석 매니저) 인증이 필요합니다.'); return; }
+  location.href='dashboard.html';
+});
 
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
