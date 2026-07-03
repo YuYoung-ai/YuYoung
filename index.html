@@ -1827,7 +1827,7 @@ document.getElementById('appBtnManager').addEventListener('click', function(){ o
 
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
-var MGR_GAS_URL='';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
+var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
 var MGR_TAX=null;     // {유형:[...]} 평탄화된 유형 목록
 function mgrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function mgrNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
