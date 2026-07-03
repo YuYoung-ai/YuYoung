@@ -691,15 +691,26 @@ function loadInventory(){
 function closeWeekly(){ document.getElementById('wkModal').classList.remove('show'); }
 document.getElementById('wkModal').addEventListener('click',function(e){ if(e.target.id==='wkModal') closeWeekly(); });
 
-/* PptxGenJS 지연 로드 (최초 1회) */
+/* PptxGenJS 지연 로드 — jsDelivr(공식) 우선, 실패 시 폴백 CDN 순차 시도 */
+var PPTX_CDNS=[
+  'https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+];
 function loadPptxLib(){
-  return new Promise(function(res,rej){
-    if(window.PptxGenJS) return res();
-    var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js';
-    s.onload=res; s.onerror=function(){rej('라이브러리 로드 실패 — 네트워크 확인');};
-    document.head.appendChild(s);
-  });
+  if(window.PptxGenJS) return Promise.resolve();
+  return PPTX_CDNS.reduce(function(chain,url){
+    return chain.catch(function(){
+      return new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src=url;
+        s.onload=function(){ window.PptxGenJS ? res() : rej('로드 후 초기화 실패'); };
+        s.onerror=function(){ rej('CDN 실패: '+url); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.reject('start'))
+  .catch(function(e){ throw 'PPT 라이브러리 로드 실패 — 네트워크 확인'; });
 }
 
 function cnt(rows,key){
