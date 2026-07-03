@@ -151,8 +151,13 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
     <h2>📑 주간업무보고(VOC) PPT 생성</h2>
     <div class="mrow">
       <label>보고 주차 (월~금)</label>
-      <select id="wkSel"></select>
+      <select id="wkSel" onchange="suggestWkDetail()"></select>
       <div class="mhint">시트 처리일 기준 최근 8주</div>
+    </div>
+    <div class="mrow">
+      <label>고장 상세 <span style="font-weight:400;color:var(--text-muted)">· 한 줄에 "유형: 설명" · 직접 수정</span></label>
+      <textarea id="wkDetail" rows="3" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--gray-line);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:72px;line-height:1.5"></textarea>
+      <div class="mhint">주차 선택 시 상위 유형 기준 초안 자동 제안 (최대 3줄 반영)</div>
     </div>
     <div class="mrow">
       <label>재고 현황 <span style="font-weight:400;color:var(--text-muted)">· 재고 시트 자동 연동, 수정 가능</span></label>
@@ -259,7 +264,7 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
 
 <script>
 /* ▼▼ handover_gas.gs 배포 URL (handover.html의 HANDOVER_URL과 동일) ▼▼ */
-var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+var HANDOVER_URL='';
 
 var CACHE_KEY='baz_dash_cache';
 var RAW=[];              // 전체 레코드
@@ -666,6 +671,7 @@ function openWeekly(){
     ['inv1','inv2','inv3','inv4'].forEach(function(id){ if(inv[id]!=null) document.getElementById(id).value=inv[id]; });
   }catch(e){}
   document.getElementById('wkModal').classList.add('show');
+  suggestWkDetail();
   loadInventory();
 }
 function loadInventory(){
@@ -721,6 +727,30 @@ function topOf(m,excl){
   return Object.keys(m).filter(function(k){return !excl||!excl(k);})
     .map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
 }
+/* 고정 앵커 항목을 항상 1행에 배치 (없으면 0건으로 표기) */
+function anchorFirst(pairs, anchor){
+  var an=nkey(anchor), idx=-1;
+  for(var i=0;i<pairs.length;i++){
+    var k=nkey(pairs[i][0]);
+    if(k===an || k.indexOf(an)>=0 || an.indexOf(k)>=0){ idx=i; break; }
+  }
+  if(idx>=0){ pairs.unshift(pairs.splice(idx,1)[0]); }
+  else pairs.unshift([anchor,0]);
+  return pairs;
+}
+/* 선택 주차 기준 고장 상세 초안 자동 제안 */
+function suggestWkDetail(){
+  var sel=document.getElementById('wkSel'); if(!sel.value) return;
+  var mon=new Date(sel.value+'T00:00:00');
+  var cur=rowsBetween(mon, addD(mon,4));
+  var top=anchorFirst(topOf(cnt(cur,'type'), isOK), '노즐누수(젯팅/녹물)').slice(0,3);
+  document.getElementById('wkDetail').value=top.map(function(p){
+    var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
+    var line=row?String(row.detail).split('\n')[0]:'';
+    if(line.length>40)line=line.slice(0,40)+'…';
+    return p[0]+': '+line;
+  }).join('\n');
+}
 function deltaTxt(cur,prev){
   if(cur>prev)  return {t:'▲ '+(cur-prev)+' 전주 대비', c:C.red};
   if(cur<prev)  return {t:'▼ '+(prev-cur)+' 전주 대비', c:C.green};
@@ -741,9 +771,10 @@ async function makeWeeklyPPT(){
     /* 집계 */
     var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
     var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
-    var types=topOf(typeC,isOK).slice(0,3);
+    var types=anchorFirst(topOf(typeC,isOK), '노즐누수(젯팅/녹물)').slice(0,3);
     var okCnt=topOf(typeC,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
-    var parts=topOf(partC).slice(0,3);
+    var okPrev=topOf(typeP,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
+    var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,3);
     var partTot=Object.keys(partC).reduce(function(a,k){return a+partC[k];},0);
     /* 월 내 주별 추이 */
     var m1=monday(new Date(mon.getFullYear(),mon.getMonth(),1));
@@ -751,20 +782,35 @@ async function makeWeeklyPPT(){
     var weeks=[]; for(var w=new Date(m1); w.getMonth()===mon.getMonth(); w=addD(w,7)){
       weeks.push({mon:new Date(w), n:rowsBetween(w,addD(w,4)).length, cur:ymd(w)===ymd(mon)});
     }
-    /* 고장 상세: 상위 유형별 대표 내용 */
-    var details=types.map(function(p){
-      var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
-      var line=row?String(row.detail).split('\n')[0]:'';
-      if(line.length>42)line=line.slice(0,42)+'…';
-      return {name:p[0], desc:line||'—'};
-    });
+    /* 고장 상세: 모달 수기 입력 우선 ("유형: 설명" 줄), 비어 있으면 자동 초안 */
+    var details=String(document.getElementById('wkDetail').value||'').split('\n')
+      .map(function(l){return l.trim();}).filter(Boolean).slice(0,3)
+      .map(function(l){
+        var ci=l.indexOf(':');
+        return ci>0 ? {name:l.slice(0,ci).trim(), desc:l.slice(ci+1).trim()||'—'}
+                    : {name:l, desc:'—'};
+      });
+    if(!details.length){
+      details=types.map(function(p){
+        var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
+        var line=row?String(row.detail).split('\n')[0]:'';
+        if(line.length>42)line=line.slice(0,42)+'…';
+        return {name:p[0], desc:line||'—'};
+      });
+    }
 
     /* ── 슬라이드 ── */
+    var FONT='맑은 고딕';
     var pptx=new PptxGenJS();
     pptx.defineLayout({name:'W',width:13.33,height:7.5}); pptx.layout='W';
+    pptx.theme={headFontFace:FONT, bodyFontFace:FONT};
     var s=pptx.addSlide();
     function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:'FFFFFF'},line:{color:C.line,width:1}}); }
-    function tx(t,o){ s.addText(t,o); }
+    function tx(t,o){
+      o=o||{}; if(!o.fontFace) o.fontFace=FONT;
+      if(Array.isArray(t)) t.forEach(function(run){ run.options=run.options||{}; if(!run.options.fontFace) run.options.fontFace=FONT; });
+      s.addText(t,o);
+    }
 
     /* 로고 · 타이틀 바 */
     tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
@@ -790,56 +836,59 @@ async function makeWeeklyPPT(){
       tx(wkNo(w.mon)+'주차',{x:x-0.15,y:base+0.03,w:bw+0.3,h:0.24,fontSize:9,align:'center',color:C.mut});
     });
 
-    /* ② VOC 유형 */
+    /* ② VOC 유형 — 유형 | 전주 대비 | 건수 (모든 행 표기) */
     card(4.95,1.4,4.35,2.85);
     tx('VOC 유형',{x:5.15,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    tx('유형',{x:5.35,y:1.86,w:2,h:0.26,fontSize:9,color:C.mut});
+    tx('유형',{x:5.35,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
+    tx('전주 대비',{x:7.1,y:1.86,w:1.15,h:0.26,fontSize:9,color:C.mut});
     tx('건수',{x:8.35,y:1.86,w:0.75,h:0.26,fontSize:9,color:C.mut,align:'right'});
     var ry=2.16;
     types.forEach(function(p,i){
-      if(i===0){
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.95,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
-        var dt=deltaTxt(p[1], typeP[p[0]]||0);
-        tx(dt.t,{x:7.15,y:ry,w:1.15,h:0.3,fontSize:8.5,bold:true,color:dt.c});
-      }
-      tx(p[0],{x:5.25,y:ry,w:1.8,h:0.3,fontSize:10.5,bold:i===0,color:'333333'});
+      if(i===0) s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.85,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
+      var dt=deltaTxt(p[1], typeP[p[0]]||0);
+      tx(p[0],{x:5.25,y:ry,w:1.7,h:0.3,fontSize:9.5,bold:i===0,color:'333333'});
+      tx(dt.t,{x:7.1,y:ry,w:1.2,h:0.3,fontSize:8,bold:true,color:dt.c});
       tx(String(p[1]),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       ry+=0.4;
     });
-    if(okCnt){
-      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.95,h:0.34,rectRadius:0.05,fill:{color:C.ghl}});
-      tx('이상 없음',{x:5.25,y:ry,w:1.8,h:0.3,fontSize:10.5,color:C.green});
+    if(okCnt || okPrev){
+      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.85,h:0.34,rectRadius:0.05,fill:{color:C.ghl}});
+      var dOk=deltaTxt(okCnt, okPrev);
+      tx('이상 없음',{x:5.25,y:ry,w:1.7,h:0.3,fontSize:9.5,color:C.green});
+      tx(dOk.t,{x:7.1,y:ry,w:1.2,h:0.3,fontSize:8,bold:true,color:dOk.c});
       tx(String(okCnt),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       ry+=0.4;
     }
     s.addShape(pptx.shapes.LINE,{x:5.15,y:ry+0.02,w:3.95,h:0,line:{color:C.line,width:1}});
     tx('총 합계',{x:5.25,y:ry+0.08,w:2,h:0.32,fontSize:11,bold:true,color:C.navy});
+    var dTot=deltaTxt(cur.length, prev.length);
+    tx(dTot.t,{x:7.1,y:ry+0.1,w:1.2,h:0.28,fontSize:8,bold:true,color:dTot.c});
     tx(String(cur.length),{x:8.35,y:ry+0.08,w:0.75,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
 
-    /* ③ 교체품 현황 */
+    /* ③ 교체품 현황 — 각 행에 전주 대비 표기 */
     card(9.5,1.4,3.55,2.85);
     tx('교체품 현황',{x:9.7,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
     tx('교체품',{x:9.9,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
     tx('수량',{x:12.15,y:1.86,w:0.7,h:0.26,fontSize:9,color:C.mut,align:'right'});
     var py=2.16;
     parts.forEach(function(p,i){
-      if(i===0){
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.75,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
-        var dp=deltaTxt(p[1], partP[p[0]]||0);
-        tx(dp.t,{x:11.5,y:py+0.28,w:1.4,h:0.26,fontSize:8,bold:true,color:dp.c});
-      }
-      tx(p[0],{x:9.8,y:py,w:1.6,h:0.3,fontSize:10,bold:i===0,color:'333333'});
+      if(i===0) s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.75,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
+      var dp=deltaTxt(p[1], partP[p[0]]||0);
+      tx(p[0],{x:9.8,y:py,w:1.7,h:0.3,fontSize:9.5,bold:i===0,color:'333333'});
       tx(String(p[1]),{x:12.15,y:py,w:0.7,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      tx(dp.t,{x:9.8,y:py+0.26,w:2.4,h:0.2,fontSize:7.5,bold:true,color:dp.c});
       py+=0.52;
     });
     s.addShape(pptx.shapes.LINE,{x:9.7,y:3.72,w:3.15,h:0,line:{color:C.line,width:1}});
     tx('총 합계',{x:9.8,y:3.8,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
+    var dPt=deltaTxt(partTot, Object.keys(partP).reduce(function(a,k){return a+partP[k];},0));
+    tx(dPt.t,{x:9.8,y:4.06,w:1.7,h:0.2,fontSize:7.5,bold:true,color:dPt.c});
     tx(String(partTot),{x:12.15,y:3.8,w:0.7,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
     /* 유상=새제품 SN 투입 · 무상=리페어 SN 투입 규칙 반영 */
     var partRows=cur.filter(function(r){return r.part&&r.part!=='없음';});
     var newCnt=partRows.filter(function(r){return r.paid==='유상'||r._cost>0;}).length;
     tx('유상(새제품) '+newCnt+'건 · 무상(리페어) '+(partRows.length-newCnt)+'건',
-       {x:9.7,y:4.06,w:3.2,h:0.2,fontSize:8,color:C.mut,align:'right'});
+       {x:11.0,y:4.06,w:1.95,h:0.2,fontSize:7.5,color:C.mut,align:'right'});
 
     /* ④ 고장 상세 */
     card(0.25,4.45,4.5,2.6);
