@@ -226,11 +226,16 @@
       <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-
-    <button type="button" id="appBtnHandover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
-      <span style="font-size:24px;">✍</span>
-      <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">카톡/Flow 양식 생성 · 시트 자동 기록</span></span>
-      <span style="color:#8EA0C8;">→</span>
+    <button type="button" id="appBtnHandover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(46,125,158,.5);background:rgba(46,125,158,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">📤</span>
+      <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#7EC8E0;">처리 내용 → 카톡 공유 · 시트 자동 기록</span></span>
+      <span style="color:#7EC8E0;">→</span>
+    </button>
+    <!-- AI 트러블슈팅 챗봇 -->
+    <button type="button" id="appBtnChatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(46,125,158,.5);background:rgba(46,125,158,.1);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">🤖</span>
+      <span style="flex:1;"><span class="tool-name">AI 트러블슈팅</span><br><span style="font-size:11px;font-weight:500;color:#7EC8E0;">증상 입력 → 3단계 즉시 안내</span></span>
+      <span style="color:#7EC8E0;">→</span>
     </button>
     <button type="button" id="appBtnHospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🏥</span>
@@ -243,40 +248,6 @@
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
-
-    <!-- 보안레벨 3 전용: 수석 매니저 가이드 -->
-    <button type="button" id="appBtnManager" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
-      <span style="font-size:24px;">🧭</span>
-      <span style="flex:1;"><span class="tool-name">수석 매니저 가이드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">유형별 [문제 확인→해결→후속 조치] · Lv.3</span></span>
-      <span style="color:#9FE0CC;">🔐→</span>
-    </button>
-
-    <!-- 보안레벨 3 전용: 현장 처리 대시보드 -->
-    <button type="button" id="appBtnDashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
-      <span style="font-size:24px;">📊</span>
-      <span style="flex:1;"><span class="tool-name">현장 처리 대시보드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">집계·필터·주간보고 PPT · Lv.3</span></span>
-      <span style="color:#9FE0CC;">🔐→</span>
-    </button>
-  </div>
-
-  <!-- 수석 매니저 가이드 패널 (보안레벨 3) -->
-  <div id="mgrPanel" style="display:none;position:fixed;inset:0;z-index:60;background:#F5F7FA;flex-direction:column;">
-    <div style="background:#1B2F5E;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;">
-      <button type="button" onclick="closeMgr()" style="border:none;background:transparent;color:#fff;font-size:20px;cursor:pointer;padding:2px 6px;font-family:inherit;">←</button>
-      <div style="flex:1;">
-        <div style="font-size:15px;font-weight:700;">🧭 수석 매니저 가이드</div>
-        <div style="font-size:11px;color:#B9C6E4;">문제 확인 ➡️ 문제 해결 ➡️ 후속 조치 · 유형 마스터 + 최근 사례 기반</div>
-      </div>
-    </div>
-    <div style="padding:14px 16px;max-width:560px;width:100%;margin:0 auto;flex:1;overflow:auto;-webkit-overflow-scrolling:touch;box-sizing:border-box;">
-      <div style="position:relative;">
-        <input id="mgrQ" autocomplete="off" placeholder="유형 또는 증상 입력 (예: 노즐누수, 풋스위치)"
-          style="width:100%;box-sizing:border-box;padding:13px 12px;border:1px solid #DDE3EE;border-radius:10px;font-size:14.5px;font-family:inherit;min-height:47px;">
-        <div id="mgrDrop" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:5;background:#fff;border:1px solid #DDE3EE;border-radius:10px;max-height:40vh;overflow:auto;box-shadow:0 8px 24px rgba(27,47,94,.16);margin-top:4px;"></div>
-      </div>
-      <div id="mgrChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;"></div>
-      <div id="mgrOut" style="margin-top:14px;"></div>
-    </div>
   </div>
 
   <!-- 2단계: 언어 선택 (AS 보고서 선택 시) -->
@@ -1735,7 +1706,7 @@ document.getElementById('hubLangSwitch').addEventListener('click',e=>{
 
 // ===== 허브: 잠금 (서버 토큰 인증) =====
 // 비밀번호는 더 이상 코드에 없습니다. 서버(auth.js)가 검증합니다.
-let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자, 3=수석 매니저
+let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자
 
 function unlockTools(level){
   unlockLevel=level;
@@ -1746,9 +1717,6 @@ function unlockTools(level){
   // 숨김 도구는 관리자(2)에서만 노출
   document.getElementById('appBtnSurvey').style.display = (level>=2)?'flex':'none';
   document.getElementById('appBtnHospital').style.display = (level>=2)?'flex':'none';
-  // 수석 매니저 가이드·대시보드는 보안레벨 3에서만 노출
-  document.getElementById('appBtnManager').style.display = (level>=3)?'flex':'none';
-  document.getElementById('appBtnDashboard').style.display = (level>=3)?'flex':'none';
 }
 
 const hubPwModal=document.getElementById('hubPwModal');
@@ -1822,107 +1790,9 @@ document.getElementById('appBtnReport').addEventListener('click', function(){
 document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
+document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
-document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
-
-// ===== 수석 매니저 가이드 (보안레벨 3) =====
-// handover 확장 웹앱(action=master/guide)을 사용합니다.
-var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
-var MGR_TAX=null;     // {유형:[...]} 평탄화된 유형 목록
-function mgrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function mgrNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
-
-function openMgr(){
-  if(unlockLevel<3){ alert('보안레벨 3(수석 매니저) 인증이 필요합니다.'); return; }
-  document.getElementById('mgrPanel').style.display='flex';
-  document.getElementById('mgrQ').value='';
-  document.getElementById('mgrOut').innerHTML='';
-  loadMgrTax();
-  setTimeout(function(){ document.getElementById('mgrQ').focus(); },100);
-}
-function closeMgr(){ document.getElementById('mgrPanel').style.display='none'; }
-
-function loadMgrTax(){
-  if(MGR_TAX){ renderMgrChips(); return; }
-  if(!MGR_GAS_URL){
-    document.getElementById('mgrOut').innerHTML='<div style="color:#C0392B;font-size:13px;">⚠️ MGR_GAS_URL 미설정 — index.html 상단에 handover 배포 URL을 입력하세요.</div>';
-    return;
-  }
-  document.getElementById('mgrChips').innerHTML='<span style="font-size:12px;color:#6B7A99;">유형 목록 불러오는 중…</span>';
-  fetch(MGR_GAS_URL+'?action=master').then(function(r){return r.json();}).then(function(d){
-    if(!d.success){ document.getElementById('mgrChips').innerHTML=''; return; }
-    var list=[];
-    Object.keys(d.taxonomy||{}).forEach(function(cat){
-      d.taxonomy[cat].forEach(function(p){ if(list.indexOf(p[1])<0) list.push(p[1]); });
-    });
-    MGR_TAX=list;
-    renderMgrChips();
-  }).catch(function(){ document.getElementById('mgrChips').innerHTML=''; });
-}
-function renderMgrChips(){
-  var top=(MGR_TAX||[]).slice(0,8);
-  document.getElementById('mgrChips').innerHTML=top.map(function(tp){
-    return '<button type="button" onclick="mgrGuide(\''+mgrEsc(tp).replace(/'/g,"\\'")+'\')" style="border:1px solid #DDE3EE;background:#fff;border-radius:16px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer;color:#1B2F5E;">'+mgrEsc(tp)+'</button>';
-  }).join('');
-}
-document.getElementById('mgrQ').addEventListener('input', function(){
-  var q=mgrNorm(this.value), drop=document.getElementById('mgrDrop');
-  if(!q||!MGR_TAX){ drop.style.display='none'; return; }
-  var hit=MGR_TAX.filter(function(tp){ return mgrNorm(tp).indexOf(q)>=0; }).slice(0,8);
-  if(!hit.length){ drop.style.display='none'; return; }
-  drop.innerHTML=hit.map(function(tp){
-    return '<div onclick="mgrGuide(\''+mgrEsc(tp).replace(/'/g,"\\'")+'\')" style="padding:12px;min-height:44px;box-sizing:border-box;font-size:13.5px;cursor:pointer;border-bottom:1px solid #F0F3F8;display:flex;align-items:center;">'+mgrEsc(tp)+'</div>';
-  }).join('');
-  drop.style.display='block';
-});
-document.getElementById('mgrQ').addEventListener('keydown', function(e){
-  if(e.key!=='Enter') return;
-  var q=mgrNorm(this.value);
-  if(!q) return;
-  var hit=(MGR_TAX||[]).filter(function(tp){ return mgrNorm(tp).indexOf(q)>=0; });
-  if(hit.length) mgrGuide(hit[0]);
-  else document.getElementById('mgrOut').innerHTML='<div style="font-size:13px;color:#6B7A99;">일치하는 유형이 없습니다. 아래 추천 칩에서 선택해 주세요.</div>';
-});
-function mgrGuide(type){
-  document.getElementById('mgrDrop').style.display='none';
-  document.getElementById('mgrQ').value=type;
-  var out=document.getElementById('mgrOut');
-  out.innerHTML='<div style="font-size:13px;color:#6B7A99;">🧭 가이드 생성 중…</div>';
-  fetch(MGR_GAS_URL+'?action=guide&type='+encodeURIComponent(type))
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.success){ out.innerHTML='<div style="color:#C0392B;font-size:13px;">❌ '+mgrEsc(d.error||'조회 실패')+'</div>'; return; }
-      var secs=String(d.guide||'').split(/\n\n(?=\d️⃣)/);
-      var head=secs.shift()||'';
-      var colors=['#2E7D9E','#1E7E4E','#B8860B'];
-      out.innerHTML=
-        '<div style="background:#1B2F5E;color:#fff;border-radius:10px;padding:12px 14px;font-size:13.5px;font-weight:700;">'+mgrEsc(head.trim())+'</div>'
-        +secs.map(function(sec,i){
-          var lines=sec.trim().split('\n');
-          var title=lines.shift();
-          return '<div style="background:#fff;border:1px solid #DDE3EE;border-left:4px solid '+colors[i%3]+';border-radius:10px;padding:12px 14px;margin-top:10px;">'
-            +'<div style="font-size:13px;font-weight:700;color:'+colors[i%3]+';margin-bottom:6px;">'+mgrEsc(title)+'</div>'
-            +'<div style="font-size:13px;line-height:1.65;color:#1A1A2E;white-space:pre-line;">'+mgrEsc(lines.join('\n'))+'</div></div>';
-        }).join('')
-        +((d.recentCases&&d.recentCases.length)
-          ? '<div style="margin-top:12px;font-size:12px;font-weight:700;color:#6B7A99;">최근 동일 유형 사례 '+d.recentCases.length+'건</div>'
-            +d.recentCases.map(function(c){
-              return '<div style="background:#FFFBEF;border:1px solid #F0E2B8;border-radius:8px;padding:10px 12px;margin-top:6px;font-size:12.5px;line-height:1.5;">'
-                +'<b>'+mgrEsc(c.date)+' · '+mgrEsc(c.hosp)+'</b> ('+mgrEsc(c.fse)+' · '+mgrEsc(c.gubun)+')'
-                +(c.part&&c.part!=='없음'?'<br>교체: '+mgrEsc(c.part):'')
-                +(c.detail?'<br>'+mgrEsc(String(c.detail).split('\n')[0]):'')+'</div>';
-            }).join('')
-          : '')
-        +'<button type="button" onclick="mgrCopy()" style="margin-top:14px;width:100%;padding:12px;border:none;border-radius:9px;background:#1B2F5E;color:#fff;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">📋 가이드 복사</button>';
-      out.dataset.guide=d.guide||'';
-    })
-    .catch(function(){ out.innerHTML='<div style="color:#C0392B;font-size:13px;">❌ 네트워크 오류 — 연결 확인</div>'; });
-}
-function mgrCopy(){
-  var t=document.getElementById('mgrOut').dataset.guide||'';
-  if(!t) return;
-  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(function(){ alert('복사되었습니다.'); }); }
-}
+document.getElementById('appBtnChatbot').addEventListener('click', function(){ location.href='chatbot.html'; });
 document.getElementById('backToApps').addEventListener('click', function(){
   document.getElementById('langSelectStage').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
