@@ -38,8 +38,36 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
   display:flex;justify-content:space-between;align-items:center}
 .filters summary::-webkit-details-marker{display:none}
 .filters summary .cnt{font-size:11px;color:var(--teal);font-weight:600}
-.fgroup{margin-top:10px}
-.fgroup h5{margin:0 0 5px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
+.fgroup{margin-top:10px;padding-top:10px;border-top:1px dashed #E4E9F2}
+.fgroup:first-of-type{border-top:none;padding-top:4px}
+.fgroup h5{margin:0 0 6px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
+.range-row{display:flex;align-items:center;gap:6px}
+.range-row input[type=date]{flex:1;min-width:0;padding:9px 8px;border:1px solid var(--gray-line);
+  border-radius:8px;font-size:13px;font-family:inherit;-webkit-appearance:none;appearance:none;background:#fff}
+.range-row input[type=date]:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.range-row .tilde{color:var(--text-muted);flex-shrink:0}
+/* 검색형 드롭다운 */
+.cb-wrap{position:relative}
+.ac2{display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;
+  border:1px solid var(--gray-line);border-radius:10px;max-height:40vh;overflow:auto;
+  box-shadow:0 8px 24px rgba(27,47,94,.16);margin-top:4px;-webkit-overflow-scrolling:touch}
+.cb-item{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:11px 12px;min-height:44px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F3F8}
+.cb-item:last-child{border-bottom:none}
+.cb-item:active{background:var(--teal-soft)}
+.cb-item.on{background:var(--teal-soft);font-weight:700;color:var(--teal)}
+.cb-item b{color:var(--text-muted);font-weight:400;font-size:11px;white-space:nowrap}
+/* N-Care 정기점검 현황 */
+.nck-sum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nck-badge{flex:1;min-width:70px;text-align:center;border-radius:8px;padding:7px 4px;font-size:11px;color:#fff}
+.nck-badge b{display:block;font-size:17px;line-height:1.2}
+.nck-list{max-height:260px;overflow:auto;-webkit-overflow-scrolling:touch}
+.nck-row{display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid #F0F3F8;font-size:12.5px}
+.nck-row:last-child{border-bottom:none}
+.nck-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.nck-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nck-row .gd{color:var(--teal);font-size:11px;flex-shrink:0}
+.nck-row .dy{color:var(--text-muted);font-size:11px;white-space:nowrap;flex-shrink:0}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 @media (max-width:560px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch} }
 .chip{border:1px solid var(--gray-line);background:#fff;color:var(--text);border-radius:16px;
@@ -70,6 +98,8 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
 .hbar:active .tr{filter:brightness(.95)}
 /* 세로 막대(월별) */
 .vchart{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:16px}
+.vchart.vscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.vchart.vscroll .vcol{min-width:38px;flex:1 0 38px}
 .vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
 .vcol .vnum{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:3px}
 .vcol .vbar{width:70%;max-width:44px;background:var(--bar);border-radius:4px 4px 0 0;min-height:2px;transition:height .3s}
@@ -156,22 +186,40 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
     <!-- 필터(슬라이서) -->
     <details class="filters" open id="fbox">
       <summary>🔍 필터 <span class="cnt" id="fCnt"></span></summary>
-      <div class="fgroup"><h5>년 · 월 · 분기</h5>
-        <div class="chips" id="fYear"></div>
-        <div class="chips" id="fMonth" style="margin-top:5px"></div>
-        <div class="chips" id="fQuarter" style="margin-top:5px"></div>
+      <div class="fgroup"><h5>📅 기간 지정</h5>
+        <div class="range-row">
+          <input type="date" id="fFrom" onchange="setRange()">
+          <span class="tilde">~</span>
+          <input type="date" id="fTo" onchange="setRange()">
+        </div>
+        <div class="chips" style="margin-top:6px">
+          <button type="button" class="chip" onclick="preset(7)">최근 7일</button>
+          <button type="button" class="chip" onclick="preset(30)">최근 30일</button>
+          <button type="button" class="chip" onclick="presetThisMonth()">이번 달</button>
+          <button type="button" class="chip" onclick="presetLastWeek()">지난주 월~금</button>
+        </div>
       </div>
-      <div class="fgroup"><h5>점검/AS · 유/무상 · N-Care</h5>
-        <div class="chips" id="fGubun"></div>
-        <div class="chips" id="fPaid" style="margin-top:5px"></div>
-        <div class="chips" id="fNcare" style="margin-top:5px"></div>
+      <div class="fgroup"><h5>년</h5><div class="chips" id="fYear"></div></div>
+      <div class="fgroup"><h5>월</h5><div class="chips" id="fMonth"></div></div>
+      <div class="fgroup"><h5>분기</h5><div class="chips" id="fQuarter"></div></div>
+      <div class="fgroup"><h5>점검 / A·S</h5><div class="chips" id="fGubun"></div></div>
+      <div class="fgroup"><h5>유 / 무상</h5><div class="chips" id="fPaid"></div></div>
+      <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
+      <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
+      <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>유형</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbTypeDrop"></div>
+        </div>
+        <div class="chips" id="fTypeSel" style="margin-top:6px"></div>
       </div>
-      <div class="fgroup"><h5>대분류 · 담당자</h5>
-        <div class="chips" id="fCat"></div>
-        <div class="chips" id="fFse" style="margin-top:5px"></div>
-      </div>
-      <div class="fgroup"><h5>병원 검색</h5>
-        <input class="hosp-search" id="fHosp" placeholder="병원명 입력 시 즉시 필터" oninput="setHospQ(this.value)">
+      <div class="fgroup"><h5>병원</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbHosp" placeholder="병원 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbHospDrop"></div>
+        </div>
+        <div class="chips" id="fHospSel" style="margin-top:6px"></div>
       </div>
       <button class="freset" id="fReset" onclick="resetFilters()">✕ 필터 전체 해제</button>
     </details>
@@ -182,6 +230,13 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
       <div class="vchart" id="cMonth"></div>
     </div>
 
+    <!-- 주차별 추이 -->
+    <div class="card">
+      <h3>주차별 서비스 건수 <span class="tot" id="tWeek"></span></h3>
+      <div class="vchart vscroll" id="cWeek"></div>
+      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text-muted)">막대를 누르면 해당 주(월~일) 기간 필터 · 다시 누르면 해제</div>
+    </div>
+
     <div class="grid2">
       <div class="card"><h3>유형 TOP 10 <span class="tot" id="tType"></span></h3><div id="cType"></div></div>
       <div class="card"><h3>대분류 <span class="tot" id="tCat"></span></h3><div id="cCat"></div></div>
@@ -189,6 +244,12 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
       <div class="card"><h3>N-Care 분포 <span class="tot" id="tNcare"></span></h3><div id="cNcare"></div></div>
       <div class="card"><h3>서비스 병원 TOP 10 <span class="tot" id="tHosp"></span></h3><div id="cHosp"></div></div>
       <div class="card"><h3>담당자별 처리 <span class="tot" id="tFse"></span></h3><div id="cFse"></div></div>
+    </div>
+
+    <!-- N-Care 정기점검 현황 (필터 무관 · 마지막 방문일 기준 현재 상태) -->
+    <div class="card">
+      <h3>🩺 N-Care 정기점검 현황 <span class="tot" id="tNck"></span></h3>
+      <div id="cNck"></div>
     </div>
 
     <div class="status" id="statusLine"></div>
@@ -202,14 +263,21 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 
 var CACHE_KEY='baz_dash_cache';
 var RAW=[];              // 전체 레코드
-var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:''};
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function normD(s){ /* '2026. 6. 25' | '2026-07-01' → {y,m,d,q} */
+function normD(s){ /* '2026. 6. 25' | '2026-07-01' | '2026.317'(점 누락) → {y,m,d,q} */
   var t=String(s||'').replace(/\s/g,'').replace(/\./g,'-').replace(/-+$/,'');
   var p=t.split('-');
   var y=Number(p[0])||0, m=Number(p[1])||0, d=Number(p[2])||0;
+  if(m>12){ /* 'MDD'·'MMDD' 형태로 붙여 쓴 경우 분해 */
+    var s1=String(p[1]);
+    if(s1.length===3){ m=Number(s1[0]);        d=Number(s1.slice(1)); }
+    else if(s1.length===4){ m=Number(s1.slice(0,2)); d=Number(s1.slice(2)); }
+    if(m>12){ m=0; d=0; }
+  }
+  if(d>31) d=0;
   return {y:y, m:m, d:d, q:m?Math.ceil(m/3):0};
 }
 function costNum(s){ var n=Number(String(s||'').replace(/[^\d]/g,'')); return isNaN(n)?0:n; }
@@ -260,7 +328,77 @@ function boot(d, fromCache){
   document.getElementById('app').style.display='block';
   document.getElementById('metaLine').textContent=
     '총 '+RAW.length+'건 · '+(fromCache?'캐시':'시트')+' 기준 '+(d.updated||'');
-  buildFilters(); apply();
+  buildFilters(); initCombos(); apply(); ncareCheck(); loadHospDB();
+}
+
+/* ── N-Care 정기점검 현황 (기준: 30일 정상 / ~60 점검대상 / ~90 권고 / 초과 경고 / 기록없음 미점검) ── */
+var HOSPDB=[];
+function loadHospDB(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
+    if(c&&c.data){ HOSPDB=c.data; ncareCheck(); } }catch(e){}
+  gv('hospdb',{}).then(function(d){
+    if(!d.success||!d.data) return;
+    HOSPDB=d.data;
+    try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
+    ncareCheck();
+  }).catch(function(){});
+}
+function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
+function ncareCheck(){
+  var today=new Date(); today.setHours(0,0,0,0);
+  /* 방문 이력: 병원별 마지막 처리일 (기록의 ncare도 확보) */
+  var visit={};
+  RAW.forEach(function(r){
+    var d=rowDate(r); if(!d || !r.hosp) return;
+    var k=nkey(r.hosp);
+    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:String(r.ncare||'').trim()};
+  });
+  /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
+  var subs={};
+  HOSPDB.forEach(function(h){
+    var nc=String(h.ncare||'').trim();
+    if(nc && !/미가입/.test(nc)) subs[nkey(h.n)]={name:h.n, ncare:nc};
+  });
+  if(!Object.keys(subs).length){
+    Object.keys(visit).forEach(function(k){
+      var nc=visit[k].ncare;
+      if(nc && !/미가입/.test(nc)) subs[k]={name:visit[k].name, ncare:nc};
+    });
+  }
+  var ST=[['정상','var(--green)'],['점검대상','var(--amber)'],['권고','#E67E22'],['경고','var(--red)'],['미점검','#6B7A99']];
+  var list=Object.keys(subs).map(function(k){
+    var vz=visit[k];
+    if(!vz) return {hosp:subs[k].name, ncare:subs[k].ncare, days:null, last:null, si:4};
+    var days=Math.floor((today-vz.last)/86400000);
+    var si = days<=30?0 : days<=60?1 : days<=90?2 : 3;
+    return {hosp:subs[k].name, ncare:subs[k].ncare, days:days, last:vz.last, si:si};
+  });
+  var el=document.getElementById('cNck');
+  document.getElementById('tNck').textContent='가입 병원 '+list.length+'곳'+(HOSPDB.length?' · 병원정보DB 연동':'');
+  if(!list.length){ el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return; }
+  var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
+  var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
+    if(a.si===4&&b.si!==4) return 1;
+    if(b.si===4&&a.si!==4) return -1;
+    return (b.days||0)-(a.days||0);
+  });
+  el.innerHTML=
+    '<div class="nck-sum">'+ST.map(function(s,i){
+      return '<div class="nck-badge" style="background:'+s[1]+'"><b>'+cnt[i]+'</b>'+s[0]+'</div>';
+    }).join('')+'</div>'
+    +(need.length
+      ? '<div class="nck-list">'+need.map(function(x){
+          var dy = x.last
+            ? x.days+'일 경과 · '+(x.last.getMonth()+1)+'/'+x.last.getDate()
+            : '방문 기록 없음';
+          return '<div class="nck-row">'
+            +'<span class="nck-dot" style="background:'+ST[x.si][1]+'"></span>'
+            +'<span class="nm">'+esc(x.hosp)+'</span>'
+            +'<span class="gd">'+esc(x.ncare)+'</span>'
+            +'<span class="dy">'+dy+'</span>'
+          +'</div>';
+        }).join('')+'</div>'
+      : '<div class="empty">🎉 모든 가입 병원이 30일 이내 점검 완료</div>');
 }
 
 /* ── 필터 UI ── */
@@ -284,33 +422,113 @@ function buildFilters(){
   chipGroup('fNcare','ncare', uniq('ncare'));
   chipGroup('fCat','cat', uniq('cat'));
   chipGroup('fFse','fse', uniq('fse'));
+  selChips('fTypeSel','type');
+  selChips('fHospSel','hosp');
+}
+/* 선택된 값 칩 (✕로 해제 — 전역 클릭 핸들러가 처리) */
+function selChips(elId, fkey){
+  document.getElementById(elId).innerHTML=F[fkey].map(function(v){
+    return '<button type="button" class="chip on" data-k="'+fkey+'" data-v="'+esc(v)+'">'+esc(v)+' ✕</button>';
+  }).join('');
+}
+/* 검색형 드롭다운: 입력=검색, 항목 클릭=토글 선택 */
+function combo(inputId, dropId, fkey, key){
+  var inp=document.getElementById(inputId), drop=document.getElementById(dropId);
+  function show(){
+    var q=String(inp.value||'').replace(/\s+/g,'').toLowerCase();
+    var opts=count(RAW, key).filter(function(o){
+      return o[0]!=='(비어 있음)' && (!q || o[0].replace(/\s+/g,'').toLowerCase().indexOf(q)>=0);
+    }).slice(0,12);
+    if(!opts.length){ drop.style.display='none'; return; }
+    drop.innerHTML=opts.map(function(o){
+      var on=F[fkey].indexOf(o[0])>=0;
+      return '<div class="cb-item'+(on?' on':'')+'" data-v="'+esc(o[0])+'"><span>'+esc(o[0])+'</span><b>'+o[1]+'건</b></div>';
+    }).join('');
+    drop.style.display='block';
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  drop.addEventListener('click', function(e){
+    var it=e.target.closest?e.target.closest('.cb-item'):null;
+    if(!it) return;
+    e.stopPropagation();
+    toggleF(fkey, it.getAttribute('data-v'));
+    inp.value=''; drop.style.display='none';
+  });
+  document.addEventListener('click', function(e){
+    if(!inp.contains(e.target) && !drop.contains(e.target)) drop.style.display='none';
+  });
+}
+var COMBO_READY=false;
+function initCombos(){
+  if(COMBO_READY) return;
+  COMBO_READY=true;
+  combo('cbType','cbTypeDrop','type','type');
+  combo('cbHosp','cbHospDrop','hosp','hosp');
 }
 document.addEventListener('click',function(e){
   var c=e.target.closest?e.target.closest('.chip'):null;
-  if(c){ toggleF(c.getAttribute('data-k'), c.getAttribute('data-v')); return; }
+  if(c && c.getAttribute('data-k')){ toggleF(c.getAttribute('data-k'), c.getAttribute('data-v')); return; }
   var hb=e.target.closest?e.target.closest('[data-fk]'):null;
   if(hb){ toggleF(hb.getAttribute('data-fk'), hb.getAttribute('data-fv')); }
 });
+/* ── 기간 지정 ── */
+function setRange(){
+  F.from=document.getElementById('fFrom').value||'';
+  F.to  =document.getElementById('fTo').value||'';
+  apply();
+}
+function setRangeDates(a,b){ /* Date,Date */
+  document.getElementById('fFrom').value=ymd(a);
+  document.getElementById('fTo').value=ymd(b);
+  setRange();
+}
+function preset(days){
+  var end=new Date(); end.setHours(0,0,0,0);
+  var start=addD(end,-(days-1));
+  setRangeDates(start,end);
+}
+function presetThisMonth(){
+  var now=new Date();
+  setRangeDates(new Date(now.getFullYear(),now.getMonth(),1),
+                new Date(now.getFullYear(),now.getMonth()+1,0));
+}
+function presetLastWeek(){
+  var mon=addD(monday(new Date()),-7);
+  setRangeDates(mon, addD(mon,4));
+}
 function toggleF(k,v){
   var i=F[k].indexOf(v);
   if(i>=0)F[k].splice(i,1); else F[k].push(v);
   buildFilters(); apply();
 }
-function setHospQ(v){ F.hospQ=String(v||'').replace(/\s+/g,'').toLowerCase(); apply(); }
+function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
-  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:''};
-  document.getElementById('fHosp').value='';
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+  document.getElementById('cbHosp').value='';
+  document.getElementById('cbType').value='';
+  document.getElementById('fFrom').value='';
+  document.getElementById('fTo').value='';
   buildFilters(); apply();
 }
 function activeCnt(){
   var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp'].forEach(function(k){n+=F[k].length;});
   if(F.hospQ)n++;
+  if(F.from||F.to)n++;
   return n;
 }
 
 /* ── 필터 적용 ── */
 function filtered(){
+  var fromD=F.from?new Date(F.from+'T00:00:00'):null;
+  var toD  =F.to  ?new Date(F.to  +'T23:59:59'):null;
   return RAW.filter(function(r){
+    if(fromD||toD){
+      var d=rowDate(r);
+      if(!d) return false;
+      if(fromD && d<fromD) return false;
+      if(toD   && d>toD)   return false;
+    }
     if(F.year.length   && F.year.indexOf(String(r._y))<0) return false;
     if(F.month.length  && F.month.indexOf(String(r._m))<0) return false;
     if(F.quarter.length&& F.quarter.indexOf(String(r._q))<0) return false;
@@ -347,6 +565,32 @@ function hbars(elId, pairs, top, fkey, totId){
       +'<div class="vl">'+p[1]+'</div></div>';
   }).join('');
 }
+function weekChart(rows){
+  var m={};
+  rows.forEach(function(r){ var d=rowDate(r); if(!d)return; var k=ymd(monday(d)); m[k]=(m[k]||0)+1; });
+  var keys=Object.keys(m).sort().slice(-12);
+  var el=document.getElementById('cWeek');
+  document.getElementById('tWeek').textContent=keys.length+'주';
+  if(!keys.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=Math.max.apply(null,keys.map(function(k){return m[k];}));
+  el.innerHTML=keys.map(function(k){
+    var mon=new Date(k+'T00:00:00');
+    var sel = F.from===k && F.to===ymd(addD(mon,6));
+    return '<div class="vcol'+(sel?' sel':'')+'" onclick="wkPick(\''+k+'\')">'
+      +'<div class="vnum">'+m[k]+'</div>'
+      +'<div class="vbar" style="height:'+Math.max(2,Math.round(m[k]/max*100))+'%"></div>'
+      +'<div class="vlb">'+(mon.getMonth()+1)+'/'+mon.getDate()+'</div></div>';
+  }).join('');
+}
+function wkPick(k){
+  var mon=new Date(k+'T00:00:00'), sun=addD(mon,6);
+  if(F.from===k && F.to===ymd(sun)){
+    document.getElementById('fFrom').value=''; document.getElementById('fTo').value='';
+    setRange();
+  }else{
+    setRangeDates(mon, sun);
+  }
+}
 function monthChart(rows){
   var m={};
   rows.forEach(function(r){ if(!r._y||!r._m)return; var k=r._y+'-'+(r._m<10?'0':'')+r._m; m[k]=(m[k]||0)+1; });
@@ -376,6 +620,7 @@ function apply(){
   document.getElementById('kAs').textContent=rows.length?Math.round(as/rows.length*100)+'%':'0%';
   /* 차트 */
   monthChart(rows);
+  weekChart(rows);
   hbars('cType', count(rows,'type'), 10, 'type', 'tType');
   hbars('cCat',  count(rows,'cat'),  8,  'cat',  'tCat');
   hbars('cPart', count(rows,'part').filter(function(p){return p[0]!=='없음';}), 10, 'part', 'tPart');
