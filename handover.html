@@ -3,557 +3,842 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>현장 처리완료 · 공유 | BAZ CS</title>
+<title>현장 처리 대시보드 | BAZ CS</title>
 <style>
 :root{
   --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+  --bar:#2E7D9E; --bar-dim:#B9CFDD;
   --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
-  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --kakao:#FEE500;
+  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --amber:#B8860B;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--gray-bg);color:var(--text);
   font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-  font-size:15px;line-height:1.5;padding-bottom:120px}
-header{background:var(--navy);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:10}
-header h1{margin:0;font-size:17px;font-weight:700}
-header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
-.wrap{max-width:560px;margin:0 auto;padding:16px}
-.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:16px;margin-bottom:14px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 10px;align-items:end}
-.grid>.field{margin-bottom:0}
-.field{margin-bottom:12px}
-.field.full{grid-column:1/-1}
-label{display:block;font-size:12.5px;font-weight:600;color:var(--navy);margin-bottom:5px}
-label .opt{color:var(--text-muted);font-weight:400}
-input,select,textarea{width:100%;padding:10px 11px;border:1px solid var(--gray-line);
-  border-radius:8px;font-size:14.5px;font-family:inherit;color:var(--text);background:#fff;min-width:0}
-input:not([type=checkbox]),select{min-height:47px;-webkit-appearance:none;appearance:none}
-input[type=date]{display:flex;align-items:center}
-select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7A99' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
-input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
-textarea{resize:vertical;min-height:56px}
-.hp-row{display:grid;grid-template-columns:1fr 22px 1fr;align-items:end;gap:6px}
-.hp2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.ac-drop{display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid var(--gray-line);border-radius:10px;max-height:45vh;overflow:auto;box-shadow:0 8px 24px rgba(27,47,94,.18);margin-top:4px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-.ac-drop.up{top:auto;bottom:100%;margin-top:0;margin-bottom:4px;box-shadow:0 -8px 24px rgba(27,47,94,.18)}
-.ac-item{padding:12px;min-height:46px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid #F0F3F8;font-size:14px}
-.ac-item:last-child{border-bottom:none}
-.ac-item:active{background:var(--teal-soft)}
-.ac-item b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ac-item b mark{background:#FFF3B8;color:inherit;border-radius:2px;padding:0 1px}
-.ac-item span{color:var(--text-muted);font-size:11px;white-space:nowrap;flex-shrink:0}
-.in-wrap{position:relative}
-.in-clear{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:none;border-radius:50%;background:#E8EDF6;color:var(--text-muted);font-size:14px;line-height:26px;text-align:center;cursor:pointer;padding:0}
-.in-wrap input{padding-right:38px}
-/* 최근 처리 이력 카드 */
-.recent-card{display:none;background:#FFFBEF;border:1px solid #F0E2B8;border-radius:10px;padding:12px;margin-top:10px}
-.recent-card h4{margin:0 0 8px;font-size:12.5px;color:#8A6D1A;display:flex;justify-content:space-between;align-items:center}
-.recent-card h4 .cnt{font-weight:400;color:var(--text-muted)}
-.recent-item{background:#fff;border:1px solid #EFE6C8;border-radius:8px;padding:10px;margin-bottom:8px;font-size:13px}
-.recent-item:last-child{margin-bottom:0}
-.recent-top{display:flex;justify-content:space-between;gap:8px;color:var(--text-muted);font-size:11.5px;margin-bottom:4px}
-.recent-body{color:var(--text);line-height:1.45;word-break:break-all}
-.recent-body b{color:var(--navy)}
-.recent-fill{margin-top:8px;width:100%;padding:8px;border:1px solid var(--teal);background:var(--teal-soft);color:var(--teal);border-radius:8px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer}
-.recent-fill:active{filter:brightness(.95)}
-/* 양식 토글 · 오늘 기록 */
-.tpl-tabs{display:flex;gap:4px;background:#E8EDF6;padding:3px;border-radius:8px}
-.tpl-tabs button{border:none;background:transparent;padding:5px 10px;border-radius:6px;font-size:11.5px;font-weight:700;color:var(--text-muted);font-family:inherit;cursor:pointer}
-.tpl-tabs button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.1)}
-.today-link{display:block;text-align:center;margin:4px 0 0;font-size:12.5px;color:var(--teal);font-weight:600;text-decoration:underline;background:none;border:none;font-family:inherit;cursor:pointer;width:100%;padding:8px}
-.sync-badge{font-size:10.5px;color:var(--text-muted);font-weight:400}
-@media (max-width:420px){ body{font-size:14.5px} .grid{gap:10px} }
-.hp-arrow{text-align:center;color:var(--text-muted);font-size:18px;padding-bottom:9px}
-.hint{font-size:11px;color:var(--text-muted);margin-top:4px}
-.sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
-  text-transform:uppercase;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
-/* 미리보기 (카톡 말풍선 느낌) */
-.preview-card{background:var(--teal-soft);border:1px solid #CBE3EE}
-.bubble{background:#fff;border-radius:4px 14px 14px 14px;padding:14px 15px;
-  white-space:pre-wrap;font-size:14px;line-height:1.65;color:#111;
-  border:1px solid #D6E7EF;word-break:break-word}
-.preview-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.preview-head b{font-size:12px;color:var(--navy)}
-/* 하단 고정 버튼 */
-.actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--gray-line);
-  padding:12px 16px;display:flex;gap:10px;max-width:560px;margin:0 auto}
-.btn{flex:1;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;
-  font-family:inherit;cursor:pointer;transition:.15s}
-.btn-copy{background:var(--navy);color:#fff}
-.btn-copy:active{background:var(--navy-light)}
-.btn-share{background:var(--kakao);color:#3A1D1D}
-.btn-share:active{filter:brightness(.94)}
-.btn-save{background:var(--teal);color:#fff}
-.btn-save:active{filter:brightness(.92)}
-.btn-save:disabled{opacity:.5}
-.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(20px);
-  background:var(--navy);color:#fff;padding:10px 20px;border-radius:16px;font-size:13.5px;
-  opacity:0;pointer-events:none;transition:.25s;z-index:20;white-space:pre-line;
-  max-width:88vw;text-align:center;line-height:1.5}
-.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  font-size:14px;line-height:1.5;padding-bottom:40px}
+header{background:var(--navy);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:20;
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{margin:0;font-size:16px;font-weight:700}
+header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
+.hd-btns{display:flex;gap:6px}
+.hd-btn{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:8px;
+  padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.hd-btn:active{background:rgba(255,255,255,.15)}
+.wrap{max-width:1080px;margin:0 auto;padding:12px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.kpi{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:12px 10px;text-align:center}
+.kpi b{display:block;font-size:22px;color:var(--navy);line-height:1.2}
+.kpi span{font-size:11px;color:var(--text-muted)}
+@media (max-width:560px){ .kpis{grid-template-columns:repeat(2,1fr)} .kpi b{font-size:19px} }
+
+/* 필터(슬라이서) */
+.filters{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.filters summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--navy);list-style:none;
+  display:flex;justify-content:space-between;align-items:center}
+.filters summary::-webkit-details-marker{display:none}
+.filters summary .cnt{font-size:11px;color:var(--teal);font-weight:600}
+.fgroup{margin-top:10px;padding-top:10px;border-top:1px dashed #E4E9F2}
+.fgroup:first-of-type{border-top:none;padding-top:4px}
+.fgroup h5{margin:0 0 6px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
+.range-row{display:flex;align-items:center;gap:6px}
+.range-row input[type=date]{flex:1;min-width:0;padding:9px 8px;border:1px solid var(--gray-line);
+  border-radius:8px;font-size:13px;font-family:inherit;-webkit-appearance:none;appearance:none;background:#fff}
+.range-row input[type=date]:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.range-row .tilde{color:var(--text-muted);flex-shrink:0}
+/* 검색형 드롭다운 */
+.cb-wrap{position:relative}
+.ac2{display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;
+  border:1px solid var(--gray-line);border-radius:10px;max-height:40vh;overflow:auto;
+  box-shadow:0 8px 24px rgba(27,47,94,.16);margin-top:4px;-webkit-overflow-scrolling:touch}
+.cb-item{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:11px 12px;min-height:44px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F3F8}
+.cb-item:last-child{border-bottom:none}
+.cb-item:active{background:var(--teal-soft)}
+.cb-item.on{background:var(--teal-soft);font-weight:700;color:var(--teal)}
+.cb-item b{color:var(--text-muted);font-weight:400;font-size:11px;white-space:nowrap}
+/* N-Care 정기점검 현황 */
+.nck-sum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nck-badge{flex:1;min-width:70px;text-align:center;border-radius:8px;padding:7px 4px;font-size:11px;color:#fff}
+.nck-badge b{display:block;font-size:17px;line-height:1.2}
+.nck-list{max-height:260px;overflow:auto;-webkit-overflow-scrolling:touch}
+.nck-row{display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid #F0F3F8;font-size:12.5px}
+.nck-row:last-child{border-bottom:none}
+.nck-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.nck-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nck-row .gd{color:var(--teal);font-size:11px;flex-shrink:0}
+.nck-row .dy{color:var(--text-muted);font-size:11px;white-space:nowrap;flex-shrink:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:560px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch} }
+.chip{border:1px solid var(--gray-line);background:#fff;color:var(--text);border-radius:16px;
+  padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:.12s}
+.chip.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+.chip:active{transform:scale(.96)}
+.hosp-search{width:100%;margin-top:6px;padding:9px 11px;border:1px solid var(--gray-line);border-radius:8px;
+  font-size:13px;font-family:inherit}
+.hosp-search:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.freset{margin-top:10px;width:100%;padding:9px;border:1px solid var(--red);background:#fff;color:var(--red);
+  border-radius:8px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer;display:none}
+
+/* 차트 카드 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:720px){ .grid2{grid-template-columns:1fr} }
+.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:12px;margin-bottom:10px}
+.card h3{margin:0 0 10px;font-size:12.5px;font-weight:700;color:var(--navy);
+  padding-bottom:7px;border-bottom:1px solid var(--gray-line);display:flex;justify-content:space-between}
+.card h3 .tot{color:var(--text-muted);font-weight:400;font-size:11px}
+/* 가로 막대 */
+.hbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
+.hbar .lb{width:34%;font-size:11.5px;text-align:right;color:var(--text);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.hbar .tr{flex:1;background:#F0F4F9;border-radius:4px;height:18px;position:relative;overflow:hidden}
+.hbar .fl{height:100%;background:var(--bar);border-radius:4px;min-width:2px;transition:width .3s}
+.hbar .vl{font-size:11px;font-weight:700;color:var(--navy);width:34px;flex-shrink:0}
+.hbar.sel .fl{background:var(--amber)}
+.hbar:active .tr{filter:brightness(.95)}
+/* 세로 막대(월별) */
+.vchart{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:16px}
+.vchart.vscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.vchart.vscroll .vcol{min-width:38px;flex:1 0 38px}
+.vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.vcol .vnum{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:3px}
+.vcol .vbar{width:70%;max-width:44px;background:var(--bar);border-radius:4px 4px 0 0;min-height:2px;transition:height .3s}
+.vcol.sel .vbar{background:var(--amber)}
+.vcol .vlb{font-size:10.5px;color:var(--text-muted);margin-top:4px;white-space:nowrap}
+.empty{color:var(--text-muted);font-size:12px;text-align:center;padding:14px 0}
+.status{font-size:11px;color:var(--text-muted);text-align:center;margin:6px 0}
+.loading{padding:40px 0;text-align:center;color:var(--text-muted)}
+.spin{display:inline-block;width:22px;height:22px;border:3px solid var(--gray-line);
+  border-top-color:var(--teal);border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+  padding:10px 20px;border-radius:24px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:30}
+.toast.on{opacity:1}
+/* 주간보고 모달 */
+.modal{display:none;position:fixed;inset:0;background:rgba(20,30,60,.5);z-index:40;padding:16px;overflow:auto}
+.modal.show{display:flex;align-items:center;justify-content:center}
+.mbox{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:18px}
+.mbox h2{margin:0 0 12px;font-size:15px;color:var(--navy)}
+.mrow{margin-bottom:12px}
+.mrow label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.mrow select,.mrow input{width:100%;padding:10px;border:1px solid var(--gray-line);border-radius:8px;
+  font-size:14px;font-family:inherit}
+.inv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inv-grid div label{font-weight:400;font-size:11px;color:var(--text-muted)}
+.mbtns{display:flex;gap:8px;margin-top:14px}
+.mbtn{flex:1;padding:12px;border:none;border-radius:9px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+.mbtn.go{background:var(--navy);color:#fff}
+.mbtn.cancel{background:#E8EDF6;color:var(--text-muted)}
+.mhint{font-size:11px;color:var(--text-muted);margin-top:4px}
 </style>
 </head>
 <body>
 <header>
-  <h1>현장 처리완료 · 공유</h1>
-  <p>처리 내용 입력 → 카톡/Flow 양식 자동 생성</p>
+  <div>
+    <h1>📊 현장 처리 대시보드</h1>
+    <div class="sub" id="metaLine">현장 처리 현황(handover) 집계</div>
+  </div>
+  <div class="hd-btns">
+    <button class="hd-btn" onclick="location.href='handover.html'">✍ 기록</button>
+    <button class="hd-btn" onclick="openWeekly()">📑 주간보고</button>
+    <button class="hd-btn" onclick="loadData(true)">🔄 새로고침</button>
+  </div>
 </header>
 
-<div class="wrap">
-  <!-- 입력 -->
-  <div class="card">
-    <p class="sec-title">처리 내용 입력</p>
-    <div class="grid">
-      <div class="field">
-        <label>담당 FSE <span class="opt">(본인)</span></label>
-        <input id="fse" list="fseList" placeholder="예) 권오성" oninput="render();saveFse()">
-        <datalist id="fseList"></datalist>
-      </div>
-      <div class="field">
-        <label>처리일자</label>
-        <input type="date" id="date" oninput="render()">
-      </div>
-      <div class="field">
-        <label>구분</label>
-        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option></select>
-      </div>
-      <div class="field full" style="position:relative">
-        <label>병원명 <span class="opt">· 입력 시 자동완성</span></label>
-        <div class="in-wrap">
-          <input id="hosp" autocomplete="off" placeholder="병원명 검색" oninput="onHospInput()" onfocus="onHospFocus()">
-          <button type="button" id="hospClear" class="in-clear" onclick="clearHosp()">✕</button>
-        </div>
-        <div id="hospDrop" class="ac-drop"></div>
-        <div id="hospMatch" class="hint" style="color:var(--green)"></div>
-        <div id="recentCard" class="recent-card">
-          <h4>🕘 최근 처리 이력 <span class="cnt" id="recentCnt"></span></h4>
-          <div id="recentList"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label>S/N (장비)</label>
-        <select id="sn" onchange="toggleCustom('sn');render()"></select>
-        <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
-      </div>
-      <div class="field">
-        <label>UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
-        <div class="hp2">
-          <input id="verUI" placeholder="UI" oninput="render()">
-          <input id="verHP" placeholder="HP" oninput="render()">
-        </div>
-      </div>
-      <div class="field full">
-        <label>S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
-        <div class="hp2">
-          <input id="hpOut" placeholder="OUT S/N (탈거)" oninput="render()">
-          <input id="wVer" placeholder="OUT Ver" oninput="render()">
-        </div>
-        <div class="hp2" style="margin-top:6px">
-          <input id="hpIn" placeholder="IN S/N (장착)" oninput="render()">
-          <input id="uVer" placeholder="IN Ver" oninput="render()">
-        </div>
-        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기</div>
-      </div>
-      <div class="field">
-        <label>노즐 제조일자</label>
-        <input id="nozzle" placeholder="예) 2025.04.21" oninput="render()">
-      </div>
-      <div class="field">
-        <label>A/S 항목 · 대분류</label>
-        <select id="cat" onchange="fillSub();render()"></select>
-      </div>
-      <div class="field">
-        <label>A/S 항목 · 소분류</label>
-        <select id="sub" onchange="toggleCustom('sub');render()"></select>
-        <input id="subCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
-      </div>
-      <div class="field">
-        <label>교체품</label>
-        <select id="part" onchange="render()"></select>
-      </div>
-      <div class="field">
-        <label>교체비용 <span class="opt">(원)</span></label>
-        <input id="cost" inputmode="numeric" placeholder="예) 1650000" oninput="render()">
-      </div>
-      <div class="field full">
-        <label>A/S 내용 상세 <span class="opt">· 줄마다 " - " 자동</span></label>
-        <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)" oninput="render()"></textarea>
-      </div>
-      <div class="field">
-        <label>A/S 결과</label>
-        <select id="result" onchange="toggleCustom('result');render()">
-          <option>교체</option><option>수리</option><option>정상</option>
-          <option>점검</option><option value="__c">직접입력…</option>
-        </select>
-        <input id="resultCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
-      </div>
-      <div class="field">
-        <label>비고 / 특이사항 <span class="opt">· 없으면 N/A</span></label>
-        <textarea id="remark" placeholder="예) 핸드피스 교체 비용 1,650,000원(부가세 포함) 결제 완료" oninput="render()"></textarea>
+<!-- 주간보고 PPT 생성 모달 -->
+<div class="modal" id="wkModal">
+  <div class="mbox">
+    <h2>📑 주간업무보고(VOC) PPT 생성</h2>
+    <div class="mrow">
+      <label>보고 주차 (월~금)</label>
+      <select id="wkSel"></select>
+      <div class="mhint">시트 처리일 기준 최근 8주</div>
+    </div>
+    <div class="mrow">
+      <label>재고 현황 <span style="font-weight:400;color:var(--text-muted)">· 재고 시트 자동 연동, 수정 가능</span></label>
+      <div class="mhint" id="invStatus" style="margin:0 0 6px">재고 시트 조회 중…</div>
+      <div class="inv-grid">
+        <div><label>Handpiece (Repair)</label><input id="inv1" inputmode="numeric" placeholder="0"></div>
+        <div><label>Handpiece (새제품)</label><input id="inv2" inputmode="numeric" placeholder="0"></div>
+        <div><label>Foot s/w (새제품)</label><input id="inv3" inputmode="numeric" placeholder="0"></div>
+        <div><label>Foot s/w (Repair)</label><input id="inv4" inputmode="numeric" placeholder="0"></div>
       </div>
     </div>
-  </div>
-
-  <!-- 미리보기 -->
-  <div class="card preview-card">
-    <div class="preview-head">
-      <b>공유 미리보기 <span class="sync-badge" id="syncBadge"></span></b>
-      <div class="tpl-tabs">
-        <button id="tplA" class="on" onclick="setTpl('basic')">기본 양식</button>
-        <button id="tplB" onclick="setTpl('sheet')">시트 요약형</button>
-      </div>
+    <div class="mbtns">
+      <button class="mbtn cancel" onclick="closeWeekly()">취소</button>
+      <button class="mbtn go" id="wkGo" onclick="makeWeeklyPPT()">PPT 생성</button>
     </div>
-    <div class="bubble" id="preview"></div>
-    <button class="today-link" onclick="showToday()">📅 오늘 내 기록 확인</button>
   </div>
 </div>
 
-<div class="actions">
-  <button class="btn btn-copy" onclick="copyText()">📋 복사</button>
-  <button class="btn btn-save" onclick="saveToSheet()">📥 시트 기록</button>
+<div class="wrap">
+  <div id="loading" class="loading"><span class="spin"></span><br>시트 데이터 불러오는 중…</div>
+  <div id="app" style="display:none">
+
+    <!-- KPI -->
+    <div class="kpis">
+      <div class="kpi"><b id="kCnt">0</b><span>서비스 건수</span></div>
+      <div class="kpi"><b id="kCost">₩0</b><span>교체비용 합계</span></div>
+      <div class="kpi"><b id="kHosp">0</b><span>서비스 병원 수</span></div>
+      <div class="kpi"><b id="kAs">0%</b><span>A/S 비율</span></div>
+    </div>
+
+    <!-- 필터(슬라이서) -->
+    <details class="filters" open id="fbox">
+      <summary>🔍 필터 <span class="cnt" id="fCnt"></span></summary>
+      <div class="fgroup"><h5>📅 기간 지정</h5>
+        <div class="range-row">
+          <input type="date" id="fFrom" onchange="setRange()">
+          <span class="tilde">~</span>
+          <input type="date" id="fTo" onchange="setRange()">
+        </div>
+        <div class="chips" style="margin-top:6px">
+          <button type="button" class="chip" onclick="preset(7)">최근 7일</button>
+          <button type="button" class="chip" onclick="preset(30)">최근 30일</button>
+          <button type="button" class="chip" onclick="presetThisMonth()">이번 달</button>
+          <button type="button" class="chip" onclick="presetLastWeek()">지난주 월~금</button>
+        </div>
+      </div>
+      <div class="fgroup"><h5>년</h5><div class="chips" id="fYear"></div></div>
+      <div class="fgroup"><h5>월</h5><div class="chips" id="fMonth"></div></div>
+      <div class="fgroup"><h5>분기</h5><div class="chips" id="fQuarter"></div></div>
+      <div class="fgroup"><h5>점검 / A·S</h5><div class="chips" id="fGubun"></div></div>
+      <div class="fgroup"><h5>유 / 무상</h5><div class="chips" id="fPaid"></div></div>
+      <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
+      <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
+      <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>유형</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbTypeDrop"></div>
+        </div>
+        <div class="chips" id="fTypeSel" style="margin-top:6px"></div>
+      </div>
+      <div class="fgroup"><h5>병원</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbHosp" placeholder="병원 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbHospDrop"></div>
+        </div>
+        <div class="chips" id="fHospSel" style="margin-top:6px"></div>
+      </div>
+      <button class="freset" id="fReset" onclick="resetFilters()">✕ 필터 전체 해제</button>
+    </details>
+
+    <!-- 월별 추이 -->
+    <div class="card">
+      <h3>월별 서비스 건수 <span class="tot" id="tMonth"></span></h3>
+      <div class="vchart" id="cMonth"></div>
+    </div>
+
+    <!-- 주차별 추이 -->
+    <div class="card">
+      <h3>주차별 서비스 건수 <span class="tot" id="tWeek"></span></h3>
+      <div class="vchart vscroll" id="cWeek"></div>
+      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text-muted)">막대를 누르면 해당 주(월~일) 기간 필터 · 다시 누르면 해제</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>유형 TOP 10 <span class="tot" id="tType"></span></h3><div id="cType"></div></div>
+      <div class="card"><h3>대분류 <span class="tot" id="tCat"></span></h3><div id="cCat"></div></div>
+      <div class="card"><h3>교체품 <span class="tot" id="tPart"></span></h3><div id="cPart"></div></div>
+      <div class="card"><h3>N-Care 분포 <span class="tot" id="tNcare"></span></h3><div id="cNcare"></div></div>
+      <div class="card"><h3>서비스 병원 TOP 10 <span class="tot" id="tHosp"></span></h3><div id="cHosp"></div></div>
+      <div class="card"><h3>담당자별 처리 <span class="tot" id="tFse"></span></h3><div id="cFse"></div></div>
+    </div>
+
+    <!-- N-Care 정기점검 현황 (필터 무관 · 마지막 방문일 기준 현재 상태) -->
+    <div class="card">
+      <h3>🩺 N-Care 정기점검 현황 <span class="tot" id="tNck"></span></h3>
+      <div id="cNck"></div>
+    </div>
+
+    <div class="status" id="statusLine"></div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
 <script>
-function val(id){return (document.getElementById(id).value||'').trim();}
+/* ▼▼ handover_gas.gs 배포 URL (handover.html의 HANDOVER_URL과 동일) ▼▼ */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
 
-/* AS 항목 분류 코드 마스터 (대분류: [코드, 소분류]) */
-var AS_TAX={
-  "장비":[["E01","메인보드 불량"],["E02","풋스위치 작동 불량"],["E03","출력 저하"],["E04","RFID 스캔 불량"],["E05","냉각수 누수"],["E06","UI 업그레이드"],["E07","팝업 불량"],["E08","디스플레이 터치"],["E09","디스플레이 점등"],["E10","작업불량"],["E11","케이블 불량"],["E12","이상 소음"],["E13","피팅 불량"],["E14","바퀴 파손"],["E15","구동 키 파손"],["E16","거치대 파손"],["E17","ARM 파손"],["E18","커넥터 체결 불량"],["E19","재현 안됨"],["E20","이물"],["E21","냉각수 충전"],["E22","SD카드 교체"],["E23","파워서플라이 불량"],["E24","이상없음"],["E25","장비 교육"],["E26","기타"]],
-  "핸드피스":[["H01","교환 조치"],["H02","냉각 호스 파손"],["H03","노즐 누수/녹물"],["H04","볼트풀림 홀더"],["H05","홀더 파손"],["H06","노즐 체결 강함"],["H07","노즐 체결 약함"],["H08","스프링 파손"],["H09","스프링 끼임"],["H10","바디센터 간섭"],["H11","발열"],["H12","플런저 오작동"],["H13","케이블 불량"],["H14","사용 설명"],["H15","볼트풀림 바디센터"],["H16","재현 안됨"],["H17","이물"],["H18","볼트 파손"],["H19","출력 약함"],["H20","작업불량"],["H21","플런저 후퇴 불량"],["H22","기타"]],
-  "노즐":[["N01","보증샷 초과"],["N02","재사용 노즐"],["N03","RFID 스캔 불량"],["N04","젯팅 불량"],["N05","노즐 막힘"],["N06","체결력 강함"],["N07","체결력 약함"],["N08","노즐 누수"],["N09","크랙"],["N10","후크 파손"],["N11","멤브레인 파손"],["N12","이물"],["N13","볼트 체결"],["N14","작업불량"],["N15","고점도 약물"],["N16","사용 설명"],["N17","기타"]],
-  "기타":[["G01","사용 설명"],["G02","재현 안됨"]]
-};
-function initTax(){
-  var cat=document.getElementById('cat');
-  Object.keys(AS_TAX).forEach(function(k){var o=document.createElement('option');o.textContent=k;cat.appendChild(o);});
-  fillSub();
-}
-function fillSub(){
-  var c=val('cat'), sub=document.getElementById('sub'); sub.innerHTML='';
-  (AS_TAX[c]||[]).forEach(function(p){var o=document.createElement('option');o.value=p[0];o.textContent=p[1];sub.appendChild(o);});
-  var oc=document.createElement('option');oc.value='__c';oc.textContent='직접입력…';sub.appendChild(oc);
-  toggleCustom('sub');
-}
-function subName(){
-  var s=document.getElementById('sub');
-  if(s.value==='__c')return val('subCustom');
-  return (s.options[s.selectedIndex]||{}).textContent||'';
-}
-function itemCode(){var s=document.getElementById('sub');return s.value==='__c'?'':s.value;}
-function itemText(){var c=val('cat'),n=subName();return n?c+' / '+n:c;}
+var CACHE_KEY='baz_dash_cache';
+var RAW=[];              // 전체 레코드
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
 
-function toggleCustom(base){
-  var sel=document.getElementById(base), c=document.getElementById(base+'Custom');
-  c.style.display = (sel.value==='__c') ? 'block' : 'none';
+function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function normD(s){ /* '2026. 6. 25' | '2026-07-01' | '2026.317'(점 누락) → {y,m,d,q} */
+  var t=String(s||'').replace(/\s/g,'').replace(/\./g,'-').replace(/-+$/,'');
+  var p=t.split('-');
+  var y=Number(p[0])||0, m=Number(p[1])||0, d=Number(p[2])||0;
+  if(m>12){ /* 'MDD'·'MMDD' 형태로 붙여 쓴 경우 분해 */
+    var s1=String(p[1]);
+    if(s1.length===3){ m=Number(s1[0]);        d=Number(s1.slice(1)); }
+    else if(s1.length===4){ m=Number(s1.slice(0,2)); d=Number(s1.slice(2)); }
+    if(m>12){ m=0; d=0; }
+  }
+  if(d>31) d=0;
+  return {y:y, m:m, d:d, q:m?Math.ceil(m/3):0};
 }
-function pick(base){
-  var sel=document.getElementById(base);
-  return sel.value==='__c' ? val(base+'Custom') : sel.value;
-}
-function bulletLines(id){
-  return val(id).split('\n').map(function(s){return s.trim();}).filter(Boolean);
-}
-function hpText(){
-  var o=val('hpOut'), i=val('hpIn');
-  if(o&&i) return o+'→'+i;
-  return i||o||'';
-}
-function buildText(){
-  var t='';
-  t+='병원명 : '+val('hosp')+'\n\n';
-  t+='S/N(장비) : '+snVal()+'\n';
-  t+='S/N(핸드피스) : '+hpText()+'\n';
-  t+='노즐 제조일자 : '+val('nozzle')+'\n';
-  t+='A/S 항목 : '+itemText()+'\n';
-  var d=bulletLines('detail');
-  t+='A/S 내용 상세 :\n'+(d.length? d.map(function(l){return '-'+l;}).join('\n') : '-')+'\n';
-  t+='A/S 결과 : '+pick('result')+'\n';
-  var r=bulletLines('remark');
-  t+='비고/특이사항 :'+(r.length? '\n'+r.map(function(l){return '-'+l;}).join('\n') : ' N/A');
-  return t;
-}
-/* 양식 토글: basic=기존 카톡/Flow 양식(불변) · sheet=시트 열 구성 요약형(추가) */
-var TPL='basic';
-function setTpl(t){
-  TPL=t;
-  document.getElementById('tplA').classList.toggle('on',t==='basic');
-  document.getElementById('tplB').classList.toggle('on',t==='sheet');
-  render();
-}
-function buildTextSheet(){
-  var t='📋 현장 처리 보고 ('+ (val('date')||todayISO()) +')\n';
-  t+='─────────────\n';
-  t+='병원명 : '+val('hosp')+'\n';
-  t+='담당 FSE : '+val('fse')+'\n';
-  t+='구분 : '+val('gubun')+'\n';
-  t+='장비 S/N : '+snVal()+'\n';
-  t+='UI/HP Ver : '+[val('verUI'),val('verHP')].filter(Boolean).join(' / ')+'\n';
-  t+='대분류/유형 : '+itemText()+(itemCode()?' ('+itemCode()+')':'')+'\n';
-  t+='교체품 : '+val('part')+(val('cost')?' · '+Number(val('cost')).toLocaleString()+'원':'')+'\n';
-  var hp=hpText(); if(hp) t+='HP 교체 : '+hp+'\n';
-  var d=bulletLines('detail');
-  t+='내용 :\n'+(d.length? d.map(function(l){return ' - '+l;}).join('\n') : ' - ')+'\n';
-  t+='결과 : '+pick('result')+'\n';
-  var r=bulletLines('remark');
-  t+='비고 : '+(r.length? r.join(' / ') : 'N/A');
-  return t;
-}
-function curText(){ return TPL==='sheet' ? buildTextSheet() : buildText(); }
-function render(){ document.getElementById('preview').textContent=curText(); }
+function costNum(s){ var n=Number(String(s||'').replace(/[^\d]/g,'')); return isNaN(n)?0:n; }
 
-/* 병원정보DB (index.html 임베드본 재사용: n=병원명 s=장비S/N c=N-Care sa=영업담당 r=지역) */
-var HOSPITAL_DB = [{"n": "아산본내과", "s": "BV2039", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "레픽의원", "s": "BWB055", "c": "Standard", "sa": "유비야", "r": "서울 / 경기"}, {"n": "루비의원", "s": "BW3011", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "메이저피부과의원 성신여대", "s": "BX7004", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "스노우의원 천안", "s": "BV4004", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "예젤의원", "s": "BW7003", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "셀린의원 하남미사", "s": "BWA038", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "스킨다피부과의원 본점", "s": "BYB016/NV46", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "포시즌의원", "s": "BWC013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "잇츠미의원 평택고덕점", "s": "BV5022", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "오가나셀피부과_동대문점", "s": "BW3007,BX4007", "c": "Premium", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터알의원", "s": "BWA005", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "르네의원", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "오아로피부과 성남", "s": "BX4016", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "에이포의원", "s": "BVB003", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "오체안피부과의원 신사", "s": "BV1007", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "뷰티온의원 인하대점", "s": "BW7002", "c": "미가입", "sa": "유비야", "r": "인천"}, {"n": "다태나의원", "s": "BXA007", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "임이석테마피부과의원", "s": "BX4030", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스누성형외과의원", "s": "BYA008", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "랑뜨산부인과의원", "s": "BV7010", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "모디헤어플란트의원", "s": "NV59", "c": "Premium", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오가나셀 피부과의원 본점 (청담)", "s": "BW4003/BX8014", "c": "Premium", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더셀피부과의원 강남본점", "s": "BX7018", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미세성형외과의원", "s": "BV5005", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "하오덤의원", "s": "", "c": "Basic", "sa": "한송이", "r": "서울 / 경기"}, {"n": "오운의원 구리", "s": "BW3014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더차오름의원", "s": "BX3017", "c": "Basic", "sa": "차성민", "r": "경상"}, {"n": "힐하우스피부과의원 대구", "s": "BVB040", "c": "미가입", "sa": "김한림", "r": "대구"}, {"n": "세예의원 강남", "s": "BW8050", "c": "Standard", "sa": "김민주", "r": "서울 / 경기"}, {"n": "벧엘피부과의원", "s": "BX8010", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "맑고고운라벨라의원", "s": "BX4026,BYB002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "봄여름가을겨울피부과의원", "s": "BYB015", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "프로젝트유의원", "s": "BW1013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "더힐피부과의원 마포공덕", "s": "BV5027", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "셀린의원 분당", "s": "BW3001", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "리더스피부과의원 압구정", "s": "BYB007", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스페이스피부과의원", "s": "BY8003", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "이오의원", "s": "BW1002", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "고운몸의원", "s": "BW1001", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "헤브피부과의원", "s": "BY8005", "c": "Basic", "sa": "차성민", "r": "인천"}, {"n": "오라클피부과의원 인천아라", "s": "BX8008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "신세계안피부과", "s": "BW7038", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "아름다운피부과의원 수원", "s": "BX8003", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "샤인빔의원 강서", "s": "BW7039", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "진스킨의원", "s": "BW1011", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "디오디피부과의원 용산", "s": "BX7005", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "고은미래의원 평택점", "s": "BW3006", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "디렉터피부과의원", "s": "BX3003", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 성북", "s": "BW9023", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 광교", "s": "BXA014", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 개포도곡", "s": "BW9021", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "스노우의원 파주운정", "s": "BV5004", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "차오르다의원", "s": "BW9031", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "피에이치디피부과의원", "s": "BWB002", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오운의원 삼성", "s": "BW9026", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "뷰티스톤의원 합정", "s": "BWA091", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오마스의원", "s": "BWC005", "c": "Basic", "sa": "김민주", "r": "서울 / 경기"}, {"n": "톤즈의원 인천본점", "s": "BWB009", "c": "미가입", "sa": "손지윤", "r": "인천"}, {"n": "뮤즈의원 강남", "s": "BV1002", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "닥터송포유의원", "s": "BV2004", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "클럽미즈라미체의원 잠실", "s": "BW8045", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "이을성형외과의원", "s": "BW4012", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "오아로피부과의원 청량리", "s": "BW7026", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "바노바기피부과", "s": "BX3007", "c": "Standard", "sa": "유비야", "r": "서울 / 경기"}, {"n": "뷰커스의원 강서", "s": "BV9001", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "에이탑성형외과", "s": "BW8043", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "하늘호수피부과의원", "s": "BX4006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 신도림", "s": "BW9036", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "셀린의원 청주", "s": "BW9027", "c": "Basic", "sa": "유비야", "r": "대전 / 충청"}, {"n": "뉘앙스성형외과의원", "s": "BWA037", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "늘샤인의원", "s": "BVB002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 은평", "s": "BW9039", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아름다운피부과의원 부산", "s": "BW9015", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "리진의원", "s": "BV4005", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "그리니피부과의원", "s": "BWB033", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "강남뷰베스트의원", "s": "BX4020", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "제이에프셀피부과의원", "s": "BXC003", "c": "Basic", "sa": "이정국", "r": "서울 / 경기"}, {"n": "델타피부과의원", "s": "BW1017", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "바른빛피부과의원 오송", "s": "BW9024", "c": "미가입", "sa": "차성민", "r": "대전 / 충청"}, {"n": "청담리즈피부과의원", "s": "BX4001", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "김종서성형외과의원", "s": "BX3014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "비아이오성형외과", "s": "BXC009", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "휴먼피부과 평택", "s": "BYA003", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "제이뉴피부과의원", "s": "BWB026", "c": "미가입", "sa": "손지윤", "r": "제주"}, {"n": "더웰니스의원", "s": "BWB012 / BV9008", "c": "Cure pass", "sa": "차성민", "r": "서울 / 경기"}, {"n": "디파인피부과의원", "s": "BW7036", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미모드림의원", "s": "BYB014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "오수진피부과의원", "s": "BWA010", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "미뉴얼의원 천안아산본점", "s": "BWA011", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "올리본의원", "s": "BV4013", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "소사벌휴먼피부과의원", "s": "BW7001,BYA007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "에르네의원", "s": "BV2038", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "벤자민의원 명동", "s": "BXC014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "청담이엘피부과의원", "s": "BW3028", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "휴먼피부과 강서", "s": "BYB018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "오라클피부과의원 산본", "s": "BW8031", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "밴스의원 수원망포", "s": "BV2033", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "메이린의원 더현대서울", "s": "BX3012", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "성재영이즈피부과의원 부산서면", "s": "BXC013", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "강남오앤의원", "s": "BYA001", "c": "Basic", "sa": "이정국", "r": "서울 / 경기"}, {"n": "단아한미인의원", "s": "BX3005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "광혜원한방병원", "s": "BW3010", "c": "Basic", "sa": "차성민", "r": "인천"}, {"n": "루미나피부과의원", "s": "BW3029", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "성피부과의원", "s": "BYB026", "c": "미가입", "sa": "유비야", "r": "경상"}, {"n": "리멤버피부과의원 김포본점", "s": "BV1016", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "다빈치의원 구미", "s": "BWB066", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "노아피부과의원", "s": "BWA015", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "뮤즈의원 안산", "s": "BW8019", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "디렉터의원 대전", "s": "BWB062", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "킴벨피부과병원", "s": "BX4014", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "연세에이앤비피부과의원", "s": "BX7007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "첫번째의원", "s": "BWA012", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "가산연합의원", "s": "BX7002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "뷰티온의원 수원망포", "s": "BYA002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "연세다안피부과의원", "s": "BXC016", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "연세캔버스피부과의원", "s": "BW8038", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울톤피부과의원 강남본점", "s": "BWB008", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 신사", "s": "BWC014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "에피소드의원 잠실", "s": "BWA041", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미래피부과의원", "s": "BV5014", "c": "미가입", "sa": "김민주", "r": "전라"}, {"n": "유앤아이의원 천호", "s": "BV2036", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더힐피부과의원 신사본점", "s": "BXA012", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "다담한의원", "s": "01108(NV)", "c": "Basic", "sa": "김한림", "r": "전라"}, {"n": "서울원피부과의원 반포", "s": "BX7017", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 영등포", "s": "BWA051", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "에센셜의원", "s": "BVB036", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "광교 퍼스트피부과의원", "s": "BWA019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 위례", "s": "BW9016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "이상피부과의원", "s": "BX7003", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "비바덤의원", "s": "BV2201", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "아티움의원 청주", "s": "BW8051/BWC030", "c": "Basic", "sa": "유비야", "r": "충북"}, {"n": "닥터제이앤비의원", "s": "BV5006", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오킴스피부과의원 일산", "s": "BWA016", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "미지예피부과의원", "s": "BW9022", "c": "미가입", "sa": "김민주", "r": "전라"}, {"n": "닥터스피부과의원 광주상무", "s": "BXA020", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "맑은미피부과의원", "s": "BWA032", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "에이비피부과", "s": "BW8052", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "피어봄의원 강남", "s": "BY8003", "c": "미가입", "sa": "차성민", "r": "인천"}, {"n": "고운미피부과의원", "s": "BYA018", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "디렉터의원 울산", "s": "BWB047", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "제이유의원", "s": "BXA001", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "서울스마트피부과의원", "s": "BWB069", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "스키니크의원", "s": "BX8002", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "에젤피부과의원", "s": "BX4013", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더리턴피부과의원 서울마곡", "s": "BX7008", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "더바른피부과", "s": "BX4029", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "애플산부인과의원 성신여대", "s": "BV2003", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "시스템피부과의원", "s": "BW9030", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "닥터스피부과의원 잠실송파", "s": "BX7020", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "쏘울성형외과의원 의정부", "s": "BW8048", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "디렉터의원 강남", "s": "BVB039", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오가나셀피부과의원 마곡", "s": "BWC003", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "타임리스피부과 마포본점", "s": "BXC005", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오블리브의원 송도본점", "s": "BW8044", "c": "Basic", "sa": "김한림", "r": "인천"}, {"n": "루아베피부과의원", "s": "BV4008", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "레지움피부과의원", "s": "BWB065", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울더맑은피부과", "s": "BW8023", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 강북본점", "s": "BXA002", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더왈츠의원", "s": "BW8021", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 청주", "s": "BW3016", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "휴먼피부과의원 청라", "s": "BYB020", "c": "미가입", "sa": "유비야", "r": "인천"}, {"n": "해피부과의원", "s": "BV9005", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 광명철산", "s": "BWA018", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "베러스킨의원", "s": "BVC002", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 일산", "s": "BW4015", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "리더스피부과의원 청담", "s": "BYB008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "G5연합의원", "s": "BWA009", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더라움의원", "s": "BWB023", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 하남미사", "s": "BW4020", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "웰라스피부과의원", "s": "BW1016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 천안시청", "s": "BX3011", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "맑고고운시그니처의원", "s": "BW7025", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "더리즈의원 강남", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "에비뉴의원", "s": "BX7001", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "디오디피부과의원 청담본점", "s": "BW1003", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "클림의원 명동", "s": "BWC023", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 과천", "s": "BWB014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 노원", "s": "BW8013", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "메이린청담의원", "s": "BY8002", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "청담글래시피부과의원", "s": "BX3019", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "원클리닉의원", "s": "BW9029", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "아르네의원", "s": "BXA009", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "셀린의원 용인수지", "s": "BXC002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 다산", "s": "BW9019", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "데이뷰의원 인천구월", "s": "BWC008", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "아이디피부과의원", "s": "BW6001", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "리쥬의원", "s": "BYB006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "차앤박피부과의원 도곡양재", "s": "BWA007", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "서울뷰의원 평택", "s": "BW8042", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "이지함피부과의원 분당", "s": "BX7006", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "미애로여성의원 부천", "s": "BYB022", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "퓨어린의원 춘천", "s": "BV5002", "c": "Basic", "sa": "손지윤", "r": "강원"}, {"n": "스노우의원 글로벌", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "보스피부과", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "소유의원", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "닥터스피부과 영종도점", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "더원의원 여의도역점", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "후한의원 천안", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "해율한의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "스노우의원 일산", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "셀리데이의원", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "리움의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이룬의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "리드성형외과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "셀라성형외과의원", "s": "BV7035", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "그날성형외과의원", "s": "BV9014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "해맑은피부과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "경남"}, {"n": "청담디어의원", "s": "BV4019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "파인트리피부과의원", "s": "BW8026", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "이승철피부과의원", "s": "", "c": "미가입", "sa": "김한림", "r": "전라"}, {"n": "하얀J피부과의원", "s": "BX4008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "봄눈피우다의원", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스킨피부과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "강원"}, {"n": "조아성형외과의원", "s": "BW3013", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "마곡튼튼소아청소년과의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "일치성형외과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "우아한피부과의원", "s": "BX4011", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "톤즈의원 용인", "s": "", "c": "Basic", "sa": "손지윤", "r": ""}, {"n": "연세마이미의원", "s": "BV2037", "c": "미가입", "sa": "이정국", "r": "인천"}, {"n": "글로리의원 강남", "s": "BXC007", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "뷰티온의원 강서", "s": "BX8009", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더원의원 서여의도", "s": "BWC019", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "서울미즈병원", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "숲피부과의원", "s": "BW3012", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "파크뷰의원 청라", "s": "BV1013", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리베리의원 영종도", "s": "BWB016", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "르샤인의원 서초", "s": "", "c": "Basic", "sa": "손지윤", "r": ""}, {"n": "제이디의원 명동", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "오체안피부과의원 양주", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더동안의원", "s": "BW9028", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "송도비앤미의원", "s": "BWC026", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "온오프피부과의원", "s": "BWC102", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "연세애드미피부과의원", "s": "BWC029", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스노우의원 마곡", "s": "BWC103", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리멤버피부과의원 별내", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "아리엘의원", "s": "BX7009", "c": "미가입", "sa": "이정국", "r": "인천"}, {"n": "은평우태하피부과의원", "s": "BWC015", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "영종센트럴피부과의원", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "삼성필의원", "s": "BY3018", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "튠앤톤의원", "s": "BWC012", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "리베리의원 화성병점", "s": "BXC008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터쁘띠의원 명동", "s": "BYA011", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더신사의원", "s": "BX3018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아이원의원 범계", "s": "BWB024", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울하나치과의원", "s": "S/N 없음", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오라클피부과의원 구월", "s": "BYB021", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "데이뷰의원 분당", "s": "BWB030", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "브라이트피부과의원", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "노바피부과의원", "s": "BWB007", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "이지함피부과의원 이대", "s": "BWB004", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "신사인피부과의원", "s": "BWA039", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "파랑새피부과의원", "s": "BX4028", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "청담제이의원", "s": "BWA034", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "서울에스의원 서초교대역", "s": "BWA035", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "탑메디피부과", "s": "BX3016", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "뷰티젠의원", "s": "BWA012", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "엘레브의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "리뉴미피부과의원 화곡", "s": "BWB038", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "패러다임피부과의원", "s": "BW8013", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "닥터정리반의원", "s": "BX3017", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "선사은피부과의원", "s": "BWA026", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "트로피피부과의원", "s": "BWA022", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "리윤피부과의원", "s": "BWA024", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "엠공일의원", "s": "BYA014", "c": "미가입", "sa": "장비OUT", "r": "인천"}, {"n": "데이샤인의원", "s": "BWA020", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "힐하우스피부과의원 건대점", "s": "BX3006", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "다시온의원", "s": "BWA014", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "다이아몬드의원 인천부평", "s": "BX8001", "c": "미가입", "sa": "장비OUT", "r": "인천"}, {"n": "한나이브성형외과의원", "s": "BWA013", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "BR피부과의원", "s": "BWA008", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "청담플렉스피부과", "s": "BX3010", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "플러스피부과의원", "s": "BW3018", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "뷰티라운지의원 천안", "s": "BXA015", "c": "미가입", "sa": "", "r": "대전 / 충청"}, {"n": "멜로우피부과의원 천호", "s": "BWA006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리퓨어피부과의원", "s": "BX3008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 청주", "s": "BW9035", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "더베이지의원", "s": "BW9002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "신상성형외과의원", "s": "BW9005", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "리슈어스의원", "s": "", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "엘앤비의원", "s": "", "c": "미가입", "sa": "", "r": "경상"}, {"n": "어울림피부과의원", "s": "BW9009", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이가인의원", "s": "BW9007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "타임의원", "s": "", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "휴먼피부과의원 천안", "s": "BW9004", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "미포인트의원", "s": "BW9003", "c": "미가입", "sa": "김민주", "r": "경상"}, {"n": "휴먼피부과의원 광장", "s": "BYB024", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "아트인휴먼피부과의원", "s": "BW8046", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "리즈온의원 홍대점피부과", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "청담오케이성형외과의원", "s": "BW3008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "쁘띠365의원", "s": "", "c": "미가입", "sa": "", "r": "강원"}, {"n": "유앤아이의원 여의도", "s": "BW8029", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "쁘띠라인의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "라라피부과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "미래로피부과의원", "s": "BW8041", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "아이린피부과의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "박성현피부과", "s": "", "c": "미가입", "sa": "", "r": "전라"}, {"n": "로하스의원", "s": "BXA011", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 삼성점", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "닉스의원 대전", "s": "BW8012", "c": "미가입", "sa": "장비OUT", "r": "대전 / 충청"}, {"n": "최우식노즈립성형외과", "s": "BYB011", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "기분좋은피부과의원", "s": "BW7035", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "타임뷰의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 청담", "s": "BW7012", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 하남감일", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "바노바기의원 대전", "s": "BX4022", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "화이트피부과의원", "s": "BW4004", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "노블클래식의원 동탄", "s": "BW7004", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "오가예의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "한양마취통증의학과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "대전 / 충청"}, {"n": "아이니의원", "s": "BX4019", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "서울미라클피부과의원", "s": "BW7001", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 성신여대", "s": "BX7015", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 청담", "s": "", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 대구범어", "s": "BW4013", "c": "미가입", "sa": "김한림", "r": "경상"}, {"n": "연세팜스의원 은평본점", "s": "BYB004", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 인천청라", "s": "BW4018", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "CU클린업피부과의원 영등포", "s": "BW4016", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 삼성", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 노원", "s": "BW4017", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 강남", "s": "BW4014", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "제이제이피부과", "s": "BW4011", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "잇츠미의원 안산", "s": "BW3030", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "모아트의원", "s": "75", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에버피부과의원", "s": "BV4017", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에미뜨의원 동탄", "s": "BW3008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "더올의원", "s": "BW3009", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "범어로제피부과의원", "s": "BW3012", "c": "미가입", "sa": "장비OUT", "r": "경상"}, {"n": "셀린의원 다산점", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "시흥휴먼피부과의원", "s": "BYA016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "노블피부과의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "새하얀피부과의원 은평", "s": "BW4005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "한사랑마취통증의학과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "강원"}, {"n": "아침정원의원", "s": "BW3004", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "닉스의원 천안", "s": "BW3002", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "닥터베이직의원", "s": "BYB001", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "닉스의원 수원", "s": "BW3003", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "피부사랑피부과의원 마포", "s": "", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "기쁨병원", "s": "BW8044", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "후즈후피부과의원 천호", "s": "BW1019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리베리의원 청주오창", "s": "BXC015", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "휴먼피부과의원 용산", "s": "BYB025", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "제이앤제이의원", "s": "", "c": "미가입", "sa": "김민주", "r": "대전 / 충청"}, {"n": "닥터스피부과의원 은평점", "s": "BXA019", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "뉴브의원", "s": "BW1017", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "오가나셀피부과의원 잠실점", "s": "BW1012", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "빛채운피부과의원", "s": "BW1005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "강남닥터우성형외과의원", "s": "NV20", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "미소안의원", "s": "BX7012", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "바라봄의원", "s": "BX4012", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "셀피부과의원", "s": "BX7014", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "바른 피부과의원", "s": "BX4024", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "레브의원", "s": "BX4005", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "오라클피부과의원 천안신부", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "CNP차앤박피부과의원 천안아산", "s": "BYA009", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이정헌피부과의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "얼라이브피부과의원 반포본점", "s": "BXC004", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 이천", "s": "BW1004", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더차오름의원 부산점", "s": "", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "송도오라클피부과의원", "s": "BX8011", "c": "Basic", "sa": "김한림", "r": "인천"}, {"n": "리타임성형외과", "s": "", "c": "미가입", "sa": "손지윤", "r": ""}, {"n": "골든디아망성형외과의원", "s": "BWA036", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오라클피부과의원", "s": "BYB003", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "예미원피부과의원", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "동안중심의원", "s": "BX3002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "피어봄의원 잠실", "s": "BYA012", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "뉴스타의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "포레스트의원", "s": "BXC001", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에이엘의원", "s": "BYA013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "에스에이치성형외과의원", "s": "BXA013", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "장성형외과의원", "s": "BX8016", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "광피부과의원 청담", "s": "BX8017", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 김포", "s": "BX8018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "빌라드스킨피부과의원", "s": "BX8015", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "더서울피부과의원", "s": "BX8013", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "리멤버피부과의원 이천", "s": "BX8007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "나음피부과", "s": "BYA002", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "미모던피부과의원", "s": "BX7019", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "메이린의원 판교", "s": "BYB010", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서아송피부과의원", "s": "BY8001", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "강남피어리의원", "s": "BX7013", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "베스탑비뇨기과의원 수원", "s": "BX7011", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "강동오아로피부과의원", "s": "BX7010", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "디의원", "s": "BYB029", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아이오르의원", "s": "BW8014", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "청담엔케이피부과의원", "s": "BX4025", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "닥터손유나의원", "s": "BX4021", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "메이린의원 압구정점", "s": "NV13", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "힐링의원", "s": "BX4018", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "조선대학교병원", "s": "", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "스킨딥의원", "s": "BX4015", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "룬피부과의원", "s": "BW4008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 공덕", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "포커스성형외과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미뉴얼의원 동탄", "s": "BWB018", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}];
-function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function normH(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
-function snVal(){ return pick('sn'); }
-function fillSN(toks){
-  var s=document.getElementById('sn'); s.innerHTML='';
-  if(!toks||!toks.length){ var o=document.createElement('option');o.value='';o.textContent='(선택)';s.appendChild(o); }
-  else toks.forEach(function(t){ var o=document.createElement('option');o.value=t;o.textContent=t;s.appendChild(o); });
-  var oc=document.createElement('option');oc.value='__c';oc.textContent='직접입력…';s.appendChild(oc);
-  toggleCustom('sn');
-}
-function hlMatch(name,q){
-  var i=normH(name).indexOf(q);
-  if(i<0||!q) return escH(name);
-  /* 공백 제거 정규화 인덱스를 원문 인덱스로 역매핑 */
-  var map=[],k=0;
-  for(var c=0;c<name.length;c++){ if(!/\s/.test(name[c])){ map[k++]=c; } }
-  var s=map[i], e=map[Math.min(i+q.length-1,k-1)]+1;
-  return escH(name.slice(0,s))+'<mark>'+escH(name.slice(s,e))+'</mark>'+escH(name.slice(e));
-}
-function onHospFocus(){
-  onHospInput();
-  /* 모바일 키보드에 가려지지 않도록 입력창을 화면 상단으로 */
-  setTimeout(function(){
-    try{ document.getElementById('hosp').scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){}
-  },250);
-}
-function updClear(){
-  document.getElementById('hospClear').style.display = val('hosp') ? 'block' : 'none';
-}
-function clearHosp(){
-  document.getElementById('hosp').value='';
-  document.getElementById('hospDrop').style.display='none';
-  document.getElementById('hospMatch').textContent='';
-  document.getElementById('recentCard').style.display='none';
-  fillSN([]); updClear(); render();
-  document.getElementById('hosp').focus();
-}
-function onHospInput(){
-  var q=normH(val('hosp')), drop=document.getElementById('hospDrop');
-  document.getElementById('hospMatch').textContent='';
-  updClear();
-  if(!q){ drop.style.display='none'; render(); return; }
-  var matches=HOSPITAL_DB.filter(function(h){ return normH(h.n).indexOf(q)>=0; }).slice(0,8);
-  if(!matches.length){ drop.style.display='none'; render(); return; }
-  drop.innerHTML=matches.map(function(h){
-    var meta=[h.c,h.sa,h.r].filter(Boolean).join(' · ');
-    return '<div class="ac-item" data-i="'+HOSPITAL_DB.indexOf(h)+'"><b>'+hlMatch(h.n,q)+'</b><span>'+escH(meta)+'</span></div>';
-  }).join('');
-  /* 화면 하단이면 위로 펼침 */
-  var rect=document.getElementById('hosp').getBoundingClientRect();
-  var vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
-  drop.classList.toggle('up', rect.bottom > vh*0.55);
-  drop.style.display='block'; render();
-}
-function pickHosp(idx){
-  var h=HOSPITAL_DB[idx];
-  document.getElementById('hosp').value=h.n;
-  document.getElementById('hospDrop').style.display='none';
-  var toks=(h.s||'').split(/[,/]/).map(function(s){return s.trim();}).filter(Boolean);
-  fillSN(toks);
-  document.getElementById('verUI').value=h.uiv||'';
-  document.getElementById('verHP').value=h.hpv||'';
-  document.getElementById('hospMatch').textContent='✓ '+[h.sa,h.c,h.r].filter(Boolean).join(' · ');
-  updClear(); render();
-  loadRecent(h.n);
-}
-document.addEventListener('click',function(e){
-  var it=e.target.closest? e.target.closest('.ac-item'):null;
-  if(it){ pickHosp(Number(it.getAttribute('data-i'))); return; }
-  if(!e.target.closest||!e.target.closest('#hosp,#hospDrop')){ var d=document.getElementById('hospDrop'); if(d)d.style.display='none'; }
-});
-
-/* 라이브 병원정보DB (hospital.html과 동일 엔드포인트) — S/N·UI/HP 버전 최신화 */
-var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
-function loadLiveDB(){
-  fetch(HOSPITAL_DB_URL,{method:'GET'})
+/* ── 데이터 로드 ── */
+function loadData(force){
+  if(!HANDOVER_URL){
+    document.getElementById('loading').innerHTML='⚠️ HANDOVER_URL이 설정되지 않았습니다.<br>handover_gas.gs 배포 후 URL을 입력하세요.';
+    return;
+  }
+  /* 캐시 즉시 표시 → 백그라운드 갱신 */
+  if(!force){
+    try{
+      var c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+      if(c&&c.data&&c.data.length){ boot(c, true); }
+    }catch(e){}
+  }
+  fetch(HANDOVER_URL+'?action=all')
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d.success||!d.data||!d.data.length) return;
-      var byName={}; HOSPITAL_DB.forEach(function(h){ byName[h.n]=h; });
-      d.data.forEach(function(r){
-        if(!r.name) return;
-        var h=byName[r.name];
-        if(h){ if(r.sn)h.s=r.sn; h.hpv=r.hpVer||h.hpv||''; h.uiv=r.uiVer||h.uiv||'';
-               if(r.sales)h.sa=r.sales; if(r.ncare)h.c=r.ncare; if(r.region)h.r=r.region; }
-        else HOSPITAL_DB.push({n:r.name,s:r.sn||'',c:r.ncare||'미가입',sa:r.sales||'',r:r.region||'',hpv:r.hpVer||'',uiv:r.uiVer||''});
-      });
-      console.log('[병원정보DB] 라이브 '+d.data.length+'건 병합');
+      if(!d.success){
+        toast('❌ '+(d.error||'로드 실패'));
+        if(!RAW.length){
+          document.getElementById('loading').innerHTML=
+            '❌ '+esc(d.error||'로드 실패')+'<br><br>'
+            +'<b>"알 수 없는 action"</b> 오류라면 GAS가 구버전입니다.<br>'
+            +'Apps Script → 배포 → 배포 관리 → ✏️ → <b>버전: 새 버전</b> → 배포 후<br>'
+            +'이 페이지를 새로고침하세요.';
+        }
+        return;
+      }
+      try{ localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }catch(e){}
+      boot(d, false);
+      if(force) toast('🔄 최신 데이터로 갱신됨');
     })
-    .catch(function(e){ console.warn('[병원정보DB] 라이브 실패 — 임베드본 사용:',e); });
-}
-
-/* 교체품 마스터 (병원 점검 현황 시트 기준) */
-var PARTS=["없음","Handpiece Ass'y","Foot-SW Ass'y","Top Cover Ass'y","Main Board","RFID Module","LCD + Raspberry Pi Ass'y","SD Card","HP / SD Card","On / Off Swich","On / Off Key","Emergency Switch","Power Adaptor","Power Cable","Water Tank","Water Pump","Caster","Arm","Arm Holder","AC Cord","Cradle (거치대)","Nozzle","Nozzle Spanner","Perm-Holder","Piston (V 1.0)","Piston (V 1.1)","Piston (V 1.2)","Bush Bobbin","Spring","Plunger (V 1.2.1)","Plunger (V 1.2.2)","Adaptor(1.0)","Adaptor(1.1)","Damper","Spacer","Wrench Bolt (수평)","Wrench Bolt (수직)","대체장비입고","재체결","내부 세척"];
-function fillParts(){ var s=document.getElementById('part'); PARTS.forEach(function(p){var o=document.createElement('option');o.textContent=p;s.appendChild(o);}); }
-function todayISO(){ var d=new Date(),z=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
-
-/* ▼▼ 현장 처리 현황(handover) 확장 웹앱 URL — handover_gas.gs 배포 후 붙여넣기 ▼▼ */
-var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* 예) 'https://script.google.com/macros/s/XXXX/exec' */
-/* 기존 기록용 URL (HANDOVER_URL 미설정 시 폴백) */
-var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
-function postUrl(){ return HANDOVER_URL || AS_URL; }
-
-async function saveToSheet(){
-  if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
-  if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
-  var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
-  var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
-    cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),cost:val('cost'),
-    detail:bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
-    hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP') };
-  try{
-    /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
-    var ok=false;
-    try{
-      var r=await fetch(postUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-      var d=await r.json();
-      if(d&&d.success){ toast(d.msg||'✅ 시트 기록 완료'); ok=true; }
-      else if(d&&d.error){ toast('❌ '+d.error); ok=true; }
-    }catch(_){}
-    if(!ok){
-      await fetch(postUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-      toast('시트에 기록됐어요');
-    }
-  }catch(e){ toast('기록 실패 — 네트워크 확인'); }
-  setTimeout(function(){btn.disabled=false;btn.textContent='📥 시트 기록';},1200);
-}
-
-/* ── 시트 연동 확장 (HANDOVER_URL 설정 시 자동 활성화) ── */
-function gv(action,params){
-  if(!HANDOVER_URL) return Promise.reject('HANDOVER_URL 미설정');
-  var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
-  return fetch(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''),{method:'GET'})
-    .then(function(r){return r.json();});
-}
-
-/* 담당 FSE 기억 + 시트 담당자 목록 datalist */
-function saveFse(){ try{ localStorage.setItem('baz_handover_fse', val('fse')); }catch(e){} }
-function loadFse(){
-  try{ var f=localStorage.getItem('baz_handover_fse'); if(f) document.getElementById('fse').value=f; }catch(e){}
-}
-function fillFseList(list){
-  var dl=document.getElementById('fseList'); dl.innerHTML='';
-  (list||[]).forEach(function(n){ var o=document.createElement('option'); o.value=n; dl.appendChild(o); });
-}
-
-/* 유형 마스터 동기화 — 시트에 있는 유형/교체품을 추가만(기존 삭제 없음) */
-function masterSync(){
-  gv('master',{}).then(function(d){
-    if(!d.success) return;
-    var added=0;
-    Object.keys(d.taxonomy||{}).forEach(function(cat){
-      if(!AS_TAX[cat]) AS_TAX[cat]=[];
-      d.taxonomy[cat].forEach(function(p){
-        if(!AS_TAX[cat].some(function(q){return q[1]===p[1];})){ AS_TAX[cat].push(p); added++; }
-      });
+    .catch(function(){
+      if(!RAW.length) document.getElementById('loading').innerHTML='❌ 네트워크 오류 — 연결 확인 후 새로고침';
+      else toast('오프라인 — 캐시 데이터 표시 중');
     });
-    (d.parts||[]).forEach(function(p){
-      if(PARTS.indexOf(p)<0){ PARTS.push(p);
-        var o=document.createElement('option');o.textContent=p;document.getElementById('part').appendChild(o);}
-    });
-    if(added){ /* 대분류 select 재구성 (선택값 보존) */
-      var cur=val('cat'), catSel=document.getElementById('cat'); catSel.innerHTML='';
-      Object.keys(AS_TAX).forEach(function(k){var o=document.createElement('option');o.textContent=k;catSel.appendChild(o);});
-      catSel.value=cur||catSel.value; fillSub();
-    }
-    fillFseList(d.fse);
-    document.getElementById('syncBadge').textContent='· 시트 동기화됨';
-    console.log('[handover] 마스터 동기화:',d.source,'유형+'+added,'교체품 '+(d.parts||[]).length+'종');
-  }).catch(function(e){ console.warn('[handover] 마스터 동기화 생략:',e); });
+}
+function boot(d, fromCache){
+  RAW=d.data.map(function(r){
+    var dd=normD(r.date);
+    r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
+    r.ncare=r.ncare||'미가입'; r.paid=r.paid||''; return r;
+  });
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('metaLine').textContent=
+    '총 '+RAW.length+'건 · '+(fromCache?'캐시':'시트')+' 기준 '+(d.updated||'');
+  buildFilters(); initCombos(); apply(); ncareCheck();
 }
 
-/* 병원 선택 → 최근 처리 이력 자동 조회 */
-var RECENT_DATA=[];
-function loadRecent(hosp){
-  var card=document.getElementById('recentCard');
-  if(!HANDOVER_URL){ card.style.display='none'; return; }
-  document.getElementById('recentList').innerHTML='<div class="hint">불러오는 중…</div>';
-  document.getElementById('recentCnt').textContent=''; card.style.display='block';
-  gv('recent',{hosp:hosp,limit:3}).then(function(d){
-    if(!d.success||!d.count){ card.style.display='none'; return; }
-    RECENT_DATA=d.data;
-    document.getElementById('recentCnt').textContent=d.count+'건';
-    document.getElementById('recentList').innerHTML=d.data.map(function(c,i){
-      var line=(c.detail||'').split('\n')[0];
-      return '<div class="recent-item">'
-        +'<div class="recent-top"><span>'+escH(c.date)+' · '+escH(c.fse)+'</span><span>'+escH(c.gubun)+'</span></div>'
-        +'<div class="recent-body"><b>'+escH(c.cat)+' / '+escH(c.type)+'</b>'
-        +(c.part&&c.part!=='없음'?' · 교체: '+escH(c.part):'')
-        +(line?'<br>'+escH(line):'')+'</div>'
-        +'<button type="button" class="recent-fill" onclick="applyRecent('+i+')">↩ 이 내용으로 양식 채우기</button>'
-        +'</div>';
+/* ── N-Care 정기점검 현황 (기준: 30일 정상 / ~60일 점검대상 / ~90일 권고 / 초과 경고) ── */
+function ncareCheck(){
+  var today=new Date(); today.setHours(0,0,0,0);
+  var map={};
+  RAW.forEach(function(r){
+    var nc=String(r.ncare||'').trim();
+    if(!nc || /미가입/.test(nc)) return;
+    var d=rowDate(r); if(!d || !r.hosp) return;
+    if(!map[r.hosp] || d>map[r.hosp].last) map[r.hosp]={last:d, ncare:nc};
+  });
+  var ST=[['정상','var(--green)',30],['점검대상','var(--amber)',60],['권고','#E67E22',90],['경고','var(--red)',1e9]];
+  var list=Object.keys(map).map(function(h){
+    var days=Math.floor((today-map[h].last)/86400000);
+    var si = days<=30?0 : days<=60?1 : days<=90?2 : 3;
+    return {hosp:h, ncare:map[h].ncare, days:days, last:map[h].last, si:si};
+  });
+  var el=document.getElementById('cNck');
+  document.getElementById('tNck').textContent='가입 병원 '+list.length+'곳';
+  if(!list.length){ el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return; }
+  var cnt=[0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
+  var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){return b.days-a.days;});
+  el.innerHTML=
+    '<div class="nck-sum">'+ST.map(function(s,i){
+      return '<div class="nck-badge" style="background:'+s[1]+'"><b>'+cnt[i]+'</b>'+s[0]+'</div>';
+    }).join('')+'</div>'
+    +(need.length
+      ? '<div class="nck-list">'+need.map(function(x){
+          var d=x.last;
+          return '<div class="nck-row">'
+            +'<span class="nck-dot" style="background:'+ST[x.si][1]+'"></span>'
+            +'<span class="nm">'+esc(x.hosp)+'</span>'
+            +'<span class="gd">'+esc(x.ncare)+'</span>'
+            +'<span class="dy">'+x.days+'일 경과 · '+(d.getMonth()+1)+'/'+d.getDate()+'</span>'
+          +'</div>';
+        }).join('')+'</div>'
+      : '<div class="empty">🎉 모든 가입 병원이 30일 이내 점검 완료</div>');
+}
+
+/* ── 필터 UI ── */
+function uniq(key,fn){
+  var s={};
+  RAW.forEach(function(r){ var v=fn?fn(r):r[key]; v=String(v==null?'':v).trim(); if(v)s[v]=(s[v]||0)+1; });
+  return Object.keys(s).sort();
+}
+function chipGroup(elId, fkey, values, labelFn){
+  var el=document.getElementById(elId);
+  el.innerHTML=values.map(function(v){
+    return '<button type="button" class="chip'+(F[fkey].indexOf(v)>=0?' on':'')+'" data-k="'+fkey+'" data-v="'+esc(v)+'">'+esc(labelFn?labelFn(v):v)+'</button>';
+  }).join('');
+}
+function buildFilters(){
+  chipGroup('fYear','year', uniq(null,function(r){return r._y||'';}).filter(Boolean), function(v){return v+'년';});
+  chipGroup('fMonth','month', uniq(null,function(r){return r._m||'';}).filter(Boolean).sort(function(a,b){return a-b;}), function(v){return v+'월';});
+  chipGroup('fQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
+  chipGroup('fGubun','gubun', uniq('gubun'));
+  chipGroup('fPaid','paid', uniq('paid'));
+  chipGroup('fNcare','ncare', uniq('ncare'));
+  chipGroup('fCat','cat', uniq('cat'));
+  chipGroup('fFse','fse', uniq('fse'));
+  selChips('fTypeSel','type');
+  selChips('fHospSel','hosp');
+}
+/* 선택된 값 칩 (✕로 해제 — 전역 클릭 핸들러가 처리) */
+function selChips(elId, fkey){
+  document.getElementById(elId).innerHTML=F[fkey].map(function(v){
+    return '<button type="button" class="chip on" data-k="'+fkey+'" data-v="'+esc(v)+'">'+esc(v)+' ✕</button>';
+  }).join('');
+}
+/* 검색형 드롭다운: 입력=검색, 항목 클릭=토글 선택 */
+function combo(inputId, dropId, fkey, key){
+  var inp=document.getElementById(inputId), drop=document.getElementById(dropId);
+  function show(){
+    var q=String(inp.value||'').replace(/\s+/g,'').toLowerCase();
+    var opts=count(RAW, key).filter(function(o){
+      return o[0]!=='(비어 있음)' && (!q || o[0].replace(/\s+/g,'').toLowerCase().indexOf(q)>=0);
+    }).slice(0,12);
+    if(!opts.length){ drop.style.display='none'; return; }
+    drop.innerHTML=opts.map(function(o){
+      var on=F[fkey].indexOf(o[0])>=0;
+      return '<div class="cb-item'+(on?' on':'')+'" data-v="'+esc(o[0])+'"><span>'+esc(o[0])+'</span><b>'+o[1]+'건</b></div>';
     }).join('');
-  }).catch(function(){ card.style.display='none'; });
-}
-function applyRecent(i){
-  var c=RECENT_DATA[i]; if(!c) return;
-  if(c.gubun) document.getElementById('gubun').value=c.gubun;
-  if(c.cat && AS_TAX[c.cat]){ document.getElementById('cat').value=c.cat; fillSub(); }
-  var sub=document.getElementById('sub'), found=false;
-  Array.prototype.forEach.call(sub.options,function(o){ if(o.textContent===c.type){ sub.value=o.value; found=true; } });
-  if(!found&&c.type){ sub.value='__c'; toggleCustom('sub'); document.getElementById('subCustom').value=c.type; }
-  if(c.part) document.getElementById('part').value = PARTS.indexOf(c.part)>=0 ? c.part : '없음';
-  if(c.detail) document.getElementById('detail').value=c.detail;
-  render(); toast('이전 처리 내용을 불러왔어요');
-}
-
-/* 오늘 내 기록 확인 */
-function showToday(){
-  if(!HANDOVER_URL){ toast('HANDOVER_URL 배포 후 사용 가능'); return; }
-  toast('조회 중…');
-  gv('today',{fse:val('fse')}).then(function(d){
-    if(!d.success){ toast('❌ '+(d.error||'조회 실패')); return; }
-    if(!d.count){ toast('오늘('+d.date+') 기록이 아직 없어요'); return; }
-    alert('📅 오늘 기록 '+d.count+'건\n\n'+d.data.map(function(c){
-      return '• '+c.hosp+' ['+c.gubun+'] '+c.cat+'/'+c.type+(c.part&&c.part!=='없음'?' · '+c.part:'');
-    }).join('\n'));
-  }).catch(function(){ toast('조회 실패 — 네트워크 확인'); });
-}
-
-initTax(); fillParts(); fillSN([]); loadLiveDB(); loadFse();
-document.getElementById('date').value=todayISO();
-if(HANDOVER_URL){ masterSync(); fetch(HANDOVER_URL+'?action=ping').catch(function(){}); } /* 콜드스타트 예열 */
-
-function toast(msg){
-  var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('on');
-  clearTimeout(el._t);
-  el._t=setTimeout(function(){el.classList.remove('on');}, msg.length>30?3500:1600);
-}
-function copyText(){
-  var t=curText();
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(t).then(function(){toast('복사됐어요');},fallbackCopy.bind(null,t));
-  } else { fallbackCopy(t); }
-}
-function fallbackCopy(t){
-  var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
-  document.body.appendChild(ta); ta.select();
-  try{document.execCommand('copy');toast('복사됐어요');}catch(e){toast('복사 실패 — 길게 눌러 복사하세요');}
-  document.body.removeChild(ta);
-}
-async function shareText(){
-  var t=curText();
-  if(navigator.share){
-    try{ await navigator.share({text:t}); return; }
-    catch(e){ if(e&&e.name==='AbortError') return; }
+    drop.style.display='block';
   }
-  copyText(); toast('복사됨 — 카톡에 붙여넣으세요');
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  drop.addEventListener('click', function(e){
+    var it=e.target.closest?e.target.closest('.cb-item'):null;
+    if(!it) return;
+    e.stopPropagation();
+    toggleF(fkey, it.getAttribute('data-v'));
+    inp.value=''; drop.style.display='none';
+  });
+  document.addEventListener('click', function(e){
+    if(!inp.contains(e.target) && !drop.contains(e.target)) drop.style.display='none';
+  });
 }
-render();
+var COMBO_READY=false;
+function initCombos(){
+  if(COMBO_READY) return;
+  COMBO_READY=true;
+  combo('cbType','cbTypeDrop','type','type');
+  combo('cbHosp','cbHospDrop','hosp','hosp');
+}
+document.addEventListener('click',function(e){
+  var c=e.target.closest?e.target.closest('.chip'):null;
+  if(c && c.getAttribute('data-k')){ toggleF(c.getAttribute('data-k'), c.getAttribute('data-v')); return; }
+  var hb=e.target.closest?e.target.closest('[data-fk]'):null;
+  if(hb){ toggleF(hb.getAttribute('data-fk'), hb.getAttribute('data-fv')); }
+});
+/* ── 기간 지정 ── */
+function setRange(){
+  F.from=document.getElementById('fFrom').value||'';
+  F.to  =document.getElementById('fTo').value||'';
+  apply();
+}
+function setRangeDates(a,b){ /* Date,Date */
+  document.getElementById('fFrom').value=ymd(a);
+  document.getElementById('fTo').value=ymd(b);
+  setRange();
+}
+function preset(days){
+  var end=new Date(); end.setHours(0,0,0,0);
+  var start=addD(end,-(days-1));
+  setRangeDates(start,end);
+}
+function presetThisMonth(){
+  var now=new Date();
+  setRangeDates(new Date(now.getFullYear(),now.getMonth(),1),
+                new Date(now.getFullYear(),now.getMonth()+1,0));
+}
+function presetLastWeek(){
+  var mon=addD(monday(new Date()),-7);
+  setRangeDates(mon, addD(mon,4));
+}
+function toggleF(k,v){
+  var i=F[k].indexOf(v);
+  if(i>=0)F[k].splice(i,1); else F[k].push(v);
+  buildFilters(); apply();
+}
+function setHospQ(v){} /* (구버전 호환용 빈 함수) */
+function resetFilters(){
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+  document.getElementById('cbHosp').value='';
+  document.getElementById('cbType').value='';
+  document.getElementById('fFrom').value='';
+  document.getElementById('fTo').value='';
+  buildFilters(); apply();
+}
+function activeCnt(){
+  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp'].forEach(function(k){n+=F[k].length;});
+  if(F.hospQ)n++;
+  if(F.from||F.to)n++;
+  return n;
+}
+
+/* ── 필터 적용 ── */
+function filtered(){
+  var fromD=F.from?new Date(F.from+'T00:00:00'):null;
+  var toD  =F.to  ?new Date(F.to  +'T23:59:59'):null;
+  return RAW.filter(function(r){
+    if(fromD||toD){
+      var d=rowDate(r);
+      if(!d) return false;
+      if(fromD && d<fromD) return false;
+      if(toD   && d>toD)   return false;
+    }
+    if(F.year.length   && F.year.indexOf(String(r._y))<0) return false;
+    if(F.month.length  && F.month.indexOf(String(r._m))<0) return false;
+    if(F.quarter.length&& F.quarter.indexOf(String(r._q))<0) return false;
+    if(F.gubun.length  && F.gubun.indexOf(r.gubun)<0) return false;
+    if(F.paid.length   && F.paid.indexOf(r.paid)<0) return false;
+    if(F.ncare.length  && F.ncare.indexOf(r.ncare)<0) return false;
+    if(F.cat.length    && F.cat.indexOf(r.cat)<0) return false;
+    if(F.fse.length    && F.fse.indexOf(r.fse)<0) return false;
+    if(F.type.length   && F.type.indexOf(r.type)<0) return false;
+    if(F.part.length   && F.part.indexOf(r.part)<0) return false;
+    if(F.hosp.length   && F.hosp.indexOf(r.hosp)<0) return false;
+    if(F.hospQ && String(r.hosp||'').replace(/\s+/g,'').toLowerCase().indexOf(F.hospQ)<0) return false;
+    return true;
+  });
+}
+
+/* ── 집계 & 렌더 ── */
+function count(rows,key){
+  var m={};
+  rows.forEach(function(r){ var v=String(r[key]||'').trim()||'(비어 있음)'; m[v]=(m[v]||0)+1; });
+  return Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
+}
+function hbars(elId, pairs, top, fkey, totId){
+  var el=document.getElementById(elId);
+  var data=pairs.slice(0, top||10);
+  if(totId) document.getElementById(totId).textContent=pairs.length+'항목';
+  if(!data.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=data[0][1];
+  el.innerHTML=data.map(function(p){
+    var sel=fkey&&F[fkey].indexOf(p[0])>=0;
+    return '<div class="hbar'+(sel?' sel':'')+'"'+(fkey?' data-fk="'+fkey+'" data-fv="'+esc(p[0])+'"':'')+'>'
+      +'<div class="lb" title="'+esc(p[0])+'">'+esc(p[0])+'</div>'
+      +'<div class="tr"><div class="fl" style="width:'+Math.max(2,Math.round(p[1]/max*100))+'%"></div></div>'
+      +'<div class="vl">'+p[1]+'</div></div>';
+  }).join('');
+}
+function weekChart(rows){
+  var m={};
+  rows.forEach(function(r){ var d=rowDate(r); if(!d)return; var k=ymd(monday(d)); m[k]=(m[k]||0)+1; });
+  var keys=Object.keys(m).sort().slice(-12);
+  var el=document.getElementById('cWeek');
+  document.getElementById('tWeek').textContent=keys.length+'주';
+  if(!keys.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=Math.max.apply(null,keys.map(function(k){return m[k];}));
+  el.innerHTML=keys.map(function(k){
+    var mon=new Date(k+'T00:00:00');
+    var sel = F.from===k && F.to===ymd(addD(mon,6));
+    return '<div class="vcol'+(sel?' sel':'')+'" onclick="wkPick(\''+k+'\')">'
+      +'<div class="vnum">'+m[k]+'</div>'
+      +'<div class="vbar" style="height:'+Math.max(2,Math.round(m[k]/max*100))+'%"></div>'
+      +'<div class="vlb">'+(mon.getMonth()+1)+'/'+mon.getDate()+'</div></div>';
+  }).join('');
+}
+function wkPick(k){
+  var mon=new Date(k+'T00:00:00'), sun=addD(mon,6);
+  if(F.from===k && F.to===ymd(sun)){
+    document.getElementById('fFrom').value=''; document.getElementById('fTo').value='';
+    setRange();
+  }else{
+    setRangeDates(mon, sun);
+  }
+}
+function monthChart(rows){
+  var m={};
+  rows.forEach(function(r){ if(!r._y||!r._m)return; var k=r._y+'-'+(r._m<10?'0':'')+r._m; m[k]=(m[k]||0)+1; });
+  var keys=Object.keys(m).sort().slice(-12);
+  var el=document.getElementById('cMonth');
+  document.getElementById('tMonth').textContent=keys.length+'개월';
+  if(!keys.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=Math.max.apply(null,keys.map(function(k){return m[k];}));
+  el.innerHTML=keys.map(function(k){
+    var mo=String(Number(k.split('-')[1]));
+    var sel=F.month.indexOf(mo)>=0;
+    return '<div class="vcol'+(sel?' sel':'')+'" data-fk="month" data-fv="'+mo+'">'
+      +'<div class="vnum">'+m[k]+'</div>'
+      +'<div class="vbar" style="height:'+Math.max(2,Math.round(m[k]/max*100))+'%"></div>'
+      +'<div class="vlb">'+Number(k.split('-')[1])+'월</div></div>';
+  }).join('');
+}
+function apply(){
+  var rows=filtered();
+  /* KPI */
+  document.getElementById('kCnt').textContent=rows.length;
+  var cost=rows.reduce(function(a,r){return a+r._cost;},0);
+  document.getElementById('kCost').textContent='₩'+cost.toLocaleString();
+  var hs={}; rows.forEach(function(r){ if(r.hosp)hs[r.hosp]=1; });
+  document.getElementById('kHosp').textContent=Object.keys(hs).length;
+  var as=rows.filter(function(r){return r.gubun==='A/S';}).length;
+  document.getElementById('kAs').textContent=rows.length?Math.round(as/rows.length*100)+'%':'0%';
+  /* 차트 */
+  monthChart(rows);
+  weekChart(rows);
+  hbars('cType', count(rows,'type'), 10, 'type', 'tType');
+  hbars('cCat',  count(rows,'cat'),  8,  'cat',  'tCat');
+  hbars('cPart', count(rows,'part').filter(function(p){return p[0]!=='없음';}), 10, 'part', 'tPart');
+  hbars('cNcare',count(rows,'ncare'),6,  'ncare','tNcare');
+  hbars('cHosp', count(rows,'hosp'), 10, 'hosp', 'tHosp');
+  hbars('cFse',  count(rows,'fse'),  8,  'fse',  'tFse');
+  /* 필터 상태 */
+  var n=activeCnt();
+  document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
+  document.getElementById('fReset').style.display=n?'block':'none';
+  document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
+}
+
+/* ══════════ 주간업무보고(VOC) PPT 생성 ══════════ */
+var C={navy:'1B2F5E',teal:'2E7D9E',orange:'E67E22',red:'C0392B',green:'1E7E4E',
+       line:'DDE3EE',mut:'6B7A99',yhl:'FDEBB0',ghl:'E4F5E9',box:'F5F7FA'};
+
+function rowDate(r){ return (r._y&&r._m&&r._d)? new Date(r._y,r._m-1,r._d) : null; }
+function monday(d){ var x=new Date(d); var w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); x.setHours(0,0,0,0); return x; }
+function addD(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function wkNo(mon){ return Math.floor((mon.getDate()-1)/7)+1; } /* 월 내 주차 */
+function wkLabel(mon){ return (mon.getMonth()+1)+'월 '+wkNo(mon)+'주차'; }
+function wkRange(mon){ var f=addD(mon,4);
+  return (mon.getMonth()+1)+'월 '+mon.getDate()+'일 ~ '+(f.getMonth()+1)+'월 '+f.getDate()+'일'; }
+function rowsBetween(a,b){ /* a~b 포함 */
+  return RAW.filter(function(r){ var d=rowDate(r); return d && d>=a && d<=b; });
+}
+function isOK(t){ return /이상없음|점검이상무|이상 없음/.test(String(t||'')); }
+
+function openWeekly(){
+  if(!RAW.length){ toast('데이터가 아직 없습니다'); return; }
+  /* 데이터에 존재하는 주(월요일) 목록 — 최근 8주 */
+  var set={};
+  RAW.forEach(function(r){ var d=rowDate(r); if(d) set[ymd(monday(d))]=1; });
+  var mons=Object.keys(set).sort().reverse().slice(0,8);
+  document.getElementById('wkSel').innerHTML=mons.map(function(k){
+    var m=new Date(k+'T00:00:00');
+    return '<option value="'+k+'">'+wkLabel(m)+' ('+wkRange(m)+')</option>';
+  }).join('');
+  /* 1) 직전 입력값 복원 → 2) 재고 시트 자동 조회로 덮어쓰기 */
+  try{ var inv=JSON.parse(localStorage.getItem('baz_dash_inv')||'{}');
+    ['inv1','inv2','inv3','inv4'].forEach(function(id){ if(inv[id]!=null) document.getElementById(id).value=inv[id]; });
+  }catch(e){}
+  document.getElementById('wkModal').classList.add('show');
+  loadInventory();
+}
+function loadInventory(){
+  var st=document.getElementById('invStatus');
+  st.textContent='재고 시트 조회 중…'; st.style.color='';
+  gv('inventory',{}).then(function(d){
+    if(!d.success){ st.textContent='⚠️ '+(d.error||'재고 시트 연동 실패')+' — 직접 입력하세요'; st.style.color='var(--red)'; return; }
+    var s=d.summary||{};
+    if(s.hpRepair   != null) document.getElementById('inv1').value = s.hpRepair;
+    if(s.hpNew      != null) document.getElementById('inv2').value = s.hpNew;
+    if(s.footNew    != null) document.getElementById('inv3').value = s.footNew;
+    if(s.footRepair != null) document.getElementById('inv4').value = s.footRepair;
+    var ok=['hpRepair','hpNew','footNew','footRepair'].filter(function(k){return s[k]!=null;}).length;
+    st.textContent = ok===4
+      ? '✅ 재고 시트 연동 — 4/4 항목 자동 입력 ('+d.updated+')'
+      : (ok? '✅ '+ok+'/4 항목 자동 입력 — 나머지는 직접 입력 ('+d.updated+')'
+           : '⚠️ 자동 매칭 실패 — inspectInventory 로그 확인 필요, 직접 입력하세요');
+    st.style.color = ok? 'var(--green)' : 'var(--red)';
+  }).catch(function(){
+    st.textContent='⚠️ 네트워크 오류 — 직접 입력하세요'; st.style.color='var(--red)';
+  });
+}
+function closeWeekly(){ document.getElementById('wkModal').classList.remove('show'); }
+document.getElementById('wkModal').addEventListener('click',function(e){ if(e.target.id==='wkModal') closeWeekly(); });
+
+/* PptxGenJS 지연 로드 (최초 1회) */
+function loadPptxLib(){
+  return new Promise(function(res,rej){
+    if(window.PptxGenJS) return res();
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js';
+    s.onload=res; s.onerror=function(){rej('라이브러리 로드 실패 — 네트워크 확인');};
+    document.head.appendChild(s);
+  });
+}
+
+function cnt(rows,key){
+  var m={}; rows.forEach(function(r){ var v=String(r[key]||'').trim(); if(v)m[v]=(m[v]||0)+1; });
+  return m;
+}
+function topOf(m,excl){
+  return Object.keys(m).filter(function(k){return !excl||!excl(k);})
+    .map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
+}
+function deltaTxt(cur,prev){
+  if(cur>prev)  return {t:'▲ '+(cur-prev)+' 전주 대비', c:C.red};
+  if(cur<prev)  return {t:'▼ '+(prev-cur)+' 전주 대비', c:C.green};
+  return {t:'— 전주 동일', c:C.mut};
+}
+
+async function makeWeeklyPPT(){
+  var btn=document.getElementById('wkGo'); btn.disabled=true; btn.textContent='생성 중…';
+  try{
+    await loadPptxLib();
+    var inv={inv1:val_('inv1'),inv2:val_('inv2'),inv3:val_('inv3'),inv4:val_('inv4')};
+    try{ localStorage.setItem('baz_dash_inv',JSON.stringify(inv)); }catch(e){}
+
+    var mon=new Date(document.getElementById('wkSel').value+'T00:00:00');
+    var fri=addD(mon,4), pMon=addD(mon,-7), pFri=addD(mon,-3);
+    var cur=rowsBetween(mon,fri), prev=rowsBetween(pMon,pFri);
+
+    /* 집계 */
+    var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
+    var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
+    var types=topOf(typeC,isOK).slice(0,3);
+    var okCnt=topOf(typeC,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
+    var parts=topOf(partC).slice(0,3);
+    var partTot=Object.keys(partC).reduce(function(a,k){return a+partC[k];},0);
+    /* 월 내 주별 추이 */
+    var m1=monday(new Date(mon.getFullYear(),mon.getMonth(),1));
+    if(m1.getMonth()!==mon.getMonth()) m1=addD(m1,7);
+    var weeks=[]; for(var w=new Date(m1); w.getMonth()===mon.getMonth(); w=addD(w,7)){
+      weeks.push({mon:new Date(w), n:rowsBetween(w,addD(w,4)).length, cur:ymd(w)===ymd(mon)});
+    }
+    /* 고장 상세: 상위 유형별 대표 내용 */
+    var details=types.map(function(p){
+      var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
+      var line=row?String(row.detail).split('\n')[0]:'';
+      if(line.length>42)line=line.slice(0,42)+'…';
+      return {name:p[0], desc:line||'—'};
+    });
+
+    /* ── 슬라이드 ── */
+    var pptx=new PptxGenJS();
+    pptx.defineLayout({name:'W',width:13.33,height:7.5}); pptx.layout='W';
+    var s=pptx.addSlide();
+    function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:'FFFFFF'},line:{color:C.line,width:1}}); }
+    function tx(t,o){ s.addText(t,o); }
+
+    /* 로고 · 타이틀 바 */
+    tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
+    tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
+    s.addShape(pptx.shapes.RECTANGLE,{x:0,y:0.5,w:11.3,h:0.68,fill:{color:C.navy}});
+    tx('생산품질_CS팀 주간업무보고(VOC)',{x:0.25,y:0.5,w:6.4,h:0.68,fontSize:19,bold:true,color:'FFFFFF'});
+    tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),{x:6.6,y:0.5,w:4.55,h:0.68,fontSize:14,bold:true,color:'FFFFFF',align:'right'});
+
+    /* ① VOC 주별 추이 */
+    card(0.25,1.4,4.5,2.85);
+    tx('VOC 주별 추이',{x:0.45,y:1.52,w:2.5,h:0.3,fontSize:11,bold:true,color:C.navy});
+    var d1=deltaTxt(cur.length,prev.length);
+    tx([{text:String(cur.length),options:{fontSize:40,bold:true,color:C.navy}},
+        {text:' 건  ',options:{fontSize:14,color:C.navy}},
+        {text:d1.t,options:{fontSize:11,bold:true,color:d1.c}}],
+       {x:0.45,y:1.82,w:4.1,h:0.7});
+    var bx=0.55,bw=0.52,gap=(3.9-bw*weeks.length)/Math.max(weeks.length-1,1),base=3.85,maxH=1.05;
+    var maxN=Math.max.apply(null,weeks.map(function(w){return w.n;}).concat([1]));
+    weeks.forEach(function(w,i){
+      var h=Math.max(0.06, w.n/maxN*maxH), x=bx+i*(bw+gap);
+      s.addShape(pptx.shapes.RECTANGLE,{x:x,y:base-h,w:bw,h:h,fill:{color:w.cur?C.orange:C.teal}});
+      tx(String(w.n),{x:x-0.1,y:base-h-0.26,w:bw+0.2,h:0.24,fontSize:10,bold:true,align:'center',color:C.navy});
+      tx(wkNo(w.mon)+'주차',{x:x-0.15,y:base+0.03,w:bw+0.3,h:0.24,fontSize:9,align:'center',color:C.mut});
+    });
+
+    /* ② VOC 유형 */
+    card(4.95,1.4,4.35,2.85);
+    tx('VOC 유형',{x:5.15,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
+    tx('유형',{x:5.35,y:1.86,w:2,h:0.26,fontSize:9,color:C.mut});
+    tx('건수',{x:8.35,y:1.86,w:0.75,h:0.26,fontSize:9,color:C.mut,align:'right'});
+    var ry=2.16;
+    types.forEach(function(p,i){
+      if(i===0){
+        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.95,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
+        var dt=deltaTxt(p[1], typeP[p[0]]||0);
+        tx(dt.t,{x:7.15,y:ry,w:1.15,h:0.3,fontSize:8.5,bold:true,color:dt.c});
+      }
+      tx(p[0],{x:5.25,y:ry,w:1.8,h:0.3,fontSize:10.5,bold:i===0,color:'333333'});
+      tx(String(p[1]),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      ry+=0.4;
+    });
+    if(okCnt){
+      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.95,h:0.34,rectRadius:0.05,fill:{color:C.ghl}});
+      tx('이상 없음',{x:5.25,y:ry,w:1.8,h:0.3,fontSize:10.5,color:C.green});
+      tx(String(okCnt),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      ry+=0.4;
+    }
+    s.addShape(pptx.shapes.LINE,{x:5.15,y:ry+0.02,w:3.95,h:0,line:{color:C.line,width:1}});
+    tx('총 합계',{x:5.25,y:ry+0.08,w:2,h:0.32,fontSize:11,bold:true,color:C.navy});
+    tx(String(cur.length),{x:8.35,y:ry+0.08,w:0.75,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+
+    /* ③ 교체품 현황 */
+    card(9.5,1.4,3.55,2.85);
+    tx('교체품 현황',{x:9.7,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
+    tx('교체품',{x:9.9,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
+    tx('수량',{x:12.15,y:1.86,w:0.7,h:0.26,fontSize:9,color:C.mut,align:'right'});
+    var py=2.16;
+    parts.forEach(function(p,i){
+      if(i===0){
+        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.75,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
+        var dp=deltaTxt(p[1], partP[p[0]]||0);
+        tx(dp.t,{x:11.5,y:py+0.28,w:1.4,h:0.26,fontSize:8,bold:true,color:dp.c});
+      }
+      tx(p[0],{x:9.8,y:py,w:1.6,h:0.3,fontSize:10,bold:i===0,color:'333333'});
+      tx(String(p[1]),{x:12.15,y:py,w:0.7,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      py+=0.52;
+    });
+    s.addShape(pptx.shapes.LINE,{x:9.7,y:3.72,w:3.15,h:0,line:{color:C.line,width:1}});
+    tx('총 합계',{x:9.8,y:3.8,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
+    tx(String(partTot),{x:12.15,y:3.8,w:0.7,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+    /* 유상=새제품 SN 투입 · 무상=리페어 SN 투입 규칙 반영 */
+    var partRows=cur.filter(function(r){return r.part&&r.part!=='없음';});
+    var newCnt=partRows.filter(function(r){return r.paid==='유상'||r._cost>0;}).length;
+    tx('유상(새제품) '+newCnt+'건 · 무상(리페어) '+(partRows.length-newCnt)+'건',
+       {x:9.7,y:4.06,w:3.2,h:0.2,fontSize:8,color:C.mut,align:'right'});
+
+    /* ④ 고장 상세 */
+    card(0.25,4.45,4.5,2.6);
+    tx('고장 상세',{x:0.45,y:4.57,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
+    var gy=4.98;
+    details.forEach(function(d,i){
+      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:0.45,y:gy,w:1.5,h:0.36,rectRadius:0.06,
+        fill:{color:i===0?C.orange:C.teal}});
+      tx(d.name,{x:0.45,y:gy,w:1.5,h:0.36,fontSize:8.5,bold:true,color:'FFFFFF',align:'center'});
+      tx(d.desc,{x:2.05,y:gy,w:2.6,h:0.4,fontSize:9,color:'333333',valign:'middle'});
+      gy+=0.62;
+    });
+    if(!details.length) tx('해당 주차 고장 내역 없음',{x:0.45,y:5.2,w:4,h:0.4,fontSize:10,color:C.mut});
+
+    /* ⑤ 재고 현황 */
+    card(4.95,4.45,8.1,2.6);
+    tx('재고 현황',{x:5.15,y:4.57,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
+    var invDefs=[['Handpiece (Repair)',inv.inv1,true],['Handpiece (새제품)',inv.inv2,false],
+                 ['Foot s/w (새제품)',inv.inv3,false],['Foot s/w (Repair)',inv.inv4,false]];
+    invDefs.forEach(function(v,i){
+      var x=5.15+i*1.95;
+      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:4.95,w:1.8,h:1.85,rectRadius:0.04,
+        fill:{color:v[2]?'FFFFFF':C.box},line:{color:v[2]?C.orange:C.line,width:v[2]?1.5:1}});
+      tx(v[0],{x:x,y:5.05,w:1.8,h:0.3,fontSize:9,color:C.mut,align:'center'});
+      tx(String(v[1]||0),{x:x,y:5.45,w:1.8,h:1,fontSize:36,bold:true,align:'center',
+        color:v[2]?C.orange:(Number(v[1])?C.navy:'AAB4C8')});
+    });
+
+    /* 푸터 */
+    s.addShape(pptx.shapes.RECTANGLE,{x:0,y:7.28,w:13.33,h:0.22,fill:{color:C.navy}});
+    tx('BAZ BIOMEDIC',{x:0.25,y:7.26,w:2,h:0.24,fontSize:8,color:'FFFFFF'});
+
+    var fname='주간업무보고_VOC_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')+'.pptx';
+    await pptx.writeFile({fileName:fname});
+    toast('📑 '+fname+' 생성 완료');
+    closeWeekly();
+  }catch(e){ toast('❌ 생성 실패: '+e); }
+  btn.disabled=false; btn.textContent='PPT 생성';
+}
+function val_(id){ return String(document.getElementById(id).value||'').replace(/[^\d]/g,''); }
+
+loadData(false);
 </script>
 </body>
 </html>
