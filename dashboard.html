@@ -61,6 +61,12 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .cb-item.on{background:var(--teal-soft);font-weight:700;color:var(--teal)}
 .cb-item b{color:var(--text-muted);font-weight:400;font-size:11px;white-space:nowrap}
 /* N-Care 정기점검 현황 */
+.nck-rate{margin-bottom:10px}
+.nck-rate-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.nck-rate-top b{font-size:13.5px;color:var(--green)}
+.nck-rate-top span{font-size:11px;color:var(--text-muted)}
+.nck-ratebar{height:10px;background:#F0F4F9;border-radius:5px;overflow:hidden}
+.nck-ratebar div{height:100%;background:var(--green);border-radius:5px;transition:width .3s}
 .nck-sum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .nck-badge{flex:1;min-width:70px;text-align:center;border-radius:8px;padding:7px 4px;font-size:11px;color:#fff}
 .nck-badge b{display:block;font-size:17px;line-height:1.2}
@@ -462,16 +468,26 @@ function ncareCheck(){
     return {hosp:subs[k].name, ncare:subs[k].ncare, days:days, last:vz.last, si:si};
   });
   var el=document.getElementById('cNck');
-  document.getElementById('tNck').textContent='가입 병원 '+list.length+'곳'+(HOSPDB.length?' · 병원정보DB 연동':'');
-  if(!list.length){ el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return; }
+  if(!list.length){
+    document.getElementById('tNck').textContent='가입 병원 0곳'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return;
+  }
   var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
+  var rate=Math.round(cnt[0]/list.length*100);   /* 정상(30일 이내 점검) 비율 */
+  document.getElementById('tNck').textContent=
+    '가입 병원 '+list.length+'곳 · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
   var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
     if(a.si===4&&b.si!==4) return 1;
     if(b.si===4&&a.si!==4) return -1;
     return (b.days||0)-(a.days||0);
   });
   el.innerHTML=
-    '<div class="nck-sum">'+ST.map(function(s,i){
+    '<div class="nck-rate">'
+      +'<div class="nck-rate-top"><b>✅ 정상 비율 '+rate+'%</b>'
+      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'곳</span></div>'
+      +'<div class="nck-ratebar"><div style="width:'+Math.max(2,rate)+'%"></div></div>'
+    +'</div>'
+    +'<div class="nck-sum">'+ST.map(function(s,i){
       return '<div class="nck-badge" style="background:'+s[1]+'"><b>'+cnt[i]+'</b>'+s[0]+'</div>';
     }).join('')+'</div>'
     +(need.length
