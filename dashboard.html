@@ -327,6 +327,14 @@ function loadData(force){
     });
 }
 
+/* GAS GET 헬퍼 — 병원정보DB(hospdb)·재고(inventory) 조회에 사용
+   (호출부는 있는데 정의가 빠져 있어 N-Care/재고 연동이 조용히 실패하던 버그 수정) */
+function gv(action, params){
+  var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
+  return fetch(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''),{method:'GET'})
+    .then(function(r){return r.json();});
+}
+
 /* 타임아웃(20초)이 있는 fetch → 응답이 JSON인지 검사 → 실패 시 재시도 */
 function fetchTimeout(url, ms){
   var ctl = ('AbortController' in window) ? new AbortController() : null;
