@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
 <title>현장 처리완료 · 공유 | BAZ CS</title>
 <style>
 :root{
@@ -116,7 +118,11 @@ textarea{resize:vertical;min-height:56px}
       </div>
       <div class="field">
         <label>구분</label>
-        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option><option>데모</option></select>
+        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option></select>
+      </div>
+      <div class="field">
+        <label>장비 구분 <span class="opt">· 데모장비 수리 시</span></label>
+        <select id="eqKind" onchange="render()"><option>병원 장비</option><option>데모 장비</option></select>
       </div>
       <div class="field full" style="position:relative">
         <label>병원명 <span class="opt">· 입력 시 자동완성</span></label>
@@ -147,17 +153,19 @@ textarea{resize:vertical;min-height:56px}
         <label>S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
         <div class="hp2">
           <input id="hpOut" placeholder="OUT S/N (탈거)" oninput="render()">
-          <input id="wVer" list="hpVerList" placeholder="OUT Ver 선택/입력" oninput="render()">
+          <select id="wVer" onchange="render()">
+            <option value="">OUT Ver</option><option>1.0</option><option>1.0.1</option>
+            <option>1.1</option><option>1.2</option><option>1.2.1</option><option>1.2.2</option>
+          </select>
         </div>
         <div class="hp2" style="margin-top:6px">
           <input id="hpIn" placeholder="IN S/N (장착)" oninput="render()">
-          <input id="uVer" list="hpVerList" placeholder="IN Ver 선택/입력" oninput="render()">
+          <select id="uVer" onchange="render()">
+            <option value="">IN Ver</option><option>1.0</option><option>1.0.1</option>
+            <option>1.1</option><option>1.2</option><option>1.2.1</option><option>1.2.2</option>
+          </select>
         </div>
-        <datalist id="hpVerList">
-          <option value="1.2.2"></option><option value="1.2.1"></option>
-          <option value="1.2.0"></option><option value="1.1.0"></option>
-        </datalist>
-        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기 · 버전은 드롭다운 선택 또는 직접 입력</div>
+        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기</div>
       </div>
       <div class="field">
         <label>노즐 제조일자</label>
@@ -180,10 +188,6 @@ textarea{resize:vertical;min-height:56px}
         <label>교체비용 <span class="opt">(원)</span></label>
         <input id="cost" inputmode="numeric" placeholder="예) 1650000" oninput="render()">
       </div>
-      <div class="field full">
-        <label>A/S 내용 상세 <span class="opt">· 줄마다 " - " 자동</span></label>
-        <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)" oninput="render()"></textarea>
-      </div>
       <div class="field">
         <label>A/S 결과</label>
         <select id="result" onchange="toggleCustom('result');render()">
@@ -191,6 +195,10 @@ textarea{resize:vertical;min-height:56px}
           <option>점검</option><option value="__c">직접입력…</option>
         </select>
         <input id="resultCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
+      </div>
+      <div class="field full">
+        <label>A/S 내용 상세 <span class="opt">· 줄마다 " - " 자동</span></label>
+        <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)" oninput="render()"></textarea>
       </div>
       <div class="field">
         <label>비고 / 특이사항 <span class="opt">· 없으면 N/A</span></label>
@@ -266,7 +274,7 @@ function hpText(){
 }
 function buildText(){
   var t='';
-  t+='병원명 : '+val('hosp')+'\n\n';
+  t+='병원명 : '+val('hosp')+(val('eqKind')==='데모 장비'?' (데모장비)':'')+'\n\n';
   t+='S/N(장비) : '+snVal()+'\n';
   t+='S/N(핸드피스) : '+hpText()+'\n';
   t+='노즐 제조일자 : '+val('nozzle')+'\n';
@@ -291,7 +299,7 @@ function buildTextSheet(){
   t+='─────────────\n';
   t+='병원명 : '+val('hosp')+'\n';
   t+='담당 FSE : '+val('fse')+'\n';
-  t+='구분 : '+val('gubun')+'\n';
+  t+='구분 : '+val('gubun')+(val('eqKind')==='데모 장비'?' · 데모장비':'')+'\n';
   t+='장비 S/N : '+snVal()+'\n';
   t+='UI/HP Ver : '+[val('verUI'),val('verHP')].filter(Boolean).join(' / ')+'\n';
   t+='대분류/유형 : '+itemText()+(itemCode()?' ('+itemCode()+')':'')+'\n';
@@ -357,10 +365,11 @@ function onHospInput(){
     var meta=[h.c,h.sa,h.r].filter(Boolean).join(' · ');
     return '<div class="ac-item" data-i="'+HOSPITAL_DB.indexOf(h)+'"><b>'+hlMatch(h.n,q)+'</b><span>'+escH(meta)+'</span></div>';
   }).join('');
-  /* 화면 하단이면 위로 펼침 */
+  /* 항상 아래로 펼침 — 키보드를 제외한 남은 공간만큼 높이 제한 */
   var rect=document.getElementById('hosp').getBoundingClientRect();
   var vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
-  drop.classList.toggle('up', rect.bottom > vh*0.55);
+  drop.classList.remove('up');
+  drop.style.maxHeight=Math.max(150, vh-rect.bottom-12)+'px';
   drop.style.display='block'; render();
 }
 function pickHosp(idx){
@@ -418,7 +427,7 @@ async function saveToSheet(){
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
   var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
     cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),cost:val('cost'),
-    detail:bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
+    detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
     hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP') };
   try{
     /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */

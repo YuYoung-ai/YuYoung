@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
 <title>현장 처리 대시보드 | BAZ CS</title>
 <style>
 :root{
@@ -301,8 +303,7 @@ function loadData(force){
       if(c&&c.data&&c.data.length){ boot(c, true); }
     }catch(e){}
   }
-  fetch(HANDOVER_URL+'?action=all')
-    .then(function(r){return r.json();})
+  fetchAllRetry(2)
     .then(function(d){
       if(!d.success){
         toast('❌ '+(d.error||'로드 실패'));
@@ -319,9 +320,66 @@ function loadData(force){
       boot(d, false);
       if(force) toast('🔄 최신 데이터로 갱신됨');
     })
+    .catch(function(err){
+      if(RAW.length){ toast('오프라인 — 캐시 데이터 표시 중'); return; }
+      diagnoseFail(err);
+    });
+}
+
+/* 타임아웃(20초)이 있는 fetch → 응답이 JSON인지 검사 → 실패 시 재시도 */
+function fetchTimeout(url, ms){
+  var ctl = ('AbortController' in window) ? new AbortController() : null;
+  var t = ctl ? setTimeout(function(){ ctl.abort(); }, ms) : null;
+  return fetch(url, ctl?{signal:ctl.signal}:{})
+    .then(function(r){
+      if(t) clearTimeout(t);
+      return r.text().then(function(txt){
+        if(/^\s*</.test(txt)) throw {kind:'html'};      /* HTML 응답 = 로그인/권한 페이지 */
+        try{ return JSON.parse(txt); }
+        catch(e){ throw {kind:'parse'}; }
+      });
+    })
+    .catch(function(e){
+      if(t) clearTimeout(t);
+      if(e && e.kind) throw e;
+      if(e && e.name==='AbortError') throw {kind:'timeout'};
+      throw {kind:'network'};
+    });
+}
+function fetchAllRetry(tries){
+  return fetchTimeout(HANDOVER_URL+'?action=all', 20000)
+    .catch(function(e){
+      if(tries>1 && (e.kind==='network'||e.kind==='timeout')){
+        toast('연결 재시도 중…');
+        return fetchAllRetry(tries-1);
+      }
+      throw e;
+    });
+}
+/* 실패 원인 자가진단: ping(소형 요청)으로 GAS 연결 자체를 확인 */
+function diagnoseFail(err){
+  var el=document.getElementById('loading');
+  var kind=(err&&err.kind)||'network';
+  if(kind==='html'||kind==='parse'){
+    el.innerHTML='❌ GAS가 데이터 대신 <b>로그인/권한 페이지</b>를 반환했습니다.<br><br>'
+      +'이 기기의 크롬이 접근 권한이 없는 상태입니다.<br>'
+      +'Apps Script → 배포 → 배포 관리 → ✏️ →<br>'
+      +'<b>액세스 권한: 모든 사용자</b>로 변경 → 새 버전 배포 후 새로고침하세요.';
+    return;
+  }
+  el.innerHTML='⏳ 연결 상태 진단 중…';
+  fetchTimeout(HANDOVER_URL+'?action=ping', 12000)
+    .then(function(){
+      el.innerHTML='❌ 서버 연결은 되지만 <b>데이터(all) 응답이 시간 내 오지 않았습니다.</b><br><br>'
+        +'GAS 콜드스타트이거나 데이터가 큰 경우입니다.<br>'
+        +'<button class="hd-btn" style="background:var(--teal);border:0;margin-top:8px" onclick="loadData(true)">다시 시도</button>';
+    })
     .catch(function(){
-      if(!RAW.length) document.getElementById('loading').innerHTML='❌ 네트워크 오류 — 연결 확인 후 새로고침';
-      else toast('오프라인 — 캐시 데이터 표시 중');
+      el.innerHTML='❌ 이 기기에서 <b>script.google.com 접속 자체가 실패</b>했습니다.<br><br>'
+        +'· 크롬 시크릿 탭에서 열어보세요 (확장/데이터절약 영향 배제)<br>'
+        +'· WiFi ↔ 모바일데이터를 바꿔 재시도해 보세요<br>'
+        +'· 그래도 안 되면 통신사/공유기 차단 가능성이 있습니다.<br>'
+        +'<button class="hd-btn" style="background:var(--teal);border:0;margin-top:8px" onclick="loadData(true)">다시 시도</button>';
     });
 }
 function boot(d, fromCache){
