@@ -504,6 +504,7 @@ code {
     <button class="tab-btn" onclick="showPanel('inspection')">🔧 점검내역서</button>
     <button class="tab-btn locked" id="tab-hospital" onclick="tryPanel('hospital')">🏥 병원DB <span class="lock-badge">🔒</span></button>
     <button class="tab-btn locked" id="tab-guide" onclick="tryPanel('guide')">📖 현장가이드 <span class="lock-badge">🔒</span></button>
+    <button class="tab-btn" onclick="showPanel('tools')">🆕 신규 도구</button>
     <button class="tab-btn" onclick="showPanel('faq')">❓ FAQ</button>
   </div>
 </div>
@@ -524,7 +525,8 @@ code {
       <div class="pw-title">접속 권한 안내</div>
       <div class="pw-list">
         <div class="pw-item">일반 도구 — <b>일반 비밀번호</b> (FSE)</div>
-        <div class="pw-item">병원DB · 가이드 편집 — <b>관리자 비밀번호</b> (팀장)</div>
+        <div class="pw-item">병원DB · 가이드 편집 · 만족도 조사 — <b>관리자 비밀번호</b> (팀장)</div>
+        <div class="pw-item">대시보드 · 수석 매니저 가이드 — <b>수석 매니저 비밀번호</b> (Lv.3)</div>
       </div>
       <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:8px;line-height:1.5;">
         비밀번호는 보안을 위해 별도 관리됩니다. CS 팀장에게 문의하세요.
@@ -532,7 +534,7 @@ code {
     </div>
   </div>
 
-  <!-- 도구 4종 -->
+  <!-- 도구 9종 -->
   <div class="overview-grid">
     <div class="ov-card" onclick="showPanel('report')">
       <div class="ov-icon">📋</div>
@@ -560,6 +562,37 @@ code {
       <div class="ov-desc">증상별 스크립트 (한·영·일)</div>
       <span class="ov-tag">guide.html</span>
     </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <div class="ov-icon">✍</div>
+      <div class="ov-name">현장 처리완료 · 공유</div>
+      <div class="ov-desc">카톡/Flow 양식 생성 · 시트 자동 기록</div>
+      <span class="ov-tag">handover.html</span>
+    </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <div class="ov-icon">📊</div>
+      <div class="ov-name">현장 처리 대시보드</div>
+      <div class="ov-desc">집계·필터·주간보고 PPT (Lv.3)</div>
+      <span class="ov-tag">dashboard.html</span>
+    </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <span class="lock-mark">🔒</span>
+      <div class="ov-icon">⭐</div>
+      <div class="ov-name">고객 만족도 조사</div>
+      <div class="ov-desc">AS 평가 · 별점/항목별 피드백</div>
+      <span class="ov-tag">survey.html</span>
+    </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <div class="ov-icon">🧭</div>
+      <div class="ov-name">수석 매니저 가이드</div>
+      <div class="ov-desc">유형별 확인→해결→후속 조치 (Lv.3)</div>
+      <span class="ov-tag">index.html 내장</span>
+    </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <div class="ov-icon">🤖</div>
+      <div class="ov-name">AI 트러블슈팅 챗봇</div>
+      <div class="ov-desc">증상 입력 → 점검·조치 가이드 응답</div>
+      <span class="ov-tag">chatbot.html</span>
+    </div>
   </div>
 
   <!-- 공통 특징 -->
@@ -572,7 +605,7 @@ code {
       </div>
       <div class="sc-body">
         <ul class="check-list">
-          <li><span class="ck-icon">📶</span> <span><b>오프라인 완전 작동</b> — 인터넷 없이도 모든 기능 사용 가능 (Service Worker 캐시 baz-cs-v16)</span></li>
+          <li><span class="ck-icon">📶</span> <span><b>오프라인 완전 작동</b> — 인터넷 없이도 모든 기능 사용 가능 (Service Worker 캐시 baz-cs-v27)</span></li>
           <li><span class="ck-icon">🏥</span> <span><b>395개 병원 자동완성</b> — 병원명 입력 시 S/N, 구독서비스, 영업담당자 자동 채워짐</span></li>
           <li><span class="ck-icon">🌐</span> <span><b>한·영·일 3개국어</b> — 우상단 언어 버튼으로 즉시 전환</span></li>
           <li><span class="ck-icon">📱</span> <span><b>홈 화면 추가(PWA)</b> — 앱처럼 설치 후 오프라인 사용</span></li>
@@ -605,10 +638,12 @@ code {
         <span class="sc-arrow">▼</span>
       </div>
       <div class="sc-body">
-        <p style="font-size:13px; margin-bottom:10px;">AS 보고서 생성 시와 점검 내역서 PDF 저장 시, Google Sheets에 방문 로그가 자동 기록됩니다.</p>
+        <p style="font-size:13px; margin-bottom:10px;">AS 보고서 생성, 점검 내역서 PDF 저장, 현장 처리완료·공유 기록 시 Google Sheets에 자동 기록됩니다.</p>
         <ul class="check-list">
           <li><span class="ck-icon">📋</span> <span>AS 보고서: 병원명, 발생일자, 담당자, S/N 등</span></li>
           <li><span class="ck-icon">🔧</span> <span>점검 내역서: 병원명, 방문일, 구분, 담당자, S/N</span></li>
+          <li><span class="ck-icon">✍</span> <span>현장 처리완료·공유: 처리일자, 병원, 유형, 교체품, 비용 등 (대시보드 집계 원본)</span></li>
+          <li><span class="ck-icon">⭐</span> <span>만족도 조사: 별점·항목별 평가 응답</span></li>
         </ul>
         <div class="warn-box">
           <span class="tb-label">⚠️ 주의</span>
@@ -1166,6 +1201,128 @@ code {
 
 
 <!-- ════════════════════════════════════════════════════ -->
+<!-- PANEL: 신규 도구 -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="panel" id="panel-tools">
+  <div class="sec-title">🆕 신규 도구</div>
+  <p class="sec-sub">최근 추가된 5종 도구의 사용법을 안내합니다.</p>
+
+  <div class="step-list">
+
+    <!-- 현장 처리완료·공유 -->
+    <div class="step-card open">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">✍</div>
+        <div class="sc-title">현장 처리완료 · 공유 (handover.html)</div>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          메뉴 허브 → <b>현장 처리완료 · 공유</b> → <b>일반 비밀번호</b>
+        </div>
+        <p style="font-size:13px; margin-bottom:10px;">현장 처리 내용을 입력하면 카톡/Flow 공유 양식이 자동 생성되고, 구글 시트(handover)에 자동 기록됩니다. 이 기록이 <b>현장 처리 대시보드</b>의 집계 원본이 됩니다.</p>
+        <ul class="check-list">
+          <li><span class="ck-icon">🏥</span><span><b>병원 자동완성</b> — 병원 선택 시 S/N, UI/HP 버전 자동 입력 · 최근 처리 이력 표시</span></li>
+          <li><span class="ck-icon">🔁</span><span><b>핸드피스 교체 기록</b> — OUT(탈거) → IN(장착) S/N·버전 입력</span></li>
+          <li><span class="ck-icon">📑</span><span><b>A/S 항목 대분류·소분류</b> 선택, 교체품·교체비용 기록</span></li>
+          <li><span class="ck-icon">💬</span><span><b>공유 양식 자동 생성</b> — 작성 즉시 카톡/Flow 붙여넣기용 텍스트 완성</span></li>
+          <li><span class="ck-icon">📊</span><span><b>시트 자동 기록</b> — 전송 즉시 대시보드에 반영</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 현장 처리 대시보드 -->
+    <div class="step-card">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">📊</div>
+        <div class="sc-title">현장 처리 대시보드 (dashboard.html)</div>
+        <span class="sc-badge optional">Lv.3 전용</span>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          메뉴 허브 → <b>현장 처리 대시보드</b> → <b>수석 매니저 비밀번호(Lv.3)</b>
+        </div>
+        <ul class="check-list">
+          <li><span class="ck-icon">📈</span><span><b>KPI 4종</b> — 서비스 건수 · 교체비용 합계 · 서비스 병원 수 · A/S 비율</span></li>
+          <li><span class="ck-icon">🔍</span><span><b>다중 필터</b> — 기간·년·월·분기·점검/A·S·유/무상·N-Care·대분류·담당자·유형·병원</span></li>
+          <li><span class="ck-icon">📊</span><span><b>차트</b> — 월별/주차별 추이, 유형·대분류·교체품·병원·담당자 TOP, 막대 클릭 시 필터 연동</span></li>
+          <li><span class="ck-icon">🩺</span><span><b>N-Care 정기점검 현황</b> — 마지막 방문일 기준 30일 정상 / ~60 점검대상 / ~90 권고 / 초과 경고</span></li>
+          <li><span class="ck-icon">📑</span><span><b>주간업무보고(VOC) PPT 자동 생성</b> — 주차 선택 → 고장 상세 초안 자동 제안 · 재고 시트 자동 연동</span></li>
+          <li><span class="ck-icon">📶</span><span><b>캐시 지원</b> — 오프라인에서도 마지막 데이터 표시, 새로고침 버튼으로 최신화</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 고객 만족도 조사 -->
+    <div class="step-card">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">⭐</div>
+        <div class="sc-title">고객 만족도 조사 (survey.html)</div>
+        <span class="sc-badge optional">관리자 이상</span>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          메뉴 허브(관리자 이상 노출) → <b>고객 만족도 조사</b> · 병원 데이터센터의 [설문] 버튼으로도 진입
+        </div>
+        <ul class="check-list">
+          <li><span class="ck-icon">⭐</span><span>AS 서비스 완료 후 고객이 직접 <b>별점·항목별 평가</b> 입력</span></li>
+          <li><span class="ck-icon">🌐</span><span>우상단 언어 버튼으로 다국어 전환</span></li>
+          <li><span class="ck-icon">📊</span><span>응답은 구글 시트에 자동 기록</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 수석 매니저 가이드 -->
+    <div class="step-card">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">🧭</div>
+        <div class="sc-title">수석 매니저 가이드 (허브 내장)</div>
+        <span class="sc-badge optional">Lv.3 전용</span>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          메뉴 허브(Lv.3 노출) → <b>수석 매니저 가이드</b> — 별도 페이지 이동 없이 허브 안에서 열림
+        </div>
+        <ul class="check-list">
+          <li><span class="ck-icon">🔍</span><span>유형 또는 증상 입력(예: 노즐누수, 풋스위치) → 자동완성 검색</span></li>
+          <li><span class="ck-icon">🧭</span><span><b>문제 확인 → 문제 해결 → 후속 조치</b> 3단계 가이드 표시</span></li>
+          <li><span class="ck-icon">📚</span><span>유형 마스터 + 최근 처리 사례 기반으로 내용 자동 구성</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- AI 트러블슈팅 챗봇 -->
+    <div class="step-card">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">🤖</div>
+        <div class="sc-title">AI 트러블슈팅 챗봇 (chatbot.html)</div>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          <b>병원 데이터센터</b>의 챗봇 버튼으로 진입 (병원 정보가 자동으로 연결됨)
+        </div>
+        <ul class="check-list">
+          <li><span class="ck-icon">💬</span><span>증상을 대화로 입력하면 <b>점검 방법 → 조치 방법</b>을 순서대로 안내</span></li>
+          <li><span class="ck-icon">🏷️</span><span>카테고리 탭 · 빠른 태그 · 증상 추천 자동완성 지원</span></li>
+          <li><span class="ck-icon">📚</span><span>노즐 인식, UI 업그레이드, 터치 불량 등 주요 증상 지식베이스 내장</span></li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /panel-tools -->
+
+
+<!-- ════════════════════════════════════════════════════ -->
 <!-- PANEL: FAQ -->
 <!-- ════════════════════════════════════════════════════ -->
 <div class="panel" id="panel-faq">
@@ -1184,12 +1341,12 @@ code {
         <p style="font-size:13px; margin-bottom:8px;">인터넷이 연결된 상태에서 한 번 이상 접속해야 Service Worker가 캐시를 구성합니다.</p>
         <ul class="check-list">
           <li><span class="ck-icon">1️⃣</span><span>인터넷 연결 상태에서 PWA에 접속</span></li>
-          <li><span class="ck-icon">2️⃣</span><span>모든 탭(4개 도구)을 한 번씩 열어서 캐시 적재</span></li>
+          <li><span class="ck-icon">2️⃣</span><span>모든 도구를 한 번씩 열어서 캐시 적재</span></li>
           <li><span class="ck-icon">3️⃣</span><span>이후 오프라인에서 정상 작동</span></li>
         </ul>
         <div class="tip-box">
           <span class="tb-label">💡 현재 캐시 버전</span>
-          <code>baz-cs-v16</code> — 업데이트 시 자동으로 새 버전으로 교체됩니다.
+          <code>baz-cs-v27</code> — 업데이트 시 자동으로 새 버전으로 교체됩니다.
         </div>
       </div>
     </div>
@@ -1256,7 +1413,8 @@ code {
             <div class="pw-title">비밀번호 정리</div>
             <div class="pw-list">
               <div class="pw-item">일반 도구 — <b>일반 비밀번호</b> (FSE)</div>
-              <div class="pw-item">병원DB · 가이드 편집 — <b>관리자 비밀번호</b> (팀장)</div>
+              <div class="pw-item">병원DB · 가이드 편집 · 만족도 조사 — <b>관리자 비밀번호</b> (팀장)</div>
+              <div class="pw-item">대시보드 · 수석 매니저 가이드 — <b>수석 매니저 비밀번호</b> (Lv.3)</div>
             </div>
           </div>
         </div>
@@ -1315,7 +1473,7 @@ function showPanel(id) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('on'));
   document.getElementById('panel-' + id).classList.add('on');
 
-  var ids = ['overview','report','inspection','hospital','guide','faq'];
+  var ids = ['overview','report','inspection','hospital','guide','tools','faq'];
   var btns = document.querySelectorAll('.tab-btn');
   var idx = ids.indexOf(id);
   if (idx >= 0 && btns[idx]) btns[idx].classList.add('on');
