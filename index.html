@@ -210,66 +210,66 @@
   <!-- 도구 선택 안내 (해제 후) -->
   <div id="appSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;margin-top:14px;">
     <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;" id="chooseToolText">사용할 도구를 선택하세요</div>
-    <button type="button" id="appBtnReport" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnReport" data-toolid="report" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
       <span style="font-size:24px;">📋</span>
       <span style="flex:1;"><span class="tool-name" data-tool="report-name">AS 처리 보고서</span><br><span style="font-size:11px;font-weight:500;color:#6B7A99;" class="tool-desc" data-tool="report-desc">현장 보고서 작성 → PPT 자동 생성</span></span>
       <span style="color:#9AA3B5;">→</span>
     </button>
-    <button type="button" id="appBtnGuide" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnGuide" data-toolid="guide" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
       <span style="font-size:24px;">📖</span>
       <span style="flex:1;"><span class="tool-name" data-tool="guide-name">현장 대응 가이드</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="guide-desc">CUREJET 증상별 진단·조치 매뉴얼</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnInspection" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnInspection" data-toolid="inspection" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🔧</span>
       <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
 
-    <button type="button" id="appBtnHandover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHandover" data-toolid="handover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">✍</span>
       <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">카톡/Flow 양식 생성 · 시트 자동 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnChatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnChatbot" data-toolid="chatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🤖</span>
       <span style="flex:1;"><span class="tool-name">CS AI 챗봇</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">증상 입력 → 점검·조치 트러블슈팅</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnWeekly" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnWeekly" data-toolid="weekly" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">📅</span>
       <span style="flex:1;"><span class="tool-name">주간업무보고</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">주간 처리 내역 불러오기 → 시트 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnHospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHospital" data-toolid="hospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🏥</span>
       <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
-    <button type="button" id="appBtnSurvey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 수석 매니저 가이드 -->
-    <button type="button" id="appBtnManager" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnManager" data-toolid="manager" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">🧭</span>
       <span style="flex:1;"><span class="tool-name">수석 매니저 가이드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">유형별 [문제 확인→해결→후속 조치] · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 현장 처리 대시보드 -->
-    <button type="button" id="appBtnDashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnDashboard" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">📊</span>
       <span style="flex:1;"><span class="tool-name">현장 처리 대시보드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">집계·필터·주간보고 PPT · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 메뉴 관리 (도구 노출 설정 · 시트 '메뉴설정' 연동) -->
-    <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(202,220,252,.4);background:transparent;color:#8EA0C8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
-      ⚙️ 메뉴 관리 <span style="font-weight:500;font-size:11px;">· 도구 표시/숨김 · Lv.3</span>
+    <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:999;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(202,220,252,.4);background:transparent;color:#8EA0C8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
+      ⚙️ 메뉴 관리 <span style="font-weight:500;font-size:11px;">· 표시/레벨/순서 설정 · Lv.3</span>
     </button>
   </div>
 
@@ -277,7 +277,7 @@
   <div id="menuAdminModal" style="position:fixed;inset:0;z-index:10000;background:rgba(10,20,45,.6);display:none;align-items:center;justify-content:center;padding:24px;">
     <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:22px;max-height:80vh;overflow:auto;">
       <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;">⚙️ 메뉴 관리</h3>
-      <p style="font-size:12px;color:#6B7A99;margin:0 0 14px;line-height:1.5;">체크 해제한 도구는 허브에서 숨겨집니다.<br>설정은 시트(메뉴설정 탭)에 저장되어 모든 기기에 적용됩니다.</p>
+      <p style="font-size:12px;color:#6B7A99;margin:0 0 14px;line-height:1.5;">체크=표시 · Lv=필요 보안레벨 · 숫자=정렬 순서.<br>설정은 시트(메뉴설정 탭)에 저장되어 모든 기기에 적용됩니다.</p>
       <div id="menuAdminList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
       <div id="menuAdminStatus" style="font-size:11.5px;color:#6B7A99;min-height:16px;margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;">
@@ -1771,16 +1771,7 @@ function unlockTools(level){
   try{ sessionStorage.setItem('baz_unlock', String(level)); }catch(e){}
   document.getElementById('lockHint').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
-  // 숨김 도구는 관리자(2)에서만 노출
-  document.getElementById('appBtnSurvey').style.display = (level>=2)?'flex':'none';
-  document.getElementById('appBtnHospital').style.display = (level>=2)?'flex':'none';
-  // 수석 매니저 가이드·대시보드는 보안레벨 3에서만 노출
-  document.getElementById('appBtnManager').style.display = (level>=3)?'flex':'none';
-  document.getElementById('appBtnDashboard').style.display = (level>=3)?'flex':'none';
-  // 메뉴 관리 버튼은 보안레벨 3에서만 노출
-  document.getElementById('appBtnMenuAdmin').style.display = (level>=3)?'flex':'none';
-  // 서버 메뉴설정(숨김 도구) 반영 — 레벨 노출 처리 뒤에 덮어씀
-  applyMenuConfig();
+  applyMenu();  // 도구 노출·레벨·순서: 시트(메뉴설정 탭) 기반 동적 적용
 }
 
 const hubPwModal=document.getElementById('hubPwModal');
@@ -1860,7 +1851,7 @@ document.getElementById('appBtnHospital').addEventListener('click', function(){ 
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
-  if(unlockLevel<3){ alert('보안레벨 3(수석 매니저) 인증이 필요합니다.'); return; }
+  if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
   location.href='dashboard.html';
 });
 
@@ -1868,98 +1859,137 @@ document.getElementById('appBtnDashboard').addEventListener('click', function(){
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
 var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
 
-// ===== 메뉴 관리 (보안레벨 3 · 시트 '메뉴설정' 탭 연동) =====
-// GET  ?action=menu               → {success, hidden:[key…]}  (구버전 GAS면 무시하고 전체 표시)
-// POST {action:'menu_save', token, hidden:[…]} → menuSave_ (menu_gas_extension.gs · AUTH_VERIFY_URL 토큰 검증)
-var MENU_TOOLS=[
-  {key:'report',    id:'appBtnReport',    name:'📋 AS 처리 보고서'},
-  {key:'guide',     id:'appBtnGuide',     name:'📖 현장 대응 가이드'},
-  {key:'inspection',id:'appBtnInspection',name:'🔧 A/S 점검 내역서'},
-  {key:'handover',  id:'appBtnHandover',  name:'✍ 현장 처리완료·공유'},
-  {key:'chatbot',   id:'appBtnChatbot',   name:'🤖 CS AI 챗봇'},
-  {key:'weekly',    id:'appBtnWeekly',    name:'📅 주간업무보고'},
-  {key:'hospital',  id:'appBtnHospital',  name:'🏥 병원 데이터센터'},
-  {key:'survey',    id:'appBtnSurvey',    name:'⭐ 고객 만족도 조사'},
-  {key:'manager',   id:'appBtnManager',   name:'🧭 수석 매니저 가이드'},
-  {key:'dashboard', id:'appBtnDashboard', name:'📊 현장 처리 대시보드'}
-];
-var MENU_BASE={report:1,guide:1,inspection:1,handover:1,chatbot:1,weekly:1};   // 잠금 없는 기본 도구
-var MENU_HIDDEN=[];
-function applyMenuConfig(){
-  MENU_TOOLS.forEach(function(t){
-    var el=document.getElementById(t.id); if(!el) return;
-    if(MENU_HIDDEN.indexOf(t.key)>=0){ el.style.display='none'; }
-    else if(MENU_BASE[t.key]){ el.style.display='flex'; }
-    /* 잠금 도구(hospital/survey/manager/dashboard)의 노출 복원은 unlockTools(레벨)가 담당 */
-  });
+// ===== 메뉴 구성 (시트 '메뉴설정' 탭 기반 · 표시/레벨/순서 · 로컬 캐시 폴백) =====
+// GET  ?action=menu → {success, menu:[{id,name,show,level,order}…]}  (구버전 hidden 배열도 수용)
+// POST {action:'menu_save', menu:[…], token} → menuSave_ (Lv.3 토큰 검증)
+// 서버 설정을 못 받아도(오프라인·미배포) 아래 기본값으로 기존과 동일하게 동작합니다.
+var MENU_DEFAULTS={
+  report:    {name:'📋 AS 처리 보고서',     level:1, show:true, order:1},
+  guide:     {name:'📖 현장 대응 가이드',   level:1, show:true, order:2},
+  inspection:{name:'🔧 A/S 점검 내역서',    level:1, show:true, order:3},
+  handover:  {name:'✍ 현장 처리완료·공유', level:1, show:true, order:4},
+  chatbot:   {name:'🤖 CS AI 챗봇',         level:1, show:true, order:5},
+  weekly:    {name:'📅 주간업무보고',       level:1, show:true, order:6},
+  hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:7},
+  survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:8},
+  manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:9},
+  dashboard: {name:'📊 현장 처리 대시보드', level:3, show:true, order:10}
+};
+var MENU_CFG=null;
+try{ MENU_CFG=JSON.parse(localStorage.getItem('baz_menu_cfg')||'null'); }catch(e){}
+
+function toolCfg(id){
+  var c=(MENU_CFG&&MENU_CFG[id])||MENU_DEFAULTS[id];
+  return c||{level:1,show:true,order:99};
 }
-function loadMenuConfig(){
-  try{
-    var c=JSON.parse(localStorage.getItem('baz_menu_hidden')||'null');
-    if(Array.isArray(c)){ MENU_HIDDEN=c; applyMenuConfig(); }
-  }catch(e){}
+function applyMenu(){
+  if(unlockLevel<1) return;
+  document.querySelectorAll('#appSelectStage [data-toolid]').forEach(function(btn){
+    var c=toolCfg(btn.getAttribute('data-toolid'));
+    var visible=(c.show!==false)&&(unlockLevel>=(parseInt(c.level,10)||1));
+    btn.style.display=visible?'flex':'none';
+    btn.style.order=parseInt(c.order,10)||99;
+  });
+  var adm=document.getElementById('appBtnMenuAdmin');
+  if(adm) adm.style.display=(unlockLevel>=3)?'flex':'none';
+}
+function loadMenuCfg(){
   fetch(MGR_GAS_URL+'?action=menu')
     .then(function(r){return r.json();})
     .then(function(d){
-      if(!d || !d.success || !Array.isArray(d.hidden)) return;   // 구버전 GAS/미설정 → 무시
-      MENU_HIDDEN=d.hidden;
-      try{ localStorage.setItem('baz_menu_hidden', JSON.stringify(d.hidden)); }catch(e){}
-      applyMenuConfig();
+      if(!d||!d.success) return;
+      var cfg=null;
+      if(d.menu && d.menu.length){
+        cfg={};
+        d.menu.forEach(function(m){
+          if(!m.id) return;
+          cfg[m.id]={name:m.name||((MENU_DEFAULTS[m.id]||{}).name)||m.id,
+                     show:m.show!==false, level:parseInt(m.level,10)||1, order:parseInt(m.order,10)||99};
+        });
+      }else if(Array.isArray(d.hidden) && d.hidden.length){
+        /* 구버전 GAS(hidden 목록) 호환: 숨김만 반영, 나머지는 기본값 */
+        cfg={};
+        d.hidden.forEach(function(id){
+          var base=MENU_DEFAULTS[id]||{name:id,level:1,order:99};
+          cfg[id]={name:base.name, show:false, level:base.level, order:base.order};
+        });
+      }
+      if(!cfg) return;
+      MENU_CFG=cfg;
+      try{ localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg)); }catch(e){}
+      applyMenu();
     })
-    .catch(function(){});
+    .catch(function(){ /* 오프라인: 캐시/기본값 유지 */ });
 }
+
+// ===== 메뉴 관리 패널 (Lv.3) — 표시 여부 · 필요 레벨 · 정렬 순서 =====
+function menuEsc_(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function openMenuAdmin(){
   if(unlockLevel<3){ alert('보안레벨 3(수석 매니저) 인증이 필요합니다.'); return; }
-  document.getElementById('menuAdminList').innerHTML=MENU_TOOLS.map(function(t){
-    var on=MENU_HIDDEN.indexOf(t.key)<0;
-    return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #DDE3EE;border-radius:10px;font-size:13.5px;color:#1A1A2E;cursor:pointer;">'
-      +'<input type="checkbox" data-menukey="'+t.key+'" '+(on?'checked':'')+' style="width:17px;height:17px;">'
-      +'<span>'+t.name+'</span></label>';
+  var ids=Object.keys(MENU_DEFAULTS);
+  document.getElementById('menuAdminList').innerHTML=ids.map(function(id){
+    var c=toolCfg(id);
+    var name=(c.name)||(MENU_DEFAULTS[id].name);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #F0F2F6;">'
+      +'<input type="checkbox" data-mid="'+id+'" '+(c.show!==false?'checked':'')+' style="width:18px;height:18px;accent-color:#1B2F5E;flex:0 0 18px;">'
+      +'<span style="flex:1;font-size:13px;font-weight:600;color:#1B2F5E;">'+menuEsc_(name)+'</span>'
+      +'<select data-mlv="'+id+'" style="width:58px;font-size:12px;padding:5px 2px;border:1px solid #DDE3EE;border-radius:6px;font-family:inherit;">'
+      +[1,2,3].map(function(l){return '<option value="'+l+'"'+((parseInt(c.level,10)||1)===l?' selected':'')+'>Lv.'+l+'</option>';}).join('')
+      +'</select>'
+      +'<input type="number" data-mord="'+id+'" value="'+(parseInt(c.order,10)||99)+'" min="1" max="99" style="width:46px;font-size:12px;padding:5px 4px;border:1px solid #DDE3EE;border-radius:6px;font-family:inherit;">'
+      +'</div>';
   }).join('');
   document.getElementById('menuAdminStatus').textContent='';
   document.getElementById('menuAdminModal').style.display='flex';
 }
 function closeMenuAdmin(){ document.getElementById('menuAdminModal').style.display='none'; }
-async function saveMenuAdmin(){
-  var hidden=[];
-  document.querySelectorAll('#menuAdminList input[data-menukey]').forEach(function(c){
-    if(!c.checked) hidden.push(c.getAttribute('data-menukey'));
-  });
-  var st=document.getElementById('menuAdminStatus');
+function saveMenuAdmin(){
+  var msg=document.getElementById('menuAdminStatus');
   var btn=document.getElementById('menuAdminSave');
-  btn.disabled=true; st.style.color='#6B7A99'; st.textContent='저장 중…';
-  try{
-    var res=await fetch(MGR_GAS_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({action:'menu_save', token:BazAuth.token(), hidden:hidden})
-    });
-    var d=await res.json();
-    if(d && (d.success || d.ok)){
-      MENU_HIDDEN=hidden;
-      try{ localStorage.setItem('baz_menu_hidden', JSON.stringify(hidden)); }catch(e){}
-      unlockTools(unlockLevel);   // 레벨 노출 복원 → applyMenuConfig로 숨김 재적용
-      st.style.color='#1E7E4E'; st.textContent='✅ 저장됨 — 시트(메뉴설정 탭)에 반영되었습니다.';
+  var menu=Object.keys(MENU_DEFAULTS).map(function(id){
+    return {
+      id:id,
+      name:(toolCfg(id).name)||MENU_DEFAULTS[id].name,
+      show:document.querySelector('[data-mid="'+id+'"]').checked,
+      level:parseInt(document.querySelector('[data-mlv="'+id+'"]').value,10)||1,
+      order:parseInt(document.querySelector('[data-mord="'+id+'"]').value,10)||99
+    };
+  });
+  if(!menu.some(function(m){return m.show;})){
+    msg.style.color='#C0392B'; msg.textContent='최소 1개 도구는 표시해야 합니다.'; return;
+  }
+  btn.disabled=true; msg.style.color='#6B7A99'; msg.textContent='저장 중…';
+  fetch(MGR_GAS_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},   /* Apps Script 프리플라이트 회피 */
+    body:JSON.stringify({action:'menu_save', menu:menu, token:BazAuth.token()})
+  }).then(function(r){return r.json();}).then(function(d){
+    btn.disabled=false;
+    if(d&&(d.success||d.ok)){
+      var cfg={}; menu.forEach(function(m){ cfg[m.id]={name:m.name,show:m.show,level:m.level,order:m.order}; });
+      MENU_CFG=cfg;
+      try{ localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg)); }catch(e){}
+      applyMenu();
+      msg.style.color='#1E7E4E'; msg.textContent='✅ 저장됨 — 모든 사용자에게 적용됩니다.';
       setTimeout(closeMenuAdmin, 900);
     }else{
-      st.style.color='#C0392B';
-      st.textContent='⚠️ '+((d&&d.error)||'저장 실패')+' — GAS menu_save 라우터·AUTH_VERIFY_URL 설정을 확인하세요.';
+      var em=(d&&d.error==='unauthorized')?'인증이 만료되었습니다. 다시 로그인해 주세요.':((d&&d.error)||'GAS menu_save 라우터·AUTH_VERIFY_URL 설정을 확인하세요');
+      msg.style.color='#C0392B'; msg.textContent='❌ 저장 실패: '+em;
     }
-  }catch(e){
-    st.style.color='#C0392B';
-    st.textContent='⚠️ 네트워크 오류 또는 GAS 구버전("알 수 없는 action") — 배포 관리에서 새 버전 배포 후 다시 시도하세요.';
-  }
-  btn.disabled=false;
+  }).catch(function(){
+    btn.disabled=false;
+    msg.style.color='#C0392B'; msg.textContent='❌ 네트워크 오류 또는 GAS 구버전("알 수 없는 action") — 새 버전 배포 후 다시 시도하세요.';
+  });
 }
 document.getElementById('appBtnMenuAdmin').addEventListener('click', openMenuAdmin);
 document.getElementById('menuAdminModal').addEventListener('click', function(e){ if(e.target.id==='menuAdminModal') closeMenuAdmin(); });
-loadMenuConfig();
+loadMenuCfg();   // 서버(메뉴설정 탭) 설정 로드 → 성공 시 캐시 갱신·재적용
 var MGR_TAX=null;     // {유형:[...]} 평탄화된 유형 목록
 function mgrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function mgrNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
 
 function openMgr(){
-  if(unlockLevel<3){ alert('보안레벨 3(수석 매니저) 인증이 필요합니다.'); return; }
+  if(unlockLevel < (parseInt(toolCfg('manager').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
   document.getElementById('mgrPanel').style.display='flex';
   document.getElementById('mgrQ').value='';
   document.getElementById('mgrOut').innerHTML='';
