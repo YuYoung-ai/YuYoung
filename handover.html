@@ -95,6 +95,7 @@ textarea{resize:vertical;min-height:56px}
 </head>
 <body>
 <header>
+  <a href="index.html" style="position:absolute;top:16px;right:14px;display:flex;align-items:center;gap:4px;background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.3);color:#cfdbf0;font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none;">← 메뉴</a>
   <h1>현장 처리완료 · 공유</h1>
   <p>처리 내용 입력 → 카톡/Flow 양식 자동 생성</p>
 </header>
@@ -115,7 +116,7 @@ textarea{resize:vertical;min-height:56px}
       </div>
       <div class="field">
         <label>구분</label>
-        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option></select>
+        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option><option>데모</option></select>
       </div>
       <div class="field full" style="position:relative">
         <label>병원명 <span class="opt">· 입력 시 자동완성</span></label>
@@ -146,13 +147,17 @@ textarea{resize:vertical;min-height:56px}
         <label>S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
         <div class="hp2">
           <input id="hpOut" placeholder="OUT S/N (탈거)" oninput="render()">
-          <input id="wVer" placeholder="OUT Ver" oninput="render()">
+          <input id="wVer" list="hpVerList" placeholder="OUT Ver 선택/입력" oninput="render()">
         </div>
         <div class="hp2" style="margin-top:6px">
           <input id="hpIn" placeholder="IN S/N (장착)" oninput="render()">
-          <input id="uVer" placeholder="IN Ver" oninput="render()">
+          <input id="uVer" list="hpVerList" placeholder="IN Ver 선택/입력" oninput="render()">
         </div>
-        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기</div>
+        <datalist id="hpVerList">
+          <option value="1.2.2"></option><option value="1.2.1"></option>
+          <option value="1.2.0"></option><option value="1.1.0"></option>
+        </datalist>
+        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기 · 버전은 드롭다운 선택 또는 직접 입력</div>
       </div>
       <div class="field">
         <label>노즐 제조일자</label>
