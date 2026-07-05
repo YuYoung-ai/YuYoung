@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.1
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.2
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -8,7 +8,7 @@
  *       → 배포 > 새 배포 > 웹 앱 > 실행: 나 / 액세스: 모든 사용자
  *       → 배포 URL을 handover.html 의 HANDOVER_URL 에 입력
  *
- * ★ v2.1 적용 방법 (기존 v2.0 위에 덮어쓰기) ★
+ * ★ v2.2 적용 방법 (기존 버전 위에 덮어쓰기) ★
  *  1) Apps Script 편집기에서 기존 코드 전체를 이 파일로 교체
  *  2) 아래 WEEKLY.REPORT_SS_ID 에 업무보고서_CS 스프레드시트 ID 입력
  *     (주소창 /d/ 와 /edit 사이 문자열)
@@ -18,7 +18,7 @@
  * 엔드포인트
  *  POST                          : 행 기록 (수기 입력 열만 기록, 수식 열 보존)
  *  POST {action:'weeklywrite'}   : [v2.1] 주간업무보고 본문을 작성자 탭 최상단에 삽입
- *  POST {action:'menu_save'}     : [v2.1] 허브 도구 표시/숨김 저장 (Lv.3 토큰 필요)
+ *  POST {action:'menu_save'}     : [v2.2] 허브 메뉴 표시/레벨/순서 저장 (Lv.3 토큰 필요)
  *  GET ?action=ping              : 콜드스타트 예열
  *  GET ?action=all               : 대시보드/주간보고용 전체 데이터
  *  GET ?action=hospdb            : 병원정보DB 목록
@@ -28,7 +28,7 @@
  *  GET ?action=master            : 유형 마스터(대분류/유형/코드/3단계 가이드/교체품)
  *  GET ?action=guide&type=유형&token=… : 3단계 원칙 답변 [v2.1: Lv.3 토큰 게이트]
  *  GET ?action=weekly&fse=이름&mon=YYYY-MM-DD : [v2.1] 해당 주(월~금) 처리 내역
- *  GET ?action=menu              : [v2.1] 허브 숨김 도구 목록 (메뉴설정 탭)
+ *  GET ?action=menu              : [v2.2] 허브 메뉴 설정(표시/레벨/순서, 메뉴설정 탭)
  *******************************************************************/
 
 var CONFIG = {
@@ -756,23 +756,37 @@ function wkWrite_(p){
   return {success:true, sheet:sh.getName(), row:row};
 }
 
-/* ═══════════════ [v2.1] 허브 메뉴 관리 (index.html 연동) ═══════════════ */
-/** GET ?action=menu → {success, hidden:[key…]} — 메뉴설정 탭 A열(2행부터) */
+/* ═══════════ [v2.2] 허브 메뉴 관리 (index.html 연동 · 표시/레벨/순서) ═══════════ */
+/** GET ?action=menu → {success, menu:[{id,name,show,level,order}…]}
+ *  메뉴설정 탭: [id | name | show | level | order | 저장일시]
+ *  (v2.1의 '숨김 key 목록' 구형 시트도 읽어서 menu 형식으로 변환) */
 function menuGet_(){
   var sh = sheet_(MENU.SHEET);
-  if(!sh) return {success:true, hidden:[]};              /* 탭 없으면 전체 표시 */
+  var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
+  if(!sh) return {success:true, menu:[], updated:now};   /* 탭 없으면 기본값 동작 */
   var v = sh.getDataRange().getDisplayValues();
-  var hidden = [];
-  for(var i=1;i<v.length;i++){
-    var k = String(v[i][0]||'').trim();
-    if(k) hidden.push(k);
+  if(v.length<2) return {success:true, menu:[], updated:now};
+  var head = v[0].map(norm_);
+  var menu = [];
+  if(head.indexOf('id')>=0){                             /* v2.2 형식 */
+    for(var i=1;i<v.length;i++){
+      var id = String(v[i][0]||'').trim();
+      if(!id) continue;
+      menu.push({ id:id, name:String(v[i][1]||'').trim(),
+                  show: norm_(v[i][2])!=='false' && norm_(v[i][2])!=='x' && norm_(v[i][2])!=='숨김',
+                  level: Number(v[i][3])||1, order: Number(v[i][4])||99 });
+    }
+  }else{                                                 /* v2.1 구형: 숨김 key 목록 */
+    for(var j=1;j<v.length;j++){
+      var k = String(v[j][0]||'').trim();
+      if(k) menu.push({id:k, name:'', show:false, level:1, order:99});
+    }
   }
-  return {success:true, hidden:hidden,
-          updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  return {success:true, menu:menu, updated:now};
 }
 
-/** POST {action:'menu_save', token, hidden:[key…]} — Lv.3 토큰 필수
- *  메뉴설정 탭을 새로 써서 숨김 도구 목록 저장 (탭 없으면 자동 생성) */
+/** POST {action:'menu_save', token, menu:[{id,name,show,level,order}…]} — Lv.3 토큰 필수
+ *  (구버전 프런트의 hidden:[key…] 형식도 수용) */
 function menuSave_(p){
   var lv = verifyLevel_(p.token||'');
   if(lv < 3){
@@ -780,12 +794,22 @@ function menuSave_(p){
       ? 'unauthorized — 보안레벨 3(수석 매니저) 토큰 필요'
       : 'AUTH_VERIFY_URL 미설정 — 저장 거부'};
   }
-  var hidden = Array.isArray(p.hidden) ? p.hidden.map(function(k){return String(k).trim();}).filter(Boolean) : [];
+  var menu = Array.isArray(p.menu) ? p.menu : null;
+  if(!menu && Array.isArray(p.hidden)){                  /* 구형 페이로드 변환 */
+    menu = p.hidden.map(function(k){ return {id:String(k).trim(), name:'', show:false, level:1, order:99}; });
+  }
+  if(!menu) return {success:false, error:'menu(또는 hidden) 배열 필요'};
+
   var sh = sheet_(MENU.SHEET) || ss_().insertSheet(MENU.SHEET);
   sh.clearContents();
   var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
-  var rows = [['숨김 도구 key','저장일시']];
-  hidden.forEach(function(k){ rows.push([k, now]); });
-  sh.getRange(1,1,rows.length,2).setValues(rows);
-  return {success:true, count:hidden.length, updated:now};
+  var rows = [['id','name','show','level','order','저장일시']];
+  menu.forEach(function(m){
+    if(!m || !m.id) return;
+    rows.push([ String(m.id).trim(), String(m.name||''),
+                m.show===false ? 'FALSE' : 'TRUE',
+                Number(m.level)||1, Number(m.order)||99, now ]);
+  });
+  sh.getRange(1,1,rows.length,6).setValues(rows);
+  return {success:true, count:rows.length-1, updated:now};
 }
