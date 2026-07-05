@@ -277,7 +277,7 @@
   <div id="menuAdminModal" style="position:fixed;inset:0;z-index:10000;background:rgba(10,20,45,.6);display:none;align-items:center;justify-content:center;padding:24px;">
     <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:22px;max-height:80vh;overflow:auto;">
       <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;">⚙️ 메뉴 관리</h3>
-      <p style="font-size:12px;color:#6B7A99;margin:0 0 14px;line-height:1.5;">체크=표시 · Lv=필요 보안레벨 · 숫자=정렬 순서.<br>설정은 시트(메뉴설정 탭)에 저장되어 모든 기기에 적용됩니다.</p>
+      <p style="font-size:12px;color:#6B7A99;margin:0 0 14px;line-height:1.5;">체크 해제=숨김 · Lv=이 보안레벨부터 표시(미달 시 보이지 않음) · 숫자=정렬 순서.<br>설정은 시트(메뉴설정 탭)에 저장되어 모든 기기에 적용됩니다.</p>
       <div id="menuAdminList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
       <div id="menuAdminStatus" style="font-size:11.5px;color:#6B7A99;min-height:16px;margin-bottom:10px;"></div>
       <div style="display:flex;gap:8px;">
@@ -1886,6 +1886,7 @@ function applyMenu(){
   if(unlockLevel<1) return;
   document.querySelectorAll('#appSelectStage [data-toolid]').forEach(function(btn){
     var c=toolCfg(btn.getAttribute('data-toolid'));
+    /* 표시 체크 해제 또는 보안레벨 미달이면 허브에서 보이지 않음 */
     var visible=(c.show!==false)&&(unlockLevel>=(parseInt(c.level,10)||1));
     btn.style.display=visible?'flex':'none';
     btn.style.order=parseInt(c.order,10)||99;
