@@ -17,11 +17,12 @@
 body{margin:0;background:var(--gray-bg);color:var(--text);
   font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
   font-size:14px;line-height:1.5;padding-bottom:40px}
-header{background:var(--navy);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:20;
-  display:flex;justify-content:space-between;align-items:center;gap:10px}
-header h1{margin:0;font-size:16px;font-weight:700}
-header .sub{font-size:11px;color:#B9C6E4;margin-top:2px}
-.hd-btns{display:flex;gap:6px}
+header{background:var(--navy);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:20;
+  display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 10px}
+header>div:first-child{min-width:0;flex:1 1 auto}
+header h1{margin:0;font-size:15px;font-weight:700;white-space:nowrap}
+header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-btns{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
 .hd-btn{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:8px;
   padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
 .hd-btn:active{background:rgba(255,255,255,.15)}
@@ -399,13 +400,28 @@ function boot(d, fromCache){
 var HOSPDB=[];
 function loadHospDB(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
-    if(c&&c.data){ HOSPDB=c.data; ncareCheck(); } }catch(e){}
+    if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); } }catch(e){}
   gv('hospdb',{}).then(function(d){
     if(!d.success||!d.data) return;
     HOSPDB=d.data;
     try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
+    enrichNcare();
     ncareCheck();
   }).catch(function(){});
+}
+/* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
+   병원정보DB 탭(action=hospdb) 값을 병원명 매칭으로 채워 넣는다 */
+function enrichNcare(){
+  if(!HOSPDB.length || !RAW.length) return;
+  var map={};
+  HOSPDB.forEach(function(h){ var nc=String(h.ncare||'').trim(); if(h.n&&nc) map[nkey(h.n)]=nc; });
+  var changed=false;
+  RAW.forEach(function(r){
+    if(r.ncare && r.ncare!=='미가입') return;
+    var nc=map[nkey(r.hosp)];
+    if(nc && nc!==r.ncare){ r.ncare=nc; changed=true; }
+  });
+  if(changed){ buildFilters(); apply(); }
 }
 function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 function ncareCheck(){
