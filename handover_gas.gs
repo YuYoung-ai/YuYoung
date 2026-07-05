@@ -664,17 +664,15 @@ function getGuide_(type){
 }
 
 /* ═══════════════ [v2.1] 인증 토큰 검증 (auth 웹앱 연동) ═══════════════ */
-/** 토큰을 인증 서버에 검증 → 레벨(0=무효, 1=일반, 2=관리자, 3=수석 매니저) */
+/** 토큰을 인증 서버에 검증 → 레벨(0=무효, 1=일반, 2=관리자, 3=수석 매니저)
+ *  ※ 반드시 GET 사용: GAS→GAS POST는 302 리다이렉트를 POST로 재시도해
+ *    "Page Not Found"가 되는 UrlFetchApp 고질 문제가 있다 (GET은 정상). */
 function verifyLevel_(token){
   try{
     if(!MENU.AUTH_VERIFY_URL || !token) return 0;
-    var res = UrlFetchApp.fetch(MENU.AUTH_VERIFY_URL, {
-      method:'post',
-      contentType:'text/plain;charset=utf-8',
-      payload: JSON.stringify({action:'verify', token:String(token)}),
-      muteHttpExceptions:true,
-      followRedirects:true
-    });
+    var res = UrlFetchApp.fetch(
+      MENU.AUTH_VERIFY_URL + '?action=verify&token=' + encodeURIComponent(String(token)),
+      { method:'get', muteHttpExceptions:true, followRedirects:true });
     var r = JSON.parse(res.getContentText()||'{}');
     return (r && r.ok) ? (Number(r.level)||0) : 0;
   }catch(e){ return 0; }
