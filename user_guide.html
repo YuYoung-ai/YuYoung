@@ -593,6 +593,12 @@ code {
       <div class="ov-desc">증상 입력 → 점검·조치 가이드 응답</div>
       <span class="ov-tag">chatbot.html</span>
     </div>
+    <div class="ov-card" onclick="showPanel('tools')">
+      <div class="ov-icon">📅</div>
+      <div class="ov-name">주간업무보고</div>
+      <div class="ov-desc">주간 처리 내역 자동 생성 → 시트 기록</div>
+      <span class="ov-tag">weekly.html</span>
+    </div>
   </div>
 
   <!-- 공통 특징 -->
@@ -605,7 +611,7 @@ code {
       </div>
       <div class="sc-body">
         <ul class="check-list">
-          <li><span class="ck-icon">📶</span> <span><b>오프라인 완전 작동</b> — 인터넷 없이도 모든 기능 사용 가능 (Service Worker 캐시 baz-cs-v27)</span></li>
+          <li><span class="ck-icon">📶</span> <span><b>오프라인 완전 작동</b> — 인터넷 없이도 모든 기능 사용 가능 (Service Worker 캐시 baz-cs-v28)</span></li>
           <li><span class="ck-icon">🏥</span> <span><b>395개 병원 자동완성</b> — 병원명 입력 시 S/N, 구독서비스, 영업담당자 자동 채워짐</span></li>
           <li><span class="ck-icon">🌐</span> <span><b>한·영·일 3개국어</b> — 우상단 언어 버튼으로 즉시 전환</span></li>
           <li><span class="ck-icon">📱</span> <span><b>홈 화면 추가(PWA)</b> — 앱처럼 설치 후 오프라인 사용</span></li>
@@ -1205,7 +1211,7 @@ code {
 <!-- ════════════════════════════════════════════════════ -->
 <div class="panel" id="panel-tools">
   <div class="sec-title">🆕 신규 도구</div>
-  <p class="sec-sub">최근 추가된 5종 도구의 사용법을 안내합니다.</p>
+  <p class="sec-sub">최근 추가된 6종 도구의 사용법을 안내합니다.</p>
 
   <div class="step-list">
 
@@ -1308,13 +1314,40 @@ code {
       <div class="sc-body">
         <div class="warn-box">
           <span class="tb-label">🔑 접속</span>
-          <b>병원 데이터센터</b>의 챗봇 버튼으로 진입 (병원 정보가 자동으로 연결됨)
+          메뉴 허브 → <b>CS AI 챗봇</b> · <b>병원 데이터센터</b>의 챗봇 버튼으로도 진입 (병원 정보 자동 연결)
         </div>
         <ul class="check-list">
           <li><span class="ck-icon">💬</span><span>증상을 대화로 입력하면 <b>점검 방법 → 조치 방법</b>을 순서대로 안내</span></li>
           <li><span class="ck-icon">🏷️</span><span>카테고리 탭 · 빠른 태그 · 증상 추천 자동완성 지원</span></li>
           <li><span class="ck-icon">📚</span><span>노즐 인식, UI 업그레이드, 터치 불량 등 주요 증상 지식베이스 내장</span></li>
+          <li><span class="ck-icon">👍</span><span><b>답변 피드백</b> — 답변마다 👍/👎 버튼 → 시트(챗봇피드백)에 기록되어 답변 보강에 활용</span></li>
+          <li><span class="ck-icon">🔄</span><span><b>KB 자동 동기화</b> — 지식베이스 버전 변경 감지 시 캐시를 버리고 전체 재수신</span></li>
         </ul>
+      </div>
+    </div>
+
+    <!-- 주간업무보고 -->
+    <div class="step-card">
+      <div class="sc-head" onclick="toggle(this)">
+        <div class="sc-num">📅</div>
+        <div class="sc-title">주간업무보고 (weekly.html)</div>
+        <span class="sc-arrow">▼</span>
+      </div>
+      <div class="sc-body">
+        <div class="warn-box">
+          <span class="tb-label">🔑 접속</span>
+          메뉴 허브 → <b>주간업무보고</b> → <b>일반 비밀번호</b>
+        </div>
+        <ul class="check-list">
+          <li><span class="ck-icon">1️⃣</span><span><b>작성자·주차 선택</b> — 최근 8주(월~금) 중 선택</span></li>
+          <li><span class="ck-icon">2️⃣</span><span><b>불러오기</b> — handover 시트에서 해당 주 본인 처리 내역을 가져와 본문 초안 자동 생성</span></li>
+          <li><span class="ck-icon">3️⃣</span><span><b>본문 수정</b> — 자동 생성된 초안을 자유롭게 편집</span></li>
+          <li><span class="ck-icon">4️⃣</span><span><b>시트에 기록</b> — 업무보고서_CS 스프레드시트의 작성자 탭(예: 권오성2) 최상단에 삽입</span></li>
+        </ul>
+        <div class="info-box">
+          <span class="tb-label">ℹ️ 참고</span>
+          시트 기록에는 GAS(weekly_gas_patch.gs)의 새 버전 배포가 필요합니다. 불러오기는 구버전 GAS에서도 폴백으로 동작합니다.
+        </div>
       </div>
     </div>
 
@@ -1346,7 +1379,7 @@ code {
         </ul>
         <div class="tip-box">
           <span class="tb-label">💡 현재 캐시 버전</span>
-          <code>baz-cs-v27</code> — 업데이트 시 자동으로 새 버전으로 교체됩니다.
+          <code>baz-cs-v28</code> — 업데이트 시 자동으로 새 버전으로 교체됩니다.
         </div>
       </div>
     </div>

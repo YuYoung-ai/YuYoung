@@ -116,7 +116,7 @@ textarea{resize:vertical;min-height:56px}
       </div>
       <div class="field">
         <label>구분</label>
-        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option></select>
+        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option><option>데모</option></select>
       </div>
       <div class="field full" style="position:relative">
         <label>병원명 <span class="opt">· 입력 시 자동완성</span></label>
@@ -147,13 +147,17 @@ textarea{resize:vertical;min-height:56px}
         <label>S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
         <div class="hp2">
           <input id="hpOut" placeholder="OUT S/N (탈거)" oninput="render()">
-          <input id="wVer" placeholder="OUT Ver" oninput="render()">
+          <input id="wVer" list="hpVerList" placeholder="OUT Ver 선택/입력" oninput="render()">
         </div>
         <div class="hp2" style="margin-top:6px">
           <input id="hpIn" placeholder="IN S/N (장착)" oninput="render()">
-          <input id="uVer" placeholder="IN Ver" oninput="render()">
+          <input id="uVer" list="hpVerList" placeholder="IN Ver 선택/입력" oninput="render()">
         </div>
-        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기</div>
+        <datalist id="hpVerList">
+          <option value="1.2.2"></option><option value="1.2.1"></option>
+          <option value="1.2.0"></option><option value="1.1.0"></option>
+        </datalist>
+        <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기 · 버전은 드롭다운 선택 또는 직접 입력</div>
       </div>
       <div class="field">
         <label>노즐 제조일자</label>

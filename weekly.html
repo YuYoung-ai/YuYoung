@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>주간업무보고 | BAZ CS</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BAZ CS">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+  --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --amber:#B8860B;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--gray-bg);color:var(--text);
+  font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px;line-height:1.5;padding-bottom:96px}
+header{background:var(--navy);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:10}
+header h1{margin:0;font-size:17px;font-weight:700}
+header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
+.menu-link{position:absolute;top:16px;right:14px;display:flex;align-items:center;gap:4px;
+  background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.3);color:#cfdbf0;
+  font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none}
+.wrap{max-width:560px;margin:0 auto;padding:12px}
+.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:14px;margin-bottom:12px}
+.sec-title{margin:0 0 12px;font-size:13px;font-weight:700;color:var(--navy);
+  padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
+.field{margin-bottom:12px}
+.field:last-child{margin-bottom:0}
+label{display:block;font-size:11.5px;font-weight:700;color:var(--navy);margin-bottom:5px}
+label .opt{font-weight:400;color:var(--text-muted)}
+select,input,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--gray-line);border-radius:9px;
+  font-size:15px;font-family:inherit;color:var(--text);background:#fff;-webkit-appearance:none;appearance:none}
+select:focus,input:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+textarea{resize:vertical;min-height:260px;line-height:1.65;font-size:13.5px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn-load{width:100%;padding:13px;border:none;border-radius:10px;background:var(--teal);color:#fff;
+  font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:4px}
+.btn-load:active{filter:brightness(.93)}
+.btn-load:disabled{opacity:.5}
+.hint{font-size:11.5px;color:var(--text-muted);margin-top:6px;line-height:1.55}
+.status{font-size:12px;margin-top:8px;line-height:1.55;min-height:18px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
+.sum-chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.sum-chip{background:var(--teal-soft);border:1px solid #BCD9E8;color:var(--teal);
+  font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:14px}
+.actions{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--gray-line);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:10}
+.btn{flex:1;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+.btn-copy{background:#E8EDF6;color:var(--navy)}
+.btn-copy:active{background:#D6DEF0}
+.btn-save{background:var(--navy);color:#fff}
+.btn-save:active{background:var(--navy-light)}
+.btn-save:disabled{opacity:.5}
+.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+  padding:10px 20px;border-radius:20px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:30;
+  max-width:88vw;text-align:center;white-space:pre-line;line-height:1.5}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="menu-link">← 메뉴</a>
+  <h1>📅 주간업무보고</h1>
+  <p>작성자·주차 선택 → 불러오기 → 본문 확인 → 시트 기록</p>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <p class="sec-title">보고 대상</p>
+    <div class="row2">
+      <div class="field">
+        <label>작성자</label>
+        <select id="writer">
+          <option>권오성</option>
+          <option>양승주</option>
+          <option value="__c">직접입력…</option>
+        </select>
+        <input id="writerCustom" style="display:none;margin-top:6px" placeholder="이름 입력">
+      </div>
+      <div class="field">
+        <label>보고 주차 <span class="opt">· 월~금</span></label>
+        <select id="weekSel"></select>
+      </div>
+    </div>
+    <button type="button" class="btn-load" id="btnLoad" onclick="loadWeek()">📥 주간 처리 내역 불러오기</button>
+    <div class="status" id="loadStatus"></div>
+    <div class="sum-chips" id="sumChips"></div>
+  </div>
+
+  <div class="card">
+    <p class="sec-title">보고 본문 <span style="font-weight:400;color:var(--text-muted)">· 자동 생성 후 자유롭게 수정</span></p>
+    <textarea id="body" placeholder="[불러오기]를 누르면 handover 시트의 주간 처리 내역으로 본문 초안이 생성됩니다.&#10;직접 작성해도 됩니다."></textarea>
+    <div class="hint">[시트에 기록]을 누르면 업무보고서_CS 스프레드시트의 작성자 탭(예: 권오성2) 최상단에 삽입됩니다.</div>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-copy" onclick="copyBody()">📋 복사</button>
+  <button class="btn btn-save" id="btnSave" onclick="writeToSheet()">📝 시트에 기록</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ▼▼ handover_gas.gs 배포 URL — handover.html/dashboard.html의 HANDOVER_URL과 동일 ▼▼ */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+
+function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2400);}
+
+/* ── 날짜 유틸 (dashboard.html과 동일 규칙) ── */
+function monday(d){ var x=new Date(d); var w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); x.setHours(0,0,0,0); return x; }
+function addD(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function wkNo(mon){ return Math.floor((mon.getDate()-1)/7)+1; }
+function wkLabel(mon){ return (mon.getMonth()+1)+'월 '+wkNo(mon)+'주차'; }
+function wkRange(mon){ var f=addD(mon,4);
+  return (mon.getMonth()+1)+'/'+mon.getDate()+' ~ '+(f.getMonth()+1)+'/'+f.getDate(); }
+function normD(s){
+  var t=String(s||'').replace(/\s/g,'').replace(/\./g,'-').replace(/-+$/,'');
+  var p=t.split('-');
+  var y=Number(p[0])||0, m=Number(p[1])||0, d=Number(p[2])||0;
+  if(m>12){ var s1=String(p[1]);
+    if(s1.length===3){ m=Number(s1[0]); d=Number(s1.slice(1)); }
+    else if(s1.length===4){ m=Number(s1.slice(0,2)); d=Number(s1.slice(2)); }
+    if(m>12){ m=0; d=0; } }
+  if(d>31) d=0;
+  return (y&&m&&d)? new Date(y,m-1,d) : null;
+}
+
+/* ── 주차 옵션: 이번 주 포함 최근 8주 ── */
+(function initWeeks(){
+  var sel=document.getElementById('weekSel');
+  var mon=monday(new Date());
+  var opts=[];
+  for(var i=0;i<8;i++){
+    var m=addD(mon,-7*i);
+    opts.push('<option value="'+ymd(m)+'">'+wkLabel(m)+' ('+wkRange(m)+')</option>');
+  }
+  sel.innerHTML=opts.join('');
+})();
+
+/* 작성자 직접입력 토글 + 마지막 작성자 복원 */
+var writerSel=document.getElementById('writer');
+writerSel.addEventListener('change',function(){
+  document.getElementById('writerCustom').style.display = writerSel.value==='__c' ? 'block':'none';
+});
+try{
+  var lastW=localStorage.getItem('baz_weekly_writer');
+  if(lastW){
+    var found=false;
+    Array.prototype.forEach.call(writerSel.options,function(o){ if(o.value===lastW){ writerSel.value=lastW; found=true; } });
+    if(!found && lastW!=='__c'){ writerSel.value='__c';
+      document.getElementById('writerCustom').style.display='block';
+      document.getElementById('writerCustom').value=lastW; }
+  }
+}catch(e){}
+function writerName(){
+  var v=writerSel.value;
+  if(v==='__c') v=String(document.getElementById('writerCustom').value||'').trim();
+  return v;
+}
+
+/* ── 불러오기: ① 신 GAS action=weekly → ② 폴백 action=all 클라이언트 집계 ── */
+function setStatus(msg, cls){
+  var el=document.getElementById('loadStatus');
+  el.textContent=msg; el.className='status'+(cls?' '+cls:'');
+}
+function loadWeek(){
+  var w=writerName();
+  if(!w){ toast('작성자를 입력하세요'); return; }
+  try{ localStorage.setItem('baz_weekly_writer', w); }catch(e){}
+  var monK=document.getElementById('weekSel').value;
+  var btn=document.getElementById('btnLoad');
+  btn.disabled=true; setStatus('시트에서 주간 내역 조회 중…');
+  document.getElementById('sumChips').innerHTML='';
+
+  fetch(HANDOVER_URL+'?action=weekly&fse='+encodeURIComponent(w)+'&mon='+encodeURIComponent(monK))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d && d.success){
+        /* 서버가 본문을 만들어주면 그대로, 행 목록이면 클라이언트에서 생성 */
+        if(d.body){ fillBody(String(d.body), d.count!=null?d.count:null, null); setStatus('✅ 시트 연동(action=weekly)으로 불러옴','ok'); }
+        else if(d.data){ buildFromRows(d.data, w, monK); setStatus('✅ 시트 연동(action=weekly)으로 불러옴','ok'); }
+        else { fallbackAll(w, monK); return; }
+        btn.disabled=false;
+      }else{
+        fallbackAll(w, monK);   /* 구버전 GAS("알 수 없는 action") → 전체 조회 폴백 */
+      }
+    })
+    .catch(function(){ fallbackAll(w, monK); });
+}
+function fallbackAll(w, monK){
+  fetch(HANDOVER_URL+'?action=all')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(!d.success||!d.data){ throw (d&&d.error)||'로드 실패'; }
+      buildFromRows(d.data, w, monK);
+      setStatus('✅ 불러옴 (구버전 GAS 폴백: 전체 조회 후 주간 필터)\n※ weekly_gas_patch.gs 배포 시 더 빨라집니다','ok');
+    })
+    .catch(function(e){
+      setStatus('❌ '+e+' — 네트워크 또는 GAS 배포 상태를 확인하세요','err');
+    })
+    .then(function(){ document.getElementById('btnLoad').disabled=false; });
+}
+function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
+var DAYS=['일','월','화','수','목','금','토'];
+function buildFromRows(rows, w, monK){
+  var mon=new Date(monK+'T00:00:00'), fri=addD(mon,4);
+  var wk=nkey(w);
+  var mine=rows.filter(function(r){
+    var d=normD(r.date); if(!d||d<mon||d>fri) return false;
+    return nkey(r.fse).indexOf(wk)>=0 || wk.indexOf(nkey(r.fse))>=0 || nkey(r.fse)===wk;
+  }).sort(function(a,b){ return (normD(a.date)||0)-(normD(b.date)||0); });
+
+  var as=mine.filter(function(r){return r.gubun==='A/S';}).length;
+  var chk=mine.length-as;
+  var lines=[];
+  lines.push('■ 주간업무보고 ('+wkLabel(mon)+' · '+wkRange(mon)+') — '+w);
+  lines.push('총 '+mine.length+'건 · A/S '+as+' · 점검 '+chk);
+  lines.push('');
+  if(!mine.length){
+    lines.push('(해당 주차 처리 내역 없음 — 직접 작성하세요)');
+  }else{
+    mine.forEach(function(r){
+      var d=normD(r.date);
+      var day=d?('['+DAYS[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate()+'] '):'';
+      var seg=[r.hosp||'병원 미입력'];
+      if(r.gubun) seg.push(r.gubun);
+      if(r.type) seg.push(r.type);
+      var line='- '+day+seg.join(' · ');
+      if(r.part && r.part!=='없음') line+=' → 교체: '+r.part;
+      var det=String(r.detail||'').split('\n')[0].trim();
+      if(det){ if(det.length>46) det=det.slice(0,46)+'…'; line+='\n    '+det; }
+      lines.push(line);
+    });
+  }
+  fillBody(lines.join('\n'), mine.length, {as:as, chk:chk});
+}
+function fillBody(text, count, sum){
+  document.getElementById('body').value=text;
+  var chips=[];
+  if(count!=null) chips.push('<span class="sum-chip">총 '+count+'건</span>');
+  if(sum){ chips.push('<span class="sum-chip">A/S '+sum.as+'</span>');
+           chips.push('<span class="sum-chip">점검 '+sum.chk+'</span>'); }
+  document.getElementById('sumChips').innerHTML=chips.join('');
+}
+
+/* ── 복사 ── */
+function copyBody(){
+  var t=document.getElementById('body').value;
+  if(!t.trim()){ toast('본문이 비어 있습니다'); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ toast('📋 복사됨'); })
+      .catch(function(){ legacyCopy(t); });
+  }else legacyCopy(t);
+}
+function legacyCopy(t){
+  var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); toast('📋 복사됨'); }catch(e){ toast('복사 실패'); }
+  document.body.removeChild(ta);
+}
+
+/* ── 시트에 기록: POST action=weeklywrite → 작성자 탭(권오성2/양승주2) 최상단 삽입 ── */
+async function writeToSheet(){
+  var w=writerName();
+  if(!w){ toast('작성자를 입력하세요'); return; }
+  var body=document.getElementById('body').value.trim();
+  if(!body){ toast('본문이 비어 있습니다 — 먼저 불러오기 또는 작성하세요'); return; }
+  var monK=document.getElementById('weekSel').value;
+  var mon=new Date(monK+'T00:00:00');
+  var btn=document.getElementById('btnSave');
+  btn.disabled=true; btn.textContent='기록 중…';
+  try{
+    var res=await fetch(HANDOVER_URL,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({
+        action:'weeklywrite',
+        writer:w,
+        mon:monK,
+        week:wkLabel(mon),
+        range:wkRange(mon),
+        body:body,
+        ts:new Date().toISOString()
+      }),
+      redirect:'follow'
+    });
+    var d=await res.json();
+    if(d && (d.success||d.ok)){
+      toast('✅ 기록 완료 — '+w+' 탭 최상단에 삽입됨'+(d.row?(' (행 '+d.row+')'):''));
+    }else{
+      var err=(d&&d.error)||'기록 실패';
+      if(/action/i.test(err)){
+        toast('❌ GAS가 구버전입니다\nweekly_gas_patch.gs 붙여넣기 후\n배포 관리 → 새 버전 배포가 필요합니다');
+      }else toast('❌ '+err);
+    }
+  }catch(e){
+    toast('❌ 네트워크 오류 — 연결 확인 후 다시 시도하세요');
+  }
+  btn.disabled=false; btn.textContent='📝 시트에 기록';
+}
+</script>
+</body>
+</html>
