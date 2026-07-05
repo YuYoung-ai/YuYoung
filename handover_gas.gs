@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.2
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.2.1
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -246,7 +246,7 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
-    if(action==='ping')   return json_({success:true, pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.2.1', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -449,17 +449,23 @@ function invNum_(s){
   if(t==='' || !/^-?\d+(\.\d+)?$/.test(t)) return null;
   return Number(t);
 }
-/* 라벨 셀 기준 아래(8행)·오른쪽(3열) 창에서 첫 숫자 */
+/* 라벨 셀 기준 주변에서 첫 숫자 탐색.
+   ★ 우선순위가 중요: 라벨들이 가로로 나란한 표(재고 현황 4칸)에서
+   왼쪽 대각선을 먼저 보면 옆 라벨의 값을 집어가 한 칸씩 밀린다.
+   ① 라벨 바로 아래(같은 열, 8행) → ② 같은 행 오른쪽(3열)
+   → ③ 아래-오른쪽 대각 → ④ 아래-왼쪽(최후) 순서로 본다 */
 function invNear_(v, r, c){
-  for(var dr=0; dr<=8; dr++){
-    for(var dc=-1; dc<=3; dc++){
-      if(dr===0 && dc<=0) continue;
-      var rr=r+dr, cc=c+dc;
-      if(rr>=v.length || cc<0 || cc>=v[rr].length) continue;
-      var n=invNum_(v[rr][cc]);
-      if(n!=null) return {value:n, at:'R'+(rr+1)+'C'+(cc+1)};
-    }
+  function at(rr,cc){
+    if(rr>=v.length || cc<0 || cc>=v[rr].length) return null;
+    var n=invNum_(v[rr][cc]);
+    return n!=null ? {value:n, at:'R'+(rr+1)+'C'+(cc+1)} : null;
   }
+  var hit, dr, dc;
+  for(dr=1; dr<=8; dr++){ if(hit=at(r+dr, c)) return hit; }          /* ① 같은 열 아래 */
+  for(dc=1; dc<=3; dc++){ if(hit=at(r, c+dc)) return hit; }          /* ② 같은 행 오른쪽 */
+  for(dr=1; dr<=8; dr++){ for(dc=1; dc<=3; dc++){                    /* ③ 아래-오른쪽 */
+    if(hit=at(r+dr, c+dc)) return hit; } }
+  for(dr=1; dr<=8; dr++){ if(hit=at(r+dr, c-1)) return hit; }        /* ④ 아래-왼쪽 */
   return null;
 }
 /** 버킷 1개 값 읽기 */
