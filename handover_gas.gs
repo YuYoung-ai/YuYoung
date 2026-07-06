@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.2.1
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.3.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -55,6 +55,17 @@ var INVENTORY = {
       footRepair: {label:'Foot s/w (Repair)'}
     }
   }
+};
+
+/* [v2.3] N-care 가입 현황 — 재고와 같은 대시보드 시트에서 표 읽기 (점검 PPT용)
+   SPREADSHEET_ID/SHEET 를 비워두면 INVENTORY.SUMMARY 값을 그대로 사용.
+   표 구조(라벨 기준 자동 탐지): 등급 헤더(Basic/Standard/Pro/Premium/CurePass 또는 미가입) +
+     가입 병원 수 / 정상 운영 병원 수 / 점검 대상 병원 수 / 점검률 행,
+     하단 요약(전체 가입자 · 정상 운영 병원 · 정상 운영률) */
+var NCARE = {
+  SPREADSHEET_ID: '',      // 비우면 INVENTORY.SUMMARY.SPREADSHEET_ID 사용
+  SHEET: '',               // 비우면 INVENTORY.SUMMARY.SHEET 사용
+  TIERS: ['Basic','Standard','Pro','Premium','CurePass']   // 마지막(미가입) 라벨은 CurePass로 표기
 };
 
 /* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·장비SN·N-Care·보증기한 등
@@ -246,10 +257,11 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
-    if(action==='ping')   return json_({success:true, ver:'2.2.1', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.3.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
+    if(action==='ncare')  return json_(getNcare_());            /* [v2.3] N-care 가입 현황 */
     if(action==='recent') return json_(getRecent_(p.hosp||'', Number(p.limit)||5));
     if(action==='today')  return json_(getToday_(p.fse||''));
     if(action==='master') return json_(getMaster_());
@@ -553,6 +565,109 @@ function getInventory_(){
     return {success:false, error:'재고 요약 시트 접근 실패: '+err};
   }
 }
+/* ═══════════ [v2.3] N-care 가입 현황 (점검 PPT용) ═══════════ */
+/** 대시보드 시트에서 N-care 가입 현황 표를 라벨 기준으로 읽는다.
+ *  반환: {success, tiers:[…5], joined:[…], normal:[…], target:[…], rate:[…],
+ *         totalJoined, totalNormal, normalRate, updated} */
+function getNcare_(){
+  try{
+    var ssId = NCARE.SPREADSHEET_ID || INVENTORY.SUMMARY.SPREADSHEET_ID;
+    var shName = NCARE.SHEET || INVENTORY.SUMMARY.SHEET;
+    var ss = SpreadsheetApp.openById(ssId);
+    var sh = invSheetByName_(ss, shName) || ss.getSheetByName(shName);
+    if(!sh) return {success:false, error:'대시보드 시트 없음: '+shName};
+    var v = sh.getDataRange().getDisplayValues();
+
+    /* 1) 등급 헤더 행 찾기: 'Basic'과 'Standard'가 같은 행 */
+    var hr=-1, hc=-1;
+    for(var r=0;r<v.length && hr<0;r++){
+      var rowN=v[r].map(norm_);
+      var bi=rowN.indexOf('basic'), si=rowN.indexOf('standard');
+      if(bi>=0 && si>=0){ hr=r; hc=bi; }
+    }
+    if(hr<0) return {success:false, error:'등급 헤더(Basic/Standard) 탐지 실패'};
+    /* 등급 5칸 열 인덱스: Basic부터 5개 (마지막은 CurePass 또는 미가입) */
+    var cols=[hc, hc+1, hc+2, hc+3, hc+4];
+
+    /* 2) 라벨 행 찾기 (헤더 아래에서 라벨 텍스트로 매칭) */
+    function findRow(cands){
+      for(var r=hr;r<v.length;r++){
+        for(var c=0;c<v[r].length;c++){
+          var t=norm_(v[r][c]);
+          for(var k=0;k<cands.length;k++){ if(t && t.indexOf(norm_(cands[k]))>=0) return r; }
+        }
+      }
+      return -1;
+    }
+    function readCols(r){
+      if(r<0) return [null,null,null,null,null];
+      return cols.map(function(c){ return (c<v[r].length)? _num_(v[r][c]) : null; });
+    }
+    function readColsRaw(r){
+      if(r<0) return ['','','','','' ];
+      return cols.map(function(c){ return (c<v[r].length)? String(v[r][c]).trim() : ''; });
+    }
+
+    var rJoin  = findRow(['가입 병원 수','가입병원수']);
+    /* '가입 병원 수' 라벨이 없으면 등급 헤더 바로 아래 행을 카운트 행으로 사용 */
+    var joined = readCols(rJoin>=0 ? rJoin : hr+1);
+    var normal = readCols(findRow(['정상 운영 병원 수','정상운영병원수']));
+    var target = readCols(findRow(['점검 대상 병원 수','점검대상병원수']));
+    var rate   = readColsRaw(findRow(['점검률']));
+
+    /* 3) 하단 요약: 전체 가입자 / 정상 운영 병원 / 정상 운영률 */
+    function findVal(cands){
+      for(var r=0;r<v.length;r++){
+        for(var c=0;c<v[r].length;c++){
+          var t=norm_(v[r][c]);
+          for(var k=0;k<cands.length;k++){
+            if(t && t.indexOf(norm_(cands[k]))>=0){
+              /* 라벨과 같은 셀에 숫자가 붙어있으면 추출, 아니면 오른쪽/다음 칸 */
+              var inline=_num_(v[r][c]); if(inline!=null && !/^[a-z]/i.test(v[r][c])) {}
+              var near=invNear_(v, r, c); return near?near.value:null;
+            }
+          }
+        }
+      }
+      return null;
+    }
+    function findPct(cands){
+      for(var r=0;r<v.length;r++){
+        for(var c=0;c<v[r].length;c++){
+          var t=norm_(v[r][c]);
+          for(var k=0;k<cands.length;k++){
+            if(t && t.indexOf(norm_(cands[k]))>=0){
+              for(var dc=1;dc<=4;dc++){ var cc=c+dc; if(cc<v[r].length){ var s=String(v[r][cc]).trim(); if(/%/.test(s)) return s; } }
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    var tiers = NCARE.TIERS.slice();
+    /* 시트의 마지막 등급 헤더가 '미가입'이면 CurePass로 표기 (설정 우선) */
+    var lastHead = (cols[4]<v[hr].length)? String(v[hr][cols[4]]).trim() : '';
+    if(lastHead && !/미가입/.test(lastHead)) tiers[4]=lastHead;   // 시트가 이미 CurePass 등 실제 라벨이면 사용
+
+    return {success:true,
+      tiers: tiers,
+      joined: joined, normal: normal, target: target, rate: rate,
+      totalJoined: findVal(['전체 가입자','전체가입자']),
+      totalNormal: findVal(['정상 운영 병원','N-care 운영 현황','ncare운영현황']),
+      normalRate:  findPct(['정상 운영률','정상운영률']),
+      sheet: sh.getName(),
+      updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  }catch(err){
+    return {success:false, error:'N-care 현황 시트 접근 실패: '+err};
+  }
+}
+function _num_(s){
+  var t=String(s==null?'':s).trim().replace(/,/g,'');
+  if(t==='' || !/^-?\d+(\.\d+)?$/.test(t)) return null;
+  return Number(t);
+}
+
 /** 진단용 — 편집기에서 실행: 요약 탭 라벨-숫자 후보 + 버킷 결과 */
 function inspectInventory(){
   var r = getInventory_();
