@@ -1401,6 +1401,20 @@ applyLang();
   var ISSUE_CACHE_TS='bazIssueHistCacheTs';
   var ISSUE_CACHE_TTL=5*60*1000; // 5분
 
+  // 시트 배열 변경으로 체크박스 값(true/false)이 유형·현상 자리에 섞여 오는 것 방어:
+  // 불리언/'true'/'false' 값 필드는 버리고 나머지만 사용
+  function cleanIssueRec(r){
+    var out={};
+    Object.keys(r||{}).forEach(function(k){
+      var v=r[k];
+      if(typeof v==='boolean') return;
+      var s=String(v==null?'':v).trim();
+      if(!s || /^(true|false)$/i.test(s)) return;
+      out[k]=v;
+    });
+    return out;
+  }
+
   // 시트 2026 이슈이력을 HISTORY에 병합 (2025 이력은 HTML 원본 유지)
   function applyIssueHist(data){
     if(!data || typeof data!=='object') return false;
@@ -1408,6 +1422,7 @@ applyLang();
     if(!names.length) return false;
     names.forEach(function(name){
       if(!Array.isArray(data[name])) return;
+      data[name]=data[name].map(cleanIssueRec);
       // 기존 HISTORY에서 2025년 이력만 보존
       var keep2025=(HISTORY[name]||[]).filter(function(r){
         return (r.d||'').indexOf('2025')===0;
