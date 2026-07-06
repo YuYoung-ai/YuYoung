@@ -711,18 +711,19 @@ function parseD_(s){
 }
 
 /** GET ?action=weekly&fse=이름&mon=YYYY-MM-DD(월요일)
- *  해당 주(월~금) + 담당자 필터된 handover 기록 반환 → weekly.html이 본문 생성 */
+ *  보고 주간(전주 토요일 ~ 금요일) + 담당자 필터된 handover 기록 반환 */
 function wkGetWeekly_(p){
   var fse = String(p.fse||'').trim();
   var monS = String(p.mon||'').trim();
   if(!monS) return {success:false, error:'mon(주 시작일 YYYY-MM-DD) 파라미터 필요'};
   var mon = parseD_(monS);
   if(!mon) return {success:false, error:'mon 형식 오류: '+monS};
+  var sat = new Date(mon); sat.setDate(sat.getDate()-2);            /* 전주 토요일부터 */
   var fri = new Date(mon); fri.setDate(fri.getDate()+4); fri.setHours(23,59,59,0);
   var qf = norm_(fse);
   var rows = readAll_().rows.map(slim_).filter(function(r){
     var d = parseD_(r.date);
-    if(!d || d<mon || d>fri) return false;
+    if(!d || d<sat || d>fri) return false;
     if(!qf) return true;
     var f = norm_(r.fse);
     return !!f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0);
