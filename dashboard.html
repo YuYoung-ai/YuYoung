@@ -165,6 +165,14 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
       <div class="mhint">시트 처리일 기준 최근 8주</div>
     </div>
     <div class="mrow">
+      <label>보고 구분 <span style="font-weight:400;color:var(--text-muted)">· A/S와 점검을 각각 따로 생성 가능</span></label>
+      <select id="wkScope" onchange="suggestWkDetail()">
+        <option value="">전체 (A/S + 점검)</option>
+        <option value="A/S">A/S만</option>
+        <option value="점검">점검만</option>
+      </select>
+    </div>
+    <div class="mrow">
       <label>고장 상세 <span style="font-weight:400;color:var(--text-muted)">· 한 줄에 "유형: 설명" · 직접 수정</span></label>
       <textarea id="wkDetail" rows="3" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--gray-line);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:72px;line-height:1.5"></textarea>
       <div class="mhint">주차 선택 시 상위 유형 기준 초안 자동 제안 (최대 3줄 반영)</div>
@@ -837,11 +845,20 @@ function anchorFirst(pairs, anchor){
   else pairs.unshift([anchor,0]);
   return pairs;
 }
+/* 보고 구분(전체/A·S/점검) — 선택 값으로 행 필터 */
+function wkScopeVal(){ var el=document.getElementById('wkScope'); return el?el.value:''; }
+function scopeRows(rows){
+  var s=wkScopeVal();
+  if(!s) return rows;
+  return rows.filter(function(r){ return String(r.gubun||'').trim()===s; });
+}
+function wkScopeLabel(){ var s=wkScopeVal(); return s ? (s==='A/S'?'A/S':'점검') : ''; }
+
 /* 선택 주차 기준 고장 상세 초안 자동 제안 */
 function suggestWkDetail(){
   var sel=document.getElementById('wkSel'); if(!sel.value) return;
   var mon=new Date(sel.value+'T00:00:00');
-  var cur=rowsBetween(mon, addD(mon,4));
+  var cur=scopeRows(rowsBetween(mon, addD(mon,4)));
   var top=anchorFirst(topOf(cnt(cur,'type'), isOK), '노즐누수(젯팅/녹물)').slice(0,3);
   document.getElementById('wkDetail').value=top.map(function(p){
     var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
@@ -865,7 +882,7 @@ async function makeWeeklyPPT(){
 
     var mon=new Date(document.getElementById('wkSel').value+'T00:00:00');
     var fri=addD(mon,4), pMon=addD(mon,-7), pFri=addD(mon,-3);
-    var cur=rowsBetween(mon,fri), prev=rowsBetween(pMon,pFri);
+    var cur=scopeRows(rowsBetween(mon,fri)), prev=scopeRows(rowsBetween(pMon,pFri));
 
     /* 집계 */
     var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
@@ -879,7 +896,7 @@ async function makeWeeklyPPT(){
     var m1=monday(new Date(mon.getFullYear(),mon.getMonth(),1));
     if(m1.getMonth()!==mon.getMonth()) m1=addD(m1,7);
     var weeks=[]; for(var w=new Date(m1); w.getMonth()===mon.getMonth(); w=addD(w,7)){
-      weeks.push({mon:new Date(w), n:rowsBetween(w,addD(w,4)).length, cur:ymd(w)===ymd(mon)});
+      weeks.push({mon:new Date(w), n:scopeRows(rowsBetween(w,addD(w,4))).length, cur:ymd(w)===ymd(mon)});
     }
     /* 고장 상세: 모달 수기 입력 우선 ("유형: 설명" 줄), 비어 있으면 자동 초안 */
     var details=String(document.getElementById('wkDetail').value||'').split('\n')
@@ -929,7 +946,8 @@ async function makeWeeklyPPT(){
       tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
     }
     s.addShape(pptx.shapes.RECTANGLE,{x:0,y:0.5,w:11.3,h:0.68,fill:{color:C.navy}});
-    tx('생산품질_CS팀 주간업무보고(VOC)',{x:0.25,y:0.5,w:6.4,h:0.68,fontSize:19,bold:true,color:'FFFFFF'});
+    var scopeLb=wkScopeLabel();
+    tx('생산품질_CS팀 주간업무보고(VOC)'+(scopeLb?' · '+scopeLb:''),{x:0.25,y:0.5,w:6.4,h:0.68,fontSize:19,bold:true,color:'FFFFFF'});
     tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),{x:6.6,y:0.5,w:4.55,h:0.68,fontSize:14,bold:true,color:'FFFFFF',align:'right'});
 
     /* ① VOC 주별 추이 */
@@ -1026,7 +1044,8 @@ async function makeWeeklyPPT(){
     s.addShape(pptx.shapes.RECTANGLE,{x:0,y:7.28,w:13.33,h:0.22,fill:{color:C.navy}});
     tx('BAZ BIOMEDIC',{x:0.25,y:7.26,w:2,h:0.24,fontSize:8,color:'FFFFFF'});
 
-    var fname='주간업무보고_VOC_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')+'.pptx';
+    var fname='주간업무보고_VOC_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')
+              +(scopeLb?'_'+scopeLb.replace('/',''):'')+'.pptx';
     await pptx.writeFile({fileName:fname});
     toast('📑 '+fname+' 생성 완료');
     closeWeekly();
