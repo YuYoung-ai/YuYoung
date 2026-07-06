@@ -456,19 +456,19 @@ function legacyCopy(t,msg){
   ta.select(); try{ document.execCommand('copy'); toast(msg); }catch(e){ toast('복사 실패'); }
   document.body.removeChild(ta);
 }
-/* ── 엑셀(.xlsx) 생성 — 보고용 템플릿 레이아웃 그대로 ── */
-/* SheetJS 지연 로드 (jsDelivr → unpkg 폴백) */
+/* ── 엑셀(.xlsx) 생성 — ExcelJS로 서식(테두리/색/정렬) 포함 보고 양식 ── */
 var XLSX_CDNS=[
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+  'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+  'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'
 ];
 function loadXlsxLib(){
-  if(window.XLSX) return Promise.resolve();
+  if(window.ExcelJS) return Promise.resolve();
   return XLSX_CDNS.reduce(function(chain,url){
     return chain.catch(function(){
       return new Promise(function(res,rej){
         var s=document.createElement('script'); s.src=url;
-        s.onload=function(){ window.XLSX?res():rej('init'); };
+        s.onload=function(){ window.ExcelJS?res():rej('init'); };
         s.onerror=function(){ rej('cdn'); };
         document.head.appendChild(s);
       });
@@ -476,6 +476,13 @@ function loadXlsxLib(){
   }, Promise.reject('start')).catch(function(){ throw '엑셀 라이브러리 로드 실패 — 네트워크 확인'; });
 }
 function _fmtDateK(s){ var d=normD(s); return d ? (d.getFullYear()+'년 '+String(d.getMonth()+1).padStart(2,'0')+'월 '+String(d.getDate()).padStart(2,'0')+'일('+DAYS[d.getDay()]+')') : (s||''); }
+
+/* 색상 (ARGB) */
+var XC={ navy:'FF1B2F5E', teal:'FF2E7D9E', tealSoft:'FFEAF4F8', line:'FFCED6E4',
+         white:'FFFFFFFF', text:'FF1A1A2E', gray:'FFF1F4F9', voc:'FFFBEAE8', vocT:'FFC0392B',
+         insp:'FFE8F5EE', inspT:'FF1E7E4E', head:'FFEAF0F8', amberSoft:'FFFBF3E0' };
+var FONT='맑은 고딕';
+function _border(){ var t={style:'thin',color:{argb:XC.line}}; return {top:t,left:t,bottom:t,right:t}; }
 
 async function genExcel(){
   if(!W_ROWS.length){ toast('표 내용이 없습니다 — 먼저 불러오기'); return; }
@@ -487,80 +494,102 @@ async function genExcel(){
     var mon=CUR_MON||monday(new Date());
     var sat=addD(mon,-2), fri=addD(mon,4);
 
-    // 그리드 채우기 헬퍼 (r,c 0-index)
-    var A=[]; function setC(r,c,v){ while(A.length<=r)A.push([]); var row=A[r]; while(row.length<=c)row.push(null); row[c]=v; }
+    var wb=new ExcelJS.Workbook();
+    var ws=wb.addWorksheet((w||'보고').slice(0,28), {views:[{showGridLines:false}]});
 
-    // ① 타이틀 (A1:H3 병합)
-    setC(0,0,'주 간 업 무 보 고');
-    // ② 요일 헤더 (I1..N1) — 토,월,화,수,목,금
+    // 열 너비 (A~N)
+    ws.columns=[
+      {width:13},{width:13},{width:8},{width:11},{width:20},{width:9},{width:40},{width:18},
+      {width:26},{width:26},{width:26},{width:26},{width:26},{width:26}
+    ];
+
+    function cell(r,c){ return ws.getRow(r).getCell(c); }
+    function put(r,c,v,o){
+      o=o||{}; var cl=cell(r,c);
+      if(v!==undefined && v!==null) cl.value=v;
+      cl.font={ name:FONT, size:o.size||10, bold:!!o.bold, color:{argb:o.color||XC.text} };
+      if(o.fill) cl.fill={ type:'pattern', pattern:'solid', fgColor:{argb:o.fill} };
+      cl.alignment={ horizontal:o.align||'left', vertical:o.valign||'middle', wrapText:o.wrap!==false };
+      cl.border=_border();
+      return cl;
+    }
+    // 병합 영역 전체에 테두리 입히기
+    function boxBorder(r1,c1,r2,c2){
+      for(var r=r1;r<=r2;r++) for(var c=c1;c<=c2;c++) cell(r,c).border=_border();
+    }
+
+    // ① 타이틀 A1:H3
+    ws.mergeCells(1,1,3,8);
+    put(1,1,'주 간 업 무 보 고',{bold:true,size:20,color:XC.white,fill:XC.navy,align:'center'});
+    boxBorder(1,1,3,8);
+    // ② 요일 헤더 I1:N3
     var dayDates=[0,2,3,4,5,6].map(function(off){ return addD(sat,off); });
-    dayDates.forEach(function(d,i){ setC(0, 8+i, String(d.getMonth()+1).padStart(2,'0')+'월 '+String(d.getDate()).padStart(2,'0')+'일 ('+DAYS[d.getDay()]+')'); });
-    // ③ 일자/작성자 (row4) + 요일별 내용 (I4..N4)
-    setC(3,0,'일자'); setC(3,2, _fmtDateK(ymd(sat))+' ~ '+_fmtDateK(ymd(fri)));
-    setC(3,5,'작성자'); setC(3,6, w);
-    var dayCount=Number(document.getElementById('daysBox').dataset.count||0);
     dayDates.forEach(function(d,i){
-      var ta=document.getElementById('day'+i);
-      setC(3, 8+i, ta ? ta.value : '');    // 이미 30자 줄바꿈된 텍스트
+      var c=9+i;
+      ws.mergeCells(1,c,3,c);
+      put(1,c, String(d.getMonth()+1).padStart(2,'0')+'월 '+String(d.getDate()).padStart(2,'0')+'일 ('+DAYS[d.getDay()]+')',
+          {bold:true,size:11,color:XC.navy,fill:XC.head,align:'center'});
+      boxBorder(1,c,3,c);
     });
+    // ③ 일자/작성자 (row4~5)
+    ws.mergeCells(4,1,5,2); put(4,1,'일자',{bold:true,fill:XC.gray,align:'center'});
+    ws.mergeCells(4,3,5,5); put(4,3, _fmtDateK(ymd(sat))+' ~ '+_fmtDateK(ymd(fri)),{align:'center'});
+    ws.mergeCells(4,6,5,6); put(4,6,'작성자',{bold:true,fill:XC.gray,align:'center'});
+    ws.mergeCells(4,7,5,8); put(4,7, w,{bold:true,align:'center'});
+    boxBorder(4,1,5,8);
     // ④ 표 헤더 (row6)
     var HEAD=['접수일자','방문일자','N-care','점검 / VOC','병원','노즐 재사용','처리내용','비고(지연 사유)'];
-    HEAD.forEach(function(h,c){ setC(5,c,h); });
+    HEAD.forEach(function(h,c){ put(6,c+1,h,{bold:true,color:XC.white,fill:XC.navy,align:'center'}); });
+    ws.getRow(6).height=22;
     // ⑤ 데이터 (row7~)
     W_ROWS.forEach(function(r,i){
-      var rr=6+i;
-      setC(rr,0,r.rcv); setC(rr,1,r.visit); setC(rr,2,r.ncare); setC(rr,3,r.kind);
-      setC(rr,4,r.hosp); setC(rr,5,r.nozzle);
-      setC(rr,6, wrapText(r.content, 50));    // 처리내용 50자 줄바꿈
-      setC(rr,7, r.memo||'');
+      var rr=7+i;
+      put(rr,1,r.rcv,{align:'center'});
+      put(rr,2,r.visit,{align:'center'});
+      put(rr,3,r.ncare,{align:'center'});
+      var isVoc=(r.kind==='VOC');
+      put(rr,4,r.kind,{align:'center',bold:true,color:isVoc?XC.vocT:XC.inspT,fill:isVoc?XC.voc:XC.insp});
+      put(rr,5,r.hosp,{});
+      put(rr,6,r.nozzle,{align:'center'});
+      put(rr,7, wrapText(r.content,50),{valign:'top'});   // 처리내용 50자 줄바꿈
+      put(rr,8, r.memo||'',{valign:'top'});
+      ws.getRow(rr).height=Math.max(18, 15*(wrapText(r.content,50).split('\n').length));
     });
-    var dataEnd=6+W_ROWS.length-1;
-    // ⑥ 건수
+    var dataEnd=6+W_ROWS.length;   // 마지막 데이터 행 번호
+    // ⑥ 요일별 내용 I4:N(dataEnd) 세로 병합
+    dayDates.forEach(function(d,i){
+      var c=9+i;
+      ws.mergeCells(4,c,dataEnd,c);
+      var ta=document.getElementById('day'+i);
+      put(4,c, ta?ta.value:'', {valign:'top'});   // 이미 30자 줄바꿈
+      boxBorder(4,c,dataEnd,c);
+    });
+    // ⑦ 건수
     var insp=W_ROWS.filter(function(r){return r.kind==='점검';}).length;
     var voc=W_ROWS.length-insp;
     var cr=dataEnd+2;
-    setC(cr,0,'점검 건수');   setC(cr,6,insp);
-    setC(cr+1,0,'VOC 건수');  setC(cr+1,6,voc);
-    setC(cr+2,0,'총 건수');   setC(cr+2,6,W_ROWS.length);
-    // ⑦ 특이사항
-    var sr=cr+4;
-    setC(sr,0,'특이사항');
-    setC(sr+1,0, document.getElementById('special').value||'');
-    var lastRow=sr+1;
-
-    // 시트 생성 + 병합/열너비
-    var ws=XLSX.utils.aoa_to_sheet(A);
-    var M=[];
-    M.push({s:{r:0,c:0},e:{r:2,c:7}});                         // 타이틀
-    for(var c=8;c<=13;c++) M.push({s:{r:0,c:c},e:{r:2,c:c}});  // 요일 헤더
-    M.push({s:{r:3,c:0},e:{r:4,c:1}});                         // 일자
-    M.push({s:{r:3,c:2},e:{r:4,c:4}});                         // 일자 값
-    M.push({s:{r:3,c:5},e:{r:4,c:5}});                         // 작성자
-    M.push({s:{r:3,c:6},e:{r:4,c:7}});                         // 작성자 값
-    for(var c2=8;c2<=13;c2++) M.push({s:{r:3,c:c2},e:{r:lastRow,c:c2}});  // 요일 내용(세로 병합)
-    M.push({s:{r:cr,c:0},e:{r:cr,c:5}});   M.push({s:{r:cr,c:6},e:{r:cr,c:7}});
-    M.push({s:{r:cr+1,c:0},e:{r:cr+1,c:5}}); M.push({s:{r:cr+1,c:6},e:{r:cr+1,c:7}});
-    M.push({s:{r:cr+2,c:0},e:{r:cr+2,c:5}}); M.push({s:{r:cr+2,c:6},e:{r:cr+2,c:7}});
-    M.push({s:{r:sr,c:0},e:{r:sr,c:7}});                       // 특이사항 라벨
-    M.push({s:{r:sr+1,c:0},e:{r:lastRow,c:7}});                // 특이사항 내용
-    ws['!merges']=M;
-    ws['!cols']=[{wch:12},{wch:12},{wch:8},{wch:9},{wch:18},{wch:9},{wch:34},{wch:16}]
-      .concat([0,0,0,0,0,0].map(function(){return {wch:30};}));
-    // 줄바꿈 표시(가능한 뷰어에서): 셀에 wrapText 스타일 부여
-    Object.keys(ws).forEach(function(addr){
-      if(addr[0]==='!') return;
-      var cell=ws[addr];
-      if(cell && typeof cell.v==='string' && cell.v.indexOf('\n')>=0){
-        cell.s=cell.s||{}; cell.s.alignment={wrapText:true, vertical:'top'};
-      }
+    [['점검 건수',insp,XC.insp,XC.inspT],['VOC 건수',voc,XC.voc,XC.vocT],['총 건수',W_ROWS.length,XC.head,XC.navy]].forEach(function(row,k){
+      var rr=cr+k;
+      ws.mergeCells(rr,1,rr,6); put(rr,1,row[0],{bold:true,fill:row[2],color:row[3]});
+      ws.mergeCells(rr,7,rr,8); put(rr,7,row[1],{bold:true,align:'center',size:12,color:row[3]});
     });
+    // ⑧ 특이사항
+    var sr=cr+4;
+    ws.mergeCells(sr,1,sr,8); put(sr,1,'특이사항',{bold:true,fill:XC.amberSoft,color:'FF8A5A00'});
+    var spTxt=document.getElementById('special').value||'';
+    var spEnd=sr+1+Math.max(2, spTxt.split('\n').length-1);
+    ws.mergeCells(sr+1,1,spEnd,8); put(sr+1,1, spTxt,{valign:'top'});
+    boxBorder(sr,1,spEnd,8);
 
-    var wb=XLSX.utils.book_new();
-    var sheetName=(w||'보고').slice(0,28);
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    var fname='주간업무보고_'+mon.getFullYear()+'년'+wkLabel(mon).replace(/\s/g,'')+'_'+(w||'')+'.xlsx';
-    XLSX.writeFile(wb, fname);
-    toast('📊 '+fname+' 생성 완료');
+    // 다운로드
+    var buf=await wb.xlsx.writeBuffer();
+    var blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url; a.download='주간업무보고_'+mon.getFullYear()+'년'+wkLabel(mon).replace(/\s/g,'')+'_'+(w||'')+'.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1500);
+    toast('📊 엑셀 생성 완료');
   }catch(e){ toast('❌ '+e); }
   btn.disabled=false; btn.innerHTML=prev;
 }
