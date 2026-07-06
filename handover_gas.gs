@@ -571,25 +571,39 @@ function getInventory_(){
  *         totalJoined, totalNormal, normalRate, updated} */
 function getNcare_(){
   try{
-    var ssId = NCARE.SPREADSHEET_ID || INVENTORY.SUMMARY.SPREADSHEET_ID;
-    var shName = NCARE.SHEET || INVENTORY.SUMMARY.SHEET;
-    var ss = SpreadsheetApp.openById(ssId);
-    var sh = invSheetByName_(ss, shName) || ss.getSheetByName(shName);
-    if(!sh) return {success:false, error:'대시보드 시트 없음: '+shName};
-    var v = sh.getDataRange().getDisplayValues();
+    /* 후보 시트: NCARE 지정 우선 → 재고 요약 스프레드시트의 모든 탭 스캔 */
+    var books=[];
+    if(NCARE.SPREADSHEET_ID) books.push(SpreadsheetApp.openById(NCARE.SPREADSHEET_ID));
+    books.push(SpreadsheetApp.openById(INVENTORY.SUMMARY.SPREADSHEET_ID));
+    var candidates=[];
+    books.forEach(function(ss){
+      var only = NCARE.SHEET ? [ss.getSheetByName(NCARE.SHEET)].filter(Boolean) : ss.getSheets();
+      only.forEach(function(sh){ if(sh) candidates.push(sh); });
+    });
 
-    /* 1) 등급 헤더 행 찾기: 'Basic'과 'Standard'가 같은 행 */
-    var hr=-1, hc=-1;
-    for(var r=0;r<v.length && hr<0;r++){
-      var rowN=v[r].map(norm_);
-      var bi=rowN.indexOf('basic'), si=rowN.indexOf('standard');
-      if(bi>=0 && si>=0){ hr=r; hc=bi; }
-    }
-    if(hr<0) return {success:false, error:'등급 헤더(Basic/Standard) 탐지 실패'};
-    /* 등급 5칸 열 인덱스: Basic부터 5개 (마지막은 CurePass 또는 미가입) */
+    /* Basic/Standard 헤더 + N-care 관련 라벨 개수로 점수화 → 최고점 시트 선택 */
+    var best=null;
+    candidates.forEach(function(sh){
+      var v = sh.getDataRange().getDisplayValues();
+      var hr=-1, hc=-1;
+      for(var r=0;r<v.length && hr<0;r++){
+        var rn=v[r].map(norm_);
+        var bi=rn.indexOf('basic'), si=rn.indexOf('standard');
+        if(bi>=0 && si>=0){ hr=r; hc=bi; }
+      }
+      if(hr<0) return;
+      var flat=norm_(v.map(function(row){return row.join(' ');}).join(' '));
+      var score=0;
+      ['정상운영','점검대상','점검률','전체가입자','정상운영률','curepass'].forEach(function(kw){
+        if(flat.indexOf(norm_(kw))>=0) score++;
+      });
+      if(!best || score>best.score) best={sh:sh, v:v, hr:hr, hc:hc, score:score};
+    });
+    if(!best) return {success:false, error:'등급 헤더(Basic/Standard) 있는 시트 없음'};
+
+    var v=best.v, hr=best.hr, hc=best.hc;
     var cols=[hc, hc+1, hc+2, hc+3, hc+4];
 
-    /* 2) 라벨 행 찾기 (헤더 아래에서 라벨 텍스트로 매칭) */
     function findRow(cands){
       for(var r=hr;r<v.length;r++){
         for(var c=0;c<v[r].length;c++){
@@ -604,26 +618,24 @@ function getNcare_(){
       return cols.map(function(c){ return (c<v[r].length)? _num_(v[r][c]) : null; });
     }
     function readColsRaw(r){
-      if(r<0) return ['','','','','' ];
+      if(r<0) return ['','','','',''];
       return cols.map(function(c){ return (c<v[r].length)? String(v[r][c]).trim() : ''; });
     }
 
     var rJoin  = findRow(['가입 병원 수','가입병원수']);
-    /* '가입 병원 수' 라벨이 없으면 등급 헤더 바로 아래 행을 카운트 행으로 사용 */
     var joined = readCols(rJoin>=0 ? rJoin : hr+1);
-    var normal = readCols(findRow(['정상 운영 병원 수','정상운영병원수']));
-    var target = readCols(findRow(['점검 대상 병원 수','점검대상병원수']));
+    var normal = readCols(findRow(['정상운영병원','정상 운영 병원']));
+    var target = readCols(findRow(['점검대상','점검 대상']));
     var rate   = readColsRaw(findRow(['점검률']));
 
-    /* 3) 하단 요약: 전체 가입자 / 정상 운영 병원 / 정상 운영률 */
     function findVal(cands){
       for(var r=0;r<v.length;r++){
         for(var c=0;c<v[r].length;c++){
           var t=norm_(v[r][c]);
           for(var k=0;k<cands.length;k++){
             if(t && t.indexOf(norm_(cands[k]))>=0){
-              /* 라벨과 같은 셀에 숫자가 붙어있으면 추출, 아니면 오른쪽/다음 칸 */
-              var inline=_num_(v[r][c]); if(inline!=null && !/^[a-z]/i.test(v[r][c])) {}
+              var m=String(v[r][c]).match(/(\d[\d,]*)/);
+              if(m) return Number(m[1].replace(/,/g,''));
               var near=invNear_(v, r, c); return near?near.value:null;
             }
           }
@@ -637,7 +649,8 @@ function getNcare_(){
           var t=norm_(v[r][c]);
           for(var k=0;k<cands.length;k++){
             if(t && t.indexOf(norm_(cands[k]))>=0){
-              for(var dc=1;dc<=4;dc++){ var cc=c+dc; if(cc<v[r].length){ var s=String(v[r][cc]).trim(); if(/%/.test(s)) return s; } }
+              var m0=String(v[r][c]).match(/(\d+%)/); if(m0) return m0[1];
+              for(var dc=1;dc<=5;dc++){ var cc=c+dc; if(cc<v[r].length){ var s=String(v[r][cc]).trim(); if(/%/.test(s)) return s; } }
             }
           }
         }
@@ -646,9 +659,15 @@ function getNcare_(){
     }
 
     var tiers = NCARE.TIERS.slice();
-    /* 시트의 마지막 등급 헤더가 '미가입'이면 CurePass로 표기 (설정 우선) */
     var lastHead = (cols[4]<v[hr].length)? String(v[hr][cols[4]]).trim() : '';
-    if(lastHead && !/미가입/.test(lastHead)) tiers[4]=lastHead;   // 시트가 이미 CurePass 등 실제 라벨이면 사용
+    if(lastHead && !/미가입/.test(lastHead)) tiers[4]=lastHead;
+
+    /* 진단용 원본 그리드 (내용 있는 행만, 앞 14열, 20자 절단) */
+    var grid=[];
+    for(var gr=0; gr<Math.min(v.length,40); gr++){
+      var cells=v[gr].slice(0,14).map(function(x){ x=String(x||'').trim(); return x.length>20?x.slice(0,20)+'…':x; });
+      if(cells.some(function(x){return x!=='';})) grid.push({r:gr+1, c:cells});
+    }
 
     return {success:true,
       tiers: tiers,
@@ -656,7 +675,8 @@ function getNcare_(){
       totalJoined: findVal(['전체 가입자','전체가입자']),
       totalNormal: findVal(['정상 운영 병원','N-care 운영 현황','ncare운영현황']),
       normalRate:  findPct(['정상 운영률','정상운영률']),
-      sheet: sh.getName(),
+      sheet: best.sh.getName(), spreadsheet: best.sh.getParent().getName(),
+      headerRow: hr+1, basicCol: hc+1, score: best.score, grid: grid,
       updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   }catch(err){
     return {success:false, error:'N-care 현황 시트 접근 실패: '+err};
