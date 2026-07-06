@@ -401,8 +401,8 @@ function fmtBlock(r){
     ln=ln.trim(); if(!ln) return;
     L.push(/^-/.test(ln)?ln:'- '+ln);
   });
-  /* 요일별 내용은 한 줄 30자 제한 */
-  return wrapText(L.join('\n'), 30);
+  /* 요일별 내용은 한 줄 50자 제한 */
+  return wrapText(L.join('\n'), 50);
 }
 function buildDays(){
   var box=document.getElementById('daysBox');
@@ -480,7 +480,7 @@ function _fmtDateK(s){ var d=normD(s); return d ? (d.getFullYear()+'년 '+String
 /* 색상 (ARGB) */
 var XC={ navy:'FF1B2F5E', teal:'FF2E7D9E', tealSoft:'FFEAF4F8', line:'FFCED6E4',
          white:'FFFFFFFF', text:'FF1A1A2E', gray:'FFF1F4F9', voc:'FFFBEAE8', vocT:'FFC0392B',
-         insp:'FFE8F5EE', inspT:'FF1E7E4E', head:'FFEAF0F8', amberSoft:'FFFBF3E0' };
+         insp:'FFE8F5EE', inspT:'FF1E7E4E', head:'FFEAF0F8', amberSoft:'FFFBF3E0', zebra:'FFF6F9FC' };
 var FONT='맑은 고딕';
 function _border(){ var t={style:'thin',color:{argb:XC.line}}; return {top:t,left:t,bottom:t,right:t}; }
 
@@ -497,10 +497,10 @@ async function genExcel(){
     var wb=new ExcelJS.Workbook();
     var ws=wb.addWorksheet((w||'보고').slice(0,28), {views:[{showGridLines:false}]});
 
-    // 열 너비 (A~N)
+    // 열 너비 (A~N): 병원 20 · 노즐 10 · 처리내용 55 · 요일 I~N 50
     ws.columns=[
-      {width:13},{width:13},{width:8},{width:11},{width:20},{width:9},{width:40},{width:18},
-      {width:26},{width:26},{width:26},{width:26},{width:26},{width:26}
+      {width:13},{width:13},{width:8},{width:11},{width:20},{width:10},{width:55},{width:18},
+      {width:50},{width:50},{width:50},{width:50},{width:50},{width:50}
     ];
 
     function cell(r,c){ return ws.getRow(r).getCell(c); }
@@ -544,42 +544,47 @@ async function genExcel(){
     // ⑤ 데이터 (row7~)
     W_ROWS.forEach(function(r,i){
       var rr=7+i;
-      put(rr,1,r.rcv,{align:'center'});
-      put(rr,2,r.visit,{align:'center'});
-      put(rr,3,r.ncare,{align:'center'});
+      var zb=(i%2===1)?XC.zebra:null;                // 교차 음영 (가독성)
+      put(rr,1,r.rcv,{align:'center',fill:zb});
+      put(rr,2,r.visit,{align:'center',fill:zb});
+      put(rr,3,r.ncare,{align:'center',fill:zb});
       var isVoc=(r.kind==='VOC');
       put(rr,4,r.kind,{align:'center',bold:true,color:isVoc?XC.vocT:XC.inspT,fill:isVoc?XC.voc:XC.insp});
-      put(rr,5,r.hosp,{});
-      put(rr,6,r.nozzle,{align:'center'});
-      put(rr,7, wrapText(r.content,50),{valign:'top'});   // 처리내용 50자 줄바꿈
-      put(rr,8, r.memo||'',{valign:'top'});
-      ws.getRow(rr).height=Math.max(18, 15*(wrapText(r.content,50).split('\n').length));
+      put(rr,5,r.hosp,{align:'center',fill:zb});     // 병원 가운데맞춤
+      put(rr,6,r.nozzle,{align:'center',fill:zb});
+      put(rr,7, wrapText(r.content,50),{valign:'top',fill:zb});   // 처리내용 왼쪽·상단 · 50자 줄바꿈
+      put(rr,8, r.memo||'',{align:'center',valign:'top',fill:zb});
+      ws.getRow(rr).height=Math.max(20, 15*(wrapText(r.content,50).split('\n').length));
     });
     var dataEnd=6+W_ROWS.length;   // 마지막 데이터 행 번호
-    // ⑥ 요일별 내용 I4:N(dataEnd) 세로 병합
-    dayDates.forEach(function(d,i){
-      var c=9+i;
-      ws.mergeCells(4,c,dataEnd,c);
-      var ta=document.getElementById('day'+i);
-      put(4,c, ta?ta.value:'', {valign:'top'});   // 이미 30자 줄바꿈
-      boxBorder(4,c,dataEnd,c);
-    });
-    // ⑦ 건수
+    // ⑦ 건수 — 데이터 아래 3줄 (A~F 라벨 가운데, G~H 값 가운데)
     var insp=W_ROWS.filter(function(r){return r.kind==='점검';}).length;
     var voc=W_ROWS.length-insp;
-    var cr=dataEnd+2;
+    var cr=dataEnd+1;                                 // 데이터 바로 다음 줄부터 (불필요 빈칸 제거)
     [['점검 건수',insp,XC.insp,XC.inspT],['VOC 건수',voc,XC.voc,XC.vocT],['총 건수',W_ROWS.length,XC.head,XC.navy]].forEach(function(row,k){
       var rr=cr+k;
-      ws.mergeCells(rr,1,rr,6); put(rr,1,row[0],{bold:true,fill:row[2],color:row[3]});
+      ws.mergeCells(rr,1,rr,6); put(rr,1,row[0],{bold:true,fill:row[2],color:row[3],align:'center'});
       ws.mergeCells(rr,7,rr,8); put(rr,7,row[1],{bold:true,align:'center',size:12,color:row[3]});
     });
-    // ⑧ 특이사항
-    var sr=cr+4;
-    ws.mergeCells(sr,1,sr,8); put(sr,1,'특이사항',{bold:true,fill:XC.amberSoft,color:'FF8A5A00'});
+    // ⑧ 특이사항 — 건수 바로 다음 줄 (불필요 빈칸 제거)
+    var sr=cr+3;
+    ws.mergeCells(sr,1,sr,8); put(sr,1,'특이사항',{bold:true,fill:XC.amberSoft,color:'FF8A5A00',align:'center'});
     var spTxt=document.getElementById('special').value||'';
-    var spEnd=sr+1+Math.max(2, spTxt.split('\n').length-1);
+    var spEnd=Math.max(sr+2, sr+1+(spTxt.split('\n').length-1));
     ws.mergeCells(sr+1,1,spEnd,8); put(sr+1,1, spTxt,{valign:'top'});
     boxBorder(sr,1,spEnd,8);
+    // ⑥ 요일별 내용 I4:N — 최소 30행까지 병합 (본문이 더 길면 그 끝까지)
+    var dayEnd=Math.max(30, spEnd);
+    dayDates.forEach(function(d,i){
+      var c=9+i;
+      ws.mergeCells(4,c,dayEnd,c);
+      var ta=document.getElementById('day'+i);
+      put(4,c, ta?ta.value:'', {valign:'top'});   // 이미 50자 줄바꿈
+      boxBorder(4,c,dayEnd,c);
+    });
+    // 인쇄: 가로 · A1:N(dayEnd) 영역 · 배율 100%
+    ws.pageSetup={ orientation:'landscape', scale:100, printArea:'A1:N'+dayEnd,
+                   margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2} };
 
     // 다운로드
     var buf=await wb.xlsx.writeBuffer();
