@@ -429,7 +429,8 @@ async function saveToSheet(){
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
   var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
-    cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),cost:val('cost'),
+    cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
+    cost:(String(val('cost')||'').trim() || '무상'),   /* 교체비용 공란이면 시트에 '무상' 기록 */
     detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
     hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP') };
   try{
