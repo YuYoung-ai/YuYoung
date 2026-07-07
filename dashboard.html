@@ -1004,7 +1004,7 @@ async function makeWeeklyPPT(){
     }catch(_){}
     if(logoData){
       /* 캡처 이미지 기준: 네이비 바(y0.5~1.18)와 세로 중앙 정렬, 우측 여백에 맞춰 배치 */
-      s.addImage({data:logoData, x:11.55, y:0.46, w:1.6, h:0.76, sizing:{type:'contain', w:1.6, h:0.76}});
+      s.addImage({data:logoData, x:11.55, y:0.46, w:1.1, h:0.3, sizing:{type:'contain', w:1.1, h:0.3}});
     }else{
       tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
       tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
