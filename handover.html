@@ -234,7 +234,7 @@ function val(id){return (document.getElementById(id).value||'').trim();}
 /* AS 항목 분류 코드 마스터 (대분류: [코드, 소분류]) */
 var AS_TAX={
   "장비":[["E01","메인보드 불량"],["E02","풋스위치 작동 불량"],["E03","출력 저하"],["E04","RFID 스캔 불량"],["E05","냉각수 누수"],["E06","UI 업그레이드"],["E07","팝업 불량"],["E08","디스플레이 터치"],["E09","디스플레이 점등"],["E10","작업불량"],["E11","케이블 불량"],["E12","이상 소음"],["E13","피팅 불량"],["E14","바퀴 파손"],["E15","구동 키 파손"],["E16","거치대 파손"],["E17","ARM 파손"],["E18","커넥터 체결 불량"],["E19","재현 안됨"],["E20","이물"],["E21","냉각수 충전"],["E22","SD카드 교체"],["E23","파워서플라이 불량"],["E24","이상없음"],["E25","장비 교육"],["E26","기타"]],
-  "핸드피스":[["H01","교환 조치"],["H02","냉각 호스 파손"],["H03","노즐 누수/녹물"],["H04","볼트풀림 홀더"],["H05","홀더 파손"],["H06","노즐 체결 강함"],["H07","노즐 체결 약함"],["H08","스프링 파손"],["H09","스프링 끼임"],["H10","바디센터 간섭"],["H11","발열"],["H12","플런저 오작동"],["H13","케이블 불량"],["H14","사용 설명"],["H15","볼트풀림 바디센터"],["H16","재현 안됨"],["H17","이물"],["H18","볼트 파손"],["H19","출력 약함"],["H20","작업불량"],["H21","플런저 후퇴 불량"],["H22","기타"]],
+  "핸드피스":[["H01","교환 조치"],["H02","냉각 호스 파손"],["H03","노즐 누수(약액유입)"],["H04","볼트풀림 홀더"],["H05","홀더 파손"],["H06","노즐 체결 강함"],["H07","노즐 체결 약함"],["H08","스프링 파손"],["H09","스프링 끼임"],["H10","바디센터 간섭"],["H11","발열"],["H12","플런저 오작동"],["H13","케이블 불량"],["H14","사용 설명"],["H15","볼트풀림 바디센터"],["H16","재현 안됨"],["H17","이물"],["H18","볼트 파손"],["H19","출력 약함"],["H20","작업불량"],["H21","플런저 후퇴 불량"],["H22","기타"]],
   "노즐":[["N01","보증샷 초과"],["N02","재사용 노즐"],["N03","RFID 스캔 불량"],["N04","젯팅 불량"],["N05","노즐 막힘"],["N06","체결력 강함"],["N07","체결력 약함"],["N08","노즐 누수"],["N09","크랙"],["N10","후크 파손"],["N11","멤브레인 파손"],["N12","이물"],["N13","볼트 체결"],["N14","작업불량"],["N15","고점도 약물"],["N16","사용 설명"],["N17","기타"]],
   "기타":[["G01","사용 설명"],["G02","재현 안됨"]]
 };
@@ -473,25 +473,27 @@ function fillFseList(list){
 function masterSync(){
   gv('master',{}).then(function(d){
     if(!d.success) return;
-    var added=0;
+    /* 유형 마스터 기준으로 교체 — 코드(E/H/N/G##) 있는 항목만, 코드순 정렬.
+       (getMaster_가 실제 기록에서 뽑은 '코드 없는' 데이터 유래 항목은 제외해 대분류 꼬임 방지) */
+    var changed=0;
     Object.keys(d.taxonomy||{}).forEach(function(cat){
-      if(!AS_TAX[cat]) AS_TAX[cat]=[];
-      d.taxonomy[cat].forEach(function(p){
-        if(!AS_TAX[cat].some(function(q){return q[1]===p[1];})){ AS_TAX[cat].push(p); added++; }
-      });
+      var coded=(d.taxonomy[cat]||[])
+        .filter(function(p){ return p[0] && String(p[0]).trim(); })
+        .sort(function(a,b){ return String(a[0]).localeCompare(String(b[0])); });
+      if(coded.length){ AS_TAX[cat]=coded; changed++; }   /* 코드 있는 카테고리만 교체 */
     });
     (d.parts||[]).forEach(function(p){
       if(PARTS.indexOf(p)<0){ PARTS.push(p);
         var o=document.createElement('option');o.textContent=p;document.getElementById('part').appendChild(o);}
     });
-    if(added){ /* 대분류 select 재구성 (선택값 보존) */
+    if(changed){ /* 대분류 select 재구성 (선택값 보존) */
       var cur=val('cat'), catSel=document.getElementById('cat'); catSel.innerHTML='';
       Object.keys(AS_TAX).forEach(function(k){var o=document.createElement('option');o.textContent=k;catSel.appendChild(o);});
       catSel.value=cur||catSel.value; fillSub();
     }
     fillFseList(d.fse);
     document.getElementById('syncBadge').textContent='· 시트 동기화됨';
-    console.log('[handover] 마스터 동기화:',d.source,'유형+'+added,'교체품 '+(d.parts||[]).length+'종');
+    console.log('[handover] 마스터 동기화:',d.source,'카테고리 교체 '+changed,'교체품 '+(d.parts||[]).length+'종');
   }).catch(function(e){ console.warn('[handover] 마스터 동기화 생략:',e); });
 }
 
