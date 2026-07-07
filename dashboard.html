@@ -786,11 +786,16 @@ function openWeekly(){
   loadInventory();
   loadNcare();
 }
-/* N-care 가입 현황 — 재고와 동일한 대시보드 시트에서 조회 (점검 PPT용) */
+/* N-care 가입 현황 — 전용 N-care 대시보드 웹앱에서 조회 (점검 PPT용).
+   ▼ 배포 후 여기에 N-care 대시보드 스크립트의 /exec URL 입력 (비우면 handover의 action=ncare 폴백) ▼ */
+var NCARE_URL='';
 var WK_NCARE=null;
 function loadNcare(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_ncare')||'null'); if(c) WK_NCARE=c; }catch(e){}
-  gv('ncare',{}).then(function(d){
+  var p = NCARE_URL
+    ? fetch(NCARE_URL).then(function(r){return r.json();})
+    : gv('ncare',{});
+  p.then(function(d){
     if(d&&d.success){ WK_NCARE=d; try{ localStorage.setItem('baz_dash_ncare', JSON.stringify(d)); }catch(e){} }
   }).catch(function(){});
 }
