@@ -884,7 +884,7 @@ function suggestWkDetail(){
   var sel=document.getElementById('wkSel'); if(!sel.value) return;
   var mon=new Date(sel.value+'T00:00:00');
   var cur=scopeRows(rowsBetween(mon, addD(mon,4)));
-  var top=anchorFirst(topOf(cnt(cur,'type'), isOK), '노즐누수(젯팅/녹물)').slice(0,3);
+  var top=anchorFirst(topOf(cnt(cur,'type'), isOK), '노즐누수(약액 유입)').slice(0,3);
   document.getElementById('wkDetail').value=top.map(function(p){
     var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
     var line=row?String(row.detail).split('\n')[0]:'';
@@ -947,7 +947,7 @@ async function makeWeeklyPPT(){
     /* 집계 */
     var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
     var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
-    var types=anchorFirst(topOf(typeC,isOK), '노즐누수(젯팅/녹물)').slice(0,3);
+    var types=anchorFirst(topOf(typeC,isOK), '노즐누수(약액 유입)').slice(0,3);
     var okCnt=topOf(typeC,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
     var okPrev=topOf(typeP,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
     var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,3);
