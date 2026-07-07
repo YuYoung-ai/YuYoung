@@ -788,7 +788,7 @@ function openWeekly(){
 }
 /* N-care 가입 현황 — 전용 N-care 대시보드 웹앱에서 조회 (점검 PPT용).
    ▼ 배포 후 여기에 N-care 대시보드 스크립트의 /exec URL 입력 (비우면 handover의 action=ncare 폴백) ▼ */
-var NCARE_URL='';
+var NCARE_URL='https://script.google.com/macros/s/AKfycbzo3CR3b5sd39ucAixgFgS1oZvAFaaK4pjn8RVz2pEc6npe0wW4toPOafXCZnUM7Nc/exec';
 var WK_NCARE=null;
 function loadNcare(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_ncare')||'null'); if(c) WK_NCARE=c; }catch(e){}
