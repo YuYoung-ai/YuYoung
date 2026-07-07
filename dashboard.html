@@ -988,15 +988,18 @@ async function makeWeeklyPPT(){
       s.addText(t,o);
     }
 
-    /* 로고 · 타이틀 바 — logo.png가 같은 폴더에 있으면 실제 로고 사용 */
+    /* 로고 · 타이틀 바 — logo.png가 같은 폴더에 있고 "유효한 이미지"일 때만 사용
+       (빈/깨진 파일이면 무시하고 텍스트 로고로 폴백 → PPT에 깨진 그림 박힘 방지) */
     var logoData=null;
     try{
-      var lr=await fetch('logo.png');
+      var lr=await fetch('logo.png',{cache:'no-store'});
       if(lr.ok){
         var lb=await lr.blob();
-        logoData=await new Promise(function(res,rej){
-          var fr=new FileReader(); fr.onload=function(){res(fr.result);}; fr.onerror=rej; fr.readAsDataURL(lb);
-        });
+        if(lb.size>200 && /^image\//.test(lb.type||'')){   // 2바이트 빈 파일 등 방어
+          logoData=await new Promise(function(res,rej){
+            var fr=new FileReader(); fr.onload=function(){res(fr.result);}; fr.onerror=rej; fr.readAsDataURL(lb);
+          });
+        }
       }
     }catch(_){}
     if(logoData){
@@ -1052,9 +1055,10 @@ async function makeWeeklyPPT(){
       tx(String(okCnt),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       ry+=0.4;
     }
-    s.addShape(pptx.shapes.LINE,{x:5.15,y:ry+0.02,w:3.95,h:0,line:{color:C.line,width:1}});
-    tx('총 합계',{x:5.25,y:ry+0.08,w:2,h:0.32,fontSize:11,bold:true,color:C.navy});
-    tx(String(cur.length),{x:8.35,y:ry+0.08,w:0.75,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+    /* 총 합계는 카드 하단 고정 (교체품 현황과 동일 y=3.8) — 행 수와 무관하게 정렬 */
+    s.addShape(pptx.shapes.LINE,{x:5.15,y:3.72,w:3.95,h:0,line:{color:C.line,width:1}});
+    tx('총 합계',{x:5.25,y:3.8,w:2,h:0.32,fontSize:11,bold:true,color:C.navy});
+    tx(String(cur.length),{x:8.35,y:3.8,w:0.75,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
 
     /* ③ 교체품 현황 — 전주 대비는 최상단 항목만, VOC 유형과 동일한 같은 행 배치 */
     card(9.5,1.4,3.55,2.85);
