@@ -1003,8 +1003,8 @@ async function makeWeeklyPPT(){
       }
     }catch(_){}
     if(logoData){
-      /* 캡처 이미지 기준: 네이비 바(y0.5~1.18)와 세로 중앙 정렬, 우측 여백에 맞춰 배치 */
-      s.addImage({data:logoData, x:11.55, y:0.46, w:1.1, h:1.1, sizing:{type:'contain', w:1.5, h:1.5}});
+      /* 1시 방향(우상단) 모서리에서 일정 간격(0.25) 띄우고 작게 배치 */
+      s.addImage({data:logoData, x:12.0, y:0.14, w:1.08, h:0.5, sizing:{type:'contain', w:1.08, h:0.5}});
     }else{
       tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
       tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
@@ -1037,7 +1037,7 @@ async function makeWeeklyPPT(){
     /* ② VOC 유형 — 전주 대비는 최상단 항목만 (유형 | 대비 | 건수) */
     card(4.95,1.4,4.35,2.85);
     tx(isInsp?'점검 유형':'VOC 유형',{x:5.15,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    tx('유형',{x:5.35,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
+    tx('유형',{x:5.15,y:1.86,w:1.85,h:0.26,fontSize:9,color:C.mut,align:'center'});
     tx('건수',{x:8.35,y:1.86,w:0.75,h:0.26,fontSize:9,color:C.mut,align:'right'});
     var ry=2.16;
     types.forEach(function(p,i){
@@ -1046,13 +1046,13 @@ async function makeWeeklyPPT(){
         var dt=deltaTxt(p[1], typeP[p[0]]||0);
         tx(dt.t,{x:7.1,y:ry,w:1.2,h:0.3,fontSize:8.5,bold:true,color:dt.c});
       }
-      tx(p[0],{x:5.25,y:ry,w:1.7,h:0.3,fontSize:9.5,bold:i===0,color:'333333'});
+      tx(p[0],{x:5.15,y:ry,w:1.85,h:0.3,fontSize:9.5,bold:i===0,color:'333333',align:'center'});
       tx(String(p[1]),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       ry+=0.4;
     });
     if(okCnt || okPrev){
       s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.85,h:0.34,rectRadius:0.05,fill:{color:C.ghl}});
-      tx('이상 없음',{x:5.25,y:ry,w:1.7,h:0.3,fontSize:9.5,color:C.green});
+      tx('이상 없음',{x:5.15,y:ry,w:1.85,h:0.3,fontSize:9.5,color:C.green,align:'center'});
       tx(String(okCnt),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       ry+=0.4;
     }
@@ -1065,21 +1065,22 @@ async function makeWeeklyPPT(){
     card(9.5,1.4,3.55,2.85);
     tx('교체품 현황',{x:9.7,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
     tx('교체품',{x:9.9,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
-    tx('수량',{x:12.15,y:1.86,w:0.7,h:0.26,fontSize:9,color:C.mut,align:'right'});
+    tx('수량',{x:12.3,y:1.86,w:0.55,h:0.26,fontSize:9,color:C.mut,align:'right'});
     var py=2.16;
     parts.forEach(function(p,i){
       if(i===0){
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.55,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
+        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.4,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
         var dp=deltaTxt(p[1], partP[p[0]]||0);
-        tx(dp.t,{x:11.3,y:py,w:0.85,h:0.3,fontSize:7.5,bold:true,color:dp.c});
+        /* 전주 대비 한 줄 — 유형과 동일하게 (박스 넓혀 줄바꿈 방지) */
+        tx(dp.t,{x:11.15,y:py,w:1.15,h:0.3,fontSize:7.5,bold:true,color:dp.c});
       }
-      tx(p[0],{x:9.8,y:py,w:1.5,h:0.3,fontSize:9,bold:i===0,color:'333333'});
-      tx(String(p[1]),{x:12.15,y:py,w:0.7,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      tx(p[0],{x:9.78,y:py,w:1.3,h:0.3,fontSize:9,bold:i===0,color:'333333'});
+      tx(String(p[1]),{x:12.3,y:py,w:0.55,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
       py+=0.52;
     });
     s.addShape(pptx.shapes.LINE,{x:9.7,y:3.72,w:3.15,h:0,line:{color:C.line,width:1}});
     tx('총 합계',{x:9.8,y:3.8,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
-    tx(String(partTot),{x:12.15,y:3.8,w:0.7,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+    tx(String(partTot),{x:12.3,y:3.8,w:0.55,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
 
     /* ④ 고장 상세 */
     card(0.25,4.45,4.5,2.6);
