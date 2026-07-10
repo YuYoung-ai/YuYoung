@@ -1,0 +1,44 @@
+{
+  "id": "trip-report",
+  "name": "출장보고",
+  "desc": "출장 개요 · 목적 · 수행 내용 · 결과",
+  "category": "보고서",
+  "version": "1.0.0",
+  "minLevel": 1,
+  "formats": ["pptx", "xlsx", "pdf"],
+  "theme": "company-default",
+  "inputs": [
+    { "key": "writer", "label": "출장자", "type": "text", "required": true },
+    { "key": "period", "label": "출장 기간", "type": "text", "required": true, "placeholder": "예) 2026-07-08 ~ 07-09" },
+    { "key": "place", "label": "출장지", "type": "text", "required": true, "placeholder": "예) 부산 ○○병원" },
+    { "key": "purpose", "label": "출장 목적", "type": "textarea", "rows": 3, "required": true },
+    { "key": "content", "label": "수행 내용", "type": "textarea", "rows": 6 },
+    { "key": "result", "label": "결과 및 조치사항", "type": "textarea", "rows": 4 }
+  ],
+  "rules": [
+    { "if": "content == ''", "warn": "수행 내용이 비어 있습니다. 그대로 생성할까요?" }
+  ],
+  "layout": {
+    "grid": { "cols": 12, "rows": 8, "gap": 0.1 },
+    "pages": [
+      { "blocks": [
+        { "component": "header", "area": "1 / 1 / 2 / 13",
+          "props": { "title": "출장보고서", "writer": "@writer", "date": "@fn.today" } },
+        { "component": "card", "area": "2 / 1 / 3 / 5",
+          "props": { "title": "출장자", "value": "@writer", "accent": "$color.primary" } },
+        { "component": "card", "area": "2 / 5 / 3 / 9",
+          "props": { "title": "기간", "value": "@period", "accent": "$color.accent" } },
+        { "component": "card", "area": "2 / 9 / 3 / 13",
+          "props": { "title": "출장지", "value": "@place", "accent": "$color.success" } },
+        { "component": "text", "area": "3 / 1 / 4 / 13",
+          "props": { "title": "출장 목적", "content": "@purpose" } },
+        { "component": "text", "area": "4 / 1 / 7 / 13",
+          "props": { "title": "수행 내용", "content": "@content" } },
+        { "component": "text", "area": "7 / 1 / 8 / 13",
+          "props": { "title": "결과 및 조치사항", "content": "@result" } },
+        { "component": "footer", "area": "8 / 1 / 9 / 13",
+          "props": { "text": "BAZ BIOMEDIC · 출장보고서 · @fn.today" } }
+      ] }
+    ]
+  }
+}

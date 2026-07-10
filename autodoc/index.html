@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoDoc | 문서 자동화</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+<script src="../auth.js"></script>
+</head>
+<body>
+<header class="app">
+  <a href="../index.html" class="menu-link">← BAZ CS 메뉴</a>
+  <h1>📄 AutoDoc 문서 자동화</h1>
+  <p>양식 선택 → 내용 입력 → 문서 생성</p>
+</header>
+
+<div class="wrap">
+  <!-- 로그인 (미인증 시) — 기존 BazAuth 재사용 -->
+  <div class="card login-card" id="loginCard" style="display:none">
+    <p class="sec-title">로그인</p>
+    <div class="fld">
+      <label>비밀번호</label>
+      <input type="password" id="pw" placeholder="접속 비밀번호" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%" id="btnLogin" onclick="doLogin()">로그인</button>
+    <div class="status" id="loginStatus"></div>
+  </div>
+
+  <!-- 문서 카탈로그 (인증 후) -->
+  <div id="catalogSec" style="display:none">
+    <div class="card">
+      <p class="sec-title">문서 양식
+        <span class="mini" id="userInfo"></span>
+      </p>
+      <div class="catalog" id="catalog"><div class="empty">양식 목록 로드 중…</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/core/config.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/providers/provider-base.js"></script>
+<script src="js/providers/gas-provider.js"></script>
+<script src="js/providers/local-provider.js"></script>
+<script src="js/providers/manual-provider.js"></script>
+<script src="js/core/services.js"></script>
+<script src="js/ui/toast.js"></script>
+<script>
+var FMT_LABEL = { pptx: 'PPT', xlsx: 'Excel', pdf: 'PDF', docx: 'Word' };
+
+function showCatalog(level) {
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('catalogSec').style.display = 'block';
+  var name = (window.BazAuth && BazAuth.name()) || '';
+  document.getElementById('userInfo').textContent = name ? (name + ' · 레벨 ' + level) : ('레벨 ' + level);
+  AD.Templates.list(level).then(function (arr) {
+    var box = document.getElementById('catalog');
+    if (!arr.length) { box.innerHTML = '<div class="empty">사용 가능한 양식이 없습니다</div>'; return; }
+    box.innerHTML = arr.map(function (t) {
+      return '<a class="tpl-card" href="editor.html?t=' + encodeURIComponent(t.id) + '">' +
+        '<span class="cat">' + AD.esc(t.category || '문서') + '</span>' +
+        '<h3>' + AD.esc(t.name) + '</h3>' +
+        '<p class="desc">' + AD.esc(t.desc || '') + '</p>' +
+        '<div class="fmts">' + (t.formats || []).map(function (f) {
+          return '<span class="fmt">' + (FMT_LABEL[f] || f) + '</span>';
+        }).join('') + '</div></a>';
+    }).join('');
+  }).catch(function (e) {
+    document.getElementById('catalog').innerHTML = '<div class="empty">❌ ' + AD.esc(e) + '</div>';
+  });
+}
+
+function doLogin() {
+  var pw = document.getElementById('pw').value;
+  if (!pw) { AD.toast('비밀번호를 입력하세요'); return; }
+  var btn = document.getElementById('btnLogin');
+  var st = document.getElementById('loginStatus');
+  btn.disabled = true; st.textContent = '확인 중…'; st.className = 'status';
+  BazAuth.login(pw).then(function (r) {
+    btn.disabled = false;
+    if (r && r.ok) { showCatalog(r.level); }
+    else { st.textContent = '❌ 로그인 실패 — 비밀번호 확인'; st.className = 'status err'; }
+  });
+}
+
+(function init() {
+  /* 인증 서버 미설정(개발 단계)이면 로그인 생략 */
+  if (!window.BazAuth || !BazAuth.isConfigured()) { showCatalog(1); return; }
+  var lv = BazAuth.cachedLevel();
+  if (lv >= 1) showCatalog(lv);
+  else document.getElementById('loginCard').style.display = 'block';
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>

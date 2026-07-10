@@ -1,0 +1,64 @@
+/* ===== 허브(카탈로그) ===== */
+.login-card{max-width:400px;margin:40px auto}
+.catalog{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.tpl-card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:16px;
+  text-decoration:none;color:var(--text);display:block;transition:.15s;border-top:3px solid var(--navy)}
+.tpl-card:hover{box-shadow:0 4px 14px rgba(27,47,94,.12);transform:translateY(-2px)}
+.tpl-card .cat{font-size:10.5px;font-weight:700;color:var(--teal);background:var(--teal-soft);
+  border-radius:10px;padding:2px 9px;display:inline-block;margin-bottom:8px}
+.tpl-card h3{margin:0 0 4px;font-size:15px;color:var(--navy)}
+.tpl-card .desc{font-size:12px;color:var(--text-muted);margin:0 0 10px;min-height:18px}
+.tpl-card .fmts{display:flex;gap:5px}
+.tpl-card .fmt{font-size:10px;font-weight:700;border:1px solid var(--gray-line);
+  border-radius:8px;padding:2px 7px;color:var(--text-muted)}
+
+/* ===== 에디터 화면 ===== */
+.editor-split{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:12px;align-items:start}
+@media(max-width:860px){.editor-split{grid-template-columns:1fr}}
+.actions{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--gray-line);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:10;
+  margin:0 -12px -12px;border-radius:0 0 12px 12px}
+.actions .btn{flex:1}
+
+/* 표형 입력 (weekly.html rrow 패턴) */
+.trow{border:1.5px solid var(--gray-line);border-radius:11px;padding:11px;margin-bottom:10px;background:#FBFCFE}
+.trow-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.trow-head .no{background:var(--navy);color:#fff;font-size:11px;font-weight:700;border-radius:12px;padding:2px 9px}
+.trow-head .del{border:none;background:transparent;color:var(--red);font-size:15px;cursor:pointer;padding:2px 6px}
+.tgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tgrid .full{grid-column:1 / -1}
+.tgrid label{font-size:10.5px;margin-bottom:3px;display:block;font-weight:700;color:var(--navy)}
+.tgrid input,.tgrid select{padding:8px 9px;font-size:13.5px;border-radius:8px}
+.tgrid textarea{min-height:48px}
+
+/* ===== 미리보기 (DocumentModel → HTML) ===== */
+.preview-box{overflow-x:auto}
+.ad-page{background:#fff;border:1px solid var(--gray-line);border-radius:6px;
+  box-shadow:0 2px 10px rgba(27,47,94,.08);width:100%;min-width:560px;
+  padding:1.6%;margin-bottom:14px;font-family:var(--ad-font,'Malgun Gothic'),sans-serif;overflow:hidden}
+.ad-block{min-width:0;min-height:0;overflow:hidden}
+
+/* 컴포넌트 미리보기 스타일 */
+.c-title-bar{font-weight:700;color:var(--ad-primary,#1B2F5E);font-size:1.06em;
+  border-bottom:1.5px solid var(--ad-line,#DDE3EE);padding-bottom:.25em;margin-bottom:.35em}
+.c-text{white-space:pre-wrap;line-height:1.55;color:var(--ad-text,#1A1A2E)}
+.c-header{background:var(--ad-primary,#1B2F5E);color:#fff;border-radius:.25em;height:100%;
+  display:flex;align-items:center;justify-content:space-between;padding:0 .9em}
+.c-header-title{font-size:1.7em;font-weight:700}
+.c-header-meta{font-size:.95em;color:#DCE6F8}
+.c-table{width:100%;border-collapse:collapse;font-size:.92em}
+.c-table th{background:var(--ad-primary,#1B2F5E);color:#fff;font-weight:700;
+  padding:.35em .45em;border:1px solid var(--ad-line,#CED6E4);text-align:center}
+.c-table td{padding:.3em .45em;border:1px solid var(--ad-line,#CED6E4);vertical-align:top;white-space:pre-wrap}
+.c-table tbody tr:nth-child(even) td{background:#F6F9FC}
+.c-table-empty{text-align:center;color:var(--ad-muted,#6B7A99)}
+.c-card{background:#F5F7FA;border:1px solid var(--ad-line,#DDE3EE);border-radius:.3em;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15em}
+.c-card-t{font-size:.9em;color:var(--ad-muted,#6B7A99)}
+.c-card-v{font-size:1.35em;font-weight:700}
+.c-footer{color:var(--ad-muted,#6B7A99);font-size:.8em;text-align:center;height:100%;
+  display:flex;align-items:center;justify-content:center}
+
+.status{font-size:12px;margin-top:8px;line-height:1.55;min-height:18px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
