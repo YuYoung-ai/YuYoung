@@ -742,9 +742,66 @@ function apply(){
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
 }
 
-/* ══════════ 주간업무보고(VOC) PPT 생성 ══════════ */
+/* ══════════ 주간업무보고 PPT 생성 ══════════ */
+/* 색상 상수 — PPT 내 모든 색은 여기서만 관리한다 */
 var C={navy:'1B2F5E',teal:'2E7D9E',orange:'E67E22',red:'C0392B',green:'1E7E4E',
-       line:'DDE3EE',mut:'6B7A99',yhl:'FDEBB0',ghl:'E4F5E9',box:'F5F7FA'};
+       line:'DDE3EE',mut:'6B7A99',yhl:'FDEBB0',ghl:'E4F5E9',box:'F5F7FA',
+       white:'FFFFFF',text:'333333',dark:'1A2E3B',dim:'AAB4C8',
+       callBd:'002060',blueBg:'EAF0F8',grayBg:'F4F6F8'};
+
+/* 폰트 상수 — 크기·서체는 여기서만 관리한다 (PPT 폰트 일괄 변경용) */
+var FT={face:'맑은 고딕',
+       logo:24, title:19, subtitle:14,        /* 폴백 로고 · 헤더 제목 · 헤더 날짜/KPI 단위 */
+       kpi:40, stat:36,                        /* 추이 KPI 숫자 · 스탯 박스 숫자 */
+       total:12, cardTitle:11, count:11,       /* 총합 값 · 카드 제목 · 행 건수 */
+       table:10, body:10, tableSm:9.5,         /* N-care 표 · 막대 숫자/빈 안내 · N-care 표 소 */
+       label:9, small:8.5, footer:8};          /* 보조 라벨 · 전주대비/버튼 · 푸터 */
+
+/* 레이아웃 상수 — 첨부 "6월 5주차 CS 주간업무보고" PPT에서 추출한 좌표(inch).
+   ★ 모든 좌표는 L에서만 관리한다. draw*() 함수 안에서 숫자 좌표를 직접 쓰지 않는다. ★
+   디자인 수정이 필요하면 L의 값만 바꾼다. */
+var L=(function(){
+  /* 기준선: 모든 카드는 페이지 여백(left/right/top/bottom)과 컬럼(x·폭)을 공유한다.
+     같은 열의 카드는 x·폭 동일, 같은 행의 카드는 y·높이 동일 — 임의 좌표 생성 금지 */
+  var page={ w:13.33, h:7.5, left:0.28, right:13.05, top:1.4, bottom:7.05 };
+  var col={ a:{x:page.left, w:4.5},          /* 1열: 추이 · 고장 상세 */
+            b:{x:4.95,      w:4.35},         /* 2열: 유형 · Call 현황 */
+            c:{x:9.5,       w:3.55} };       /* 3열: 교체품 · 재고 현황 */
+  return {
+    page:page, col:col,
+    header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.4,
+             dateX:6.6, dateW:4.55, logo:{x:12.01,y:0.16,w:1.07,h:0.58},
+             fbLogo:{x:11.9,y:0.02,w:1.3,h:0.42}, fbSub:{x:11.4,y:0.4,w:1.8,h:0.24} },
+    title:{ w:3.2, h:0.3 },                  /* 카드 제목 공통 박스 */
+    /* 1행 카드 공통 — 카드 높이는 행 수(1~5)와 무관하게 고정, 행 간격만 자동 조정 */
+    row1:{ y:page.top, h:2.85, titleY:1.52, headY:1.86, headH:0.26,
+           rowY:2.16, rowH:0.3, hlH:0.34, hlDY:0.02,
+           lineY:3.72, totY:3.8, totH:0.32, totW:1.6 },
+    trend:{ x:col.a.x, w:col.a.w, titleX:0.45, kpiY:1.82, kpiW:4.1, kpiH:0.7,
+            barX0:0.58, barW:0.52, barSpan:3.87, baseY:3.85, maxBarH:1.05, minBarH:0.06,
+            numDY:0.26, numH:0.24, numPad:0.1, lblDY:0.03, lblH:0.24, lblPad:0.15 },
+    voc:{ x:col.b.x, w:col.b.w, titleX:5.15, headX:5.35, headW:1.6, hlX:5.15, hlW:1.85,
+          nameX:5.25, nameW:1.7, nameSize:9.5, nameAlign:'center',
+          deltaX:7.1, deltaW:1.2, cntX:8.35, cntW:0.75, lineW:3.95, gapMax:0.4, lastRowY:3.36 },
+    part:{ x:col.c.x, w:col.c.w, titleX:9.7, headX:9.9, headW:1.6, hlX:9.7, hlW:1.55,
+           nameX:9.8, nameW:1.5, nameSize:9, nameAlign:'left',
+           deltaX:11.3, deltaW:1.06, cntX:12.15, cntW:0.7, lineW:3.15, gapMax:0.52, lastRowY:3.42 },
+    /* 2행 카드 공통 + 스탯 박스(라벨/숫자 카드 내 상대 위치) */
+    row2:{ y:4.45, h:2.6, boxY:4.98, boxH:2.0,
+           stat:{lblDY:0.1, lblH:0.32, numDY:0.5, numH:1.05} },
+    fail:{ x:col.a.x, w:col.a.w, titleX:0.5, titleY:4.57, btnX:0.5, btnW:1.5, btnH:0.36,
+           rowY:4.98, gap:0.62, lastRowY:6.45, descX:2.1, descW:2.6, descH:0.4, descDY:0.02,
+           emptyY:5.2, emptyW:4, emptyH:0.4 },
+    call:{ x:col.b.x, w:col.b.w, titleX:5.03, titleY:4.53,
+           total:{x:5.24,w:1.58}, inb:{x:6.92,w:0.99}, outb:{x:7.99,w:0.99} },
+    invt:{ x:col.c.x, w:col.c.w, titleX:9.53, titleY:4.54, x0:9.56, boxW:0.81, pitch:0.875 },
+    ncare:{ x:col.b.x, w:page.right-col.b.x, titleX:5.13, titleY:4.55, titleW:3, titleH:0.28,
+            tblX:5.08, tblY:4.85, tblW:7.85, rowH:0.33, colW:[1.85,1.2,1.2,1.2,1.2,1.2],
+            sumY:6.55, sumH:0.42, sumPad:0.08,
+            sum1:{x:5.08,w:2.6}, sum2:{x:7.78,w:2.6}, sum3:{x:10.48,w:2.45} },
+    foot:{ y:7.28, h:0.22, textY:7.26, textW:2, textH:0.24 }
+  };
+})();
 
 function rowDate(r){ return (r._y&&r._m&&r._d)? new Date(r._y,r._m-1,r._d) : null; }
 function monday(d){ var x=new Date(d); var w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); x.setHours(0,0,0,0); return x; }
@@ -879,19 +936,19 @@ function deltaTxt(cur,prev){
   return {t:'— 전주 동일', c:C.mut};
 }
 
-/* N-care 서비스 현황 표 (2페이지 하단 우측 · 첨부 양식과 동일 배치) */
+/* N-care 서비스 현황 표 (2페이지 하단 우측 · 첨부 양식과 동일 배치 · 데이터 없으면 '-' 표시) */
 function renderNcareTable(pptx, s, tx){
-  var nc=WK_NCARE||{};
+  var nc=WK_NCARE||{}, T=L.ncare;
   var tiers=(nc.tiers&&nc.tiers.length===5)?nc.tiers:['Basic','Standard','Pro','Premium','CurePass'];
   function arr(a){ return (a&&a.length===5)?a:[null,null,null,null,null]; }
   var joined=arr(nc.joined), normal=arr(nc.normal), target=arr(nc.target), rate=arr(nc.rate);
   function n(x){ return (x==null||x==='')?'-':String(x); }
   /* 제목 */
-  tx('N-care 서비스 현황',{x:5.13,y:4.55,w:3,h:0.28,fontSize:10,bold:true,color:C.navy});
+  tx('N-care 서비스 현황',{x:T.titleX,y:T.titleY,w:T.titleW,h:T.titleH,fontSize:FT.table,bold:true,color:C.navy});
   /* 표: 5행 데이터(구분/가입/정상/점검대상/점검률) — pptx addTable */
-  var HB={fill:C.navy,color:'FFFFFF',bold:true,align:'center',valign:'middle',fontSize:10};
-  var LB={fill:'EAF0F8',color:C.navy,bold:true,align:'center',valign:'middle',fontSize:9.5};
-  var CE={align:'center',valign:'middle',fontSize:10,color:'1A2E3B'};
+  var HB={fill:C.navy,color:C.white,bold:true,align:'center',valign:'middle',fontSize:FT.table};
+  var LB={fill:C.blueBg,color:C.navy,bold:true,align:'center',valign:'middle',fontSize:FT.tableSm};
+  var CE={align:'center',valign:'middle',fontSize:FT.table,color:C.dark};
   var rows=[
     [{text:'구분',options:HB}].concat(tiers.map(function(t){return {text:t,options:HB};})),
     [{text:'가입 병원 수',options:LB}].concat(joined.map(function(x){return {text:n(x),options:CE};})),
@@ -899,19 +956,19 @@ function renderNcareTable(pptx, s, tx){
     [{text:'점검 대상 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
     [{text:'점검률',options:LB}].concat(rate.map(function(x){return {text:n(x),options:CE};}))
   ];
-  s.addTable(rows, {x:5.08,y:4.85,w:7.85,colW:[1.85,1.2,1.2,1.2,1.2,1.2],
-    rowH:0.33,border:{type:'solid',color:C.line,pt:0.75},fontFace:'맑은 고딕',valign:'middle'});
+  s.addTable(rows, {x:T.tblX,y:T.tblY,w:T.tblW,colW:T.colW,
+    rowH:T.rowH,border:{type:'solid',color:C.line,pt:0.75},fontFace:FT.face,valign:'middle'});
   /* 하단 요약 바: 전체 가입자 · 정상 운영 병원 · 정상 운영률 */
-  var sy=6.55;
-  function sumBox(x,w,label,val,strong){
-    s.addShape(pptx.shapes.RECTANGLE,{x:x,y:sy,w:w,h:0.42,fill:{color:strong?'EAF0F8':'F4F6F8'},line:{color:C.line,width:0.75}});
-    tx([{text:label+'  ',options:{fontSize:9.5,bold:true,color:C.navy}},
-        {text:(val==null||val==='')?'-':String(val),options:{fontSize:12,bold:true,color:C.navy}}],
-       {x:x+0.08,y:sy,w:w-0.16,h:0.42,align:'center',valign:'middle'});
+  function sumBox(g,label,val,strong){
+    s.addShape(pptx.shapes.RECTANGLE,{x:g.x,y:T.sumY,w:g.w,h:T.sumH,
+      fill:{color:strong?C.blueBg:C.grayBg},line:{color:C.line,width:0.75}});
+    tx([{text:label+'  ',options:{fontSize:FT.tableSm,bold:true,color:C.navy}},
+        {text:(val==null||val==='')?'-':String(val),options:{fontSize:FT.total,bold:true,color:C.navy}}],
+       {x:g.x+T.sumPad,y:T.sumY,w:g.w-T.sumPad*2,h:T.sumH,align:'center',valign:'middle'});
   }
-  sumBox(5.08,2.6,'전체 가입자',nc.totalJoined,true);
-  sumBox(7.78,2.6,'정상 운영 병원',nc.totalNormal,false);
-  sumBox(10.48,2.45,'정상 운영률',nc.normalRate,true);
+  sumBox(T.sum1,'전체 가입자',nc.totalJoined,true);
+  sumBox(T.sum2,'정상 운영 병원',nc.totalNormal,false);
+  sumBox(T.sum3,'정상 운영률',nc.normalRate,true);
 }
 
 async function makeWeeklyPPT(){
@@ -968,80 +1025,66 @@ async function makeWeeklyPPT(){
     /* 고객센터 Call 현황 — 콜 집계 데이터 소스가 아직 없어 0으로 출력(생성 후 PPT에서 직접 수정) */
     var callIn=0, callOut=0, callTot=callIn+callOut;
 
-    /* ══ 레이아웃 상수 — 첨부 "6월 5주차 CS 주간업무보고" PPT에서 추출한 좌표(inch) ══
-       상단바 y0.5 h0.68 · 1행 카드 y1.4 h2.85 · 2행 카드 y4.45 h2.6 · 푸터 y7.28 h0.22 */
-    var L={
-      header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.4, titleSize:19,
-               dateX:6.6, dateW:4.55, dateSize:14, logo:{x:12.01,y:0.16,w:1.07,h:0.58} },
-      /* 1행 공통: 카드 내 제목/헤더/행 시작/구분선/총합 y */
-      row1:{ y:1.4, h:2.85, titleY:1.52, headY:1.86, rowY:2.16, hlH:0.34, lineY:3.72, totY:3.8 },
-      trend:{ x:0.28, w:4.5, titleX:0.45, kpiY:1.82,
-              barX0:0.58, barW:0.52, barSpan:3.87, baseY:3.85, maxBarH:1.05 },
-      voc:{ x:4.95, w:4.35, titleX:5.15, headX:5.35, headW:1.6, hlX:5.15, hlW:1.85,
-            nameX:5.25, nameW:1.7, nameSize:9.5, nameAlign:'center',
-            deltaX:7.1, deltaW:1.2, cntX:8.35, cntW:0.75, lineW:3.95, gapMax:0.4, lastRowY:3.36 },
-      part:{ x:9.5, w:3.55, titleX:9.7, headX:9.9, headW:1.6, hlX:9.7, hlW:1.55,
-             nameX:9.8, nameW:1.5, nameSize:9, nameAlign:'left',
-             deltaX:11.3, deltaW:1.06, cntX:12.15, cntW:0.7, lineW:3.15, gapMax:0.52, lastRowY:3.42 },
-      row2:{ y:4.45, h:2.6, boxY:4.98, boxH:2.0 },   /* 2행 카드 + 스탯 박스 공통 */
-      fail:{ x:0.28, w:4.5, titleX:0.5, titleY:4.57, btnX:0.5, btnW:1.5, btnH:0.36,
-             rowY:4.98, gap:0.62, lastRowY:6.45, descX:2.1, descW:2.6 },
-      call:{ x:4.95, w:4.35, titleX:5.03, titleY:4.53,
-             total:{x:5.24,w:1.58}, inb:{x:6.92,w:0.99}, outb:{x:7.99,w:0.99} },
-      invt:{ x:9.5, w:3.55, titleX:9.53, titleY:4.54, x0:9.56, boxW:0.81, pitch:0.875 },
-      ncare:{ x:4.95, w:8.1 },                        /* 점검 모드: N-care 표 카드 */
-      foot:{ y:7.28, h:0.22, textY:7.26 }
-    };
-
-    /* ── PPT 초기화: 하나의 PPT 객체에 2개 슬라이드 ── */
-    var FONT='맑은 고딕';
+    /* ── PPT 초기화: 하나의 PPT 객체에 2개 슬라이드 (좌표는 파일 상단 L, 색상 C, 폰트 F에서만 관리) ── */
     var pptx=new PptxGenJS();
-    pptx.defineLayout({name:'W',width:13.33,height:7.5}); pptx.layout='W';
-    pptx.theme={headFontFace:FONT, bodyFontFace:FONT};
+    pptx.defineLayout({name:'W',width:L.page.w,height:L.page.h}); pptx.layout='W';
+    pptx.theme={headFontFace:FT.face, bodyFontFace:FT.face};
 
-    /* ── 슬라이드 헬퍼 바인딩: addSlide 후 해당 슬라이드 전용 공통 함수 번들(v) 반환 ── */
+    /* ── 슬라이드 헬퍼 바인딩: addSlide 후 해당 슬라이드 전용 공통 컴포넌트 번들(v) 반환.
+          addText/addShape/addImage는 아래 공통 함수를 통해서만 사용한다 ── */
     function newSlide(pptx){
       var s=pptx.addSlide();
+      /* 텍스트 — 서체·세로 중앙 정렬 기본값 (첨부 PPT 전 텍스트 anchor=ctr) */
       function tx(t,o){
-        o=o||{}; if(!o.fontFace) o.fontFace=FONT;
-        if(!o.valign) o.valign='middle';             /* 첨부 PPT 전 텍스트 anchor=ctr */
-        if(Array.isArray(t)) t.forEach(function(run){ run.options=run.options||{}; if(!run.options.fontFace) run.options.fontFace=FONT; });
+        o=o||{}; if(!o.fontFace) o.fontFace=FT.face;
+        if(!o.valign) o.valign='middle';
+        if(Array.isArray(t)) t.forEach(function(run){ run.options=run.options||{}; if(!run.options.fontFace) run.options.fontFace=FT.face; });
         s.addText(t,o);
       }
-      function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:'FFFFFF'},line:{color:C.line,width:1}}); }
-      function cardTitle(t,x,y){ tx(t,{x:x,y:y,w:3.2,h:0.3,fontSize:11,bold:true,color:C.navy}); }
-      /* 유형·교체품 공통 순위표: 헤더 + 행(1~5행 자동 간격) + 구분선 + 총합
+      /* 단색 사각형 / 라운드 사각형(강조 배경·버튼) */
+      function rect(x,y,w,h,color){ s.addShape(pptx.shapes.RECTANGLE,{x:x,y:y,w:w,h:h,fill:{color:color}}); }
+      function pill(x,y,w,h,color,r){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:r||0.05,fill:{color:color}}); }
+      /* 카드 외곽 + 카드 제목 */
+      function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:C.white},line:{color:C.line,width:1}}); }
+      function cardTitle(t,x,y){ tx(t,{x:x,y:y,w:L.title.w,h:L.title.h,fontSize:FT.cardTitle,bold:true,color:C.navy}); }
+      /* 정보 카드: 카드 + 제목 — 모든 카드의 공통 시작점 */
+      function infoCard(x,y,w,h,title,tX,tY){ card(x,y,w,h); cardTitle(title,tX,tY); }
+      /* 표 카드(유형·교체품 공용): 헤더 + 행(1~5행 rowHeight 자동, 카드 높이 고정) + 구분선 + 총합
          rows:[{name,val,hl:'y'|'g',bold,color,delta}] — 강조/전주 대비는 해당 행에만 */
-      function drawRankTable(T,o){
-        card(T.x, L.row1.y, T.w, L.row1.h);
-        cardTitle(o.title, T.titleX, L.row1.titleY);
-        tx(o.head[0],{x:T.headX,y:L.row1.headY,w:T.headW,h:0.26,fontSize:9,color:C.mut});
-        tx(o.head[1],{x:T.cntX,y:L.row1.headY,w:T.cntW,h:0.26,fontSize:9,color:C.mut,align:'right'});
+      function tableCard(T,o){
+        infoCard(T.x, L.row1.y, T.w, L.row1.h, o.title, T.titleX, L.row1.titleY);
+        tx(o.head[0],{x:T.headX,y:L.row1.headY,w:T.headW,h:L.row1.headH,fontSize:FT.label,color:C.mut});
+        tx(o.head[1],{x:T.cntX,y:L.row1.headY,w:T.cntW,h:L.row1.headH,fontSize:FT.label,color:C.mut,align:'right'});
         var n=o.rows.length;
-        var gap=n>1 ? Math.min(T.gapMax,(T.lastRowY-L.row1.rowY)/(n-1)) : 0;
+        var gap=n>1 ? Math.min(T.gapMax,(T.lastRowY-L.row1.rowY)/(n-1)) : 0;  /* 행 간격 자동 */
         o.rows.forEach(function(r,i){
           var y=L.row1.rowY+i*gap;
-          if(r.hl) s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:T.hlX,y:y-0.02,w:T.hlW,h:L.row1.hlH,rectRadius:0.05,
-            fill:{color:r.hl==='g'?C.ghl:C.yhl}});
-          if(r.delta) tx(r.delta.t,{x:T.deltaX,y:y,w:T.deltaW,h:0.3,fontSize:8.5,bold:true,color:r.delta.c});
-          tx(r.name,{x:T.nameX,y:y,w:T.nameW,h:0.3,fontSize:T.nameSize,bold:!!r.bold,color:r.color||'333333',align:T.nameAlign});
-          tx(String(r.val),{x:T.cntX,y:y,w:T.cntW,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+          if(r.hl) pill(T.hlX, y-L.row1.hlDY, T.hlW, L.row1.hlH, r.hl==='g'?C.ghl:C.yhl);
+          if(r.delta) tx(r.delta.t,{x:T.deltaX,y:y,w:T.deltaW,h:L.row1.rowH,fontSize:FT.small,bold:true,color:r.delta.c});
+          tx(r.name,{x:T.nameX,y:y,w:T.nameW,h:L.row1.rowH,fontSize:T.nameSize,bold:!!r.bold,color:r.color||C.text,align:T.nameAlign});
+          tx(String(r.val),{x:T.cntX,y:y,w:T.cntW,h:L.row1.rowH,fontSize:FT.count,bold:true,align:'right',color:C.navy});
         });
         /* 총 합계는 카드 하단 고정 — 행 수와 무관하게 두 카드가 같은 y에 정렬 */
         s.addShape(pptx.shapes.LINE,{x:T.hlX,y:L.row1.lineY,w:T.lineW,h:0,line:{color:C.line,width:1}});
-        tx('총 합계',{x:T.nameX,y:L.row1.totY,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
-        tx(String(o.total),{x:T.cntX,y:L.row1.totY,w:T.cntW,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+        tx('총 합계',{x:T.nameX,y:L.row1.totY,w:L.row1.totW,h:L.row1.totH,fontSize:FT.cardTitle,bold:true,color:C.navy});
+        tx(String(o.total),{x:T.cntX,y:L.row1.totY,w:T.cntW,h:L.row1.totH,fontSize:FT.total,bold:true,align:'right',color:C.navy});
       }
-      /* Call 현황·재고 현황 공통 스탯 박스: 라운드 박스 + 제목 + 대형 숫자(0은 회색) */
+      /* 스탯 박스: 라운드 박스 + 라벨 + 대형 숫자(0은 회색) */
       function statBox(x,w,label,val,o){
-        o=o||{};
+        o=o||{}; var S=L.row2.stat;
         s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:L.row2.boxY,w:w,h:L.row2.boxH,rectRadius:0.04,
-          fill:{color:o.accent?'FFFFFF':C.box}, line:o.accent?{color:o.accent,width:1.5}:{color:C.line,width:1}});
-        tx(label,{x:x,y:L.row2.boxY+0.1,w:w,h:0.32,fontSize:9,color:C.mut,align:'center'});
-        tx(String(val),{x:x,y:L.row2.boxY+0.5,w:w,h:1.05,fontSize:36,bold:true,align:'center',
-          color:o.numColor||(Number(val)?C.navy:'AAB4C8')});
+          fill:{color:o.accent?C.white:C.box}, line:o.accent?{color:o.accent,width:1.5}:{color:C.line,width:1}});
+        tx(label,{x:x,y:L.row2.boxY+S.lblDY,w:w,h:S.lblH,fontSize:FT.label,color:C.mut,align:'center'});
+        tx(String(val),{x:x,y:L.row2.boxY+S.numDY,w:w,h:S.numH,fontSize:FT.stat,bold:true,align:'center',
+          color:o.numColor||(Number(val)?C.navy:C.dim)});
       }
-      return {s:s, tx:tx, card:card, cardTitle:cardTitle, drawRankTable:drawRankTable, statBox:statBox};
+      /* 메트릭 카드(Call 현황·재고 현황 공용): 카드 + 제목 + 스탯 박스 목록 */
+      function metricCard(T,title,boxes){
+        infoCard(T.x, L.row2.y, T.w, L.row2.h, title, T.titleX, T.titleY);
+        boxes.forEach(function(b){ statBox(b.x, b.w, b.label, b.val, b.o); });
+      }
+      return {s:s, tx:tx, rect:rect, pill:pill, card:card, cardTitle:cardTitle,
+              infoCard:infoCard, tableCard:tableCard, statBox:statBox, metricCard:metricCard};
     }
 
     /* 로고 — logo.png가 같은 폴더에 있고 "유효한 이미지"일 때만 사용
@@ -1068,97 +1111,92 @@ async function makeWeeklyPPT(){
         v.s.addImage({data:logoData, x:H.logo.x, y:H.logo.y, w:H.logo.w, h:H.logo.h,
           sizing:{type:'contain', w:H.logo.w, h:H.logo.h}});
       }else{
-        v.tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
-        v.tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
+        v.tx('baz',{x:H.fbLogo.x,y:H.fbLogo.y,w:H.fbLogo.w,h:H.fbLogo.h,fontSize:FT.logo,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
+        v.tx('BAZ BIOMEDIC',{x:H.fbSub.x,y:H.fbSub.y,w:H.fbSub.w,h:H.fbSub.h,fontSize:FT.footer,color:C.mut,align:'right',charSpacing:2});
       }
-      v.s.addShape(pptx.shapes.RECTANGLE,{x:0,y:H.barY,w:H.barW,h:H.barH,fill:{color:C.navy}});
+      v.rect(0, H.barY, H.barW, H.barH, C.navy);
       v.tx('생산품질_CS팀 주간업무보고'+kind,
-         {x:H.padX,y:H.barY,w:H.titleW,h:H.barH,fontSize:H.titleSize,bold:true,color:'FFFFFF'});
+         {x:H.padX,y:H.barY,w:H.titleW,h:H.barH,fontSize:FT.title,bold:true,color:C.white});
       v.tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),
-         {x:H.dateX,y:H.barY,w:H.dateW,h:H.barH,fontSize:H.dateSize,bold:true,color:'FFFFFF',align:'right'});
+         {x:H.dateX,y:H.barY,w:H.dateW,h:H.barH,fontSize:FT.subtitle,bold:true,color:C.white,align:'right'});
     }
 
-    /* ① 주별 추이: 건수 KPI + 주별 막대(당주 주황) */
+    /* ① 주별 추이: 건수 KPI + 주별 막대(당주 주황) — 0건이어도 빈 막대로 정상 출력 */
     function drawTrendChart(v, d, title){
       var T=L.trend;
-      v.card(T.x, L.row1.y, T.w, L.row1.h);
-      v.cardTitle(title, T.titleX, L.row1.titleY);
+      v.infoCard(T.x, L.row1.y, T.w, L.row1.h, title, T.titleX, L.row1.titleY);
       var d1=deltaTxt(d.cur.length, d.prev.length);
-      v.tx([{text:String(d.cur.length),options:{fontSize:40,bold:true,color:C.navy}},
-          {text:' 건  ',options:{fontSize:14,color:C.navy}},
-          {text:d1.t,options:{fontSize:11,bold:true,color:d1.c}}],
-         {x:T.titleX,y:T.kpiY,w:4.1,h:0.7});
+      v.tx([{text:String(d.cur.length),options:{fontSize:FT.kpi,bold:true,color:C.navy}},
+          {text:' 건  ',options:{fontSize:FT.subtitle,color:C.navy}},
+          {text:d1.t,options:{fontSize:FT.cardTitle,bold:true,color:d1.c}}],
+         {x:T.titleX,y:T.kpiY,w:T.kpiW,h:T.kpiH});
       var maxN=Math.max.apply(null,d.weeks.map(function(w){return w.n;}).concat([1]));
       var gap=(T.barSpan-T.barW*d.weeks.length)/Math.max(d.weeks.length-1,1);
       d.weeks.forEach(function(w,i){
-        var h=Math.max(0.06, w.n/maxN*T.maxBarH), x=T.barX0+i*(T.barW+gap);
-        v.s.addShape(pptx.shapes.RECTANGLE,{x:x,y:T.baseY-h,w:T.barW,h:h,fill:{color:w.cur?C.orange:C.teal}});
-        v.tx(String(w.n),{x:x-0.1,y:T.baseY-h-0.26,w:T.barW+0.2,h:0.24,fontSize:10,bold:true,align:'center',color:C.navy});
-        v.tx(wkNo(w.mon)+'주차',{x:x-0.15,y:T.baseY+0.03,w:T.barW+0.3,h:0.24,fontSize:9,align:'center',color:C.mut});
+        var h=Math.max(T.minBarH, w.n/maxN*T.maxBarH), x=T.barX0+i*(T.barW+gap);
+        v.rect(x, T.baseY-h, T.barW, h, w.cur?C.orange:C.teal);
+        v.tx(String(w.n),{x:x-T.numPad,y:T.baseY-h-T.numDY,w:T.barW+T.numPad*2,h:T.numH,fontSize:FT.body,bold:true,align:'center',color:C.navy});
+        v.tx(wkNo(w.mon)+'주차',{x:x-T.lblPad,y:T.baseY+T.lblDY,w:T.barW+T.lblPad*2,h:T.lblH,fontSize:FT.label,align:'center',color:C.mut});
       });
     }
 
-    /* ② 유형: 1위 노란 강조 + 전주 대비 · '이상 없음' 초록 행 */
+    /* ② 유형(표 카드): 1위 노란 강조 + 전주 대비 · '이상 없음' 초록 행 — 최대 5행, 0건도 정상 */
     function drawTypeTable(v, d, title){
       var rows=d.types.map(function(p,i){
         return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
                 delta:i===0?deltaTxt(p[1], d.typeP[p[0]]||0):null};
       });
       if(d.hasOk) rows.push({name:'이상 없음', val:d.okCnt, hl:'g', color:C.green});
-      v.drawRankTable(L.voc,{title:title, head:['유형','건수'], rows:rows, total:d.cur.length});
+      v.tableCard(L.voc,{title:title, head:['유형','건수'], rows:rows, total:d.cur.length});
     }
 
-    /* ③ 교체품 현황 */
+    /* ③ 교체품 현황(표 카드) — 최대 5행, 0건도 정상 */
     function drawReplacementTable(v, d){
       var rows=d.parts.map(function(p,i){
         return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
                 delta:i===0?deltaTxt(p[1], d.partP[p[0]]||0):null};
       });
-      v.drawRankTable(L.part,{title:'교체품 현황', head:['교체품','수량'], rows:rows, total:d.partTot});
+      v.tableCard(L.part,{title:'교체품 현황', head:['교체품','수량'], rows:rows, total:d.partTot});
     }
 
-    /* ④ 고장 상세: 유형 버튼(1위 주황·이하 청록) + 설명 — 카드 높이 고정, 최대 4행 자동 간격 */
+    /* ④ 고장 상세: 유형 버튼(1위 주황·이하 청록) + 설명 — 카드 높이 고정, 최대 4행 줄간격 자동 */
     function drawFailureDetail(v, d){
       var T=L.fail;
-      v.card(T.x, L.row2.y, T.w, L.row2.h);
-      v.cardTitle('고장 상세', T.titleX, T.titleY);
-      if(!d.details.length){ v.tx('해당 주차 고장 내역 없음',{x:T.titleX,y:5.2,w:4,h:0.4,fontSize:10,color:C.mut}); return; }
+      v.infoCard(T.x, L.row2.y, T.w, L.row2.h, '고장 상세', T.titleX, T.titleY);
+      if(!d.details.length){ v.tx('해당 주차 고장 내역 없음',{x:T.titleX,y:T.emptyY,w:T.emptyW,h:T.emptyH,fontSize:FT.body,color:C.mut}); return; }
       var gap=d.details.length>3 ? (T.lastRowY-T.rowY)/(d.details.length-1) : T.gap; /* 4행이면 자동 압축 */
       d.details.forEach(function(dt,i){
         var y=T.rowY+i*gap;
-        v.s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,rectRadius:0.06,
-          fill:{color:i===0?C.orange:C.teal}});
-        v.tx(dt.name,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,fontSize:8.5,bold:true,color:'FFFFFF',align:'center'});
-        v.tx(dt.desc,{x:T.descX,y:y-0.02,w:T.descW,h:0.4,fontSize:9,color:'1A2E3B'});
+        v.pill(T.btnX, y, T.btnW, T.btnH, i===0?C.orange:C.teal, 0.06);
+        v.tx(dt.name,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,fontSize:FT.small,bold:true,color:C.white,align:'center'});
+        v.tx(dt.desc,{x:T.descX,y:y-T.descDY,w:T.descW,h:T.descH,fontSize:FT.label,color:C.dark});
       });
     }
 
     /* 하단 BAZ BIOMEDIC 바 */
     function drawFooter(v){
-      v.s.addShape(pptx.shapes.RECTANGLE,{x:0,y:L.foot.y,w:13.33,h:L.foot.h,fill:{color:C.navy}});
-      v.tx('BAZ BIOMEDIC',{x:L.header.padX,y:L.foot.textY,w:2,h:0.24,fontSize:8,color:'FFFFFF'});
+      v.rect(0, L.foot.y, L.page.w, L.foot.h, C.navy);
+      v.tx('BAZ BIOMEDIC',{x:L.header.padX,y:L.foot.textY,w:L.foot.textW,h:L.foot.textH,fontSize:FT.footer,color:C.white});
     }
 
-    /* ── 1페이지 전용: 고객센터 Call 현황 + 재고 현황 ── */
+    /* ── 1페이지 전용: 고객센터 Call 현황 + 재고 현황 (메트릭 카드 공용) ── */
     function drawCallStatus(v){
       var T=L.call;
-      v.card(T.x, L.row2.y, T.w, L.row2.h);
-      v.cardTitle('고객센터 Call 현황', T.titleX, T.titleY);
-      v.statBox(T.total.x, T.total.w, '총 Call', callTot, {accent:'002060'});
-      v.statBox(T.inb.x,   T.inb.w,   'INBOUND',  callIn);
-      v.statBox(T.outb.x,  T.outb.w,  'OUTBOUND', callOut);
+      v.metricCard(T, '고객센터 Call 현황', [
+        {x:T.total.x, w:T.total.w, label:'총 Call',  val:callTot, o:{accent:C.callBd}},
+        {x:T.inb.x,   w:T.inb.w,   label:'INBOUND',  val:callIn},
+        {x:T.outb.x,  w:T.outb.w,  label:'OUTBOUND', val:callOut}
+      ]);
     }
     function drawInventory(v){
       var T=L.invt;
-      v.card(T.x, L.row2.y, T.w, L.row2.h);
-      v.cardTitle('재고 현황', T.titleX, T.titleY);
-      var invDefs=[['Handpiece','(Repair)',inv.inv1,true],['Handpiece','(새제품)',inv.inv2,false],
-                   ['Foot s/w','(새제품)',inv.inv3,false],['Foot s/w','(Repair)',inv.inv4,false]];
-      invDefs.forEach(function(b,i){
-        var label=[{text:b[0],options:{breakLine:true}},{text:b[1]}]; /* 첨부와 동일한 2줄 제목 */
-        v.statBox(T.x0+i*T.pitch, T.boxW, label, b[2]||0,
-                  b[3]?{accent:C.orange,numColor:C.orange}:null);
-      });
+      var defs=[['Handpiece','(Repair)',inv.inv1,true],['Handpiece','(새제품)',inv.inv2,false],
+                ['Foot s/w','(새제품)',inv.inv3,false],['Foot s/w','(Repair)',inv.inv4,false]];
+      v.metricCard(T, '재고 현황', defs.map(function(b,i){
+        return {x:T.x0+i*T.pitch, w:T.boxW,
+                label:[{text:b[0],options:{breakLine:true}},{text:b[1]}], /* 첨부와 동일한 2줄 제목 */
+                val:b[2]||0, o:b[3]?{accent:C.orange,numColor:C.orange}:null};
+      }));
     }
 
     /* ── 2페이지 전용: N-care 서비스 현황(하단 우측 전체 폭) ── */
@@ -1192,8 +1230,9 @@ async function makeWeeklyPPT(){
       drawFooter(v);
     }
 
-    createASSlide(pptx);          /* 1페이지 */
-    createInspectionSlide(pptx);  /* 2페이지 */
+    /* 슬라이드 빌더 목록 — Slide3/4 확장 시 여기에 생성 함수만 추가.
+       각 스코프가 0건이어도 빈 카드로 정상 생성된다(에러 없음) */
+    [createASSlide, createInspectionSlide].forEach(function(build){ build(pptx); });
 
     var fname='주간업무보고_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')+'.pptx';
     await pptx.writeFile({fileName:fname});
