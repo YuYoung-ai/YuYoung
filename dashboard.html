@@ -944,30 +944,34 @@ async function makeWeeklyPPT(){
     var fri=addD(mon,4), pMon=addD(mon,-7), pFri=addD(mon,-3);
     var cur=scopeRows(rowsBetween(mon,fri)), prev=scopeRows(rowsBetween(pMon,pFri));
 
-    /* 집계 */
+    /* 집계 — 계산 로직은 기존 유지, 표시 행 수만 첨부 양식 기준 최대 5행 */
     var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
     var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
-    var types=anchorFirst(topOf(typeC,isOK), '노즐누수(약액 유입)').slice(0,3);
     var okCnt=topOf(typeC,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
     var okPrev=topOf(typeP,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
-    var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,3);
+    var hasOk=!!(okCnt||okPrev);                     /* '이상 없음' 행 포함 여부 */
+    /* 건수 내림차순 상위 표시('이상 없음' 행 포함 총 5행 이내) · 총합은 전체 데이터 기준 */
+    var types=anchorFirst(topOf(typeC,isOK), '노즐누수(약액 유입)').slice(0, hasOk?4:5);
+    var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,5);
     var partTot=Object.keys(partC).reduce(function(a,k){return a+partC[k];},0);
+    /* 고객센터 Call 현황 — 콜 집계 데이터 소스가 아직 없어 0으로 출력(생성 후 PPT에서 직접 수정) */
+    var callIn=0, callOut=0, callTot=callIn+callOut;
     /* 월 내 주별 추이 */
     var m1=monday(new Date(mon.getFullYear(),mon.getMonth(),1));
     if(m1.getMonth()!==mon.getMonth()) m1=addD(m1,7);
     var weeks=[]; for(var w=new Date(m1); w.getMonth()===mon.getMonth(); w=addD(w,7)){
       weeks.push({mon:new Date(w), n:scopeRows(rowsBetween(w,addD(w,4))).length, cur:ymd(w)===ymd(mon)});
     }
-    /* 고장 상세: 모달 수기 입력 우선 ("유형: 설명" 줄), 비어 있으면 자동 초안 */
+    /* 고장 상세: 모달 수기 입력 우선 ("유형: 설명" 줄), 비어 있으면 자동 초안 — 첨부 양식 기준 최대 4행 */
     var details=String(document.getElementById('wkDetail').value||'').split('\n')
-      .map(function(l){return l.trim();}).filter(Boolean).slice(0,3)
+      .map(function(l){return l.trim();}).filter(Boolean).slice(0,4)
       .map(function(l){
         var ci=l.indexOf(':');
         return ci>0 ? {name:l.slice(0,ci).trim(), desc:l.slice(ci+1).trim()||'—'}
                     : {name:l, desc:'—'};
       });
     if(!details.length){
-      details=types.map(function(p){
+      details=types.slice(0,4).map(function(p){
         var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
         var line=row?String(row.detail).split('\n')[0]:'';
         if(line.length>42)line=line.slice(0,42)+'…';
@@ -975,7 +979,32 @@ async function makeWeeklyPPT(){
       });
     }
 
-    /* ── 슬라이드 ── */
+    /* ══ 레이아웃 상수 — 첨부 "6월 5주차 CS 주간업무보고" PPT에서 추출한 좌표(inch) ══
+       상단바 y0.5 h0.68 · 1행 카드 y1.4 h2.85 · 2행 카드 y4.45 h2.6 · 푸터 y7.28 h0.22 */
+    var L={
+      header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.4, titleSize:19,
+               dateX:6.6, dateW:4.55, dateSize:14, logo:{x:12.01,y:0.16,w:1.07,h:0.58} },
+      /* 1행 공통: 카드 내 제목/헤더/행 시작/구분선/총합 y */
+      row1:{ y:1.4, h:2.85, titleY:1.52, headY:1.86, rowY:2.16, hlH:0.34, lineY:3.72, totY:3.8 },
+      trend:{ x:0.28, w:4.5, titleX:0.45, kpiY:1.82,
+              barX0:0.58, barW:0.52, barSpan:3.87, baseY:3.85, maxBarH:1.05 },
+      voc:{ x:4.95, w:4.35, titleX:5.15, headX:5.35, headW:1.6, hlX:5.15, hlW:1.85,
+            nameX:5.25, nameW:1.7, nameSize:9.5, nameAlign:'center',
+            deltaX:7.1, deltaW:1.2, cntX:8.35, cntW:0.75, lineW:3.95, gapMax:0.4, lastRowY:3.36 },
+      part:{ x:9.5, w:3.55, titleX:9.7, headX:9.9, headW:1.6, hlX:9.7, hlW:1.55,
+             nameX:9.8, nameW:1.5, nameSize:9, nameAlign:'left',
+             deltaX:11.3, deltaW:1.06, cntX:12.15, cntW:0.7, lineW:3.15, gapMax:0.52, lastRowY:3.42 },
+      row2:{ y:4.45, h:2.6, boxY:4.98, boxH:2.0 },   /* 2행 카드 + 스탯 박스 공통 */
+      fail:{ x:0.28, w:4.5, titleX:0.5, titleY:4.57, btnX:0.5, btnW:1.5, btnH:0.36,
+             rowY:4.98, gap:0.62, lastRowY:6.45, descX:2.1, descW:2.6 },
+      call:{ x:4.95, w:4.35, titleX:5.03, titleY:4.53,
+             total:{x:5.24,w:1.58}, inb:{x:6.92,w:0.99}, outb:{x:7.99,w:0.99} },
+      invt:{ x:9.5, w:3.55, titleX:9.53, titleY:4.54, x0:9.56, boxW:0.81, pitch:0.875 },
+      ncare:{ x:4.95, w:8.1 },                        /* 점검 모드: N-care 표 카드 */
+      foot:{ y:7.28, h:0.22, textY:7.26 }
+    };
+
+    /* ── 슬라이드 초기화 · 공통 헬퍼 ── */
     var FONT='맑은 고딕';
     var pptx=new PptxGenJS();
     pptx.defineLayout({name:'W',width:13.33,height:7.5}); pptx.layout='W';
@@ -984,11 +1013,44 @@ async function makeWeeklyPPT(){
     function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:'FFFFFF'},line:{color:C.line,width:1}}); }
     function tx(t,o){
       o=o||{}; if(!o.fontFace) o.fontFace=FONT;
+      if(!o.valign) o.valign='middle';               /* 첨부 PPT 전 텍스트 anchor=ctr */
       if(Array.isArray(t)) t.forEach(function(run){ run.options=run.options||{}; if(!run.options.fontFace) run.options.fontFace=FONT; });
       s.addText(t,o);
     }
+    function cardTitle(t,x,y){ tx(t,{x:x,y:y,w:3.2,h:0.3,fontSize:11,bold:true,color:C.navy}); }
+    /* VOC 유형·교체품 현황 공통 순위표: 헤더 + 행(1~5행 자동 간격) + 구분선 + 총합
+       rows:[{name,val,hl:'y'|'g',bold,color,delta}] — 강조/전주 대비는 해당 행에만 */
+    function drawRankTable(T,o){
+      card(T.x, L.row1.y, T.w, L.row1.h);
+      cardTitle(o.title, T.titleX, L.row1.titleY);
+      tx(o.head[0],{x:T.headX,y:L.row1.headY,w:T.headW,h:0.26,fontSize:9,color:C.mut});
+      tx(o.head[1],{x:T.cntX,y:L.row1.headY,w:T.cntW,h:0.26,fontSize:9,color:C.mut,align:'right'});
+      var n=o.rows.length;
+      var gap=n>1 ? Math.min(T.gapMax,(T.lastRowY-L.row1.rowY)/(n-1)) : 0;
+      o.rows.forEach(function(r,i){
+        var y=L.row1.rowY+i*gap;
+        if(r.hl) s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:T.hlX,y:y-0.02,w:T.hlW,h:L.row1.hlH,rectRadius:0.05,
+          fill:{color:r.hl==='g'?C.ghl:C.yhl}});
+        if(r.delta) tx(r.delta.t,{x:T.deltaX,y:y,w:T.deltaW,h:0.3,fontSize:8.5,bold:true,color:r.delta.c});
+        tx(r.name,{x:T.nameX,y:y,w:T.nameW,h:0.3,fontSize:T.nameSize,bold:!!r.bold,color:r.color||'333333',align:T.nameAlign});
+        tx(String(r.val),{x:T.cntX,y:y,w:T.cntW,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
+      });
+      /* 총 합계는 카드 하단 고정 — 행 수와 무관하게 두 카드가 같은 y에 정렬 */
+      s.addShape(pptx.shapes.LINE,{x:T.hlX,y:L.row1.lineY,w:T.lineW,h:0,line:{color:C.line,width:1}});
+      tx('총 합계',{x:T.nameX,y:L.row1.totY,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
+      tx(String(o.total),{x:T.cntX,y:L.row1.totY,w:T.cntW,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
+    }
+    /* Call 현황·재고 현황 공통 스탯 박스: 라운드 박스 + 제목 + 대형 숫자(0은 회색) */
+    function statBox(x,w,label,val,o){
+      o=o||{};
+      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:L.row2.boxY,w:w,h:L.row2.boxH,rectRadius:0.04,
+        fill:{color:o.accent?'FFFFFF':C.box}, line:o.accent?{color:o.accent,width:1.5}:{color:C.line,width:1}});
+      tx(label,{x:x,y:L.row2.boxY+0.1,w:w,h:0.32,fontSize:9,color:C.mut,align:'center'});
+      tx(String(val),{x:x,y:L.row2.boxY+0.5,w:w,h:1.05,fontSize:36,bold:true,align:'center',
+        color:o.numColor||(Number(val)?C.navy:'AAB4C8')});
+    }
 
-    /* 로고 · 타이틀 바 — logo.png가 같은 폴더에 있고 "유효한 이미지"일 때만 사용
+    /* 로고 — logo.png가 같은 폴더에 있고 "유효한 이미지"일 때만 사용
        (빈/깨진 파일이면 무시하고 텍스트 로고로 폴백 → PPT에 깨진 그림 박힘 방지) */
     var logoData=null;
     try{
@@ -1002,120 +1064,131 @@ async function makeWeeklyPPT(){
         }
       }
     }catch(_){}
-    if(logoData){
-      /* 1시 방향(우상단) 모서리에서 일정 간격(0.25) 띄우고 작게 배치 */
-      s.addImage({data:logoData, x:12.0, y:0.14, w:1.08, h:0.5, sizing:{type:'contain', w:1.08, h:0.5}});
-    }else{
-      tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
-      tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
-    }
-    s.addShape(pptx.shapes.RECTANGLE,{x:0,y:0.5,w:11.3,h:0.68,fill:{color:C.navy}});
+
     var scopeLb=wkScopeLabel();
     var isInsp=(wkScopeVal()==='점검');
-    /* 제목: 점검이면 (N-care 정기 점검), 그 외 (VOC) — AS만이면 부제로 · A/S */
-    var titleKind = isInsp ? '(N-care 정기 점검)' : ('(VOC)'+(scopeLb==='A/S'?' · A/S':''));
-    tx('생산품질_CS팀 주간업무보고'+titleKind,{x:0.25,y:0.5,w:6.4,h:0.68,fontSize:19,bold:true,color:'FFFFFF'});
-    tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),{x:6.6,y:0.5,w:4.55,h:0.68,fontSize:14,bold:true,color:'FFFFFF',align:'right'});
+    /* 제목: 점검이면 (N-care 정기 점검), 그 외 (VOC/Call) — AS만이면 부제로 · A/S */
+    var titleKind = isInsp ? '(N-care 정기 점검)' : ('(VOC/Call)'+(scopeLb==='A/S'?' · A/S':''));
 
-    /* ① 주별 추이 (점검: N-care 정기 점검 서비스) */
-    card(0.25,1.4,4.5,2.85);
-    tx(isInsp?'N-care 정기 점검 서비스':'VOC 주별 추이',{x:0.45,y:1.52,w:3.2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    var d1=deltaTxt(cur.length,prev.length);
-    tx([{text:String(cur.length),options:{fontSize:40,bold:true,color:C.navy}},
-        {text:' 건  ',options:{fontSize:14,color:C.navy}},
-        {text:d1.t,options:{fontSize:11,bold:true,color:d1.c}}],
-       {x:0.45,y:1.82,w:4.1,h:0.7});
-    var bx=0.55,bw=0.52,gap=(3.9-bw*weeks.length)/Math.max(weeks.length-1,1),base=3.85,maxH=1.05;
-    var maxN=Math.max.apply(null,weeks.map(function(w){return w.n;}).concat([1]));
-    weeks.forEach(function(w,i){
-      var h=Math.max(0.06, w.n/maxN*maxH), x=bx+i*(bw+gap);
-      s.addShape(pptx.shapes.RECTANGLE,{x:x,y:base-h,w:bw,h:h,fill:{color:w.cur?C.orange:C.teal}});
-      tx(String(w.n),{x:x-0.1,y:base-h-0.26,w:bw+0.2,h:0.24,fontSize:10,bold:true,align:'center',color:C.navy});
-      tx(wkNo(w.mon)+'주차',{x:x-0.15,y:base+0.03,w:bw+0.3,h:0.24,fontSize:9,align:'center',color:C.mut});
-    });
-
-    /* ② VOC 유형 — 전주 대비는 최상단 항목만 (유형 | 대비 | 건수) */
-    card(4.95,1.4,4.35,2.85);
-    tx(isInsp?'점검 유형':'VOC 유형',{x:5.15,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    tx('유형',{x:5.15,y:1.86,w:1.85,h:0.26,fontSize:9,color:C.mut,align:'center'});
-    tx('건수',{x:8.35,y:1.86,w:0.75,h:0.26,fontSize:9,color:C.mut,align:'right'});
-    var ry=2.16;
-    types.forEach(function(p,i){
-      if(i===0){
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.85,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
-        var dt=deltaTxt(p[1], typeP[p[0]]||0);
-        tx(dt.t,{x:7.1,y:ry,w:1.2,h:0.3,fontSize:8.5,bold:true,color:dt.c});
+    /* ── 상단 타이틀 바 + 우상단 로고 ── */
+    function drawHeader(){
+      var H=L.header;
+      if(logoData){
+        s.addImage({data:logoData, x:H.logo.x, y:H.logo.y, w:H.logo.w, h:H.logo.h,
+          sizing:{type:'contain', w:H.logo.w, h:H.logo.h}});
+      }else{
+        tx('baz',{x:11.9,y:0.02,w:1.3,h:0.42,fontSize:24,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
+        tx('BAZ BIOMEDIC',{x:11.4,y:0.4,w:1.8,h:0.24,fontSize:8,color:C.mut,align:'right',charSpacing:2});
       }
-      tx(p[0],{x:5.15,y:ry,w:1.85,h:0.3,fontSize:9.5,bold:i===0,color:'333333',align:'center'});
-      tx(String(p[1]),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
-      ry+=0.4;
-    });
-    if(okCnt || okPrev){
-      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:5.15,y:ry-0.02,w:1.85,h:0.34,rectRadius:0.05,fill:{color:C.ghl}});
-      tx('이상 없음',{x:5.15,y:ry,w:1.85,h:0.3,fontSize:9.5,color:C.green,align:'center'});
-      tx(String(okCnt),{x:8.35,y:ry,w:0.75,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
-      ry+=0.4;
+      s.addShape(pptx.shapes.RECTANGLE,{x:0,y:H.barY,w:H.barW,h:H.barH,fill:{color:C.navy}});
+      tx('생산품질_CS팀 주간업무보고'+titleKind,
+         {x:H.padX,y:H.barY,w:H.titleW,h:H.barH,fontSize:H.titleSize,bold:true,color:'FFFFFF'});
+      tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),
+         {x:H.dateX,y:H.barY,w:H.dateW,h:H.barH,fontSize:H.dateSize,bold:true,color:'FFFFFF',align:'right'});
     }
-    /* 총 합계는 카드 하단 고정 (교체품 현황과 동일 y=3.8) — 행 수와 무관하게 정렬 */
-    s.addShape(pptx.shapes.LINE,{x:5.15,y:3.72,w:3.95,h:0,line:{color:C.line,width:1}});
-    tx('총 합계',{x:5.25,y:3.8,w:2,h:0.32,fontSize:11,bold:true,color:C.navy});
-    tx(String(cur.length),{x:8.35,y:3.8,w:0.75,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
 
-    /* ③ 교체품 현황 — 전주 대비는 최상단 항목만, VOC 유형과 동일한 같은 행 배치 */
-    card(9.5,1.4,3.55,2.85);
-    tx('교체품 현황',{x:9.7,y:1.52,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    tx('교체품',{x:9.9,y:1.86,w:1.6,h:0.26,fontSize:9,color:C.mut});
-    tx('수량',{x:12.3,y:1.86,w:0.55,h:0.26,fontSize:9,color:C.mut,align:'right'});
-    var py=2.16;
-    parts.forEach(function(p,i){
-      if(i===0){
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:9.7,y:py-0.02,w:1.4,h:0.34,rectRadius:0.05,fill:{color:C.yhl}});
-        var dp=deltaTxt(p[1], partP[p[0]]||0);
-        /* 전주 대비 한 줄 — 유형과 동일하게 (박스 넓혀 줄바꿈 방지) */
-        tx(dp.t,{x:11.15,y:py,w:1.15,h:0.3,fontSize:7.5,bold:true,color:dp.c});
-      }
-      tx(p[0],{x:9.78,y:py,w:1.3,h:0.3,fontSize:9,bold:i===0,color:'333333'});
-      tx(String(p[1]),{x:12.3,y:py,w:0.55,h:0.3,fontSize:11,bold:true,align:'right',color:C.navy});
-      py+=0.52;
-    });
-    s.addShape(pptx.shapes.LINE,{x:9.7,y:3.72,w:3.15,h:0,line:{color:C.line,width:1}});
-    tx('총 합계',{x:9.8,y:3.8,w:1.6,h:0.32,fontSize:11,bold:true,color:C.navy});
-    tx(String(partTot),{x:12.3,y:3.8,w:0.55,h:0.32,fontSize:12,bold:true,align:'right',color:C.navy});
-
-    /* ④ 고장 상세 */
-    card(0.25,4.45,4.5,2.6);
-    tx('고장 상세',{x:0.45,y:4.57,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-    var gy=4.98;
-    details.forEach(function(d,i){
-      s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:0.45,y:gy,w:1.5,h:0.36,rectRadius:0.06,
-        fill:{color:i===0?C.orange:C.teal}});
-      tx(d.name,{x:0.45,y:gy,w:1.5,h:0.36,fontSize:8.5,bold:true,color:'FFFFFF',align:'center'});
-      tx(d.desc,{x:2.05,y:gy,w:2.6,h:0.4,fontSize:9,color:'333333',valign:'middle'});
-      gy+=0.62;
-    });
-    if(!details.length) tx('해당 주차 고장 내역 없음',{x:0.45,y:5.2,w:4,h:0.4,fontSize:10,color:C.mut});
-
-    /* ⑤ 점검: N-care 가입 현황 표 / 그 외: 재고 현황 */
-    card(4.95,4.45,8.1,2.6);
-    if(isInsp){
-      renderNcareTable(pptx, s, tx);
-    }else{
-      tx('재고 현황',{x:5.15,y:4.57,w:2,h:0.3,fontSize:11,bold:true,color:C.navy});
-      var invDefs=[['Handpiece (Repair)',inv.inv1,true],['Handpiece (새제품)',inv.inv2,false],
-                   ['Foot s/w (새제품)',inv.inv3,false],['Foot s/w (Repair)',inv.inv4,false]];
-      invDefs.forEach(function(v,i){
-        var x=5.15+i*1.95;
-        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:4.95,w:1.8,h:1.85,rectRadius:0.04,
-          fill:{color:v[2]?'FFFFFF':C.box},line:{color:v[2]?C.orange:C.line,width:v[2]?1.5:1}});
-        tx(v[0],{x:x,y:5.05,w:1.8,h:0.3,fontSize:9,color:C.mut,align:'center'});
-        tx(String(v[1]||0),{x:x,y:5.45,w:1.8,h:1,fontSize:36,bold:true,align:'center',
-          color:v[2]?C.orange:(Number(v[1])?C.navy:'AAB4C8')});
+    /* ── ① VOC 주별 추이: 건수 KPI + 주별 막대(당주 주황) ── */
+    function drawVocTrend(){
+      var T=L.trend;
+      card(T.x, L.row1.y, T.w, L.row1.h);
+      cardTitle(isInsp?'N-care 정기 점검 서비스':'VOC 주별 추이', T.titleX, L.row1.titleY);
+      var d1=deltaTxt(cur.length,prev.length);
+      tx([{text:String(cur.length),options:{fontSize:40,bold:true,color:C.navy}},
+          {text:' 건  ',options:{fontSize:14,color:C.navy}},
+          {text:d1.t,options:{fontSize:11,bold:true,color:d1.c}}],
+         {x:T.titleX,y:T.kpiY,w:4.1,h:0.7});
+      var maxN=Math.max.apply(null,weeks.map(function(w){return w.n;}).concat([1]));
+      var gap=(T.barSpan-T.barW*weeks.length)/Math.max(weeks.length-1,1);
+      weeks.forEach(function(w,i){
+        var h=Math.max(0.06, w.n/maxN*T.maxBarH), x=T.barX0+i*(T.barW+gap);
+        s.addShape(pptx.shapes.RECTANGLE,{x:x,y:T.baseY-h,w:T.barW,h:h,fill:{color:w.cur?C.orange:C.teal}});
+        tx(String(w.n),{x:x-0.1,y:T.baseY-h-0.26,w:T.barW+0.2,h:0.24,fontSize:10,bold:true,align:'center',color:C.navy});
+        tx(wkNo(w.mon)+'주차',{x:x-0.15,y:T.baseY+0.03,w:T.barW+0.3,h:0.24,fontSize:9,align:'center',color:C.mut});
       });
     }
 
-    /* 푸터 */
-    s.addShape(pptx.shapes.RECTANGLE,{x:0,y:7.28,w:13.33,h:0.22,fill:{color:C.navy}});
-    tx('BAZ BIOMEDIC',{x:0.25,y:7.26,w:2,h:0.24,fontSize:8,color:'FFFFFF'});
+    /* ── ② VOC 유형: 1위 노란 강조 + 전주 대비 · '이상 없음' 초록 행 ── */
+    function drawVocTable(){
+      var rows=types.map(function(p,i){
+        return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
+                delta:i===0?deltaTxt(p[1], typeP[p[0]]||0):null};
+      });
+      if(hasOk) rows.push({name:'이상 없음', val:okCnt, hl:'g', color:C.green});
+      drawRankTable(L.voc,{title:isInsp?'점검 유형':'VOC 유형', head:['유형','건수'],
+                           rows:rows, total:cur.length});
+    }
+
+    /* ── ③ 교체품 현황 ── */
+    function drawReplacementTable(){
+      var rows=parts.map(function(p,i){
+        return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
+                delta:i===0?deltaTxt(p[1], partP[p[0]]||0):null};
+      });
+      drawRankTable(L.part,{title:'교체품 현황', head:['교체품','수량'],
+                            rows:rows, total:partTot});
+    }
+
+    /* ── ④ 고장 상세: 유형 버튼(1위 주황·이하 청록) + 설명 ── */
+    function drawFailureDetail(){
+      var T=L.fail;
+      card(T.x, L.row2.y, T.w, L.row2.h);
+      cardTitle('고장 상세', T.titleX, T.titleY);
+      if(!details.length){ tx('해당 주차 고장 내역 없음',{x:T.titleX,y:5.2,w:4,h:0.4,fontSize:10,color:C.mut}); return; }
+      var gap=details.length>3 ? (T.lastRowY-T.rowY)/(details.length-1) : T.gap; /* 4행이면 자동 압축 */
+      details.forEach(function(d,i){
+        var y=T.rowY+i*gap;
+        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,rectRadius:0.06,
+          fill:{color:i===0?C.orange:C.teal}});
+        tx(d.name,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,fontSize:8.5,bold:true,color:'FFFFFF',align:'center'});
+        tx(d.desc,{x:T.descX,y:y-0.02,w:T.descW,h:0.4,fontSize:9,color:'1A2E3B'});
+      });
+    }
+
+    /* ── ⑤ 고객센터 Call 현황: 총 Call(남색 테두리) + INBOUND/OUTBOUND ── */
+    function drawCallStatus(){
+      var T=L.call;
+      card(T.x, L.row2.y, T.w, L.row2.h);
+      cardTitle('고객센터 Call 현황', T.titleX, T.titleY);
+      statBox(T.total.x, T.total.w, '총 Call', callTot, {accent:'002060'});
+      statBox(T.inb.x,   T.inb.w,   'INBOUND',  callIn);
+      statBox(T.outb.x,  T.outb.w,  'OUTBOUND', callOut);
+    }
+
+    /* ── ⑥ 재고 현황: 4박스(첫 박스 주황 강조 · 제목 2줄) ── */
+    function drawInventory(){
+      var T=L.invt;
+      card(T.x, L.row2.y, T.w, L.row2.h);
+      cardTitle('재고 현황', T.titleX, T.titleY);
+      var invDefs=[['Handpiece','(Repair)',inv.inv1,true],['Handpiece','(새제품)',inv.inv2,false],
+                   ['Foot s/w','(새제품)',inv.inv3,false],['Foot s/w','(Repair)',inv.inv4,false]];
+      invDefs.forEach(function(v,i){
+        var label=[{text:v[0],options:{breakLine:true}},{text:v[1]}]; /* 첨부와 동일한 2줄 제목 */
+        statBox(T.x0+i*T.pitch, T.boxW, label, v[2]||0,
+                v[3]?{accent:C.orange,numColor:C.orange}:null);
+      });
+    }
+
+    /* ── ⑤' 점검 모드: N-care 가입 현황 표(하단 우측 전체 폭) ── */
+    function drawNcare(){
+      card(L.ncare.x, L.row2.y, L.ncare.w, L.row2.h);
+      renderNcareTable(pptx, s, tx);
+    }
+
+    /* ── 하단 BAZ BIOMEDIC 바 ── */
+    function drawFooter(){
+      s.addShape(pptx.shapes.RECTANGLE,{x:0,y:L.foot.y,w:13.33,h:L.foot.h,fill:{color:C.navy}});
+      tx('BAZ BIOMEDIC',{x:L.header.padX,y:L.foot.textY,w:2,h:0.24,fontSize:8,color:'FFFFFF'});
+    }
+
+    /* ── 섹션 순서대로 렌더 ── */
+    drawHeader();
+    drawVocTrend();
+    drawVocTable();
+    drawReplacementTable();
+    drawFailureDetail();
+    if(isInsp){ drawNcare(); }
+    else{ drawCallStatus(); drawInventory(); }
+    drawFooter();
 
     var fname='주간업무보고_VOC_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')
               +(scopeLb?'_'+scopeLb.replace('/',''):'')+'.pptx';
