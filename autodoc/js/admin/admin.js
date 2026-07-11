@@ -466,6 +466,38 @@
     }).join('\n');
   }
 
+  /* ══════════ ⑤ AI 템플릿 빌더 (Phase 4) ══════════ */
+
+  function setAiStatus(msg, cls) {
+    var el = $('aiStatus');
+    el.textContent = msg;
+    el.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function aiAnalyze() {
+    var input = $('aiFile');
+    var file = input.files && input.files[0];
+    if (!file) { AD.toast('양식 파일을 선택하세요 (.pptx .docx .xlsx .pdf)'); return; }
+    if (!AD.config.GAS_URL) {
+      setAiStatus('❌ GAS 백엔드 미설정 — 배포 후 config.js 의 GAS_URL 과 스크립트 속성 ANTHROPIC_API_KEY 를 설정하세요', 'err');
+      return;
+    }
+    var btn = $('btnAiAnalyze');
+    btn.disabled = true;
+    setAiStatus('① "' + file.name + '" 에서 텍스트 추출 중…');
+    AD.TemplateBuilder.extract(file).then(function (ex) {
+      setAiStatus('② AI가 레이아웃·입력 항목 분석 중… (수십 초 걸릴 수 있습니다)');
+      return AD.TemplateBuilder.request(file.name, ex);
+    }).then(function (raw) {
+      var tpl = AD.TemplateBuilder.normalize(raw, file.name.replace(/\.[^.]+$/, ''));
+      setAiStatus('③ 생성 완료 — 아래 편집기에서 검토·수정 후 [저장]하면 게시됩니다', 'ok');
+      AD.toast('🪄 템플릿 초안 생성 — 검토 후 저장하세요');
+      editTemplate(tpl);
+    }).catch(function (e) {
+      setAiStatus('❌ ' + e, 'err');
+    }).then(function () { btn.disabled = false; });
+  }
+
   /* ══════════ 초기화 ══════════ */
 
   window.addEventListener('DOMContentLoaded', function () {
@@ -486,6 +518,7 @@
     };
     $('btnSave').onclick = save;
     $('btnDraftsReload').onclick = loadDrafts;
+    $('btnAiAnalyze').onclick = aiAnalyze;
     loadList();
     loadDrafts();
   });

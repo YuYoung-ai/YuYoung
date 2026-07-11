@@ -25,6 +25,8 @@
  *   POST {action:'draftSave', ...}          → 초안 제출 (승인 대기)
  *   POST {action:'draftReview', ...}        → 초안 승인/반려
  *   POST {action:'ai', task, text, context} → AI 프록시 (Phase 3)
+ *   POST {action:'aiTemplate', fileName, fileType, content}
+ *        → 양식 텍스트 분석 → 템플릿 JSON 초안 (Phase 4 AI Template Builder)
  *
  * AI 사용 설정 (Phase 3):
  *   스크립트 속성에 ANTHROPIC_API_KEY 추가 (Claude API 키 — 클라이언트 비노출)
@@ -116,6 +118,7 @@ function doPost(e) {
     if (b.action === 'draftSave')       return json_(saveDraft_(b));
     if (b.action === 'draftReview')     return json_(reviewDraft_(b));
     if (b.action === 'ai')              return json_(aiCall_(b));
+    if (b.action === 'aiTemplate')      return json_(aiTemplate_(b));
     return json_({ success: false, error: 'unknown action: ' + b.action });
   } catch (err) {
     return json_({ success: false, error: String(err) });
@@ -305,4 +308,89 @@ function aiCall_(b) {
   (body.content || []).forEach(function (bl) { if (bl.type === 'text') text += bl.text; });
   if (!text.trim()) throw 'AI 응답이 비어 있습니다';
   return { success: true, data: { text: text.trim(), model: body.model } };
+}
+
+/************************************************************
+ * AI Template Builder (Phase 4)
+ * 업로드된 양식에서 추출한 텍스트를 분석해 AutoDoc 템플릿 JSON
+ * 초안을 생성합니다. 산출물은 클라이언트(template-builder.js)의
+ * normalize()로 한 번 더 검증·보정된 뒤 관리자 검토를 거칩니다.
+ ************************************************************/
+
+var AI_TEMPLATE_SPEC = [
+  '너는 회사 양식 문서를 분석해 문서 자동화 플랫폼의 "템플릿 JSON"을 설계하는 전문가다.',
+  '주어진 양식 텍스트에서 ①고정 서식(제목·표 머리글·라벨)과 ②사용자가 매번 채우는 값을 구분하고,',
+  '채우는 값들을 입력 필드(inputs)로, 문서 구조를 레이아웃(layout)으로 설계하라.',
+  '',
+  '반드시 아래 스키마의 JSON "하나만" 출력하라 (설명·코드펜스 금지):',
+  '{',
+  ' "id": "영문-소문자-하이픈",',
+  ' "name": "문서 이름(한국어)",',
+  ' "desc": "카탈로그 한 줄 설명",',
+  ' "category": "보고서|회의|품질|점검|기타",',
+  ' "minLevel": 1,',
+  ' "formats": ["pptx","xlsx","docx","pdf"] 중 이 양식에 적합한 것들,',
+  ' "inputs": [ { "key":"영문키", "label":"한국어 라벨",',
+  '   "type":"text|number|date|week|select|textarea|table",',
+  '   "required":true(핵심 항목만), "placeholder":"예시(선택)",',
+  '   "options":["..."](select만), "columns":[{"key","label","type","options"}](table만) } ],',
+  ' "rules": [ {"if":"키.length == 0" 또는 "키 == \'\'", "warn":"안내문"} ] (0~2개),',
+  ' "layout": { "grid":{"cols":12,"rows":8~14,"gap":0.1}, "pages":[{"blocks":[',
+  '   {"component":"header|text|table|card|chart|footer",',
+  '    "area":"행시작 / 열시작 / 행끝 / 열끝" (1~13열, 끝 미포함),',
+  '    "props":{...}} ]}] }',
+  '',
+  '컴포넌트 props 규칙:',
+  ' header: {"title","subtitle","writer","date"} · text: {"title","content"} ·',
+  ' table: {"title","columns":[{"key","label","width":비율}],"rows":"@표입력키"} ·',
+  ' card: {"title","value","accent":"$color.primary|accent|success"} · footer: {"text"}',
+  '바인딩: "@입력키"=입력값, "@fn.today"=오늘 날짜, "@fn.currentWeek"=이번 주차.',
+  '레이아웃 원칙: 1행=header 전체 폭, 마지막 행=footer 전체 폭, 표는 폭 넓게,',
+  '짧은 필드(text/date/select)는 card 로 2~3개씩 한 행에, textarea 는 text 블록으로.',
+  '블록의 area 는 서로 겹치지 않게 하라. 라벨·문구는 원본 양식의 한국어를 그대로 살려라.'
+].join('\n');
+
+function aiTemplate_(b) {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty('ANTHROPIC_API_KEY');
+  if (!key) throw 'ANTHROPIC_API_KEY 미설정 — 스크립트 속성에 추가하세요';
+  var model = props.getProperty('AI_MODEL') || 'claude-opus-4-8';
+
+  var content = String(b.content || '').slice(0, 60000);
+  if (!content.trim()) throw '분석할 양식 텍스트가 없습니다';
+
+  var user = '[양식 파일] ' + (b.fileName || '') + ' (형식: ' + (b.fileType || '?') + ')\n\n' +
+             '[양식에서 추출한 텍스트]\n' + content +
+             '\n\n위 양식을 분석해 템플릿 JSON을 출력하라.';
+
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({
+      model: model,
+      max_tokens: 16000,
+      system: AI_TEMPLATE_SPEC,
+      messages: [{ role: 'user', content: user }]
+    }),
+    muteHttpExceptions: true
+  });
+
+  var code = res.getResponseCode();
+  var body;
+  try { body = JSON.parse(res.getContentText()); }
+  catch (e) { throw 'AI 응답 파싱 실패 (HTTP ' + code + ')'; }
+  if (code !== 200) throw (body.error && body.error.message) || ('AI API 오류 ' + code);
+  if (body.stop_reason === 'refusal') throw 'AI가 이 요청을 거절했습니다';
+
+  var text = '';
+  (body.content || []).forEach(function (bl) { if (bl.type === 'text') text += bl.text; });
+  /* 혹시 붙은 코드펜스 제거 후 JSON 추출 */
+  text = text.replace(/```json/gi, '```').split('```').filter(function (s) { return s.indexOf('{') >= 0; })[0] || text;
+  var start = text.indexOf('{'), end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) throw 'AI 응답에서 JSON을 찾지 못했습니다';
+  var tpl;
+  try { tpl = JSON.parse(text.slice(start, end + 1)); }
+  catch (e) { throw 'AI 가 생성한 템플릿 JSON 파싱 실패'; }
+  return { success: true, data: tpl, model: body.model };
 }

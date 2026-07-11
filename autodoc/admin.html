@@ -27,6 +27,20 @@
     <div id="tplList"><div class="empty">로드 중…</div></div>
   </div>
 
+  <!-- ①-b AI 템플릿 빌더 (Phase 4) -->
+  <div class="card">
+    <p class="sec-title">🪄 AI 템플릿 빌더
+      <span class="mini">회사 양식 업로드 → 템플릿 자동 생성</span></p>
+    <div class="ai-upload">
+      <input type="file" id="aiFile" accept=".pptx,.docx,.xlsx,.pdf">
+      <button class="btn btn-teal" id="btnAiAnalyze">🪄 분석 → 템플릿 생성</button>
+    </div>
+    <div class="status" id="aiStatus"></div>
+    <div class="hint">PPT·Word·Excel·PDF 양식에서 구조와 입력 항목을 AI가 분석해 템플릿 초안을 만듭니다.
+      생성되면 아래 편집기가 열립니다 — 검토·수정 후 [저장]하면 카탈로그에 게시됩니다.
+      (GAS 배포 + 스크립트 속성 ANTHROPIC_API_KEY 필요)</div>
+  </div>
+
   <!-- ② 편집기 (템플릿 선택 시 표시) -->
   <div class="card" id="editorSec" style="display:none">
     <p class="sec-title">템플릿 편집 <span class="mini" id="mVersion"></span></p>
@@ -123,6 +137,7 @@
 <script src="js/ui/preview.js"></script>
 <script src="js/ui/toast.js"></script>
 <script src="js/core/services.js"></script>
+<script src="js/ai/template-builder.js"></script>
 <script src="js/admin/admin.js"></script>
 <script>
 /* 관리자 테마 선로드 (미리보기용) */
