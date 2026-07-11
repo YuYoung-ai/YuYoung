@@ -146,8 +146,44 @@ AD.Form = (function () {
       if (f.type === 'week' || f.type === 'select') state[f.key] = ctl.value;   /* select 초기 선택값 반영 */
       bindCtl(ctl, f.key);
       wrap.appendChild(ctl);
+      /* AI 버튼 (Phase 3) — 템플릿에 "ai":[...] 선언 시, GAS 배포된 경우에만 */
+      if (Array.isArray(f.ai) && f.ai.length && window.AD.AI && AD.AI.available()) {
+        wrap.appendChild(buildAiBar(f, ctl));
+      }
       root.appendChild(wrap);
     });
+
+    /* AI 작업 버튼 줄 — 결과는 해당 입력란을 대체 */
+    function buildAiBar(f, ctl) {
+      var bar = document.createElement('div');
+      bar.className = 'ai-bar';
+      f.ai.forEach(function (task) {
+        var spec = AD.AI.TASKS[task];
+        if (!spec) return;
+        var b = el('<button type="button" class="btn-sm ai-btn">' + AD.esc(spec.label) + '</button>');
+        b.onclick = function () {
+          var cur = ctl.value || '';
+          if (spec.needText && !cur.trim()) { AD.toast('내용을 먼저 입력하세요'); return; }
+          /* 컨텍스트: 문서/항목명 + 다른 짧은 입력값 요약 (초안 품질용) */
+          var others = {};
+          Object.keys(state).forEach(function (k) {
+            if (k !== f.key && typeof state[k] === 'string' && state[k] && state[k].length <= 300)
+              others[k] = state[k];
+          });
+          var prev = b.textContent;
+          b.disabled = true; b.textContent = '⏳ AI 작성 중…';
+          AD.AI.run(task, cur, { template: tpl.name, field: f.label, values: others })
+            .then(function (out) {
+              ctl.value = out; state[f.key] = out; emit();
+              AD.toast(spec.label + ' 완료');
+            })
+            .catch(function (e) { AD.toast('❌ ' + e); })
+            .then(function () { b.disabled = false; b.textContent = prev; });
+        };
+        bar.appendChild(b);
+      });
+      return bar;
+    }
 
     return {
       getValues: function () {

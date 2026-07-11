@@ -3,53 +3,182 @@
   "name": "회의록",
   "desc": "안건 · 논의 내용 · 결정 사항 · 후속 조치",
   "category": "회의",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minLevel": 1,
-  "formats": ["pptx", "xlsx", "pdf"],
+  "formats": [
+    "pptx",
+    "xlsx",
+    "docx",
+    "pdf"
+  ],
   "theme": "company-default",
   "inputs": [
-    { "key": "title", "label": "회의명", "type": "text", "required": true, "placeholder": "예) 7월 CS 정례회의" },
-    { "key": "date", "label": "회의 일자", "type": "date", "required": true, "default": "@fn.today" },
-    { "key": "writer", "label": "작성자", "type": "text", "required": true },
-    { "key": "attendees", "label": "참석자", "type": "text", "placeholder": "예) 홍길동, 김철수, 이영희" },
-    { "key": "agenda", "label": "안건", "type": "textarea", "rows": 3 },
-    { "key": "discussion", "label": "논의 내용", "type": "textarea", "rows": 6 },
-    { "key": "decisions", "label": "결정 사항", "type": "textarea", "rows": 4 },
-    { "key": "actions", "label": "후속 조치", "type": "table",
+    {
+      "key": "title",
+      "label": "회의명",
+      "type": "text",
+      "required": true,
+      "placeholder": "예) 7월 CS 정례회의"
+    },
+    {
+      "key": "date",
+      "label": "회의 일자",
+      "type": "date",
+      "required": true,
+      "default": "@fn.today"
+    },
+    {
+      "key": "writer",
+      "label": "작성자",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "attendees",
+      "label": "참석자",
+      "type": "text",
+      "placeholder": "예) 홍길동, 김철수, 이영희"
+    },
+    {
+      "key": "agenda",
+      "label": "안건",
+      "type": "textarea",
+      "rows": 3,
+      "ai": [
+        "draft"
+      ]
+    },
+    {
+      "key": "discussion",
+      "label": "논의 내용",
+      "type": "textarea",
+      "rows": 6,
+      "ai": [
+        "summarize",
+        "proofread"
+      ]
+    },
+    {
+      "key": "decisions",
+      "label": "결정 사항",
+      "type": "textarea",
+      "rows": 4,
+      "ai": [
+        "proofread"
+      ]
+    },
+    {
+      "key": "actions",
+      "label": "후속 조치",
+      "type": "table",
       "columns": [
-        { "key": "item", "label": "항목" },
-        { "key": "owner", "label": "담당" },
-        { "key": "due", "label": "기한", "type": "date" }
-      ] }
+        {
+          "key": "item",
+          "label": "항목"
+        },
+        {
+          "key": "owner",
+          "label": "담당"
+        },
+        {
+          "key": "due",
+          "label": "기한",
+          "type": "date"
+        }
+      ]
+    }
   ],
   "rules": [
-    { "if": "decisions == ''", "warn": "결정 사항이 비어 있습니다. 그대로 생성할까요?" }
+    {
+      "if": "decisions == ''",
+      "warn": "결정 사항이 비어 있습니다. 그대로 생성할까요?"
+    }
   ],
   "layout": {
-    "grid": { "cols": 12, "rows": 8, "gap": 0.1 },
+    "grid": {
+      "cols": 12,
+      "rows": 8,
+      "gap": 0.1
+    },
     "pages": [
-      { "blocks": [
-        { "component": "header", "area": "1 / 1 / 2 / 13",
-          "props": { "title": "@title", "subtitle": "회의록", "writer": "@writer", "date": "@date" } },
-        { "component": "text", "area": "2 / 1 / 3 / 7",
-          "props": { "title": "참석자", "content": "@attendees" } },
-        { "component": "text", "area": "2 / 7 / 3 / 13",
-          "props": { "title": "안건", "content": "@agenda" } },
-        { "component": "text", "area": "3 / 1 / 6 / 7",
-          "props": { "title": "논의 내용", "content": "@discussion" } },
-        { "component": "text", "area": "3 / 7 / 6 / 13",
-          "props": { "title": "결정 사항", "content": "@decisions" } },
-        { "component": "table", "area": "6 / 1 / 8 / 13",
-          "props": { "title": "후속 조치",
-            "columns": [
-              { "key": "item", "label": "항목", "width": 0.5 },
-              { "key": "owner", "label": "담당", "width": 0.25 },
-              { "key": "due", "label": "기한", "width": 0.25 }
-            ],
-            "rows": "@actions" } },
-        { "component": "footer", "area": "8 / 1 / 9 / 13",
-          "props": { "text": "BAZ BIOMEDIC · 회의록 · @date" } }
-      ] }
+      {
+        "blocks": [
+          {
+            "component": "header",
+            "area": "1 / 1 / 2 / 13",
+            "props": {
+              "title": "@title",
+              "subtitle": "회의록",
+              "writer": "@writer",
+              "date": "@date"
+            }
+          },
+          {
+            "component": "text",
+            "area": "2 / 1 / 3 / 7",
+            "props": {
+              "title": "참석자",
+              "content": "@attendees"
+            }
+          },
+          {
+            "component": "text",
+            "area": "2 / 7 / 3 / 13",
+            "props": {
+              "title": "안건",
+              "content": "@agenda"
+            }
+          },
+          {
+            "component": "text",
+            "area": "3 / 1 / 6 / 7",
+            "props": {
+              "title": "논의 내용",
+              "content": "@discussion"
+            }
+          },
+          {
+            "component": "text",
+            "area": "3 / 7 / 6 / 13",
+            "props": {
+              "title": "결정 사항",
+              "content": "@decisions"
+            }
+          },
+          {
+            "component": "table",
+            "area": "6 / 1 / 8 / 13",
+            "props": {
+              "title": "후속 조치",
+              "columns": [
+                {
+                  "key": "item",
+                  "label": "항목",
+                  "width": 0.5
+                },
+                {
+                  "key": "owner",
+                  "label": "담당",
+                  "width": 0.25
+                },
+                {
+                  "key": "due",
+                  "label": "기한",
+                  "width": 0.25
+                }
+              ],
+              "rows": "@actions"
+            }
+          },
+          {
+            "component": "footer",
+            "area": "8 / 1 / 9 / 13",
+            "props": {
+              "text": "BAZ BIOMEDIC · 회의록 · @date"
+            }
+          }
+        ]
+      }
     ]
   }
 }

@@ -24,6 +24,11 @@
  *   POST {action:'templateRestore', ...}    → 이력 버전으로 롤백(현재본 스냅샷)
  *   POST {action:'draftSave', ...}          → 초안 제출 (승인 대기)
  *   POST {action:'draftReview', ...}        → 초안 승인/반려
+ *   POST {action:'ai', task, text, context} → AI 프록시 (Phase 3)
+ *
+ * AI 사용 설정 (Phase 3):
+ *   스크립트 속성에 ANTHROPIC_API_KEY 추가 (Claude API 키 — 클라이언트 비노출)
+ *   선택: AI_MODEL (기본 claude-opus-4-8)
  ************************************************************/
 
 var TAB_TPL   = '템플릿';
@@ -110,6 +115,7 @@ function doPost(e) {
     if (b.action === 'templateRestore') return json_(restoreTemplate_(b));
     if (b.action === 'draftSave')       return json_(saveDraft_(b));
     if (b.action === 'draftReview')     return json_(reviewDraft_(b));
+    if (b.action === 'ai')              return json_(aiCall_(b));
     return json_({ success: false, error: 'unknown action: ' + b.action });
   } catch (err) {
     return json_({ success: false, error: String(err) });
@@ -238,4 +244,65 @@ function appendLog_(b) {
     new Date(), b.user || '', b.template || '', b.version || '', b.format || ''
   ]);
   return { success: true };
+}
+
+/************************************************************
+ * AI 프록시 (Phase 3) — Claude API 호출
+ * API 키는 스크립트 속성(ANTHROPIC_API_KEY)에만 보관합니다.
+ * 요청: {action:'ai', task:'draft|summarize|proofread|translate',
+ *        text:'대상 텍스트', context:{template, field, values}}
+ * 응답: {success, data:{text, model}}
+ ************************************************************/
+
+/* 작업별 지시문 — {field}=입력 항목명, {template}=문서명 */
+var AI_TASK_PROMPTS = {
+  draft:     '아래 컨텍스트를 참고하여 "{template}" 문서의 "{field}" 항목에 들어갈 초안을 한국어로 작성하라. 보고서에 바로 붙여넣을 수 있는 간결한 개조식(- 항목) 문장으로.',
+  summarize: '다음 텍스트를 "{template}" 문서의 "{field}" 항목에 적합하게 핵심만 남겨 간결하게 요약하라. 개조식을 유지하라.',
+  proofread: '다음 텍스트의 맞춤법·띄어쓰기·문장을 교정하라. 의미와 형식(개조식/줄바꿈)은 유지하고 표현만 다듬어라.',
+  translate: 'Translate the following Korean business report text into professional English. Keep the line structure.'
+};
+
+function aiCall_(b) {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty('ANTHROPIC_API_KEY');
+  if (!key) throw 'ANTHROPIC_API_KEY 미설정 — 스크립트 속성에 추가하세요';
+  var model = props.getProperty('AI_MODEL') || 'claude-opus-4-8';
+
+  var tmpl = AI_TASK_PROMPTS[b.task];
+  if (!tmpl) throw '지원하지 않는 AI 작업: ' + b.task;
+  var ctx = b.context || {};
+  var instruction = tmpl
+    .replace('{template}', String(ctx.template || '문서'))
+    .replace('{field}', String(ctx.field || '내용'));
+
+  var user = instruction;
+  if (ctx.values && Object.keys(ctx.values).length) {
+    user += '\n\n[문서의 다른 입력값 (참고)]\n' + JSON.stringify(ctx.values);
+  }
+  if (b.text) user += '\n\n[대상 텍스트]\n' + b.text;
+
+  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify({
+      model: model,
+      max_tokens: 4096,   /* 보고서 항목 텍스트 — 의도적으로 짧은 출력 */
+      system: '당신은 한국 기업의 사내 보고서 작성을 돕는 어시스턴트다. 요청된 결과 텍스트만 출력한다 — 머리말, 설명, 코드펜스, 따옴표를 붙이지 않는다.',
+      messages: [{ role: 'user', content: user }]
+    }),
+    muteHttpExceptions: true
+  });
+
+  var code = res.getResponseCode();
+  var body;
+  try { body = JSON.parse(res.getContentText()); }
+  catch (e) { throw 'AI 응답 파싱 실패 (HTTP ' + code + ')'; }
+  if (code !== 200) throw (body.error && body.error.message) || ('AI API 오류 ' + code);
+  if (body.stop_reason === 'refusal') throw 'AI가 이 요청을 거절했습니다';
+
+  var text = '';
+  (body.content || []).forEach(function (bl) { if (bl.type === 'text') text += bl.text; });
+  if (!text.trim()) throw 'AI 응답이 비어 있습니다';
+  return { success: true, data: { text: text.trim(), model: body.model } };
 }

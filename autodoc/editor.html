@@ -50,11 +50,13 @@
 <script src="js/providers/gas-provider.js"></script>
 <script src="js/providers/local-provider.js"></script>
 <script src="js/providers/manual-provider.js"></script>
+<script src="js/ai/ai-service.js"></script>
 <script src="js/form/form-generator.js"></script>
 <script src="js/form/validator.js"></script>
 <script src="js/renderers/renderer-base.js"></script>
 <script src="js/renderers/ppt-renderer.js"></script>
 <script src="js/renderers/excel-renderer.js"></script>
+<script src="js/renderers/word-renderer.js"></script>
 <script src="js/renderers/pdf-renderer.js"></script>
 <script src="js/ui/preview.js"></script>
 <script src="js/ui/toast.js"></script>
@@ -109,6 +111,39 @@ function submitDraft(btn) {
     .then(function () { btn.disabled = false; });
 }
 
+/* 전체 생성 (Phase 3) — 한 번 입력으로 모든 포맷 동시 생성 */
+function generateAll(btn) {
+  var values = FORM.getValues();
+  var v = AD.Validator.validate(values, TPL);
+  if (!v.ok) { AD.toast('❌ ' + v.errors.join('\n')); return; }
+  if (v.warns.length && !confirm(v.warns.join('\n'))) return;
+
+  var model = AD.Model.assemble(TPL, values);
+  var fmts = (TPL.formats || []).filter(function (f) { return AD.Renderers.get(f); });
+  var prev = btn.textContent;
+  btn.disabled = true;
+
+  var done = 0;
+  fmts.reduce(function (chain, fmt) {
+    return chain.then(function () {
+      var r = AD.Renderers.get(fmt);
+      btn.textContent = '⏳ ' + r.label + ' (' + (done + 1) + '/' + fmts.length + ')';
+      return r.render(model).then(function (blob) {
+        if (blob) AD.download(blob, TPL.name + '_' + AD.date.ymd(new Date()) + r.ext);
+        done += 1;
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    AD.toast('📦 전체 생성 완료 (' + done + '/' + fmts.length + ')');
+    AD.History.log({ user: (window.BazAuth && BazAuth.name()) || '',
+      template: TPL.id, version: TPL.version, format: 'all(' + fmts.join(',') + ')' });
+  }).catch(function (e) {
+    AD.toast('❌ ' + e + (done ? ' — ' + done + '개는 생성됨' : ''));
+  }).then(function () {
+    btn.disabled = false; btn.textContent = prev;
+  });
+}
+
 function buildActions() {
   var bar = document.getElementById('actionBar');
   bar.innerHTML = '';
@@ -121,6 +156,14 @@ function buildActions() {
     b.onclick = function () { generate(fmt, b); };
     bar.appendChild(b);
   });
+  /* 전체 생성 (Phase 3) — 포맷 2개 이상일 때 */
+  if ((TPL.formats || []).length > 1) {
+    var a = document.createElement('button');
+    a.className = 'btn btn-soft';
+    a.textContent = '📦 전체 생성';
+    a.onclick = function () { generateAll(a); };
+    bar.appendChild(a);
+  }
   /* 승인 워크플로 (Phase 2) — GAS 백엔드 배포 시에만 노출 */
   if (AD.config.GAS_URL) {
     var d = document.createElement('button');

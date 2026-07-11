@@ -35,5 +35,20 @@ AD.Registry.register('header', {
     x.put(r + 2, x.c1, meta, { align: 'center', fill: 'FFEAF0F8',
       color: AD.hexA(t.color && t.color.primary), bold: true });
     return 3;
+  },
+
+  word: function (x, p) {
+    var d = x.d, t = x.theme, f = (t && t.font) || {};
+    x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: String(p.title || ''), bold: true,
+        color: 'FFFFFF', size: Math.round((f.title || 20) * 2) })],
+      shading: { type: d.ShadingType.CLEAR, fill: AD.hex(t.color && t.color.primary) },
+      spacing: { before: 80, after: 80 }
+    }));
+    var meta = [p.subtitle, p.writer, p.date].filter(Boolean).join('  ·  ');
+    if (meta) x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: meta, color: '6B7A99' })],
+      alignment: d.AlignmentType.RIGHT, spacing: { after: 80 }
+    }));
   }
 });

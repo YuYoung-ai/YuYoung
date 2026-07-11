@@ -44,5 +44,26 @@ AD.Registry.register('text', {
     x.put(r + used, x.c1, String(p.content || ''), { valign: 'top' });
     x.box(r + used, x.c1, r + used + h - 1, x.c2);
     return used + h;
+  },
+
+  word: function (x, p) {
+    var d = x.d, t = x.theme, f = (t && t.font) || {};
+    if (p.title) x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: p.title, bold: true,
+        color: AD.hex(t.color && t.color.primary),
+        size: Math.round(((f.body || 10.5) + 1) * 2) })],
+      border: { bottom: { style: d.BorderStyle.SINGLE, size: 6,
+        color: AD.hex((t.border && t.border.color) || '#DDE3EE') } },
+      spacing: { after: 80 }
+    }));
+    String(p.content || '').split('\n').forEach(function (ln) {
+      x.children.push(new d.Paragraph({
+        children: [new d.TextRun({ text: ln,
+          bold: p.level === 'title',
+          size: p.level === 'title' ? Math.round((f.title || 20) * 2) : undefined,
+          color: p.level === 'title' ? AD.hex(t.color && t.color.primary) : undefined })],
+        alignment: p.align === 'center' ? d.AlignmentType.CENTER : undefined
+      }));
+    });
   }
 });

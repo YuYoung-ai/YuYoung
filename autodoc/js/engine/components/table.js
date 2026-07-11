@@ -85,5 +85,39 @@ AD.Registry.register('table', {
       used += 1;
     });
     return used;
+  },
+
+  word: function (x, p) {
+    var d = x.d, t = x.theme;
+    var prim = AD.hex(t.color && t.color.primary);
+    var cols = p.columns || [];
+    if (!cols.length) return;
+    if (p.title) x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: p.title, bold: true, color: prim })],
+      spacing: { after: 60 }
+    }));
+    function cell(text, o) {
+      o = o || {};
+      return new d.TableCell({
+        shading: o.fill ? { type: d.ShadingType.CLEAR, fill: o.fill } : undefined,
+        width: o.width ? { size: o.width, type: d.WidthType.PERCENTAGE } : undefined,
+        children: String(text == null ? '' : text).split('\n').map(function (ln) {
+          return new d.Paragraph({
+            children: [new d.TextRun({ text: ln, bold: !!o.bold, color: o.color })],
+            alignment: o.center ? d.AlignmentType.CENTER : undefined
+          });
+        })
+      });
+    }
+    var rows = [new d.TableRow({ tableHeader: true, children: cols.map(function (c) {
+      return cell(c.label, { fill: prim, color: 'FFFFFF', bold: true, center: true,
+        width: Math.round((c.width || 1 / cols.length) * 100) });
+    }) })];
+    (Array.isArray(p.rows) ? p.rows : []).forEach(function (r, i) {
+      rows.push(new d.TableRow({ children: cols.map(function (c) {
+        return cell(r[c.key], { fill: i % 2 ? 'F6F9FC' : undefined });
+      }) }));
+    });
+    x.children.push(new d.Table({ rows: rows, width: { size: 100, type: d.WidthType.PERCENTAGE } }));
   }
 });

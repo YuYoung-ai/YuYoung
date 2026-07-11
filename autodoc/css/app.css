@@ -112,3 +112,8 @@
 .c-chart-bar i{display:block;height:100%;border-radius:.2em}
 .c-chart-v{flex:0 0 2.5em;font-weight:700;color:var(--ad-primary,#1B2F5E)}
 .c-chart-empty{color:var(--ad-muted,#6B7A99);font-size:.85em;text-align:center;padding:.8em 0}
+
+/* AI 버튼 줄 (Phase 3) */
+.ai-bar{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.ai-btn{background:var(--teal-soft);border-color:#BFDCE8;color:var(--teal)}
+.ai-btn:disabled{opacity:.6}

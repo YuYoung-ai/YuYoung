@@ -81,5 +81,23 @@ AD.Registry.register('chart', {
       x.put(rr, Math.min(mid + 1, x.c2), s.values[i], { align: 'right' });
     });
     return used + s.labels.length;
+  },
+
+  word: function (x, p) {
+    var d = x.d, t = x.theme;
+    var prim = AD.hex(t.color && t.color.primary);
+    var s = this._series(p);
+    if (p.title) x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: p.title + ' (차트 데이터)', bold: true, color: prim })],
+      spacing: { after: 60 }
+    }));
+    s.labels.forEach(function (l, i) {
+      x.children.push(new d.Paragraph({
+        children: [
+          new d.TextRun({ text: '· ' + l + ' — ' }),
+          new d.TextRun({ text: String(s.values[i]), bold: true, color: prim })
+        ]
+      }));
+    });
   }
 });

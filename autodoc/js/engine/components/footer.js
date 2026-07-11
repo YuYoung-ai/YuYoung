@@ -17,5 +17,14 @@ AD.Registry.register('footer', {
     x.merge(r, x.c1, r, x.c2);
     x.put(r, x.c1, String(p.text || ''), { align: 'center', size: 8.5, color: 'FF6B7A99', border: false });
     return 1;
+  },
+
+  word: function (x, p) {
+    var d = x.d, t = x.theme, f = (t && t.font) || {};
+    x.children.push(new d.Paragraph({
+      children: [new d.TextRun({ text: String(p.text || ''), color: '6B7A99',
+        size: Math.round(((f.body || 10.5) - 2) * 2) })],
+      alignment: d.AlignmentType.CENTER, spacing: { before: 120 }
+    }));
   }
 });

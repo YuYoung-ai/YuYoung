@@ -29,5 +29,17 @@ AD.Registry.register('card', {
     x.put(r + 1, x.c1, String(p.value == null ? '' : p.value), { align: 'center', bold: true, size: 13, color: accent, fill: 'FFF5F7FA' });
     x.box(r, x.c1, r + 1, x.c2);
     return 2;
+  },
+
+  word: function (x, p) {
+    var d = x.d;
+    var accent = AD.hex(AD.Theme.resolve(p.accent || '$color.primary') || '#1B2F5E');
+    x.children.push(new d.Paragraph({
+      children: [
+        new d.TextRun({ text: '▪ ' + String(p.title || '') + ' : ', color: '6B7A99' }),
+        new d.TextRun({ text: String(p.value == null ? '' : p.value), bold: true, color: accent })
+      ],
+      spacing: { after: 40 }
+    }));
   }
 });
