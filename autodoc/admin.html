@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 | AutoDoc</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+<script>window.BAZ_PAGE_MIN_LEVEL = 3;</script>  <!-- 관리자 화면: 레벨 3 이상 (인증 GAS에 레벨 4 추가 시 4로 상향) -->
+<script src="../auth.js"></script>
+</head>
+<body>
+<header class="app">
+  <a href="index.html" class="menu-link">← 카탈로그</a>
+  <h1>⚙️ AutoDoc 관리자</h1>
+  <p>템플릿 등록·수정 · 버전 이력 · 초안 승인</p>
+</header>
+
+<div class="wrap">
+  <!-- ① 템플릿 목록 -->
+  <div class="card">
+    <p class="sec-title">템플릿 목록
+      <button class="btn-sm" id="btnNew">＋ 새 템플릿</button>
+    </p>
+    <div id="tplList"><div class="empty">로드 중…</div></div>
+  </div>
+
+  <!-- ② 편집기 (템플릿 선택 시 표시) -->
+  <div class="card" id="editorSec" style="display:none">
+    <p class="sec-title">템플릿 편집 <span class="mini" id="mVersion"></span></p>
+
+    <div class="admin-split">
+      <div>
+        <!-- 기본 정보 -->
+        <div class="adm-group">
+          <p class="adm-title">기본 정보</p>
+          <div class="row2">
+            <div class="fld"><label>id <span class="mini">(영문·하이픈)</span></label><input id="mId"></div>
+            <div class="fld"><label>이름</label><input id="mName"></div>
+          </div>
+          <div class="row2">
+            <div class="fld"><label>분류</label><input id="mCategory" placeholder="보고서 / 회의 / 품질…"></div>
+            <div class="fld"><label>최소 권한 레벨</label>
+              <select id="mMinLevel">
+                <option value="1">1 (일반사용자)</option>
+                <option value="2">2 (팀장)</option>
+                <option value="3">3 (부서장/관리자)</option>
+              </select></div>
+          </div>
+          <div class="fld"><label>설명</label><input id="mDesc"></div>
+          <div class="fld"><label>생성 형식</label>
+            <span class="fmt-checks">
+              <label><input type="checkbox" name="fmt" value="pptx"> PPT</label>
+              <label><input type="checkbox" name="fmt" value="xlsx"> Excel</label>
+              <label><input type="checkbox" name="fmt" value="pdf"> PDF</label>
+            </span></div>
+        </div>
+
+        <!-- 폼 빌더 -->
+        <div class="adm-group">
+          <p class="adm-title">입력 필드 (폼 빌더)
+            <button class="btn-sm" id="btnAddField">＋ 필드 추가</button></p>
+          <div id="inputsBox"></div>
+        </div>
+
+        <!-- 레이아웃 -->
+        <div class="adm-group">
+          <p class="adm-title">레이아웃 블록
+            <span>
+              <button class="btn-sm" id="btnAutoLayout">🪄 자동 배치</button>
+              <button class="btn-sm" id="btnAddBlock">＋ 블록 추가</button>
+            </span></p>
+          <div class="hint">area = "행시작 / 열시작 / 행끝 / 열끝" (끝 미포함 · 열 1~13) · props의 @키 = 입력 필드 바인딩</div>
+          <div id="blocksBox"></div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%" id="btnSave">💾 저장 (버전 자동 증가)</button>
+      </div>
+
+      <!-- 실시간 미리보기 -->
+      <div class="preview-box">
+        <p class="adm-title">미리보기 <span class="mini">샘플 값 자동 생성</span> <span class="status err" id="pvStatus"></span></p>
+        <div id="adminPreview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 버전 이력 (GAS) -->
+  <div class="card" id="histSec" style="display:none">
+    <p class="sec-title" id="histTitle">버전 이력</p>
+    <div id="histBox"></div>
+  </div>
+
+  <!-- ④ 초안 승인함 (GAS) -->
+  <div class="card">
+    <p class="sec-title">초안 승인함
+      <button class="btn-sm" id="btnDraftsReload">🔄 새로고침</button></p>
+    <div id="draftsBox"></div>
+  </div>
+</div>
+
+<script src="js/core/config.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/bus.js"></script>
+<script src="js/engine/theme-engine.js"></script>
+<script src="js/engine/layout-engine.js"></script>
+<script src="js/engine/components/registry.js"></script>
+<script src="js/engine/components/text.js"></script>
+<script src="js/engine/components/header.js"></script>
+<script src="js/engine/components/table.js"></script>
+<script src="js/engine/components/card.js"></script>
+<script src="js/engine/components/chart.js"></script>
+<script src="js/engine/components/footer.js"></script>
+<script src="js/engine/document-model.js"></script>
+<script src="js/providers/provider-base.js"></script>
+<script src="js/providers/gas-provider.js"></script>
+<script src="js/providers/local-provider.js"></script>
+<script src="js/providers/manual-provider.js"></script>
+<script src="js/renderers/renderer-base.js"></script>  <!-- AD.download (저장 JSON 다운로드 폴백) -->
+<script src="js/ui/preview.js"></script>
+<script src="js/ui/toast.js"></script>
+<script src="js/core/services.js"></script>
+<script src="js/admin/admin.js"></script>
+<script>
+/* 관리자 테마 선로드 (미리보기용) */
+AD.Theme.load(AD.config.DEFAULT_THEME).catch(function () {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>

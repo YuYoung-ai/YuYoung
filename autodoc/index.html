@@ -56,7 +56,15 @@ function showCatalog(level) {
   document.getElementById('loginCard').style.display = 'none';
   document.getElementById('catalogSec').style.display = 'block';
   var name = (window.BazAuth && BazAuth.name()) || '';
-  document.getElementById('userInfo').textContent = name ? (name + ' · 레벨 ' + level) : ('레벨 ' + level);
+  var info = document.getElementById('userInfo');
+  info.textContent = name ? (name + ' · 레벨 ' + level) : ('레벨 ' + level);
+  /* 관리자 링크 (Phase 2) */
+  if (level >= AD.config.ADMIN_MIN_LEVEL) {
+    var a = document.createElement('a');
+    a.href = 'admin.html'; a.className = 'btn-sm'; a.style.textDecoration = 'none';
+    a.style.marginLeft = '8px'; a.textContent = '⚙️ 관리자';
+    info.appendChild(a);
+  }
   AD.Templates.list(level).then(function (arr) {
     var box = document.getElementById('catalog');
     if (!arr.length) { box.innerHTML = '<div class="empty">사용 가능한 양식이 없습니다</div>'; return; }

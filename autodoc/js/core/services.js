@@ -1,5 +1,5 @@
 /************************************************************
- * TemplateService / HistoryService
+ * TemplateService / HistoryService / DraftService
  * 템플릿 로드 우선순위: GAS(시트) → localStorage 캐시 → 정적 templates/
  * GAS_URL 미설정 시 정적 JSON만으로 동작합니다.
  ************************************************************/
@@ -10,6 +10,17 @@ AD.Templates = (function () {
     return fetch('templates/' + id + '.json').then(function (r) {
       if (!r.ok) throw '템플릿 없음: ' + id;
       return r.json();
+    });
+  }
+
+  function post(body) {
+    return fetch(AD.config.GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   /* preflight 회피 (기존 규약) */
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.success) return d;
+      throw (d && d.error) || '요청 실패';
     });
   }
 
@@ -63,7 +74,43 @@ AD.Templates = (function () {
     })).then(function (arr) { return arr.filter(Boolean); });
   }
 
-  return { load: load, list: list };
+  /* ── 관리자용 (Phase 2) ── */
+
+  /* 전체 템플릿(보관 포함, GAS) 또는 정적 전문 목록 */
+  function listAll() {
+    if (AD.config.GAS_URL) {
+      return AD.Providers.get('gas').fetch({ action: 'templatesAll' });
+    }
+    return Promise.all(AD.config.STATIC_TEMPLATES.map(function (id) {
+      return fromStatic(id).catch(function () { return null; });
+    })).then(function (arr) { return arr.filter(Boolean); });
+  }
+
+  /* 저장(버전 스냅샷은 GAS가 자동). GAS 미설정이면 JSON 다운로드 폴백 */
+  function save(tpl, user, status) {
+    if (!AD.config.GAS_URL) {
+      var blob = new Blob([JSON.stringify(tpl, null, 2)], { type: 'application/json' });
+      AD.download(blob, tpl.id + '.json');
+      return Promise.resolve({ success: true, downloaded: true });
+    }
+    return post({ action: 'templateSave', template: tpl, user: user || '', status: status || '활성' });
+  }
+
+  function setStatus(id, status, user) {
+    return post({ action: 'templateStatus', id: id, status: status, user: user || '' });
+  }
+
+  function history(id) {
+    return AD.Providers.get('gas').fetch({ action: 'templateHistory', params: { id: id } });
+  }
+
+  function restore(id, histRow, user) {
+    return post({ action: 'templateRestore', id: id, histRow: histRow, user: user || '' });
+  }
+
+  return { load: load, list: list, listAll: listAll,
+           save: save, setStatus: setStatus, history: history, restore: restore,
+           _post: post };
 })();
 
 AD.History = {
@@ -76,8 +123,24 @@ AD.History = {
     if (!AD.config.GAS_URL) return Promise.resolve();
     return fetch(AD.config.GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   /* preflight 회피 (기존 규약) */
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(Object.assign({ action: 'log' }, ev))
     }).catch(function () {});
+  }
+};
+
+/* ── 초안 제출/승인 워크플로 (Phase 2, GAS 필요) ── */
+AD.Drafts = {
+  submit: function (tpl, values, user) {
+    return AD.Templates._post({ action: 'draftSave',
+      template: tpl.id, name: tpl.name, version: tpl.version,
+      user: user || '', values: values });
+  },
+  list: function (status) {
+    return AD.Providers.get('gas').fetch({ action: 'drafts', params: status ? { status: status } : {} });
+  },
+  review: function (row, status, reviewer, comment) {
+    return AD.Templates._post({ action: 'draftReview',
+      row: row, status: status, reviewer: reviewer || '', comment: comment || '' });
   }
 };

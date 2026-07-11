@@ -14,7 +14,10 @@ AD.config = {
   /* GAS 미설정 시 카탈로그에 노출할 정적 템플릿 id (templates/<id>.json) */
   STATIC_TEMPLATES: ['weekly-report', 'meeting-minutes', 'trip-report'],
 
-  DEFAULT_THEME: 'company-default'
+  DEFAULT_THEME: 'company-default',
+
+  /* 관리자 화면(admin.html) 최소 권한 레벨 — 인증 GAS에 레벨 4 추가 시 4로 상향 */
+  ADMIN_MIN_LEVEL: 3
 };
 
 /* HTML 이스케이프 (기존 weekly.html esc 이관) */

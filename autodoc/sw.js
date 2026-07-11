@@ -1,11 +1,14 @@
 // AutoDoc - Service Worker (기존 sw.js 패턴, /autodoc/ 스코프 전용)
 // ★ 파일을 수정해 배포할 때마다 CACHE_VERSION 을 반드시 올리세요. ★
-const CACHE_VERSION = 'autodoc-v1';
+const CACHE_VERSION = 'autodoc-v2';
 
 const ASSETS = [
   './',
   './index.html',
   './editor.html',
+  './admin.html',
+  './js/admin/admin.js',
+  './js/engine/components/chart.js',
   './manifest.json',
   './css/base.css',
   './css/app.css',
