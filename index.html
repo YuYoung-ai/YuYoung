@@ -267,6 +267,13 @@
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
 
+    <!-- AutoDoc — 회사 문서 자동화 플랫폼 (별도 앱 · /autodoc/) -->
+    <button type="button" id="appBtnAutodoc" data-toolid="autodoc" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">📄</span>
+      <span style="flex:1;"><span class="tool-name">AutoDoc</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">회사 문서 자동화 플랫폼</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+
     <!-- 보안레벨 3 전용: 메뉴 관리 (도구 노출 설정 · 시트 '메뉴설정' 연동) -->
     <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:999;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(202,220,252,.4);background:transparent;color:#8EA0C8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
       ⚙️ 메뉴 관리 <span style="font-weight:500;font-size:11px;">· 표시/레벨/순서 설정 · Lv.3</span>
@@ -1850,6 +1857,7 @@ document.getElementById('appBtnInspection').addEventListener('click', function()
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
+document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
   location.href='dashboard.html';
@@ -1873,7 +1881,8 @@ var MENU_DEFAULTS={
   hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:7},
   survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:8},
   manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:9},
-  dashboard: {name:'📊 현장 처리 대시보드', level:3, show:true, order:10}
+  dashboard: {name:'📊 현장 처리 대시보드', level:3, show:true, order:10},
+  autodoc:   {name:'📄 AutoDoc',            level:1, show:true, order:11}
 };
 var MENU_CFG=null;
 try{ MENU_CFG=JSON.parse(localStorage.getItem('baz_menu_cfg')||'null'); }catch(e){}
