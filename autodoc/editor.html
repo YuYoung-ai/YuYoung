@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>문서 작성 | AutoDoc</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1B2F5E">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/app.css">
+<script src="../auth.js"></script>
+</head>
+<body>
+<header class="app">
+  <a href="index.html" class="menu-link">← 양식 목록</a>
+  <h1 id="docTitle">📝 문서 작성</h1>
+  <p id="docDesc">입력 → 미리보기 확인 → 생성</p>
+</header>
+
+<div class="wrap">
+  <div class="editor-split">
+    <!-- 왼쪽: 자동 생성 입력폼 -->
+    <div class="card">
+      <p class="sec-title">내용 입력 <span class="mini">자동 임시저장</span></p>
+      <div id="formBox"><div class="empty">템플릿 로드 중…</div></div>
+      <div class="actions" id="actionBar"></div>
+    </div>
+    <!-- 오른쪽: 실시간 미리보기 -->
+    <div class="card preview-box">
+      <p class="sec-title">미리보기 <span class="mini">생성될 문서와 동일한 구조</span></p>
+      <div id="previewBox"><div class="empty">입력하면 실시간으로 표시됩니다</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="js/core/config.js"></script>
+<script src="js/core/store.js"></script>
+<script src="js/core/bus.js"></script>
+<script src="js/engine/theme-engine.js"></script>
+<script src="js/engine/layout-engine.js"></script>
+<script src="js/engine/components/registry.js"></script>
+<script src="js/engine/components/text.js"></script>
+<script src="js/engine/components/header.js"></script>
+<script src="js/engine/components/table.js"></script>
+<script src="js/engine/components/card.js"></script>
+<script src="js/engine/components/chart.js"></script>
+<script src="js/engine/components/footer.js"></script>
+<script src="js/engine/document-model.js"></script>
+<script src="js/providers/provider-base.js"></script>
+<script src="js/providers/gas-provider.js"></script>
+<script src="js/providers/local-provider.js"></script>
+<script src="js/providers/manual-provider.js"></script>
+<script src="js/ai/ai-service.js"></script>
+<script src="js/form/form-generator.js"></script>
+<script src="js/form/validator.js"></script>
+<script src="js/renderers/renderer-base.js"></script>
+<script src="js/renderers/ppt-renderer.js"></script>
+<script src="js/renderers/excel-renderer.js"></script>
+<script src="js/renderers/word-renderer.js"></script>
+<script src="js/renderers/pdf-renderer.js"></script>
+<script src="js/ui/preview.js"></script>
+<script src="js/ui/toast.js"></script>
+<script src="js/core/services.js"></script>
+<script>
+var TPL = null, FORM = null;
+
+function refresh() {
+  if (!TPL || !FORM) return;
+  var model = AD.Model.assemble(TPL, FORM.getValues());
+  AD.Preview.render(model, document.getElementById('previewBox'));
+}
+
+function generate(fmt, btn) {
+  var values = FORM.getValues();
+  var v = AD.Validator.validate(values, TPL);
+  if (!v.ok) { AD.toast('❌ ' + v.errors.join('\n')); return; }
+  if (v.warns.length && !confirm(v.warns.join('\n'))) return;
+
+  var r = AD.Renderers.get(fmt);
+  if (!r) { AD.toast('지원하지 않는 형식: ' + fmt); return; }
+  var model = AD.Model.assemble(TPL, values);
+  var prev = btn.textContent;
+  btn.disabled = true; btn.textContent = '생성 중…';
+
+  r.render(model).then(function (blob) {
+    if (blob) {
+      var name = TPL.name + '_' + AD.date.ymd(new Date()) + r.ext;
+      AD.download(blob, name);
+      AD.toast((r.icon || '✅') + ' ' + r.label + ' 완료');
+    }
+    AD.History.log({
+      user: (window.BazAuth && BazAuth.name()) || '',
+      template: TPL.id, version: TPL.version, format: fmt
+    });
+  }).catch(function (e) {
+    AD.toast('❌ ' + e);
+  }).then(function () {
+    btn.disabled = false; btn.textContent = prev;
+  });
+}
+
+function submitDraft(btn) {
+  var values = FORM.getValues();
+  var v = AD.Validator.validate(values, TPL);
+  if (!v.ok) { AD.toast('❌ ' + v.errors.join('\n')); return; }
+  if (!confirm('작성한 내용을 승인 요청(초안 제출)할까요?')) return;
+  btn.disabled = true;
+  AD.Drafts.submit(TPL, values, (window.BazAuth && BazAuth.name()) || '')
+    .then(function () { AD.toast('✅ 승인 요청 완료 — 관리자 승인함에 등록됨'); })
+    .catch(function (e) { AD.toast('❌ ' + e); })
+    .then(function () { btn.disabled = false; });
+}
+
+/* 전체 생성 (Phase 3) — 한 번 입력으로 모든 포맷 동시 생성 */
+function generateAll(btn) {
+  var values = FORM.getValues();
+  var v = AD.Validator.validate(values, TPL);
+  if (!v.ok) { AD.toast('❌ ' + v.errors.join('\n')); return; }
+  if (v.warns.length && !confirm(v.warns.join('\n'))) return;
+
+  var model = AD.Model.assemble(TPL, values);
+  var fmts = (TPL.formats || []).filter(function (f) { return AD.Renderers.get(f); });
+  var prev = btn.textContent;
+  btn.disabled = true;
+
+  var done = 0;
+  fmts.reduce(function (chain, fmt) {
+    return chain.then(function () {
+      var r = AD.Renderers.get(fmt);
+      btn.textContent = '⏳ ' + r.label + ' (' + (done + 1) + '/' + fmts.length + ')';
+      return r.render(model).then(function (blob) {
+        if (blob) AD.download(blob, TPL.name + '_' + AD.date.ymd(new Date()) + r.ext);
+        done += 1;
+      });
+    });
+  }, Promise.resolve()).then(function () {
+    AD.toast('📦 전체 생성 완료 (' + done + '/' + fmts.length + ')');
+    AD.History.log({ user: (window.BazAuth && BazAuth.name()) || '',
+      template: TPL.id, version: TPL.version, format: 'all(' + fmts.join(',') + ')' });
+  }).catch(function (e) {
+    AD.toast('❌ ' + e + (done ? ' — ' + done + '개는 생성됨' : ''));
+  }).then(function () {
+    btn.disabled = false; btn.textContent = prev;
+  });
+}
+
+function buildActions() {
+  var bar = document.getElementById('actionBar');
+  bar.innerHTML = '';
+  (TPL.formats || ['pptx']).forEach(function (fmt) {
+    var r = AD.Renderers.get(fmt);
+    if (!r) return;
+    var b = document.createElement('button');
+    b.className = 'btn ' + (fmt === 'pptx' ? 'btn-primary' : fmt === 'xlsx' ? 'btn-green' : 'btn-soft');
+    b.textContent = (r.icon || '') + ' ' + r.label;
+    b.onclick = function () { generate(fmt, b); };
+    bar.appendChild(b);
+  });
+  /* 전체 생성 (Phase 3) — 포맷 2개 이상일 때 */
+  if ((TPL.formats || []).length > 1) {
+    var a = document.createElement('button');
+    a.className = 'btn btn-soft';
+    a.textContent = '📦 전체 생성';
+    a.onclick = function () { generateAll(a); };
+    bar.appendChild(a);
+  }
+  /* 승인 워크플로 (Phase 2) — GAS 백엔드 배포 시에만 노출 */
+  if (AD.config.GAS_URL) {
+    var d = document.createElement('button');
+    d.className = 'btn btn-teal';
+    d.textContent = '✅ 승인 요청';
+    d.onclick = function () { submitDraft(d); };
+    bar.appendChild(d);
+  }
+}
+
+(function init() {
+  var id = new URLSearchParams(location.search).get('t');
+  if (!id) { document.getElementById('formBox').innerHTML = '<div class="empty">❌ 템플릿이 지정되지 않았습니다</div>'; return; }
+  AD.Templates.load(id).then(function (tpl) {
+    TPL = tpl;
+    document.getElementById('docTitle').textContent = '📝 ' + tpl.name;
+    document.getElementById('docDesc').textContent = (tpl.desc || '') + ' · v' + (tpl.version || '1.0.0');
+    document.title = tpl.name + ' | AutoDoc';
+    return AD.Theme.load(tpl.theme);
+  }).then(function () {
+    FORM = AD.Form.build(TPL, document.getElementById('formBox'), refresh);
+    buildActions();
+    refresh();
+  }).catch(function (e) {
+    document.getElementById('formBox').innerHTML = '<div class="empty">❌ ' + AD.esc(String(e)) + '</div>';
+  });
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>
