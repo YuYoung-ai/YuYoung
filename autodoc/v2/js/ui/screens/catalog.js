@@ -34,11 +34,6 @@ export function catalogScreen() {
 
   function render() {
     clear(outletEl);
-    const list = templateService.list()
-      .filter(t => !query || (t.name + t.desc + t.category).toLowerCase().includes(query.toLowerCase()))
-      // Golden 우선, 그다음 이름
-      .sort((a, b) => (b.golden - a.golden) || a.name.localeCompare(b.name));
-
     const search = h('input', { class: 'field-input', placeholder: '양식 이름·용도 검색…', 'aria-label': '양식 검색',
       value: query, oninput: e => { query = e.target.value; renderGrid(); } });
 

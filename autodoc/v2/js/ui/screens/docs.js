@@ -19,7 +19,7 @@ export function docsScreen() {
     clear(outletEl);
     outletEl.appendChild(h('h1', { class: 'screen-title', text: '내 문서' }));
 
-    const drafts = await draft.list();
+    const drafts = await draft.listMerged();
     if (drafts.length) {
       outletEl.appendChild(h('h2', { class: 'cat-title', text: '이어서 작성 (임시저장)' }));
       outletEl.appendChild(h('div', { class: 'doc-list' }, drafts.map(d =>

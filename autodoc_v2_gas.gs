@@ -229,7 +229,7 @@ function rowsToObjs_(tab) {
   var head = vals[0]; var ji = head.indexOf('json');
   var out = [];
   for (var i = 1; i < vals.length; i++) {
-    var raw = vals[ji]; try { var o = JSON.parse(vals[i][ji] || '{}'); o.__row = i + 1; out.push(o); } catch (e) {}
+    try { var o = JSON.parse(vals[i][ji] || '{}'); o.__row = i + 1; out.push(o); } catch (e) {}
   }
   return out;
 }
@@ -246,23 +246,28 @@ function repoGet_(tab, id, ws, version) {
 }
 function repoLatest_(tab, ws) { var l = repoList_(tab, ws, true); return l.sort(function (a, b) { return (b.ver || 0) - (a.ver || 0); })[0] || null; }
 
-function writeRow_(tab, rec, ctx) {
+function writeRow_(tab, rec, ctx, upsert) {
   var s = sheet_(tab);
   rec.workspaceId = rec.workspaceId || ctx.ws;
   rec.updatedAt = new Date().toISOString();
-  s.appendRow([rec.id, rec.ver || '', rec.updatedAt, rec.workspaceId, JSON.stringify(rec)]);
+  var row = [rec.id, rec.ver || '', rec.updatedAt, rec.workspaceId, JSON.stringify(rec)];
+  if (upsert) {                                // 같은 id 행이 있으면 그 자리를 갱신(append 금지 — 상태 전이 엔티티)
+    var cur = repoGet_(tab, rec.id, ctx.ws);
+    if (cur && cur.__row) { s.getRange(cur.__row, 1, 1, HEADERS.length).setValues([row]); auditWrite_(tab, rec, ctx); return rec; }
+  }
+  s.appendRow(row);
   auditWrite_(tab, rec, ctx);
   return rec;
 }
-function repoPut_(tab, rec, ctx) {           // 최신행 갱신형(간단화: append + latest 조회로 대체)
+function repoPut_(tab, rec, ctx) {           // upsert: 같은 id 는 제자리 갱신 (Learning/KB/Drafts/Workspace 등)
   var lock = LockService.getScriptLock(); lock.tryLock(15000);
-  try { return writeRow_(tab, rec, ctx); } finally { lock.releaseLock(); }
+  try { return writeRow_(tab, rec, ctx, true); } finally { lock.releaseLock(); }
 }
-function repoPutAsset_(tab, rec, ctx) {       // 버전 불변: 새 ver 행 추가
+function repoPutAsset_(tab, rec, ctx) {       // 버전 불변: 새 ver 행 추가 (Templates/Golden/DNA/Prompts)
   var lock = LockService.getScriptLock(); lock.tryLock(15000);
   try {
     if (rec.ver == null) { var cur = repoGet_(tab, rec.id, ctx.ws); rec.ver = (cur && cur.ver ? cur.ver : 0) + 1; }
-    return writeRow_(tab, rec, ctx);
+    return writeRow_(tab, rec, ctx, false);
   } finally { lock.releaseLock(); }
 }
 function repoAppendId_(tab, rec, ctx) { rec.id = rec.id || uid_(); rec.at = rec.at || new Date().toISOString(); return repoPut_(tab, rec, ctx); }
@@ -317,4 +322,22 @@ function setPath_(obj, path, val) { var ks = String(path).split('.'); var o = ob
 function setup() {
   Object.keys(COLLECTIONS).forEach(function (tab) { sheet_(tab); });
   return 'AutoDoc v2 탭 생성 완료: ' + Object.keys(COLLECTIONS).join(', ');
+}
+
+/* ── 유지보수(1회): 상태 전이 탭의 중복 행 정리 — id 별 최신 행만 남김.
+ *    upsert 도입 전 append 로 쌓인 잔여 행(예: 승인해도 안 사라지던 Learning)을 청소. */
+function cleanup() {
+  var mutable = ['Learning', 'Drafts', 'KB', 'Memory', 'Rules', 'Workspace'];
+  var report = {};
+  mutable.forEach(function (tab) {
+    var s = ss_().getSheetByName(tab); if (!s) { report[tab] = 'no-tab'; return; }
+    var vals = s.getDataRange().getValues(); if (vals.length < 2) { report[tab] = 0; return; }
+    var head = vals[0]; var idi = head.indexOf('id');
+    var byId = {}; for (var i = 1; i < vals.length; i++) { byId[vals[i][idi]] = vals[i]; } // 마지막(최신) 행 우선
+    var rows = Object.keys(byId).map(function (k) { return byId[k]; });
+    s.clearContents(); s.appendRow(head);
+    if (rows.length) s.getRange(2, 1, rows.length, head.length).setValues(rows);
+    report[tab] = rows.length;
+  });
+  return report;
 }

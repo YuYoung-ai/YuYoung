@@ -45,6 +45,19 @@ export const draft = {
     return all.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
   },
 
+  /** 로컬 + GAS 병합 (기기 간 이어서 작성). 오프라인/미연결이면 로컬만. */
+  async listMerged() {
+    const local = await this.list();
+    if (!api.configured()) return local;
+    try {
+      const remote = (await api.request('v2.draft.list', {})).items || [];
+      const byKey = {};
+      for (const r of remote) byKey[`${r.templateId}::${r.draftId}`] = { templateId: r.templateId, draftId: r.draftId, values: r.values, savedAt: r.savedAt };
+      for (const l of local) byKey[`${l.templateId}::${l.draftId}`] = l; // 로컬 우선(더 최신일 수 있음)
+      return Object.values(byKey).sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+    } catch { return local; }
+  },
+
   /** 사용자 명시 삭제만 */
   async remove(templateId, draftId) {
     await idb.del('drafts', key(templateId, draftId)).catch(() => {});
