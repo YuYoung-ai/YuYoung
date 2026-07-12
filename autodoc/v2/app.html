@@ -18,6 +18,7 @@
     import { bus } from './js/infra/bus.js';
     import { catalogScreen } from './js/ui/screens/catalog.js';
     import { editorScreen } from './js/ui/screens/editor.js';
+    import { docsScreen } from './js/ui/screens/docs.js';
 
     const root = document.getElementById('root');
     root.innerHTML = `
@@ -52,7 +53,7 @@
     router
       .register('catalog', { screen: () => catalogScreen(), guard: 'user', title: '문서 만들기' })
       .register('edit/:templateId', { screen: () => editorScreen(), guard: 'user', title: '작성' })
-      .register('docs', { screen: stub('내 문서', 'Sprint 3에서 생성 이력과 함께 제공됩니다.'), guard: 'user', title: '내 문서' })
+      .register('docs', { screen: () => docsScreen(), guard: 'user', title: '내 문서' })
       .register('settings', { screen: stub('설정', 'Sprint 6에서 제공됩니다.'), guard: 'user', title: '설정' })
       .register('admin', { screen: stub('관리', '관리자 전용 — 권한 가드가 지키는 화면(Sprint 5).'), guard: 'admin', title: '관리' })
       .mount(document.getElementById('outlet'), { notFound: '/catalog' });

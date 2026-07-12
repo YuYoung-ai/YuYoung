@@ -115,3 +115,13 @@ body {
 .preview-stub .preview-page { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-5); min-height: 300px; box-shadow: var(--elev-1); }
 .sum-row { padding: var(--space-1) 0; border-bottom: 1px solid var(--ui-border); }
 .preview-note { color: var(--ui-text-weak); font-size: var(--font-caption); margin-top: var(--space-2); }
+
+/* ── Sprint 3: Preview · 생성 · 내 문서 ─────────────────── */
+.preview-toolbar { font-size: var(--font-caption); color: var(--ui-text-weak); margin-bottom: var(--space-2); }
+.preview-host { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-3); min-height: 320px; box-shadow: var(--elev-1); overflow: auto; }
+.preview-host .ad-page { background: #fff; margin: 0 auto var(--space-3); box-shadow: var(--elev-1); width: 100%; }
+.gen-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.gen-status { margin-top: var(--space-2); color: var(--ui-text-weak); font-size: var(--font-caption); min-height: 1.2em; }
+.doc-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-item { display: flex; align-items: center; gap: var(--space-2); text-align: left; }
+.doc-item .btn.small { margin-left: auto; }

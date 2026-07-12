@@ -15,6 +15,9 @@ const SHELL = [
   './js/core/form-engine.js', './js/core/template-service.js',
   './js/ui/dom.js', './js/ui/screens/catalog.js', './js/ui/screens/editor.js',
   './templates/weekly-report.json', './templates/meeting-minutes.json', './templates/trip-report.json',
+  './js/core/engine-bridge.js', './js/core/document-engine.js',
+  './js/core/preview-engine.js', './js/core/history.js',
+  './js/ui/screens/docs.js', './themes/company-default.json',
   './manifest.json',
 ];
 

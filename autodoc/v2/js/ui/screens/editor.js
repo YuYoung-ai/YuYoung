@@ -1,32 +1,48 @@
 /************************************************************
- * editor.js — Document Editor 화면 (폼 ⇄ 미리보기)
+ * editor.js — Document Editor (폼 ⇄ 실시간 Preview + 생성)
  * ----------------------------------------------------------
- * S2: 폼 자동생성 + 진행률 + Draft 자동 저장/복원 + 값 요약.
- * S3에서 우측을 실제 PreviewEngine 으로 교체.
+ * S3: v1 엔진 브리지로 실제 미리보기(AD.Preview)·생성(AD.Renderers).
+ * Preview 와 생성물은 동일 모델을 소비 → 구조 일치.
  ************************************************************/
 import { h, clear } from '../dom.js';
 import { templateService } from '../../core/template-service.js';
 import { createForm } from '../../core/form-engine.js';
 import { draft } from '../../core/draft.js';
+import { documentEngine } from '../../core/document-engine.js';
+import { previewEngine } from '../../core/preview-engine.js';
 import { router } from '../../infra/router.js';
 import { bus } from '../../infra/bus.js';
+import { logger } from '../../infra/logger.js';
 
 export function editorScreen() {
   let outletEl = null, form = null, tpl = null, draftId = 'current';
-  let unsubLeave = null;
+  let unsubLeave = null, previewBox = null, debTimer = null, genBtnRow = null;
 
-  function summary(values) {
-    // S3 이전 임시 미리보기: 값 요약
-    const lines = (tpl.inputs || []).map(f => {
-      const v = values[f.key];
-      if (v == null || v === '') return null;
-      const show = Array.isArray(v) ? `${v.length}행` : String(v).slice(0, 60);
-      return h('div', { class: 'sum-row' }, [h('b', { text: (f.label || f.key) + ': ' }), show]);
-    }).filter(Boolean);
-    return h('div', { class: 'preview-stub' }, [
-      h('div', { class: 'preview-page' }, [h('h3', { text: tpl.name }), ...(lines.length ? lines : [h('div', { class: 'empty', text: '입력하면 여기에 표시됩니다.' })])]),
-      h('div', { class: 'preview-note', text: '※ 실제 문서 미리보기는 Sprint 3에서 제공됩니다.' }),
-    ]);
+  function schedulePreview() {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(() => {
+      previewEngine.render(tpl, form.getValues(), previewBox);
+      updateGen();
+    }, 300);
+  }
+
+  function updateGen() {
+    const okBtns = form.validate().ok;
+    genBtnRow.querySelectorAll('button[data-fmt]').forEach(b => { b.disabled = okBtns ? null : 'true'; });
+  }
+
+  async function onGenerate(formatId) {
+    const r = form.focusFirstError();
+    if (!r.ok) return;
+    const status = document.getElementById('gen-status');
+    status.textContent = '생성 중…';
+    try {
+      const res = await documentEngine.generate(tpl, form.getValues(), formatId);
+      status.textContent = `완료: ${res.filename} (내 문서에 저장됨)`;
+    } catch (e) {
+      logger.error('E-RENDER', { meta: { e: String(e && e.message || e) } });
+      status.textContent = '생성 실패 — 입력과 임시저장은 보존됩니다. 네트워크(라이브러리 CDN)를 확인하세요.';
+    }
   }
 
   async function render() {
@@ -35,51 +51,51 @@ export function editorScreen() {
     const initialValues = saved ? saved.values : {};
 
     const progressBar = h('div', { class: 'progress' }, [h('div', { class: 'progress-fill' })]);
-    const previewCol = h('div', { class: 'preview-col' });
-    const genBtn = h('button', { class: 'btn primary', disabled: 'true',
-      onclick: onGenerate }, ['생성 (Sprint 3)']);
+    previewBox = h('div', { class: 'preview-host' });
 
-    function refreshPreview(values, progress) {
-      clear(previewCol); previewCol.appendChild(summary(values));
-      progressBar.firstChild.style.width = (progress ?? form.progress()) + '%';
-      progressBar.setAttribute('aria-valuenow', String(progress ?? form.progress()));
-      genBtn.disabled = form.validate().ok ? null : 'true';
-    }
+    // 사용 가능 포맷별 생성 버튼 (SplitButton 대체 — S3)
+    const formats = documentEngine.availableFormats(tpl);
+    const fmtButtons = formats.length
+      ? formats.map(f => h('button', { class: 'btn primary', 'data-fmt': f.id, disabled: 'true',
+          onclick: () => onGenerate(f.id) }, [`${f.icon || ''} ${f.label || f.id}`.trim()]))
+      : [h('span', { class: 'empty', text: '사용 가능한 출력 형식이 없습니다.' })];
+    genBtnRow = h('div', { class: 'gen-row' }, fmtButtons);
 
     form = createForm(tpl, {
       initialValues,
-      onChange: ({ values, changedPaths, progress }) => {
-        refreshPreview(values, progress);
-        draft.save(tpl.id, draftId, values);
+      onChange: ({ changedPaths }) => {
+        progressBar.firstChild.style.width = form.progress() + '%';
+        draft.save(tpl.id, draftId, form.getValues());
         bus.publish('document.edited', { templateId: tpl.id, changedPaths });
+        schedulePreview();
       },
     });
 
     const formCol = h('div', { class: 'form-col' }, [
-      h('div', { class: 'editor-head' }, [
-        h('h1', { class: 'screen-title', text: tpl.name }),
-        progressBar,
-      ]),
+      h('div', { class: 'editor-head' }, [h('h1', { class: 'screen-title', text: tpl.name }), progressBar]),
       form.el,
       h('div', { class: 'editor-actions' }, [
         h('button', { class: 'btn', onclick: () => router.go('/catalog') }, ['← 목록']),
-        genBtn,
+        genBtnRow,
       ]),
+      h('div', { id: 'gen-status', class: 'gen-status', 'aria-live': 'polite' }),
+    ]);
+
+    const previewCol = h('div', { class: 'preview-col' }, [
+      h('div', { class: 'preview-toolbar', text: '미리보기 (생성물과 동일 구조)' }),
+      previewBox,
     ]);
 
     outletEl.appendChild(h('div', { class: 'editor-split' }, [formCol, previewCol]));
-    refreshPreview(initialValues, form.progress());
+    progressBar.firstChild.style.width = form.progress() + '%';
 
-    // 이탈 시 Draft 즉시 저장 (차단 없음)
+    // 초기 미리보기 (엔진·테마 준비 후)
+    previewBox.innerHTML = '<div class="empty">미리보기 준비 중…</div>';
+    await previewEngine.ensure(tpl);
+    previewEngine.render(tpl, form.getValues(), previewBox);
+    updateGen();
+
     unsubLeave = router.onLeave(() => draft.saveNow(tpl.id, draftId, form.getValues()));
-  }
-
-  function onGenerate() {
-    const r = form.focusFirstError();
-    if (!r.ok) return;
-    // S3: DocumentEngine.assemble → Renderer. 지금은 안내.
-    bus.publish('document.generated', { templateId: tpl.id, mock: true });
-    alert('입력 검증 통과 — 실제 생성은 Sprint 3에서 연결됩니다.');
   }
 
   return {
@@ -92,6 +108,7 @@ export function editorScreen() {
       await render();
     },
     unmount() {
+      clearTimeout(debTimer);
       if (unsubLeave) unsubLeave();
       if (form) form.destroy();
       if (outletEl) clear(outletEl);
