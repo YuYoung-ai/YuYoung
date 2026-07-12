@@ -19,6 +19,10 @@
     import { catalogScreen } from './js/ui/screens/catalog.js';
     import { editorScreen } from './js/ui/screens/editor.js';
     import { docsScreen } from './js/ui/screens/docs.js';
+    import { adminScreen } from './js/ui/screens/admin.js';
+    import { importWizardScreen } from './js/ui/screens/import-wizard.js';
+    import { approvalsScreen } from './js/ui/screens/approvals.js';
+    import { learningStatusScreen } from './js/ui/screens/learning-status.js';
 
     const root = document.getElementById('root');
     root.innerHTML = `
@@ -55,7 +59,10 @@
       .register('edit/:templateId', { screen: () => editorScreen(), guard: 'user', title: '작성' })
       .register('docs', { screen: () => docsScreen(), guard: 'user', title: '내 문서' })
       .register('settings', { screen: stub('설정', 'Sprint 6에서 제공됩니다.'), guard: 'user', title: '설정' })
-      .register('admin', { screen: stub('관리', '관리자 전용 — 권한 가드가 지키는 화면(Sprint 5).'), guard: 'admin', title: '관리' })
+      .register('admin', { screen: () => adminScreen(), guard: 'admin', title: '관리' })
+      .register('admin/import', { screen: () => importWizardScreen(), guard: 'admin', title: 'AI 가져오기' })
+      .register('admin/approvals', { screen: () => approvalsScreen(), guard: 'admin', title: '승인함' })
+      .register('admin/learning', { screen: () => learningStatusScreen(), guard: 'admin', title: '학습 상태' })
       .mount(document.getElementById('outlet'), { notFound: '/catalog' });
 
     (async () => {

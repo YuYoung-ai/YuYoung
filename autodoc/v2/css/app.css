@@ -141,3 +141,27 @@ body {
 .dynamic-section { border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-3); margin-bottom: var(--space-4); }
 .dynamic-section legend { color: var(--ui-text-weak); padding: 0 var(--space-2); }
 .form-mount { margin-bottom: var(--space-2); }
+
+/* ── Sprint 5: AI Import · 학습 ─────────────────────────── */
+.wiz-steps { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.wiz-step { font-size: var(--font-caption); padding: 2px 10px; border-radius: 999px; background: var(--ui-surface-2); color: var(--ui-text-weak); }
+.wiz-step.active { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.wiz-step.done { color: var(--ui-success); }
+.wiz-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.wiz-nav { display: flex; justify-content: space-between; margin-top: var(--space-3); }
+.wiz-row { display: flex; align-items: center; gap: var(--space-3); }
+.wiz-hint p { margin: var(--space-2) 0; }
+.prop-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--ui-border); }
+.prop-after { grid-column: 1 / -1; color: var(--ui-text-weak); font-size: var(--font-caption); }
+.approve-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.approve-item { display: flex; flex-direction: column; gap: var(--space-2); }
+.approve-after { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.approve-actions { display: flex; gap: var(--space-2); }
+.admin-tiles, .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-top: var(--space-3); }
+@media (max-width: 899px) { .admin-tiles, .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+.admin-tile { text-align: left; cursor: pointer; }
+.metric { text-align: left; }
+.metric-title { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.metric-value { font-size: var(--font-display); font-weight: 700; }
+.metric-note { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.todo-row { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
