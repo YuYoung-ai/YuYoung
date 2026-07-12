@@ -6,6 +6,7 @@
  ************************************************************/
 import { idb } from '../infra/idb.js';
 import { bus } from '../infra/bus.js';
+import { api } from '../infra/api.js';
 
 function key(templateId, draftId) { return `${templateId}::${draftId}`; }
 
@@ -28,6 +29,8 @@ export const draft = {
     const rec = { templateId, draftId, values, meta, savedAt: new Date().toISOString() };
     await idb.put('drafts', key(templateId, draftId), rec).catch(() => {});
     bus.publish('draft.saved', { templateId, draftId });
+    // GAS 동기(best-effort) — 기기 간 이어서 작성
+    if (api.configured()) api.request('v2.draft.sync', { record: { id: key(templateId, draftId), templateId, draftId, values, savedAt: rec.savedAt } }).catch(() => {});
     return rec;
   },
 

@@ -10,7 +10,7 @@ const SHELL = [
   './js/infra/config.js', './js/infra/logger.js', './js/infra/bus.js',
   './js/infra/flags.js', './js/infra/idb.js', './js/infra/workspace-context.js',
   './js/infra/auth.js', './js/infra/sync-queue.js', './js/infra/store.js',
-  './js/infra/router.js', './js/infra/selfcheck.js',
+  './js/infra/router.js', './js/infra/selfcheck.js', './js/infra/api.js',
   './js/core/json-schema.js', './js/core/validator.js', './js/core/draft.js',
   './js/core/form-engine.js', './js/core/template-service.js',
   './js/ui/dom.js', './js/ui/screens/catalog.js', './js/ui/screens/editor.js',

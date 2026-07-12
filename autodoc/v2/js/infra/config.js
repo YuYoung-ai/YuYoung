@@ -6,8 +6,8 @@
  ************************************************************/
 
 export const CONFIG = Object.freeze({
-  // v2 전용 GAS 웹앱 /exec URL — 배포 후 채움 (S2)
-  GAS_URL: '',
+  // v2 전용 GAS 웹앱 /exec URL (배포 완료)
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbxp1CRKCf6RAAopJWCs8FDVWH4aK_9hYR-zYAVt-_9Oe6E8t4GptqvDnjrqAZ3W5bM/exec',
   API_VERSION: 1,
   ENGINE_VERSION: 'v2.5.0',
   SCHEMA_VERSION: { event: '1' },

@@ -1,10 +1,11 @@
 /************************************************************
  * history.js — 생성 이력 (DOCUMENT_ENGINE_SPEC · 내 문서)
  * ----------------------------------------------------------
- * S3: 로컬(IndexedDB kv) 기록. GAS 연결 시 v2.history.record 로 승격.
+ * local-first(IndexedDB) + GAS 동기(best-effort). 오프라인에서도 동작.
  ************************************************************/
 import { idb } from '../infra/idb.js';
 import { bus } from '../infra/bus.js';
+import { api } from '../infra/api.js';
 
 const KEY = 'history';
 
@@ -15,9 +16,21 @@ export const history = {
     list.unshift(entry);
     await idb.put('kv', KEY, list.slice(0, 200)).catch(() => {});
     bus.publish('history.recorded', { id: entry.id });
+    // GAS 동기 (실패해도 무시 — 로컬이 진실)
+    if (api.configured()) api.request('v2.history.record', { record: entry }).catch(() => {});
     return entry;
   },
+
   async list() {
-    return (await idb.get('kv', KEY).catch(() => null)) || [];
+    const local = (await idb.get('kv', KEY).catch(() => null)) || [];
+    if (!api.configured()) return local;
+    try {
+      const remote = (await api.request('v2.history.list', {})).items || [];
+      // id 기준 병합(로컬 우선) → 최신순
+      const byId = {};
+      for (const r of remote) byId[r.id] = r;
+      for (const l of local) byId[l.id] = l;
+      return Object.values(byId).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+    } catch { return local; }
   },
 };
