@@ -1,0 +1,68 @@
+/************************************************************
+ * app.css — 앱 셸·화면 스타일 (토큰만 참조)
+ ************************************************************/
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-body) * var(--font-scale));
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 앱 프레임 */
+.app-frame { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+.topbar {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--ui-surface); border-bottom: 1px solid var(--ui-border);
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .brand { font-weight: 700; font-size: calc(var(--font-h1) * var(--font-scale)); }
+.topbar .spacer { flex: 1; }
+
+.app-body { display: grid; grid-template-columns: 220px 1fr; }
+.sidenav { padding: var(--space-3); border-right: 1px solid var(--ui-border); background: var(--ui-surface); }
+.sidenav a {
+  display: block; padding: var(--space-2) var(--space-3); border-radius: var(--radius-s);
+  color: var(--ui-text); text-decoration: none; margin-bottom: var(--space-1);
+}
+.sidenav a:hover { background: var(--ui-surface-2); }
+.sidenav a.active { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.sidenav a.cta { color: var(--ui-primary); font-weight: 700; }
+
+.content { padding: var(--space-5); max-width: 1100px; }
+.statusbar {
+  padding: var(--space-2) var(--space-4); border-top: 1px solid var(--ui-border);
+  background: var(--ui-surface); color: var(--ui-text-weak); font-size: calc(var(--font-caption) * var(--font-scale));
+  display: flex; gap: var(--space-4);
+}
+
+/* 공통 부품 */
+.btn {
+  font: inherit; cursor: pointer; border: 1px solid transparent; border-radius: var(--radius-s);
+  padding: var(--space-2) var(--space-4); background: var(--ui-surface-2); color: var(--ui-text);
+  transition: background var(--motion-fast);
+}
+.btn:hover { background: var(--ui-border); }
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn.primary { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.card {
+  background: var(--ui-surface); border: 1px solid var(--ui-border);
+  border-radius: var(--radius-m); padding: var(--space-4); box-shadow: var(--elev-1);
+}
+.badge { font-size: calc(var(--font-caption) * var(--font-scale)); padding: 2px 8px; border-radius: 999px; background: var(--ui-surface-2); }
+.badge.golden { color: var(--ui-golden); border: 1px solid var(--ui-golden); }
+
+/* 로그인 카드 */
+.login-wrap { display: grid; place-items: center; min-height: 100vh; }
+.login-card { width: min(360px, 90vw); }
+.login-card input { width: 100%; padding: var(--space-3); border: 1px solid var(--ui-border); border-radius: var(--radius-s); font: inherit; margin: var(--space-3) 0; background: var(--ui-bg); color: var(--ui-text); }
+
+/* 반응형 — RESPONSIVE_GUIDE 3단 (기초) */
+@media (max-width: 1023px) { .app-body { grid-template-columns: 64px 1fr; } .sidenav a span { display: none; } }
+@media (max-width: 599px) {
+  .app-body { grid-template-columns: 1fr; }
+  .sidenav { display: none; }
+}

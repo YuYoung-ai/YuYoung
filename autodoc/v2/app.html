@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AutoDoc</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563EB">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="../../auth.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import { auth } from './js/infra/auth.js';
+    import { router } from './js/infra/router.js';
+
+    const root = document.getElementById('root');
+    root.innerHTML = `
+      <div class="app-frame">
+        <header class="topbar"><div class="brand">⌂ AutoDoc</div><div class="spacer"></div>
+          <a class="btn" href="index.html">홈</a></header>
+        <div class="app-body">
+          <nav class="sidenav" aria-label="주요 메뉴">
+            <a class="cta" href="#/catalog"><span>＋ 문서 만들기</span></a>
+            <a href="#/docs"><span>🗂 내 문서</span></a>
+            <a href="#/settings"><span>⚙ 설정</span></a>
+            <a href="#/admin"><span>관리</span></a>
+          </nav>
+          <main class="content" id="outlet"></main>
+        </div>
+        <footer class="statusbar"><span>저장됨 ✓</span></footer>
+      </div>`;
+
+    // S1: 화면 모듈은 S2+에서 구현. 지금은 라우팅·가드 검증용 스텁.
+    const stub = (label, note) => async () => ({
+      mount(outlet) { outlet.innerHTML =
+        `<div class="card"><h1 style="font-size:var(--font-h1)">${label}</h1>
+         <p style="color:var(--ui-text-weak)">${note || 'Sprint 2에서 구현됩니다.'}</p></div>`; },
+    });
+
+    router
+      .register('catalog', { screen: stub('문서 만들기 (Template Catalog)'), guard: 'user', title: '문서 만들기' })
+      .register('docs', { screen: stub('내 문서'), guard: 'user', title: '내 문서' })
+      .register('settings', { screen: stub('설정'), guard: 'user', title: '설정' })
+      .register('admin', { screen: stub('관리', '관리자 전용 — 권한 가드가 지키는 화면'), guard: 'admin', title: '관리' })
+      .mount(document.getElementById('outlet'), { notFound: '/catalog' });
+
+    (async () => {
+      await auth.ensure();
+      if (!auth.session()) { location.href = 'index.html'; return; }
+      router.start();
+    })();
+  </script>
+</body>
+</html>

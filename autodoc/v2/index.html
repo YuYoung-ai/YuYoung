@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AutoDoc</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563EB">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <!-- v1 전역 인증 라이브러리 (무수정 재사용) -->
+  <script src="../../auth.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import { auth } from './js/infra/auth.js';
+    import { runSelfCheck } from './js/infra/selfcheck.js';
+    import { CONFIG } from './js/infra/config.js';
+
+    const root = document.getElementById('root');
+
+    function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+
+    async function renderShell() {
+      const s = auth.session();
+      root.innerHTML = '';
+      root.appendChild(el(`
+        <div class="app-frame">
+          <header class="topbar">
+            <div class="brand">⌂ AutoDoc</div>
+            <div class="spacer"></div>
+            <span class="badge">${CONFIG.ENGINE_VERSION}</span>
+            <span class="badge">${s ? s.role : '게스트'}</span>
+            <button class="btn" id="logout">로그아웃</button>
+          </header>
+          <div class="app-body">
+            <nav class="sidenav" aria-label="주요 메뉴">
+              <a class="cta" href="app.html#/catalog"><span>＋ 문서 만들기</span></a>
+              <a href="app.html#/docs"><span>🗂 내 문서</span></a>
+              <a href="app.html#/settings"><span>⚙ 설정</span></a>
+              ${s && s.role === 'admin' ? '<a href="app.html#/admin"><span>관리</span></a>' : ''}
+            </nav>
+            <main class="content">
+              <h1 style="font-size:var(--font-display)">시작 화면 (Sprint 1)</h1>
+              <p style="color:var(--ui-text-weak)">Infra 계층 부트스트랩 완료. 아래는 S1 완료조건 진단입니다.</p>
+              <div class="card" id="diag"><b>진단 실행 중…</b></div>
+            </main>
+          </div>
+          <footer class="statusbar"><span>저장됨 ✓</span><span id="net"></span></footer>
+        </div>
+      `));
+      document.getElementById('logout').onclick = () => { auth.logout(); renderLogin(); };
+      document.getElementById('net').textContent = navigator.onLine ? '온라인' : '오프라인';
+
+      const results = await runSelfCheck();
+      const pass = results.filter(r => r.pass).length;
+      const rows = results.map(r =>
+        `<tr><td>${r.pass ? '✅' : '❌'}</td><td>${r.name}</td><td style="color:var(--ui-text-weak)">${r.detail}</td></tr>`
+      ).join('');
+      document.getElementById('diag').innerHTML =
+        `<b>S1 진단: ${pass}/${results.length} 통과</b>
+         <table style="width:100%;margin-top:8px;border-collapse:collapse">${rows}</table>`;
+    }
+
+    function renderLogin() {
+      root.innerHTML = '';
+      root.appendChild(el(`
+        <div class="login-wrap"><div class="card login-card">
+          <div class="brand" style="font-size:var(--font-h1);font-weight:700">⌂ AutoDoc</div>
+          <p style="color:var(--ui-text-weak)">접속 비밀번호를 입력하세요.</p>
+          <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
+          <button class="btn primary" id="go" style="width:100%">로그인</button>
+          <p id="err" style="color:var(--ui-danger);min-height:1.2em"></p>
+        </div></div>
+      `));
+      const doLogin = async () => {
+        const pw = document.getElementById('pw').value;
+        const err = document.getElementById('err');
+        err.textContent = '';
+        try {
+          const r = await auth.login(pw);
+          if (r && r.ok) renderShell();
+          else err.textContent = (r && r.message) || '로그인 실패';
+        } catch (e) { err.textContent = '인증 서버에 연결할 수 없습니다.'; }
+      };
+      document.getElementById('go').onclick = doLogin;
+      document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+    }
+
+    (async () => {
+      await auth.ensure();
+      if (auth.session()) renderShell(); else renderLogin();
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    })();
+  </script>
+</body>
+</html>
