@@ -18,6 +18,7 @@ const SHELL = [
   './js/core/engine-bridge.js', './js/core/document-engine.js',
   './js/core/preview-engine.js', './js/core/history.js',
   './js/ui/screens/docs.js', './themes/company-default.json',
+  './js/core/undo.js', './js/core/memory-suggest.js',
   './manifest.json',
 ];
 

@@ -29,6 +29,9 @@ function evalCond(cond, values) {
   return op ? op(left, right) : true;
 }
 
+/** 조건부 입력·규칙 공용 조건 평가 (form-engine 이 공유) */
+export function evalCondition(cond, values) { return evalCond(cond, values); }
+
 export const validator = {
   /** 전체 검증 → { ok, errors:[{key,msg}] } */
   validate(values, tpl) {
