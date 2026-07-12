@@ -19,7 +19,9 @@
     import { runSelfCheck } from './js/infra/selfcheck.js';
     import { CONFIG } from './js/infra/config.js';
     import { api } from './js/infra/api.js';
+    import { prefs } from './js/core/prefs.js';
 
+    prefs.apply();
     const root = document.getElementById('root');
 
     function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }

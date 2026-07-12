@@ -165,3 +165,15 @@ body {
 .metric-value { font-size: var(--font-display); font-weight: 700; }
 .metric-note { color: var(--ui-text-weak); font-size: var(--font-caption); }
 .todo-row { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+
+/* ── Sprint 6: 오프라인 · 접근성 · 설정 ─────────────────── */
+.skip-link { position: absolute; left: -9999px; top: 0; background: var(--ui-primary); color: var(--ui-primary-ink); padding: var(--space-2) var(--space-3); z-index: 100; border-radius: 0 0 var(--radius-s) 0; }
+.skip-link:focus { left: 0; }
+.content:focus-visible { outline: none; }
+.banner { background: var(--ui-info); color: #fff; padding: var(--space-2) var(--space-4); font-size: var(--font-caption); }
+.set-row { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-3); flex-wrap: wrap; }
+.set-label { min-width: 90px; color: var(--ui-text-weak); }
+.seg { display: inline-flex; gap: var(--space-1); flex-wrap: wrap; }
+.seg-btn { font: inherit; cursor: pointer; border: 1px solid var(--ui-border); background: var(--ui-surface); color: var(--ui-text); border-radius: var(--radius-s); padding: var(--space-1) var(--space-3); }
+.seg-btn.on { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary); }
+.seg-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }

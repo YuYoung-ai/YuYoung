@@ -15,8 +15,13 @@ export const syncQueue = {
 
   async enqueue(requestEnvelope) {
     const id = requestEnvelope.requestId || ('req-' + Date.now().toString(36));
+    // dedupeKey: 같은 대상의 이전 대기 항목을 최신으로 대체 (예: 같은 Draft)
+    if (requestEnvelope.dedupeKey) {
+      const all = await idb.all('queue').catch(() => []);
+      for (const it of all) if (it && it.dedupeKey === requestEnvelope.dedupeKey && it.requestId !== id) await idb.del('queue', it.requestId).catch(() => {});
+    }
     await idb.put('queue', id, { ...requestEnvelope, requestId: id, queuedAt: new Date().toISOString() });
-    bus.publish('sync.queued', { requestId: id, action: requestEnvelope.action || null });
+    bus.publish('sync.queued', { requestId: id, action: requestEnvelope.action || null, pending: await this.pending() });
     return id;
   },
 
@@ -33,10 +38,10 @@ export const syncQueue = {
       try {
         const res = await sender(it);
         if (res && res.ok) { await idb.del('queue', it.requestId); out.sent += 1; }
-        else if (res && res.error && res.error.code === 'E-CONFLICT') out.conflicts.push(it.requestId);
-        else out.failed.push(it.requestId);
+        else if (res && res.error && res.error.code === 'E-CONFLICT') out.conflicts.push(it.requestId); // 해소 대기 — 유지
+        else { await idb.del('queue', it.requestId); out.failed.push(it.requestId); } // 영구 실패 → 큐 제거(무한 재시도 방지)
       } catch {
-        out.failed.push(it.requestId); // retryable — 다음 drain 에서 재시도
+        out.failed.push(it.requestId); // retryable — 큐 유지, 다음 drain 재시도
       }
     }
     bus.publish('sync.completed', out);

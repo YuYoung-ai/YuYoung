@@ -29,8 +29,10 @@ export const draft = {
     const rec = { templateId, draftId, values, meta, savedAt: new Date().toISOString() };
     await idb.put('drafts', key(templateId, draftId), rec).catch(() => {});
     bus.publish('draft.saved', { templateId, draftId });
-    // GAS 동기(best-effort) — 기기 간 이어서 작성
-    if (api.configured()) api.request('v2.draft.sync', { record: { id: key(templateId, draftId), templateId, draftId, values, savedAt: rec.savedAt } }).catch(() => {});
+    // GAS 동기 — 오프라인 시 큐(같은 Draft 는 최신으로 dedupe)
+    const k = key(templateId, draftId);
+    api.write('v2.draft.sync', { record: { id: k, templateId, draftId, values, savedAt: rec.savedAt } },
+      { requestId: 'rd-' + k + '-' + rec.savedAt, dedupeKey: 'draft:' + k }).catch(() => {});
     return rec;
   },
 

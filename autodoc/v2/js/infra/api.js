@@ -9,6 +9,7 @@ import { CONFIG } from './config.js';
 import { auth } from './auth.js';
 import { workspaceContext } from './workspace-context.js';
 import { logger } from './logger.js';
+import { syncQueue } from './sync-queue.js';
 
 let reqSeq = 0;
 function newRequestId() { reqSeq += 1; return 'req-' + Date.now().toString(36) + '-' + reqSeq.toString(36); }
@@ -74,6 +75,25 @@ export const api = {
       }
     }
     throw lastErr || appErr('E-NET-TIMEOUT', '요청 실패', true);
+  },
+
+  /**
+   * 쓰기 요청. 오프라인/미설정/재시도성 실패면 동기 큐에 적재(멱등 requestId).
+   * 반환 { ok } | { queued:true }. 비재시도 오류만 throw.
+   */
+  async write(action, payload = {}, opts = {}) {
+    const requestId = opts.requestId || newRequestId();
+    if (!configured()) { await syncQueue.enqueue({ action, payload, requestId, dedupeKey: opts.dedupeKey }); return { queued: true }; }
+    try {
+      const p = await this.request(action, payload, { requestId });
+      return { ok: true, payload: p };
+    } catch (e) {
+      if (e.code === 'E-NET-OFFLINE' || e.retryable) {
+        await syncQueue.enqueue({ action, payload, requestId, dedupeKey: opts.dedupeKey });
+        return { queued: true };
+      }
+      throw e;
+    }
   },
 };
 

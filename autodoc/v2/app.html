@@ -23,12 +23,20 @@
     import { importWizardScreen } from './js/ui/screens/import-wizard.js';
     import { approvalsScreen } from './js/ui/screens/approvals.js';
     import { learningStatusScreen } from './js/ui/screens/learning-status.js';
+    import { settingsScreen } from './js/ui/screens/settings.js';
+    import { prefs } from './js/core/prefs.js';
+    import { startSync } from './js/infra/sync-boot.js';
+    import { syncQueue } from './js/infra/sync-queue.js';
+
+    prefs.apply();
 
     const root = document.getElementById('root');
     root.innerHTML = `
+      <a class="skip-link" href="#outlet">본문으로 건너뛰기</a>
       <div class="app-frame">
         <header class="topbar"><div class="brand">⌂ AutoDoc</div><div class="spacer"></div>
           <a class="btn" href="index.html">홈</a></header>
+        <div id="offline-banner" class="banner" hidden role="status">오프라인 — 계속 작성할 수 있어요. 연결되면 자동 반영됩니다.</div>
         <div class="app-body">
           <nav class="sidenav" aria-label="주요 메뉴">
             <a class="cta" href="#/catalog"><span>＋ 문서 만들기</span></a>
@@ -36,16 +44,32 @@
             <a href="#/settings"><span>⚙ 설정</span></a>
             <a href="#/admin"><span>관리</span></a>
           </nav>
-          <main class="content" id="outlet"></main>
+          <main class="content" id="outlet" tabindex="-1"></main>
         </div>
-        <footer class="statusbar"><span id="save-state">준비됨</span></footer>
+        <footer class="statusbar"><span id="save-state">준비됨</span><span id="sync-state"></span></footer>
       </div>`;
 
     // Draft 저장 상태를 상태바에 반영
     bus.subscribe('draft.saved', () => {
       const el = document.getElementById('save-state');
-      if (el) { el.textContent = '저장됨 ✓'; }
+      if (el) el.textContent = '저장됨 ✓';
     });
+
+    // 오프라인 배너 + 동기 대기 표시
+    function refreshNet() {
+      const b = document.getElementById('offline-banner');
+      if (b) b.hidden = navigator.onLine;
+      syncQueue.pending().then(n => {
+        const s = document.getElementById('sync-state');
+        if (s) s.textContent = n > 0 ? `· 동기 대기 ${n}건` : (navigator.onLine ? '· 온라인' : '· 오프라인');
+      });
+    }
+    window.addEventListener('online', refreshNet);
+    window.addEventListener('offline', refreshNet);
+    bus.subscribe('sync.queued', refreshNet);
+    bus.subscribe('sync.completed', refreshNet);
+    startSync();
+    refreshNet();
 
     // 미구현 화면은 안내 스텁 (S3+ 구현)
     const stub = (label, note) => () => ({
@@ -58,7 +82,7 @@
       .register('catalog', { screen: () => catalogScreen(), guard: 'user', title: '문서 만들기' })
       .register('edit/:templateId', { screen: () => editorScreen(), guard: 'user', title: '작성' })
       .register('docs', { screen: () => docsScreen(), guard: 'user', title: '내 문서' })
-      .register('settings', { screen: stub('설정', 'Sprint 6에서 제공됩니다.'), guard: 'user', title: '설정' })
+      .register('settings', { screen: () => settingsScreen(), guard: 'user', title: '설정' })
       .register('admin', { screen: () => adminScreen(), guard: 'admin', title: '관리' })
       .register('admin/import', { screen: () => importWizardScreen(), guard: 'admin', title: 'AI 가져오기' })
       .register('admin/approvals', { screen: () => approvalsScreen(), guard: 'admin', title: '승인함' })

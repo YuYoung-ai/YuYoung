@@ -21,6 +21,7 @@ const SHELL = [
   './js/core/undo.js', './js/core/memory-suggest.js',
   './js/core/prompt-engine.js', './js/core/import-gate.js', './js/core/confidence.js', './js/core/learning.js',
   './js/ui/screens/admin.js', './js/ui/screens/import-wizard.js', './js/ui/screens/approvals.js', './js/ui/screens/learning-status.js',
+  './js/core/prefs.js', './js/infra/sync-boot.js', './js/ui/screens/settings.js',
   './manifest.json',
 ];
 

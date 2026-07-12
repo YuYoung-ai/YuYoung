@@ -16,8 +16,8 @@ export const history = {
     list.unshift(entry);
     await idb.put('kv', KEY, list.slice(0, 200)).catch(() => {});
     bus.publish('history.recorded', { id: entry.id });
-    // GAS 동기 (실패해도 무시 — 로컬이 진실)
-    if (api.configured()) api.request('v2.history.record', { record: entry }).catch(() => {});
+    // GAS 동기 — 오프라인/실패 시 큐 적재(멱등 requestId)
+    api.write('v2.history.record', { record: entry }, { requestId: 'rh-' + entry.id }).catch(() => {});
     return entry;
   },
 
