@@ -15,6 +15,9 @@
   <script type="module">
     import { auth } from './js/infra/auth.js';
     import { router } from './js/infra/router.js';
+    import { bus } from './js/infra/bus.js';
+    import { catalogScreen } from './js/ui/screens/catalog.js';
+    import { editorScreen } from './js/ui/screens/editor.js';
 
     const root = document.getElementById('root');
     root.innerHTML = `
@@ -30,21 +33,28 @@
           </nav>
           <main class="content" id="outlet"></main>
         </div>
-        <footer class="statusbar"><span>저장됨 ✓</span></footer>
+        <footer class="statusbar"><span id="save-state">준비됨</span></footer>
       </div>`;
 
-    // S1: 화면 모듈은 S2+에서 구현. 지금은 라우팅·가드 검증용 스텁.
-    const stub = (label, note) => async () => ({
+    // Draft 저장 상태를 상태바에 반영
+    bus.subscribe('draft.saved', () => {
+      const el = document.getElementById('save-state');
+      if (el) { el.textContent = '저장됨 ✓'; }
+    });
+
+    // 미구현 화면은 안내 스텁 (S3+ 구현)
+    const stub = (label, note) => () => ({
       mount(outlet) { outlet.innerHTML =
         `<div class="card"><h1 style="font-size:var(--font-h1)">${label}</h1>
-         <p style="color:var(--ui-text-weak)">${note || 'Sprint 2에서 구현됩니다.'}</p></div>`; },
+         <p style="color:var(--ui-text-weak)">${note || '다음 Sprint에서 구현됩니다.'}</p></div>`; },
     });
 
     router
-      .register('catalog', { screen: stub('문서 만들기 (Template Catalog)'), guard: 'user', title: '문서 만들기' })
-      .register('docs', { screen: stub('내 문서'), guard: 'user', title: '내 문서' })
-      .register('settings', { screen: stub('설정'), guard: 'user', title: '설정' })
-      .register('admin', { screen: stub('관리', '관리자 전용 — 권한 가드가 지키는 화면'), guard: 'admin', title: '관리' })
+      .register('catalog', { screen: () => catalogScreen(), guard: 'user', title: '문서 만들기' })
+      .register('edit/:templateId', { screen: () => editorScreen(), guard: 'user', title: '작성' })
+      .register('docs', { screen: stub('내 문서', 'Sprint 3에서 생성 이력과 함께 제공됩니다.'), guard: 'user', title: '내 문서' })
+      .register('settings', { screen: stub('설정', 'Sprint 6에서 제공됩니다.'), guard: 'user', title: '설정' })
+      .register('admin', { screen: stub('관리', '관리자 전용 — 권한 가드가 지키는 화면(Sprint 5).'), guard: 'admin', title: '관리' })
       .mount(document.getElementById('outlet'), { notFound: '/catalog' });
 
     (async () => {
