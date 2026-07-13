@@ -18,6 +18,7 @@ const ASSETS = [
   './weekly.html',
   './user_guide.html',
   './manifest.json',
+  './logo.png',         // A/S 점검 내역서 PDF 로고 (오프라인 출력용)
   './icon-192.png',
   './icon-512.png'
 ];
