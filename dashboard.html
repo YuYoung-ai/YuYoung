@@ -507,13 +507,13 @@ function ncareCheck(){
   });
   var el=document.getElementById('cNck');
   if(!list.length){
-    document.getElementById('tNck').textContent='가입 병원 0곳'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    document.getElementById('tNck').textContent='가입 병원 0'+(HOSPDB.length?' · 병원정보DB 연동':'');
     el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return;
   }
   var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
   var rate=Math.round(cnt[0]/list.length*100);   /* 정상(30일 이내 점검) 비율 */
   document.getElementById('tNck').textContent=
-    '가입 병원 '+list.length+'곳 · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    '가입 병원 '+list.length+' · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
   var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
     if(a.si===4&&b.si!==4) return 1;
     if(b.si===4&&a.si!==4) return -1;
@@ -522,7 +522,7 @@ function ncareCheck(){
   el.innerHTML=
     '<div class="nck-rate">'
       +'<div class="nck-rate-top"><b>✅ 정상 비율 '+rate+'%</b>'
-      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'곳</span></div>'
+      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'</span></div>'
       +'<div class="nck-ratebar"><div style="width:'+Math.max(2,rate)+'%"></div></div>'
     +'</div>'
     +'<div class="nck-sum">'+ST.map(function(s,i){
@@ -787,8 +787,8 @@ function nozGroupHtml_(title, g){
   return '<div class="nz-group">'
     +'<div class="nz-sub">■ '+esc(title)+'</div>'
     +'<div class="nz-metrics">'
-      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'곳</b></div>'
-      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'곳</b></div>'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'</b></div>'
       +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
     +'</div>'
     +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
@@ -802,7 +802,7 @@ function nozzleStats(rows){
   var mapped=rows.map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
   var st=window.Statistics.build(mapped);
   var j=st.nozzle.joined, n=st.nozzle.nonJoined;
-  document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+'곳 재사용';
+  document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+' 재사용';
   box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
 }
 
