@@ -182,6 +182,66 @@
 
   /* 수기 작성용 PDF 버튼 */
   .btn-blank{display:block;width:100%;margin-top:2px;}
+
+  /* 현재 작업 상태 바 */
+  .task-status-bar{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--gray-line);
+    border-radius:10px;padding:9px 12px;margin-bottom:14px;}
+  .task-status-badge{font-size:12.5px;font-weight:800;white-space:nowrap;}
+  .task-status-meta{flex:1;min-width:0;font-size:11.5px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .task-status-select{flex:0 0 auto;width:auto;font-size:12px;font-weight:700;padding:6px 26px 6px 10px;border:1.5px solid var(--gray-line);border-radius:8px;}
+
+  /* 상태 뱃지 색상 (목록/상태바 공통) */
+  .st-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .st-draft{background:#FBF3E0;color:var(--amber);}
+  .st-inspection_completed{background:#FBEEE0;color:#B5651D;}
+  .st-waiting_signature{background:#E4F0FB;color:#1B6FB0;}
+  .st-completed{background:#E8F5EE;color:var(--green);}
+  .sign-need-label{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;font-weight:800;color:#fff;
+    background:var(--red);padding:3px 9px;border-radius:20px;white-space:nowrap;}
+
+  /* 사인 모드 안내 배너 */
+  .sign-banner{display:flex;align-items:center;gap:10px;background:#E4F0FB;border:1.5px solid #9EC6E8;
+    border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+  .sign-banner-text{flex:1;font-size:13px;font-weight:800;color:#1B6FB0;line-height:1.5;}
+  .sign-banner-text span{font-size:11.5px;font-weight:600;color:#4A5C78;}
+  .sign-banner button{flex:0 0 auto;background:#fff;border:1.5px solid #9EC6E8;color:#1B6FB0;font-size:12.5px;
+    font-weight:700;padding:9px 12px;border-radius:8px;cursor:pointer;font-family:inherit;}
+
+  /* 사인 모드: 잠금 카드 */
+  body.sign-mode #receptionCard .card-body,
+  body.sign-mode #inspCard .card-body,
+  body.sign-mode #actionCard .card-body,
+  body.sign-mode #photoCard .card-body{pointer-events:none;opacity:.6;}
+  body.sign-mode #receptionCard .card-header::after,
+  body.sign-mode #inspCard .card-header::after,
+  body.sign-mode #actionCard .card-header::after,
+  body.sign-mode #photoCard .card-header::after{content:'🔒 잠김';margin-left:auto;font-size:11px;color:#9EADCC;font-weight:700;}
+
+  /* 작업 목록 Modal */
+  .tasklist-overlay{position:fixed;inset:0;z-index:400;background:rgba(16,29,61,.55);display:none;align-items:flex-end;justify-content:center;}
+  .tasklist-overlay.show{display:flex;}
+  .tasklist-panel{background:var(--gray-bg);width:100%;max-width:560px;height:88vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden;}
+  .tasklist-head{display:flex;align-items:center;justify-content:space-between;background:var(--navy);padding:14px 16px;flex:0 0 auto;}
+  .tasklist-title{color:#fff;font-size:15px;font-weight:700;}
+  .tasklist-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:15px;width:30px;height:30px;border-radius:15px;cursor:pointer;}
+  .tasklist-search{padding:12px 14px 6px;flex:0 0 auto;}
+  .tasklist-search input{width:100%;border:1.5px solid var(--gray-line);border-radius:8px;padding:11px 12px;font-size:14px;font-family:inherit;outline:none;}
+  .tasklist-search input:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  .tasklist-body{flex:1;overflow-y:auto;padding:8px 14px 20px;-webkit-overflow-scrolling:touch;}
+  .task-empty{text-align:center;color:var(--text-muted);font-size:13px;padding:40px 0;}
+
+  .task-item{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:12px 13px;margin-bottom:10px;}
+  .task-item.is-waiting{border-color:#9EC6E8;box-shadow:0 0 0 2px rgba(27,111,176,.14);}
+  .task-item-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:7px;}
+  .task-hosp{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px;}
+  .task-meta{font-size:11.5px;color:var(--text-muted);line-height:1.6;}
+  .task-meta b{color:#4A5C78;font-weight:700;}
+  .task-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+  .task-actions button,.task-actions select{flex:1;min-width:0;font-size:12px;font-weight:700;padding:8px 4px;border:1.5px solid var(--gray-line);
+    border-radius:8px;background:#fff;color:var(--navy);cursor:pointer;font-family:inherit;}
+  .task-actions .ta-load{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .task-actions .ta-del{color:var(--red);border-color:#F0D0CC;}
+  .task-actions select{color:var(--text-muted);flex:1.2;padding-right:20px;}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -198,11 +258,29 @@
   </header>
 
   <div class="body">
-    <!-- 임시저장 도구 바 -->
+    <!-- 작업 도구 바 -->
     <div class="save-bar">
-      <button type="button" id="saveDraftBtn">💾 임시저장</button>
-      <button type="button" id="loadDraftBtn">📂 불러오기</button>
-      <button type="button" id="resetDraftBtn" class="save-danger">🗑 초기화</button>
+      <button type="button" id="saveDraftBtn">💾 저장</button>
+      <button type="button" id="loadDraftBtn">📂 작업 목록</button>
+      <button type="button" id="newTaskBtn">➕ 새 점검</button>
+    </div>
+
+    <!-- 현재 작업 상태 표시 -->
+    <div id="taskStatusBar" class="task-status-bar" style="display:none;">
+      <span class="task-status-badge" id="taskStatusBadge"></span>
+      <span class="task-status-meta" id="taskStatusMeta"></span>
+      <select id="taskStatusSelect" class="task-status-select" title="상태 변경">
+        <option value="draft">🟡 작성중</option>
+        <option value="inspection_completed">🟠 점검완료</option>
+        <option value="waiting_signature">🔵 사인대기</option>
+        <option value="completed">🟢 완료</option>
+      </select>
+    </div>
+
+    <!-- 사인 모드 안내 배너 -->
+    <div id="signBanner" class="sign-banner" style="display:none;">
+      <div class="sign-banner-text">⚠ 담당자 사인만 진행하면 됩니다.<br><span>담당자 이름과 서명을 입력한 뒤 PDF를 생성하세요.</span></div>
+      <button type="button" id="editModeBtn">✏️ 편집 모드</button>
     </div>
 
     <!-- 접수 정보 -->
@@ -267,7 +345,7 @@
     </div>
 
     <!-- 점검 항목 -->
-    <div class="card">
+    <div class="card" id="inspCard">
       <div class="card-header"><span class="badge-icon">🔧</span><h2>점검 항목</h2></div>
       <div class="card-body">
         <div id="inspList"></div>
@@ -275,7 +353,7 @@
     </div>
 
     <!-- 조치 / 마무리 -->
-    <div class="card">
+    <div class="card" id="actionCard">
       <div class="card-header"><span class="badge-icon">📝</span><h2>조치 내용 / 마무리</h2></div>
       <div class="card-body">
         <div class="field-group">
@@ -389,6 +467,20 @@
       <button class="done-survey" id="doneSurvey" style="padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid #BCD9E8;background:#EAF4F8;color:#2E7D9E;">⭐ 고객 만족도 조사 보내기</button>
       <button class="done-new" id="doneNew">새 점검 내역서</button>
     </div>
+  </div>
+</div>
+
+<!-- 작업 목록 Modal -->
+<div class="tasklist-overlay" id="taskListOverlay">
+  <div class="tasklist-panel">
+    <div class="tasklist-head">
+      <div class="tasklist-title">📋 작업 목록</div>
+      <button type="button" class="tasklist-close" id="taskListClose">✕</button>
+    </div>
+    <div class="tasklist-search">
+      <input type="text" id="taskSearch" placeholder="병원명 · 제품명 · S/N · 엔지니어 검색" autocomplete="off">
+    </div>
+    <div class="tasklist-body" id="taskListBody"></div>
   </div>
 </div>
 
@@ -841,7 +933,16 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 <script>
 // ===== 설정 상수 =====
 const LOGO_PATH = './logo.png';            // 회사 로고 (저장소 루트, sw.js가 캐시)
-const STORAGE_KEY = 'baz_inspection_draft_v1'; // 임시저장 localStorage 키
+const STORAGE_KEY = 'baz_inspection_draft_v1'; // (구) 단일 임시저장 키 — 마이그레이션용
+const TASKS_KEY = 'inspection_tasks_v1';       // 작업 목록(다중 저장) 키
+const CURRENT_TASK_KEY = 'inspection_current_task_v1'; // 현재 열린 작업 id
+// 작업 상태 정의 (정렬 order: 사인대기>작성중>점검완료>완료)
+const TASK_STATUS = {
+  waiting_signature:{label:'사인대기', badge:'🔵', cls:'st-waiting_signature', order:0},
+  draft:            {label:'작성중',   badge:'🟡', cls:'st-draft',             order:1},
+  inspection_completed:{label:'점검완료', badge:'🟠', cls:'st-inspection_completed', order:2},
+  completed:        {label:'완료',     badge:'🟢', cls:'st-completed',         order:3},
+};
 const AUTOSAVE_DELAY = 2000;               // 자동저장 debounce (ms)
 const AUTOSAVE_TOAST_GAP = 30000;          // "자동저장 완료" 토스트 최소 간격 (ms)
 const AC_SEARCH_DELAY = 120;               // 자동완성 검색 debounce (ms)
@@ -1281,49 +1382,239 @@ function applyFormData(d){
   renderPhotos();
 }
 
-// ===== localStorage 저장/불러오기 =====
+// ===== 작업 목록(Task List) 저장 계층 =====
+// 하나의 Task = { id, createdAt, updatedAt, status, hospital, product, serial,
+//                engineer, documentNo, data(=collectFormData 결과) }
 let _lastAutosaveToast=0;
-function saveDraft(showMsg){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(collectFormData()));
-    if(showMsg) showToast(showMsg);
-    return true;
-  }catch(err){
+let _currentTaskId=null;   // 현재 열려있는 작업 id
+let _signMode=false;       // 사인 모드 여부
+
+function genTaskId(){ return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function loadTasks(){
+  try{ const r=localStorage.getItem(TASKS_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function persistTasks(tasks){
+  try{ localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); return true; }
+  catch(err){
     // 용량 초과 시 사진 제외하고 재시도
     if(err && (err.name==='QuotaExceededError' || /quota/i.test(err.message||''))){
       try{
-        const d=collectFormData(); d.photos=[];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
+        const stripped=tasks.map(t=>({...t, data:{...t.data, photos:[]}}));
+        localStorage.setItem(TASKS_KEY, JSON.stringify(stripped));
         showToast('저장공간 부족: 사진 제외하고 저장했습니다');
         return true;
       }catch(e2){ showToast('저장 실패: 저장공간이 부족합니다'); return false; }
     }
-    showToast('저장 실패'); console.warn('[저장] 실패:', err); return false;
+    showToast('저장 실패'); console.warn('[작업저장] 실패:', err); return false;
   }
 }
-function loadDraftRaw(){
-  try{ const raw=localStorage.getItem(STORAGE_KEY); return raw?JSON.parse(raw):null; }
-  catch(e){ return null; }
+function getTask(id){ return loadTasks().find(t=>t.id===id) || null; }
+function setCurrentTaskId(id){
+  _currentTaskId=id;
+  try{ id?localStorage.setItem(CURRENT_TASK_KEY,id):localStorage.removeItem(CURRENT_TASK_KEY); }catch(e){}
 }
+function taskMetaFromData(data){
+  const b=(data&&data.basic)||{};
+  return { hospital:b.hospital||'', product:b.product||'', serial:b.serialNo||'', engineer:b.csName||b.receiver||'' };
+}
+
+// 현재 작업 저장 (기존 saveDraft 대체). opts: {status, documentNo, showMsg}
+function saveCurrentTask(opts){
+  opts=opts||{};
+  const data=collectFormData();
+  const tasks=loadTasks();
+  const now=Date.now();
+  let task=_currentTaskId ? tasks.find(t=>t.id===_currentTaskId) : null;
+  if(!task){
+    task={ id:genTaskId(), createdAt:now, updatedAt:now, status:opts.status||'draft',
+           documentNo:opts.documentNo||'', ...taskMetaFromData(data), data };
+    tasks.push(task);
+    setCurrentTaskId(task.id);
+  }else{
+    task.updatedAt=now;
+    Object.assign(task, taskMetaFromData(data));
+    task.data=data;
+    if(opts.status) task.status=opts.status;
+    if(opts.documentNo) task.documentNo=opts.documentNo;
+  }
+  const ok=persistTasks(tasks);
+  if(ok && opts.showMsg) showToast(opts.showMsg);
+  updateTaskStatusBar();
+  return ok;
+}
+// 하위호환: 기존 saveDraft(showMsg) 호출부(사진 핸들러 등) 유지
+function saveDraft(showMsg){ return saveCurrentTask(showMsg?{showMsg}:{}); }
+
+// 자동저장: 현재 작업에만 적용, 상태 변경 없음
 const _autoSaveDebounced = debounce(()=>{
-  if(saveDraft()){
+  if(saveCurrentTask()){
     const now=Date.now();
     if(now-_lastAutosaveToast > AUTOSAVE_TOAST_GAP){ _lastAutosaveToast=now; showToast('자동저장 완료'); }
   }
 }, AUTOSAVE_DELAY);
 function autoSave(){ _autoSaveDebounced(); }
 
-// 임시저장 도구 바 버튼
-document.getElementById('saveDraftBtn').addEventListener('click', ()=>{ saveDraft('임시저장 완료'); });
-document.getElementById('loadDraftBtn').addEventListener('click', ()=>{
-  const d=loadDraftRaw();
-  if(!d){ showToast('저장된 내용이 없습니다'); return; }
-  applyFormData(d); showToast('불러오기 완료');
+// 폼 비우기 (새 작업/불러오기 초기화용)
+function clearForm(){
+  BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  applyFormData({ basic:{}, pay:'', types:[], results:{}, memos:{}, photos:[], signatures:{cs:null,hs:null} });
+  const ccA=document.getElementById('cc_action'), ccR=document.getElementById('cc_recommend');
+  if(ccA) ccA.textContent='0'; if(ccR) ccR.textContent='0';
+  document.getElementById('receiveDate').value=today;
+  document.getElementById('inspectDate').value=today;
+}
+
+// 새 점검: 항상 새로운 Task 생성 (기존 작업은 보존)
+function newTask(){
+  exitSignMode();
+  clearForm();
+  const now=Date.now();
+  const tasks=loadTasks();
+  const task={ id:genTaskId(), createdAt:now, updatedAt:now, status:'draft', documentNo:'',
+               hospital:'', product:'', serial:'', engineer:'', data:collectFormData() };
+  tasks.push(task);
+  setCurrentTaskId(task.id);
+  persistTasks(tasks);
+  updateTaskStatusBar();
+  window.scrollTo({top:0,behavior:'smooth'});
+  showToast('새 점검 작업 생성');
+}
+
+// 작업 불러오기 (사인대기 작업이면 자동으로 사인 모드 진입)
+function openTask(id){
+  const task=getTask(id);
+  if(!task){ showToast('작업을 찾을 수 없습니다'); return; }
+  setCurrentTaskId(id);
+  applyFormData(task.data);
+  closeTaskList();
+  if(task.status==='waiting_signature') enterSignMode(); else exitSignMode();
+  updateTaskStatusBar();
+  window.scrollTo({top:0,behavior:'smooth'});
+  showToast('작업 불러옴');
+}
+
+// 복제 (새 id, 작성중 상태)
+function duplicateTask(id){
+  const task=getTask(id); if(!task) return;
+  const now=Date.now();
+  const copy=JSON.parse(JSON.stringify(task));
+  copy.id=genTaskId(); copy.createdAt=now; copy.updatedAt=now; copy.status='draft'; copy.documentNo='';
+  const tasks=loadTasks(); tasks.push(copy); persistTasks(tasks);
+  renderTaskList(); showToast('작업 복제됨');
+}
+
+// 상태 변경
+function changeTaskStatus(id, status){
+  if(!TASK_STATUS[status]) return;
+  const tasks=loadTasks(); const t=tasks.find(x=>x.id===id); if(!t) return;
+  t.status=status; t.updatedAt=Date.now(); persistTasks(tasks);
+  if(id===_currentTaskId){
+    if(status!=='waiting_signature' && _signMode) exitSignMode();
+    updateTaskStatusBar();
+  }
+}
+
+// 삭제 (confirm 확인)
+function deleteTask(id){
+  if(!confirm('이 작업을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  let tasks=loadTasks(); tasks=tasks.filter(t=>t.id!==id); persistTasks(tasks);
+  if(id===_currentTaskId) setCurrentTaskId(null);
+  renderTaskList(); showToast('작업 삭제됨');
+  updateTaskStatusBar();
+}
+
+// 현재 작업 상태 바 갱신
+function updateTaskStatusBar(){
+  const bar=document.getElementById('taskStatusBar');
+  const task=_currentTaskId?getTask(_currentTaskId):null;
+  if(!task){ bar.style.display='none'; return; }
+  const m=TASK_STATUS[task.status]||TASK_STATUS.draft;
+  const badge=document.getElementById('taskStatusBadge');
+  badge.className='task-status-badge st-badge '+m.cls;
+  badge.textContent=m.badge+' '+m.label;
+  document.getElementById('taskStatusMeta').textContent=(task.hospital||'무제목')+(task.serial?' · '+task.serial:'');
+  document.getElementById('taskStatusSelect').value=task.status;
+  bar.style.display='flex';
+}
+
+// ===== 사인 모드 =====
+function enterSignMode(){
+  _signMode=true;
+  document.body.classList.add('sign-mode');
+  document.getElementById('signBanner').style.display='flex';
+}
+function exitSignMode(){
+  _signMode=false;
+  document.body.classList.remove('sign-mode');
+  document.getElementById('signBanner').style.display='none';
+}
+
+// ===== 작업 목록 Modal =====
+function openTaskList(){ renderTaskList(); document.getElementById('taskListOverlay').classList.add('show'); }
+function closeTaskList(){ document.getElementById('taskListOverlay').classList.remove('show'); }
+function taskSortKey(t){ return (TASK_STATUS[t.status]||TASK_STATUS.draft).order; }
+function fmtTaskTime(ts){ return ts?new Date(ts).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'; }
+function renderTaskList(){
+  const q=normalize(document.getElementById('taskSearch').value);
+  let tasks=loadTasks();
+  if(q) tasks=tasks.filter(t=>[t.hospital,t.product,t.serial,t.engineer].some(x=>normalize(x).includes(q)));
+  // 정렬: 상태 order → 최신 수정순
+  tasks.sort((a,b)=> taskSortKey(a)-taskSortKey(b) || (b.updatedAt||0)-(a.updatedAt||0));
+  const body=document.getElementById('taskListBody');
+  if(!tasks.length){ body.innerHTML='<div class="task-empty">저장된 작업이 없습니다</div>'; return; }
+  body.innerHTML=tasks.map(t=>{
+    const m=TASK_STATUS[t.status]||TASK_STATUS.draft;
+    const waiting=t.status==='waiting_signature';
+    const opt=(val,label)=>`<option value="${val}"${t.status===val?' selected':''}>${label}</option>`;
+    return `<div class="task-item ${waiting?'is-waiting':''}" data-id="${t.id}">
+      <div class="task-item-top">
+        <span class="st-badge ${m.cls}">${m.badge} ${m.label}</span>
+        ${waiting?'<span class="sign-need-label">⚠ 담당자 사인 필요</span>':''}
+      </div>
+      <div class="task-hosp">${esc(t.hospital||'무제목')}</div>
+      <div class="task-meta">
+        <b>제품</b> ${esc(t.product||'—')} · <b>S/N</b> ${esc(t.serial||'—')} · <b>엔지니어</b> ${esc(t.engineer||'—')}<br>
+        <b>작성</b> ${fmtTaskTime(t.createdAt)} · <b>수정</b> ${fmtTaskTime(t.updatedAt)}
+      </div>
+      <div class="task-actions">
+        <button type="button" class="ta-load" data-act="load" data-id="${t.id}">불러오기</button>
+        <button type="button" data-act="dup" data-id="${t.id}">복제</button>
+        <select data-act="status" data-id="${t.id}" title="상태 변경">
+          ${opt('draft','🟡 작성중')}${opt('inspection_completed','🟠 점검완료')}${opt('waiting_signature','🔵 사인대기')}${opt('completed','🟢 완료')}
+        </select>
+        <button type="button" class="ta-del" data-act="del" data-id="${t.id}">삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== 작업 도구 바 · Modal 이벤트 =====
+document.getElementById('saveDraftBtn').addEventListener('click', ()=>{ saveCurrentTask({showMsg:'저장 완료'}); });
+document.getElementById('loadDraftBtn').addEventListener('click', openTaskList);
+document.getElementById('newTaskBtn').addEventListener('click', newTask);
+document.getElementById('taskListClose').addEventListener('click', closeTaskList);
+document.getElementById('taskListOverlay').addEventListener('click', (e)=>{ if(e.target.id==='taskListOverlay') closeTaskList(); });
+document.getElementById('taskSearch').addEventListener('input', debounce(renderTaskList, 150));
+document.getElementById('editModeBtn').addEventListener('click', ()=>{ exitSignMode(); showToast('편집 모드로 전환'); });
+document.getElementById('taskStatusSelect').addEventListener('change', (e)=>{
+  if(!_currentTaskId) return;
+  changeTaskStatus(_currentTaskId, e.target.value);
+  showToast('상태 변경: '+(TASK_STATUS[e.target.value]||TASK_STATUS.draft).label);
 });
-document.getElementById('resetDraftBtn').addEventListener('click', ()=>{
-  if(!confirm('작성 내용과 임시저장을 모두 초기화할까요?')) return;
-  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
-  location.reload();
+// 작업 목록 내 액션 (불러오기/복제/삭제)
+document.getElementById('taskListBody').addEventListener('click', (e)=>{
+  const btn=e.target.closest('button[data-act]'); if(!btn) return;
+  const id=btn.getAttribute('data-id'), act=btn.getAttribute('data-act');
+  if(act==='load') openTask(id);
+  else if(act==='dup') duplicateTask(id);
+  else if(act==='del') deleteTask(id);
+});
+// 작업 목록 내 상태 변경 select
+document.getElementById('taskListBody').addEventListener('change', (e)=>{
+  const sel=e.target.closest('select[data-act="status"]'); if(!sel) return;
+  changeTaskStatus(sel.getAttribute('data-id'), sel.value);
+  showToast('상태 변경됨');
 });
 
 // ===== 현장 사진 =====
@@ -1697,6 +1988,9 @@ async function generatePDF(arg){
       document.getElementById('doneFname').textContent=_lastFname;
       document.getElementById('doneOverlay').classList.add('show');
       showToast('PDF 생성 완료');
+      // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
+      exitSignMode();
+      saveCurrentTask({status:'completed', documentNo:docNo});
       // ── 구글시트 방문 기록 전송 (백그라운드) ──
       (function(){
         var GAS_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
@@ -1729,24 +2023,44 @@ document.getElementById('doneSurvey').addEventListener('click',()=>{
   // 만족도 페이지로 병원명·담당자 자동 전달
   location.href=`survey.html?h=${hosp}&e=${cs}`;
 });
-document.getElementById('doneNew').addEventListener('click',()=>{ location.reload(); });
+// 완료 오버레이의 "새 점검 내역서" → 새 작업 생성 (기존 작업 보존)
+document.getElementById('doneNew').addEventListener('click',()=>{
+  document.getElementById('doneOverlay').classList.remove('show');
+  newTask();
+});
 
 // 초기화
 buildInspList();
 renderPhotos();
 preloadLogo();
 
-// 임시저장 복원 (있으면 확인 후 불러오기)
-(function(){
-  const d=loadDraftRaw();
-  if(!d) return;
-  const when = d.savedAt ? new Date(d.savedAt).toLocaleString('ko-KR') : '';
-  setTimeout(()=>{
-    if(confirm(`임시저장된 작성 내용이 있습니다${when?` (${when})`:''}.\n불러올까요?`)){
-      applyFormData(d);
-      showToast('임시저장 불러옴');
+// (구) 단일 임시저장 → 작업 목록 마이그레이션 (최초 1회)
+(function migrateOldDraft(){
+  try{
+    const old=localStorage.getItem(STORAGE_KEY);
+    if(old && loadTasks().length===0){
+      const data=JSON.parse(old);
+      const now=data.savedAt||Date.now();
+      persistTasks([{ id:genTaskId(), createdAt:now, updatedAt:now, status:'draft',
+        documentNo:'', ...taskMetaFromData(data), data }]);
+      localStorage.removeItem(STORAGE_KEY);
     }
-  }, 300);
+  }catch(e){ console.warn('[마이그레이션] 실패:', e); }
+})();
+
+// 이전에 열려있던 작업 복원 (없으면 빈 폼 — 첫 입력 시 새 작업 자동 생성)
+(function restoreCurrentTask(){
+  let curId=null; try{ curId=localStorage.getItem(CURRENT_TASK_KEY); }catch(e){}
+  const task=curId?getTask(curId):null;
+  if(task){
+    _currentTaskId=task.id;
+    applyFormData(task.data);
+    if(task.status==='waiting_signature') enterSignMode();
+    updateTaskStatusBar();
+  }else{
+    setCurrentTaskId(null);
+    updateTaskStatusBar();
+  }
 })();
 </script>
 <script>
