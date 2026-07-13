@@ -1218,7 +1218,7 @@ function pvSlide(ctx, sp){
             return '<td style="width:'+(T.colW[i]/T.tblW*100)+'%;height:'+pvIn(T.rowH)+'px;'+bd
               +'background:'+pvHex(C.navy)+';color:#fff;font-weight:700;text-align:center;font-size:'+pvPt(FT.table)+'px">'+esc(t)+'</td>';
           }).join('')+'</tr>'
-        +[['가입 병원 수',arr(nc.joined)],['정상 운영 병원 수',arr(nc.normal)],
+        +[['가입 병원 수',arr(nc.joined)],['점검 완료 병원 수',arr(nc.normal)],
           ['점검 대상 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
             return '<tr><td style="height:'+pvIn(T.rowH)+'px;'+bd+'background:'+pvHex(C.blueBg)+';color:'+pvHex(C.navy)
               +';font-weight:700;text-align:center;font-size:'+pvPt(FT.tableSm)+'px">'+esc(df[0])+'</td>'
@@ -1226,8 +1226,8 @@ function pvSlide(ctx, sp){
                 +';font-size:'+pvPt(FT.table)+'px">'+esc(n(x))+'</td>';}).join('')+'</tr>';
           }).join('')+'</table>';
       el(T.tblX,T.tblY,T.tblW,T.rowH*5,'',html);
-      [[T.sum1,'전체 가입자',nc.totalJoined,true],[T.sum2,'정상 운영 병원',nc.totalNormal,false],
-       [T.sum3,'정상 운영률',nc.normalRate,true]].forEach(function(g){
+      [[T.sum1,'전체 가입자',nc.totalJoined,true],[T.sum2,'점검 완료 병원',nc.totalNormal,false],
+       [T.sum3,'점검 운영률',nc.normalRate,true]].forEach(function(g){
         el(g[0].x,T.sumY,g[0].w,T.sumH,txc(FT.tableSm,'font-weight:700;justify-content:center;color:'+pvHex(C.navy)
           +';background:'+pvHex(g[3]?C.blueBg:C.grayBg)+';border:1px solid '+pvHex(C.line)),
           esc(g[1])+'&nbsp;&nbsp;<span style="font-size:'+pvPt(FT.total)+'px">'+esc(n(g[2]))+'</span>');
