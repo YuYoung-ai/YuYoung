@@ -96,6 +96,19 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .card h3{margin:0 0 10px;font-size:12.5px;font-weight:700;color:var(--navy);
   padding-bottom:7px;border-bottom:1px solid var(--gray-line);display:flex;justify-content:space-between}
 .card h3 .tot{color:var(--text-muted);font-weight:400;font-size:11px}
+/* 노즐 재사용 현황 */
+.nz-wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.nz-wrap{grid-template-columns:1fr}}
+.nz-sub{font-size:12px;font-weight:700;color:var(--teal);margin:0 0 8px;padding-left:2px}
+.nz-metrics{display:flex;gap:6px;margin-bottom:8px}
+.nz-metric{flex:1;text-align:center;border:1px solid var(--gray-line);border-radius:9px;padding:8px 4px;background:#FBFCFE}
+.nz-metric span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px}
+.nz-metric b{font-size:16px;line-height:1.2;color:var(--navy)}
+.nz-listwrap{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px}
+.nz-listtit{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.nz-list{margin:0;padding-left:16px}
+.nz-list li{font-size:12.5px;color:var(--text);margin-bottom:2px}
+.nz-list li.nz-none{list-style:none;margin-left:-16px;color:var(--text-muted)}
 /* 가로 막대 */
 .hbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
 .hbar .lb{width:34%;font-size:11.5px;text-align:right;color:var(--text);overflow:hidden;
@@ -278,6 +291,12 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
       <div class="card"><h3>N-Care 분포 <span class="tot" id="tNcare"></span></h3><div id="cNcare"></div></div>
       <div class="card"><h3>서비스 병원 TOP 10 <span class="tot" id="tHosp"></span></h3><div id="cHosp"></div></div>
       <div class="card"><h3>담당자별 처리 <span class="tot" id="tFse"></span></h3><div id="cFse"></div></div>
+    </div>
+
+    <!-- 노즐 재사용 현황 (병원 기준 · 중복 방문 제거 · 필터 반영) -->
+    <div class="card">
+      <h3>💠 노즐 재사용 현황 <span class="tot" id="tNoz"></span></h3>
+      <div id="cNoz"></div>
     </div>
 
     <!-- N-Care 정기점검 현황 (필터 무관 · 마지막 방문일 기준 현재 상태) -->
@@ -750,11 +769,41 @@ function apply(){
   hbars('cNcare',count(rows,'ncare'),6,  'ncare','tNcare');
   hbars('cHosp', count(rows,'hosp'), 10, 'hosp', 'tHosp');
   hbars('cFse',  count(rows,'fse'),  8,  'fse',  'tFse');
+  nozzleStats(rows);
   /* 필터 상태 */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
   document.getElementById('fReset').style.display=n?'block':'none';
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
+}
+
+/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ──
+   병원 기준(중복 방문 제거) · N-care 가입/미가입 분리 · 재사용률 · 리스트(가나다) */
+function nzNcare_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? '가입' : '미가입'; }
+function nozGroupHtml_(title, g){
+  var list=(g.hospitals&&g.hospitals.length)
+    ? g.hospitals.map(function(h){ return '<li>'+esc(h)+'</li>'; }).join('')
+    : '<li class="nz-none">재사용 병원 없음</li>';
+  return '<div class="nz-group">'
+    +'<div class="nz-sub">■ '+esc(title)+'</div>'
+    +'<div class="nz-metrics">'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'곳</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'곳</b></div>'
+      +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
+    +'</div>'
+    +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
+      +'<ul class="nz-list">'+list+'</ul></div>'
+  +'</div>';
+}
+function nozzleStats(rows){
+  var box=document.getElementById('cNoz'); if(!box) return;
+  if(!(window.Statistics&&window.Statistics.build)){ box.innerHTML='<div class="empty">통계 모듈 로드 실패</div>'; return; }
+  /* handover 행 → Statistics 입력형(hosp/ncare 가입·미가입/nozzle O·X)으로 매핑 */
+  var mapped=rows.map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
+  var st=window.Statistics.build(mapped);
+  var j=st.nozzle.joined, n=st.nozzle.nonJoined;
+  document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+'곳 재사용';
+  box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
 }
 
 /* ══════════ 주간업무보고 PPT 생성 ══════════ */

@@ -70,7 +70,7 @@ var NCARE = {
 
 /* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·장비SN·N-Care·보증기한 등
    수식/자동 열)은 절대 건드리지 않는다 */
-var WRITE_COLS = ['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용'];
+var WRITE_COLS = ['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용','노즐 재사용'];
 
 /* [v2.1] 주간업무보고 — weekly.html 연동
    REPORT_SS_ID: ★필수★ 업무보고서_CS 스프레드시트 ID (주소창 /d/ 와 /edit 사이)
@@ -224,7 +224,8 @@ function doPost(e){
       '유형'     : payload.type  || '',
       '교체품'   : payload.part  || '',
       '교체비용' : payload.cost  || '',
-      '내용'     : payload.detail|| ''
+      '내용'     : payload.detail|| '',
+      '노즐 재사용' : (String(payload.nozzle||'').trim().toUpperCase()==='O' ? 'O' : 'X')  /* P열 · 기본 X */
     };
     Object.keys(m).forEach(function(k){
       var c = hdr.map[k];
@@ -318,7 +319,8 @@ function slim_(o){
     warranty: pickH_(o,['보증기한','보증']),
     paid : pickH_(o,['유/무상','유무상','유·무상']),
     hpIn : o['HP_SN(IN)']||'', verIn: o['VerIN']||'',
-    hpOut: o['HP_SN(OUT)']||'', verOut: o['VerOUT']||''
+    hpOut: o['HP_SN(OUT)']||'', verOut: o['VerOUT']||'',
+    nozzleReuse: (String(pickH_(o,['노즐 재사용','노즐재사용'])||'').trim().toUpperCase()==='O' ? 'O' : 'X')  /* P열 · 기본 X */
   };
 }
 
