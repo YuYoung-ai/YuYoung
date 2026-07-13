@@ -723,6 +723,7 @@ document.getElementById('filterRow').addEventListener('click',e=>{
   const c=e.target.closest('[data-filter]'); if(!c||nearbyMode) return;
   document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.remove('on'));
   c.classList.add('on'); curFilter=c.getAttribute('data-filter'); showCount=20; render();
+  if(window.refreshHospDB) window.refreshHospDB();
 });
 document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilter=e.target.value; showCount=20; render(); });
 document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; render(); });
@@ -1554,7 +1555,7 @@ applyLang();
     return false;
   }
 
-  (function syncHospDB(){
+  function syncHospDB(){
     // 1) 캐시 먼저 적용 (즉시 반영)
     try{
       var cached=localStorage.getItem(HDB_CACHE_KEY);
@@ -1587,7 +1588,10 @@ applyLang();
         }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
       })
       .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
-  })();
+  }
+  // 칩 필터(전체/N-CARE/점검필요) 활성화 시 재동기화 트리거용으로 노출 (5분 캐시 준수)
+  window.refreshHospDB=syncHospDB;
+  syncHospDB();
 
   // ── 방문로그 동기화 (5분 캐시) ──
   var VLOG_CACHE_KEY='bazVisitLogCache';
