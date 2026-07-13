@@ -478,26 +478,46 @@ document.getElementById('langSwitch').addEventListener('click',e=>{
   LANG=b.getAttribute('data-lang'); localStorage.setItem('baz_lang',LANG); applyLang();
 });
 
-// ===== 필터 드롭다운 채우기 =====
+// ===== 필터 카운트 공용 조건 (다른 활성 필터 반영) =====
+function matchSearchQ(h){
+  if(!searchQ) return true;
+  const nq=normalize(searchQ);
+  return normalize(h.n).includes(nq)||normalize(h.a).includes(nq)||normalize(h.s).includes(nq);
+}
+function matchChipFilter(h){
+  if(curFilter==='ncare') return isNcare(h);
+  if(curFilter==='due') return isDue(h);
+  return true;
+}
+
+// ===== 필터 드롭다운 채우기 (교차 필터 카운트) =====
 function populateFilters(){
   const salesSet={}, regionSet={};
   HOSPITALS.forEach(h=>{
-    if(h.sa && h.sa!=='장비OUT') salesSet[h.sa]=(salesSet[h.sa]||0)+1;
-    if(h.rg) regionSet[h.rg]=(regionSet[h.rg]||0)+1;
+    // 영업담당 카운트: 칩·지역·검색 반영(영업담당 자신은 제외), 옵션 목록은 전체 유지
+    if(h.sa && h.sa!=='장비OUT'){
+      if(!(h.sa in salesSet)) salesSet[h.sa]=0;
+      if(matchChipFilter(h)&&(!regionFilter||h.rg===regionFilter)&&matchSearchQ(h)) salesSet[h.sa]++;
+    }
+    // 지역 카운트: 칩·영업담당·검색 반영(지역 자신은 제외), 옵션 목록은 전체 유지
+    if(h.rg){
+      if(!(h.rg in regionSet)) regionSet[h.rg]=0;
+      if(matchChipFilter(h)&&(!salesFilter||h.sa===salesFilter)&&matchSearchQ(h)) regionSet[h.rg]++;
+    }
   });
   const sf=document.getElementById('salesFilter');
   while(sf.options.length>1) sf.remove(1);
   Object.keys(salesSet).sort((a,b)=>salesSet[b]-salesSet[a]).forEach(s=>{
     const o=document.createElement('option'); o.value=s; o.textContent=s+' ('+salesSet[s]+')'; sf.appendChild(o);
   });
-  if(salesFilter && !salesSet[salesFilter]) salesFilter='';
+  if(salesFilter && !(salesFilter in salesSet)) salesFilter='';
   sf.value=salesFilter;
   const rf=document.getElementById('regionFilter');
   while(rf.options.length>1) rf.remove(1);
   Object.keys(regionSet).sort((a,b)=>regionSet[b]-regionSet[a]).forEach(r=>{
     const o=document.createElement('option'); o.value=r; o.textContent=r+' ('+regionSet[r]+')'; rf.appendChild(o);
   });
-  if(regionFilter && !regionSet[regionFilter]) regionFilter='';
+  if(regionFilter && !(regionFilter in regionSet)) regionFilter='';
   rf.value=regionFilter;
 }
 
@@ -506,14 +526,19 @@ function updateStats(){
   const total=HOSPITALS.length;
   const ncare=HOSPITALS.filter(isNcare).length;
   const due=HOSPITALS.filter(isDue).length;
-  document.getElementById('cnt-all').textContent=total;
-  document.getElementById('cnt-ncare').textContent=ncare;
-  document.getElementById('cnt-due').textContent=due;
+  // 칩 카운트는 영업담당·지역·검색 필터를 반영(칩 자신은 제외)
+  const base=HOSPITALS.filter(h=>(!salesFilter||h.sa===salesFilter)&&(!regionFilter||h.rg===regionFilter)&&matchSearchQ(h));
+  document.getElementById('cnt-all').textContent=base.length;
+  document.getElementById('cnt-ncare').textContent=base.filter(isNcare).length;
+  document.getElementById('cnt-due').textContent=base.filter(isDue).length;
   document.getElementById('stats').innerHTML=
     '<div class="s"><div class="num" style="color:var(--navy)">'+total+'</div><div class="lbl">'+t('stTotal')+'</div></div>'+
     '<div class="s"><div class="num" style="color:var(--teal)">'+ncare+'</div><div class="lbl">'+t('stNcare')+'</div></div>'+
     '<div class="s"><div class="num" style="color:var(--amber)">'+due+'</div><div class="lbl">'+t('stDue')+'</div></div>';
 }
+
+// 필터 변경 시 칩/드롭다운 카운트 재계산
+function updateFilterCounts(){ populateFilters(); updateStats(); }
 
 // ===== 필터링 =====
 function getFiltered(){
@@ -715,18 +740,18 @@ function showMap(list){
 const searchInput=document.getElementById('searchInput');
 const searchClear=document.getElementById('searchClear');
 searchInput.addEventListener('input',()=>{
-  searchQ=searchInput.value; searchClear.style.display=searchQ?'block':'none'; showCount=20; render();
+  searchQ=searchInput.value; searchClear.style.display=searchQ?'block':'none'; showCount=20; updateFilterCounts(); render();
 });
-searchClear.addEventListener('click',()=>{ searchInput.value=''; searchQ=''; searchClear.style.display='none'; showCount=20; render(); });
+searchClear.addEventListener('click',()=>{ searchInput.value=''; searchQ=''; searchClear.style.display='none'; showCount=20; updateFilterCounts(); render(); });
 
 document.getElementById('filterRow').addEventListener('click',e=>{
   const c=e.target.closest('[data-filter]'); if(!c||nearbyMode) return;
   document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.remove('on'));
-  c.classList.add('on'); curFilter=c.getAttribute('data-filter'); showCount=20; render();
+  c.classList.add('on'); curFilter=c.getAttribute('data-filter'); showCount=20; updateFilterCounts(); render();
   if(window.refreshHospDB) window.refreshHospDB();
 });
-document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilter=e.target.value; showCount=20; render(); });
-document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; render(); });
+document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
+document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('loadMore').addEventListener('click',()=>{ showCount+=20; render(); });
 
 const nearbyBtn=document.getElementById('nearbyBtn');
