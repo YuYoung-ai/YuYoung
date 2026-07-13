@@ -1219,7 +1219,7 @@ function pvSlide(ctx, sp){
               +'background:'+pvHex(C.navy)+';color:#fff;font-weight:700;text-align:center;font-size:'+pvPt(FT.table)+'px">'+esc(t)+'</td>';
           }).join('')+'</tr>'
         +[['가입 병원 수',arr(nc.joined)],['점검 완료 병원 수',arr(nc.normal)],
-          ['점검 대상 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
+          ['점검 예정 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
             return '<tr><td style="height:'+pvIn(T.rowH)+'px;'+bd+'background:'+pvHex(C.blueBg)+';color:'+pvHex(C.navy)
               +';font-weight:700;text-align:center;font-size:'+pvPt(FT.tableSm)+'px">'+esc(df[0])+'</td>'
               +df[1].map(function(x){return '<td style="'+bd+'text-align:center;color:'+pvHex(C.dark)
