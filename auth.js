@@ -245,5 +245,83 @@
 
   global.BazAuth = BazAuth;
 
+  /************************************************************
+   * 공통 통계 모듈 (Statistics)
+   * ----------------------------------------------------------
+   * Weekly(W_ROWS)를 입력받아 "병원 기준" 노즐 재사용 통계를 만든다.
+   * Weekly 화면 / Weekly Excel / Dashboard 등 여러 화면이
+   * 동일한 계산을 재사용하도록 auth.js(공통 로드 파일)에 둔다.
+   *
+   * 사용법:
+   *   var st = Statistics.build(W_ROWS);
+   *   st.nozzle.joined.percent    // N-care 가입 재사용률(%)
+   *
+   * 계산 규칙:
+   *   - 병원 기준(건수 아님). 같은 병원의 중복 방문은 1곳으로 집계.
+   *   - 병원명은 Trim + 대소문자 무시 + 연속 공백 1칸 정규화 후 비교.
+   *   - 노즐 재사용이 한 번이라도 'O'면 그 병원은 재사용 병원(X→O→X 포함).
+   *   - N-care 가입 여부는 병원의 행 중 하나라도 '가입'이면 가입으로 본다.
+   *   - Set/Map으로 O(n) 계산, 병원 리스트는 마지막에만 정렬(가나다순).
+   * 반환 구조:
+   *   { counts:{insp,voc,total},
+   *     nozzle:{
+   *       joined:   {total,reuse,percent,hospitals[]},
+   *       nonJoined:{total,reuse,percent,hospitals[]} } }
+   ************************************************************/
+  var Statistics = (function () {
+    // 병원명 정규화 키: Trim → 소문자 → 연속 공백 1칸
+    function normName(s) {
+      return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+    // 재사용률(%) — 소수점 1자리
+    function pct(reuse, total) {
+      return total > 0 ? Math.round((reuse / total) * 1000) / 10 : 0;
+    }
+    // 가나다(한국어) 정렬
+    function cmpKo(a, b) {
+      try { return String(a).localeCompare(String(b), 'ko'); }
+      catch (e) { return a < b ? -1 : (a > b ? 1 : 0); }
+    }
+
+    function build(rows) {
+      rows = rows || [];
+      var map = new Map();          // 정규화키 → {name, joined, reuse}
+      var insp = 0, total = 0;      // 건수 요약(가입/미가입 무관 전체 행 기준)
+
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i] || {};
+        total++;
+        if (String(r.kind).trim() === '점검') insp++;
+
+        var rawName = String(r.hosp == null ? '' : r.hosp).trim();
+        if (!rawName) continue;                       // 병원명 없는 행은 병원 통계에서 제외
+        var key = normName(rawName);
+        var rec = map.get(key);
+        if (!rec) { rec = { name: rawName, joined: false, reuse: false }; map.set(key, rec); }
+        if (String(r.ncare).trim() === '가입') rec.joined = true;                 // 한 번이라도 가입 → 가입
+        if (String(r.nozzle).trim().toUpperCase() === 'O') rec.reuse = true;      // 한 번이라도 O → 재사용
+      }
+
+      var jAll = [], jReuse = [], nAll = [], nReuse = [];
+      map.forEach(function (rec) {
+        if (rec.joined) { jAll.push(rec.name); if (rec.reuse) jReuse.push(rec.name); }
+        else { nAll.push(rec.name); if (rec.reuse) nReuse.push(rec.name); }
+      });
+      jReuse.sort(cmpKo); nReuse.sort(cmpKo);         // 리스트는 마지막에만 정렬
+
+      return {
+        counts: { insp: insp, voc: total - insp, total: total },
+        nozzle: {
+          joined:    { total: jAll.length, reuse: jReuse.length, percent: pct(jReuse.length, jAll.length), hospitals: jReuse },
+          nonJoined: { total: nAll.length, reuse: nReuse.length, percent: pct(nReuse.length, nAll.length), hospitals: nReuse }
+        }
+      };
+    }
+
+    return { build: build };
+  })();
+
+  global.Statistics = Statistics;   // Weekly / Excel / Dashboard 공용
+
   guardPage_();   // 스크립트 로드 즉시 실행 (렌더링 차단 검사)
 })(window);
