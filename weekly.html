@@ -90,6 +90,20 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
   max-width:88vw;text-align:center;white-space:pre-line;line-height:1.5}
 .toast.on{opacity:1}
 .empty{color:var(--text-muted);font-size:12.5px;text-align:center;padding:14px 0}
+/* 노즐 재사용 현황 */
+.nz-group{margin-bottom:12px}
+.nz-group:last-child{margin-bottom:0}
+.nz-sub{font-size:12px;font-weight:700;color:var(--teal);margin:0 0 8px;padding-left:2px}
+.nz-metrics{display:flex;gap:6px;margin-bottom:8px}
+.nz-metric{flex:1;text-align:center;border:1px solid var(--gray-line);border-radius:9px;padding:8px 4px;background:#FBFCFE}
+.nz-metric span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px}
+.nz-metric b{font-size:16px;line-height:1.2;color:var(--navy)}
+.nz-listwrap{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px}
+.nz-listtit{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.nz-list{margin:0;padding-left:16px}
+.nz-list li{font-size:12.5px;color:var(--text);margin-bottom:2px}
+.nz-list li.nz-none{list-style:none;margin-left:-16px;color:var(--text-muted)}
+.nz-div{height:1px;background:var(--gray-line);margin:12px 0}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -134,6 +148,12 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
     <div id="rowsBox"><div class="empty">[불러오기]를 누르면 handover 시트에서 채워집니다</div></div>
     <button type="button" class="btn-addrow" onclick="addRow()">＋ 행 추가</button>
     <div class="hint">접수일자·노즐 재사용·비고(지연 사유)는 직접 입력 · 방문일자는 처리일 자동 · N-care는 병원정보DB 자동(수정 가능)</div>
+  </div>
+
+  <!-- ②-1 노즐 재사용 현황 (병원 기준 · 중복 제거) -->
+  <div class="card" id="nozzleCard" style="display:none">
+    <p class="sec-title">노즐 재사용 현황 <span class="mini">병원 기준 · 중복 방문 제거</span></p>
+    <div id="nozzleBox"></div>
   </div>
 
   <!-- ③ 요일별 내용 -->
@@ -370,7 +390,7 @@ function renderRows(){
   }
   buildCnt();
 }
-function upRow(i,k,v){ if(W_ROWS[i]) W_ROWS[i][k]=v; if(k==='hosp'||k==='kind') buildCnt(); }
+function upRow(i,k,v){ if(W_ROWS[i]) W_ROWS[i][k]=v; if(k==='hosp'||k==='kind') buildCnt(); if(k==='nozzle'||k==='ncare') renderNozzleStats(); }
 function delRow(i){ W_ROWS.splice(i,1); renderRows(); }
 function addRow(){
   var vd=CUR_MON?ymd(CUR_MON):ymd(new Date());
@@ -383,6 +403,35 @@ function buildCnt(){
   document.getElementById('cntInsp').textContent=insp;
   document.getElementById('cntVoc').textContent=voc;
   document.getElementById('cntTot').textContent=W_ROWS.length;
+  renderNozzleStats();
+}
+
+/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ── */
+function nozGroupHtml(title, g){
+  var list = (g.hospitals && g.hospitals.length)
+    ? g.hospitals.map(function(h){ return '<li>'+esc(h)+'</li>'; }).join('')
+    : '<li class="nz-none">재사용 병원 없음</li>';
+  return '<div class="nz-group">'
+    +'<div class="nz-sub">'+esc(title)+'</div>'
+    +'<div class="nz-metrics">'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'곳</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'곳</b></div>'
+      +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
+    +'</div>'
+    +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
+      +'<ul class="nz-list">'+list+'</ul></div>'
+  +'</div>';
+}
+function renderNozzleStats(){
+  var card=document.getElementById('nozzleCard');
+  if(!card) return;
+  if(!W_ROWS.length || !(window.Statistics && window.Statistics.build)){ card.style.display='none'; return; }
+  var st=window.Statistics.build(W_ROWS);
+  card.style.display='';
+  document.getElementById('nozzleBox').innerHTML=
+      nozGroupHtml('N-care', st.nozzle.joined)
+    + '<div class="nz-div"></div>'
+    + nozGroupHtml('미가입', st.nozzle.nonJoined);
 }
 
 /* ── 요일별 내용: handover 공유 기본양식 블록 ── */
@@ -576,8 +625,33 @@ async function genExcel(){
     var spEnd=Math.max(sr+2, sr+1+(spTxt.split('\n').length-1));
     ws.mergeCells(sr+1,1,spEnd,8); put(sr+1,1, spTxt,{valign:'top'});
     boxBorder(sr,1,spEnd,8);
+    // ⑧-1 노즐 재사용 현황 — 특이사항 아래 (공통 Statistics 모듈 재사용)
+    var nozEnd=spEnd;
+    if(window.Statistics && window.Statistics.build){
+      var st=window.Statistics.build(W_ROWS);
+      var nr=spEnd+1;
+      // 섹션 타이틀
+      ws.mergeCells(nr,1,nr,8); put(nr,1,'노즐 재사용 현황',{bold:true,fill:XC.head,color:XC.navy,align:'center'});
+      nr++;
+      // 그룹(가입/미가입) 렌더
+      function nozBlock(title, g){
+        ws.mergeCells(nr,1,nr,8); put(nr,1,title,{bold:true,fill:XC.tealSoft,color:XC.teal,align:'center'}); nr++;
+        [['전체 병원', g.total+'곳'],['재사용 병원', g.reuse+'곳'],['재사용률', g.percent.toFixed(1)+'%']].forEach(function(m){
+          ws.mergeCells(nr,1,nr,6); put(nr,1,m[0],{bold:true,fill:XC.gray,align:'center'});
+          ws.mergeCells(nr,7,nr,8); put(nr,7,m[1],{bold:true,align:'center',size:12,color:XC.navy});
+          nr++;
+        });
+        ws.mergeCells(nr,1,nr,8); put(nr,1,'재사용 병원',{bold:true,fill:XC.gray,align:'center'}); nr++;
+        var hs=(g.hospitals&&g.hospitals.length)?g.hospitals:['(없음)'];
+        hs.forEach(function(h){ ws.mergeCells(nr,1,nr,8); put(nr,1,'- '+h,{valign:'middle'}); nr++; });
+      }
+      nozBlock('N-care', st.nozzle.joined);
+      nozBlock('미가입', st.nozzle.nonJoined);
+      nozEnd=nr-1;
+      boxBorder(spEnd+1,1,nozEnd,8);
+    }
     // ⑥ 요일별 내용 I4:N — 최소 30행까지 병합 (본문이 더 길면 그 끝까지)
-    var dayEnd=Math.max(28, spEnd);   /* 요일 패널 병합 28행까지 (본문이 더 길면 그 끝까지) */
+    var dayEnd=Math.max(28, nozEnd);   /* 요일 패널 병합 28행까지 (본문이 더 길면 그 끝까지) */
     dayDates.forEach(function(d,i){
       var c=9+i;
       ws.mergeCells(4,c,dayEnd,c);
