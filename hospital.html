@@ -486,13 +486,19 @@ function populateFilters(){
     if(h.rg) regionSet[h.rg]=(regionSet[h.rg]||0)+1;
   });
   const sf=document.getElementById('salesFilter');
+  while(sf.options.length>1) sf.remove(1);
   Object.keys(salesSet).sort((a,b)=>salesSet[b]-salesSet[a]).forEach(s=>{
     const o=document.createElement('option'); o.value=s; o.textContent=s+' ('+salesSet[s]+')'; sf.appendChild(o);
   });
+  if(salesFilter && !salesSet[salesFilter]) salesFilter='';
+  sf.value=salesFilter;
   const rf=document.getElementById('regionFilter');
+  while(rf.options.length>1) rf.remove(1);
   Object.keys(regionSet).sort((a,b)=>regionSet[b]-regionSet[a]).forEach(r=>{
     const o=document.createElement('option'); o.value=r; o.textContent=r+' ('+regionSet[r]+')'; rf.appendChild(o);
   });
+  if(regionFilter && !regionSet[regionFilter]) regionFilter='';
+  rf.value=regionFilter;
 }
 
 // ===== 통계 =====
@@ -1540,6 +1546,7 @@ applyLang();
 
   function applyHospDB(rows){
     if(applyDB(rows)){
+      populateFilters();
       updateStats(); render();
       if(curTab==='dash') renderDash();
       return true;

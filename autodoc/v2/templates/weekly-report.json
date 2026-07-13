@@ -1,0 +1,172 @@
+{
+  "id": "weekly-report",
+  "name": "주간업무보고",
+  "desc": "주간 처리 내역 · 차주 계획 · 특이사항",
+  "category": "보고서",
+  "version": "1.1.0",
+  "minLevel": 1,
+  "formats": [
+    "pptx",
+    "xlsx",
+    "docx",
+    "pdf"
+  ],
+  "theme": "company-default",
+  "inputs": [
+    {
+      "key": "writer",
+      "label": "작성자",
+      "type": "text",
+      "required": true,
+      "placeholder": "이름"
+    },
+    {
+      "key": "week",
+      "label": "보고 주차",
+      "type": "week",
+      "required": true
+    },
+    {
+      "key": "rows",
+      "label": "처리 내역",
+      "type": "table",
+      "columns": [
+        {
+          "key": "date",
+          "label": "일자",
+          "type": "date"
+        },
+        {
+          "key": "kind",
+          "label": "구분",
+          "type": "select",
+          "options": [
+            "점검",
+            "VOC",
+            "기타"
+          ]
+        },
+        {
+          "key": "hosp",
+          "label": "병원/고객"
+        },
+        {
+          "key": "content",
+          "label": "처리내용",
+          "type": "textarea"
+        },
+        {
+          "key": "memo",
+          "label": "비고"
+        }
+      ]
+    },
+    {
+      "key": "plan",
+      "label": "차주 계획",
+      "type": "textarea",
+      "rows": 4,
+      "ai": [
+        "draft",
+        "proofread"
+      ]
+    },
+    {
+      "key": "special",
+      "label": "특이사항",
+      "type": "textarea",
+      "rows": 3,
+      "placeholder": "예) ○○의원 : 핸드피스 유상 교체 1,650,000원(부가세 포함)",
+      "ai": [
+        "proofread"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "if": "rows.length == 0",
+      "warn": "처리 내역이 비어 있습니다. 그대로 생성할까요?"
+    }
+  ],
+  "layout": {
+    "grid": {
+      "cols": 12,
+      "rows": 8,
+      "gap": 0.1
+    },
+    "pages": [
+      {
+        "blocks": [
+          {
+            "component": "header",
+            "area": "1 / 1 / 2 / 13",
+            "props": {
+              "title": "주간업무보고",
+              "subtitle": "@week",
+              "writer": "@writer",
+              "date": "@fn.today"
+            }
+          },
+          {
+            "component": "table",
+            "area": "2 / 1 / 8 / 9",
+            "props": {
+              "title": "처리 내역",
+              "columns": [
+                {
+                  "key": "date",
+                  "label": "일자",
+                  "width": 0.14
+                },
+                {
+                  "key": "kind",
+                  "label": "구분",
+                  "width": 0.1
+                },
+                {
+                  "key": "hosp",
+                  "label": "병원/고객",
+                  "width": 0.2
+                },
+                {
+                  "key": "content",
+                  "label": "처리내용",
+                  "width": 0.4
+                },
+                {
+                  "key": "memo",
+                  "label": "비고",
+                  "width": 0.16
+                }
+              ],
+              "rows": "@rows"
+            }
+          },
+          {
+            "component": "text",
+            "area": "2 / 9 / 5 / 13",
+            "props": {
+              "title": "차주 계획",
+              "content": "@plan"
+            }
+          },
+          {
+            "component": "text",
+            "area": "5 / 9 / 8 / 13",
+            "props": {
+              "title": "특이사항",
+              "content": "@special"
+            }
+          },
+          {
+            "component": "footer",
+            "area": "8 / 1 / 9 / 13",
+            "props": {
+              "text": "BAZ BIOMEDIC · 주간업무보고 · @fn.today"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

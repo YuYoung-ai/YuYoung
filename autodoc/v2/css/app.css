@@ -1,0 +1,179 @@
+/************************************************************
+ * app.css — 앱 셸·화면 스타일 (토큰만 참조)
+ ************************************************************/
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-family);
+  font-size: calc(var(--font-body) * var(--font-scale));
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 앱 프레임 */
+.app-frame { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+.topbar {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--ui-surface); border-bottom: 1px solid var(--ui-border);
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar .brand { font-weight: 700; font-size: calc(var(--font-h1) * var(--font-scale)); }
+.topbar .spacer { flex: 1; }
+
+.app-body { display: grid; grid-template-columns: 220px 1fr; }
+.sidenav { padding: var(--space-3); border-right: 1px solid var(--ui-border); background: var(--ui-surface); }
+.sidenav a {
+  display: block; padding: var(--space-2) var(--space-3); border-radius: var(--radius-s);
+  color: var(--ui-text); text-decoration: none; margin-bottom: var(--space-1);
+}
+.sidenav a:hover { background: var(--ui-surface-2); }
+.sidenav a.active { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.sidenav a.cta { color: var(--ui-primary); font-weight: 700; }
+
+.content { padding: var(--space-5); max-width: 1100px; }
+.statusbar {
+  padding: var(--space-2) var(--space-4); border-top: 1px solid var(--ui-border);
+  background: var(--ui-surface); color: var(--ui-text-weak); font-size: calc(var(--font-caption) * var(--font-scale));
+  display: flex; gap: var(--space-4);
+}
+
+/* 공통 부품 */
+.btn {
+  font: inherit; cursor: pointer; border: 1px solid transparent; border-radius: var(--radius-s);
+  padding: var(--space-2) var(--space-4); background: var(--ui-surface-2); color: var(--ui-text);
+  transition: background var(--motion-fast);
+}
+.btn:hover { background: var(--ui-border); }
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn.primary { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.card {
+  background: var(--ui-surface); border: 1px solid var(--ui-border);
+  border-radius: var(--radius-m); padding: var(--space-4); box-shadow: var(--elev-1);
+}
+.badge { font-size: calc(var(--font-caption) * var(--font-scale)); padding: 2px 8px; border-radius: 999px; background: var(--ui-surface-2); }
+.badge.golden { color: var(--ui-golden); border: 1px solid var(--ui-golden); }
+
+/* 로그인 카드 */
+.login-wrap { display: grid; place-items: center; min-height: 100vh; }
+.login-card { width: min(360px, 90vw); }
+.login-card input { width: 100%; padding: var(--space-3); border: 1px solid var(--ui-border); border-radius: var(--radius-s); font: inherit; margin: var(--space-3) 0; background: var(--ui-bg); color: var(--ui-text); }
+
+/* 반응형 — RESPONSIVE_GUIDE 3단 (기초) */
+@media (max-width: 1023px) { .app-body { grid-template-columns: 64px 1fr; } .sidenav a span { display: none; } }
+@media (max-width: 599px) {
+  .app-body { grid-template-columns: 1fr; }
+  .sidenav { display: none; }
+}
+
+/* ── Sprint 2: Catalog · Form · Editor ─────────────────── */
+.screen-title { font-size: var(--font-display); margin: 0 0 var(--space-4); }
+.toolbar { margin-bottom: var(--space-4); }
+.cat-title { font-size: var(--font-h2); color: var(--ui-text-weak); margin: var(--space-5) 0 var(--space-2); }
+.card-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+@media (max-width: 1023px) { .card-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 599px) { .card-grid { grid-template-columns: 1fr; } }
+
+.tpl-card { text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--ui-border); }
+.tpl-card:hover { box-shadow: var(--elev-2); }
+.tpl-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tpl-card.golden { border-color: var(--ui-golden); }
+.tpl-card.locked { opacity: .55; cursor: not-allowed; }
+.tpl-thumb { height: 72px; border-radius: var(--radius-s); background: var(--ui-surface-2); display: grid; place-items: center; font-size: 28px; color: var(--ui-text-weak); }
+.tpl-title { font-weight: 700; }
+.tpl-meta { font-size: var(--font-caption); color: var(--ui-text-weak); }
+.tpl-desc { font-size: var(--font-caption); color: var(--ui-text-weak); }
+.empty { color: var(--ui-text-weak); padding: var(--space-4); }
+
+/* Form */
+.ad-form .field { margin-bottom: var(--space-4); }
+.field-label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+.field-label .req { color: var(--ui-danger); }
+.field-input { width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--ui-border); border-radius: var(--radius-s); font: inherit; background: var(--ui-bg); color: var(--ui-text); }
+.field-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.field.has-error .field-input { border-color: var(--ui-danger); }
+.field-err { color: var(--ui-danger); font-size: var(--font-caption); min-height: 1.1em; }
+.field-radio .radio-opt, .checkbox-opt { margin-right: var(--space-4); }
+.optional-group { margin-top: var(--space-3); border-top: 1px dashed var(--ui-border); padding-top: var(--space-3); }
+.optional-group summary { cursor: pointer; color: var(--ui-text-weak); }
+.field-table { width: 100%; border-collapse: collapse; margin-bottom: var(--space-2); }
+.field-table th, .field-table td { border: 1px solid var(--ui-border); padding: 2px; text-align: left; }
+.field-table th { background: var(--ui-surface-2); font-size: var(--font-caption); }
+.cell-input { width: 100%; border: none; background: transparent; font: inherit; color: var(--ui-text); padding: var(--space-1); }
+.cell-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn.small { padding: 2px 8px; font-size: var(--font-caption); }
+
+/* Editor split */
+.editor-split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+@media (max-width: 899px) { .editor-split { grid-template-columns: 1fr; } }
+.editor-head { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-3); }
+.progress { flex: 1; height: 8px; background: var(--ui-surface-2); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; width: 0; background: var(--ui-primary); transition: width var(--motion-base); }
+.editor-actions { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+.preview-col { position: sticky; top: 76px; }
+.preview-stub .preview-page { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-5); min-height: 300px; box-shadow: var(--elev-1); }
+.sum-row { padding: var(--space-1) 0; border-bottom: 1px solid var(--ui-border); }
+.preview-note { color: var(--ui-text-weak); font-size: var(--font-caption); margin-top: var(--space-2); }
+
+/* ── Sprint 3: Preview · 생성 · 내 문서 ─────────────────── */
+.preview-toolbar { font-size: var(--font-caption); color: var(--ui-text-weak); margin-bottom: var(--space-2); }
+.preview-host { background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-3); min-height: 320px; box-shadow: var(--elev-1); overflow: auto; }
+.preview-host .ad-page { background: #fff; margin: 0 auto var(--space-3); box-shadow: var(--elev-1); width: 100%; }
+.gen-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.gen-status { margin-top: var(--space-2); color: var(--ui-text-weak); font-size: var(--font-caption); min-height: 1.2em; }
+.doc-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.doc-item { display: flex; align-items: center; gap: var(--space-2); text-align: left; }
+.doc-item .btn.small { margin-left: auto; }
+
+/* ── Sprint 4: 입력 심화 · 편집 ─────────────────────────── */
+.suggest-row { display: flex; gap: var(--space-2); margin-top: var(--space-1); flex-wrap: wrap; }
+.chip { font: inherit; font-size: var(--font-caption); cursor: pointer; border: 1px solid var(--ui-border); background: var(--ui-surface-2); color: var(--ui-text); border-radius: 999px; padding: 2px 10px; }
+.chip:hover { background: var(--ui-border); }
+.chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.field-file .thumb { max-width: 160px; max-height: 120px; border: 1px solid var(--ui-border); border-radius: var(--radius-s); margin-top: var(--space-2); display: block; }
+.file-preview { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.field-sign { display: flex; align-items: flex-start; gap: var(--space-2); }
+.sign-pad { border: 1px solid var(--ui-border); border-radius: var(--radius-s); background: #fff; touch-action: none; }
+.field-repeat .repeat-item { margin-bottom: var(--space-3); }
+.repeat-bar { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.repeat-bar .btn { margin-left: 0; }
+.dynamic-section { border: 1px solid var(--ui-border); border-radius: var(--radius-m); padding: var(--space-3); margin-bottom: var(--space-4); }
+.dynamic-section legend { color: var(--ui-text-weak); padding: 0 var(--space-2); }
+.form-mount { margin-bottom: var(--space-2); }
+
+/* ── Sprint 5: AI Import · 학습 ─────────────────────────── */
+.wiz-steps { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
+.wiz-step { font-size: var(--font-caption); padding: 2px 10px; border-radius: 999px; background: var(--ui-surface-2); color: var(--ui-text-weak); }
+.wiz-step.active { background: var(--ui-primary); color: var(--ui-primary-ink); }
+.wiz-step.done { color: var(--ui-success); }
+.wiz-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.wiz-nav { display: flex; justify-content: space-between; margin-top: var(--space-3); }
+.wiz-row { display: flex; align-items: center; gap: var(--space-3); }
+.wiz-hint p { margin: var(--space-2) 0; }
+.prop-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--ui-border); }
+.prop-after { grid-column: 1 / -1; color: var(--ui-text-weak); font-size: var(--font-caption); }
+.approve-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.approve-item { display: flex; flex-direction: column; gap: var(--space-2); }
+.approve-after { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.approve-actions { display: flex; gap: var(--space-2); }
+.admin-tiles, .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-top: var(--space-3); }
+@media (max-width: 899px) { .admin-tiles, .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+.admin-tile { text-align: left; cursor: pointer; }
+.metric { text-align: left; }
+.metric-title { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.metric-value { font-size: var(--font-display); font-weight: 700; }
+.metric-note { color: var(--ui-text-weak); font-size: var(--font-caption); }
+.todo-row { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+
+/* ── Sprint 6: 오프라인 · 접근성 · 설정 ─────────────────── */
+.skip-link { position: absolute; left: -9999px; top: 0; background: var(--ui-primary); color: var(--ui-primary-ink); padding: var(--space-2) var(--space-3); z-index: 100; border-radius: 0 0 var(--radius-s) 0; }
+.skip-link:focus { left: 0; }
+.content:focus-visible { outline: none; }
+.banner { background: var(--ui-info); color: #fff; padding: var(--space-2) var(--space-4); font-size: var(--font-caption); }
+.set-row { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-3); flex-wrap: wrap; }
+.set-label { min-width: 90px; color: var(--ui-text-weak); }
+.seg { display: inline-flex; gap: var(--space-1); flex-wrap: wrap; }
+.seg-btn { font: inherit; cursor: pointer; border: 1px solid var(--ui-border); background: var(--ui-surface); color: var(--ui-text); border-radius: var(--radius-s); padding: var(--space-1) var(--space-3); }
+.seg-btn.on { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary); }
+.seg-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }

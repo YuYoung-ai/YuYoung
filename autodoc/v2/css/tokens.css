@@ -1,0 +1,52 @@
+/************************************************************
+ * tokens.css — 디자인 토큰 (DESIGN_SYSTEM.md)
+ * 앱 UI 토큰. 부품은 직접 색상값 금지, 토큰만 참조.
+ * 라이트/다크 2세트 — data-theme 또는 prefers-color-scheme.
+ ************************************************************/
+:root {
+  --ui-primary: #2563EB;
+  --ui-primary-ink: #FFFFFF;
+  --ui-success: #16A34A;
+  --ui-warning: #D97706;
+  --ui-danger: #DC2626;
+  --ui-info: #0891B2;
+  --ui-golden: #B45309;
+
+  --ui-bg: #F8FAFC;
+  --ui-surface: #FFFFFF;
+  --ui-surface-2: #F1F5F9;
+  --ui-border: #E2E8F0;
+  --ui-text: #0F172A;
+  --ui-text-weak: #64748B;
+
+  --space-1: 4px; --space-2: 8px; --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px;
+
+  --radius-s: 6px; --radius-m: 10px; --radius-l: 16px;
+  --elev-1: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.10);
+  --elev-2: 0 4px 12px rgba(15,23,42,.12);
+
+  --font-body: 15px; --font-h2: 17px; --font-h1: 20px; --font-display: 24px; --font-caption: 13px;
+  --font-family: "Noto Sans KR", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --motion-fast: 150ms; --motion-base: 250ms;
+  --focus-ring: 0 0 0 2px var(--ui-primary);
+  --font-scale: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-bg: #0B1220; --ui-surface: #111827; --ui-surface-2: #1F2937;
+    --ui-border: #334155; --ui-text: #E5E7EB; --ui-text-weak: #94A3B8;
+    --ui-primary: #3B82F6; --ui-golden: #D97706;
+  }
+}
+:root[data-theme="dark"] {
+  --ui-bg: #0B1220; --ui-surface: #111827; --ui-surface-2: #1F2937;
+  --ui-border: #334155; --ui-text: #E5E7EB; --ui-text-weak: #94A3B8;
+  --ui-primary: #3B82F6; --ui-golden: #D97706;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-base: 0ms; }
+}
