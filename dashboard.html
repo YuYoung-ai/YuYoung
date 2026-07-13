@@ -1019,13 +1019,13 @@ function renderNcareTable(pptx, s, tx){
   var rows=[
     [{text:'구분',options:HB}].concat(tiers.map(function(t){return {text:t,options:HB};})),
     [{text:'가입 병원 수',options:LB}].concat(joined.map(function(x){return {text:n(x),options:CE};})),
-    [{text:'정상 운영 병원 수',options:LB}].concat(normal.map(function(x){return {text:n(x),options:CE};})),
-    [{text:'점검 대상 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 완료 병원 수',options:LB}].concat(normal.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 예정 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
     [{text:'점검률',options:LB}].concat(rate.map(function(x){return {text:n(x),options:CE};}))
   ];
   s.addTable(rows, {x:T.tblX,y:T.tblY,w:T.tblW,colW:T.colW,
     rowH:T.rowH,border:{type:'solid',color:C.line,pt:0.75},fontFace:FT.face,valign:'middle'});
-  /* 하단 요약 바: 전체 가입자 · 정상 운영 병원 · 정상 운영률 */
+  /* 하단 요약 바: 전체 가입자 · 점검 완료 병원 · 점검 운영률 */
   function sumBox(g,label,val,strong){
     s.addShape(pptx.shapes.RECTANGLE,{x:g.x,y:T.sumY,w:g.w,h:T.sumH,
       fill:{color:strong?C.blueBg:C.grayBg},line:{color:C.line,width:0.75}});
@@ -1034,8 +1034,8 @@ function renderNcareTable(pptx, s, tx){
        {x:g.x+T.sumPad,y:T.sumY,w:g.w-T.sumPad*2,h:T.sumH,align:'center',valign:'middle'});
   }
   sumBox(T.sum1,'전체 가입자',nc.totalJoined,true);
-  sumBox(T.sum2,'정상 운영 병원',nc.totalNormal,false);
-  sumBox(T.sum3,'정상 운영률',nc.normalRate,true);
+  sumBox(T.sum2,'점검 완료 병원',nc.totalNormal,false);
+  sumBox(T.sum3,'점검 운영률',nc.normalRate,true);
 }
 
 /* ══════════ PPT 미리보기 — 생성 전 두 슬라이드를 HTML로 렌더해 확인 ══════════
