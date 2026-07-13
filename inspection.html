@@ -242,6 +242,12 @@
   .task-actions .ta-load{background:var(--navy);color:#fff;border-color:var(--navy);}
   .task-actions .ta-del{color:var(--red);border-color:#F0D0CC;}
   .task-actions select{color:var(--text-muted);flex:1.2;padding-right:20px;}
+  .tasklist-cloud{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:12px;font-weight:700;
+    padding:7px 11px;border-radius:16px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .ta-cloud-tag{display:inline-flex;align-items:center;font-size:11px;font-weight:800;color:#2E7D9E;
+    background:#EAF4F8;border-radius:12px;padding:2px 8px;}
+  .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
+  .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -475,7 +481,10 @@
   <div class="tasklist-panel">
     <div class="tasklist-head">
       <div class="tasklist-title">📋 작업 목록</div>
-      <button type="button" class="tasklist-close" id="taskListClose">✕</button>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" class="tasklist-cloud" id="cloudRefreshBtn" title="클라우드 새로고침">☁ 새로고침</button>
+        <button type="button" class="tasklist-close" id="taskListClose">✕</button>
+      </div>
     </div>
     <div class="tasklist-search">
       <input type="text" id="taskSearch" placeholder="병원명 · 제품명 · S/N · 엔지니어 검색" autocomplete="off">
@@ -936,6 +945,10 @@ const LOGO_PATH = './logo.png';            // 회사 로고 (저장소 루트, s
 const STORAGE_KEY = 'baz_inspection_draft_v1'; // (구) 단일 임시저장 키 — 마이그레이션용
 const TASKS_KEY = 'inspection_tasks_v1';       // 작업 목록(다중 저장) 키
 const CURRENT_TASK_KEY = 'inspection_current_task_v1'; // 현재 열린 작업 id
+// 클라우드 동기화 (Google Sheets 협업) — 오프라인 우선, 설정 시에만 동작
+const TASK_SYNC_URL = '';                       // ★ 배포 후 inspection_gas.gs /exec URL 입력 ★
+const SYNC_URL_OVERRIDE_KEY = 'inspection_sync_url';   // 코드 수정 없이 URL 설정용
+const SYNC_QUEUE_KEY = 'inspection_sync_queue_v1';     // 오프라인 동기화 대기 큐
 // 작업 상태 정의 (정렬 order: 사인대기>작성중>점검완료>완료)
 const TASK_STATUS = {
   waiting_signature:{label:'사인대기', badge:'🔵', cls:'st-waiting_signature', order:0},
@@ -1513,6 +1526,12 @@ function changeTaskStatus(id, status){
     if(status!=='waiting_signature' && _signMode) exitSignMode();
     updateTaskStatusBar();
   }
+  // 사인대기 전환 시 Google Sheets 자동 등록 (다른 기기에서 이어받기)
+  if(status==='waiting_signature'){
+    cloudSyncTask(t, {toast: cloudConfigured()?'사인대기 작업이 등록되었습니다.':''});
+  }else if(status==='completed'){
+    cloudSyncTask(t, {silent:true});
+  }
 }
 
 // 삭제 (confirm 확인)
@@ -1550,27 +1569,148 @@ function exitSignMode(){
   document.getElementById('signBanner').style.display='none';
 }
 
+// ===== 클라우드 동기화 (Google Sheets 협업, 오프라인 우선) =====
+// 설정되지 않으면(=URL 없음) 전부 무동작 → 기존 localStorage 동작 100% 유지.
+let _cloudTasks=[];        // 서버에서 조회한 사인대기/완료 작업 메타데이터
+let _cloudBusy=false;
+function cloudUrl(){
+  try{ const o=localStorage.getItem(SYNC_URL_OVERRIDE_KEY); if(o) return o; }catch(e){}
+  return TASK_SYNC_URL;
+}
+function cloudConfigured(){ return !!cloudUrl(); }
+function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
+
+function cloudPost(payload){
+  // auth.js 방식: text/plain 단순요청(프리플라이트 회피) + JSON 응답
+  return fetch(cloudUrl(), { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({token:authToken()}, payload)) }).then(r=>r.json());
+}
+function cloudGet(params){
+  const q=Object.assign({token:authToken()}, params);
+  const qs=Object.keys(q).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(q[k])).join('&');
+  return fetch(cloudUrl()+'?'+qs).then(r=>r.json());
+}
+
+// 오프라인 동기화 대기 큐
+function loadSyncQueue(){ try{ const q=JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return []; } }
+function saveSyncQueue(q){ try{ localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)); }catch(e){} }
+function enqueueSync(id){ const q=loadSyncQueue(); if(!q.includes(id)){ q.push(id); saveSyncQueue(q); } }
+function dequeueSync(id){ saveSyncQueue(loadSyncQueue().filter(x=>x!==id)); }
+
+// Task → 서버 업서트 payload (Data(JSON)에 전체 폼 데이터 포함)
+function taskToSyncPayload(task){
+  return { action:'upsert',
+    taskId: task.id, status: task.status, documentNo: task.documentNo||'',
+    hospital: task.hospital||'', product: task.product||'', serial: task.serial||'',
+    engineer: task.engineer||'', receiver: (task.data&&task.data.basic&&task.data.basic.receiver)||'',
+    createdAt: new Date(task.createdAt).toISOString(), updatedAt: new Date(task.updatedAt).toISOString(),
+    data: JSON.stringify(task.data||{}) };
+}
+// 서버로 작업 동기화 (실패/오프라인 시 큐에 적재). opts:{toast, silent}
+function cloudSyncTask(task, opts){
+  opts=opts||{};
+  if(!task || !cloudConfigured()) return Promise.resolve({skip:true});
+  if(!navigator.onLine){ enqueueSync(task.id); return Promise.resolve({queued:true}); }
+  return cloudPost(taskToSyncPayload(task)).then(r=>{
+    if(r&&r.success){ dequeueSync(task.id); if(opts.toast) showToast(opts.toast); }
+    else { enqueueSync(task.id); if(!opts.silent) showToast('클라우드 동기화 실패 — 나중에 재시도합니다'); }
+    return r||{success:false};
+  }).catch(()=>{ enqueueSync(task.id); if(!opts.silent) showToast('오프라인 — 복구 시 자동 동기화'); return {success:false, offline:true}; });
+}
+// 대기 큐 재전송 (네트워크 복구/로드 시)
+function flushSyncQueue(){
+  if(!cloudConfigured() || !navigator.onLine) return;
+  loadSyncQueue().forEach(id=>{ const t=getTask(id); if(t) cloudSyncTask(t,{silent:true}); else dequeueSync(id); });
+}
+
+// 서버에서 사인대기·완료 작업 목록 조회 → _cloudTasks 갱신 후 목록 재렌더
+function refreshCloudTasks(){
+  if(!cloudConfigured()){ return Promise.resolve(); }
+  _cloudBusy=true; renderTaskList();
+  return cloudGet({action:'list', status:'waiting_signature,completed'}).then(r=>{
+    _cloudTasks = (r&&r.success&&Array.isArray(r.tasks)) ? r.tasks : [];
+  }).catch(()=>{ /* 오프라인: 로컬만 표시 */ }).finally(()=>{ _cloudBusy=false; renderTaskList(); });
+}
+// 서버 작업 불러오기 (Data 포함) → 로컬 반영 + 화면 복원(+사인 모드)
+function cloudPullTask(taskId){
+  if(!cloudConfigured()) return;
+  showLoading('클라우드에서 불러오는 중...');
+  cloudGet({action:'get', taskId}).then(r=>{
+    if(!(r&&r.success&&r.task)){ hideLoading(); showToast('클라우드 작업을 불러오지 못했습니다'); return; }
+    const ct=r.task;
+    // 로컬 tasks 에 병합 (같은 TaskID면 UpdatedAt 최신 유지)
+    const tasks=loadTasks();
+    const local=tasks.find(t=>t.id===ct.taskId);
+    const remoteUpdated=new Date(ct.updatedAt||0).getTime();
+    if(!local || remoteUpdated >= (local.updatedAt||0)){
+      const merged={ id:ct.taskId, createdAt:new Date(ct.createdAt||Date.now()).getTime(),
+        updatedAt:remoteUpdated||Date.now(), status:ct.status||'draft', documentNo:ct.documentNo||'',
+        hospital:ct.hospital||'', product:ct.product||'', serial:ct.serial||'', engineer:ct.engineer||'',
+        data:ct.data||{basic:{},pay:'',types:[],results:{},memos:{},photos:[],signatures:{cs:null,hs:null}} };
+      const idx=tasks.findIndex(t=>t.id===ct.taskId);
+      if(idx>=0) tasks[idx]=merged; else tasks.push(merged);
+      persistTasks(tasks);
+    }
+    hideLoading();
+    openTask(ct.taskId);   // 로컬에 반영됐으므로 기존 열기 로직 재사용 (사인대기면 사인 모드)
+  }).catch(()=>{ hideLoading(); showToast('클라우드 오류 — 오프라인일 수 있습니다'); });
+}
+
+window.addEventListener('online', ()=>{ if(cloudConfigured()){ showToast('네트워크 복구 — 동기화 중'); flushSyncQueue(); } });
+
 // ===== 작업 목록 Modal =====
-function openTaskList(){ renderTaskList(); document.getElementById('taskListOverlay').classList.add('show'); }
+function openTaskList(){
+  renderTaskList();
+  document.getElementById('taskListOverlay').classList.add('show');
+  // 클라우드 설정 시 사인대기/완료 작업 자동 조회 (다른 기기 작업 이어받기)
+  if(cloudConfigured() && navigator.onLine){ refreshCloudTasks(); }
+}
 function closeTaskList(){ document.getElementById('taskListOverlay').classList.remove('show'); }
 function taskSortKey(t){ return (TASK_STATUS[t.status]||TASK_STATUS.draft).order; }
 function fmtTaskTime(ts){ return ts?new Date(ts).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'; }
+function toMs(ts){ return typeof ts==='number' ? ts : (ts?new Date(ts).getTime():0); }
+// 로컬 + 클라우드 작업 병합 (같은 TaskID는 UpdatedAt 최신 우선, 중복 생성 안 함)
+function mergedTaskList(){
+  const map=new Map();
+  loadTasks().forEach(t=>{
+    map.set(t.id, { id:t.id, status:t.status, hospital:t.hospital, product:t.product, serial:t.serial,
+      engineer:t.engineer, createdAt:t.createdAt, updatedAt:t.updatedAt, cloud:false });
+  });
+  _cloudTasks.forEach(c=>{
+    const cu=toMs(c.updatedAt), ex=map.get(c.taskId);
+    // 로컬에 없거나, 클라우드가 더 최신이면 클라우드(불러오기 시 pull) 엔트리로 표시
+    if(!ex || cu > toMs(ex.updatedAt)){
+      map.set(c.taskId, { id:c.taskId, status:c.status, hospital:c.hospital, product:c.product, serial:c.serial,
+        engineer:c.engineer, createdAt:c.createdAt, updatedAt:c.updatedAt, cloud:true });
+    }
+  });
+  return [...map.values()];
+}
 function renderTaskList(){
   const q=normalize(document.getElementById('taskSearch').value);
-  let tasks=loadTasks();
+  let tasks=mergedTaskList();
   if(q) tasks=tasks.filter(t=>[t.hospital,t.product,t.serial,t.engineer].some(x=>normalize(x).includes(q)));
   // 정렬: 상태 order → 최신 수정순
-  tasks.sort((a,b)=> taskSortKey(a)-taskSortKey(b) || (b.updatedAt||0)-(a.updatedAt||0));
+  tasks.sort((a,b)=> taskSortKey(a)-taskSortKey(b) || (toMs(b.updatedAt))-(toMs(a.updatedAt)));
   const body=document.getElementById('taskListBody');
-  if(!tasks.length){ body.innerHTML='<div class="task-empty">저장된 작업이 없습니다</div>'; return; }
-  body.innerHTML=tasks.map(t=>{
+  const cloudNote = cloudConfigured() ? (_cloudBusy?'<div class="task-cloud-note">☁ 클라우드 동기화 중…</div>':'') : '';
+  if(!tasks.length){ body.innerHTML=cloudNote+'<div class="task-empty">저장된 작업이 없습니다</div>'; return; }
+  body.innerHTML=cloudNote+tasks.map(t=>{
     const m=TASK_STATUS[t.status]||TASK_STATUS.draft;
     const waiting=t.status==='waiting_signature';
     const opt=(val,label)=>`<option value="${val}"${t.status===val?' selected':''}>${label}</option>`;
+    // 클라우드 전용(로컬 미보유/구버전) 항목은 불러오기 시 서버에서 pull, 상태변경·복제·삭제는 로컬 전용
+    const loadAct = t.cloud ? 'cloudload' : 'load';
+    const statusCtrl = t.cloud
+      ? '<span class="ta-cloud-tag">☁ 클라우드</span>'
+      : `<select data-act="status" data-id="${t.id}" title="상태 변경">${opt('draft','🟡 작성중')}${opt('inspection_completed','🟠 점검완료')}${opt('waiting_signature','🔵 사인대기')}${opt('completed','🟢 완료')}</select>`;
+    const delBtn = t.cloud ? '' : `<button type="button" class="ta-del" data-act="del" data-id="${t.id}">삭제</button>`;
+    const dupBtn = t.cloud ? '' : `<button type="button" data-act="dup" data-id="${t.id}">복제</button>`;
     return `<div class="task-item ${waiting?'is-waiting':''}" data-id="${t.id}">
       <div class="task-item-top">
         <span class="st-badge ${m.cls}">${m.badge} ${m.label}</span>
         ${waiting?'<span class="sign-need-label">⚠ 담당자 사인 필요</span>':''}
+        ${t.cloud?'<span class="ta-cloud-tag">☁</span>':''}
       </div>
       <div class="task-hosp">${esc(t.hospital||'무제목')}</div>
       <div class="task-meta">
@@ -1578,12 +1718,8 @@ function renderTaskList(){
         <b>작성</b> ${fmtTaskTime(t.createdAt)} · <b>수정</b> ${fmtTaskTime(t.updatedAt)}
       </div>
       <div class="task-actions">
-        <button type="button" class="ta-load" data-act="load" data-id="${t.id}">불러오기</button>
-        <button type="button" data-act="dup" data-id="${t.id}">복제</button>
-        <select data-act="status" data-id="${t.id}" title="상태 변경">
-          ${opt('draft','🟡 작성중')}${opt('inspection_completed','🟠 점검완료')}${opt('waiting_signature','🔵 사인대기')}${opt('completed','🟢 완료')}
-        </select>
-        <button type="button" class="ta-del" data-act="del" data-id="${t.id}">삭제</button>
+        <button type="button" class="ta-load" data-act="${loadAct}" data-id="${t.id}">불러오기</button>
+        ${dupBtn}${statusCtrl}${delBtn}
       </div>
     </div>`;
   }).join('');
@@ -1596,6 +1732,10 @@ document.getElementById('newTaskBtn').addEventListener('click', newTask);
 document.getElementById('taskListClose').addEventListener('click', closeTaskList);
 document.getElementById('taskListOverlay').addEventListener('click', (e)=>{ if(e.target.id==='taskListOverlay') closeTaskList(); });
 document.getElementById('taskSearch').addEventListener('input', debounce(renderTaskList, 150));
+document.getElementById('cloudRefreshBtn').addEventListener('click', ()=>{
+  if(!cloudConfigured()){ showToast('클라우드 동기화가 설정되지 않았습니다'); return; }
+  refreshCloudTasks();
+});
 document.getElementById('editModeBtn').addEventListener('click', ()=>{ exitSignMode(); showToast('편집 모드로 전환'); });
 document.getElementById('taskStatusSelect').addEventListener('change', (e)=>{
   if(!_currentTaskId) return;
@@ -1607,6 +1747,7 @@ document.getElementById('taskListBody').addEventListener('click', (e)=>{
   const btn=e.target.closest('button[data-act]'); if(!btn) return;
   const id=btn.getAttribute('data-id'), act=btn.getAttribute('data-act');
   if(act==='load') openTask(id);
+  else if(act==='cloudload') cloudPullTask(id);
   else if(act==='dup') duplicateTask(id);
   else if(act==='del') deleteTask(id);
 });
@@ -1991,6 +2132,8 @@ async function generatePDF(arg){
       // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
       exitSignMode();
       saveCurrentTask({status:'completed', documentNo:docNo});
+      // Google Sheets 도 완료 처리 (설정 시). 다른 기기에서 조회·재생성 가능
+      if(_currentTaskId) cloudSyncTask(getTask(_currentTaskId), {silent:true});
       // ── 구글시트 방문 기록 전송 (백그라운드) ──
       (function(){
         var GAS_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
@@ -2062,6 +2205,9 @@ preloadLogo();
     updateTaskStatusBar();
   }
 })();
+
+// 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
+flushSyncQueue();
 </script>
 <script>
 // 오프라인 사용을 위한 서비스 워커 등록
