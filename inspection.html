@@ -946,7 +946,7 @@ const STORAGE_KEY = 'baz_inspection_draft_v1'; // (구) 단일 임시저장 키 
 const TASKS_KEY = 'inspection_tasks_v1';       // 작업 목록(다중 저장) 키
 const CURRENT_TASK_KEY = 'inspection_current_task_v1'; // 현재 열린 작업 id
 // 클라우드 동기화 (Google Sheets 협업) — 오프라인 우선, 설정 시에만 동작
-const TASK_SYNC_URL = '';                       // ★ 배포 후 inspection_gas.gs /exec URL 입력 ★
+const TASK_SYNC_URL = 'https://script.google.com/macros/s/AKfycby4X8be7XtZ0yeM1cdCjOeui4rmmQwGlWZWN6NCg7lf1z1fQAkx88a2CjSisdKmuKwU/exec';                       // ★ 배포 후 inspection_gas.gs /exec URL 입력 ★
 const SYNC_URL_OVERRIDE_KEY = 'inspection_sync_url';   // 코드 수정 없이 URL 설정용
 const SYNC_QUEUE_KEY = 'inspection_sync_queue_v1';     // 오프라인 동기화 대기 큐
 // 작업 상태 정의 (정렬 order: 사인대기>작성중>점검완료>완료)
