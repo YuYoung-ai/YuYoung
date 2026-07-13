@@ -333,7 +333,7 @@ function buildFromRows(rows, w, monK){
       ncare: ncareOf(r.hosp, r.ncare),              /* 가입/미가입 — 병원정보DB 연동 */
       kind:  (r.gubun==='점검') ? '점검' : 'VOC',   /* A/S → VOC 표기 */
       hosp:  r.hosp||'',
-      nozzle:'X',                                   /* 노즐 재사용: 직접입력(기본 X) */
+      nozzle:(String(r.nozzleReuse||'').trim().toUpperCase()==='O'?'O':'X'),  /* 노즐 재사용: handover(P열) 자동 반영 · 수정 가능 */
       content:String(r.detail||'').trim(),          /* 처리내용 = A/S 내용 상세 그대로 */
       memo:  '',                                    /* 비고(지연 사유): 직접입력 */
       _raw:  r
