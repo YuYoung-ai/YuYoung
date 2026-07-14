@@ -422,6 +422,20 @@ function nozGroupHtml(title, g){
       +'<ul class="nz-list">'+list+'</ul></div>'
   +'</div>';
 }
+/* 노즐 재사용 현황을 특이사항용 텍스트로 정리 (공통 Statistics 재사용 · 가나다순) */
+function nozzleSummaryText(){
+  if(!W_ROWS.length || !(window.Statistics && window.Statistics.build)) return '';
+  var st=window.Statistics.build(W_ROWS);
+  function grp(title,g){
+    var head=title+' : 전체 '+g.total+'곳 · 재사용 '+g.reuse+'곳 · 재사용률 '+g.percent.toFixed(1)+'%';
+    var list=(g.hospitals && g.hospitals.length) ? ('  - '+g.hospitals.join(', ')) : '  - 재사용 병원 없음';
+    return head+'\n'+list;
+  }
+  var txt='[노즐 재사용 현황]\n'
+    + grp('N-care', st.nozzle.joined) + '\n'
+    + grp('미가입', st.nozzle.nonJoined);
+  return wrapText(txt, 70);   /* 셀 폭에 맞춰 줄바꿈(행 높이 계산 일치) */
+}
 function renderNozzleStats(){
   var card=document.getElementById('nozzleCard');
   if(!card) return;
@@ -618,40 +632,17 @@ async function genExcel(){
       ws.mergeCells(rr,1,rr,6); put(rr,1,row[0],{bold:true,fill:row[2],color:row[3],align:'center'});
       ws.mergeCells(rr,7,rr,8); put(rr,7,row[1],{bold:true,align:'center',size:12,color:row[3]});
     });
-    // ⑧ 특이사항 — 건수 바로 다음 줄 (불필요 빈칸 제거)
+    // ⑧ 특이사항 — 건수 바로 다음 줄 · 노즐 재사용 현황을 텍스트로 함께 정리
     var sr=cr+3;
     ws.mergeCells(sr,1,sr,8); put(sr,1,'특이사항',{bold:true,fill:XC.amberSoft,color:'FF8A5A00',align:'center'});
     var spTxt=document.getElementById('special').value||'';
+    var nozTxt=nozzleSummaryText();                                  /* 노즐 재사용 현황 → 특이사항 텍스트 */
+    if(nozTxt){ spTxt = spTxt.replace(/\s+$/,'') ? (spTxt.replace(/\s+$/,'')+'\n\n'+nozTxt) : nozTxt; }
     var spEnd=Math.max(sr+2, sr+1+(spTxt.split('\n').length-1));
     ws.mergeCells(sr+1,1,spEnd,8); put(sr+1,1, spTxt,{valign:'top'});
     boxBorder(sr,1,spEnd,8);
-    // ⑧-1 노즐 재사용 현황 — 특이사항 아래 (공통 Statistics 모듈 재사용)
-    var nozEnd=spEnd;
-    if(window.Statistics && window.Statistics.build){
-      var st=window.Statistics.build(W_ROWS);
-      var nr=spEnd+1;
-      // 섹션 타이틀
-      ws.mergeCells(nr,1,nr,8); put(nr,1,'노즐 재사용 현황',{bold:true,fill:XC.head,color:XC.navy,align:'center'});
-      nr++;
-      // 그룹(가입/미가입) 렌더
-      function nozBlock(title, g){
-        ws.mergeCells(nr,1,nr,8); put(nr,1,title,{bold:true,fill:XC.tealSoft,color:XC.teal,align:'center'}); nr++;
-        [['전체 병원', g.total+'곳'],['재사용 병원', g.reuse+'곳'],['재사용률', g.percent.toFixed(1)+'%']].forEach(function(m){
-          ws.mergeCells(nr,1,nr,6); put(nr,1,m[0],{bold:true,fill:XC.gray,align:'center'});
-          ws.mergeCells(nr,7,nr,8); put(nr,7,m[1],{bold:true,align:'center',size:12,color:XC.navy});
-          nr++;
-        });
-        ws.mergeCells(nr,1,nr,8); put(nr,1,'재사용 병원',{bold:true,fill:XC.gray,align:'center'}); nr++;
-        var hs=(g.hospitals&&g.hospitals.length)?g.hospitals:['(없음)'];
-        hs.forEach(function(h){ ws.mergeCells(nr,1,nr,8); put(nr,1,'- '+h,{valign:'middle'}); nr++; });
-      }
-      nozBlock('N-care', st.nozzle.joined);
-      nozBlock('미가입', st.nozzle.nonJoined);
-      nozEnd=nr-1;
-      boxBorder(spEnd+1,1,nozEnd,8);
-    }
     // ⑥ 요일별 내용 I4:N — 최소 30행까지 병합 (본문이 더 길면 그 끝까지)
-    var dayEnd=Math.max(28, nozEnd);   /* 요일 패널 병합 28행까지 (본문이 더 길면 그 끝까지) */
+    var dayEnd=Math.max(28, spEnd);   /* 요일 패널 병합 28행까지 (본문이 더 길면 그 끝까지) */
     dayDates.forEach(function(d,i){
       var c=9+i;
       ws.mergeCells(4,c,dayEnd,c);
