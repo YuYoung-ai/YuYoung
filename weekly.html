@@ -414,8 +414,8 @@ function nozGroupHtml(title, g){
   return '<div class="nz-group">'
     +'<div class="nz-sub">'+esc(title)+'</div>'
     +'<div class="nz-metrics">'
-      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'곳</b></div>'
-      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'곳</b></div>'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'</b></div>'
       +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
     +'</div>'
     +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
@@ -427,7 +427,7 @@ function nozzleSummaryText(){
   if(!W_ROWS.length || !(window.Statistics && window.Statistics.build)) return '';
   var st=window.Statistics.build(W_ROWS);
   function grp(title,g){
-    var head=title+' : 전체 '+g.total+'곳 · 재사용 '+g.reuse+'곳 · 재사용률 '+g.percent.toFixed(1)+'%';
+    var head=title+' : 전체 '+g.total+' · 재사용 '+g.reuse+' · 재사용률 '+g.percent.toFixed(1)+'%';
     var list=(g.hospitals && g.hospitals.length) ? ('  - '+g.hospitals.join(', ')) : '  - 재사용 병원 없음';
     return head+'\n'+list;
   }
