@@ -453,7 +453,7 @@ function fmtBlock(r){
   var raw=r._raw||{};
   var L=[];
   L.push('병 원 명 : '+(r.hosp||'')+'('+r.kind+')');
-  if(raw.sn) L.push('S/N(장비) : '+raw.sn);
+  L.push('S/N(장비) : '+(raw.sn?String(raw.sn).trim():'N/A'));   /* 장비 S/N 필수 기재 · 미작성 시 N/A */
   var hp='';
   if(raw.hpOut&&raw.hpIn) hp=raw.hpOut+'→'+raw.hpIn;
   else if(raw.hpIn) hp=raw.hpIn;
@@ -466,7 +466,7 @@ function fmtBlock(r){
     ln=ln.trim(); if(!ln) return;
     L.push(/^-/.test(ln)?ln:'- '+ln);
   });
-  if(r.memo && String(r.memo).trim()) L.push('비고 : '+String(r.memo).trim());   /* 비고(지연 사유) 추가 */
+  L.push('비고 : '+(r.memo && String(r.memo).trim() ? String(r.memo).trim() : 'N/A'));   /* 비고 필수 기재 · 미작성 시 N/A */
   /* 요일별 내용은 한 줄 50자 제한 */
   return wrapText(L.join('\n'), 50);
 }
