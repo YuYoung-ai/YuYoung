@@ -180,6 +180,8 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 <script>
 /* ▼▼ handover_gas.gs 배포 URL — handover.html/dashboard.html의 HANDOVER_URL과 동일 ▼▼ */
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+/* ▼▼ 라이브 병원정보DB 배포 URL — hospital.html/handover.html과 동일 · 병원별 장비 S/N 출처 ▼▼ */
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2400);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -270,6 +272,24 @@ function loadHospDB(){
   }).catch(function(){});
 }
 loadHospDB();
+
+/* ── 병원별 장비 S/N 맵 — 라이브 병원정보DB(hospital.html 엔드포인트) 연동 ──
+   handover 처리 레코드에는 장비 S/N이 기록되지 않으므로 병원정보DB의 S/N을 사용한다.
+   S/N이 "BW3007,BX4007"처럼 여러 대면 콤마·슬래시로 구분(장비 2대 대응). */
+var HOSPSN_MAP=null;   // nkey(병원명) → S/N 원문(콤마/슬래시 구분 가능)
+function loadHospSN(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospsn')||'null');
+    if(c){ HOSPSN_MAP=c; } }catch(e){}
+  fetch(HOSPITAL_DB_URL).then(function(r){return r.json();}).then(function(d){
+    if(!d.success||!d.data) return;
+    var map={};
+    d.data.forEach(function(h){ var sn=String(h.sn||'').trim(); if(h.name&&sn) map[nkey(h.name)]=sn; });
+    HOSPSN_MAP=map;
+    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map)); }catch(e){}
+    if(W_ROWS.length && CUR_MON) buildDays();   /* 맵이 늦게 도착하면 요일별 내용 갱신 */
+  }).catch(function(){});
+}
+loadHospSN();
 function ncareOf(hosp, recNcare){
   var nc=String(recNcare||'').trim();
   if(!nc || nc==='미가입'){
@@ -454,11 +474,24 @@ function renderNozzleStats(){
 }
 
 /* ── 요일별 내용: handover 공유 기본양식 블록 ── */
+/* 병원 장비 S/N 토큰(콤마·슬래시 구분) — 여러 대 대응 */
+function snTokens(hosp){
+  var s=HOSPSN_MAP && HOSPSN_MAP[nkey(hosp)];
+  return s ? String(s).split(/[,/]/).map(function(x){return x.trim();}).filter(Boolean) : [];
+}
+/* 장비 S/N 결정: 처리 레코드값 우선 → 없으면 병원정보DB S/N(대수별 토큰) → N/A */
+function resolveSN(r, idx){
+  var raw=r._raw||{};
+  if(raw.sn && String(raw.sn).trim()) return String(raw.sn).trim();   /* 레코드에 S/N이 있으면 우선 */
+  var toks=snTokens(r.hosp);
+  if(toks.length) return toks[idx] || toks[0];                        /* 병원정보DB S/N — 대수별 토큰 */
+  return 'N/A';
+}
 /* 한 장비(행)의 상세 라인 — grp>1(같은 병원 여러 대)이면 S/N 옆에 (n번) 표기 */
 function fmtDeviceLines(r, idx, grp){
   var raw=r._raw||{};
   var L=[];
-  var sn=raw.sn?String(raw.sn).trim():'N/A';
+  var sn=resolveSN(r, idx);
   L.push('S/N(장비) : '+sn+(grp>1?' ('+(idx+1)+'번)':''));   /* 장비 S/N 필수 · 여러 대면 1번·2번 표기 */
   var hp='';
   if(raw.hpOut&&raw.hpIn) hp=raw.hpOut+'→'+raw.hpIn;
