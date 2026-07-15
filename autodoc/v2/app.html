@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AutoDoc</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#2563EB">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="../../auth.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    import { auth } from './js/infra/auth.js';
+    import { router } from './js/infra/router.js';
+    import { bus } from './js/infra/bus.js';
+    import { catalogScreen } from './js/ui/screens/catalog.js';
+    import { editorScreen } from './js/ui/screens/editor.js';
+    import { docsScreen } from './js/ui/screens/docs.js';
+    import { adminScreen } from './js/ui/screens/admin.js';
+    import { importWizardScreen } from './js/ui/screens/import-wizard.js';
+    import { approvalsScreen } from './js/ui/screens/approvals.js';
+    import { learningStatusScreen } from './js/ui/screens/learning-status.js';
+    import { settingsScreen } from './js/ui/screens/settings.js';
+    import { prefs } from './js/core/prefs.js';
+    import { startSync } from './js/infra/sync-boot.js';
+    import { syncQueue } from './js/infra/sync-queue.js';
+
+    prefs.apply();
+
+    const root = document.getElementById('root');
+    root.innerHTML = `
+      <a class="skip-link" href="#outlet">본문으로 건너뛰기</a>
+      <div class="app-frame">
+        <header class="topbar"><div class="brand">⌂ AutoDoc</div><div class="spacer"></div>
+          <a class="btn" href="index.html">홈</a></header>
+        <div id="offline-banner" class="banner" hidden role="status">오프라인 — 계속 작성할 수 있어요. 연결되면 자동 반영됩니다.</div>
+        <div class="app-body">
+          <nav class="sidenav" aria-label="주요 메뉴">
+            <a class="cta" href="#/catalog"><span>＋ 문서 만들기</span></a>
+            <a href="#/docs"><span>🗂 내 문서</span></a>
+            <a href="#/settings"><span>⚙ 설정</span></a>
+            <a href="#/admin"><span>관리</span></a>
+          </nav>
+          <main class="content" id="outlet" tabindex="-1"></main>
+        </div>
+        <footer class="statusbar"><span id="save-state">준비됨</span><span id="sync-state"></span></footer>
+      </div>`;
+
+    // Draft 저장 상태를 상태바에 반영
+    bus.subscribe('draft.saved', () => {
+      const el = document.getElementById('save-state');
+      if (el) el.textContent = '저장됨 ✓';
+    });
+
+    // 오프라인 배너 + 동기 대기 표시
+    function refreshNet() {
+      const b = document.getElementById('offline-banner');
+      if (b) b.hidden = navigator.onLine;
+      syncQueue.pending().then(n => {
+        const s = document.getElementById('sync-state');
+        if (s) s.textContent = n > 0 ? `· 동기 대기 ${n}건` : (navigator.onLine ? '· 온라인' : '· 오프라인');
+      });
+    }
+    window.addEventListener('online', refreshNet);
+    window.addEventListener('offline', refreshNet);
+    bus.subscribe('sync.queued', refreshNet);
+    bus.subscribe('sync.completed', refreshNet);
+    startSync();
+    refreshNet();
+
+    // 미구현 화면은 안내 스텁 (S3+ 구현)
+    const stub = (label, note) => () => ({
+      mount(outlet) { outlet.innerHTML =
+        `<div class="card"><h1 style="font-size:var(--font-h1)">${label}</h1>
+         <p style="color:var(--ui-text-weak)">${note || '다음 Sprint에서 구현됩니다.'}</p></div>`; },
+    });
+
+    router
+      .register('catalog', { screen: () => catalogScreen(), guard: 'user', title: '문서 만들기' })
+      .register('edit/:templateId', { screen: () => editorScreen(), guard: 'user', title: '작성' })
+      .register('docs', { screen: () => docsScreen(), guard: 'user', title: '내 문서' })
+      .register('settings', { screen: () => settingsScreen(), guard: 'user', title: '설정' })
+      .register('admin', { screen: () => adminScreen(), guard: 'admin', title: '관리' })
+      .register('admin/import', { screen: () => importWizardScreen(), guard: 'admin', title: 'AI 가져오기' })
+      .register('admin/approvals', { screen: () => approvalsScreen(), guard: 'admin', title: '승인함' })
+      .register('admin/learning', { screen: () => learningStatusScreen(), guard: 'admin', title: '학습 상태' })
+      .mount(document.getElementById('outlet'), { notFound: '/catalog' });
+
+    (async () => {
+      await auth.ensure();
+      if (!auth.session()) { location.href = 'index.html'; return; }
+      router.start();
+    })();
+  </script>
+</body>
+</html>

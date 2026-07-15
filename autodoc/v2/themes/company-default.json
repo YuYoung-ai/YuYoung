@@ -1,0 +1,32 @@
+{
+  "id": "company-default",
+  "name": "회사 기본 테마",
+  "version": "1.0.0",
+  "color": {
+    "primary": "#1B2F5E",
+    "primaryLight": "#2A4080",
+    "accent": "#2E7D9E",
+    "accentSoft": "#EAF4F8",
+    "danger": "#C0392B",
+    "success": "#1E7E4E",
+    "warning": "#B8860B",
+    "text": "#1A1A2E",
+    "muted": "#6B7A99",
+    "bg": "#F5F7FA",
+    "line": "#DDE3EE"
+  },
+  "font": {
+    "family": "맑은 고딕",
+    "title": 20,
+    "body": 10.5
+  },
+  "spacing": {
+    "pageMargin": 0.3,
+    "blockGap": 0.1
+  },
+  "border": {
+    "color": "#CED6E4",
+    "width": "thin"
+  },
+  "logo": "assets/logo.png"
+}

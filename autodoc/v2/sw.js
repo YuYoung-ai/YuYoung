@@ -1,0 +1,56 @@
+/************************************************************
+ * sw.js — v2 서비스워커 (PWA_SPEC)
+ * 스코프 /autodoc/v2/ — v1·루트 SW 와 무간섭.
+ * 앱 셸 precache · API POST 패스스루 · 작성 보호 업데이트.
+ ************************************************************/
+const V2_CACHE = 'ad2-cache-v1';
+const SHELL = [
+  './index.html', './app.html',
+  './css/tokens.css', './css/app.css',
+  './js/infra/config.js', './js/infra/logger.js', './js/infra/bus.js',
+  './js/infra/flags.js', './js/infra/idb.js', './js/infra/workspace-context.js',
+  './js/infra/auth.js', './js/infra/sync-queue.js', './js/infra/store.js',
+  './js/infra/router.js', './js/infra/selfcheck.js', './js/infra/api.js',
+  './js/core/json-schema.js', './js/core/validator.js', './js/core/draft.js',
+  './js/core/form-engine.js', './js/core/template-service.js',
+  './js/ui/dom.js', './js/ui/screens/catalog.js', './js/ui/screens/editor.js',
+  './templates/weekly-report.json', './templates/meeting-minutes.json', './templates/trip-report.json',
+  './js/core/engine-bridge.js', './js/core/document-engine.js',
+  './js/core/preview-engine.js', './js/core/history.js',
+  './js/ui/screens/docs.js', './themes/company-default.json',
+  './js/core/undo.js', './js/core/memory-suggest.js',
+  './js/core/prompt-engine.js', './js/core/import-gate.js', './js/core/confidence.js', './js/core/learning.js',
+  './js/ui/screens/admin.js', './js/ui/screens/import-wizard.js', './js/ui/screens/approvals.js', './js/ui/screens/learning-status.js',
+  './js/core/prefs.js', './js/infra/sync-boot.js', './js/ui/screens/settings.js',
+  './manifest.json',
+];
+
+self.addEventListener('install', (e) => {
+  // skipWaiting 하지 않음 — 작성 중 강제 교체 방지
+  e.waitUntil(caches.open(V2_CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k.startsWith('ad2-cache-') && k !== V2_CACHE).map(k => caches.delete(k)))
+  ));
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIP_WAITING') self.skipWaiting();
+});
+
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  // API POST 는 캐시하지 않음(패스스루)
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return; // 외부(CDN)는 런타임 캐시 대상 아님(S6)
+  e.respondWith(
+    caches.match(req).then(hit => hit || fetch(req).then(res => {
+      const copy = res.clone();
+      caches.open(V2_CACHE).then(c => c.put(req, copy)).catch(() => {});
+      return res;
+    }).catch(() => caches.match('./index.html')))
+  );
+});
