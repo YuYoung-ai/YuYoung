@@ -103,9 +103,18 @@ export function createForm(tpl, opts = {}) {
 
     // text / number / date / week
     const nativeType = { number: 'number', date: 'date', week: 'week' }[type] || 'text';
+    // 기본값: week 은 이번 주차 자동, date 는 default:'today' 지원 (미지원 브라우저에서도 필수 충족)
+    if (type === 'week' && (g() == null || g() === '')) bind.set(isoWeekString(new Date()));
+    if (type === 'date' && (g() == null || g() === '') && f.default === 'today') bind.set(todayString());
     const input = h('input', { id, class: 'field-input', type: nativeType, placeholder: f.placeholder || '',
       oninput: e => s(nativeType === 'number' ? e.target.valueAsNumber : e.target.value), onblur: () => validateField(f) });
     if (g() != null) input.value = g();
+    // type=week 미지원(Firefox/Safari) → 텍스트 강등: 형식 힌트 제공
+    if (type === 'week' && input.type !== 'week') {
+      input.setAttribute('placeholder', '예: ' + isoWeekString(new Date()));
+      const wrap = h('div', {}, [input, h('div', { class: 'field-hint', text: '주차 형식: YYYY-Www — 이번 주가 자동 입력되어 있습니다.' })]);
+      return { id, node: wrap };
+    }
     return { id, node: withSuggest(f, input, v => { input.value = v; s(v); }) };
   }
 
@@ -269,4 +278,21 @@ function setupSignature(cnv, onEnd) {
   cnv.addEventListener('pointerup', end); cnv.addEventListener('pointerleave', end);
 }
 function clearCanvas(cnv) { const c = cnv.getContext && cnv.getContext('2d'); if (c) c.clearRect(0, 0, cnv.width, cnv.height); }
+
+/* ── 날짜 기본값 헬퍼 ─────────────────────────────────────── */
+export function todayString(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+/** ISO 8601 주차 (월요일 시작) — <input type=week> 값 형식 YYYY-Www */
+export function isoWeekString(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = (d.getUTCDay() + 6) % 7;          // 월=0
+  d.setUTCDate(d.getUTCDate() - day + 3);       // 이번 주 목요일
+  const firstThu = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const fday = (firstThu.getUTCDay() + 6) % 7;
+  firstThu.setUTCDate(firstThu.getUTCDate() - fday + 3);
+  const week = 1 + Math.round((d - firstThu) / (7 * 24 * 3600 * 1000));
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
 function drawDataUrl(cnv, url) { const c = cnv.getContext && cnv.getContext('2d'); if (!c) return; const img = new Image(); img.onload = () => c.drawImage(img, 0, 0); img.src = url; }

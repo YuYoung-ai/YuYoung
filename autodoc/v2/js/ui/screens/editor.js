@@ -33,8 +33,10 @@ export function editorScreen() {
   }
 
   function updateGen() {
-    const ok = form.validate().ok;
-    genBtnRow.querySelectorAll('button[data-fmt]').forEach(b => { b.disabled = ok ? null : 'true'; });
+    // 버튼은 항상 클릭 가능 — 미완료 시 클릭하면 첫 오류 필드로 안내(침묵 금지)
+    const r = form.validate();
+    const info = document.getElementById('req-info');
+    if (info) info.textContent = r.ok ? '✓ 생성 준비 완료' : `필수 ${r.errors.length}개 남음`;
   }
 
   function refreshUndoButtons() {
@@ -68,9 +70,30 @@ export function editorScreen() {
     updateGen();
   }
 
+  async function loadPreviewEngine() {
+    previewBox.innerHTML = '<div class="empty">미리보기 준비 중…</div>';
+    try {
+      await previewEngine.ensure(tpl);
+      previewEngine.render(tpl, form.getValues(), previewBox);
+    } catch (e) {
+      // 침묵 금지: 원인 + 다음 행동 (ERROR_HANDLING 3요소)
+      previewBox.innerHTML = '';
+      previewBox.appendChild(h('div', { class: 'empty' }, [
+        h('div', {}, ['미리보기 엔진을 불러오지 못했어요 — 네트워크를 확인해 주세요.']),
+        h('div', { class: 'tpl-meta', text: '입력한 내용은 자동 저장되어 있어요.' }),
+        h('button', { class: 'btn small', onclick: () => loadPreviewEngine() }, ['다시 시도']),
+      ]));
+      logger.warn('E-ENGINE-LOAD', { meta: { e: String(e && e.message || e) } });
+    }
+  }
+
   async function onGenerate(formatId) {
     const r = form.focusFirstError();
-    if (!r.ok) return;
+    if (!r.ok) {
+      const st = document.getElementById('gen-status');
+      if (st) st.textContent = `아직 비어 있는 필수 항목이 있어요 (${r.errors.length}개) — 빨간 표시를 채워주세요.`;
+      return;
+    }
     const status = document.getElementById('gen-status');
     status.textContent = '생성 중…';
     try {
@@ -94,8 +117,9 @@ export function editorScreen() {
 
     const formats = documentEngine.availableFormats(tpl);
     const fmtButtons = formats.length
-      ? formats.map(f => h('button', { class: 'btn primary', 'data-fmt': f.id, disabled: 'true', onclick: () => onGenerate(f.id) }, [`${f.icon || ''} ${f.label || f.id}`.trim()]))
+      ? formats.map(f => h('button', { class: 'btn primary', 'data-fmt': f.id, onclick: () => onGenerate(f.id) }, [`${f.icon || ''} ${f.label || f.id}`.trim()]))
       : [h('span', { class: 'empty', text: '사용 가능한 출력 형식이 없습니다.' })];
+    fmtButtons.push(h('span', { id: 'req-info', class: 'tpl-meta', 'aria-live': 'polite' }));
     genBtnRow = h('div', { class: 'gen-row' }, fmtButtons);
 
     const undoBtn = h('button', { id: 'btn-undo', class: 'btn small', disabled: 'true', 'aria-label': '실행 취소',
@@ -127,9 +151,7 @@ export function editorScreen() {
     };
     document.addEventListener('keydown', keyHandler);
 
-    previewBox.innerHTML = '<div class="empty">미리보기 준비 중…</div>';
-    await previewEngine.ensure(tpl);
-    previewEngine.render(tpl, form.getValues(), previewBox);
+    await loadPreviewEngine();
     updateGen();
 
     unsubLeave = router.onLeave(() => draft.saveNow(tpl.id, draftId, form.getValues()));

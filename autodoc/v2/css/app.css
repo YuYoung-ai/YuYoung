@@ -177,3 +177,9 @@ body {
 .seg-btn { font: inherit; cursor: pointer; border: 1px solid var(--ui-border); background: var(--ui-surface); color: var(--ui-text); border-radius: var(--radius-s); padding: var(--space-1) var(--space-3); }
 .seg-btn.on { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary); }
 .seg-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── 기본 동작 보정: Dashboard · 폼 힌트 ────────────────── */
+.dash-hero { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.dash-cta { font-size: calc(var(--font-h2) * var(--font-scale)); padding: var(--space-3) var(--space-5); text-decoration: none; display: inline-block; border-radius: var(--radius-m); }
+.dash-admin { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); border-left: 4px solid var(--ui-warning); }
+.field-hint { color: var(--ui-text-weak); font-size: var(--font-caption); margin-top: 2px; }

@@ -6,6 +6,7 @@
 import { h, clear } from '../dom.js';
 import { history } from '../../core/history.js';
 import { draft } from '../../core/draft.js';
+import { templateService } from '../../core/template-service.js';
 import { router } from '../../infra/router.js';
 
 export function docsScreen() {
@@ -19,14 +20,18 @@ export function docsScreen() {
     clear(outletEl);
     outletEl.appendChild(h('h1', { class: 'screen-title', text: '내 문서' }));
 
+    await templateService.init().catch(() => {});
     const drafts = await draft.listMerged();
     if (drafts.length) {
       outletEl.appendChild(h('h2', { class: 'cat-title', text: '이어서 작성 (임시저장)' }));
-      outletEl.appendChild(h('div', { class: 'doc-list' }, drafts.map(d =>
-        h('button', { class: 'doc-item card', onclick: () => router.go('/edit/' + d.templateId, { draft: d.draftId }) }, [
-          h('b', { text: d.templateId }), h('span', { class: 'tpl-meta', text: ' · ' + fmtTime(d.savedAt) }),
-        ])
-      )));
+      outletEl.appendChild(h('div', { class: 'doc-list' }, drafts.map(d => {
+        const tpl = templateService.get(d.templateId);
+        return h('button', { class: 'doc-item card', onclick: () => router.go('/edit/' + d.templateId, { draft: d.draftId }) }, [
+          h('b', { text: tpl ? tpl.name : d.templateId }),
+          h('span', { class: 'tpl-meta', text: ' · ' + fmtTime(d.savedAt) + ' 저장' }),
+          h('span', { class: 'btn small', text: '이어서 →' }),
+        ]);
+      })));
     }
 
     const list = await history.list();

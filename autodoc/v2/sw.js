@@ -1,9 +1,11 @@
 /************************************************************
  * sw.js — v2 서비스워커 (PWA_SPEC)
  * 스코프 /autodoc/v2/ — v1·루트 SW 와 무간섭.
- * 앱 셸 precache · API POST 패스스루 · 작성 보호 업데이트.
+ * 전략: network-first(성공 시 캐시 갱신 → 항상 최신 빌드),
+ *       실패(오프라인) 시 캐시 폴백 → 오프라인 작성 보장 유지.
+ * 새 SW 즉시 활성(skipWaiting/claim) — 입력은 Draft 자동저장이 보호.
  ************************************************************/
-const V2_CACHE = 'ad2-cache-v1';
+const V2_CACHE = 'ad2-cache-v2';
 const SHELL = [
   './index.html', './app.html',
   './css/tokens.css', './css/app.css',
@@ -26,14 +28,18 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  // skipWaiting 하지 않음 — 작성 중 강제 교체 방지
-  e.waitUntil(caches.open(V2_CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
+  // 오프라인 보장을 위한 precache + 즉시 대기 해제(구버전에 갇히지 않게)
+  e.waitUntil(
+    caches.open(V2_CACHE).then(c => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k.startsWith('ad2-cache-') && k !== V2_CACHE).map(k => caches.delete(k)))
-  ));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k.startsWith('ad2-cache-') && k !== V2_CACHE).map(k => caches.delete(k)));
+    await self.clients.claim(); // 열린 탭도 즉시 새 SW 가 담당
+  })());
 });
 
 self.addEventListener('message', (e) => {
@@ -42,15 +48,23 @@ self.addEventListener('message', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  // API POST 는 캐시하지 않음(패스스루)
-  if (req.method !== 'GET') return;
+  if (req.method !== 'GET') return;                 // API POST 는 패스스루(캐시 금지)
   const url = new URL(req.url);
-  if (url.origin !== location.origin) return; // 외부(CDN)는 런타임 캐시 대상 아님(S6)
-  e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(V2_CACHE).then(c => c.put(req, copy)).catch(() => {});
+  if (url.origin !== location.origin) return;       // 외부(CDN)는 대상 아님
+
+  // network-first: 최신 우선, 오프라인이면 캐시 폴백
+  e.respondWith((async () => {
+    try {
+      const res = await fetch(req);
+      if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(V2_CACHE).then(c => c.put(req, copy)).catch(() => {});
+      }
       return res;
-    }).catch(() => caches.match('./index.html')))
-  );
+    } catch {
+      const hit = await caches.match(req);
+      if (hit) return hit;
+      return caches.match('./index.html');           // 앱 셸 최후 폴백
+    }
+  })());
 });

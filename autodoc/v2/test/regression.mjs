@@ -85,6 +85,20 @@ const { createUndo } = await import(path.join(CORE,'undo.js'));
   const u=createUndo(); u.init({a:1}); u.record({a:2}); ck('S4 undo/redo', JSON.stringify(u.undo())==='{"a":1}' && JSON.stringify(u.redo())==='{"a":2}');
 }
 
+// ── P3: week 자동 기본값 (미지원 브라우저 생성 불가 수정) ──
+{
+  const { isoWeekString, todayString } = await import(path.join(CORE, 'form-engine.js'));
+  const w = isoWeekString(new Date());
+  ck('P3 isoWeekString format YYYY-Www', /^\d{4}-W\d{2}$/.test(w), w);
+  ck('P3 isoWeekString known date (2026-01-08 → 2026-W02)', isoWeekString(new Date(2026, 0, 8)) === '2026-W02', isoWeekString(new Date(2026, 0, 8)));
+  ck('P3 todayString format', /^\d{4}-\d{2}-\d{2}$/.test(todayString()));
+  // required week 필드가 기본값으로 즉시 충족되는지
+  const f = createForm({ inputs: [{ key: 'week', label: '주차', type: 'week', required: true }] }, {});
+  ck('P3 week default satisfies required', f.validate().ok === true && /^\d{4}-W\d{2}$/.test(f.getValues().week), f.getValues().week);
+  const fd = createForm({ inputs: [{ key: 'd', type: 'date', default: 'today', required: true }] }, {});
+  ck('P3 date default:today satisfies required', fd.validate().ok === true);
+}
+
 // ── I5/I2: workspace + store write permission ─────────────
 const { workspaceContext } = await import(path.join(INFRA,'workspace-context.js'));
 const { store } = await import(path.join(INFRA,'store.js'));

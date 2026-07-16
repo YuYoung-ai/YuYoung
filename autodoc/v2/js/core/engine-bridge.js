@@ -22,27 +22,34 @@ const ORDER = [
 ];
 
 let readyPromise = null;
+const loadedSrcs = new Set(); // 재시도 시 이미 성공한 스크립트는 재주입하지 않음(중복 register 방지)
 
 function injectSequential(paths) {
-  return paths.reduce((chain, p) => chain.then(() => new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = V1 + p;
-    s.async = false;
-    s.onload = () => res();
-    s.onerror = () => rej(new Error('v1 script 로드 실패: ' + p));
-    document.head.appendChild(s);
-  })), Promise.resolve());
+  return paths.reduce((chain, p) => chain.then(() => {
+    if (loadedSrcs.has(p)) return;
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = V1 + p;
+      s.async = false;
+      s.onload = () => { loadedSrcs.add(p); res(); };
+      s.onerror = () => { s.remove(); rej(new Error('엔진 스크립트 로드 실패: ' + p)); };
+      document.head.appendChild(s);
+    });
+  }), Promise.resolve());
 }
 
 function AD() { return (typeof window !== 'undefined') ? window.AD : undefined; }
 
 export const engine = {
-  /** v1 엔진 전역 준비 (1회) */
+  /** v1 엔진 전역 준비 (1회) — 실패 시 다음 호출에서 이어서 재시도 가능 */
   async ensure() {
     if (AD() && AD().Preview && AD().Model && AD().Renderers) return AD();
-    if (!readyPromise) readyPromise = injectSequential(ORDER).then(() => AD());
+    if (!readyPromise) {
+      readyPromise = injectSequential(ORDER).then(() => AD())
+        .catch(err => { readyPromise = null; throw err; }); // 재시도 허용
+    }
     await readyPromise;
-    if (!AD() || !AD().Preview) throw new Error('v1 엔진 초기화 실패');
+    if (!AD() || !AD().Preview) { readyPromise = null; throw new Error('문서 엔진 초기화 실패'); }
     return AD();
   },
 

@@ -63,8 +63,27 @@ export const auth = {
   /** 동기 조회 — 마지막으로 확인된 세션 */
   session() { return cachedSession; },
 
-  /** 서버 기준 재확인(비동기) */
-  async ensure() { return refresh(); },
+  /**
+   * 세션 복원 — 빠른 경로: 로컬 캐시 레벨(v1 cachedLevel)로 즉시 세션 구성,
+   * 서버 verify 는 백그라운드(실패 시에만 auth.expired). 첫 화면 지연 제거.
+   */
+  async ensure() {
+    const b = baz();
+    if (!b) { cachedSession = null; return null; }
+    const lv = (typeof b.cachedLevel === 'function') ? b.cachedLevel() : 0;
+    if (lv > 0) {
+      cachedSession = buildSession(lv);
+      workspaceContext.setActive(cachedSession.workspaceId);
+      this._startWatch();
+      refresh().then(now => {
+        if (!now) { logger.warn('E-AUTH-EXPIRED'); bus.publish('auth.expired', {}); }
+      }).catch(() => {});
+      return cachedSession;
+    }
+    const s = await refresh();
+    if (s) { workspaceContext.setActive(s.workspaceId); this._startWatch(); }
+    return s;
+  },
 
   /** 라우터 가드: 'user' | 'admin' 요구 */
   guard(requiredRole) {
