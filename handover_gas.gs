@@ -68,8 +68,9 @@ var NCARE = {
   TIERS: ['Basic','Standard','Pro','Premium','CurePass']   // 마지막(미가입) 라벨은 CurePass로 표기
 };
 
-/* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·장비SN·N-Care·보증기한 등
-   수식/자동 열)은 절대 건드리지 않는다 */
+/* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·N-Care·보증기한 등
+   수식/자동 열)은 절대 건드리지 않는다.
+   ※ 장비SN(Q열)·HP_SN(IN/OUT)·Ver는 payload 값이 있을 때만 별도로 기록 */
 var WRITE_COLS = ['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용','노즐 재사용'];
 
 /* [v2.1] 주간업무보고 — weekly.html 연동
@@ -171,7 +172,8 @@ function cleanupStray(){
   var sh = sheet_(CONFIG.SHEET_NAME), hdr = findHeader_(sh);
   var stray = findStray();
   var cols = WRITE_COLS.map(function(k){return hdr.map[k];}).filter(Boolean)
-    .concat([hdr.map['HP_SN(IN)'],hdr.map['__VER_IN'],hdr.map['HP_SN(OUT)'],hdr.map['__VER_OUT']].filter(Boolean));
+    .concat([hdr.map['HP_SN(IN)'],hdr.map['__VER_IN'],hdr.map['HP_SN(OUT)'],hdr.map['__VER_OUT'],
+             colBy_(hdr,['장비SN','장비 SN'])].filter(Boolean));
   stray.forEach(function(s){
     cols.forEach(function(c){ sh.getRange(s.row, c).clearContent(); });
   });
@@ -231,6 +233,9 @@ function doPost(e){
       var c = hdr.map[k];
       if(c) sh.getRange(row, c).setValue(m[k]);
     });
+    /* 장비 S/N (Q열 '장비SN' 등 · 열이 존재하고 값이 있을 때만) */
+    var snCol = colBy_(hdr, ['장비SN','장비 SN','장비 S/N','S/N(장비)']);
+    if(snCol && payload.sn) sh.getRange(row, snCol).setValue(payload.sn);
     /* HP 교체 정보 (열이 존재할 때만) */
     if(hdr.map['HP_SN(IN)']  && payload.hpIn)  sh.getRange(row, hdr.map['HP_SN(IN)']).setValue(payload.hpIn);
     if(hdr.map['__VER_IN']   && payload.uVer)  sh.getRange(row, hdr.map['__VER_IN']).setValue(payload.uVer);
@@ -307,6 +312,16 @@ function pickH_(o, cands){
     for(var k2=0;k2<keys.length;k2++){ if(q2 && norm_(keys[k2]).indexOf(q2)>=0) return o[keys[k2]]; }
   }
   return '';
+}
+
+/** 헤더맵에서 후보 이름으로 열번호 찾기(정규화 완전일치 → 부분일치) · 없으면 0 */
+function colBy_(hdr, cands){
+  var keys=Object.keys(hdr.map);
+  for(var i=0;i<cands.length;i++){ var q=norm_(cands[i]);
+    for(var k=0;k<keys.length;k++){ if(norm_(keys[k])===q) return hdr.map[keys[k]]; } }
+  for(var i2=0;i2<cands.length;i2++){ var q2=norm_(cands[i2]);
+    for(var k2=0;k2<keys.length;k2++){ if(q2 && norm_(keys[k2]).indexOf(q2)>=0) return hdr.map[keys[k2]]; } }
+  return 0;
 }
 
 function slim_(o){
