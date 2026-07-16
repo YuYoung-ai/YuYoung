@@ -90,6 +90,43 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
   max-width:88vw;text-align:center;white-space:pre-line;line-height:1.5}
 .toast.on{opacity:1}
 .empty{color:var(--text-muted);font-size:12.5px;text-align:center;padding:14px 0}
+/* 노즐 재사용 현황 */
+.nz-group{margin-bottom:12px}
+.nz-group:last-child{margin-bottom:0}
+.nz-sub{font-size:12px;font-weight:700;color:var(--teal);margin:0 0 8px;padding-left:2px}
+.nz-metrics{display:flex;gap:6px;margin-bottom:8px}
+.nz-metric{flex:1;text-align:center;border:1px solid var(--gray-line);border-radius:9px;padding:8px 4px;background:#FBFCFE}
+.nz-metric span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px}
+.nz-metric b{font-size:16px;line-height:1.2;color:var(--navy)}
+.nz-listwrap{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px}
+.nz-listtit{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.nz-list{margin:0;padding-left:16px}
+.nz-list li{font-size:12.5px;color:var(--text);margin-bottom:2px}
+.nz-list li.nz-none{list-style:none;margin-left:-16px;color:var(--text-muted)}
+.nz-div{height:1px;background:var(--gray-line);margin:12px 0}
+/* 엑셀 미리보기 모달 */
+.modal{position:fixed;inset:0;background:rgba(20,28,48,.55);z-index:50;display:none;padding:14px;overflow:auto}
+.modal.on{display:flex;align-items:flex-start;justify-content:center}
+.modal-box{background:#fff;border-radius:14px;max-width:960px;width:100%;margin:auto;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:calc(100vh - 28px)}
+.modal-head{background:var(--navy);color:#fff;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;flex:0 0 auto}
+.modal-head b{font-size:14px}
+.modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:13px;font-weight:700;border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit}
+.modal-body{padding:14px 16px;overflow:auto;flex:1 1 auto}
+.modal-actions{border-top:1px solid var(--gray-line);padding:10px 16px;display:flex;gap:8px;background:#fff;flex:0 0 auto}
+.pv-title{font-size:13px;font-weight:700;color:var(--navy);margin:16px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--gray-line)}
+.pv-title:first-child{margin-top:0}
+.pv-meta{font-size:12px;color:var(--text-muted);margin-bottom:4px}
+.pv-meta b{color:var(--navy)}
+.pv-tablewrap{overflow-x:auto}
+.pv-table{width:100%;border-collapse:collapse;font-size:11px;min-width:640px}
+.pv-table th,.pv-table td{border:1px solid var(--gray-line);padding:4px 6px;text-align:center;vertical-align:middle}
+.pv-table th{background:var(--navy);color:#fff;font-weight:700}
+.pv-table td.l{text-align:left;white-space:pre-wrap;vertical-align:top}
+.pv-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.pv-day{border:1px solid var(--gray-line);border-radius:8px;overflow:hidden}
+.pv-day b{display:block;background:var(--teal-soft);color:var(--navy);font-size:11.5px;padding:4px 7px;border-bottom:1px solid var(--gray-line)}
+.pv-day pre{margin:0;padding:7px;font-size:11px;white-space:pre-wrap;font-family:inherit;line-height:1.5;min-height:40px}
+.pv-special{white-space:pre-wrap;font-size:12px;border:1px solid var(--gray-line);border-radius:8px;padding:9px;background:#FBFCFE;line-height:1.55}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -136,6 +173,12 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
     <div class="hint">접수일자·노즐 재사용·비고(지연 사유)는 직접 입력 · 방문일자는 처리일 자동 · N-care는 병원정보DB 자동(수정 가능)</div>
   </div>
 
+  <!-- ②-1 노즐 재사용 현황 (병원 기준 · 중복 제거) -->
+  <div class="card" id="nozzleCard" style="display:none">
+    <p class="sec-title">노즐 재사용 현황 <span class="mini">병원 기준 · 중복 방문 제거</span></p>
+    <div id="nozzleBox"></div>
+  </div>
+
   <!-- ③ 요일별 내용 -->
   <div class="card">
     <p class="sec-title">요일별 내용 <span class="mini">handover 공유 기본양식 · 자유 수정</span></p>
@@ -151,15 +194,27 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 </div>
 
 <div class="actions">
-  <button class="btn btn-tsv" id="btnXlsx" onclick="genExcel()">📊 엑셀 생성<br><span style="font-weight:400;font-size:10.5px">(.xlsx 다운로드)</span></button>
-  <button class="btn btn-copy" onclick="copyAll()">📄 전체 복사</button>
-  <button class="btn btn-save" id="btnSave" onclick="writeToSheet()">📝 시트 기록</button>
+  <button class="btn btn-tsv" id="btnXlsx" onclick="previewExcel()">📊 엑셀 생성<span style="font-weight:400;font-size:11px"> · 미리보기 후 다운로드</span></button>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- 엑셀 미리보기 모달 -->
+<div class="modal" id="pvModal">
+  <div class="modal-box">
+    <div class="modal-head"><b>📊 엑셀 미리보기</b><button type="button" class="modal-close" onclick="closePreview()">✕ 닫기</button></div>
+    <div class="modal-body" id="pvBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-copy" onclick="closePreview()">취소</button>
+      <button class="btn btn-save" id="btnDl" onclick="genExcel()">⬇️ 다운로드 (.xlsx)</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ▼▼ handover_gas.gs 배포 URL — handover.html/dashboard.html의 HANDOVER_URL과 동일 ▼▼ */
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+/* ▼▼ 라이브 병원정보DB 배포 URL — hospital.html/handover.html과 동일 · 병원별 장비 S/N 출처 ▼▼ */
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2400);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -250,6 +305,24 @@ function loadHospDB(){
   }).catch(function(){});
 }
 loadHospDB();
+
+/* ── 병원별 장비 S/N 맵 — 라이브 병원정보DB(hospital.html 엔드포인트) 연동 ──
+   handover 처리 레코드에는 장비 S/N이 기록되지 않으므로 병원정보DB의 S/N을 사용한다.
+   S/N이 "BW3007,BX4007"처럼 여러 대면 콤마·슬래시로 구분(장비 2대 대응). */
+var HOSPSN_MAP=null;   // nkey(병원명) → S/N 원문(콤마/슬래시 구분 가능)
+function loadHospSN(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospsn')||'null');
+    if(c){ HOSPSN_MAP=c; } }catch(e){}
+  fetch(HOSPITAL_DB_URL).then(function(r){return r.json();}).then(function(d){
+    if(!d.success||!d.data) return;
+    var map={};
+    d.data.forEach(function(h){ var sn=String(h.sn||'').trim(); if(h.name&&sn) map[nkey(h.name)]=sn; });
+    HOSPSN_MAP=map;
+    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map)); }catch(e){}
+    if(W_ROWS.length && CUR_MON) buildDays();   /* 맵이 늦게 도착하면 요일별 내용 갱신 */
+  }).catch(function(){});
+}
+loadHospSN();
 function ncareOf(hosp, recNcare){
   var nc=String(recNcare||'').trim();
   if(!nc || nc==='미가입'){
@@ -302,7 +375,12 @@ function buildFromRows(rows, w, monK){
   CUR_MON=new Date(monK+'T00:00:00');
   var sat=addD(CUR_MON,-2), fri=addD(CUR_MON,4);
   var inRange=rows.filter(function(r){ var d=normD(r.date); return d && d>=sat && d<=fri; })
-    .sort(function(a,b){ return (normD(a.date)||0)-(normD(b.date)||0); });
+    .sort(function(a,b){
+      var t=(normD(a.date)||0)-(normD(b.date)||0);
+      if(t) return t;
+      var ha=nkey(a.hosp), hb=nkey(b.hosp);   /* 같은 날은 병원끼리 인접 정렬(장비 여러 대 병합용) */
+      return ha<hb?-1:ha>hb?1:0;
+    });
 
   W_ROWS=inRange.map(function(r){
     var d=normD(r.date);
@@ -313,7 +391,7 @@ function buildFromRows(rows, w, monK){
       ncare: ncareOf(r.hosp, r.ncare),              /* 가입/미가입 — 병원정보DB 연동 */
       kind:  (r.gubun==='점검') ? '점검' : 'VOC',   /* A/S → VOC 표기 */
       hosp:  r.hosp||'',
-      nozzle:'X',                                   /* 노즐 재사용: 직접입력(기본 X) */
+      nozzle:(String(r.nozzleReuse||'').trim().toUpperCase()==='O'?'O':'X'),  /* 노즐 재사용: handover(P열) 자동 반영 · 수정 가능 */
       content:String(r.detail||'').trim(),          /* 처리내용 = A/S 내용 상세 그대로 */
       memo:  '',                                    /* 비고(지연 사유): 직접입력 */
       _raw:  r
@@ -370,7 +448,7 @@ function renderRows(){
   }
   buildCnt();
 }
-function upRow(i,k,v){ if(W_ROWS[i]) W_ROWS[i][k]=v; if(k==='hosp'||k==='kind') buildCnt(); }
+function upRow(i,k,v){ if(W_ROWS[i]) W_ROWS[i][k]=v; if(k==='hosp'||k==='kind') buildCnt(); if(k==='nozzle'||k==='ncare') renderNozzleStats(); }
 function delRow(i){ W_ROWS.splice(i,1); renderRows(); }
 function addRow(){
   var vd=CUR_MON?ymd(CUR_MON):ymd(new Date());
@@ -383,14 +461,71 @@ function buildCnt(){
   document.getElementById('cntInsp').textContent=insp;
   document.getElementById('cntVoc').textContent=voc;
   document.getElementById('cntTot').textContent=W_ROWS.length;
+  renderNozzleStats();
+}
+
+/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ── */
+function nozGroupHtml(title, g){
+  var list = (g.hospitals && g.hospitals.length)
+    ? g.hospitals.map(function(h){ return '<li>'+esc(h)+'</li>'; }).join('')
+    : '<li class="nz-none">재사용 병원 없음</li>';
+  return '<div class="nz-group">'
+    +'<div class="nz-sub">'+esc(title)+'</div>'
+    +'<div class="nz-metrics">'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'</b></div>'
+      +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
+    +'</div>'
+    +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
+      +'<ul class="nz-list">'+list+'</ul></div>'
+  +'</div>';
+}
+/* 노즐 재사용 현황을 특이사항용 텍스트로 정리 (공통 Statistics 재사용 · 가나다순) */
+function nozzleSummaryText(){
+  if(!W_ROWS.length || !(window.Statistics && window.Statistics.build)) return '';
+  var st=window.Statistics.build(W_ROWS);
+  function grp(title,g){
+    var head=title+' : 전체 '+g.total+' · 재사용 '+g.reuse+' · 재사용률 '+g.percent.toFixed(1)+'%';
+    var list=(g.hospitals && g.hospitals.length) ? ('  - '+g.hospitals.join(', ')) : '  - 재사용 병원 없음';
+    return head+'\n'+list;
+  }
+  var txt='[노즐 재사용 현황]\n'
+    + grp('N-care', st.nozzle.joined) + '\n'
+    + grp('미가입', st.nozzle.nonJoined);
+  return wrapText(txt, 70);   /* 셀 폭에 맞춰 줄바꿈(행 높이 계산 일치) */
+}
+function renderNozzleStats(){
+  var card=document.getElementById('nozzleCard');
+  if(!card) return;
+  if(!W_ROWS.length || !(window.Statistics && window.Statistics.build)){ card.style.display='none'; return; }
+  var st=window.Statistics.build(W_ROWS);
+  card.style.display='';
+  document.getElementById('nozzleBox').innerHTML=
+      nozGroupHtml('N-care', st.nozzle.joined)
+    + '<div class="nz-div"></div>'
+    + nozGroupHtml('미가입', st.nozzle.nonJoined);
 }
 
 /* ── 요일별 내용: handover 공유 기본양식 블록 ── */
-function fmtBlock(r){
+/* 병원 장비 S/N 토큰(콤마·슬래시 구분) — 여러 대 대응 */
+function snTokens(hosp){
+  var s=HOSPSN_MAP && HOSPSN_MAP[nkey(hosp)];
+  return s ? String(s).split(/[,/]/).map(function(x){return x.trim();}).filter(Boolean) : [];
+}
+/* 장비 S/N 결정: 처리 레코드값 우선 → 없으면 병원정보DB S/N(대수별 토큰) → N/A */
+function resolveSN(r, idx){
+  var raw=r._raw||{};
+  if(raw.sn && String(raw.sn).trim()) return String(raw.sn).trim();   /* 레코드에 S/N이 있으면 우선 */
+  var toks=snTokens(r.hosp);
+  if(toks.length) return toks[idx] || toks[0];                        /* 병원정보DB S/N — 대수별 토큰 */
+  return 'N/A';
+}
+/* 한 장비(행)의 상세 라인 — grp>1(같은 병원 여러 대)이면 S/N 옆에 (n번) 표기 */
+function fmtDeviceLines(r, idx, grp){
   var raw=r._raw||{};
   var L=[];
-  L.push('병 원 명 : '+(r.hosp||'')+'('+r.kind+')');
-  if(raw.sn) L.push('S/N(장비) : '+raw.sn);
+  var sn=resolveSN(r, idx);
+  L.push('S/N(장비) : '+sn+(grp>1?' ('+(idx+1)+'번)':''));   /* 장비 S/N 필수 · 여러 대면 1번·2번 표기 */
   var hp='';
   if(raw.hpOut&&raw.hpIn) hp=raw.hpOut+'→'+raw.hpIn;
   else if(raw.hpIn) hp=raw.hpIn;
@@ -403,9 +538,32 @@ function fmtBlock(r){
     ln=ln.trim(); if(!ln) return;
     L.push(/^-/.test(ln)?ln:'- '+ln);
   });
-  if(r.memo && String(r.memo).trim()) L.push('비고 : '+String(r.memo).trim());   /* 비고(지연 사유) 추가 */
+  L.push('비고 : '+(r.memo && String(r.memo).trim() ? String(r.memo).trim() : 'N/A'));   /* 비고 필수 기재 · 미작성 시 N/A */
+  return L;
+}
+/* 같은 병원(같은 날) 여러 장비를 병원명 1회 + 장비별 상세로 병합 */
+function fmtHospBlock(rows){
+  var first=rows[0];
+  var kinds=rows.map(function(r){return r.kind;}).filter(function(v,i,a){return a.indexOf(v)===i;});
+  var L=[];
+  var head='병 원 명 : '+(first.hosp||'')+'('+kinds.join('/')+')';
+  if(rows.length>1) head+=' · 장비 '+rows.length+'대';   /* 병원명 중복 제거 · 장비 대수 표기 */
+  L.push(head);
+  rows.forEach(function(r,idx){
+    fmtDeviceLines(r, idx, rows.length).forEach(function(ln){ L.push(ln); });
+  });
   /* 요일별 내용은 한 줄 50자 제한 */
   return wrapText(L.join('\n'), 50);
+}
+/* 하루치 행들을 병원 기준으로 묶어 블록 배열 생성(등장 순서 유지) */
+function fmtDayBlocks(rows){
+  var groups=[], idxOf={};
+  rows.forEach(function(r){
+    var k=nkey(r.hosp);
+    if(idxOf[k]===undefined){ idxOf[k]=groups.length; groups.push([r]); }
+    else groups[idxOf[k]].push(r);
+  });
+  return groups.map(fmtHospBlock);
 }
 function buildDays(){
   var box=document.getElementById('daysBox');
@@ -415,7 +573,7 @@ function buildDays(){
   [0,2,3,4,5,6].forEach(function(off){       /* 토, 월, 화, 수, 목, 금 (일요일 제외) */
     var d=addD(sat,off);
     var key=ymd(d);
-    var blocks=W_ROWS.filter(function(r){return r.visit===key;}).map(fmtBlock);
+    var blocks=fmtDayBlocks(W_ROWS.filter(function(r){return r.visit===key;}));   /* 같은 병원 여러 대 → 병원명 1회 + 1번·2번 */
     days.push({d:d, key:key, text:blocks.join('\n\n')});
   });
   box.innerHTML=days.map(function(x,i){
@@ -559,6 +717,22 @@ async function genExcel(){
       put(rr,8, r.memo||'',{align:'center',valign:'top',fill:zb});
       ws.getRow(rr).height=Math.max(20, 15*(wrapText(r.content,50).split('\n').length));
     });
+    // 같은 방문일자·같은 병원(장비 여러 대) → 접수일자(A)·방문일자(B)·병원명(E) 세로 병합
+    var gi=0;
+    while(gi<W_ROWS.length){
+      var gj=gi+1;
+      while(gj<W_ROWS.length
+            && (W_ROWS[gi].hosp||'').trim()!==''
+            && W_ROWS[gj].visit===W_ROWS[gi].visit
+            && nkey(W_ROWS[gj].hosp)===nkey(W_ROWS[gi].hosp)){ gj++; }
+      if(gj-gi>1){
+        var mr1=7+gi, mr2=7+gj-1;
+        ws.mergeCells(mr1,1,mr2,1);   // 접수일자
+        ws.mergeCells(mr1,2,mr2,2);   // 방문일자
+        ws.mergeCells(mr1,5,mr2,5);   // 병원명
+      }
+      gi=gj;
+    }
     var dataEnd=6+W_ROWS.length;   // 마지막 데이터 행 번호
     // ⑦ 건수 — 데이터 아래 3줄 (A~F 라벨 가운데, G~H 값 가운데)
     var insp=W_ROWS.filter(function(r){return r.kind==='점검';}).length;
@@ -569,10 +743,12 @@ async function genExcel(){
       ws.mergeCells(rr,1,rr,6); put(rr,1,row[0],{bold:true,fill:row[2],color:row[3],align:'center'});
       ws.mergeCells(rr,7,rr,8); put(rr,7,row[1],{bold:true,align:'center',size:12,color:row[3]});
     });
-    // ⑧ 특이사항 — 건수 바로 다음 줄 (불필요 빈칸 제거)
+    // ⑧ 특이사항 — 건수 바로 다음 줄 · 노즐 재사용 현황을 텍스트로 함께 정리
     var sr=cr+3;
     ws.mergeCells(sr,1,sr,8); put(sr,1,'특이사항',{bold:true,fill:XC.amberSoft,color:'FF8A5A00',align:'center'});
     var spTxt=document.getElementById('special').value||'';
+    var nozTxt=nozzleSummaryText();                                  /* 노즐 재사용 현황 → 특이사항 텍스트 */
+    if(nozTxt){ spTxt = spTxt.replace(/\s+$/,'') ? (spTxt.replace(/\s+$/,'')+'\n\n'+nozTxt) : nozTxt; }
     var spEnd=Math.max(sr+2, sr+1+(spTxt.split('\n').length-1));
     ws.mergeCells(sr+1,1,spEnd,8); put(sr+1,1, spTxt,{valign:'top'});
     boxBorder(sr,1,spEnd,8);
@@ -598,79 +774,73 @@ async function genExcel(){
     document.body.appendChild(a); a.click();
     setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1500);
     toast('📊 엑셀 생성 완료');
+    closePreview();
   }catch(e){ toast('❌ '+e); }
   btn.disabled=false; btn.innerHTML=prev;
 }
-/* 전체 텍스트 합본 */
-function fullText(){
+/* ── 엑셀 미리보기 — 다운로드 전 내용 확인 ── */
+function buildPreviewHTML(){
   var w=writerName();
   var mon=CUR_MON||monday(new Date());
-  var insp=document.getElementById('cntInsp').textContent,
-      voc=document.getElementById('cntVoc').textContent,
-      tot=document.getElementById('cntTot').textContent;
-  var L=[];
-  L.push('■ 주간업무보고 ('+wkLabel(mon)+' · '+wkRange(mon)+') — '+w);
-  L.push('점검 '+insp+'건 · VOC '+voc+'건 · 총 '+tot+'건');
-  L.push('');
-  L.push('[처리 내역]');
-  if(!W_ROWS.length) L.push('(없음)');
-  W_ROWS.forEach(function(r,i){
-    L.push((i+1)+'. 접수 '+r.rcv+' → 방문 '+r.visit+' | '+r.ncare+' | '+r.kind+' | '+r.hosp+' | 노즐 재사용 '+r.nozzle);
-    wrapText(r.content||'', 50).split('\n').forEach(function(ln){ if(ln.trim()) L.push('   '+ln); });
-    if(r.memo) L.push('   비고: '+r.memo);
-  });
-  L.push('');
-  L.push('[요일별 내용]');
-  var box=document.getElementById('daysBox');
-  var n=Number(box.dataset.count||0);
-  var labels=(box.dataset.labels||'').split(',');
-  for(var i=0;i<n;i++){
-    var t=document.getElementById('day'+i);
-    if(!t || !t.value.trim()) continue;
-    L.push('◆ '+labels[i]);
-    L.push(t.value.trim());
-    L.push('');
-  }
-  var sp=document.getElementById('special').value.trim();
-  if(sp){ L.push('[특이사항]'); L.push(sp); }
-  return L.join('\n');
-}
-function copyAll(){
-  if(!W_ROWS.length && !document.getElementById('special').value.trim()){ toast('내용이 없습니다 — 먼저 불러오기'); return; }
-  doCopy(fullText(),'📄 전체 보고 내용 복사됨');
-}
+  var html='';
+  html+='<div class="pv-meta">작성자 <b>'+esc(w||'-')+'</b> · '+esc(wkLabel(mon))+' ('+esc(wkRange(mon))+')</div>';
 
-/* ── 시트 기록 (기존 weeklywrite 계약 유지) ── */
-async function writeToSheet(){
-  var w=writerName();
-  if(!w){ toast('작성자를 입력하세요'); return; }
-  if(!W_ROWS.length){ toast('내용이 없습니다 — 먼저 불러오기'); return; }
-  var monK=document.getElementById('weekSel').value;
-  var mon=new Date(monK+'T00:00:00');
-  var btn=document.getElementById('btnSave');
-  btn.disabled=true; btn.textContent='기록 중…';
-  try{
-    var res=await fetch(HANDOVER_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({
-        action:'weeklywrite', writer:w, mon:monK,
-        week:wkLabel(mon), range:wkRange(mon),
-        body:fullText(), ts:new Date().toISOString()
-      }),
-      redirect:'follow'
-    });
-    var d=await res.json();
-    if(d && (d.success||d.ok)){
-      toast('✅ 기록 완료 — '+w+' 탭 최상단 삽입'+(d.row?(' (행 '+d.row+')'):''));
-    }else{
-      var err=(d&&d.error)||'기록 실패';
-      if(/action/i.test(err)) toast('❌ GAS 구버전 — weekly 패치 새 버전 배포 필요');
-      else toast('❌ '+err);
+  /* 처리 내역 표 — 같은 방문일자·병원은 접수/방문/병원 셀 병합(rowspan) */
+  html+='<div class="pv-title">처리 내역</div><div class="pv-tablewrap"><table class="pv-table"><thead><tr>'
+      +'<th>접수일자</th><th>방문일자</th><th>N-care</th><th>점검/VOC</th><th>병원</th><th>노즐<br>재사용</th><th>처리내용</th><th>비고</th></tr></thead><tbody>';
+  if(!W_ROWS.length){
+    html+='<tr><td colspan="8" style="color:var(--text-muted)">처리 내역 없음</td></tr>';
+  }else{
+    var i=0;
+    while(i<W_ROWS.length){
+      var j=i+1;
+      while(j<W_ROWS.length && (W_ROWS[i].hosp||'').trim()!=='' &&
+            W_ROWS[j].visit===W_ROWS[i].visit && nkey(W_ROWS[j].hosp)===nkey(W_ROWS[i].hosp)) j++;
+      var span=j-i;
+      for(var k=i;k<j;k++){
+        var r=W_ROWS[k];
+        html+='<tr>';
+        if(k===i){ html+='<td rowspan="'+span+'">'+esc(r.rcv)+'</td><td rowspan="'+span+'">'+esc(r.visit)+'</td>'; }
+        html+='<td>'+esc(r.ncare)+'</td><td>'+esc(r.kind)+'</td>';
+        if(k===i){ html+='<td rowspan="'+span+'">'+esc(r.hosp)+'</td>'; }
+        html+='<td>'+esc(r.nozzle)+'</td>'
+            +'<td class="l">'+esc(wrapText(r.content,50))+'</td>'
+            +'<td>'+esc(r.memo||'')+'</td></tr>';
+      }
+      i=j;
     }
-  }catch(e){ toast('❌ 네트워크 오류 — 연결 확인 후 재시도'); }
-  btn.disabled=false; btn.textContent='📝 시트 기록';
+  }
+  html+='</tbody></table></div>';
+
+  var insp=W_ROWS.filter(function(r){return r.kind==='점검';}).length, voc=W_ROWS.length-insp;
+  html+='<div class="pv-meta" style="margin-top:8px">점검 <b>'+insp+'</b>건 · VOC <b>'+voc+'</b>건 · 총 <b>'+W_ROWS.length+'</b>건</div>';
+
+  /* 요일별 내용 */
+  html+='<div class="pv-title">요일별 내용</div><div class="pv-days">';
+  var box=document.getElementById('daysBox');
+  var n=Number(box.dataset.count||0), labels=(box.dataset.labels||'').split(',');
+  for(var d=0;d<n;d++){
+    var ta=document.getElementById('day'+d);
+    html+='<div class="pv-day"><b>'+esc(labels[d]||'')+'</b><pre>'+esc(ta?ta.value:'')+'</pre></div>';
+  }
+  html+='</div>';
+
+  /* 특이사항 (+ 노즐 재사용 현황) — 엑셀과 동일하게 합쳐 표시 */
+  var sp=String(document.getElementById('special').value||'').replace(/\s+$/,'');
+  var noz=nozzleSummaryText();
+  var spFull = sp ? (noz ? sp+'\n\n'+noz : sp) : noz;
+  html+='<div class="pv-title">특이사항</div><div class="pv-special">'+esc(spFull||'(없음)')+'</div>';
+  return html;
 }
+function previewExcel(){
+  if(!W_ROWS.length){ toast('표 내용이 없습니다 — 먼저 불러오기'); return; }
+  document.getElementById('pvBody').innerHTML=buildPreviewHTML();
+  document.getElementById('pvBody').scrollTop=0;
+  document.getElementById('pvModal').classList.add('on');
+}
+function closePreview(){ document.getElementById('pvModal').classList.remove('on'); }
+/* 모달 배경 클릭 시 닫기 */
+document.getElementById('pvModal').addEventListener('click',function(e){ if(e.target===this) closePreview(); });
 </script>
 </body>
 </html>

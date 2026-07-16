@@ -191,6 +191,10 @@ textarea{resize:vertical;min-height:56px}
         <input id="cost" inputmode="numeric" placeholder="예) 1650000" oninput="render()">
       </div>
       <div class="field">
+        <label>노즐 재사용 <span class="opt">· A/S·점검 공통</span></label>
+        <select id="nozzleReuse" onchange="render()"><option>X</option><option>O</option></select>
+      </div>
+      <div class="field">
         <label>A/S 결과</label>
         <select id="result" onchange="toggleCustom('result');render()">
           <option>교체</option><option>수리</option><option>정상</option>
@@ -433,7 +437,8 @@ async function saveToSheet(){
     cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
     cost:(String(val('cost')||'').trim() || '무상'),   /* 교체비용 공란이면 시트에 '무상' 기록 */
     detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
-    hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP') };
+    hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP'),
+    nozzle:val('nozzleReuse') };   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
   try{
     /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
     var ok=false;
@@ -530,6 +535,7 @@ function applyRecent(i){
   if(!found&&c.type){ sub.value='__c'; toggleCustom('sub'); document.getElementById('subCustom').value=c.type; }
   if(c.part) document.getElementById('part').value = PARTS.indexOf(c.part)>=0 ? c.part : '없음';
   if(c.detail) document.getElementById('detail').value=c.detail;
+  if(c.nozzleReuse) document.getElementById('nozzleReuse').value = (c.nozzleReuse==='O'?'O':'X');
   render(); toast('이전 처리 내용을 불러왔어요');
 }
 

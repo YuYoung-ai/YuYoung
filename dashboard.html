@@ -96,6 +96,19 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .card h3{margin:0 0 10px;font-size:12.5px;font-weight:700;color:var(--navy);
   padding-bottom:7px;border-bottom:1px solid var(--gray-line);display:flex;justify-content:space-between}
 .card h3 .tot{color:var(--text-muted);font-weight:400;font-size:11px}
+/* 노즐 재사용 현황 */
+.nz-wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.nz-wrap{grid-template-columns:1fr}}
+.nz-sub{font-size:12px;font-weight:700;color:var(--teal);margin:0 0 8px;padding-left:2px}
+.nz-metrics{display:flex;gap:6px;margin-bottom:8px}
+.nz-metric{flex:1;text-align:center;border:1px solid var(--gray-line);border-radius:9px;padding:8px 4px;background:#FBFCFE}
+.nz-metric span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px}
+.nz-metric b{font-size:16px;line-height:1.2;color:var(--navy)}
+.nz-listwrap{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px}
+.nz-listtit{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.nz-list{margin:0;padding-left:16px}
+.nz-list li{font-size:12.5px;color:var(--text);margin-bottom:2px}
+.nz-list li.nz-none{list-style:none;margin-left:-16px;color:var(--text-muted)}
 /* 가로 막대 */
 .hbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
 .hbar .lb{width:34%;font-size:11.5px;text-align:right;color:var(--text);overflow:hidden;
@@ -278,6 +291,12 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
       <div class="card"><h3>N-Care 분포 <span class="tot" id="tNcare"></span></h3><div id="cNcare"></div></div>
       <div class="card"><h3>서비스 병원 TOP 10 <span class="tot" id="tHosp"></span></h3><div id="cHosp"></div></div>
       <div class="card"><h3>담당자별 처리 <span class="tot" id="tFse"></span></h3><div id="cFse"></div></div>
+    </div>
+
+    <!-- 노즐 재사용 현황 (병원 기준 · 중복 방문 제거 · 필터 반영) -->
+    <div class="card">
+      <h3>💠 노즐 재사용 현황 <span class="tot" id="tNoz"></span></h3>
+      <div id="cNoz"></div>
     </div>
 
     <!-- N-Care 정기점검 현황 (필터 무관 · 마지막 방문일 기준 현재 상태) -->
@@ -488,13 +507,13 @@ function ncareCheck(){
   });
   var el=document.getElementById('cNck');
   if(!list.length){
-    document.getElementById('tNck').textContent='가입 병원 0곳'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    document.getElementById('tNck').textContent='가입 병원 0'+(HOSPDB.length?' · 병원정보DB 연동':'');
     el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return;
   }
   var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
   var rate=Math.round(cnt[0]/list.length*100);   /* 정상(30일 이내 점검) 비율 */
   document.getElementById('tNck').textContent=
-    '가입 병원 '+list.length+'곳 · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    '가입 병원 '+list.length+' · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
   var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
     if(a.si===4&&b.si!==4) return 1;
     if(b.si===4&&a.si!==4) return -1;
@@ -503,7 +522,7 @@ function ncareCheck(){
   el.innerHTML=
     '<div class="nck-rate">'
       +'<div class="nck-rate-top"><b>✅ 정상 비율 '+rate+'%</b>'
-      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'곳</span></div>'
+      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'</span></div>'
       +'<div class="nck-ratebar"><div style="width:'+Math.max(2,rate)+'%"></div></div>'
     +'</div>'
     +'<div class="nck-sum">'+ST.map(function(s,i){
@@ -750,11 +769,41 @@ function apply(){
   hbars('cNcare',count(rows,'ncare'),6,  'ncare','tNcare');
   hbars('cHosp', count(rows,'hosp'), 10, 'hosp', 'tHosp');
   hbars('cFse',  count(rows,'fse'),  8,  'fse',  'tFse');
+  nozzleStats(rows);
   /* 필터 상태 */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
   document.getElementById('fReset').style.display=n?'block':'none';
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
+}
+
+/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ──
+   병원 기준(중복 방문 제거) · N-care 가입/미가입 분리 · 재사용률 · 리스트(가나다) */
+function nzNcare_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? '가입' : '미가입'; }
+function nozGroupHtml_(title, g){
+  var list=(g.hospitals&&g.hospitals.length)
+    ? g.hospitals.map(function(h){ return '<li>'+esc(h)+'</li>'; }).join('')
+    : '<li class="nz-none">재사용 병원 없음</li>';
+  return '<div class="nz-group">'
+    +'<div class="nz-sub">■ '+esc(title)+'</div>'
+    +'<div class="nz-metrics">'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'</b></div>'
+      +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
+    +'</div>'
+    +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
+      +'<ul class="nz-list">'+list+'</ul></div>'
+  +'</div>';
+}
+function nozzleStats(rows){
+  var box=document.getElementById('cNoz'); if(!box) return;
+  if(!(window.Statistics&&window.Statistics.build)){ box.innerHTML='<div class="empty">통계 모듈 로드 실패</div>'; return; }
+  /* handover 행 → Statistics 입력형(hosp/ncare 가입·미가입/nozzle O·X)으로 매핑 */
+  var mapped=rows.map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
+  var st=window.Statistics.build(mapped);
+  var j=st.nozzle.joined, n=st.nozzle.nonJoined;
+  document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+' 재사용';
+  box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
 }
 
 /* ══════════ 주간업무보고 PPT 생성 ══════════ */
@@ -814,6 +863,20 @@ var L=(function(){
             tblX:5.08, tblY:4.85, tblW:7.85, rowH:0.33, colW:[1.85,1.2,1.2,1.2,1.2,1.2],
             sumY:6.55, sumH:0.42, sumPad:0.08,
             sum1:{x:5.08,w:2.6}, sum2:{x:7.78,w:2.6}, sum3:{x:10.48,w:2.45} },
+    /* 슬라이드 3(노즐 재사용) — 페이지 여백/그리드를 슬라이드 1·2와 공유.
+       상단 KPI 4칸 → 월간·주간 비교표 → 하단 재사용 병원 리스트(좌 N-care/우 미가입) */
+    noz:(function(){
+      var fullW=page.right-page.left, kGap=0.2, kW=(fullW-kGap*3)/4;   /* KPI 4칸 균등 */
+      var listL={x:page.left, w:6.15}, listR={x:6.6, w:page.right-6.6};
+      return {
+        kpi:{ x0:page.left, y:1.5, w:kW, h:1.0, gap:kGap, lblDY:0.13, lblH:0.3, numDY:0.46, numH:0.48 },
+        tbl:{ x:page.left, y:2.55, w:fullW, h:1.8,
+              titleX:page.left+0.15, titleY:2.62, titleW:4, titleH:0.26,
+              tX:page.left+0.1, tY:2.95, tW:fullW-0.2, rowH:0.28, colW:[4.17,2.8,2.8,2.8] },
+        list:{ y:4.45, h:2.6, L:listL, R:listR,   /* row2와 동일 밴드 */
+               titleDX:0.15, titleDY:0.12, titleH:0.28, bodyDY:0.52, bodyPad:0.22, bodyBot:0.15 }
+      };
+    })(),
     foot:{ y:7.28, h:0.22, textY:7.26, textW:2, textH:0.24 }
   };
 })();
@@ -1003,6 +1066,39 @@ function collectWeekCtx(){
   };
 }
 
+/* ── 슬라이드 3(노즐 재사용) 데이터 — 병원 기준 통계(공통 Statistics 재사용) ──
+   월간=선택 주차가 속한 달, 주간=선택 주차(월~금). 미리보기·실제 PPT 공용. */
+function nozStatOf_(rows){
+  var mapped=rows.map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
+  return window.Statistics.build(mapped).nozzle;   /* {joined, nonJoined} */
+}
+function buildNozzleData(mon){
+  if(!(window.Statistics&&window.Statistics.build)) return null;
+  var fri=addD(mon,4);
+  var ms=new Date(mon.getFullYear(),mon.getMonth(),1), me=new Date(mon.getFullYear(),mon.getMonth()+1,0);
+  return { month:nozStatOf_(rowsBetween(ms,me)), week:nozStatOf_(rowsBetween(mon,fri)),
+           monthLabel:(mon.getMonth()+1)+'월', weekLabel:wkLabel(mon) };
+}
+/* 상단 KPI 4칸(월간 헤드라인) — 라벨/값/강조색 */
+function nozKpis(nd){
+  return [
+    {label:'N-care 재사용률',   val:nd.month.joined.percent.toFixed(1)+'%', accent:C.teal,   numColor:C.teal},
+    {label:'N-care 재사용 병원', val:nd.month.joined.reuse+' / '+nd.month.joined.total+' 곳', accent:null, numColor:null},
+    {label:'미가입 재사용률',    val:nd.month.nonJoined.percent.toFixed(1)+'%', accent:C.orange, numColor:C.orange},
+    {label:'미가입 재사용 병원',  val:nd.month.nonJoined.reuse+' / '+nd.month.nonJoined.total+' 곳', accent:null, numColor:null}
+  ];
+}
+/* 월간·주간 비교표 본문 4행 [구분, 전체, 재사용, 재사용률] */
+function nozTableRows(nd){
+  function P(g){ return g.percent.toFixed(1)+'%'; }
+  return [
+    ['월간 · N-care', nd.month.joined.total,    nd.month.joined.reuse,    P(nd.month.joined)],
+    ['월간 · 미가입', nd.month.nonJoined.total, nd.month.nonJoined.reuse, P(nd.month.nonJoined)],
+    ['주간 · N-care', nd.week.joined.total,     nd.week.joined.reuse,     P(nd.week.joined)],
+    ['주간 · 미가입', nd.week.nonJoined.total,  nd.week.nonJoined.reuse,  P(nd.week.nonJoined)]
+  ];
+}
+
 /* N-care 서비스 현황 표 (2페이지 하단 우측 · 첨부 양식과 동일 배치 · 데이터 없으면 '-' 표시) */
 function renderNcareTable(pptx, s, tx){
   var nc=WK_NCARE||{}, T=L.ncare;
@@ -1019,13 +1115,13 @@ function renderNcareTable(pptx, s, tx){
   var rows=[
     [{text:'구분',options:HB}].concat(tiers.map(function(t){return {text:t,options:HB};})),
     [{text:'가입 병원 수',options:LB}].concat(joined.map(function(x){return {text:n(x),options:CE};})),
-    [{text:'정상 운영 병원 수',options:LB}].concat(normal.map(function(x){return {text:n(x),options:CE};})),
-    [{text:'점검 대상 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 완료 병원 수',options:LB}].concat(normal.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 예정 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
     [{text:'점검률',options:LB}].concat(rate.map(function(x){return {text:n(x),options:CE};}))
   ];
   s.addTable(rows, {x:T.tblX,y:T.tblY,w:T.tblW,colW:T.colW,
     rowH:T.rowH,border:{type:'solid',color:C.line,pt:0.75},fontFace:FT.face,valign:'middle'});
-  /* 하단 요약 바: 전체 가입자 · 정상 운영 병원 · 정상 운영률 */
+  /* 하단 요약 바: 전체 가입자 · 점검 완료 병원 · 점검 운영률 */
   function sumBox(g,label,val,strong){
     s.addShape(pptx.shapes.RECTANGLE,{x:g.x,y:T.sumY,w:g.w,h:T.sumH,
       fill:{color:strong?C.blueBg:C.grayBg},line:{color:C.line,width:0.75}});
@@ -1034,8 +1130,8 @@ function renderNcareTable(pptx, s, tx){
        {x:g.x+T.sumPad,y:T.sumY,w:g.w-T.sumPad*2,h:T.sumH,align:'center',valign:'middle'});
   }
   sumBox(T.sum1,'전체 가입자',nc.totalJoined,true);
-  sumBox(T.sum2,'정상 운영 병원',nc.totalNormal,false);
-  sumBox(T.sum3,'정상 운영률',nc.normalRate,true);
+  sumBox(T.sum2,'점검 완료 병원',nc.totalNormal,false);
+  sumBox(T.sum3,'점검 운영률',nc.normalRate,true);
 }
 
 /* ══════════ PPT 미리보기 — 생성 전 두 슬라이드를 HTML로 렌더해 확인 ══════════
@@ -1053,6 +1149,7 @@ function previewWeeklyPPT(){
   [ {kind:'(VOC/Call)',        d:ctx.dataAS,   trend:'VOC 주별 추이',    type:'VOC 유형', bottom:'as'},
     {kind:'(N-care 정기점검)', d:ctx.dataInsp, trend:'N-care 점검 추이', type:'점검 유형', bottom:'insp'}
   ].forEach(function(sp){ wrap.appendChild(pvSlide(ctx, sp)); });
+  wrap.appendChild(pvNozzleSlide(ctx));                    /* 슬라이드 3: 노즐 재사용 현황 */
   document.getElementById('wkPvModal').classList.add('show');
   pvFit();
 }
@@ -1218,16 +1315,16 @@ function pvSlide(ctx, sp){
             return '<td style="width:'+(T.colW[i]/T.tblW*100)+'%;height:'+pvIn(T.rowH)+'px;'+bd
               +'background:'+pvHex(C.navy)+';color:#fff;font-weight:700;text-align:center;font-size:'+pvPt(FT.table)+'px">'+esc(t)+'</td>';
           }).join('')+'</tr>'
-        +[['가입 병원 수',arr(nc.joined)],['정상 운영 병원 수',arr(nc.normal)],
-          ['점검 대상 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
+        +[['가입 병원 수',arr(nc.joined)],['점검 완료 병원 수',arr(nc.normal)],
+          ['점검 예정 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
             return '<tr><td style="height:'+pvIn(T.rowH)+'px;'+bd+'background:'+pvHex(C.blueBg)+';color:'+pvHex(C.navy)
               +';font-weight:700;text-align:center;font-size:'+pvPt(FT.tableSm)+'px">'+esc(df[0])+'</td>'
               +df[1].map(function(x){return '<td style="'+bd+'text-align:center;color:'+pvHex(C.dark)
                 +';font-size:'+pvPt(FT.table)+'px">'+esc(n(x))+'</td>';}).join('')+'</tr>';
           }).join('')+'</table>';
       el(T.tblX,T.tblY,T.tblW,T.rowH*5,'',html);
-      [[T.sum1,'전체 가입자',nc.totalJoined,true],[T.sum2,'정상 운영 병원',nc.totalNormal,false],
-       [T.sum3,'정상 운영률',nc.normalRate,true]].forEach(function(g){
+      [[T.sum1,'전체 가입자',nc.totalJoined,true],[T.sum2,'점검 완료 병원',nc.totalNormal,false],
+       [T.sum3,'점검 운영률',nc.normalRate,true]].forEach(function(g){
         el(g[0].x,T.sumY,g[0].w,T.sumH,txc(FT.tableSm,'font-weight:700;justify-content:center;color:'+pvHex(C.navy)
           +';background:'+pvHex(g[3]?C.blueBg:C.grayBg)+';border:1px solid '+pvHex(C.line)),
           esc(g[1])+'&nbsp;&nbsp;<span style="font-size:'+pvPt(FT.total)+'px">'+esc(n(g[2]))+'</span>');
@@ -1236,6 +1333,96 @@ function pvSlide(ctx, sp){
   }
 
   /* ── 푸터 ── */
+  el(0,L.foot.y,L.page.w,L.foot.h,'background:'+pvHex(C.navy));
+  el(L.header.padX,L.foot.textY,L.foot.textW,L.foot.textH,txc(FT.footer,'color:#fff'),'BAZ BIOMEDIC');
+  return holder;
+}
+
+/* 슬라이드 3(노즐 재사용) 미리보기 — createNozzleSlide와 동일 구성·같은 L/C/FT 좌표를 HTML로 재현 */
+function pvNozzleSlide(ctx){
+  var mon=ctx.mon;
+  var holder=document.createElement('div');
+  holder.style.cssText='overflow:hidden;margin:0 0 14px';
+  var s=document.createElement('div');
+  s.style.cssText='position:relative;width:'+pvIn(L.page.w)+'px;height:'+pvIn(L.page.h)+'px;'
+    +'background:#fff;box-shadow:0 2px 8px rgba(20,30,60,.15);transform-origin:0 0;'
+    +'font-family:"맑은 고딕","Malgun Gothic",sans-serif;overflow:hidden';
+  holder.appendChild(s);
+  function el(x,y,w,h,css,html){
+    var e=document.createElement('div');
+    e.style.cssText='position:absolute;box-sizing:border-box;left:'+pvIn(x)+'px;top:'+pvIn(y)
+      +'px;width:'+pvIn(w)+'px;height:'+pvIn(h)+'px;'+(css||'');
+    if(html!=null) e.innerHTML=html; s.appendChild(e); return e;
+  }
+  function txc(pt,extra){ return 'display:flex;align-items:center;font-size:'+pvPt(pt)+'px;line-height:1.15;white-space:nowrap;overflow:hidden;'+(extra||''); }
+  function card(x,y,w,h){ el(x,y,w,h,'background:#fff;border:1px solid '+pvHex(C.line)+';border-radius:4px'); }
+
+  /* 헤더 (pvSlide와 동일) */
+  (function(){
+    var H=L.header;
+    var img=el(H.logo.x,H.logo.y,H.logo.w,H.logo.h,'');
+    img.innerHTML='<img src="logo.png" style="width:100%;height:100%;object-fit:contain" onerror="this.parentNode.innerHTML=\'<b style=&quot;font-family:Arial Black;font-size:'+pvPt(FT.logo)+'px;color:'+pvHex(C.navy)+'&quot;>baz</b>\'">';
+    el(0,H.barY,H.barW,H.barH,'background:'+pvHex(C.navy));
+    el(H.padX,H.barY,H.titleW,H.barH,txc(FT.title,'font-weight:700;color:#fff'),esc('생산품질_CS팀 주간업무보고(노즐 재사용)'));
+    el(H.dateX,H.barY,H.dateW,H.barH,txc(FT.subtitle,'font-weight:700;color:#fff;justify-content:flex-end'),
+       esc('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon)));
+  })();
+
+  var nd=buildNozzleData(mon);
+  if(!nd){
+    el(L.noz.tbl.x,3,6,0.4,txc(FT.body,'color:'+pvHex(C.mut)),'통계 모듈(Statistics) 로드 실패');
+    el(0,L.foot.y,L.page.w,L.foot.h,'background:'+pvHex(C.navy));
+    el(L.header.padX,L.foot.textY,L.foot.textW,L.foot.textH,txc(FT.footer,'color:#fff'),'BAZ BIOMEDIC');
+    return holder;
+  }
+
+  /* ① KPI 4칸 */
+  (function(){
+    var K=L.noz.kpi;
+    nozKpis(nd).forEach(function(k,i){
+      var x=K.x0+i*(K.w+K.gap);
+      el(x,K.y,K.w,K.h,'border-radius:4px;background:'+(k.accent?'#fff':pvHex(C.box))
+        +';border:'+(k.accent?'1.5px solid '+pvHex(k.accent):'1px solid '+pvHex(C.line)));
+      el(x,K.y+K.lblDY,K.w,K.lblH,txc(FT.label,'justify-content:center;color:'+pvHex(C.mut)),esc(k.label));
+      el(x,K.y+K.numDY,K.w,K.numH,txc(FT.stat,'font-weight:700;justify-content:center;color:'+pvHex(k.numColor||C.navy)),esc(String(k.val)));
+    });
+  })();
+
+  /* ② 월간·주간 비교표 */
+  (function(){
+    var T=L.noz.tbl;
+    card(T.x,T.y,T.w,T.h);
+    el(T.titleX,T.titleY,T.titleW,T.titleH,txc(FT.cardTitle,'font-weight:700;color:'+pvHex(C.navy)),'월간 · 주간 재사용 비교');
+    var bd='border:1px solid '+pvHex(C.line)+';';
+    var cw=T.colW, tot=cw.reduce(function(a,b){return a+b;},0);
+    var head='<tr>'+['구분','전체 병원','재사용 병원','재사용률'].map(function(t,i){
+        return '<td style="width:'+(cw[i]/tot*100)+'%;height:'+pvIn(T.rowH)+'px;'+bd
+          +'background:'+pvHex(C.navy)+';color:#fff;font-weight:700;text-align:center;font-size:'+pvPt(FT.table)+'px">'+esc(t)+'</td>';
+      }).join('')+'</tr>';
+    var body=nozTableRows(nd).map(function(r){
+        return '<tr><td style="height:'+pvIn(T.rowH)+'px;'+bd+'background:'+pvHex(C.blueBg)+';color:'+pvHex(C.navy)
+          +';font-weight:700;text-align:center;font-size:'+pvPt(FT.tableSm)+'px">'+esc(r[0])+'</td>'
+          +[r[1],r[2],r[3]].map(function(x){return '<td style="'+bd+'text-align:center;color:'+pvHex(C.dark)
+          +';font-size:'+pvPt(FT.table)+'px">'+esc(String(x))+'</td>';}).join('')+'</tr>';
+      }).join('');
+    el(T.tX,T.tY,T.tW,T.rowH*5,'','<table style="border-collapse:collapse;width:100%;table-layout:fixed">'+head+body+'</table>');
+  })();
+
+  /* ③ 재사용 병원 리스트 (좌 N-care / 우 미가입) */
+  (function(){
+    var Ls=L.noz.list;
+    [[Ls.L,'N-care 재사용 병원',nd.month.joined.hospitals],
+     [Ls.R,'미가입 재사용 병원',nd.month.nonJoined.hospitals]].forEach(function(g){
+      var box=g[0], has=g[2]&&g[2].length;
+      card(box.x,Ls.y,box.w,Ls.h);
+      el(box.x+Ls.titleDX,Ls.y+Ls.titleDY,box.w-Ls.titleDX*2,Ls.titleH,txc(FT.cardTitle,'font-weight:700;color:'+pvHex(C.navy)),esc('■ '+g[1]));
+      var html=has ? g[2].map(function(h){return '• '+esc(h);}).join('<br>') : '재사용 병원 없음';
+      el(box.x+Ls.bodyPad,Ls.y+Ls.bodyDY,box.w-Ls.bodyPad*2,Ls.h-Ls.bodyDY-Ls.bodyBot,
+        'font-size:'+pvPt(FT.body)+'px;line-height:1.5;color:'+pvHex(has?C.text:C.mut)+';overflow:hidden;white-space:normal',html);
+    });
+  })();
+
+  /* 푸터 */
   el(0,L.foot.y,L.page.w,L.foot.h,'background:'+pvHex(C.navy));
   el(L.header.padX,L.foot.textY,L.foot.textW,L.foot.textH,txc(FT.footer,'color:#fff'),'BAZ BIOMEDIC');
   return holder;
@@ -1456,9 +1643,57 @@ async function makeWeeklyPPT(){
       drawFooter(v);
     }
 
-    /* 슬라이드 빌더 목록 — Slide3/4 확장 시 여기에 생성 함수만 추가.
+    /* ── Slide 3: 노즐 재사용 현황 (슬라이드 1·2와 동일 양식: 헤더/카드/표/푸터) ── */
+    function drawNozKpi(v, nd){
+      var K=L.noz.kpi;
+      nozKpis(nd).forEach(function(k,i){
+        var x=K.x0 + i*(K.w+K.gap);
+        v.s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:K.y,w:K.w,h:K.h,rectRadius:0.05,
+          fill:{color:k.accent?C.white:C.box}, line:k.accent?{color:k.accent,width:1.5}:{color:C.line,width:1}});
+        v.tx(k.label,{x:x,y:K.y+K.lblDY,w:K.w,h:K.lblH,fontSize:FT.label,color:C.mut,align:'center'});
+        v.tx(String(k.val),{x:x,y:K.y+K.numDY,w:K.w,h:K.numH,fontSize:FT.stat,bold:true,align:'center',
+          color:k.numColor||C.navy});
+      });
+    }
+    function drawNozTable(v, nd){
+      var T=L.noz.tbl;
+      v.infoCard(T.x, T.y, T.w, T.h, '월간 · 주간 재사용 비교', T.titleX, T.titleY);
+      var HB={fill:C.navy,color:C.white,bold:true,align:'center',valign:'middle',fontSize:FT.table};
+      var LB={fill:C.blueBg,color:C.navy,bold:true,align:'center',valign:'middle',fontSize:FT.tableSm};
+      var CE={align:'center',valign:'middle',fontSize:FT.table,color:C.dark};
+      var head=['구분','전체 병원','재사용 병원','재사용률'].map(function(t){return {text:t,options:HB};});
+      var body=nozTableRows(nd).map(function(r){
+        return [{text:r[0],options:LB},{text:String(r[1]),options:CE},
+                {text:String(r[2]),options:CE},{text:String(r[3]),options:CE}];
+      });
+      v.s.addTable([head].concat(body),{x:T.tX,y:T.tY,w:T.tW,colW:T.colW,
+        rowH:T.rowH,border:{type:'solid',color:C.line,pt:0.75},fontFace:FT.face,valign:'middle'});
+    }
+    function drawNozList(v, box, title, hosps){
+      var Ls=L.noz.list;
+      v.card(box.x, Ls.y, box.w, Ls.h);
+      v.tx('■ '+title,{x:box.x+Ls.titleDX,y:Ls.y+Ls.titleDY,w:box.w-Ls.titleDX*2,h:Ls.titleH,
+        fontSize:FT.cardTitle,bold:true,color:C.navy});
+      var has=hosps&&hosps.length;
+      var txt=has ? hosps.map(function(h){return '• '+h;}).join('\n') : '재사용 병원 없음';
+      v.tx(txt,{x:box.x+Ls.bodyPad,y:Ls.y+Ls.bodyDY,w:box.w-Ls.bodyPad*2,h:Ls.h-Ls.bodyDY-Ls.bodyBot,
+        fontSize:FT.body,color:has?C.text:C.mut,valign:'top',align:'left'});
+    }
+    function createNozzleSlide(pptx){
+      var v=newSlide(pptx);
+      drawHeader(v, '(노즐 재사용)');
+      var nd=buildNozzleData(mon);
+      if(!nd){ v.tx('통계 모듈(Statistics) 로드 실패',{x:L.noz.tbl.x,y:3,w:6,h:0.4,fontSize:FT.body,color:C.mut}); drawFooter(v); return; }
+      drawNozKpi(v, nd);
+      drawNozTable(v, nd);
+      drawNozList(v, L.noz.list.L, 'N-care 재사용 병원', nd.month.joined.hospitals);
+      drawNozList(v, L.noz.list.R, '미가입 재사용 병원', nd.month.nonJoined.hospitals);
+      drawFooter(v);
+    }
+
+    /* 슬라이드 빌더 목록 — Slide4 확장 시 여기에 생성 함수만 추가.
        각 스코프가 0건이어도 빈 카드로 정상 생성된다(에러 없음) */
-    [createASSlide, createInspectionSlide].forEach(function(build){ build(pptx); });
+    [createASSlide, createInspectionSlide, createNozzleSlide].forEach(function(build){ build(pptx); });
 
     var fname='주간업무보고_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')+'.pptx';
     await pptx.writeFile({fileName:fname});
