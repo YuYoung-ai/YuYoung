@@ -6,7 +6,8 @@
  *
  * 설계 원칙 (3-2단계 요구사항)
  *  - 오프라인 우선: 클라이언트는 localStorage를 항상 사용하고,
- *    사인대기(waiting_signature) 전환·최종 완료(completed) 시에만 Sheets에 동기화.
+ *    모든 저장(자동저장 포함)을 debounce 후 Sheets에 동기화한다.
+ *    (사인대기 전환을 잊어도 시트에 등록되도록 — 상태와 무관하게 upsert)
  *  - 새 로그인 시스템을 만들지 않는다: 기존 auth.js 의 토큰을 그대로 검증.
  *  - 새 서버를 만들지 않는다: 기존 Apps Script + Sheets 구조를 그대로 사용.
  *
@@ -27,6 +28,8 @@
  *       → 같은 TaskID가 있으면 UpdatedAt 기준 최신만 유지(중복 생성 안 함)
  *  POST {action:'complete', token, taskId, documentNo}
  *       → 해당 작업 Status=completed, UpdatedAt=now 로 갱신
+ *  POST {action:'remove', token, taskId}
+ *       → 해당 작업 행 삭제 (클라이언트 작업 삭제와 동기화)
  *  GET  ?action=ping
  *  GET  ?action=list&token=…&status=waiting_signature,completed
  *       → 상태 필터된 메타데이터 목록(Data 제외, 가벼움)
@@ -110,6 +113,7 @@ function doPost(e){
 
     if(p.action === 'upsert')   return json_(upsert_(p));
     if(p.action === 'complete') return json_(complete_(p));
+    if(p.action === 'remove')   return json_(remove_(p));
     return json_({success:false, error:'알 수 없는 action: '+p.action});
   }catch(err){
     return json_({success:false, error:String(err)});
@@ -142,6 +146,15 @@ function upsert_(p){
   var newRow = HEADERS.map(function(h){ return row[h]; });
   sh.appendRow(newRow);
   return {success:true, row:sh.getLastRow(), created:true, taskId:p.taskId};
+}
+
+/* remove: 해당 TaskID 행 삭제 (클라이언트에서 작업 삭제 시) */
+function remove_(p){
+  if(!p.taskId) return {success:false, error:'taskId 필요'};
+  var at = findRowByTaskId_(p.taskId);
+  if(!at) return {success:true, missing:true};   // 이미 없음 → 성공 처리
+  sheet_().deleteRow(at);
+  return {success:true, removed:true, taskId:p.taskId};
 }
 
 /* complete: 상태 completed + UpdatedAt 갱신 (+ 문서번호 반영) */
