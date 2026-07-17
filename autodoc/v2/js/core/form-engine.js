@@ -107,7 +107,11 @@ export function createForm(tpl, opts = {}) {
     if (type === 'week' && (g() == null || g() === '')) bind.set(isoWeekString(new Date()));
     if (type === 'date' && (g() == null || g() === '') && f.default === 'today') bind.set(todayString());
     const input = h('input', { id, class: 'field-input', type: nativeType, placeholder: f.placeholder || '',
-      oninput: e => s(nativeType === 'number' ? e.target.valueAsNumber : e.target.value), onblur: () => validateField(f) });
+      oninput: e => {
+        // number 를 비우면 valueAsNumber 가 NaN — 빈 값('')으로 저장해 검증·미리보기 오염 방지
+        const n = e.target.valueAsNumber;
+        s(nativeType === 'number' ? (Number.isNaN(n) ? '' : n) : e.target.value);
+      }, onblur: () => validateField(f) });
     if (g() != null) input.value = g();
     // type=week 미지원(Firefox/Safari) → 텍스트 강등: 형식 힌트 제공
     if (type === 'week' && input.type !== 'week') {

@@ -92,6 +92,11 @@
     (async () => {
       await auth.ensure();
       if (!auth.session()) { location.href = 'index.html'; return; }
+      // 관리 메뉴는 관리자에게만 (일반 사용자는 클릭해도 조용히 튕겨 혼란)
+      if (auth.session().role !== 'admin') {
+        const a = document.querySelector('.sidenav a[href="#/admin"]');
+        if (a) a.remove();
+      }
       router.start();
     })();
   </script>
