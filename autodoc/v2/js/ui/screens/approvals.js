@@ -13,6 +13,7 @@ export function approvalsScreen() {
   function afterText(it) {
     const a = it.analysis || {};
     if (a.kbTerm) return `용어: ${a.kbTerm.canonical} (동의어: ${(a.kbTerm.synonyms || []).join(', ') || '-'})`;
+    if (a.template) return `양식: ${a.template.name} — 입력 ${(a.template.inputs || []).length}개 (${(a.template.inputs || []).map(f => f.label).slice(0, 5).join(', ')}${(a.template.inputs || []).length > 5 ? ' …' : ''})`;
     if (a.target) return `${a.target.path} → ${JSON.stringify(a.after).slice(0, 140)}`;
     return JSON.stringify(a).slice(0, 140);
   }
@@ -36,8 +37,10 @@ export function approvalsScreen() {
     const grade = it.grade || confidence.grade((it.analysis || {}).confidence);
     const card = h('div', { class: 'approve-item card' });
     const reason = h('input', { class: 'field-input', placeholder: '사유(반려/수정 시)' });
+    const status = h('div', { class: 'gen-status', 'aria-live': 'polite' });
     async function decide(decision) {
       card.style.opacity = '.5';
+      status.textContent = '처리 중…';
       try {
         await learning.decide(it, decision, reason.value);
         if (!outletEl) return;
@@ -46,15 +49,22 @@ export function approvalsScreen() {
         const t = outletEl.querySelector('.screen-title');
         if (t) t.textContent = items.length ? `승인함 — 대기 ${items.length}건` : '승인함';
         if (!items.length) outletEl.querySelector('.approve-list').appendChild(h('div', { class: 'empty', text: '대기 중인 항목이 없습니다. 👍' }));
-      } catch { card.style.opacity = '1'; }
+      } catch (e) {
+        // 침묵 금지 — 실패 원인과 다음 행동을 표시
+        card.style.opacity = '1';
+        status.textContent = '처리 실패 — 네트워크를 확인하고 다시 시도해 주세요. (' + String(e && e.message || e) + ')';
+      }
     }
     card.appendChild(h('div', { class: 'approve-head' }, [
       h('span', { class: 'badge', text: confidence.label(grade) }),
-      h('b', { text: ' ' + ((it.analysis && it.analysis.kbTerm) ? '용어 등록' : (it.analysis && it.analysis.target ? '회사 규칙: ' + it.analysis.target.path : '학습 제안')) }),
+      h('b', { text: ' ' + ((it.analysis && it.analysis.kbTerm) ? '용어 등록'
+        : (it.analysis && it.analysis.template) ? '양식 가져오기'
+        : (it.analysis && it.analysis.target ? '회사 규칙: ' + it.analysis.target.path : '학습 제안')) }),
       h('span', { class: 'tpl-meta', text: '  근거: ' + ((it.analysis || {}).analyzer || '-') + ' ' + ((it.analysis || {}).promptVersion || '') }),
     ]));
     card.appendChild(h('div', { class: 'approve-after', text: afterText(it) }));
     card.appendChild(reason);
+    card.appendChild(status);
     card.appendChild(h('div', { class: 'approve-actions' }, [
       h('button', { class: 'btn primary', onclick: () => decide('approved') }, ['승인']),
       h('button', { class: 'btn', onclick: () => decide('rejected') }, ['반려']),

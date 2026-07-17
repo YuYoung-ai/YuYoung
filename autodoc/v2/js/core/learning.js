@@ -7,6 +7,7 @@
  ************************************************************/
 import { api } from '../infra/api.js';
 import { confidence } from './confidence.js';
+import { templateService } from './template-service.js';
 import { bus } from '../infra/bus.js';
 
 const DNA_FIELDS = ['writingStyle', 'colorRule', 'sectionOrder', 'tableRule', 'brandRule', 'fontRule'];
@@ -31,6 +32,13 @@ export const learning = {
         analysis: { analyzer: env.analyzer, promptVersion: env.promptVersion, kbTerm: { canonical: t.canonical, synonyms: t.synonyms || [] }, confidence: c },
       });
     }
+    if (p.template && typeof p.template === 'object') {
+      const tpl = templateService.normalizeImported(p.template);
+      out.push({
+        kind: 'template', label: `양식: ${tpl.name}`, after: { id: tpl.id, inputs: tpl.inputs.length }, confidence: c, grade: confidence.grade(c),
+        analysis: { analyzer: env.analyzer, promptVersion: env.promptVersion, template: tpl, confidence: c },
+      });
+    }
     return out;
   },
 
@@ -47,13 +55,18 @@ export const learning = {
 
   async queue(grade) { return (await api.request('v2.learning.queue', grade ? { grade } : {})).items || []; },
 
-  /** 승인/반려/수정. 승인이면 DNA 는 GAS 가 자동 반영, KB 용어는 여기서 등록. */
+  /** 승인/반려/수정. 승인이면 DNA 는 GAS 가 자동 반영, KB 용어·양식은 여기서 등록. */
   async decide(item, decision, reason, correction) {
     const res = await api.request('v2.learning.decide', { id: item.id, decision, reason: reason || '', correction: correction || null });
-    if ((decision === 'approved' || decision === 'corrected') && item.analysis && item.analysis.kbTerm) {
+    const approved = decision === 'approved' || decision === 'corrected';
+    if (approved && item.analysis && item.analysis.kbTerm) {
       const t = item.analysis.kbTerm;
       const id = 'kb-' + String(t.canonical).toLowerCase().replace(/\s+/g, '-');
       await api.request('v2.kb.decide', { record: { id, canonical: t.canonical, synonyms: t.synonyms || [], status: 'active' }, decision: 'active' }).catch(() => {});
+    }
+    if (approved && item.analysis && item.analysis.template) {
+      // KB 와 같은 승인-반영 패턴: 승인된 양식을 Templates 컬렉션에 등록 → 카탈로그 노출
+      await api.request('v2.template.save', { record: item.analysis.template });
     }
     bus.publish('approval.decided', { id: item.id, decision });
     return res;

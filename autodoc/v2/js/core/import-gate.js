@@ -5,6 +5,7 @@
  * 구문 정리(코드펜스 제거)만 허용 — 의미 보정 금지.
  ************************************************************/
 import { CONTRACT } from './prompt-engine.js';
+import { jsonSchema } from './json-schema.js';
 
 function stripFence(text) {
   let t = String(text || '').trim();
@@ -14,7 +15,7 @@ function stripFence(text) {
   return t;
 }
 
-const KNOWN_PAYLOAD = ['writingStyle', 'colorRule', 'sectionOrder', 'tableRule', 'brandRule', 'fontRule', 'terms'];
+const KNOWN_PAYLOAD = ['writingStyle', 'colorRule', 'sectionOrder', 'tableRule', 'brandRule', 'fontRule', 'terms', 'template'];
 
 export const importGate = {
   /** validate(text, expectedAnalyzer?) → { ok, envelope } | { error:{code,detail} } */
@@ -45,6 +46,15 @@ export const importGate = {
       return { error: { code: 'E-IMPORT-E3', detail: '인식 가능한 payload 항목이 없습니다' } };
     if (env.payload.terms && !Array.isArray(env.payload.terms))
       return { error: { code: 'E-IMPORT-E3', detail: 'payload.terms 는 배열이어야 합니다' } };
+    if (env.payload.template != null) {
+      const t = env.payload.template;
+      if (typeof t !== 'object' || Array.isArray(t))
+        return { error: { code: 'E-IMPORT-E3', detail: 'payload.template 은 객체여야 합니다' } };
+      // id 는 승인 시 자동 부여 — 검증용 placeholder 로 채워 스키마만 확인
+      const v = jsonSchema.validate('template.v1', { id: t.id || '_pending_', name: t.name, inputs: t.inputs, formats: t.formats });
+      if (!v.ok)
+        return { error: { code: 'E-IMPORT-E3', detail: 'payload.template 위반: ' + v.violations.join(', ') } };
+    }
 
     env.warnings = Array.isArray(env.warnings) ? env.warnings : [];
     return { ok: true, envelope: env };
