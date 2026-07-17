@@ -121,7 +121,16 @@
           const wrap = el('<div class="doc-list"></div>');
           for (const r of recent) {
             const b = el(`<button class="doc-item card"><b>${esc(r.filename || r.name)}</b><span class="tpl-meta"> · ${esc((r.format || '').toUpperCase())} · ${fmtTime(r.at)}</span><span class="btn small" style="margin-left:auto">다시 만들기</span></button>`);
-            b.onclick = () => { location.href = 'app.html#/edit/' + encodeURIComponent(r.templateId); };
+            b.onclick = async () => {
+              // 생성 당시 입력값이 있으면 전용 Draft 로 복원해 편집기를 연다
+              if (r.values && r.id) {
+                const draftId = 'hist-' + r.id;
+                await draft.saveNow(r.templateId, draftId, r.values);
+                location.href = 'app.html#/edit/' + encodeURIComponent(r.templateId) + '?draft=' + encodeURIComponent(draftId);
+                return;
+              }
+              location.href = 'app.html#/edit/' + encodeURIComponent(r.templateId);
+            };
             wrap.appendChild(b);
           }
           sec.appendChild(wrap);

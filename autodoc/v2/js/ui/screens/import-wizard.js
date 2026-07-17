@@ -118,7 +118,7 @@ export function importWizardScreen() {
       const chosen = st.proposals.filter((_, i) => st.selected.has(i));
       if (!chosen.length) return;
       submitBtn.disabled = 'true'; submitBtn.textContent = '제출 중…';
-      try { const r = await learning.submit(chosen); st.submitted = r.count; st.step = 5; render(); }
+      try { const r = await learning.submit(chosen); if (!outletEl) return; st.submitted = r.count; st.step = 5; render(); }
       catch (e) { submitBtn.disabled = null; submitBtn.textContent = '제출 실패 — 네트워크 확인'; }
     } }, ['승인함에 제출']);
     body.appendChild(h('div', { class: 'wiz-nav' }, [
@@ -140,6 +140,6 @@ export function importWizardScreen() {
 
   return {
     mount(outlet) { outletEl = outlet; render(); },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }

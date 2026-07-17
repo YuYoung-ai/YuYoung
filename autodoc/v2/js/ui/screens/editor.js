@@ -107,15 +107,22 @@ export function editorScreen() {
 
   async function render() {
     clear(outletEl);
-    const saved = await draft.get(tpl.id, draftId);
+    const saved = await draft.getMerged(tpl.id, draftId);
     const initialValues = saved ? saved.values : {};
     mem = await memorySuggest.forTemplate(tpl.id).catch(() => null);
+    if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
 
     progressBar = h('div', { class: 'progress', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' }, [h('div', { class: 'progress-fill' })]);
     previewBox = h('div', { class: 'preview-host' });
     formMount = h('div', { class: 'form-mount' });
 
-    const formats = documentEngine.availableFormats(tpl);
+    // v1 엔진(window.AD)이 주입되기 전에는 renderers 조회가 불가능하다 —
+    // 로드 실패 시에도 폼은 그려지고, 미리보기 영역의 재시도 UI가 회복을 담당한다.
+    let engineReady = false;
+    try { await documentEngine.ensure(tpl); engineReady = true; }
+    catch (e) { logger.warn('E-ENGINE-LOAD', { meta: { e: String(e && e.message || e) } }); }
+    const formats = engineReady ? documentEngine.availableFormats(tpl) : [];
+    if (!outletEl) return;
     const fmtButtons = formats.length
       ? formats.map(f => h('button', { class: 'btn primary', 'data-fmt': f.id, onclick: () => onGenerate(f.id) }, [`${f.icon || ''} ${f.label || f.id}`.trim()]))
       : [h('span', { class: 'empty', text: '사용 가능한 출력 형식이 없습니다.' })];
@@ -152,6 +159,7 @@ export function editorScreen() {
     document.addEventListener('keydown', keyHandler);
 
     await loadPreviewEngine();
+    if (!outletEl) return;
     updateGen();
 
     unsubLeave = router.onLeave(() => draft.saveNow(tpl.id, draftId, form.getValues()));
@@ -172,6 +180,7 @@ export function editorScreen() {
       if (unsubLeave) unsubLeave();
       if (form) form.destroy();
       if (outletEl) clear(outletEl);
+      outletEl = null;
     },
   };
 }

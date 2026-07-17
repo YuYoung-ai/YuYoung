@@ -30,6 +30,7 @@ export function learningStatusScreen() {
     try { kb = await learning.kbList(); } catch {}
     try { queue = await learning.queue(); } catch {}
     try { golden = await learning.goldenList(); } catch {}
+    if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
     clear(grid);
     grid.appendChild(metric('Company DNA', 'v' + (dna.ver || 0), '학습 반영 버전'));
     grid.appendChild(metric('Knowledge Base', kb.length, '등록 용어', () => router.go('/admin')));
@@ -40,6 +41,6 @@ export function learningStatusScreen() {
 
   return {
     async mount(outlet) { outletEl = outlet; await load(); },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }

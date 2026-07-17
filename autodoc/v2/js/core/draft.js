@@ -40,6 +40,25 @@ export const draft = {
     return idb.get('drafts', key(templateId, draftId)).catch(() => null);
   },
 
+  /** 로컬 우선, 없으면 GAS에서 복원(기기 간 이어서 작성).
+   *  로컬이 비어 있는 채로 편집기를 열면 이탈 시 빈 값이 서버 Draft를
+   *  덮어써 데이터가 사라지므로, 원격 폴백이 필수다. 지연 상한 6s. */
+  async getMerged(templateId, draftId) {
+    const local = await this.get(templateId, draftId);
+    if (local || !api.configured()) return local;
+    try {
+      const remote = await Promise.race([
+        api.request('v2.draft.list', {}),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('E-NET-TIMEOUT')), 6000)),
+      ]);
+      const r = (remote.items || []).find(x => x.templateId === templateId && String(x.draftId) === String(draftId));
+      if (!r) return null;
+      const rec = { templateId, draftId, values: r.values || {}, meta: {}, savedAt: r.savedAt };
+      await idb.put('drafts', key(templateId, draftId), rec).catch(() => {});
+      return rec;
+    } catch { return null; }
+  },
+
   async list() {
     const all = await idb.all('drafts').catch(() => []);
     return all.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));

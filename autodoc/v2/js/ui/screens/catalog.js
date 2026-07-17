@@ -62,8 +62,9 @@ export function catalogScreen() {
     async mount(outlet) {
       outletEl = outlet;
       await templateService.init();
+      if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
       render();
     },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }

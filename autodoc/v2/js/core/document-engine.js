@@ -52,7 +52,8 @@ export const documentEngine = {
     const meta = engine.renderers().find(r => r.id === formatId) || { ext: '' };
     const filename = `${tpl.name || tpl.id}${meta.ext || ''}`;
     engine.download(blob, filename);
-    const entry = await history.add({ templateId: tpl.id, name: tpl.name, format: formatId, filename });
+    // values 를 함께 기록해야 History 에서 '당시 입력값 그대로' 다시 열 수 있다
+    const entry = await history.add({ templateId: tpl.id, name: tpl.name, format: formatId, filename, values });
     bus.publish('document.generated', { docId: entry.id, templateId: tpl.id, format: formatId });
     return { filename, docId: entry.id };
   },

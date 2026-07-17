@@ -27,7 +27,15 @@ const PAYLOAD_HINT = `{
     "colorRule": { "primary": "#RRGGBB", "accent": "#RRGGBB" },
     "sectionOrder": { "<문서종류>": ["섹션1","섹션2","..."] },
     "tableRule": { "headerFill": "primary|accent|none", "zebra": true|false },
-    "terms": [ { "canonical": "표준표기", "synonyms": ["이표기","저표기"] } ]
+    "terms": [ { "canonical": "표준표기", "synonyms": ["이표기","저표기"] } ],
+    "template": {
+      "name": "양식 이름", "desc": "용도 한 줄", "category": "보고서|회의|기타",
+      "inputs": [
+        { "key": "englishKey", "label": "항목 이름", "type": "text|textarea|number|date|week|select|table", "required": true|false,
+          "options": ["select일 때만"],
+          "columns": [ { "key": "colKey", "label": "열 이름" } ] }
+      ]
+    }
   }`;
 
 export const promptEngine = {
@@ -56,6 +64,8 @@ export const promptEngine = {
 - 문서에서 실제로 관찰된 것만 채우고, 모르면 그 키를 생략하세요.
 - confidence 는 전체 추출 신뢰도(0~1).
 - payload 의 각 항목은 회사 표준으로 삼을 값입니다.
+- template 은 이 문서를 다시 만들 때 채워야 할 빈칸(입력 항목) 구조입니다.
+  반복되는 목록/표는 type "table"+columns 로, 긴 글은 "textarea" 로 추출하세요.
 
 [회사 문서]
 <여기에 문서 내용을 붙여넣으세요>`;
