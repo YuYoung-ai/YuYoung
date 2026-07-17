@@ -22,6 +22,7 @@ export function docsScreen() {
 
     await templateService.init().catch(() => {});
     const drafts = await draft.listMerged();
+    if (!outletEl) return; // 이동 후 늦게 도착한 렌더가 다른 화면 위에 쌓이는 것 방지
     if (drafts.length) {
       outletEl.appendChild(h('h2', { class: 'cat-title', text: '이어서 작성 (임시저장)' }));
       outletEl.appendChild(h('div', { class: 'doc-list' }, drafts.map(d => {
@@ -35,6 +36,7 @@ export function docsScreen() {
     }
 
     const list = await history.list();
+    if (!outletEl) return;
     outletEl.appendChild(h('h2', { class: 'cat-title', text: '최근 생성 문서' }));
     if (!list.length) { outletEl.appendChild(h('div', { class: 'empty', text: '아직 생성한 문서가 없습니다.' })); return; }
     outletEl.appendChild(h('div', { class: 'doc-list' }, list.map(r =>
@@ -48,6 +50,6 @@ export function docsScreen() {
 
   return {
     async mount(outlet) { outletEl = outlet; await render(); },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }

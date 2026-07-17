@@ -84,12 +84,19 @@ export const router = {
     const ctx = { params: { ...params, ...values }, outlet };
     try {
       const screen = await matched.def.screen(ctx);
-      if (screen && screen.mount) screen.mount(outlet, ctx);
       currentScreen = { unmount: screen && screen.unmount, path };
       if (matched.def.title && typeof document !== 'undefined') document.title = matched.def.title + ' · AutoDoc';
+      // mount 비동기 오류를 삼키면 화면이 조용히 빈 채로 남는다(침묵 금지)
+      if (screen && screen.mount) await screen.mount(outlet, ctx);
       bus.publish('route.changed', { path });
     } catch (err) {
       logger.error('E-INTERNAL', { meta: { path, err: String(err && err.message || err) } });
+      if (outlet) {
+        outlet.innerHTML =
+          '<div class="card"><h1 class="screen-title">화면을 불러오지 못했어요</h1>' +
+          '<p style="color:var(--ui-text-weak)">일시적인 문제일 수 있어요 — 새로고침하거나 잠시 후 다시 시도해 주세요.</p>' +
+          '<button class="btn" onclick="location.reload()">새로고침</button></div>';
+      }
     }
   },
 };

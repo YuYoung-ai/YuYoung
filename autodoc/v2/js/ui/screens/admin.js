@@ -18,6 +18,7 @@ export function adminScreen() {
     outletEl.appendChild(todo);
     let queue = [];
     try { queue = await learning.queue(); } catch {}
+    if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
     clear(todo);
     todo.appendChild(h('b', { text: '오늘의 할 일' }));
     todo.appendChild(h('div', { class: 'todo-row' }, [
@@ -39,6 +40,6 @@ export function adminScreen() {
 
   return {
     async mount(outlet) { outletEl = outlet; await load(); },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }

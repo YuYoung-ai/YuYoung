@@ -24,6 +24,7 @@ export function approvalsScreen() {
     outletEl.appendChild(listEl);
     listEl.appendChild(h('div', { class: 'empty', text: '불러오는 중…' }));
     try { items = await learning.queue(); } catch { items = null; }
+    if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
     clear(listEl);
     if (items == null) { listEl.appendChild(h('div', { class: 'empty', text: '백엔드에 연결할 수 없습니다.' })); return; }
     if (!items.length) { listEl.appendChild(h('div', { class: 'empty', text: '대기 중인 항목이 없습니다. 👍' })); return; }
@@ -39,6 +40,7 @@ export function approvalsScreen() {
       card.style.opacity = '.5';
       try {
         await learning.decide(it, decision, reason.value);
+        if (!outletEl) return;
         card.remove();
         items = items.filter(x => x !== it);
         const t = outletEl.querySelector('.screen-title');
@@ -62,6 +64,6 @@ export function approvalsScreen() {
 
   return {
     async mount(outlet) { outletEl = outlet; await load(); },
-    unmount() { if (outletEl) clear(outletEl); },
+    unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };
 }
