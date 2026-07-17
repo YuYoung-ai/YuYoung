@@ -3,7 +3,7 @@
   "name": "주간업무보고",
   "desc": "주간 처리 내역 · 차주 계획 · 특이사항",
   "category": "보고서",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "minLevel": 1,
   "formats": [
     "pptx",
@@ -108,20 +108,99 @@
             }
           },
           {
+            "component": "card",
+            "area": "2 / 1 / 4 / 5",
+            "props": {
+              "title": "점검",
+              "source": "@rows",
+              "countWhere": { "key": "kind", "equals": "점검" },
+              "unit": "건",
+              "accent": "$color.success"
+            }
+          },
+          {
+            "component": "card",
+            "area": "2 / 5 / 4 / 9",
+            "props": {
+              "title": "VOC",
+              "source": "@rows",
+              "countWhere": { "key": "kind", "equals": "VOC" },
+              "unit": "건",
+              "accent": "$color.danger"
+            }
+          },
+          {
+            "component": "card",
+            "area": "2 / 9 / 4 / 13",
+            "props": {
+              "title": "총 처리",
+              "source": "@rows",
+              "unit": "건",
+              "accent": "$color.primary"
+            }
+          },
+          {
+            "component": "chart",
+            "area": "4 / 1 / 8 / 7",
+            "props": {
+              "title": "구분별 처리 현황",
+              "type": "bar",
+              "source": "@rows",
+              "groupBy": "kind"
+            }
+          },
+          {
+            "component": "text",
+            "area": "4 / 7 / 6 / 13",
+            "props": {
+              "title": "차주 계획",
+              "content": "@plan"
+            }
+          },
+          {
+            "component": "text",
+            "area": "6 / 7 / 8 / 13",
+            "props": {
+              "title": "특이사항",
+              "content": "@special"
+            }
+          },
+          {
+            "component": "footer",
+            "area": "8 / 1 / 9 / 13",
+            "props": {
+              "text": "BAZ BIOMEDIC · 주간업무보고 · @fn.today"
+            }
+          }
+        ]
+      },
+      {
+        "blocks": [
+          {
+            "component": "header",
+            "area": "1 / 1 / 2 / 13",
+            "props": {
+              "title": "처리 내역 상세",
+              "subtitle": "@week",
+              "writer": "@writer",
+              "date": "@fn.today"
+            }
+          },
+          {
             "component": "table",
-            "area": "2 / 1 / 8 / 9",
+            "area": "2 / 1 / 8 / 13",
             "props": {
               "title": "처리 내역",
               "columns": [
                 {
                   "key": "date",
                   "label": "일자",
-                  "width": 0.14
+                  "width": 0.13
                 },
                 {
                   "key": "kind",
                   "label": "구분",
-                  "width": 0.1
+                  "width": 0.09
                 },
                 {
                   "key": "hosp",
@@ -131,7 +210,7 @@
                 {
                   "key": "content",
                   "label": "처리내용",
-                  "width": 0.4
+                  "width": 0.42
                 },
                 {
                   "key": "memo",
@@ -139,23 +218,21 @@
                   "width": 0.16
                 }
               ],
-              "rows": "@rows"
-            }
-          },
-          {
-            "component": "text",
-            "area": "2 / 9 / 5 / 13",
-            "props": {
-              "title": "차주 계획",
-              "content": "@plan"
-            }
-          },
-          {
-            "component": "text",
-            "area": "5 / 9 / 8 / 13",
-            "props": {
-              "title": "특이사항",
-              "content": "@special"
+              "rows": "@rows",
+              "colorRules": [
+                {
+                  "key": "kind",
+                  "equals": "VOC",
+                  "color": "$color.danger",
+                  "bold": true
+                },
+                {
+                  "key": "kind",
+                  "equals": "점검",
+                  "color": "$color.success",
+                  "bold": true
+                }
+              ]
             }
           },
           {

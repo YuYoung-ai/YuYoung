@@ -105,18 +105,52 @@ export const templateService = {
     t.inputs = Array.isArray(t.inputs) ? t.inputs.filter(f => f && f.key) : [];
     for (const f of t.inputs) { if (!f.label) f.label = f.key; }
     if (!t.layout || !Array.isArray(t.layout.pages) || !t.layout.pages.length) {
-      const content = t.inputs.filter(f => (f.type || 'text') !== 'image' && (f.type || 'text') !== 'signature' && (f.type || 'text') !== 'file');
-      const blocks = content.map(f => (f.type === 'table'
-        ? { component: 'table', props: { title: f.label, columns: (f.columns || []).map(c => ({ key: c.key, label: c.label || c.key })), rows: '@' + f.key } }
-        : { component: 'text', props: { title: f.label, content: '@' + f.key } }));
+      // 기본 레이아웃 자동 생성: 짧은 필드는 KPI 카드(한 줄 3개), 긴 글·표는
+      // 전폭 블록으로 배치하고 8행을 넘으면 페이지를 나눈다.
+      const typeOf = f => f.type || 'text';
+      const content = t.inputs.filter(f => !['image', 'signature', 'file'].includes(typeOf(f)));
+      const SHORT = ['text', 'number', 'date', 'week', 'select', 'radio', 'checkbox'];
+      const shorts = content.filter(f => SHORT.includes(typeOf(f))).slice(0, 6);
+      const longs = content.filter(f => !shorts.includes(f));
+      const writerKey = shorts.find(f => /writer|작성자/.test(f.key + (f.label || '')));
+
+      const header = { component: 'header', area: '1 / 1 / 2 / 13',
+        props: { title: t.name, writer: writerKey ? '@' + writerKey.key : undefined, date: '@fn.today' } };
+      const footer = { component: 'footer', area: '8 / 1 / 9 / 13',
+        props: { text: `${t.name} · @fn.today` } };
+
       const pages = [];
-      for (let i = 0; i < Math.max(1, Math.ceil(blocks.length / 3)); i++) {
-        const chunk = blocks.slice(i * 3, i * 3 + 3);
-        const pageBlocks = [{ component: 'header', area: '1 / 1 / 2 / 13', props: { title: t.name, date: '@fn.today' } }];
-        chunk.forEach((b, j) => { pageBlocks.push({ ...b, area: `${2 + j * 2} / 1 / ${4 + j * 2} / 13` }); });
-        pageBlocks.push({ component: 'footer', area: '8 / 1 / 9 / 13', props: { text: `${t.name} · @fn.today` } });
-        pages.push({ blocks: pageBlocks });
+      let blocks = [], row = 2;
+      const flush = () => {
+        if (!blocks.length) return;
+        pages.push({ blocks: [header, ...blocks, footer] });
+        blocks = []; row = 2;
+      };
+
+      for (let i = 0; i < shorts.length; i += 3) {
+        const rowFields = shorts.slice(i, i + 3);
+        const w = Math.floor(12 / rowFields.length);
+        rowFields.forEach((f, j) => {
+          const c1 = 1 + j * w;
+          const c2 = (j === rowFields.length - 1) ? 13 : c1 + w;
+          blocks.push({ component: 'card', area: `${row} / ${c1} / ${row + 2} / ${c2}`,
+            props: { title: f.label, value: '@' + f.key } });
+        });
+        row += 2;
+        if (row + 2 > 8) flush();
       }
+      for (const f of longs) {
+        const h = typeOf(f) === 'table' ? 3 : 2;
+        if (row + h > 8) flush();
+        blocks.push(typeOf(f) === 'table'
+          ? { component: 'table', area: `${row} / 1 / ${row + h} / 13`,
+              props: { title: f.label, columns: (f.columns || []).map(c => ({ key: c.key, label: c.label || c.key })), rows: '@' + f.key } }
+          : { component: 'text', area: `${row} / 1 / ${row + h} / 13`,
+              props: { title: f.label, content: '@' + f.key } });
+        row += h;
+      }
+      flush();
+      if (!pages.length) pages.push({ blocks: [header, footer] });
       t.layout = { grid: { cols: 12, rows: 8, gap: 0.1 }, pages };
     }
     return t;

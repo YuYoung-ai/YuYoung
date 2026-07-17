@@ -6,14 +6,44 @@
  ************************************************************/
 import { engine } from './engine-bridge.js';
 import { history } from './history.js';
+import { learning } from './learning.js';
 import { bus } from '../infra/bus.js';
 import { logger } from '../infra/logger.js';
 import { workspaceContext } from '../infra/workspace-context.js';
 
+// 승인된 Company DNA(colorRule·tableRule)를 생성 시 실제 반영 (I2 의 완성).
+// 이전에는 DNA 가 학습·버전 표시만 되고 문서에는 아무 영향이 없었다.
+let dnaCache = null, dnaAt = 0;
+async function dnaRules() {
+  if (dnaCache && (Date.now() - dnaAt) < 5 * 60 * 1000) return dnaCache;
+  try {
+    const d = await Promise.race([
+      learning.dna(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('E-NET-TIMEOUT')), 4000)),
+    ]);
+    dnaCache = (d && d.json) || {};
+    dnaAt = Date.now();
+  } catch { dnaCache = dnaCache || {}; }
+  return dnaCache;
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+function applyDnaToTheme(theme, rules) {
+  if (!theme || !rules) return;
+  const cr = rules.colorRule || {};
+  theme.color = theme.color || {};
+  if (HEX.test(String(cr.primary || ''))) theme.color.primary = cr.primary;
+  if (HEX.test(String(cr.accent || ''))) theme.color.accent = cr.accent;
+  if (rules.tableRule && typeof rules.tableRule === 'object') theme.tableRule = rules.tableRule;
+}
+
 export const documentEngine = {
   async ensure(tpl) {
     await engine.ensure();
-    if (tpl && tpl.theme) await engine.loadTheme(tpl.theme).catch(() => {});
+    if (tpl && tpl.theme) {
+      const theme = await engine.loadTheme(tpl.theme).catch(() => null);
+      if (theme) applyDnaToTheme(theme, await dnaRules());
+    }
   },
 
   /** 입력값 + Template → 렌더러 중립 모델 (x2 provenance 부착) */

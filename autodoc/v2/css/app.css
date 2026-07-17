@@ -183,3 +183,37 @@ body {
 .dash-cta { font-size: calc(var(--font-h2) * var(--font-scale)); padding: var(--space-3) var(--space-5); text-decoration: none; display: inline-block; border-radius: var(--radius-m); }
 .dash-admin { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); border-left: 4px solid var(--ui-warning); }
 .field-hint { color: var(--ui-text-weak); font-size: var(--font-caption); margin-top: 2px; }
+
+/* ===== 미리보기 컴포넌트 (v1 엔진 AD.Preview 출력 — autodoc/css/app.css 에서 이식) =====
+   v2 에 이 스타일이 없어서 미리보기가 무스타일 텍스트로 보였음(보고서 '빈약' 체감 원인) */
+.preview-host .ad-page{border:1px solid var(--ui-border);border-radius:6px;min-width:560px;
+  padding:1.6%;font-family:var(--ad-font,'Malgun Gothic'),sans-serif;overflow:hidden}
+.ad-block{min-width:0;min-height:0;overflow:hidden}
+.c-title-bar{font-weight:700;color:var(--ad-primary,#1B2F5E);font-size:1.06em;
+  border-bottom:1.5px solid var(--ad-line,#DDE3EE);padding-bottom:.25em;margin-bottom:.35em}
+.c-text{white-space:pre-wrap;line-height:1.55;color:var(--ad-text,#1A1A2E)}
+.c-header{background:var(--ad-primary,#1B2F5E);color:#fff;border-radius:.25em;height:100%;
+  display:flex;align-items:center;justify-content:space-between;padding:0 .9em}
+.c-header-title{font-size:1.7em;font-weight:700}
+.c-header-meta{font-size:.95em;color:#DCE6F8}
+.c-header-logo{height:1.6em;background:#fff;border-radius:.2em;padding:.1em .25em}
+.c-table{width:100%;border-collapse:collapse;font-size:.92em}
+.c-table th{background:var(--ad-primary,#1B2F5E);color:#fff;font-weight:700;
+  padding:.35em .45em;border:1px solid var(--ad-line,#CED6E4);text-align:center}
+.c-table td{padding:.3em .45em;border:1px solid var(--ad-line,#CED6E4);vertical-align:top;white-space:pre-wrap}
+.c-table tbody tr:nth-child(even) td{background:#F6F9FC}
+.c-table-empty{text-align:center;color:var(--ad-muted,#6B7A99)}
+.c-card{background:#F5F7FA;border:1px solid var(--ad-line,#DDE3EE);border-radius:.3em;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15em}
+.c-card-t{font-size:.9em;color:var(--ad-muted,#6B7A99)}
+.c-card-v{font-size:1.35em;font-weight:700}
+.c-card-d{font-size:.8em}
+.c-footer{color:var(--ad-muted,#6B7A99);font-size:.8em;text-align:center;height:100%;
+  display:flex;align-items:center;justify-content:center}
+.c-chart{display:flex;flex-direction:column;gap:.25em;padding-top:.15em}
+.c-chart-row{display:flex;align-items:center;gap:.4em;font-size:.9em}
+.c-chart-l{flex:0 0 28%;text-align:right;color:var(--ad-text,#1A1A2E);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-chart-bar{flex:1;background:#EEF2F8;border-radius:.2em;height:1em;overflow:hidden}
+.c-chart-bar i{display:block;height:100%;border-radius:.2em}
+.c-chart-v{flex:0 0 2.5em;font-weight:700;color:var(--ad-primary,#1B2F5E)}
+.c-chart-empty{color:var(--ad-muted,#6B7A99);font-size:.85em;text-align:center;padding:.8em 0}
