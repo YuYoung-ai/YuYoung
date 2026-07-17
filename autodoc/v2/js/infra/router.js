@@ -20,6 +20,8 @@ function compile(path) {
   return { re, keys };
 }
 
+function decode_(s) { try { return decodeURIComponent(s); } catch { return s; } }
+
 function parseHash() {
   const raw = (location.hash || '#/').replace(/^#/, '');
   const [p, qs] = raw.split('?');
@@ -63,7 +65,8 @@ export const router = {
     let matched = null, values = {};
     for (const r of routes) {
       const m = r.re.exec('/' + path.replace(/^\/?/, ''));
-      if (m) { matched = r; r.keys.forEach((k, i) => { values[k] = m[i + 1]; }); break; }
+      // location.hash 는 비ASCII(한글 id 등)를 %-인코딩해 돌려주므로 반드시 디코드
+      if (m) { matched = r; r.keys.forEach((k, i) => { values[k] = decode_(m[i + 1]); }); break; }
     }
     if (!matched) { logger.info('ROUTE-NOTFOUND', { path }); this.go(notFoundPath); return; }
 
