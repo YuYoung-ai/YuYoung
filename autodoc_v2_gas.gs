@@ -106,10 +106,11 @@ function verifyToken_(token) {
   if (!authUrl) throw appErr_('E-AUTH-EXPIRED', 'AUTH_URL 미설정');
   var level = 0, userId = null;
   try {
-    var r = UrlFetchApp.fetch(authUrl, {
-      method: 'post', contentType: 'text/plain;charset=utf-8',
-      payload: JSON.stringify({ action: 'verifyToken', token: token }), muteHttpExceptions: true
-    });
+    // GAS→GAS 는 POST 시 302 redirect 에서 본문이 유실되므로 반드시 GET
+    // (inspection_gas 와 동일 패턴). 인증 서버 액션명은 'verify'.
+    var r = UrlFetchApp.fetch(
+      authUrl + '?action=verify&token=' + encodeURIComponent(String(token)),
+      { method: 'get', muteHttpExceptions: true, followRedirects: true });
     var body = JSON.parse(r.getContentText() || '{}');
     if (body && (body.ok || body.valid)) { level = Number(body.level || 0); userId = body.name || body.userId || null; }
   } catch (err) { /* 실패 = 미인증 */ }
@@ -185,7 +186,8 @@ var ROUTER = {
     return repoPut_('Drafts', r, ctx);
   },
   'v2.draft.list': function (p, ctx) {
-    return { items: repoList_('Drafts', ctx.ws, false).filter(function (d) { return d.userId === ctx.session.userId; }) };
+    // 'dev' = REQUIRE_AUTH=false 시절(파일럿 초기) 저장분 — 인증 전환 후에도 보이게 유지
+    return { items: repoList_('Drafts', ctx.ws, false).filter(function (d) { return d.userId === ctx.session.userId || d.userId === 'dev'; }) };
   },
 
   'v2.settings.get': function (p, ctx) { return repoGet_('Workspace', p.key || 'settings', ctx.ws) || {}; },
