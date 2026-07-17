@@ -25,8 +25,10 @@ let readyPromise = null;
 const loadedSrcs = new Set(); // 재시도 시 이미 성공한 스크립트는 재주입하지 않음(중복 register 방지)
 
 function injectSequential(paths) {
-  return paths.reduce((chain, p) => chain.then(() => {
-    if (loadedSrcs.has(p)) return;
+  // async=false 스크립트는 한꺼번에 추가해도 '삽입 순서대로 실행'이 보장되므로
+  // 전부 병렬로 fetch 시킨다 (이전: promise 체인으로 17개를 왕복까지 직렬 → 편집기 오픈 지연)
+  return Promise.all(paths.map(p => {
+    if (loadedSrcs.has(p)) return Promise.resolve();
     return new Promise((res, rej) => {
       const s = document.createElement('script');
       s.src = V1 + p;
@@ -35,7 +37,7 @@ function injectSequential(paths) {
       s.onerror = () => { s.remove(); rej(new Error('엔진 스크립트 로드 실패: ' + p)); };
       document.head.appendChild(s);
     });
-  }), Promise.resolve());
+  }));
 }
 
 function AD() { return (typeof window !== 'undefined') ? window.AD : undefined; }

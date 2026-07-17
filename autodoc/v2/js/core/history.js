@@ -21,11 +21,15 @@ export const history = {
     return entry;
   },
 
+  /** 로컬 우선 + 원격 병합(지연 상한 8s — 실패/지연 시 로컬만) */
   async list() {
     const local = (await idb.get('kv', KEY).catch(() => null)) || [];
     if (!api.configured()) return local;
     try {
-      const remote = (await api.request('v2.history.list', {})).items || [];
+      const remote = (await Promise.race([
+        api.request('v2.history.list', {}),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('E-NET-TIMEOUT')), 8000)),
+      ])).items || [];
       // id 기준 병합(로컬 우선) → 최신순
       const byId = {};
       for (const r of remote) byId[r.id] = r;

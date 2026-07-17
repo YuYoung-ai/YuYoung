@@ -1,13 +1,23 @@
 /* chart 컴포넌트 (Phase 2) — bar/line/pie
- * 데이터 소스 2가지:
- *   ① source:'@표키' + labelKey/valueKey — 표 입력에서 자동 집계
- *   ② labels:[] + values:[] 직접 지정
+ * 데이터 소스 3가지:
+ *   ① source:'@표키' + labelKey/valueKey — 표 입력에서 값 추출
+ *   ② source:'@표키' + groupBy:'컬럼키' — 컬럼 값별 건수 집계 (COUNT)
+ *   ③ labels:[] + values:[] 직접 지정
  */
 AD.Registry.register('chart', {
 
   _series: function (p) {
     var labels = [], values = [];
-    if (Array.isArray(p.source) && p.labelKey && p.valueKey) {
+    if (Array.isArray(p.source) && p.groupBy) {
+      var counts = {}, order = [];
+      p.source.forEach(function (r) {
+        var k = String(r[p.groupBy] == null || r[p.groupBy] === '' ? '기타' : r[p.groupBy]).trim();
+        if (!(k in counts)) { counts[k] = 0; order.push(k); }
+        counts[k] += 1;
+      });
+      labels = order;
+      values = order.map(function (k) { return counts[k]; });
+    } else if (Array.isArray(p.source) && p.labelKey && p.valueKey) {
       p.source.forEach(function (r) {
         labels.push(String(r[p.labelKey] == null ? '' : r[p.labelKey]));
         values.push(Number(String(r[p.valueKey] == null ? 0 : r[p.valueKey]).replace(/[^\d.-]/g, '')) || 0);

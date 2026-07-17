@@ -61,9 +61,14 @@ export function catalogScreen() {
   return {
     async mount(outlet) {
       outletEl = outlet;
-      await templateService.init();
+      // 시드로 즉시 그리고, 서버 병합(가져온 양식) 도착 시 갱신
+      await templateService.initLocal();
       if (!outletEl) return; // 이동 후 늦게 도착한 렌더 방지
+      const before = templateService.list().length;
       render();
+      templateService.init().then(() => {
+        if (outletEl && templateService.list().length !== before) render();
+      }).catch(() => {});
     },
     unmount() { if (outletEl) clear(outletEl); outletEl = null; },
   };

@@ -6,10 +6,27 @@
 AD.Theme = (function () {
   var cur = null;
 
+  /* theme.logo 경로 → dataURL (PPT addImage·미리보기 공용, 실패해도 무시) */
+  function loadLogo(t) {
+    if (!t || !t.logo || t.logoData) return Promise.resolve(t);
+    return fetch(t.logo)
+      .then(function (r) { if (!r.ok) throw 'no logo'; return r.blob(); })
+      .then(function (b) {
+        return new Promise(function (res) {
+          var fr = new FileReader();
+          fr.onload = function () { t.logoData = fr.result; res(t); };
+          fr.onerror = function () { res(t); };
+          fr.readAsDataURL(b);
+        });
+      })
+      .catch(function () { return t; });
+  }
+
   function load(id) {
     id = id || AD.config.DEFAULT_THEME;
     return fetch('themes/' + id + '.json')
       .then(function (r) { if (!r.ok) throw 'not found'; return r.json(); })
+      .then(loadLogo)
       .then(function (t) { cur = t; AD.store.set('theme_' + id, t); return t; })
       .catch(function () {
         var c = AD.store.get('theme_' + id);          // 오프라인: 캐시 폴백

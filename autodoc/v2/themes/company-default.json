@@ -28,5 +28,5 @@
     "color": "#CED6E4",
     "width": "thin"
   },
-  "logo": "assets/logo.png"
+  "logo": "../../logo.png"
 }

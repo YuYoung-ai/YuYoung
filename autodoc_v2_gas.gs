@@ -67,8 +67,10 @@ function doPost(e) {
     if (req.apiVersion && Number(req.apiVersion) > apiVersion_())
       return err_('E-VERSION', '앱 업데이트가 필요합니다', false, requestId);
 
-    // 멱등: 같은 requestId 재수신이면 이전 결과 반환
-    if (requestId) {
+    // 멱등: 같은 requestId 재수신이면 이전 결과 반환 — 쓰기 액션만.
+    // (읽기까지 _Requests 전체 스캔을 하면 시트가 커질수록 모든 요청이 느려짐)
+    var isWrite = WRITE_ACTIONS[req.action] === true;
+    if (requestId && isWrite) {
       var prev = idemGet_(requestId);
       if (prev) return json_(prev);
     }
@@ -86,13 +88,23 @@ function doPost(e) {
     var payload = handler(req.payload || {}, { session: session, ws: ws });
 
     var res = { ok: true, apiVersion: apiVersion_(), requestId: requestId, payload: payload };
-    if (requestId) idemPut_(requestId, res);
+    if (requestId && isWrite) idemPut_(requestId, res);
     return json_(res);
   } catch (ex) {
     var code = (ex && ex.appCode) || 'E-INTERNAL';
     return err_(code, String((ex && ex.message) || ex), code === 'E-INTERNAL', requestId);
   }
 }
+
+/* 멱등 보장이 필요한 쓰기 액션 (읽기는 재실행해도 무해 — 스캔 생략) */
+var WRITE_ACTIONS = {
+  'v2.template.save': true, 'v2.template.publish': true, 'v2.golden.designate': true,
+  'v2.prompt.save': true, 'v2.prompt.stats': true,
+  'v2.import.submit': true, 'v2.learning.decide': true,
+  'v2.kb.decide': true, 'v2.kb.merge': true, 'v2.memory.feedback': true,
+  'v2.history.record': true, 'v2.draft.sync': true,
+  'v2.settings.set': true, 'v2.backup.restore': true
+};
 
 /* ── 인증 ────────────────────────────────────────────────────────────── */
 function verifyToken_(token) {
@@ -104,6 +116,16 @@ function verifyToken_(token) {
   if (!token) throw appErr_('E-AUTH-EXPIRED', '로그인이 필요합니다');
   var authUrl = cfg_('AUTH_URL', '');
   if (!authUrl) throw appErr_('E-AUTH-EXPIRED', 'AUTH_URL 미설정');
+
+  // 검증 결과 캐시 (10분) — 없으면 모든 요청이 인증 GAS 왕복(+2~5s)을 치른다
+  var cache = CacheService.getScriptCache();
+  var ck = 'tok:' + hash_(String(token)).slice(0, 40);
+  var hit = null;
+  try { hit = cache.get(ck); } catch (e) {}
+  if (hit) {
+    var s = JSON.parse(hit);
+    return { userId: s.u, level: s.l, role: (s.l >= adminLevel_() ? 'admin' : 'user') };
+  }
   var level = 0, userId = null;
   try {
     // GAS→GAS 는 POST 시 302 redirect 에서 본문이 유실되므로 반드시 GET
@@ -115,6 +137,7 @@ function verifyToken_(token) {
     if (body && (body.ok || body.valid)) { level = Number(body.level || 0); userId = body.name || body.userId || null; }
   } catch (err) { /* 실패 = 미인증 */ }
   if (level <= 0) throw appErr_('E-AUTH-EXPIRED', '토큰 검증 실패');
+  try { cache.put(ck, JSON.stringify({ u: userId, l: level }), 600); } catch (e) {}
   return { userId: userId, level: level, role: (level >= adminLevel_() ? 'admin' : 'user') };
 }
 
@@ -341,5 +364,21 @@ function cleanup() {
     if (rows.length) s.getRange(2, 1, rows.length, head.length).setValues(rows);
     report[tab] = rows.length;
   });
+  // _Requests 멱등 대장: 7일 지난 행 제거 (매 쓰기 요청이 이 시트를 스캔하므로 주기적 정리 필수)
+  var rq = ss_().getSheetByName('_Requests');
+  if (rq) {
+    var vals = rq.getDataRange().getValues();
+    if (vals.length > 1) {
+      var cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      var keep = [];
+      for (var i = 1; i < vals.length; i++) {
+        var at = String(vals[i][2] || '');
+        if (at >= cutoff) keep.push(vals[i]);
+      }
+      rq.clearContents(); rq.appendRow(vals[0]);
+      if (keep.length) rq.getRange(2, 1, keep.length, vals[0].length).setValues(keep);
+      report['_Requests'] = keep.length + '/' + (vals.length - 1);
+    }
+  }
   return report;
 }

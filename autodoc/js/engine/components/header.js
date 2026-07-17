@@ -3,7 +3,10 @@ AD.Registry.register('header', {
 
   html: function (p, t) {
     var meta = [p.subtitle, p.writer, p.date].filter(Boolean).join(' · ');
-    return '<div class="c-header">' +
+    var logo = (t && t.logoData)
+      ? '<img class="c-header-logo" src="' + t.logoData + '" alt="" style="float:right;height:22px;margin:2px 4px">'
+      : '';
+    return '<div class="c-header">' + logo +
       '<span class="c-header-title">' + AD.esc(p.title || '') + '</span>' +
       (meta ? '<span class="c-header-meta">' + AD.esc(meta) + '</span>' : '') +
       '</div>';
@@ -17,10 +20,19 @@ AD.Registry.register('header', {
       fill: { color: prim }, color: 'FFFFFF', bold: true,
       fontSize: f.title || 20, align: 'left', valign: 'middle',
       fontFace: f.family, margin: 10 });
+    var hasLogo = !!(t && t.logoData);
     var meta = [p.subtitle, p.writer, p.date].filter(Boolean).join('  ·  ');
-    if (meta) slide.addText(meta, { x: rc.x, y: rc.y, w: rc.w - 0.15, h: rc.h,
+    if (meta) slide.addText(meta, { x: rc.x, y: rc.y, w: rc.w - 0.15 - (hasLogo ? 1.0 : 0), h: rc.h,
       align: 'right', valign: 'middle', color: 'DCE6F8',
       fontSize: f.body || 10.5, fontFace: f.family });
+    if (hasLogo) {
+      var lh = Math.min(rc.h * 0.55, 0.3);
+      try {
+        slide.addImage({ data: t.logoData,
+          x: rc.x + rc.w - 0.95, y: rc.y + (rc.h - lh) / 2, w: 0.85, h: lh,
+          sizing: { type: 'contain', w: 0.85, h: lh } });
+      } catch (e) { /* 로고 실패는 문서 생성을 막지 않음 */ }
+    }
   },
 
   excel: function (x, p) {
