@@ -107,6 +107,8 @@ export function editorScreen() {
 
   async function render() {
     clear(outletEl);
+    // draft 원격 조회(서버 상태에 따라 수 초)와 엔진 로드를 병렬로
+    const enginePromise = documentEngine.ensure(tpl);
     const saved = await draft.getMerged(tpl.id, draftId);
     const initialValues = saved ? saved.values : {};
     mem = await memorySuggest.forTemplate(tpl.id).catch(() => null);
@@ -119,7 +121,7 @@ export function editorScreen() {
     // v1 엔진(window.AD)이 주입되기 전에는 renderers 조회가 불가능하다 —
     // 로드 실패 시에도 폼은 그려지고, 미리보기 영역의 재시도 UI가 회복을 담당한다.
     let engineReady = false;
-    try { await documentEngine.ensure(tpl); engineReady = true; }
+    try { await enginePromise; engineReady = true; }
     catch (e) { logger.warn('E-ENGINE-LOAD', { meta: { e: String(e && e.message || e) } }); }
     const formats = engineReady ? documentEngine.availableFormats(tpl) : [];
     if (!outletEl) return;
@@ -168,8 +170,10 @@ export function editorScreen() {
   return {
     async mount(outlet, ctx) {
       outletEl = outlet;
-      await templateService.init();
+      // 시드 양식이면 서버 병합을 기다리지 않고 즉시 연다
+      await templateService.initLocal();
       tpl = templateService.get(ctx.params.templateId);
+      if (!tpl) { await templateService.init(); tpl = templateService.get(ctx.params.templateId); }
       if (ctx.params.draft) draftId = ctx.params.draft;
       if (!tpl) { outlet.appendChild(h('div', { class: 'card', text: '양식을 찾을 수 없습니다.' })); return; }
       await render();

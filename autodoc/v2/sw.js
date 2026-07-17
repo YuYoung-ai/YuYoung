@@ -1,11 +1,13 @@
 /************************************************************
  * sw.js — v2 서비스워커 (PWA_SPEC)
  * 스코프 /autodoc/v2/ — v1·루트 SW 와 무간섭.
- * 전략: network-first(성공 시 캐시 갱신 → 항상 최신 빌드),
- *       실패(오프라인) 시 캐시 폴백 → 오프라인 작성 보장 유지.
+ * 전략: stale-while-revalidate — 캐시가 있으면 즉시 응답하고
+ *       백그라운드에서 갱신(다음 방문에 반영). 캐시가 없으면 네트워크.
+ *       (기존 network-first 는 캐시된 자산도 매번 네트워크를 기다려
+ *        느린 회선에서 접속이 수십 초 걸리는 원인이었음)
  * 새 SW 즉시 활성(skipWaiting/claim) — 입력은 Draft 자동저장이 보호.
  ************************************************************/
-const V2_CACHE = 'ad2-cache-v2';
+const V2_CACHE = 'ad2-cache-v3';
 const SHELL = [
   './index.html', './app.html',
   './css/tokens.css', './css/app.css',
@@ -52,19 +54,18 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;       // 외부(CDN)는 대상 아님
 
-  // network-first: 최신 우선, 오프라인이면 캐시 폴백
+  // stale-while-revalidate: 캐시 즉시 응답 + 백그라운드 갱신
   e.respondWith((async () => {
-    try {
-      const res = await fetch(req);
+    const hit = await caches.match(req);
+    const revalidate = fetch(req).then(res => {
       if (res && res.ok) {
         const copy = res.clone();
         caches.open(V2_CACHE).then(c => c.put(req, copy)).catch(() => {});
       }
       return res;
-    } catch {
-      const hit = await caches.match(req);
-      if (hit) return hit;
-      return caches.match('./index.html');           // 앱 셸 최후 폴백
-    }
+    });
+    if (hit) { e.waitUntil(revalidate.catch(() => {})); return hit; }
+    try { return await revalidate; }
+    catch { return caches.match('./index.html'); }   // 앱 셸 최후 폴백
   })());
 });

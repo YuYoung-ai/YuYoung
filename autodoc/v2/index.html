@@ -74,29 +74,18 @@
       document.getElementById('logout').onclick = () => { auth.logout(); renderLogin(); };
       document.getElementById('net').textContent = navigator.onLine ? '온라인' : '오프라인';
 
-      // 이어서 작성 (Draft 상위 3)
-      try {
-        await templateService.init();
-        const drafts = (await draft.listMerged()).slice(0, 3);
-        if (drafts.length) {
-          const sec = document.getElementById('drafts-sec');
-          sec.appendChild(el('<h2 class="cat-title">이어서 작성</h2>'));
-          const wrap = el('<div class="doc-list"></div>');
-          for (const d of drafts) {
-            const tpl = templateService.get(d.templateId);
-            const name = tpl ? tpl.name : d.templateId;
-            const b = el(`<button class="doc-item card"><b>${esc(name)}</b><span class="tpl-meta"> · ${fmtTime(d.savedAt)} 저장</span><span class="btn small" style="margin-left:auto">이어서 →</span></button>`);
-            b.onclick = () => { location.href = 'app.html#/edit/' + encodeURIComponent(d.templateId) + '?draft=' + encodeURIComponent(d.draftId); };
-            wrap.appendChild(b);
-          }
-          sec.appendChild(wrap);
-        }
-      } catch {}
+      // ── 데이터 섹션: 로컬 우선 즉시 표시 + 원격 병합은 병렬 백그라운드 ──
+      // (이전: GAS 3~4왕복을 순차 await → 홈 완성까지 수십 초. 지금: 셸·양식은 즉시,
+      //  이어서작성/최근문서/승인대기는 각자 도착하는 대로 채움)
+      const gen = (renderShell._gen = (renderShell._gen || 0) + 1); // 재로그인 중 늦은 응답 가드
+      const alive = () => renderShell._gen === gen;
 
-      // 양식 바로가기 (Golden 우선)
+      try { await templateService.init(); } catch {}
+
+      // 양식 바로가기 (시드+캐시 — 네트워크 대기 없음)
       try {
         const tpls = templateService.list().sort((a, b) => (b.golden - a.golden) || a.name.localeCompare(b.name)).slice(0, 4);
-        if (tpls.length) {
+        if (tpls.length && alive()) {
           const sec = document.getElementById('tpl-sec');
           sec.appendChild(el('<h2 class="cat-title">양식 바로가기</h2>'));
           const grid = el('<div class="card-grid"></div>');
@@ -112,10 +101,30 @@
         }
       } catch {}
 
-      // 최근 생성 문서 (상위 5)
-      try {
-        const recent = (await history.list()).slice(0, 5);
-        if (recent.length) {
+      // 이어서 작성 (Draft 상위 3) — 병렬
+      (async () => {
+        try {
+          const drafts = (await draft.listMerged()).slice(0, 3);
+          if (!drafts.length || !alive()) return;
+          const sec = document.getElementById('drafts-sec');
+          sec.appendChild(el('<h2 class="cat-title">이어서 작성</h2>'));
+          const wrap = el('<div class="doc-list"></div>');
+          for (const d of drafts) {
+            const tpl = templateService.get(d.templateId);
+            const name = tpl ? tpl.name : d.templateId;
+            const b = el(`<button class="doc-item card"><b>${esc(name)}</b><span class="tpl-meta"> · ${fmtTime(d.savedAt)} 저장</span><span class="btn small" style="margin-left:auto">이어서 →</span></button>`);
+            b.onclick = () => { location.href = 'app.html#/edit/' + encodeURIComponent(d.templateId) + '?draft=' + encodeURIComponent(d.draftId); };
+            wrap.appendChild(b);
+          }
+          sec.appendChild(wrap);
+        } catch {}
+      })();
+
+      // 최근 생성 문서 (상위 5) — 병렬
+      (async () => {
+        try {
+          const recent = (await history.list()).slice(0, 5);
+          if (!recent.length || !alive()) return;
           const sec = document.getElementById('recent-sec');
           sec.appendChild(el('<h2 class="cat-title">최근 생성 문서</h2>'));
           const wrap = el('<div class="doc-list"></div>');
@@ -134,18 +143,20 @@
             wrap.appendChild(b);
           }
           sec.appendChild(wrap);
-        }
-      } catch {}
-
-      // 관리자 행: 승인 대기
-      if (s && s.role === 'admin') {
-        try {
-          const queue = await learning.queue();
-          if (queue.length) {
-            const row = el(`<div class="card dash-admin"><span>● 승인 대기 <b>${queue.length}</b>건</span><a class="btn small" href="app.html#/admin/approvals">처리 →</a></div>`);
-            document.getElementById('admin-row').appendChild(row);
-          }
         } catch {}
+      })();
+
+      // 관리자 행: 승인 대기 — 병렬
+      if (s && s.role === 'admin') {
+        (async () => {
+          try {
+            const queue = await learning.queue();
+            if (queue.length && alive()) {
+              const row = el(`<div class="card dash-admin"><span>● 승인 대기 <b>${queue.length}</b>건</span><a class="btn small" href="app.html#/admin/approvals">처리 →</a></div>`);
+              document.getElementById('admin-row').appendChild(row);
+            }
+          } catch {}
+        })();
       }
 
       // 진단 모드 (?diag=1)

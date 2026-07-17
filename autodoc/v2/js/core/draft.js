@@ -64,12 +64,16 @@ export const draft = {
     return all.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
   },
 
-  /** 로컬 + GAS 병합 (기기 간 이어서 작성). 오프라인/미연결이면 로컬만. */
+  /** 로컬 + GAS 병합 (기기 간 이어서 작성). 오프라인/미연결이면 로컬만.
+   *  원격 병합 지연 상한 8s — 서버가 느려도 화면이 수십 초 멈추지 않게. */
   async listMerged() {
     const local = await this.list();
     if (!api.configured()) return local;
     try {
-      const remote = (await api.request('v2.draft.list', {})).items || [];
+      const remote = (await Promise.race([
+        api.request('v2.draft.list', {}),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('E-NET-TIMEOUT')), 8000)),
+      ])).items || [];
       const byKey = {};
       for (const r of remote) byKey[`${r.templateId}::${r.draftId}`] = { templateId: r.templateId, draftId: r.draftId, values: r.values, savedAt: r.savedAt };
       for (const l of local) byKey[`${l.templateId}::${l.draftId}`] = l; // 로컬 우선(더 최신일 수 있음)
