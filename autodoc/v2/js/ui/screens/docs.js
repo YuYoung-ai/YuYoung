@@ -43,9 +43,20 @@ export function docsScreen() {
       h('div', { class: 'doc-item card' }, [
         h('b', { text: r.filename || r.name }),
         h('span', { class: 'tpl-meta', text: ` · ${(r.format || '').toUpperCase()} · ${fmtTime(r.at)}` }),
-        h('button', { class: 'btn small', onclick: () => router.go('/edit/' + r.templateId) }, ['다시 만들기']),
+        h('button', { class: 'btn small', onclick: () => reopen(r) }, ['다시 만들기']),
       ])
     )));
+  }
+
+  /** 생성 당시 입력값이 있으면 전용 Draft 로 복원해 편집기를 연다 */
+  async function reopen(r) {
+    if (r.values && r.id) {
+      const draftId = 'hist-' + r.id;
+      await draft.saveNow(r.templateId, draftId, r.values);
+      router.go('/edit/' + r.templateId, { draft: draftId });
+      return;
+    }
+    router.go('/edit/' + r.templateId);
   }
 
   return {
