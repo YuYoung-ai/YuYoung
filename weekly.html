@@ -385,15 +385,20 @@ function buildFromRows(rows, w, monK){
   W_ROWS=inRange.map(function(r){
     var d=normD(r.date);
     var vd=d?ymd(d):'';
+    /* 데모장비 이력: handover가 내용 앞에 [데모장비] 태그를 붙여 기록 →
+       weekly에서는 포함하되 N-care=미가입 고정, 비고에 '데모 장비' 표기 (태그는 처리내용에서 제거) */
+    var content=String(r.detail||'').trim();
+    var isDemo=/^\[데모\s*장비\]/.test(content) || /\[데모\s*장비\]/.test(content);
+    if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
     return {
       rcv:   vd,                                    /* 접수일자: 기본=방문일자, 직접 수정 */
       visit: vd,                                    /* 방문일자 = 처리일 (자동) */
-      ncare: ncareOf(r.hosp, r.ncare),              /* 가입/미가입 — 병원정보DB 연동 */
+      ncare: isDemo?'미가입':ncareOf(r.hosp, r.ncare),  /* 가입/미가입 — 병원정보DB 연동 · 데모는 미가입 고정 */
       kind:  (r.gubun==='점검') ? '점검' : 'VOC',   /* A/S → VOC 표기 */
       hosp:  r.hosp||'',
       nozzle:(String(r.nozzleReuse||'').trim().toUpperCase()==='O'?'O':'X'),  /* 노즐 재사용: handover(P열) 자동 반영 · 수정 가능 */
-      content:String(r.detail||'').trim(),          /* 처리내용 = A/S 내용 상세 그대로 */
-      memo:  '',                                    /* 비고(지연 사유): 직접입력 */
+      content:content,                              /* 처리내용 = A/S 내용 상세 그대로 */
+      memo:  isDemo?'데모 장비':'',                 /* 비고(지연 사유): 직접입력 · 데모는 '데모 장비' 자동 */
       _raw:  r
     };
   });
