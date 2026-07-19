@@ -89,6 +89,9 @@ textarea{resize:vertical;min-height:56px}
 .btn-save:active{filter:brightness(.92)}
 .btn-save:disabled{opacity:.5}
 .btn-copy:disabled{opacity:.45;cursor:not-allowed}
+.btn-cont{background:#fff;color:var(--teal);border:1.5px solid var(--teal)}
+.btn-cont:active{background:rgba(0,150,136,.08)}
+.btn-cont:disabled{opacity:.45;cursor:not-allowed}
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(20px);
   background:var(--navy);color:#fff;padding:10px 20px;border-radius:16px;font-size:13.5px;
   opacity:0;pointer-events:none;transition:.25s;z-index:20;white-space:pre-line;
@@ -229,6 +232,7 @@ textarea{resize:vertical;min-height:56px}
 
 <div class="actions">
   <button class="btn btn-copy" id="btnCopy" onclick="copyText()" disabled title="시트 기록 후 복사할 수 있어요">📋 복사</button>
+  <button class="btn btn-cont" id="btnCont" onclick="contToInspection()" disabled title="시트 기록 후 점검 내역서를 이어서 작성할 수 있어요">📝 내역서 이어쓰기</button>
   <button class="btn btn-save" onclick="saveToSheet()">📥 시트 기록</button>
 </div>
 <div class="toast" id="toast"></div>
@@ -319,8 +323,11 @@ function buildTextSheet(){
   return t;
 }
 function curText(){ return TPL==='sheet' ? buildTextSheet() : buildText(); }
-/* 복사 버튼 게이트: 시트 기록이 한 번이라도 성공하면 이후 계속 복사 가능 */
-function enableCopy(){ var b=document.getElementById('btnCopy'); if(b){ b.disabled=false; b.title='복사'; } }
+/* 복사·이어쓰기 버튼 게이트: 시트 기록이 한 번이라도 성공하면 이후 계속 사용 가능 */
+function enableCopy(){
+  var b=document.getElementById('btnCopy'); if(b){ b.disabled=false; b.title='복사'; }
+  var c=document.getElementById('btnCont'); if(c){ c.disabled=false; c.title='점검 내역서 이어서 작성'; }
+}
 function render(){ document.getElementById('preview').textContent=curText(); }
 
 /* 병원정보DB (index.html 임베드본 재사용: n=병원명 s=장비S/N c=N-Care sa=영업담당 r=지역) */
@@ -455,6 +462,42 @@ async function saveToSheet(){
     }
   }catch(e){ toast('기록 실패 — 네트워크 확인'); }
   setTimeout(function(){btn.disabled=false;btn.textContent='📥 시트 기록';},1200);
+}
+
+/* ── 점검 내역서 이어쓰기: 현재 입력값을 inspection.html 새 작업으로 넘김 ── */
+var PREFILL_KEY='insp_prefill_v1';
+function contToInspection(){
+  if(!val('hosp')){ toast('병원명을 입력하세요'); return; }
+  var b=document.getElementById('btnCont'); if(b) b.disabled=true;   /* 이중 클릭 방지 */
+  var demo = val('eqKind')==='데모 장비';
+  var dLines = bulletLines('detail');
+  var action = (demo?'[데모장비]\n':'') +
+               (dLines.length ? dLines.join('\n') : (itemText()+' / '+pick('result')));
+  var remark = bulletLines('remark').join('\n');
+  var costNum = String(val('cost')||'').replace(/[^\d]/g,'');
+  var snv = snVal();
+  var rec = HOSPITAL_DB.filter(function(h){ return h.n===val('hosp'); })[0];
+  var payload = { v:1, createdAt:Date.now(), source:'handover', form:{
+    basic:{
+      receiveDate: val('date')||todayISO(),
+      inspectDate: val('date')||todayISO(),
+      hospital:    val('hosp'),
+      serialNo:    snv,
+      version:     [val('verUI'),val('verHP')].filter(Boolean).join(' / '),
+      csName:      val('fse'),
+      replacedPart:(val('part')==='없음' ? '' : val('part')),
+      cost:        costNum ? Number(costNum).toLocaleString() : '',
+      subscription:(rec && rec.c) || '',
+      product:     /^NV/i.test(snv) ? 'NOVOJET' : (/^B[VWXY]/i.test(snv) ? 'CUREJET' : ''),
+      actionDetail: action.slice(0,200),
+      recommend:   (remark && remark.toUpperCase()!=='N/A') ? remark.slice(0,150) : ''
+    },
+    pay:   (costNum && Number(costNum)>0) ? '유상' : '무상',
+    types: [ val('gubun')==='점검' ? '장비 점검' : 'A/S' ]
+  }};
+  try{ localStorage.setItem(PREFILL_KEY, JSON.stringify(payload)); }
+  catch(e){ toast('임시저장 실패 — 브라우저 저장공간 확인'); if(b) b.disabled=false; return; }
+  location.href='inspection.html?prefill=1';
 }
 
 /* ── 시트 연동 확장 (HANDOVER_URL 설정 시 자동 활성화) ── */

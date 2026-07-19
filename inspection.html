@@ -83,7 +83,7 @@
 
   /* 서명 */
   .sig-wrap{margin-top:4px;}
-  .sig-box{position:relative;border:1.5px dashed var(--gray-line);border-radius:10px;background:#fff;height:120px;overflow:hidden;cursor:pointer;}
+  .sig-box{position:relative;border:1.5px dashed var(--gray-line);border-radius:10px;background:#fff;height:140px;overflow:hidden;cursor:pointer;}
   .sig-box canvas{display:block;width:100%;height:100%;}
   .sig-box .sig-preview-img{width:100%;height:100%;object-fit:contain;display:none;}
   .sig-box.has-sign .sig-preview-img{display:block;}
@@ -1213,13 +1213,13 @@ let sigCtx=null, sigDrawing=false, sigHasInk=false, sigLastX=0, sigLastY=0, sigT
 function sizeSigCanvas(){
   const wrap=sigpadCanvas.parentElement;
   const r=wrap.getBoundingClientRect();
-  const dpr=window.devicePixelRatio||1;
+  const dpr=Math.max(window.devicePixelRatio||1,2);   // 최소 2x 백킹 — PDF에서도 선명하게
   sigpadCanvas.width=r.width*dpr;
   sigpadCanvas.height=r.height*dpr;
   sigCtx=sigpadCanvas.getContext('2d');
   sigCtx.scale(dpr,dpr);
   sigCtx.strokeStyle='#16264D';
-  sigCtx.lineWidth=2.8; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
+  sigCtx.lineWidth=3.6; sigCtx.lineCap='round'; sigCtx.lineJoin='round';
 }
 function sigPos(e){
   const r=sigpadCanvas.getBoundingClientRect();
@@ -1254,7 +1254,10 @@ function openSigPad(which){
       const img=new Image();
       img.onload=()=>{
         const r=sigpadCanvas.parentElement.getBoundingClientRect();
-        sigCtx.drawImage(img,0,0,r.width,r.height);
+        // 비율 유지 중앙 배치 (크롭된 서명 왜곡 방지, 확대는 하지 않음)
+        const s=Math.min(1, r.width*0.9/img.width, r.height*0.8/img.height);
+        const dw=img.width*s, dh=img.height*s;
+        sigCtx.drawImage(img,(r.width-dw)/2,(r.height-dh)/2,dw,dh);
         sigHasInk=true; sigpadPh.classList.add('hide');
       };
       img.src=sigStore[which];
@@ -1271,9 +1274,30 @@ function clearSigPad(){
   if(sigCtx) sigCtx.clearRect(0,0,sigpadCanvas.width,sigpadCanvas.height);
   sigHasInk=false; sigpadPh.classList.remove('hide');
 }
+// 잉크 바운딩박스만 잘라 내보내기 — 여백 제거로 미리보기/PDF에서 서명이 크고 선명하게 표시됨
+function cropSigCanvas(canvas){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+  const px=ctx.getImageData(0,0,w,h).data;
+  let minX=w, minY=h, maxX=-1, maxY=-1;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    if(px[(y*w+x)*4+3]>10){
+      if(x<minX)minX=x; if(x>maxX)maxX=x;
+      if(y<minY)minY=y; if(y>maxY)maxY=y;
+    }
+  }
+  if(maxX<0) return canvas.toDataURL('image/png');   // 잉크 없음 — 전체 내보내기
+  const pad=Math.round(Math.max(w,h)*0.02)+8;
+  minX=Math.max(0,minX-pad); minY=Math.max(0,minY-pad);
+  maxX=Math.min(w-1,maxX+pad); maxY=Math.min(h-1,maxY+pad);
+  const out=document.createElement('canvas');
+  out.width=maxX-minX+1; out.height=maxY-minY+1;
+  out.getContext('2d').drawImage(canvas,minX,minY,out.width,out.height,0,0,out.width,out.height);
+  return out.toDataURL('image/png');
+}
 function saveSigPad(){
   if(!sigHasInk){ closeSigPad(); return; }
-  const dataURL=sigpadCanvas.toDataURL('image/png');
+  const dataURL=cropSigCanvas(sigpadCanvas);
   sigStore[sigTarget]=dataURL;
   // 미리보기 반영
   const box=document.getElementById(sigTarget+'SigBox');
@@ -2026,13 +2050,13 @@ function buildSheetHTML(opts){
               <td style="width:50%;border-bottom:1px solid #888;padding:6px;font-size:11px;font-weight:700;text-align:center;background:#F4F4F4;">병원 담당자</td>
             </tr>
             <tr>
-              <td style="border-right:1px solid #888;padding:4px;text-align:center;height:60px;vertical-align:middle;">
+              <td style="border-right:1px solid #888;padding:4px;text-align:center;height:110px;vertical-align:middle;">
                 <div style="font-size:11px;color:#333;">${esc(bv('csName'))}</div>
-                ${csSigImg?`<img src="${csSigImg}" style="max-height:42px;max-width:90%;">`:''}
+                ${csSigImg?`<img src="${csSigImg}" style="max-height:92px;max-width:90%;">`:''}
               </td>
-              <td style="padding:4px;text-align:center;height:60px;vertical-align:middle;">
+              <td style="padding:4px;text-align:center;height:110px;vertical-align:middle;">
                 <div style="font-size:11px;color:#333;">${esc(bv('hospitalName'))||''}</div>
-                ${hsSigImg?`<img src="${hsSigImg}" style="max-height:42px;max-width:90%;">`:''}
+                ${hsSigImg?`<img src="${hsSigImg}" style="max-height:92px;max-width:90%;">`:''}
               </td>
             </tr>
           </table>
@@ -2248,6 +2272,24 @@ preloadLogo();
     setCurrentTaskId(null);
     updateTaskStatusBar();
   }
+})();
+
+// 현장 처리(handover.html) → 점검 내역서 이어쓰기 프리필 소비
+(function consumePrefill(){
+  const PREFILL_KEY='insp_prefill_v1';
+  let raw=null; try{ raw=localStorage.getItem(PREFILL_KEY); }catch(e){}
+  if(!raw) return;
+  try{ localStorage.removeItem(PREFILL_KEY); }catch(e){}      // 파싱 전에 제거 — 재적용/오염 방지
+  let p=null; try{ p=JSON.parse(raw); }catch(e){ return; }
+  if(!p || p.v!==1 || !p.form) return;
+  if(Date.now()-(p.createdAt||0) > 10*60*1000) return;        // 10분 지난 프리필은 무시
+  newTask();                                                  // 새 draft — 기존 작업은 목록에 보존
+  applyFormData(Object.assign(
+    { basic:{}, pay:'', types:[], results:{}, memos:{}, photos:[], signatures:{cs:null,hs:null} },
+    p.form
+  ));
+  saveCurrentTask({ showMsg:'현장 처리 내용을 불러왔습니다 — 이어서 작성하세요' });
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
 })();
 
 // 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
