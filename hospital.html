@@ -480,11 +480,18 @@ document.getElementById('langSwitch').addEventListener('click',e=>{
   LANG=b.getAttribute('data-lang'); localStorage.setItem('baz_lang',LANG); applyLang();
 });
 
+// ===== 검색 대상 문자열(병원명·주소·장비·거래처·UI/HP Ver·AS 유무상) =====
+function searchHaystack(h){
+  const vendor=(h.d||'').trim();
+  const vendorLabel=vendor==='납품 1년 이내'?'워런티 유효':'';
+  const hpVer=(h.hpv||'').trim()||getLastHpVer(h.n);
+  const uiVer=(h.uiv||'').trim()||getLastUiVer(h.n);
+  return normalize([h.n,h.a,h.s,vendor,vendorLabel,hpVer,uiVer,h.as].join(' '));
+}
 // ===== 필터 카운트 공용 조건 (다른 활성 필터 반영) =====
 function matchSearchQ(h){
   if(!searchQ) return true;
-  const nq=normalize(searchQ);
-  return normalize(h.n).includes(nq)||normalize(h.a).includes(nq)||normalize(h.s).includes(nq);
+  return searchHaystack(h).includes(normalize(searchQ));
 }
 function matchChipFilter(h){
   if(curFilter==='ncare') return isNcare(h);
@@ -557,7 +564,7 @@ function getFiltered(){
   if(regionFilter) list=list.filter(h=>h.rg===regionFilter);
   if(searchQ){
     const nq=normalize(searchQ);
-    list=list.filter(h=>normalize(h.n).includes(nq)||normalize(h.a).includes(nq)||normalize(h.s).includes(nq));
+    list=list.filter(h=>searchHaystack(h).includes(nq));
   }
   const stOrder={'미점검':0,'경고':1,'권고':2,'점검대상':3,'정상':4};
   list.sort((a,b)=>{
