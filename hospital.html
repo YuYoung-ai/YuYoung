@@ -113,6 +113,8 @@
   .h-tag.sales{background:#F3EEFA;color:#534AB7;}
   .h-tag.hpver{background:#E8F5EE;color:#1B7A47;border:1px solid #BFE6CF;}
   .h-tag.uiver{background:#E8F0FB;color:#1B5FAF;border:1px solid #C2D7F0;}
+  .h-tag.vendor{background:#F1EFEA;color:#7A6A3A;border:1px solid #E3DCC9;}
+  .h-tag.warranty{background:#E8F5EE;color:#1B7A47;border:1px solid #BFE6CF;}
 
   .h-actions{display:flex;gap:6px;margin-top:11px;}
   .h-actions button{flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:8px;cursor:pointer;font-family:inherit;border:1.5px solid var(--gray-line);background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;gap:4px;}
@@ -646,6 +648,10 @@ function cardHTML(h){
   const hpTag=hpVer?'<span class="h-tag hpver">HP '+escapeHtml(hpVer)+'</span>':'';
   const uiVer=(h.uiv||'').trim()||getLastUiVer(h.n);
   const uiTag=uiVer?'<span class="h-tag uiver">UI '+escapeHtml(uiVer)+'</span>':'';
+  const vendorRaw=(h.d||'').trim();
+  let vendorTag='';
+  if(vendorRaw==='납품 1년 이내'){ vendorTag='<span class="h-tag warranty">🛡 워런티 유효</span>'; }
+  else if(vendorRaw){ vendorTag='<span class="h-tag vendor">'+escapeHtml(vendorRaw)+'</span>'; }
   const distHtml=(h._dist!=null)?'<div class="h-dist show">📍 '+h._dist.toFixed(1)+'km</div>':'';
   const naverUrl='https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
   const inspUrl='inspection.html?h='+encodeURIComponent(h.n)+'&sn='+encodeURIComponent(h.s||'')+'&nc='+encodeURIComponent(h.nc||'')+'&e='+encodeURIComponent(h.sa||'');
@@ -668,7 +674,7 @@ function cardHTML(h){
       '<div class="line"><span class="ico">🔧</span><span>'+escapeHtml(h.s||'-')+' · '+t('sales')+' '+escapeHtml(h.sa||'-')+'</span></div>'+
       '<div class="line"><span class="ico">📅</span><span>'+statusDays(h)+'</span></div>'+
     '</div>'+ (warnTag?'<div>'+warnTag+'</div>':'') +
-    '<div class="h-tags">'+ncareTag+asTag+salesTag+hpTag+uiTag+'</div>'+
+    '<div class="h-tags">'+ncareTag+asTag+salesTag+hpTag+uiTag+vendorTag+'</div>'+
     '<div class="h-actions">'+
       '<button class="nmap" onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
       '<button class="insp" onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
