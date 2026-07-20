@@ -1,0 +1,1577 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<title>현장 처리 대시보드 (PC) | BAZ CS</title>
+<style>
+:root{
+  --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+  --bar:#2E7D9E; --bar-dim:#B9CFDD;
+  --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --amber:#B8860B;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--gray-bg);color:var(--text);
+  font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px;line-height:1.5;padding-bottom:40px}
+header{background:var(--navy);color:#fff;padding:12px 16px;position:sticky;top:0;z-index:20;
+  display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 10px}
+header>div:first-child{min-width:0;flex:1 1 auto}
+header h1{margin:0;font-size:15px;font-weight:700;white-space:nowrap}
+header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd-btns{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
+.hd-btn{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:8px;
+  padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
+.hd-btn:active{background:rgba(255,255,255,.15)}
+.wrap{max-width:1080px;margin:0 auto;padding:12px;transition:max-width .18s ease}
+
+/* ===== Window(PC) 모드 : 넓은 화면 활용 ===== */
+.mode-toggle{display:flex;gap:2px;background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:8px;padding:2px}
+.mode-toggle button{background:transparent;border:0;color:var(--text-muted);font-size:11px;font-weight:700;padding:6px 9px;border-radius:6px;cursor:pointer;line-height:1;font-family:inherit}
+.mode-toggle button.on{background:var(--navy);color:#fff}
+body.mode-window .wrap{max-width:1480px}
+@media(max-width:720px){ body.mode-window .wrap{max-width:1080px} }
+body.mode-mobile .wrap{max-width:560px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.kpi{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:12px 10px;text-align:center}
+.kpi b{display:block;font-size:22px;color:var(--navy);line-height:1.2}
+.kpi span{font-size:11px;color:var(--text-muted)}
+@media (max-width:560px){ .kpis{grid-template-columns:repeat(2,1fr)} .kpi b{font-size:19px} }
+
+/* 필터(슬라이서) */
+.filters{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.filters summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--navy);list-style:none;
+  display:flex;justify-content:space-between;align-items:center}
+.filters summary::-webkit-details-marker{display:none}
+.filters summary .cnt{font-size:11px;color:var(--teal);font-weight:600}
+.fgroup{margin-top:10px;padding-top:10px;border-top:1px dashed #E4E9F2}
+.fgroup:first-of-type{border-top:none;padding-top:4px}
+.fgroup h5{margin:0 0 6px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
+.range-row{display:flex;align-items:center;gap:6px}
+.range-row input[type=date]{flex:1;min-width:0;padding:9px 8px;border:1px solid var(--gray-line);
+  border-radius:8px;font-size:13px;font-family:inherit;-webkit-appearance:none;appearance:none;background:#fff}
+.range-row input[type=date]:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.range-row .tilde{color:var(--text-muted);flex-shrink:0}
+/* 검색형 드롭다운 */
+.cb-wrap{position:relative}
+.ac2{display:none;position:absolute;left:0;right:0;top:100%;z-index:25;background:#fff;
+  border:1px solid var(--gray-line);border-radius:10px;max-height:40vh;overflow:auto;
+  box-shadow:0 8px 24px rgba(27,47,94,.16);margin-top:4px;-webkit-overflow-scrolling:touch}
+.cb-item{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  padding:11px 12px;min-height:44px;font-size:13px;cursor:pointer;border-bottom:1px solid #F0F3F8}
+.cb-item:last-child{border-bottom:none}
+.cb-item:active{background:var(--teal-soft)}
+.cb-item.on{background:var(--teal-soft);font-weight:700;color:var(--teal)}
+.cb-item b{color:var(--text-muted);font-weight:400;font-size:11px;white-space:nowrap}
+/* N-Care 정기점검 현황 */
+.nck-rate{margin-bottom:10px}
+.nck-rate-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.nck-rate-top b{font-size:13.5px;color:var(--green)}
+.nck-rate-top span{font-size:11px;color:var(--text-muted)}
+.nck-ratebar{height:10px;background:#F0F4F9;border-radius:5px;overflow:hidden}
+.nck-ratebar div{height:100%;background:var(--green);border-radius:5px;transition:width .3s}
+.nck-sum{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.nck-badge{flex:1;min-width:70px;text-align:center;border-radius:8px;padding:7px 4px;font-size:11px;color:#fff}
+.nck-badge b{display:block;font-size:17px;line-height:1.2}
+.nck-list{max-height:260px;overflow:auto;-webkit-overflow-scrolling:touch}
+.nck-row{display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid #F0F3F8;font-size:12.5px}
+.nck-row:last-child{border-bottom:none}
+.nck-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.nck-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nck-row .gd{color:var(--teal);font-size:11px;flex-shrink:0}
+.nck-row .dy{color:var(--text-muted);font-size:11px;white-space:nowrap;flex-shrink:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:560px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch} }
+.chip{border:1px solid var(--gray-line);background:#fff;color:var(--text);border-radius:16px;
+  padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:.12s}
+.chip.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:700}
+.chip:active{transform:scale(.96)}
+.hosp-search{width:100%;margin-top:6px;padding:9px 11px;border:1px solid var(--gray-line);border-radius:8px;
+  font-size:13px;font-family:inherit}
+.hosp-search:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.freset{margin-top:10px;width:100%;padding:9px;border:1px solid var(--red);background:#fff;color:var(--red);
+  border-radius:8px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer;display:none}
+
+/* 차트 카드 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:720px){ .grid2{grid-template-columns:1fr} }
+.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:12px;margin-bottom:10px}
+.card h3{margin:0 0 10px;font-size:12.5px;font-weight:700;color:var(--navy);
+  padding-bottom:7px;border-bottom:1px solid var(--gray-line);display:flex;justify-content:space-between}
+.card h3 .tot{color:var(--text-muted);font-weight:400;font-size:11px}
+/* 노즐 재사용 현황 */
+.nz-wrap{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.nz-wrap{grid-template-columns:1fr}}
+.nz-sub{font-size:12px;font-weight:700;color:var(--teal);margin:0 0 8px;padding-left:2px}
+.nz-metrics{display:flex;gap:6px;margin-bottom:8px}
+.nz-metric{flex:1;text-align:center;border:1px solid var(--gray-line);border-radius:9px;padding:8px 4px;background:#FBFCFE}
+.nz-metric span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px}
+.nz-metric b{font-size:16px;line-height:1.2;color:var(--navy)}
+.nz-listwrap{background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px}
+.nz-listtit{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.nz-list{margin:0;padding-left:16px}
+.nz-list li{font-size:12.5px;color:var(--text);margin-bottom:2px}
+.nz-list li.nz-none{list-style:none;margin-left:-16px;color:var(--text-muted)}
+/* 가로 막대 */
+.hbar{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
+.hbar .lb{width:34%;font-size:11.5px;text-align:right;color:var(--text);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.hbar .tr{flex:1;background:#F0F4F9;border-radius:4px;height:18px;position:relative;overflow:hidden}
+.hbar .fl{height:100%;background:var(--bar);border-radius:4px;min-width:2px;transition:width .3s}
+.hbar .vl{font-size:11px;font-weight:700;color:var(--navy);width:34px;flex-shrink:0}
+.hbar.sel .fl{background:var(--amber)}
+.hbar:active .tr{filter:brightness(.95)}
+/* 세로 막대(월별) */
+.vchart{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:16px}
+.vchart.vscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.vchart.vscroll .vcol{min-width:38px;flex:1 0 38px}
+.vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer}
+.vcol .vnum{font-size:11px;font-weight:700;color:var(--navy);margin-bottom:3px}
+.vcol .vbar{width:70%;max-width:44px;background:var(--bar);border-radius:4px 4px 0 0;min-height:2px;transition:height .3s}
+.vcol.sel .vbar{background:var(--amber)}
+.vcol .vlb{font-size:10.5px;color:var(--text-muted);margin-top:4px;white-space:nowrap}
+.empty{color:var(--text-muted);font-size:12px;text-align:center;padding:14px 0}
+.status{font-size:11px;color:var(--text-muted);text-align:center;margin:6px 0}
+.loading{padding:40px 0;text-align:center;color:var(--text-muted)}
+.spin{display:inline-block;width:22px;height:22px;border:3px solid var(--gray-line);
+  border-top-color:var(--teal);border-radius:50%;animation:sp 0.8s linear infinite;margin-bottom:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+  padding:10px 20px;border-radius:24px;font-size:13px;opacity:0;pointer-events:none;transition:.25s;z-index:30}
+.toast.on{opacity:1}
+/* 주간보고 모달 */
+.modal{display:none;position:fixed;inset:0;background:rgba(20,30,60,.5);z-index:40;padding:16px;overflow:auto}
+.modal.show{display:flex;align-items:center;justify-content:center}
+.mbox{background:#fff;border-radius:14px;max-width:420px;width:100%;padding:18px}
+.mbox h2{margin:0 0 12px;font-size:15px;color:var(--navy)}
+.mrow{margin-bottom:12px}
+.mrow label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.mrow select,.mrow input{width:100%;padding:10px;border:1px solid var(--gray-line);border-radius:8px;
+  font-size:14px;font-family:inherit}
+.inv-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.inv-grid div label{font-weight:400;font-size:11px;color:var(--text-muted)}
+.mbtns{display:flex;gap:8px;margin-top:14px}
+.mbtn{flex:1;padding:12px;border:none;border-radius:9px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer}
+.mbtn.go{background:var(--navy);color:#fff}
+.mbtn.cancel{background:#E8EDF6;color:var(--text-muted)}
+.mhint{font-size:11px;color:var(--text-muted);margin-top:4px}
+</style>
+<script src="auth.js"></script>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📊 현장 처리 대시보드</h1>
+    <div class="sub" id="metaLine">현장 처리 현황(handover) 집계</div>
+  </div>
+  <div class="hd-btns">
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
+      <button type="button" data-mode="window">🖥 Window</button><button type="button" data-mode="mobile">📱 Mobile</button>
+    </div>
+    <button class="hd-btn" onclick="location.href='index.html'">← 메뉴</button>
+    <button class="hd-btn" onclick="location.href='handover.html'">✍ 기록</button>
+    <button class="hd-btn" onclick="openWeekly()">📑 주간보고</button>
+    <button class="hd-btn" onclick="loadData(true)">🔄 새로고침</button>
+  </div>
+</header>
+
+<!-- 주간보고 PPT 생성 모달 -->
+<div class="modal" id="wkModal">
+  <div class="mbox">
+    <h2>📑 주간업무보고 PPT 생성</h2>
+    <div class="mrow">
+      <label>보고 주차 (월~금)</label>
+      <select id="wkSel" onchange="suggestWkDetail()"></select>
+      <div class="mhint">시트 처리일 기준 최근 8주 · 1페이지 A/S(VOC/Call) + 2페이지 N-care 정기점검</div>
+    </div>
+    <div class="mrow">
+      <label>고장 상세 <span style="font-weight:400;color:var(--text-muted)">· 1페이지(A/S)에 반영 · 한 줄에 "유형: 설명"</span></label>
+      <textarea id="wkDetail" rows="3" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--gray-line);border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:72px;line-height:1.5"></textarea>
+      <div class="mhint">주차 선택 시 A/S 상위 유형 기준 초안 자동 제안 (최대 4줄) · 2페이지(점검)는 자동 생성</div>
+    </div>
+    <div class="mrow" id="invRow">
+      <label>재고 현황 <span style="font-weight:400;color:var(--text-muted)">· 재고 시트 자동 연동, 수정 가능</span></label>
+      <div class="mhint" id="invStatus" style="margin:0 0 6px">재고 시트 조회 중…</div>
+      <div class="inv-grid">
+        <div><label>Handpiece (Repair)</label><input id="inv1" inputmode="numeric" placeholder="0"></div>
+        <div><label>Handpiece (새제품)</label><input id="inv2" inputmode="numeric" placeholder="0"></div>
+        <div><label>Foot s/w (새제품)</label><input id="inv3" inputmode="numeric" placeholder="0"></div>
+        <div><label>Foot s/w (Repair)</label><input id="inv4" inputmode="numeric" placeholder="0"></div>
+      </div>
+    </div>
+    <div class="mrow" id="callRow">
+      <label>고객센터 Call 현황 <span style="font-weight:400;color:var(--text-muted)">· 1페이지(A/S) Call 카드에 반영 · 직접 입력</span></label>
+      <div class="inv-grid">
+        <div><label>INBOUND</label><input id="callInInp" inputmode="numeric" placeholder="0" oninput="updWkCallTot()"></div>
+        <div><label>OUTBOUND</label><input id="callOutInp" inputmode="numeric" placeholder="0" oninput="updWkCallTot()"></div>
+      </div>
+      <div class="mhint" id="callTotHint">총 Call 0건 — INBOUND + OUTBOUND 자동 합산</div>
+    </div>
+    <div class="mrow" id="ncareRow">
+      <label>N-care 서비스 현황 <span style="font-weight:400;color:var(--text-muted)">· 대시보드 시트 자동 연동</span></label>
+      <div class="mhint" id="ncareStatus">대시보드 시트에서 자동 조회 — PPT 2페이지 표에 반영됩니다</div>
+    </div>
+    <div class="mbtns">
+      <button class="mbtn cancel" onclick="closeWeekly()">취소</button>
+      <button class="mbtn" onclick="previewWeeklyPPT()" style="background:#EEF2FA;color:var(--navy)">👁 미리보기</button>
+      <button class="mbtn go" id="wkGo" onclick="makeWeeklyPPT()">PPT 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- 주간보고 PPT 미리보기 모달 — 생성 전 두 슬라이드를 화면에서 확인 -->
+<div class="modal" id="wkPvModal">
+  <div class="mbox" style="max-width:1080px">
+    <h2>👁 PPT 미리보기</h2>
+    <div class="mhint" style="margin:0 0 10px">실제 PPT와 동일한 좌표·색상·데이터로 렌더한 미리보기입니다 · 1페이지 A/S(VOC/Call) + 2페이지 N-care 정기점검</div>
+    <div id="wkPvSlides" style="max-height:68vh;overflow:auto;background:#E8ECF4;padding:10px;border-radius:8px"></div>
+    <div class="mbtns">
+      <button class="mbtn cancel" onclick="closeWkPreview()">닫기</button>
+      <button class="mbtn go" onclick="closeWkPreview();makeWeeklyPPT()">PPT 생성</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="loading" class="loading"><span class="spin"></span><br>시트 데이터 불러오는 중…</div>
+  <div id="app" style="display:none">
+
+    <!-- KPI -->
+    <div class="kpis">
+      <div class="kpi"><b id="kCnt">0</b><span>서비스 건수</span></div>
+      <div class="kpi"><b id="kCost">₩0</b><span>교체비용 합계</span></div>
+      <div class="kpi"><b id="kHosp">0</b><span>서비스 병원 수</span></div>
+      <div class="kpi"><b id="kAs">0%</b><span>A/S 비율</span></div>
+    </div>
+
+    <!-- 필터(슬라이서) -->
+    <details class="filters" open id="fbox">
+      <summary>🔍 필터 <span class="cnt" id="fCnt"></span></summary>
+      <div class="fgroup"><h5>📅 기간 지정</h5>
+        <div class="range-row">
+          <input type="date" id="fFrom" onchange="setRange()">
+          <span class="tilde">~</span>
+          <input type="date" id="fTo" onchange="setRange()">
+        </div>
+        <div class="chips" style="margin-top:6px">
+          <button type="button" class="chip" onclick="preset(7)">최근 7일</button>
+          <button type="button" class="chip" onclick="preset(30)">최근 30일</button>
+          <button type="button" class="chip" onclick="presetThisMonth()">이번 달</button>
+          <button type="button" class="chip" onclick="presetLastWeek()">지난주 월~금</button>
+        </div>
+      </div>
+      <div class="fgroup"><h5>년</h5><div class="chips" id="fYear"></div></div>
+      <div class="fgroup"><h5>월</h5><div class="chips" id="fMonth"></div></div>
+      <div class="fgroup"><h5>분기</h5><div class="chips" id="fQuarter"></div></div>
+      <div class="fgroup"><h5>점검 / A·S</h5><div class="chips" id="fGubun"></div></div>
+      <div class="fgroup"><h5>유 / 무상</h5><div class="chips" id="fPaid"></div></div>
+      <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
+      <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
+      <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>유형</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbTypeDrop"></div>
+        </div>
+        <div class="chips" id="fTypeSel" style="margin-top:6px"></div>
+      </div>
+      <div class="fgroup"><h5>병원</h5>
+        <div class="cb-wrap">
+          <input class="hosp-search" id="cbHosp" placeholder="병원 검색 후 선택 (복수 가능)" autocomplete="off">
+          <div class="ac2" id="cbHospDrop"></div>
+        </div>
+        <div class="chips" id="fHospSel" style="margin-top:6px"></div>
+      </div>
+      <button class="freset" id="fReset" onclick="resetFilters()">✕ 필터 전체 해제</button>
+    </details>
+
+    <!-- 월별 추이 -->
+    <div class="card">
+      <h3>월별 서비스 건수 <span class="tot" id="tMonth"></span></h3>
+      <div class="vchart" id="cMonth"></div>
+    </div>
+
+    <!-- 주차별 추이 -->
+    <div class="card">
+      <h3>주차별 서비스 건수 <span class="tot" id="tWeek"></span></h3>
+      <div class="vchart vscroll" id="cWeek"></div>
+      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--text-muted)">막대를 누르면 해당 주(월~일) 기간 필터 · 다시 누르면 해제</div>
+    </div>
+
+    <div class="grid2">
+      <div class="card"><h3>유형 TOP 10 <span class="tot" id="tType"></span></h3><div id="cType"></div></div>
+      <div class="card"><h3>대분류 <span class="tot" id="tCat"></span></h3><div id="cCat"></div></div>
+      <div class="card"><h3>교체품 <span class="tot" id="tPart"></span></h3><div id="cPart"></div></div>
+      <div class="card"><h3>N-Care 분포 <span class="tot" id="tNcare"></span></h3><div id="cNcare"></div></div>
+      <div class="card"><h3>서비스 병원 TOP 10 <span class="tot" id="tHosp"></span></h3><div id="cHosp"></div></div>
+      <div class="card"><h3>담당자별 처리 <span class="tot" id="tFse"></span></h3><div id="cFse"></div></div>
+    </div>
+
+    <!-- 노즐 재사용 현황 (병원 기준 · 중복 방문 제거 · 필터 반영) -->
+    <div class="card">
+      <h3>💠 노즐 재사용 현황 <span class="tot" id="tNoz"></span></h3>
+      <div id="cNoz"></div>
+    </div>
+
+    <!-- N-Care 정기점검 현황 (필터 무관 · 마지막 방문일 기준 현재 상태) -->
+    <div class="card">
+      <h3>🩺 N-Care 정기점검 현황 <span class="tot" id="tNck"></span></h3>
+      <div id="cNck"></div>
+    </div>
+
+    <div class="status" id="statusLine"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ▼▼ handover_gas.gs 배포 URL (handover.html의 HANDOVER_URL과 동일) ▼▼ */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+
+var CACHE_KEY='baz_dash_cache';
+var RAW=[];              // 전체 레코드
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+
+function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function normD(s){ /* '2026. 6. 25' | '2026-07-01' | '2026.317'(점 누락) → {y,m,d,q} */
+  var t=String(s||'').replace(/\s/g,'').replace(/\./g,'-').replace(/-+$/,'');
+  var p=t.split('-');
+  var y=Number(p[0])||0, m=Number(p[1])||0, d=Number(p[2])||0;
+  if(m>12){ /* 'MDD'·'MMDD' 형태로 붙여 쓴 경우 분해 */
+    var s1=String(p[1]);
+    if(s1.length===3){ m=Number(s1[0]);        d=Number(s1.slice(1)); }
+    else if(s1.length===4){ m=Number(s1.slice(0,2)); d=Number(s1.slice(2)); }
+    if(m>12){ m=0; d=0; }
+  }
+  if(d>31) d=0;
+  return {y:y, m:m, d:d, q:m?Math.ceil(m/3):0};
+}
+function costNum(s){ var n=Number(String(s||'').replace(/[^\d]/g,'')); return isNaN(n)?0:n; }
+
+/* ── 데이터 로드 ── */
+function loadData(force){
+  if(!HANDOVER_URL){
+    document.getElementById('loading').innerHTML='⚠️ HANDOVER_URL이 설정되지 않았습니다.<br>handover_gas.gs 배포 후 URL을 입력하세요.';
+    return;
+  }
+  /* 캐시 즉시 표시 → 백그라운드 갱신 */
+  if(!force){
+    try{
+      var c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+      if(c&&c.data&&c.data.length){ boot(c, true); }
+    }catch(e){}
+  }
+  fetchAllRetry(2)
+    .then(function(d){
+      if(!d.success){
+        toast('❌ '+(d.error||'로드 실패'));
+        if(!RAW.length){
+          document.getElementById('loading').innerHTML=
+            '❌ '+esc(d.error||'로드 실패')+'<br><br>'
+            +'<b>"알 수 없는 action"</b> 오류라면 GAS가 구버전입니다.<br>'
+            +'Apps Script → 배포 → 배포 관리 → ✏️ → <b>버전: 새 버전</b> → 배포 후<br>'
+            +'이 페이지를 새로고침하세요.';
+        }
+        return;
+      }
+      try{ localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }catch(e){}
+      boot(d, false);
+      if(force) toast('🔄 최신 데이터로 갱신됨');
+    })
+    .catch(function(err){
+      if(RAW.length){ toast('오프라인 — 캐시 데이터 표시 중'); return; }
+      diagnoseFail(err);
+    });
+}
+
+/* GAS GET 헬퍼 — 병원정보DB(hospdb)·재고(inventory) 조회에 사용
+   (호출부는 있는데 정의가 빠져 있어 N-Care/재고 연동이 조용히 실패하던 버그 수정) */
+function gv(action, params){
+  var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
+  return fetch(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''),{method:'GET'})
+    .then(function(r){return r.json();});
+}
+
+/* 타임아웃(20초)이 있는 fetch → 응답이 JSON인지 검사 → 실패 시 재시도 */
+function fetchTimeout(url, ms){
+  var ctl = ('AbortController' in window) ? new AbortController() : null;
+  var t = ctl ? setTimeout(function(){ ctl.abort(); }, ms) : null;
+  return fetch(url, ctl?{signal:ctl.signal}:{})
+    .then(function(r){
+      if(t) clearTimeout(t);
+      return r.text().then(function(txt){
+        if(/^\s*</.test(txt)) throw {kind:'html'};      /* HTML 응답 = 로그인/권한 페이지 */
+        try{ return JSON.parse(txt); }
+        catch(e){ throw {kind:'parse'}; }
+      });
+    })
+    .catch(function(e){
+      if(t) clearTimeout(t);
+      if(e && e.kind) throw e;
+      if(e && e.name==='AbortError') throw {kind:'timeout'};
+      throw {kind:'network'};
+    });
+}
+function fetchAllRetry(tries){
+  return fetchTimeout(HANDOVER_URL+'?action=all', 20000)
+    .catch(function(e){
+      if(tries>1 && (e.kind==='network'||e.kind==='timeout')){
+        toast('연결 재시도 중…');
+        return fetchAllRetry(tries-1);
+      }
+      throw e;
+    });
+}
+/* 실패 원인 자가진단: ping(소형 요청)으로 GAS 연결 자체를 확인 */
+function diagnoseFail(err){
+  var el=document.getElementById('loading');
+  var kind=(err&&err.kind)||'network';
+  if(kind==='html'||kind==='parse'){
+    el.innerHTML='❌ GAS가 데이터 대신 <b>로그인/권한 페이지</b>를 반환했습니다.<br><br>'
+      +'이 기기의 크롬이 접근 권한이 없는 상태입니다.<br>'
+      +'Apps Script → 배포 → 배포 관리 → ✏️ →<br>'
+      +'<b>액세스 권한: 모든 사용자</b>로 변경 → 새 버전 배포 후 새로고침하세요.';
+    return;
+  }
+  el.innerHTML='⏳ 연결 상태 진단 중…';
+  fetchTimeout(HANDOVER_URL+'?action=ping', 12000)
+    .then(function(){
+      el.innerHTML='❌ 서버 연결은 되지만 <b>데이터(all) 응답이 시간 내 오지 않았습니다.</b><br><br>'
+        +'GAS 콜드스타트이거나 데이터가 큰 경우입니다.<br>'
+        +'<button class="hd-btn" style="background:var(--teal);border:0;margin-top:8px" onclick="loadData(true)">다시 시도</button>';
+    })
+    .catch(function(){
+      el.innerHTML='❌ 이 기기에서 <b>script.google.com 접속 자체가 실패</b>했습니다.<br><br>'
+        +'· 크롬 시크릿 탭에서 열어보세요 (확장/데이터절약 영향 배제)<br>'
+        +'· WiFi ↔ 모바일데이터를 바꿔 재시도해 보세요<br>'
+        +'· 그래도 안 되면 통신사/공유기 차단 가능성이 있습니다.<br>'
+        +'<button class="hd-btn" style="background:var(--teal);border:0;margin-top:8px" onclick="loadData(true)">다시 시도</button>';
+    });
+}
+function boot(d, fromCache){
+  RAW=d.data.map(function(r){
+    var dd=normD(r.date);
+    r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
+    r.ncare=r.ncare||'미가입'; r.paid=r.paid||''; return r;
+  });
+  document.getElementById('loading').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('metaLine').textContent=
+    '총 '+RAW.length+'건 · '+(fromCache?'캐시':'시트')+' 기준 '+(d.updated||'');
+  buildFilters(); initCombos(); apply(); ncareCheck(); loadHospDB();
+}
+
+/* ── N-Care 정기점검 현황 (기준: 30일 정상 / ~60 점검대상 / ~90 권고 / 초과 경고 / 기록없음 미점검) ── */
+var HOSPDB=[];
+function loadHospDB(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
+    if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); } }catch(e){}
+  gv('hospdb',{}).then(function(d){
+    if(!d.success||!d.data) return;
+    HOSPDB=d.data;
+    try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
+    enrichNcare();
+    ncareCheck();
+  }).catch(function(){});
+}
+/* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
+   병원정보DB 탭(action=hospdb) 값을 병원명 매칭으로 채워 넣는다 */
+function enrichNcare(){
+  if(!HOSPDB.length || !RAW.length) return;
+  var map={};
+  HOSPDB.forEach(function(h){ var nc=String(h.ncare||'').trim(); if(h.n&&nc) map[nkey(h.n)]=nc; });
+  var changed=false;
+  RAW.forEach(function(r){
+    if(r.ncare && r.ncare!=='미가입') return;
+    var nc=map[nkey(r.hosp)];
+    if(nc && nc!==r.ncare){ r.ncare=nc; changed=true; }
+  });
+  if(changed){ buildFilters(); apply(); }
+}
+function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
+function ncareCheck(){
+  var today=new Date(); today.setHours(0,0,0,0);
+  /* 방문 이력: 병원별 마지막 처리일 (기록의 ncare도 확보) */
+  var visit={};
+  RAW.forEach(function(r){
+    var d=rowDate(r); if(!d || !r.hosp) return;
+    var k=nkey(r.hosp);
+    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:String(r.ncare||'').trim()};
+  });
+  /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
+  var subs={};
+  HOSPDB.forEach(function(h){
+    var nc=String(h.ncare||'').trim();
+    if(nc && !/미가입/.test(nc)) subs[nkey(h.n)]={name:h.n, ncare:nc};
+  });
+  if(!Object.keys(subs).length){
+    Object.keys(visit).forEach(function(k){
+      var nc=visit[k].ncare;
+      if(nc && !/미가입/.test(nc)) subs[k]={name:visit[k].name, ncare:nc};
+    });
+  }
+  var ST=[['정상','var(--green)'],['점검대상','var(--amber)'],['권고','#E67E22'],['경고','var(--red)'],['미점검','#6B7A99']];
+  var list=Object.keys(subs).map(function(k){
+    var vz=visit[k];
+    if(!vz) return {hosp:subs[k].name, ncare:subs[k].ncare, days:null, last:null, si:4};
+    var days=Math.floor((today-vz.last)/86400000);
+    var si = days<=30?0 : days<=60?1 : days<=90?2 : 3;
+    return {hosp:subs[k].name, ncare:subs[k].ncare, days:days, last:vz.last, si:si};
+  });
+  var el=document.getElementById('cNck');
+  if(!list.length){
+    document.getElementById('tNck').textContent='가입 병원 0'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return;
+  }
+  var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
+  var rate=Math.round(cnt[0]/list.length*100);   /* 정상(30일 이내 점검) 비율 */
+  document.getElementById('tNck').textContent=
+    '가입 병원 '+list.length+' · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
+  var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
+    if(a.si===4&&b.si!==4) return 1;
+    if(b.si===4&&a.si!==4) return -1;
+    return (b.days||0)-(a.days||0);
+  });
+  el.innerHTML=
+    '<div class="nck-rate">'
+      +'<div class="nck-rate-top"><b>✅ 정상 비율 '+rate+'%</b>'
+      +'<span>30일 이내 점검 '+cnt[0]+' / '+list.length+'</span></div>'
+      +'<div class="nck-ratebar"><div style="width:'+Math.max(2,rate)+'%"></div></div>'
+    +'</div>'
+    +'<div class="nck-sum">'+ST.map(function(s,i){
+      return '<div class="nck-badge" style="background:'+s[1]+'"><b>'+cnt[i]+'</b>'+s[0]+'</div>';
+    }).join('')+'</div>'
+    +(need.length
+      ? '<div class="nck-list">'+need.map(function(x){
+          var dy = x.last
+            ? x.days+'일 경과 · '+(x.last.getMonth()+1)+'/'+x.last.getDate()
+            : '방문 기록 없음';
+          return '<div class="nck-row">'
+            +'<span class="nck-dot" style="background:'+ST[x.si][1]+'"></span>'
+            +'<span class="nm">'+esc(x.hosp)+'</span>'
+            +'<span class="gd">'+esc(x.ncare)+'</span>'
+            +'<span class="dy">'+dy+'</span>'
+          +'</div>';
+        }).join('')+'</div>'
+      : '<div class="empty">🎉 모든 가입 병원이 30일 이내 점검 완료</div>');
+}
+
+/* ── 필터 UI ── */
+function uniq(key,fn){
+  var s={};
+  RAW.forEach(function(r){ var v=fn?fn(r):r[key]; v=String(v==null?'':v).trim(); if(v)s[v]=(s[v]||0)+1; });
+  return Object.keys(s).sort();
+}
+function chipGroup(elId, fkey, values, labelFn){
+  var el=document.getElementById(elId);
+  el.innerHTML=values.map(function(v){
+    return '<button type="button" class="chip'+(F[fkey].indexOf(v)>=0?' on':'')+'" data-k="'+fkey+'" data-v="'+esc(v)+'">'+esc(labelFn?labelFn(v):v)+'</button>';
+  }).join('');
+}
+function buildFilters(){
+  chipGroup('fYear','year', uniq(null,function(r){return r._y||'';}).filter(Boolean), function(v){return v+'년';});
+  chipGroup('fMonth','month', uniq(null,function(r){return r._m||'';}).filter(Boolean).sort(function(a,b){return a-b;}), function(v){return v+'월';});
+  chipGroup('fQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
+  chipGroup('fGubun','gubun', uniq('gubun'));
+  chipGroup('fPaid','paid', uniq('paid'));
+  chipGroup('fNcare','ncare', uniq('ncare'));
+  chipGroup('fCat','cat', uniq('cat'));
+  chipGroup('fFse','fse', uniq('fse'));
+  selChips('fTypeSel','type');
+  selChips('fHospSel','hosp');
+}
+/* 선택된 값 칩 (✕로 해제 — 전역 클릭 핸들러가 처리) */
+function selChips(elId, fkey){
+  document.getElementById(elId).innerHTML=F[fkey].map(function(v){
+    return '<button type="button" class="chip on" data-k="'+fkey+'" data-v="'+esc(v)+'">'+esc(v)+' ✕</button>';
+  }).join('');
+}
+/* 검색형 드롭다운: 입력=검색, 항목 클릭=토글 선택 */
+function combo(inputId, dropId, fkey, key){
+  var inp=document.getElementById(inputId), drop=document.getElementById(dropId);
+  function show(){
+    var q=String(inp.value||'').replace(/\s+/g,'').toLowerCase();
+    var opts=count(RAW, key).filter(function(o){
+      return o[0]!=='(비어 있음)' && (!q || o[0].replace(/\s+/g,'').toLowerCase().indexOf(q)>=0);
+    }).slice(0,12);
+    if(!opts.length){ drop.style.display='none'; return; }
+    drop.innerHTML=opts.map(function(o){
+      var on=F[fkey].indexOf(o[0])>=0;
+      return '<div class="cb-item'+(on?' on':'')+'" data-v="'+esc(o[0])+'"><span>'+esc(o[0])+'</span><b>'+o[1]+'건</b></div>';
+    }).join('');
+    drop.style.display='block';
+  }
+  inp.addEventListener('input', show);
+  inp.addEventListener('focus', show);
+  drop.addEventListener('click', function(e){
+    var it=e.target.closest?e.target.closest('.cb-item'):null;
+    if(!it) return;
+    e.stopPropagation();
+    toggleF(fkey, it.getAttribute('data-v'));
+    inp.value=''; drop.style.display='none';
+  });
+  document.addEventListener('click', function(e){
+    if(!inp.contains(e.target) && !drop.contains(e.target)) drop.style.display='none';
+  });
+}
+var COMBO_READY=false;
+function initCombos(){
+  if(COMBO_READY) return;
+  COMBO_READY=true;
+  combo('cbType','cbTypeDrop','type','type');
+  combo('cbHosp','cbHospDrop','hosp','hosp');
+}
+document.addEventListener('click',function(e){
+  var c=e.target.closest?e.target.closest('.chip'):null;
+  if(c && c.getAttribute('data-k')){ toggleF(c.getAttribute('data-k'), c.getAttribute('data-v')); return; }
+  var hb=e.target.closest?e.target.closest('[data-fk]'):null;
+  if(hb){ toggleF(hb.getAttribute('data-fk'), hb.getAttribute('data-fv')); }
+});
+/* ── 기간 지정 ── */
+function setRange(){
+  F.from=document.getElementById('fFrom').value||'';
+  F.to  =document.getElementById('fTo').value||'';
+  apply();
+}
+function setRangeDates(a,b){ /* Date,Date */
+  document.getElementById('fFrom').value=ymd(a);
+  document.getElementById('fTo').value=ymd(b);
+  setRange();
+}
+function preset(days){
+  var end=new Date(); end.setHours(0,0,0,0);
+  var start=addD(end,-(days-1));
+  setRangeDates(start,end);
+}
+function presetThisMonth(){
+  var now=new Date();
+  setRangeDates(new Date(now.getFullYear(),now.getMonth(),1),
+                new Date(now.getFullYear(),now.getMonth()+1,0));
+}
+function presetLastWeek(){
+  var mon=addD(monday(new Date()),-7);
+  setRangeDates(mon, addD(mon,4));
+}
+function toggleF(k,v){
+  var i=F[k].indexOf(v);
+  if(i>=0)F[k].splice(i,1); else F[k].push(v);
+  buildFilters(); apply();
+}
+function setHospQ(v){} /* (구버전 호환용 빈 함수) */
+function resetFilters(){
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+  document.getElementById('cbHosp').value='';
+  document.getElementById('cbType').value='';
+  document.getElementById('fFrom').value='';
+  document.getElementById('fTo').value='';
+  buildFilters(); apply();
+}
+function activeCnt(){
+  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp'].forEach(function(k){n+=F[k].length;});
+  if(F.hospQ)n++;
+  if(F.from||F.to)n++;
+  return n;
+}
+
+/* ── 필터 적용 ── */
+function filtered(){
+  var fromD=F.from?new Date(F.from+'T00:00:00'):null;
+  var toD  =F.to  ?new Date(F.to  +'T23:59:59'):null;
+  return RAW.filter(function(r){
+    if(fromD||toD){
+      var d=rowDate(r);
+      if(!d) return false;
+      if(fromD && d<fromD) return false;
+      if(toD   && d>toD)   return false;
+    }
+    if(F.year.length   && F.year.indexOf(String(r._y))<0) return false;
+    if(F.month.length  && F.month.indexOf(String(r._m))<0) return false;
+    if(F.quarter.length&& F.quarter.indexOf(String(r._q))<0) return false;
+    if(F.gubun.length  && F.gubun.indexOf(r.gubun)<0) return false;
+    if(F.paid.length   && F.paid.indexOf(r.paid)<0) return false;
+    if(F.ncare.length  && F.ncare.indexOf(r.ncare)<0) return false;
+    if(F.cat.length    && F.cat.indexOf(r.cat)<0) return false;
+    if(F.fse.length    && F.fse.indexOf(r.fse)<0) return false;
+    if(F.type.length   && F.type.indexOf(r.type)<0) return false;
+    if(F.part.length   && F.part.indexOf(r.part)<0) return false;
+    if(F.hosp.length   && F.hosp.indexOf(r.hosp)<0) return false;
+    if(F.hospQ && String(r.hosp||'').replace(/\s+/g,'').toLowerCase().indexOf(F.hospQ)<0) return false;
+    return true;
+  });
+}
+
+/* ── 집계 & 렌더 ── */
+function count(rows,key){
+  var m={};
+  rows.forEach(function(r){ var v=String(r[key]||'').trim()||'(비어 있음)'; m[v]=(m[v]||0)+1; });
+  return Object.keys(m).map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
+}
+function hbars(elId, pairs, top, fkey, totId){
+  var el=document.getElementById(elId);
+  var data=pairs.slice(0, top||10);
+  if(totId) document.getElementById(totId).textContent=pairs.length+'항목';
+  if(!data.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=data[0][1];
+  el.innerHTML=data.map(function(p){
+    var sel=fkey&&F[fkey].indexOf(p[0])>=0;
+    return '<div class="hbar'+(sel?' sel':'')+'"'+(fkey?' data-fk="'+fkey+'" data-fv="'+esc(p[0])+'"':'')+'>'
+      +'<div class="lb" title="'+esc(p[0])+'">'+esc(p[0])+'</div>'
+      +'<div class="tr"><div class="fl" style="width:'+Math.max(2,Math.round(p[1]/max*100))+'%"></div></div>'
+      +'<div class="vl">'+p[1]+'</div></div>';
+  }).join('');
+}
+function weekChart(rows){
+  var m={};
+  rows.forEach(function(r){ var d=rowDate(r); if(!d)return; var k=ymd(monday(d)); m[k]=(m[k]||0)+1; });
+  var keys=Object.keys(m).sort().slice(-12);
+  var el=document.getElementById('cWeek');
+  document.getElementById('tWeek').textContent=keys.length+'주';
+  if(!keys.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=Math.max.apply(null,keys.map(function(k){return m[k];}));
+  el.innerHTML=keys.map(function(k){
+    var mon=new Date(k+'T00:00:00');
+    var sel = F.from===k && F.to===ymd(addD(mon,6));
+    return '<div class="vcol'+(sel?' sel':'')+'" onclick="wkPick(\''+k+'\')">'
+      +'<div class="vnum">'+m[k]+'</div>'
+      +'<div class="vbar" style="height:'+Math.max(2,Math.round(m[k]/max*100))+'%"></div>'
+      +'<div class="vlb">'+(mon.getMonth()+1)+'/'+mon.getDate()+'</div></div>';
+  }).join('');
+}
+function wkPick(k){
+  var mon=new Date(k+'T00:00:00'), sun=addD(mon,6);
+  if(F.from===k && F.to===ymd(sun)){
+    document.getElementById('fFrom').value=''; document.getElementById('fTo').value='';
+    setRange();
+  }else{
+    setRangeDates(mon, sun);
+  }
+}
+function monthChart(rows){
+  var m={};
+  rows.forEach(function(r){ if(!r._y||!r._m)return; var k=r._y+'-'+(r._m<10?'0':'')+r._m; m[k]=(m[k]||0)+1; });
+  var keys=Object.keys(m).sort().slice(-12);
+  var el=document.getElementById('cMonth');
+  document.getElementById('tMonth').textContent=keys.length+'개월';
+  if(!keys.length){ el.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+  var max=Math.max.apply(null,keys.map(function(k){return m[k];}));
+  el.innerHTML=keys.map(function(k){
+    var mo=String(Number(k.split('-')[1]));
+    var sel=F.month.indexOf(mo)>=0;
+    return '<div class="vcol'+(sel?' sel':'')+'" data-fk="month" data-fv="'+mo+'">'
+      +'<div class="vnum">'+m[k]+'</div>'
+      +'<div class="vbar" style="height:'+Math.max(2,Math.round(m[k]/max*100))+'%"></div>'
+      +'<div class="vlb">'+Number(k.split('-')[1])+'월</div></div>';
+  }).join('');
+}
+function apply(){
+  var rows=filtered();
+  /* KPI */
+  document.getElementById('kCnt').textContent=rows.length;
+  var cost=rows.reduce(function(a,r){return a+r._cost;},0);
+  document.getElementById('kCost').textContent='₩'+cost.toLocaleString();
+  var hs={}; rows.forEach(function(r){ if(r.hosp)hs[r.hosp]=1; });
+  document.getElementById('kHosp').textContent=Object.keys(hs).length;
+  var as=rows.filter(function(r){return r.gubun==='A/S';}).length;
+  document.getElementById('kAs').textContent=rows.length?Math.round(as/rows.length*100)+'%':'0%';
+  /* 차트 */
+  monthChart(rows);
+  weekChart(rows);
+  hbars('cType', count(rows,'type'), 10, 'type', 'tType');
+  hbars('cCat',  count(rows,'cat'),  8,  'cat',  'tCat');
+  hbars('cPart', count(rows,'part').filter(function(p){return p[0]!=='없음';}), 10, 'part', 'tPart');
+  hbars('cNcare',count(rows,'ncare'),6,  'ncare','tNcare');
+  hbars('cHosp', count(rows,'hosp'), 10, 'hosp', 'tHosp');
+  hbars('cFse',  count(rows,'fse'),  8,  'fse',  'tFse');
+  nozzleStats(rows);
+  /* 필터 상태 */
+  var n=activeCnt();
+  document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
+  document.getElementById('fReset').style.display=n?'block':'none';
+  document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
+}
+
+/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ──
+   병원 기준(중복 방문 제거) · N-care 가입/미가입 분리 · 재사용률 · 리스트(가나다) */
+function nzNcare_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? '가입' : '미가입'; }
+function nozGroupHtml_(title, g){
+  var list=(g.hospitals&&g.hospitals.length)
+    ? g.hospitals.map(function(h){ return '<li>'+esc(h)+'</li>'; }).join('')
+    : '<li class="nz-none">재사용 병원 없음</li>';
+  return '<div class="nz-group">'
+    +'<div class="nz-sub">■ '+esc(title)+'</div>'
+    +'<div class="nz-metrics">'
+      +'<div class="nz-metric"><span>전체 병원</span><b>'+g.total+'</b></div>'
+      +'<div class="nz-metric"><span>재사용 병원</span><b>'+g.reuse+'</b></div>'
+      +'<div class="nz-metric"><span>재사용률</span><b>'+g.percent.toFixed(1)+'%</b></div>'
+    +'</div>'
+    +'<div class="nz-listwrap"><div class="nz-listtit">재사용 병원</div>'
+      +'<ul class="nz-list">'+list+'</ul></div>'
+  +'</div>';
+}
+function nozzleStats(rows){
+  var box=document.getElementById('cNoz'); if(!box) return;
+  if(!(window.Statistics&&window.Statistics.build)){ box.innerHTML='<div class="empty">통계 모듈 로드 실패</div>'; return; }
+  /* handover 행 → Statistics 입력형(hosp/ncare 가입·미가입/nozzle O·X)으로 매핑 */
+  var mapped=rows.map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
+  var st=window.Statistics.build(mapped);
+  var j=st.nozzle.joined, n=st.nozzle.nonJoined;
+  document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+' 재사용';
+  box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
+}
+
+/* ══════════ 주간업무보고 PPT 생성 ══════════ */
+/* 색상 상수 — PPT 내 모든 색은 여기서만 관리한다 */
+var C={navy:'1B2F5E',teal:'2E7D9E',orange:'E67E22',red:'C0392B',green:'1E7E4E',
+       line:'DDE3EE',mut:'6B7A99',yhl:'FDEBB0',ghl:'E4F5E9',box:'F5F7FA',
+       white:'FFFFFF',text:'333333',dark:'1A2E3B',dim:'AAB4C8',
+       callBd:'002060',blue:'2563EB',blueBg:'EAF0F8',grayBg:'F4F6F8'};
+
+/* 폰트 상수 — 크기·서체는 여기서만 관리한다 (PPT 폰트 일괄 변경용) */
+var FT={face:'맑은 고딕',
+       logo:24, title:19, subtitle:14,        /* 폴백 로고 · 헤더 제목 · 헤더 날짜/KPI 단위 */
+       kpi:40, stat:36,                        /* 추이 KPI 숫자 · 스탯 박스 숫자 */
+       total:12, cardTitle:11, count:11,       /* 총합 값 · 카드 제목 · 행 건수 */
+       table:10, body:10, tableSm:9.5,         /* N-care 표 · 막대 숫자/빈 안내 · N-care 표 소 */
+       label:9, small:8.5, footer:8};          /* 보조 라벨 · 전주대비/버튼 · 푸터 */
+
+/* 레이아웃 상수 — 첨부 "6월 5주차 CS 주간업무보고" PPT에서 추출한 좌표(inch).
+   ★ 모든 좌표는 L에서만 관리한다. draw*() 함수 안에서 숫자 좌표를 직접 쓰지 않는다. ★
+   디자인 수정이 필요하면 L의 값만 바꾼다. */
+var L=(function(){
+  /* 기준선: 모든 카드는 페이지 여백(left/right/top/bottom)과 컬럼(x·폭)을 공유한다.
+     같은 열의 카드는 x·폭 동일, 같은 행의 카드는 y·높이 동일 — 임의 좌표 생성 금지 */
+  var page={ w:13.33, h:7.5, left:0.28, right:13.05, top:1.4, bottom:7.05 };
+  var col={ a:{x:page.left, w:4.5},          /* 1열: 추이 · 고장 상세 */
+            b:{x:4.95,      w:4.35},         /* 2열: 유형 · Call 현황 */
+            c:{x:9.5,       w:3.55} };       /* 3열: 교체품 · 재고 현황 */
+  return {
+    page:page, col:col,
+    header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.4,
+             dateX:6.6, dateW:4.55, logo:{x:12.01,y:0.16,w:1.07,h:0.58},
+             fbLogo:{x:11.9,y:0.02,w:1.3,h:0.42}, fbSub:{x:11.4,y:0.4,w:1.8,h:0.24} },
+    title:{ w:3.2, h:0.3 },                  /* 카드 제목 공통 박스 */
+    /* 1행 카드 공통 — 카드 높이는 행 수(1~5)와 무관하게 고정, 행 간격만 자동 조정 */
+    row1:{ y:page.top, h:2.85, titleY:1.52, headY:1.86, headH:0.26,
+           rowY:2.16, rowH:0.3, hlH:0.34, hlDY:0.02,
+           lineY:3.72, totY:3.8, totH:0.32, totW:1.6 },
+    trend:{ x:col.a.x, w:col.a.w, titleX:0.45, kpiY:1.82, kpiW:4.1, kpiH:0.7,
+            barX0:0.58, barW:0.52, barSpan:3.87, baseY:3.85, maxBarH:1.05, minBarH:0.06,
+            numDY:0.26, numH:0.24, numPad:0.1, lblDY:0.03, lblH:0.24, lblPad:0.15 },
+    voc:{ x:col.b.x, w:col.b.w, titleX:5.15, headX:5.35, headW:1.6, hlX:5.15, hlW:1.85,
+          nameX:5.25, nameW:1.7, nameSize:9.5, nameAlign:'center',
+          deltaX:7.1, deltaW:1.2, cntX:8.35, cntW:0.75, lineW:3.95, gapMax:0.4, lastRowY:3.36 },
+    part:{ x:col.c.x, w:col.c.w, titleX:9.7, headX:9.9, headW:1.6, hlX:9.7, hlW:1.55,
+           nameX:9.8, nameW:1.5, nameSize:9, nameAlign:'left',
+           deltaX:11.3, deltaW:1.06, cntX:12.15, cntW:0.7, lineW:3.15, gapMax:0.52, lastRowY:3.42 },
+    /* 2행 카드 공통 + 스탯 박스(라벨/숫자 카드 내 상대 위치) */
+    row2:{ y:4.45, h:2.6, boxY:4.98, boxH:2.0,
+           stat:{lblDY:0.1, lblH:0.32, numDY:0.5, numH:1.05} },
+    fail:{ x:col.a.x, w:col.a.w, titleX:0.5, titleY:4.57, btnX:0.5, btnW:1.5, btnH:0.36,
+           rowY:4.98, gap:0.62, lastRowY:6.45, descX:2.1, descW:2.6, descH:0.4, descDY:0.02,
+           emptyY:5.2, emptyW:4, emptyH:0.4 },
+    call:{ x:col.b.x, w:col.b.w, titleX:5.03, titleY:4.53,
+           total:{x:5.24,w:1.58}, inb:{x:6.92,w:0.99}, outb:{x:7.99,w:0.99} },
+    invt:{ x:col.c.x, w:col.c.w, titleX:9.53, titleY:4.54, x0:9.56, boxW:0.81, pitch:0.875 },
+    ncare:{ x:col.b.x, w:page.right-col.b.x, titleX:5.13, titleY:4.55, titleW:3, titleH:0.28,
+            tblX:5.08, tblY:4.85, tblW:7.85, rowH:0.33, colW:[1.85,1.2,1.2,1.2,1.2,1.2],
+            sumY:6.55, sumH:0.42, sumPad:0.08,
+            sum1:{x:5.08,w:2.6}, sum2:{x:7.78,w:2.6}, sum3:{x:10.48,w:2.45} },
+    foot:{ y:7.28, h:0.22, textY:7.26, textW:2, textH:0.24 }
+  };
+})();
+
+function rowDate(r){ return (r._y&&r._m&&r._d)? new Date(r._y,r._m-1,r._d) : null; }
+function monday(d){ var x=new Date(d); var w=(x.getDay()+6)%7; x.setDate(x.getDate()-w); x.setHours(0,0,0,0); return x; }
+function addD(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function wkNo(mon){ return Math.floor((mon.getDate()-1)/7)+1; } /* 월 내 주차 */
+function wkLabel(mon){ return (mon.getMonth()+1)+'월 '+wkNo(mon)+'주차'; }
+function wkRange(mon){ var f=addD(mon,4);
+  return (mon.getMonth()+1)+'월 '+mon.getDate()+'일 ~ '+(f.getMonth()+1)+'월 '+f.getDate()+'일'; }
+function rowsBetween(a,b){ /* a~b 포함 */
+  return RAW.filter(function(r){ var d=rowDate(r); return d && d>=a && d<=b; });
+}
+function isOK(t){ return /이상없음|점검이상무|이상 없음/.test(String(t||'')); }
+
+function openWeekly(){
+  if(!RAW.length){ toast('데이터가 아직 없습니다'); return; }
+  /* 데이터에 존재하는 주(월요일) 목록 — 최근 8주 */
+  var set={};
+  RAW.forEach(function(r){ var d=rowDate(r); if(d) set[ymd(monday(d))]=1; });
+  var mons=Object.keys(set).sort().reverse().slice(0,8);
+  document.getElementById('wkSel').innerHTML=mons.map(function(k){
+    var m=new Date(k+'T00:00:00');
+    return '<option value="'+k+'">'+wkLabel(m)+' ('+wkRange(m)+')</option>';
+  }).join('');
+  /* 1) 직전 입력값 복원 → 2) 재고 시트 자동 조회로 덮어쓰기 */
+  try{ var inv=JSON.parse(localStorage.getItem('baz_dash_inv')||'{}');
+    ['inv1','inv2','inv3','inv4'].forEach(function(id){ if(inv[id]!=null) document.getElementById(id).value=inv[id]; });
+  }catch(e){}
+  /* Call 수기 입력값 복원 (재고와 동일하게 직전 입력 유지) */
+  try{ var cl=JSON.parse(localStorage.getItem('baz_dash_call')||'{}');
+    ['callInInp','callOutInp'].forEach(function(id){ if(cl[id]!=null) document.getElementById(id).value=cl[id]; });
+  }catch(e){}
+  updWkCallTot();
+  document.getElementById('wkModal').classList.add('show');
+  suggestWkDetail();
+  loadInventory();
+  loadNcare();
+}
+/* Call 입력 합계 힌트 갱신 — 모달의 INBOUND/OUTBOUND 입력 변경 시 호출 */
+function updWkCallTot(){
+  var t=(Number(val_('callInInp'))||0)+(Number(val_('callOutInp'))||0);
+  document.getElementById('callTotHint').textContent='총 Call '+t+'건 — INBOUND + OUTBOUND 자동 합산';
+}
+/* N-care 가입 현황 — 전용 N-care 대시보드 웹앱에서 조회 (점검 PPT용).
+   ▼ 배포 후 여기에 N-care 대시보드 스크립트의 /exec URL 입력 (비우면 handover의 action=ncare 폴백) ▼ */
+var NCARE_URL='https://script.google.com/macros/s/AKfycbzo3CR3b5sd39ucAixgFgS1oZvAFaaK4pjn8RVz2pEc6npe0wW4toPOafXCZnUM7Nc/exec';
+var WK_NCARE=null;
+function loadNcare(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_dash_ncare')||'null'); if(c) WK_NCARE=c; }catch(e){}
+  var p = NCARE_URL
+    ? fetch(NCARE_URL).then(function(r){return r.json();})
+    : gv('ncare',{});
+  p.then(function(d){
+    if(d&&d.success){ WK_NCARE=d; try{ localStorage.setItem('baz_dash_ncare', JSON.stringify(d)); }catch(e){} }
+  }).catch(function(){});
+}
+function loadInventory(){
+  var st=document.getElementById('invStatus');
+  st.textContent='재고 시트 조회 중…'; st.style.color='';
+  gv('inventory',{}).then(function(d){
+    if(!d.success){ st.textContent='⚠️ '+(d.error||'재고 시트 연동 실패')+' — 직접 입력하세요'; st.style.color='var(--red)'; return; }
+    var s=d.summary||{};
+    if(s.hpRepair   != null) document.getElementById('inv1').value = s.hpRepair;
+    if(s.hpNew      != null) document.getElementById('inv2').value = s.hpNew;
+    if(s.footNew    != null) document.getElementById('inv3').value = s.footNew;
+    if(s.footRepair != null) document.getElementById('inv4').value = s.footRepair;
+    var ok=['hpRepair','hpNew','footNew','footRepair'].filter(function(k){return s[k]!=null;}).length;
+    st.textContent = ok===4
+      ? '✅ 재고 시트 연동 — 4/4 항목 자동 입력 ('+d.updated+')'
+      : (ok? '✅ '+ok+'/4 항목 자동 입력 — 나머지는 직접 입력 ('+d.updated+')'
+           : '⚠️ 자동 매칭 실패 — inspectInventory 로그 확인 필요, 직접 입력하세요');
+    st.style.color = ok? 'var(--green)' : 'var(--red)';
+  }).catch(function(){
+    st.textContent='⚠️ 네트워크 오류 — 직접 입력하세요'; st.style.color='var(--red)';
+  });
+}
+function closeWeekly(){ document.getElementById('wkModal').classList.remove('show'); }
+document.getElementById('wkModal').addEventListener('click',function(e){ if(e.target.id==='wkModal') closeWeekly(); });
+
+/* PptxGenJS 지연 로드 — jsDelivr(공식) 우선, 실패 시 폴백 CDN 순차 시도 */
+var PPTX_CDNS=[
+  'https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+];
+function loadPptxLib(){
+  if(window.PptxGenJS) return Promise.resolve();
+  return PPTX_CDNS.reduce(function(chain,url){
+    return chain.catch(function(){
+      return new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src=url;
+        s.onload=function(){ window.PptxGenJS ? res() : rej('로드 후 초기화 실패'); };
+        s.onerror=function(){ rej('CDN 실패: '+url); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.reject('start'))
+  .catch(function(e){ throw 'PPT 라이브러리 로드 실패 — 네트워크 확인'; });
+}
+
+function cnt(rows,key){
+  var m={}; rows.forEach(function(r){ var v=String(r[key]||'').trim(); if(v)m[v]=(m[v]||0)+1; });
+  return m;
+}
+function topOf(m,excl){
+  return Object.keys(m).filter(function(k){return !excl||!excl(k);})
+    .map(function(k){return [k,m[k]];}).sort(function(a,b){return b[1]-a[1];});
+}
+/* 고정 앵커 항목을 항상 1행에 배치 (없으면 0건으로 표기) */
+function anchorFirst(pairs, anchor){
+  var an=nkey(anchor), idx=-1;
+  for(var i=0;i<pairs.length;i++){
+    var k=nkey(pairs[i][0]);
+    if(k===an || k.indexOf(an)>=0 || an.indexOf(k)>=0){ idx=i; break; }
+  }
+  if(idx>=0){ pairs.unshift(pairs.splice(idx,1)[0]); }
+  else pairs.unshift([anchor,0]);
+  return pairs;
+}
+/* 보고 구분(gubun)별 행 필터 — 1페이지: 'A/S', 2페이지: '점검' */
+function gubunRows(rows, scope){
+  return rows.filter(function(r){ return String(r.gubun||'').trim()===scope; });
+}
+
+/* 선택 주차 기준 고장 상세 초안 자동 제안 (1페이지 A/S 슬라이드용) */
+function suggestWkDetail(){
+  var sel=document.getElementById('wkSel'); if(!sel.value) return;
+  var mon=new Date(sel.value+'T00:00:00');
+  var cur=gubunRows(rowsBetween(mon, addD(mon,4)), 'A/S');
+  var top=anchorFirst(topOf(cnt(cur,'type'), isOK), '노즐누수(약액 유입)').slice(0,4);
+  document.getElementById('wkDetail').value=top.map(function(p){
+    var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
+    var line=row?String(row.detail).split('\n')[0]:'';
+    if(line.length>40)line=line.slice(0,40)+'…';
+    return p[0]+': '+line;
+  }).join('\n');
+}
+function deltaTxt(cur,prev){
+  if(cur>prev)  return {t:'▲ '+(cur-prev)+' 전주 대비', c:C.red};
+  if(cur<prev)  return {t:'▼ '+(prev-cur)+' 전주 대비', c:C.green};
+  return {t:'— 전주 동일', c:C.mut};
+}
+
+/* ── 데이터 계층: 스코프(gubun)별 주간 집계 — PPT 생성·미리보기 공용 ── */
+function buildWeekData(mon, scope, manualLines){
+  var fri=addD(mon,4), pMon=addD(mon,-7), pFri=addD(mon,-3);
+  var cur=gubunRows(rowsBetween(mon,fri),scope), prev=gubunRows(rowsBetween(pMon,pFri),scope);
+  /* 집계 — 표시 행 수만 첨부 양식 기준 최대 5행 */
+  var typeC=cnt(cur,'type'), typeP=cnt(prev,'type');
+  var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
+  var okCnt=topOf(typeC,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
+  var okPrev=topOf(typeP,function(k){return !isOK(k);}).reduce(function(a,p){return a+p[1];},0);
+  var hasOk=!!(okCnt||okPrev);                   /* '이상 없음' 행 포함 여부 */
+  /* 건수 내림차순 상위 표시('이상 없음' 행 포함 총 5행 이내) · 총합은 전체 데이터 기준 */
+  var types=anchorFirst(topOf(typeC,isOK), '노즐누수(약액 유입)').slice(0, hasOk?4:5);
+  var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,5);
+  var partTot=Object.keys(partC).reduce(function(a,k){return a+partC[k];},0);
+  /* 월 내 주별 추이 */
+  var m1=monday(new Date(mon.getFullYear(),mon.getMonth(),1));
+  if(m1.getMonth()!==mon.getMonth()) m1=addD(m1,7);
+  var weeks=[]; for(var w=new Date(m1); w.getMonth()===mon.getMonth(); w=addD(w,7)){
+    weeks.push({mon:new Date(w), n:gubunRows(rowsBetween(w,addD(w,4)),scope).length, cur:ymd(w)===ymd(mon)});
+  }
+  /* 고장 상세: manualLines("유형: 설명" 줄) 우선, 비어 있으면 자동 초안 — 최대 4행 */
+  var details=String(manualLines||'').split('\n')
+    .map(function(l){return l.trim();}).filter(Boolean).slice(0,4)
+    .map(function(l){
+      var ci=l.indexOf(':');
+      return ci>0 ? {name:l.slice(0,ci).trim(), desc:l.slice(ci+1).trim()||'—'}
+                  : {name:l, desc:'—'};
+    });
+  if(!details.length){
+    details=types.slice(0,4).map(function(p){
+      var row=cur.filter(function(r){return r.type===p[0]&&String(r.detail||'').trim();})[0];
+      var line=row?String(row.detail).split('\n')[0]:'';
+      if(line.length>42)line=line.slice(0,42)+'…';
+      return {name:p[0], desc:line||'—'};
+    });
+  }
+  return {cur:cur, prev:prev, typeP:typeP, partP:partP, okCnt:okCnt, hasOk:hasOk,
+          types:types, parts:parts, partTot:partTot, weeks:weeks, details:details};
+}
+/* 모달 입력값 → 주간보고 컨텍스트(선택 주차·양쪽 슬라이드 데이터·재고·Call) — 생성·미리보기 공용 */
+function collectWeekCtx(){
+  var mon=new Date(document.getElementById('wkSel').value+'T00:00:00');
+  return {
+    mon:mon,
+    dataAS:  buildWeekData(mon, 'A/S',  document.getElementById('wkDetail').value),  /* 1페이지: 수기 반영 */
+    dataInsp:buildWeekData(mon, '점검', null),                                        /* 2페이지: 자동 초안 */
+    inv:{inv1:val_('inv1'),inv2:val_('inv2'),inv3:val_('inv3'),inv4:val_('inv4')},
+    /* 고객센터 Call 현황 — 모달 INBOUND/OUTBOUND 수기 입력값 반영 (총 Call은 합산) */
+    callIn:Number(val_('callInInp'))||0, callOut:Number(val_('callOutInp'))||0
+  };
+}
+
+/* N-care 서비스 현황 표 (2페이지 하단 우측 · 첨부 양식과 동일 배치 · 데이터 없으면 '-' 표시) */
+function renderNcareTable(pptx, s, tx){
+  var nc=WK_NCARE||{}, T=L.ncare;
+  var tiers=(nc.tiers&&nc.tiers.length===5)?nc.tiers:['Basic','Standard','Pro','Premium','CurePass'];
+  function arr(a){ return (a&&a.length===5)?a:[null,null,null,null,null]; }
+  var joined=arr(nc.joined), normal=arr(nc.normal), target=arr(nc.target), rate=arr(nc.rate);
+  function n(x){ return (x==null||x==='')?'-':String(x); }
+  /* 제목 */
+  tx('N-care 서비스 현황',{x:T.titleX,y:T.titleY,w:T.titleW,h:T.titleH,fontSize:FT.table,bold:true,color:C.navy});
+  /* 표: 5행 데이터(구분/가입/정상/점검대상/점검률) — pptx addTable */
+  var HB={fill:C.navy,color:C.white,bold:true,align:'center',valign:'middle',fontSize:FT.table};
+  var LB={fill:C.blueBg,color:C.navy,bold:true,align:'center',valign:'middle',fontSize:FT.tableSm};
+  var CE={align:'center',valign:'middle',fontSize:FT.table,color:C.dark};
+  var rows=[
+    [{text:'구분',options:HB}].concat(tiers.map(function(t){return {text:t,options:HB};})),
+    [{text:'가입 병원 수',options:LB}].concat(joined.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 완료 병원 수',options:LB}].concat(normal.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검 예정 병원 수',options:LB}].concat(target.map(function(x){return {text:n(x),options:CE};})),
+    [{text:'점검률',options:LB}].concat(rate.map(function(x){return {text:n(x),options:CE};}))
+  ];
+  s.addTable(rows, {x:T.tblX,y:T.tblY,w:T.tblW,colW:T.colW,
+    rowH:T.rowH,border:{type:'solid',color:C.line,pt:0.75},fontFace:FT.face,valign:'middle'});
+  /* 하단 요약 바: 전체 가입자 · 점검 완료 병원 · 점검 운영률 */
+  function sumBox(g,label,val,strong){
+    s.addShape(pptx.shapes.RECTANGLE,{x:g.x,y:T.sumY,w:g.w,h:T.sumH,
+      fill:{color:strong?C.blueBg:C.grayBg},line:{color:C.line,width:0.75}});
+    tx([{text:label+'  ',options:{fontSize:FT.tableSm,bold:true,color:C.navy}},
+        {text:(val==null||val==='')?'-':String(val),options:{fontSize:FT.total,bold:true,color:C.navy}}],
+       {x:g.x+T.sumPad,y:T.sumY,w:g.w-T.sumPad*2,h:T.sumH,align:'center',valign:'middle'});
+  }
+  sumBox(T.sum1,'전체 가입자',nc.totalJoined,true);
+  sumBox(T.sum2,'점검 완료 병원',nc.totalNormal,false);
+  sumBox(T.sum3,'점검 운영률',nc.normalRate,true);
+}
+
+/* ══════════ PPT 미리보기 — 생성 전 두 슬라이드를 HTML로 렌더해 확인 ══════════
+   데이터는 collectWeekCtx(), 좌표는 L, 색상은 C, 폰트는 FT를 그대로 사용해
+   실제 PPT 출력과 동일한 배치를 화면에서 재현한다 (좌표 단위: inch → px). */
+var PVK=75;                                   /* 1 inch → 75 px (슬라이드 폭 13.33in → 약 1000px) */
+function pvIn(v){ return v*PVK; }             /* inch → px */
+function pvPt(v){ return v*PVK/72; }          /* PPT 폰트 pt → px (같은 배율) */
+function pvHex(c){ return '#'+c; }
+
+function previewWeeklyPPT(){
+  if(!document.getElementById('wkSel').value){ toast('보고 주차를 먼저 선택하세요'); return; }
+  var ctx=collectWeekCtx();
+  var wrap=document.getElementById('wkPvSlides'); wrap.innerHTML='';
+  [ {kind:'(VOC/Call)',        d:ctx.dataAS,   trend:'VOC 주별 추이',    type:'VOC 유형', bottom:'as'},
+    {kind:'(N-care 정기점검)', d:ctx.dataInsp, trend:'N-care 점검 추이', type:'점검 유형', bottom:'insp'}
+  ].forEach(function(sp){ wrap.appendChild(pvSlide(ctx, sp)); });
+  document.getElementById('wkPvModal').classList.add('show');
+  pvFit();
+}
+function closeWkPreview(){ document.getElementById('wkPvModal').classList.remove('show'); }
+/* 모달 폭에 맞춰 슬라이드 축소 (원본 좌표는 그대로, transform만 적용) */
+function pvFit(){
+  var box=document.getElementById('wkPvSlides');
+  var sc=Math.min(1,(box.clientWidth-20)/pvIn(L.page.w));
+  Array.prototype.forEach.call(box.children,function(holder){
+    holder.firstChild.style.transform='scale('+sc+')';
+    holder.style.height=(pvIn(L.page.h)*sc)+'px';
+  });
+}
+window.addEventListener('resize',function(){
+  if(document.getElementById('wkPvModal').classList.contains('show')) pvFit();
+});
+document.getElementById('wkPvModal').addEventListener('click',function(e){ if(e.target.id==='wkPvModal') closeWkPreview(); });
+
+/* 슬라이드 1장 렌더 — draw*() 공통 함수와 같은 구성·같은 L 좌표를 HTML div로 재현 */
+function pvSlide(ctx, sp){
+  var holder=document.createElement('div');
+  holder.style.cssText='overflow:hidden;margin:0 0 14px';
+  var s=document.createElement('div');
+  s.style.cssText='position:relative;width:'+pvIn(L.page.w)+'px;height:'+pvIn(L.page.h)+'px;'
+    +'background:#fff;box-shadow:0 2px 8px rgba(20,30,60,.15);transform-origin:0 0;'
+    +'font-family:"맑은 고딕","Malgun Gothic",sans-serif;overflow:hidden';
+  holder.appendChild(s);
+  var d=sp.d, mon=ctx.mon;
+
+  /* ── 미니 컴포넌트 (newSlide()의 tx/rect/pill/card 대응) ── */
+  function el(x,y,w,h,css,html){
+    var e=document.createElement('div');
+    e.style.cssText='position:absolute;box-sizing:border-box;left:'+pvIn(x)+'px;top:'+pvIn(y)
+      +'px;width:'+pvIn(w)+'px;height:'+pvIn(h)+'px;'+(css||'');
+    if(html!=null) e.innerHTML=html;
+    s.appendChild(e); return e;
+  }
+  function txc(pt,extra){ /* PPT tx()의 valign:middle 대응 */
+    return 'display:flex;align-items:center;font-size:'+pvPt(pt)+'px;line-height:1.15;white-space:nowrap;overflow:hidden;'+(extra||'');
+  }
+  function card(x,y,w,h){ el(x,y,w,h,'background:#fff;border:1px solid '+pvHex(C.line)+';border-radius:4px'); }
+  function cardTitle(t,x,y){ el(x,y,L.title.w,L.title.h,txc(FT.cardTitle,'font-weight:700;color:'+pvHex(C.navy)),esc(t)); }
+
+  /* ── 헤더 ── */
+  (function(){
+    var H=L.header;
+    var img=el(H.logo.x,H.logo.y,H.logo.w,H.logo.h,'');
+    img.innerHTML='<img src="logo.png" style="width:100%;height:100%;object-fit:contain" onerror="this.parentNode.innerHTML=\'<b style=&quot;font-family:Arial Black;font-size:'+pvPt(FT.logo)+'px;color:'+pvHex(C.navy)+'&quot;>baz</b>\'">';
+    el(0,H.barY,H.barW,H.barH,'background:'+pvHex(C.navy));
+    el(H.padX,H.barY,H.titleW,H.barH,txc(FT.title,'font-weight:700;color:#fff'),esc('생산품질_CS팀 주간업무보고'+sp.kind));
+    el(H.dateX,H.barY,H.dateW,H.barH,txc(FT.subtitle,'font-weight:700;color:#fff;justify-content:flex-end'),
+       esc('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon)));
+  })();
+
+  /* ── ① 주별 추이 ── */
+  (function(){
+    var T=L.trend;
+    card(T.x,L.row1.y,T.w,L.row1.h); cardTitle(sp.trend,T.titleX,L.row1.titleY);
+    var d1=deltaTxt(d.cur.length,d.prev.length);
+    el(T.titleX,T.kpiY,T.kpiW,T.kpiH,txc(FT.subtitle,'color:'+pvHex(C.navy)),
+       '<span style="font-size:'+pvPt(FT.kpi)+'px;font-weight:700">'+d.cur.length+'</span>&nbsp;건&nbsp;&nbsp;'
+       +'<span style="font-size:'+pvPt(FT.cardTitle)+'px;font-weight:700;color:'+pvHex(d1.c)+'">'+esc(d1.t)+'</span>');
+    var maxN=Math.max.apply(null,d.weeks.map(function(w){return w.n;}).concat([1]));
+    var gap=(T.barSpan-T.barW*d.weeks.length)/Math.max(d.weeks.length-1,1);
+    d.weeks.forEach(function(w,i){
+      var h=Math.max(T.minBarH,w.n/maxN*T.maxBarH), x=T.barX0+i*(T.barW+gap);
+      el(x,T.baseY-h,T.barW,h,'background:'+pvHex(w.cur?C.orange:C.teal));
+      el(x-T.numPad,T.baseY-h-T.numDY,T.barW+T.numPad*2,T.numH,txc(FT.body,'font-weight:700;justify-content:center;color:'+pvHex(C.navy)),String(w.n));
+      el(x-T.lblPad,T.baseY+T.lblDY,T.barW+T.lblPad*2,T.lblH,txc(FT.label,'justify-content:center;color:'+pvHex(C.mut)),wkNo(w.mon)+'주차');
+    });
+  })();
+
+  /* ── ②③ 표 카드 (유형·교체품 — tableCard()와 동일 규칙) ── */
+  function pvTableCard(T,o){
+    card(T.x,L.row1.y,T.w,L.row1.h); cardTitle(o.title,T.titleX,L.row1.titleY);
+    el(T.headX,L.row1.headY,T.headW,L.row1.headH,txc(FT.label,'color:'+pvHex(C.mut)),esc(o.head[0]));
+    el(T.cntX,L.row1.headY,T.cntW,L.row1.headH,txc(FT.label,'justify-content:flex-end;color:'+pvHex(C.mut)),esc(o.head[1]));
+    var n=o.rows.length;
+    var gap=n>1?Math.min(T.gapMax,(T.lastRowY-L.row1.rowY)/(n-1)):0;
+    o.rows.forEach(function(r,i){
+      var y=L.row1.rowY+i*gap;
+      if(r.hl) el(T.hlX,y-L.row1.hlDY,T.hlW,L.row1.hlH,'background:'+pvHex(r.hl==='g'?C.ghl:C.yhl)+';border-radius:4px');
+      if(r.delta) el(T.deltaX,y,T.deltaW,L.row1.rowH,txc(FT.small,'font-weight:700;color:'+pvHex(r.delta.c)),esc(r.delta.t));
+      el(T.nameX,y,T.nameW,L.row1.rowH,txc(T.nameSize,(r.bold?'font-weight:700;':'')
+        +'color:'+pvHex(r.color||C.text)+(T.nameAlign==='center'?';justify-content:center':'')),esc(r.name));
+      el(T.cntX,y,T.cntW,L.row1.rowH,txc(FT.count,'font-weight:700;justify-content:flex-end;color:'+pvHex(C.navy)),String(r.val));
+    });
+    el(T.hlX,L.row1.lineY,T.lineW,0.014,'background:'+pvHex(C.line));
+    el(T.nameX,L.row1.totY,L.row1.totW,L.row1.totH,txc(FT.cardTitle,'font-weight:700;color:'+pvHex(C.navy)),'총 합계');
+    el(T.cntX,L.row1.totY,T.cntW,L.row1.totH,txc(FT.total,'font-weight:700;justify-content:flex-end;color:'+pvHex(C.navy)),String(o.total));
+  }
+  (function(){ /* drawTypeTable과 동일 행 구성 */
+    var rows=d.types.map(function(p,i){
+      return {name:p[0],val:p[1],hl:i===0?'y':'',bold:i===0,delta:i===0?deltaTxt(p[1],d.typeP[p[0]]||0):null};
+    });
+    if(d.hasOk) rows.push({name:'이상 없음',val:d.okCnt,hl:'g',color:C.green});
+    pvTableCard(L.voc,{title:sp.type,head:['유형','건수'],rows:rows,total:d.cur.length});
+  })();
+  (function(){ /* drawReplacementTable과 동일 행 구성 */
+    var rows=d.parts.map(function(p,i){
+      return {name:p[0],val:p[1],hl:i===0?'y':'',bold:i===0,delta:i===0?deltaTxt(p[1],d.partP[p[0]]||0):null};
+    });
+    pvTableCard(L.part,{title:'교체품 현황',head:['교체품','수량'],rows:rows,total:d.partTot});
+  })();
+
+  /* ── ④ 고장 상세 ── */
+  (function(){
+    var T=L.fail;
+    card(T.x,L.row2.y,T.w,L.row2.h); cardTitle('고장 상세',T.titleX,T.titleY);
+    if(!d.details.length){
+      el(T.titleX,T.emptyY,T.emptyW,T.emptyH,txc(FT.body,'color:'+pvHex(C.mut)),'해당 주차 고장 내역 없음'); return;
+    }
+    var gap=d.details.length>3?(T.lastRowY-T.rowY)/(d.details.length-1):T.gap;
+    d.details.forEach(function(dt,i){
+      var y=T.rowY+i*gap;
+      el(T.btnX,y,T.btnW,T.btnH,txc(FT.small,'font-weight:700;justify-content:center;color:#fff;border-radius:5px;background:'
+        +pvHex(i===0?C.orange:C.teal)),esc(dt.name));
+      el(T.descX,y-T.descDY,T.descW,T.descH,txc(FT.label,'color:'+pvHex(C.dark)),esc(dt.desc));
+    });
+  })();
+
+  /* ── 스탯 박스 (statBox() 대응) ── */
+  function pvStatBox(x,w,labelHtml,val,o){
+    o=o||{}; var S=L.row2.stat;
+    el(x,L.row2.boxY,w,L.row2.boxH,'border-radius:4px;background:'+(o.accent?'#fff':pvHex(C.box))
+      +';border:'+(o.accent?'1.5px solid '+pvHex(o.accent):'1px solid '+pvHex(C.line)));
+    el(x,L.row2.boxY+S.lblDY,w,S.lblH+(o.tall?0.22:0),txc(FT.label,'justify-content:center;text-align:center;color:'
+      +pvHex(C.mut)+';white-space:normal;line-height:1.2'),labelHtml);
+    el(x,L.row2.boxY+S.numDY,w,S.numH,txc(FT.stat,'font-weight:700;justify-content:center;color:'
+      +pvHex(o.numColor||(Number(val)?C.navy:C.dim))),String(val));
+  }
+
+  /* ── 하단 우측: 1페이지 Call+재고 / 2페이지 N-care 표 ── */
+  if(sp.bottom==='as'){
+    (function(){ /* drawCallStatus */
+      var T=L.call, tot=ctx.callIn+ctx.callOut;
+      card(T.x,L.row2.y,T.w,L.row2.h); cardTitle('고객센터 Call 현황',T.titleX,T.titleY);
+      pvStatBox(T.total.x,T.total.w,'총 Call',tot,{accent:C.callBd,numColor:C.green});
+      pvStatBox(T.inb.x,T.inb.w,'INBOUND',ctx.callIn,{numColor:C.blue});
+      pvStatBox(T.outb.x,T.outb.w,'OUTBOUND',ctx.callOut,{numColor:C.blue});
+    })();
+    (function(){ /* drawInventory */
+      var T=L.invt;
+      card(T.x,L.row2.y,T.w,L.row2.h); cardTitle('재고 현황',T.titleX,T.titleY);
+      [['Handpiece','(Repair)',ctx.inv.inv1,true],['Handpiece','(새제품)',ctx.inv.inv2,false],
+       ['Foot s/w','(새제품)',ctx.inv.inv3,false],['Foot s/w','(Repair)',ctx.inv.inv4,false]]
+      .forEach(function(b,i){
+        pvStatBox(T.x0+i*T.pitch,T.boxW,esc(b[0])+'<br>'+esc(b[1]),b[2]||0,
+          b[3]?{accent:C.orange,numColor:C.orange,tall:true}:{tall:true});
+      });
+    })();
+  }else{
+    (function(){ /* drawNcare + renderNcareTable */
+      var T=L.ncare, nc=WK_NCARE||{};
+      card(L.ncare.x,L.row2.y,L.ncare.w,L.row2.h);
+      var tiers=(nc.tiers&&nc.tiers.length===5)?nc.tiers:['Basic','Standard','Pro','Premium','CurePass'];
+      function arr(a){ return (a&&a.length===5)?a:[null,null,null,null,null]; }
+      function n(x){ return (x==null||x==='')?'-':String(x); }
+      el(T.titleX,T.titleY,T.titleW,T.titleH,txc(FT.table,'font-weight:700;color:'+pvHex(C.navy)),'N-care 서비스 현황');
+      var bd='border:1px solid '+pvHex(C.line)+';';
+      var html='<table style="border-collapse:collapse;width:100%;table-layout:fixed">'
+        +'<tr>'+['구분'].concat(tiers).map(function(t,i){
+            return '<td style="width:'+(T.colW[i]/T.tblW*100)+'%;height:'+pvIn(T.rowH)+'px;'+bd
+              +'background:'+pvHex(C.navy)+';color:#fff;font-weight:700;text-align:center;font-size:'+pvPt(FT.table)+'px">'+esc(t)+'</td>';
+          }).join('')+'</tr>'
+        +[['가입 병원 수',arr(nc.joined)],['점검 완료 병원 수',arr(nc.normal)],
+          ['점검 예정 병원 수',arr(nc.target)],['점검률',arr(nc.rate)]].map(function(df){
+            return '<tr><td style="height:'+pvIn(T.rowH)+'px;'+bd+'background:'+pvHex(C.blueBg)+';color:'+pvHex(C.navy)
+              +';font-weight:700;text-align:center;font-size:'+pvPt(FT.tableSm)+'px">'+esc(df[0])+'</td>'
+              +df[1].map(function(x){return '<td style="'+bd+'text-align:center;color:'+pvHex(C.dark)
+                +';font-size:'+pvPt(FT.table)+'px">'+esc(n(x))+'</td>';}).join('')+'</tr>';
+          }).join('')+'</table>';
+      el(T.tblX,T.tblY,T.tblW,T.rowH*5,'',html);
+      [[T.sum1,'전체 가입자',nc.totalJoined,true],[T.sum2,'점검 완료 병원',nc.totalNormal,false],
+       [T.sum3,'점검 운영률',nc.normalRate,true]].forEach(function(g){
+        el(g[0].x,T.sumY,g[0].w,T.sumH,txc(FT.tableSm,'font-weight:700;justify-content:center;color:'+pvHex(C.navy)
+          +';background:'+pvHex(g[3]?C.blueBg:C.grayBg)+';border:1px solid '+pvHex(C.line)),
+          esc(g[1])+'&nbsp;&nbsp;<span style="font-size:'+pvPt(FT.total)+'px">'+esc(n(g[2]))+'</span>');
+      });
+    })();
+  }
+
+  /* ── 푸터 ── */
+  el(0,L.foot.y,L.page.w,L.foot.h,'background:'+pvHex(C.navy));
+  el(L.header.padX,L.foot.textY,L.foot.textW,L.foot.textH,txc(FT.footer,'color:#fff'),'BAZ BIOMEDIC');
+  return holder;
+}
+
+async function makeWeeklyPPT(){
+  var btn=document.getElementById('wkGo'); btn.disabled=true; btn.textContent='생성 중…';
+  try{
+    await loadPptxLib();
+    /* 데이터 수집은 미리보기와 동일한 collectWeekCtx() 한 곳에서 — 미리보기=실제 출력 보장 */
+    var ctx=collectWeekCtx();
+    try{ localStorage.setItem('baz_dash_inv',JSON.stringify(ctx.inv));
+         localStorage.setItem('baz_dash_call',JSON.stringify({callInInp:val_('callInInp'),callOutInp:val_('callOutInp')})); }catch(e){}
+    var mon=ctx.mon, inv=ctx.inv, dataAS=ctx.dataAS, dataInsp=ctx.dataInsp;
+    var callIn=ctx.callIn, callOut=ctx.callOut, callTot=callIn+callOut;
+
+    /* ── PPT 초기화: 하나의 PPT 객체에 2개 슬라이드 (좌표는 파일 상단 L, 색상 C, 폰트 F에서만 관리) ── */
+    var pptx=new PptxGenJS();
+    pptx.defineLayout({name:'W',width:L.page.w,height:L.page.h}); pptx.layout='W';
+    pptx.theme={headFontFace:FT.face, bodyFontFace:FT.face};
+
+    /* ── 슬라이드 헬퍼 바인딩: addSlide 후 해당 슬라이드 전용 공통 컴포넌트 번들(v) 반환.
+          addText/addShape/addImage는 아래 공통 함수를 통해서만 사용한다 ── */
+    function newSlide(pptx){
+      var s=pptx.addSlide();
+      /* 텍스트 — 서체·세로 중앙 정렬 기본값 (첨부 PPT 전 텍스트 anchor=ctr) */
+      function tx(t,o){
+        o=o||{}; if(!o.fontFace) o.fontFace=FT.face;
+        if(!o.valign) o.valign='middle';
+        if(Array.isArray(t)) t.forEach(function(run){ run.options=run.options||{}; if(!run.options.fontFace) run.options.fontFace=FT.face; });
+        s.addText(t,o);
+      }
+      /* 단색 사각형 / 라운드 사각형(강조 배경·버튼) */
+      function rect(x,y,w,h,color){ s.addShape(pptx.shapes.RECTANGLE,{x:x,y:y,w:w,h:h,fill:{color:color}}); }
+      function pill(x,y,w,h,color,r){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:r||0.05,fill:{color:color}}); }
+      /* 카드 외곽 + 카드 제목 */
+      function card(x,y,w,h){ s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:y,w:w,h:h,rectRadius:0.05,fill:{color:C.white},line:{color:C.line,width:1}}); }
+      function cardTitle(t,x,y){ tx(t,{x:x,y:y,w:L.title.w,h:L.title.h,fontSize:FT.cardTitle,bold:true,color:C.navy}); }
+      /* 정보 카드: 카드 + 제목 — 모든 카드의 공통 시작점 */
+      function infoCard(x,y,w,h,title,tX,tY){ card(x,y,w,h); cardTitle(title,tX,tY); }
+      /* 표 카드(유형·교체품 공용): 헤더 + 행(1~5행 rowHeight 자동, 카드 높이 고정) + 구분선 + 총합
+         rows:[{name,val,hl:'y'|'g',bold,color,delta}] — 강조/전주 대비는 해당 행에만 */
+      function tableCard(T,o){
+        infoCard(T.x, L.row1.y, T.w, L.row1.h, o.title, T.titleX, L.row1.titleY);
+        tx(o.head[0],{x:T.headX,y:L.row1.headY,w:T.headW,h:L.row1.headH,fontSize:FT.label,color:C.mut});
+        tx(o.head[1],{x:T.cntX,y:L.row1.headY,w:T.cntW,h:L.row1.headH,fontSize:FT.label,color:C.mut,align:'right'});
+        var n=o.rows.length;
+        var gap=n>1 ? Math.min(T.gapMax,(T.lastRowY-L.row1.rowY)/(n-1)) : 0;  /* 행 간격 자동 */
+        o.rows.forEach(function(r,i){
+          var y=L.row1.rowY+i*gap;
+          if(r.hl) pill(T.hlX, y-L.row1.hlDY, T.hlW, L.row1.hlH, r.hl==='g'?C.ghl:C.yhl);
+          if(r.delta) tx(r.delta.t,{x:T.deltaX,y:y,w:T.deltaW,h:L.row1.rowH,fontSize:FT.small,bold:true,color:r.delta.c});
+          tx(r.name,{x:T.nameX,y:y,w:T.nameW,h:L.row1.rowH,fontSize:T.nameSize,bold:!!r.bold,color:r.color||C.text,align:T.nameAlign});
+          tx(String(r.val),{x:T.cntX,y:y,w:T.cntW,h:L.row1.rowH,fontSize:FT.count,bold:true,align:'right',color:C.navy});
+        });
+        /* 총 합계는 카드 하단 고정 — 행 수와 무관하게 두 카드가 같은 y에 정렬 */
+        s.addShape(pptx.shapes.LINE,{x:T.hlX,y:L.row1.lineY,w:T.lineW,h:0,line:{color:C.line,width:1}});
+        tx('총 합계',{x:T.nameX,y:L.row1.totY,w:L.row1.totW,h:L.row1.totH,fontSize:FT.cardTitle,bold:true,color:C.navy});
+        tx(String(o.total),{x:T.cntX,y:L.row1.totY,w:T.cntW,h:L.row1.totH,fontSize:FT.total,bold:true,align:'right',color:C.navy});
+      }
+      /* 스탯 박스: 라운드 박스 + 라벨 + 대형 숫자(0은 회색) */
+      function statBox(x,w,label,val,o){
+        o=o||{}; var S=L.row2.stat;
+        s.addShape(pptx.shapes.ROUNDED_RECTANGLE,{x:x,y:L.row2.boxY,w:w,h:L.row2.boxH,rectRadius:0.04,
+          fill:{color:o.accent?C.white:C.box}, line:o.accent?{color:o.accent,width:1.5}:{color:C.line,width:1}});
+        tx(label,{x:x,y:L.row2.boxY+S.lblDY,w:w,h:S.lblH,fontSize:FT.label,color:C.mut,align:'center'});
+        tx(String(val),{x:x,y:L.row2.boxY+S.numDY,w:w,h:S.numH,fontSize:FT.stat,bold:true,align:'center',
+          color:o.numColor||(Number(val)?C.navy:C.dim)});
+      }
+      /* 메트릭 카드(Call 현황·재고 현황 공용): 카드 + 제목 + 스탯 박스 목록 */
+      function metricCard(T,title,boxes){
+        infoCard(T.x, L.row2.y, T.w, L.row2.h, title, T.titleX, T.titleY);
+        boxes.forEach(function(b){ statBox(b.x, b.w, b.label, b.val, b.o); });
+      }
+      return {s:s, tx:tx, rect:rect, pill:pill, card:card, cardTitle:cardTitle,
+              infoCard:infoCard, tableCard:tableCard, statBox:statBox, metricCard:metricCard};
+    }
+
+    /* 로고 — logo.png가 같은 폴더에 있고 "유효한 이미지"일 때만 사용
+       (빈/깨진 파일이면 무시하고 텍스트 로고로 폴백 → PPT에 깨진 그림 박힘 방지) */
+    var logoData=null;
+    try{
+      var lr=await fetch('logo.png',{cache:'no-store'});
+      if(lr.ok){
+        var lb=await lr.blob();
+        if(lb.size>200 && /^image\//.test(lb.type||'')){   // 2바이트 빈 파일 등 방어
+          logoData=await new Promise(function(res,rej){
+            var fr=new FileReader(); fr.onload=function(){res(fr.result);}; fr.onerror=rej; fr.readAsDataURL(lb);
+          });
+        }
+      }
+    }catch(_){}
+
+    /* ── 공통 섹션 (1·2페이지 동일 디자인 가이드 — v: 슬라이드 헬퍼 번들, d: 주간 데이터) ── */
+
+    /* 상단 타이틀 바 + 우상단 로고 */
+    function drawHeader(v, kind){
+      var H=L.header;
+      if(logoData){
+        v.s.addImage({data:logoData, x:H.logo.x, y:H.logo.y, w:H.logo.w, h:H.logo.h,
+          sizing:{type:'contain', w:H.logo.w, h:H.logo.h}});
+      }else{
+        v.tx('baz',{x:H.fbLogo.x,y:H.fbLogo.y,w:H.fbLogo.w,h:H.fbLogo.h,fontSize:FT.logo,bold:true,color:C.navy,align:'right',fontFace:'Arial Black'});
+        v.tx('BAZ BIOMEDIC',{x:H.fbSub.x,y:H.fbSub.y,w:H.fbSub.w,h:H.fbSub.h,fontSize:FT.footer,color:C.mut,align:'right',charSpacing:2});
+      }
+      v.rect(0, H.barY, H.barW, H.barH, C.navy);
+      v.tx('생산품질_CS팀 주간업무보고'+kind,
+         {x:H.padX,y:H.barY,w:H.titleW,h:H.barH,fontSize:FT.title,bold:true,color:C.white});
+      v.tx('필드 현황 ('+wkLabel(mon)+') '+wkRange(mon),
+         {x:H.dateX,y:H.barY,w:H.dateW,h:H.barH,fontSize:FT.subtitle,bold:true,color:C.white,align:'right'});
+    }
+
+    /* ① 주별 추이: 건수 KPI + 주별 막대(당주 주황) — 0건이어도 빈 막대로 정상 출력 */
+    function drawTrendChart(v, d, title){
+      var T=L.trend;
+      v.infoCard(T.x, L.row1.y, T.w, L.row1.h, title, T.titleX, L.row1.titleY);
+      var d1=deltaTxt(d.cur.length, d.prev.length);
+      v.tx([{text:String(d.cur.length),options:{fontSize:FT.kpi,bold:true,color:C.navy}},
+          {text:' 건  ',options:{fontSize:FT.subtitle,color:C.navy}},
+          {text:d1.t,options:{fontSize:FT.cardTitle,bold:true,color:d1.c}}],
+         {x:T.titleX,y:T.kpiY,w:T.kpiW,h:T.kpiH});
+      var maxN=Math.max.apply(null,d.weeks.map(function(w){return w.n;}).concat([1]));
+      var gap=(T.barSpan-T.barW*d.weeks.length)/Math.max(d.weeks.length-1,1);
+      d.weeks.forEach(function(w,i){
+        var h=Math.max(T.minBarH, w.n/maxN*T.maxBarH), x=T.barX0+i*(T.barW+gap);
+        v.rect(x, T.baseY-h, T.barW, h, w.cur?C.orange:C.teal);
+        v.tx(String(w.n),{x:x-T.numPad,y:T.baseY-h-T.numDY,w:T.barW+T.numPad*2,h:T.numH,fontSize:FT.body,bold:true,align:'center',color:C.navy});
+        v.tx(wkNo(w.mon)+'주차',{x:x-T.lblPad,y:T.baseY+T.lblDY,w:T.barW+T.lblPad*2,h:T.lblH,fontSize:FT.label,align:'center',color:C.mut});
+      });
+    }
+
+    /* ② 유형(표 카드): 1위 노란 강조 + 전주 대비 · '이상 없음' 초록 행 — 최대 5행, 0건도 정상 */
+    function drawTypeTable(v, d, title){
+      var rows=d.types.map(function(p,i){
+        return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
+                delta:i===0?deltaTxt(p[1], d.typeP[p[0]]||0):null};
+      });
+      if(d.hasOk) rows.push({name:'이상 없음', val:d.okCnt, hl:'g', color:C.green});
+      v.tableCard(L.voc,{title:title, head:['유형','건수'], rows:rows, total:d.cur.length});
+    }
+
+    /* ③ 교체품 현황(표 카드) — 최대 5행, 0건도 정상 */
+    function drawReplacementTable(v, d){
+      var rows=d.parts.map(function(p,i){
+        return {name:p[0], val:p[1], hl:i===0?'y':'', bold:i===0,
+                delta:i===0?deltaTxt(p[1], d.partP[p[0]]||0):null};
+      });
+      v.tableCard(L.part,{title:'교체품 현황', head:['교체품','수량'], rows:rows, total:d.partTot});
+    }
+
+    /* ④ 고장 상세: 유형 버튼(1위 주황·이하 청록) + 설명 — 카드 높이 고정, 최대 4행 줄간격 자동 */
+    function drawFailureDetail(v, d){
+      var T=L.fail;
+      v.infoCard(T.x, L.row2.y, T.w, L.row2.h, '고장 상세', T.titleX, T.titleY);
+      if(!d.details.length){ v.tx('해당 주차 고장 내역 없음',{x:T.titleX,y:T.emptyY,w:T.emptyW,h:T.emptyH,fontSize:FT.body,color:C.mut}); return; }
+      var gap=d.details.length>3 ? (T.lastRowY-T.rowY)/(d.details.length-1) : T.gap; /* 4행이면 자동 압축 */
+      d.details.forEach(function(dt,i){
+        var y=T.rowY+i*gap;
+        v.pill(T.btnX, y, T.btnW, T.btnH, i===0?C.orange:C.teal, 0.06);
+        v.tx(dt.name,{x:T.btnX,y:y,w:T.btnW,h:T.btnH,fontSize:FT.small,bold:true,color:C.white,align:'center'});
+        v.tx(dt.desc,{x:T.descX,y:y-T.descDY,w:T.descW,h:T.descH,fontSize:FT.label,color:C.dark});
+      });
+    }
+
+    /* 하단 BAZ BIOMEDIC 바 */
+    function drawFooter(v){
+      v.rect(0, L.foot.y, L.page.w, L.foot.h, C.navy);
+      v.tx('BAZ BIOMEDIC',{x:L.header.padX,y:L.foot.textY,w:L.foot.textW,h:L.foot.textH,fontSize:FT.footer,color:C.white});
+    }
+
+    /* ── 1페이지 전용: 고객센터 Call 현황 + 재고 현황 (메트릭 카드 공용) ── */
+    function drawCallStatus(v){
+      var T=L.call;
+      v.metricCard(T, '고객센터 Call 현황', [
+        {x:T.total.x, w:T.total.w, label:'총 Call',  val:callTot, o:{accent:C.callBd,numColor:C.green}},
+        {x:T.inb.x,   w:T.inb.w,   label:'INBOUND',  val:callIn,  o:{numColor:C.blue}},
+        {x:T.outb.x,  w:T.outb.w,  label:'OUTBOUND', val:callOut, o:{numColor:C.blue}}
+      ]);
+    }
+    function drawInventory(v){
+      var T=L.invt;
+      var defs=[['Handpiece','(Repair)',inv.inv1,true],['Handpiece','(새제품)',inv.inv2,false],
+                ['Foot s/w','(새제품)',inv.inv3,false],['Foot s/w','(Repair)',inv.inv4,false]];
+      v.metricCard(T, '재고 현황', defs.map(function(b,i){
+        return {x:T.x0+i*T.pitch, w:T.boxW,
+                label:[{text:b[0],options:{breakLine:true}},{text:b[1]}], /* 첨부와 동일한 2줄 제목 */
+                val:b[2]||0, o:b[3]?{accent:C.orange,numColor:C.orange}:null};
+      }));
+    }
+
+    /* ── 2페이지 전용: N-care 서비스 현황(하단 우측 전체 폭) ── */
+    function drawNcare(v){
+      v.card(L.ncare.x, L.row2.y, L.ncare.w, L.row2.h);
+      renderNcareTable(pptx, v.s, v.tx);
+    }
+
+    /* ── Slide 1: A/S 주간업무보고(VOC/Call) ── */
+    function createASSlide(pptx){
+      var v=newSlide(pptx);
+      drawHeader(v, '(VOC/Call)');
+      drawTrendChart(v, dataAS, 'VOC 주별 추이');
+      drawTypeTable(v, dataAS, 'VOC 유형');
+      drawReplacementTable(v, dataAS);
+      drawFailureDetail(v, dataAS);
+      drawCallStatus(v);
+      drawInventory(v);
+      drawFooter(v);
+    }
+
+    /* ── Slide 2: N-care 정기점검 주간업무보고 ── */
+    function createInspectionSlide(pptx){
+      var v=newSlide(pptx);
+      drawHeader(v, '(N-care 정기점검)');
+      drawTrendChart(v, dataInsp, 'N-care 점검 추이');
+      drawTypeTable(v, dataInsp, '점검 유형');
+      drawReplacementTable(v, dataInsp);
+      drawFailureDetail(v, dataInsp);
+      drawNcare(v);
+      drawFooter(v);
+    }
+
+    /* 슬라이드 빌더 목록 — 슬라이드 확장 시 여기에 생성 함수만 추가.
+       각 스코프가 0건이어도 빈 카드로 정상 생성된다(에러 없음) */
+    [createASSlide, createInspectionSlide].forEach(function(build){ build(pptx); });
+
+    var fname='주간업무보고_'+mon.getFullYear()+'년'+wkLabel(mon).replace(' ','')+'.pptx';
+    await pptx.writeFile({fileName:fname});
+    toast('📑 '+fname+' 생성 완료');
+    closeWeekly();
+  }catch(e){ toast('❌ 생성 실패: '+e); }
+  btn.disabled=false; btn.textContent='PPT 생성';
+}
+function val_(id){ return String(document.getElementById(id).value||'').replace(/[^\d]/g,''); }
+
+loadData(false);
+
+// ===== 화면 모드 (Window / Mobile) =====
+(function(){
+  var KEY='baz_viewmode';
+  function apply(mode){
+    document.body.classList.toggle('mode-window', mode==='window');
+    document.body.classList.toggle('mode-mobile', mode==='mobile');
+    var tg=document.getElementById('modeToggle');
+    if(tg) tg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.mode===mode); });
+    window.dispatchEvent(new Event('resize')); // 차트 리사이즈 유도
+  }
+  function get(){
+    var saved=localStorage.getItem(KEY);
+    if(saved==='window'||saved==='mobile') return saved;
+    return (window.matchMedia && window.matchMedia('(min-width:900px)').matches) ? 'window' : 'mobile';
+  }
+  var cur=get(); apply(cur);
+  var tg=document.getElementById('modeToggle');
+  if(tg) tg.addEventListener('click', function(e){
+    var btn=e.target.closest('button[data-mode]'); if(!btn) return;
+    cur=btn.dataset.mode; localStorage.setItem(KEY, cur); apply(cur);
+  });
+})();
+</script>
+</body>
+</html>
