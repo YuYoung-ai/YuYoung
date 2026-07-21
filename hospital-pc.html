@@ -35,6 +35,56 @@
   body.mode-window .load-more{max-width:520px;margin-left:auto;margin-right:auto;}
   @media(max-width:720px){ body.mode-window .wrap{max-width:560px;} body.mode-window #cardList{grid-template-columns:1fr;} body.mode-window .body{padding:14px;} }
 
+  /* ===== Window 전용: 카드/표 + 지도/상세 2-pane ===== */
+  #pcPane{display:none;}
+  body.mode-window #pcPane{display:block;}
+  body.mode-window #cardList{display:none !important;}
+  body.mode-window #mapBox{display:none !important;}
+  body.mode-window #loadMore{display:none !important;}
+  #pcToolbar{display:flex;align-items:center;gap:10px;margin:2px 0 12px;flex-wrap:wrap;}
+  .pc-viewtoggle{display:flex;gap:2px;background:#fff;border:1px solid var(--gray-line);border-radius:9px;padding:3px;}
+  .pc-viewtoggle button{background:transparent;border:0;color:var(--text-muted);font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:6px;cursor:pointer;font-family:inherit;line-height:1.1;}
+  .pc-viewtoggle button.on{background:var(--navy);color:#fff;}
+  #pcToolbar .pc-hint{font-size:11.5px;color:var(--text-muted);}
+  #pcSplit{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(370px,1fr);gap:16px;align-items:start;}
+  #pcLeft{min-width:0;}
+  #pcRight{position:sticky;top:16px;height:calc(100vh - 40px);background:#fff;border:1px solid var(--gray-line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(27,47,94,.05);}
+  #pcRightHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid var(--gray-line);background:var(--gray-bg);flex:0 0 auto;}
+  #pcRightHead .ttl{font-size:12.5px;font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #pcRightBody{flex:1 1 auto;position:relative;min-height:0;}
+  #pcMapPane{position:absolute;inset:0;background:#E9EEF3;}
+  .pc-mapfail{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.6;}
+  #pcDetail{position:absolute;inset:0;overflow:auto;padding:15px 16px;display:none;background:#fff;}
+  #pcRight.detail #pcMapPane{visibility:hidden;}
+  #pcRight.detail #pcDetail{display:block;}
+  .pc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
+  .pc-cardwrap{cursor:pointer;}
+  .pc-cardwrap .h-card{margin-bottom:0;height:100%;transition:box-shadow .12s,border-color .12s;}
+  .pc-cardwrap:hover .h-card{border-color:var(--teal);box-shadow:0 3px 12px rgba(27,47,94,.10);}
+  .pc-cardwrap.sel .h-card{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset;}
+  .pc-table-wrap{overflow-x:auto;background:#fff;border:1px solid var(--gray-line);border-radius:12px;}
+  table.pc-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .pc-table th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:700;padding:9px 11px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;z-index:1;}
+  .pc-table th .ar{opacity:.55;font-size:10px;margin-left:3px;}
+  .pc-table td{padding:8px 11px;border-top:1px solid var(--gray-line);white-space:nowrap;color:var(--text);}
+  .pc-table tbody tr{cursor:pointer;}
+  .pc-table tbody tr:hover{background:var(--teal-soft);}
+  .pc-table tbody tr.sel{background:#E8F0FB;}
+  .pc-badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;}
+  .pc-dt-name{font-size:17px;font-weight:800;color:var(--navy);margin-bottom:3px;line-height:1.3;}
+  .pc-dt-sub{font-size:12px;color:var(--text-muted);margin-bottom:12px;}
+  .pc-dt-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:13px;}
+  .pc-dt-rows{display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:12.5px;margin-bottom:14px;}
+  .pc-dt-rows dt{color:var(--text-muted);font-weight:600;}
+  .pc-dt-rows dd{color:var(--text);word-break:break-all;}
+  .pc-dt-acts{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
+  .pc-dt-acts button{flex:1;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid var(--gray-line);background:#fff;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;color:var(--navy);}
+  .pc-dt-acts button:hover{background:var(--gray-bg);}
+  .pc-dt-h3{font-size:12.5px;font-weight:800;color:var(--navy);margin:4px 0 9px;padding-bottom:6px;border-bottom:1px solid var(--gray-line);}
+  .pc-backmap{background:#fff;border:1px solid var(--gray-line);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .pc-backmap:hover{background:#fff;border-color:var(--navy);}
+  @media(max-width:980px){ body.mode-window #pcSplit{grid-template-columns:1fr;} body.mode-window #pcRight{position:static;height:auto;min-height:440px;} }
+
   header{background:var(--navy);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
   header .logo-area{display:flex;align-items:center;gap:10px;min-width:0;}
   header .logo-area svg{width:32px;height:32px;flex:0 0 auto;}
@@ -711,12 +761,21 @@ function render(){
   const list=getFiltered();
   const cl=document.getElementById('cardList');
   const rc=document.getElementById('resultCount');
+  // 결과 수 라벨(공통)
+  if(list.length===0){ rc.textContent=''; }
+  else if(nearbyMode){ rc.innerHTML='<b>'+t('nearbyResult').replace('{n}',list.length)+'</b>'; }
+  else { rc.innerHTML=t('resultN').replace('{n}','<b>'+list.length+'</b>'); }
+
+  // Window(PC) 모드: 2-pane 렌더러로 위임
+  if(document.body.classList.contains('mode-window') && typeof pcRender==='function'){
+    pcRender(list); return;
+  }
+
+  // ── Mobile 모드: 기존 단일 컬럼 카드 ──
   if(list.length===0){
     cl.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>';
-    rc.textContent=''; document.getElementById('loadMore').style.display='none'; return;
+    document.getElementById('loadMore').style.display='none'; return;
   }
-  if(nearbyMode){ rc.innerHTML='<b>'+t('nearbyResult').replace('{n}',list.length)+'</b>'; }
-  else { rc.innerHTML=t('resultN').replace('{n}','<b>'+list.length+'</b>'); }
   const shown=list.slice(0,showCount);
   cl.innerHTML=shown.map(cardHTML).join('');
   const lm=document.getElementById('loadMore');
@@ -1689,6 +1748,254 @@ applyLang();
   })();
 })();
 
+// ===== Window 전용: 카드/표 + 지도/상세 2-pane =====
+var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' | 'table'
+var pcRightMode = 'map';   // 'map' | 'detail'
+var pcSelName = null;
+var pcSort = { key:'st', dir:1 };
+var pcList = [];
+var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false;
+var PC_DEFAULT_CENTER={lat:37.5665,lng:126.9780};
+var PC_ST_ORDER={'미점검':0,'경고':1,'권고':2,'점검대상':3,'정상':4};
+
+function pcVendorTag(h){
+  var v=(h.d||'').trim();
+  if(v==='납품 1년 이내') return '<span class="h-tag warranty">🛡 워런티 유효</span>';
+  if(v) return '<span class="h-tag vendor">'+escapeHtml(v)+'</span>';
+  return '';
+}
+function pcVendorText(h){
+  var v=(h.d||'').trim();
+  if(v==='납품 1년 이내') return '워런티 유효';
+  return v||'-';
+}
+function pcStatusBadge(h){
+  return isNcare(h)
+    ? '<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
+    : '<span class="st-badge 비대상">'+t('notTarget')+'</span>';
+}
+
+function pcEnsureDOM(){
+  if(pcDomReady) return;
+  var vl=document.getElementById('viewList'); if(!vl) return;
+  var pane=document.createElement('div');
+  pane.id='pcPane';
+  pane.innerHTML=
+    '<div id="pcToolbar">'+
+      '<div class="pc-viewtoggle" id="pcViewToggle">'+
+        '<button type="button" data-view="cards">⊞ 카드</button>'+
+        '<button type="button" data-view="table">▤ 표</button>'+
+      '</div>'+
+      '<span class="pc-hint">카드·행을 클릭하면 오른쪽에 상세·이력이 열립니다</span>'+
+    '</div>'+
+    '<div id="pcSplit">'+
+      '<div id="pcLeft"></div>'+
+      '<div id="pcRight">'+
+        '<div id="pcRightHead">'+
+          '<span class="ttl" id="pcRightTtl">🗺 지도</span>'+
+          '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">🗺 지도로</button>'+
+        '</div>'+
+        '<div id="pcRightBody">'+
+          '<div id="pcMapPane"></div>'+
+          '<div id="pcDetail"></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  // #cardList 다음에 삽입
+  var cl=document.getElementById('cardList');
+  if(cl && cl.parentNode){ cl.parentNode.insertBefore(pane, cl.nextSibling); }
+  else { vl.appendChild(pane); }
+
+  // 뷰 토글(카드/표)
+  document.getElementById('pcViewToggle').addEventListener('click', function(e){
+    var b=e.target.closest('button[data-view]'); if(!b) return;
+    pcListView=b.dataset.view; localStorage.setItem('baz_pc_listview', pcListView);
+    pcRender(pcList);
+  });
+  // 왼쪽(카드/표) 클릭 → 정렬 or 선택
+  document.getElementById('pcLeft').addEventListener('click', function(e){
+    var th=e.target.closest('th[data-sortkey]');
+    if(th){
+      var k=th.getAttribute('data-sortkey');
+      if(pcSort.key===k) pcSort.dir*=-1; else { pcSort.key=k; pcSort.dir=1; }
+      pcRenderLeft(pcList); pcHighlight(); return;
+    }
+    if(e.target.closest('button, a')) return; // 카드 내 액션버튼은 통과
+    var el=e.target.closest('[data-hname]'); if(!el) return;
+    pcSelect(el.getAttribute('data-hname'));
+  });
+  document.getElementById('pcBackMap').addEventListener('click', pcBackToMap);
+  pcDomReady=true;
+}
+
+function pcCardsHTML(list){
+  return '<div class="pc-cards">'+ list.map(function(h){
+    return '<div class="pc-cardwrap'+(h.n===pcSelName?' sel':'')+'" data-hname="'+escapeHtml(h.n)+'">'+cardHTML(h)+'</div>';
+  }).join('') +'</div>';
+}
+
+function pcTableHTML(list){
+  var cols=[
+    {k:'n',  label:'병원명',   sv:function(h){return normalize(h.n);},        cell:function(h){return '<b>'+escapeHtml(h.n)+'</b>';}},
+    {k:'rg', label:'지역',     sv:function(h){return h.rg||'';},              cell:function(h){return escapeHtml(h.rg||'-');}},
+    {k:'sa', label:'영업담당', sv:function(h){return h.sa||'';},              cell:function(h){return escapeHtml(h.sa||'-');}},
+    {k:'st', label:'상태',     sv:function(h){return isNcare(h)?(PC_ST_ORDER[h.st]!=null?PC_ST_ORDER[h.st]:9):99;}, cell:function(h){return pcStatusBadge(h);}},
+    {k:'days',label:'점검경과',sv:function(h){var d=daysSince(h.li);return d==null?-1:d;}, cell:function(h){var d=daysSince(h.li);return d==null?'<span style="color:var(--text-muted)">-</span>':(d+'일');}},
+    {k:'nc', label:'N-CARE',   sv:function(h){return isNcare(h)?(h.nc||''):'zzz';}, cell:function(h){return isNcare(h)?escapeHtml(h.nc):'<span style="color:var(--text-muted)">미가입</span>';}},
+    {k:'d',  label:'거래처',   sv:function(h){return pcVendorText(h);},        cell:function(h){var v=(h.d||'').trim(); if(v==='납품 1년 이내') return '<span class="pc-badge" style="background:#E8F5EE;color:#1B7A47;">워런티 유효</span>'; return v?escapeHtml(v):'<span style="color:var(--text-muted)">-</span>';}},
+    {k:'hp', label:'HP',       sv:function(h){return (h.hpv||'').trim()||getLastHpVer(h.n)||'';}, cell:function(h){var x=(h.hpv||'').trim()||getLastHpVer(h.n);return x?escapeHtml(x):'-';}},
+    {k:'ui', label:'UI',       sv:function(h){return (h.uiv||'').trim()||getLastUiVer(h.n)||'';}, cell:function(h){var x=(h.uiv||'').trim()||getLastUiVer(h.n);return x?escapeHtml(x):'-';}}
+  ];
+  var col=null; for(var i=0;i<cols.length;i++){ if(cols[i].k===pcSort.key){col=cols[i];break;} }
+  if(!col) col=cols[0];
+  var sorted=list.slice().sort(function(a,b){
+    var va=col.sv(a), vb=col.sv(b);
+    if(va<vb) return -1*pcSort.dir; if(va>vb) return 1*pcSort.dir; return normalize(a.n)<normalize(b.n)?-1:1;
+  });
+  var head='<tr>'+cols.map(function(c){
+    var ar = (c.k===pcSort.key) ? '<span class="ar">'+(pcSort.dir>0?'▲':'▼')+'</span>' : '<span class="ar">↕</span>';
+    return '<th data-sortkey="'+c.k+'">'+c.label+ar+'</th>';
+  }).join('')+'</tr>';
+  var rows=sorted.map(function(h){
+    return '<tr data-hname="'+escapeHtml(h.n)+'"'+(h.n===pcSelName?' class="sel"':'')+'>'+
+      cols.map(function(c){return '<td>'+c.cell(h)+'</td>';}).join('')+'</tr>';
+  }).join('');
+  return '<div class="pc-table-wrap"><table class="pc-table"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function pcRenderLeft(list){
+  var left=document.getElementById('pcLeft'); if(!left) return;
+  if(!list.length){ left.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>'; return; }
+  left.innerHTML = (pcListView==='table') ? pcTableHTML(list) : pcCardsHTML(list);
+}
+
+function pcHighlight(){
+  document.querySelectorAll('#pcLeft .pc-cardwrap').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
+  document.querySelectorAll('#pcLeft tr[data-hname]').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
+}
+
+function pcHistTimeline(name){
+  var recs=HISTORY[name]||[];
+  if(!recs.length) return '<div class="tl-empty">'+t('histEmpty')+'</div>';
+  return recs.map(function(r){
+    var isInsp=(r.t==='점검');
+    var typeLabel=isInsp?'점검':'A/S', typeCls=isInsp?'점검':'AS';
+    var symLine=(r.pt||r.sy)?'<div class="tl-cat">'+escapeHtml([r.pt,r.sy].filter(Boolean).join(' · '))+'</div>':'';
+    var memo=r.m?'<div class="tl-memo">'+escapeHtml(r.m)+'</div>':'';
+    var fix=r.fx?'<div class="tl-memo" style="background:#EAF4F8;">↳ '+escapeHtml(r.fx)+'</div>':'';
+    var partLine=r.p?'<div class="tl-part">🔧 '+t('histPart')+': '+escapeHtml(r.p)+'</div>':'';
+    var meta=[]; if(r.f) meta.push(t('histFse')+' '+escapeHtml(r.f)); if(r.pay) meta.push(escapeHtml(r.pay));
+    var metaLine=meta.length?'<div class="tl-meta">'+meta.join(' · ')+'</div>':'';
+    return '<div class="tl-item '+(isInsp?'':'as')+'"><div class="tl-date">'+escapeHtml(r.d)+'<span class="tl-type '+typeCls+'">'+typeLabel+'</span></div>'+metaLine+symLine+memo+fix+partLine+'</div>';
+  }).join('');
+}
+
+function pcRenderDetail(name){
+  var box=document.getElementById('pcDetail'); if(!box) return;
+  var h=null;
+  for(var i=0;i<HOSPITALS.length;i++){ if(HOSPITALS[i].n===name){ h=HOSPITALS[i]; break; } }
+  if(!h){ for(var j=0;j<pcList.length;j++){ if(pcList[j].n===name){ h=pcList[j]; break; } } }
+  if(!h){ box.innerHTML='<div class="tl-empty">정보를 찾을 수 없습니다.</div>'; return; }
+  var hp=(h.hpv||'').trim()||getLastHpVer(h.n);
+  var ui=(h.uiv||'').trim()||getLastUiVer(h.n);
+  var esc=encodeURIComponent;
+  var naverUrl='https://m.map.naver.com/search2/search.naver?query='+esc(h.n);
+  var inspUrl='inspection.html?h='+esc(h.n)+'&sn='+esc(h.s||'')+'&nc='+esc(h.nc||'')+'&e='+esc(h.sa||'');
+  var survUrl='survey.html?h='+esc(h.n)+'&e='+esc(h.sa||'');
+  var tags='';
+  tags+= isNcare(h)?'<span class="h-tag ncare">N-CARE '+escapeHtml(h.nc)+'</span>':'<span class="h-tag ncare none">미가입</span>';
+  if(h.as) tags+='<span class="h-tag as">'+escapeHtml(h.as)+'</span>';
+  if(h.sa) tags+='<span class="h-tag sales">'+escapeHtml(h.sa)+'</span>';
+  if(hp) tags+='<span class="h-tag hpver">HP '+escapeHtml(hp)+'</span>';
+  if(ui) tags+='<span class="h-tag uiver">UI '+escapeHtml(ui)+'</span>';
+  tags+= pcVendorTag(h);
+  var rows='';
+  function row(k,v){ rows+='<dt>'+k+'</dt><dd>'+v+'</dd>'; }
+  row('상태', pcStatusBadge(h));
+  if(h.a) row('주소', escapeHtml(h.a));
+  row('장비번호', escapeHtml(h.s||'-'));
+  row(t('sales'), escapeHtml(h.sa||'-'));
+  row('지역', escapeHtml(h.rg||'-'));
+  row('거래처', escapeHtml(pcVendorText(h)));
+  row(isNcare(h)?t('lastInsp'):t('lastVisit'), statusDays(h));
+  var nameJs=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  box.innerHTML=
+    '<div class="pc-dt-name">'+escapeHtml(h.n)+'</div>'+
+    '<div class="pc-dt-sub">'+escapeHtml(h.s||'')+(h.rg?' · '+escapeHtml(h.rg):'')+'</div>'+
+    '<div class="pc-dt-tags">'+tags+'</div>'+
+    '<dl class="pc-dt-rows">'+rows+'</dl>'+
+    '<div class="pc-dt-acts">'+
+      '<button onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
+      '<button onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
+      '<button onclick="location.href=\''+survUrl+'\'">⭐ '+t('surv')+'</button>'+
+    '</div>'+
+    '<div class="pc-dt-h3">🕑 '+t('histTitle')+' <span style="font-weight:400;color:var(--text-muted);">'+t('histCount').replace('{n}', (HISTORY[name]||[]).length)+'</span> '+
+      '<button class="pc-backmap" style="float:right;font-size:11px;padding:3px 8px;" onclick="openHist(\''+nameJs+'\')">✎ 편집</button></div>'+
+    pcHistTimeline(name);
+}
+
+function pcShowMap(list){
+  var pane=document.getElementById('pcMapPane'); if(!pane) return;
+  loadKakao(function(ok){
+    if(ok===false){ pane.innerHTML='<div class="pc-mapfail">지도를 불러올 수 없습니다.<br>네트워크 연결 또는 지도 키 설정을 확인해 주세요.</div>'; return; }
+    if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
+    var center=myPos?new kakao.maps.LatLng(myPos.lat,myPos.lng):new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
+    if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9}); }
+    else { pcMapObj.relayout(); }
+    pcMapMarkers.forEach(function(m){m.setMap(null);}); pcMapMarkers=[]; pcMarkerByName={};
+    var bounds=new kakao.maps.LatLngBounds(), any=false;
+    list.forEach(function(h){
+      if(h.lat==null||h.lng==null) return;
+      var pos=new kakao.maps.LatLng(h.lat,h.lng);
+      var mk=new kakao.maps.Marker({position:pos, title:h.n});
+      mk.setMap(pcMapObj); pcMapMarkers.push(mk); pcMarkerByName[h.n]=mk;
+      kakao.maps.event.addListener(mk,'click',function(){ pcSelect(h.n); });
+      bounds.extend(pos); any=true;
+    });
+    if(any) pcMapObj.setBounds(bounds);
+    setTimeout(function(){ if(pcMapObj){ pcMapObj.relayout(); if(any) pcMapObj.setBounds(bounds); } },120);
+  });
+}
+
+function pcSelect(name){
+  pcSelName=name; pcRightMode='detail';
+  var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
+  var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
+  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=name;
+  pcRenderDetail(name);
+  pcHighlight();
+  var body=document.getElementById('pcDetail'); if(body) body.scrollTop=0;
+}
+window.pcSelect=pcSelect;
+
+function pcBackToMap(){
+  pcRightMode='map';
+  var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
+  var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
+  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 지도 · '+(pcList?pcList.length:0)+'곳';
+  pcShowMap(pcList||[]);
+}
+
+function pcRender(list){
+  pcList=list||[];
+  pcEnsureDOM();
+  document.querySelectorAll('#pcViewToggle button').forEach(function(b){ b.classList.toggle('on', b.dataset.view===pcListView); });
+  pcRenderLeft(pcList);
+  if(pcRightMode==='detail' && pcSelName){
+    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=pcSelName;
+    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
+    document.getElementById('pcRight').classList.add('detail');
+    pcRenderDetail(pcSelName);
+  } else {
+    var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 지도 · '+pcList.length+'곳';
+    var bm2=document.getElementById('pcBackMap'); if(bm2) bm2.style.display='none';
+    document.getElementById('pcRight').classList.remove('detail');
+    pcShowMap(pcList);
+  }
+  pcHighlight();
+}
+window.pcRender=pcRender;
+
 // ===== 화면 모드 (Window / Mobile) =====
 (function(){
   var KEY='baz_viewmode';
@@ -1697,8 +2004,11 @@ applyLang();
     document.body.classList.toggle('mode-mobile', mode==='mobile');
     var tg=document.getElementById('modeToggle');
     if(tg) tg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.mode===mode); });
+    // 레이아웃 전환 → 목록 재렌더 (mobile ↔ window)
+    try{ if(typeof render==='function' && curTab==='list') render(); }catch(e){}
     // 카카오맵이 떠 있으면 넓이 변경 반영
     try{ if(typeof mapObj!=='undefined' && mapObj && mapObj.relayout){ setTimeout(function(){ mapObj.relayout(); }, 200); } }catch(e){}
+    try{ if(pcMapObj && pcMapObj.relayout){ setTimeout(function(){ pcMapObj.relayout(); }, 220); } }catch(e){}
   }
   function get(){
     var saved=localStorage.getItem(KEY);
