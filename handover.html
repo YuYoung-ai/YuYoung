@@ -436,6 +436,16 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 function postUrl(){ return HANDOVER_URL || AS_URL; }
 
+/* 완료 기록을 로컬에도 남겨 hospital-pc '최근완료'에서 즉시(같은 기기) 확인 가능하게 함 */
+function rememberRecentHandover_(){
+  try{
+    var arr=JSON.parse(localStorage.getItem('baz_recent_handover')||'[]')||[];
+    arr.unshift({ date:val('date'), hosp:val('hosp'), fse:val('fse'), gubun:val('gubun') });
+    var seen={}, out=[];
+    arr.forEach(function(r){ var k=(r.hosp||'')+'|'+(r.date||'')+'|'+(r.fse||''); if(seen[k])return; seen[k]=1; out.push(r); });
+    localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
+  }catch(e){}
+}
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
@@ -452,13 +462,14 @@ async function saveToSheet(){
     try{
       var r=await fetch(postUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
       var d=await r.json();
-      if(d&&d.success){ toast(d.msg||'✅ 시트 기록 완료'); ok=true; enableCopy(); }
+      if(d&&d.success){ toast(d.msg||'✅ 시트 기록 완료'); ok=true; enableCopy(); rememberRecentHandover_(); }
       else if(d&&d.error){ toast('❌ '+d.error); ok=true; }   /* 오류는 복사 활성화 안 함 */
     }catch(_){}
     if(!ok){
       await fetch(postUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
       toast('시트에 기록됐어요');
       enableCopy();   /* 응답 확인 불가(no-cors)여도 기록 요청은 전송됨 → 복사 허용 */
+      rememberRecentHandover_();
     }
   }catch(e){ toast('기록 실패 — 네트워크 확인'); }
   setTimeout(function(){btn.disabled=false;btn.textContent='📥 시트 기록';},1200);

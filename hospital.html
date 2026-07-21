@@ -35,6 +35,22 @@
 
   .body{padding:14px;}
 
+  /* ===== 필터: 모바일 상단 고정 / PC 좌측 사이드바 ===== */
+  /* 모바일: filterRail은 레이아웃상 사라져(display:contents) filterSticky가
+     긴 #viewList 기준으로 고정되어 카드 목록 내내 상단에 붙어 있음 */
+  #filterRail{display:contents;}
+  #filterSticky{position:sticky;top:var(--hdr-h,56px);z-index:30;background:var(--gray-bg);padding-top:8px;margin-bottom:2px;}
+  #filterSticky::after{content:'';position:absolute;left:0;right:0;bottom:-8px;height:8px;background:linear-gradient(rgba(245,247,250,.9),rgba(245,247,250,0));pointer-events:none;}
+  body.mode-window #viewList{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px;align-items:start;}
+  body.mode-window #filterRail{grid-column:1;position:sticky;top:calc(var(--hdr-h,56px) + 10px);align-self:start;max-height:calc(100vh - var(--hdr-h,56px) - 24px);overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;}
+  body.mode-window #filterSticky{position:static;top:auto;background:transparent;padding-top:0;z-index:auto;}
+  body.mode-window #filterSticky::after{display:none;}
+  body.mode-window #viewList>.result-count,
+  body.mode-window #viewList>#cardList,
+  body.mode-window #viewList>#loadMore,
+  body.mode-window #viewList>#pcPane{grid-column:2;min-width:0;}
+  @media(max-width:980px){ body.mode-window #viewList{grid-template-columns:1fr;} body.mode-window #filterRail{position:static;max-height:none;overflow:visible;} }
+
   /* 탭 */
   .tabs{display:flex;gap:6px;margin-bottom:14px;background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:4px;}
   .tab{flex:1;text-align:center;padding:9px 6px;border-radius:9px;font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;border:none;background:transparent;font-family:inherit;}
@@ -246,6 +262,7 @@
 
   <!-- ===== 조회 탭 ===== -->
   <div id="viewList">
+   <div id="filterRail">
     <div class="search-wrap">
       <span class="ico">🔍</span>
       <input type="text" id="searchInput" placeholder="병원명 검색..." autocomplete="off">
@@ -258,6 +275,7 @@
     <div class="nearby-status" id="nearbyStatus"></div>
     <div id="mapBox"></div>
 
+    <div id="filterSticky">
     <div class="filter-section">
       <div class="filter-row" id="filterRow">
         <button class="chip on" data-filter="all">전체 <span class="cnt" id="cnt-all"></span></button>
@@ -272,8 +290,10 @@
         <select class="flt" id="regionFilter"><option value="">전체 지역</option></select>
       </div>
     </div>
+    </div>
 
     <div class="stats" id="stats"></div>
+   </div>
     <div class="result-count" id="resultCount"></div>
     <div id="cardList"></div>
     <button class="load-more" id="loadMore" style="display:none;">더 보기</button>
@@ -1671,6 +1691,14 @@ applyLang();
       })
       .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
   })();
+})();
+
+// ===== 헤더 높이 → 필터 sticky 오프셋(--hdr-h) =====
+(function(){
+  function setHdrH(){ var h=document.querySelector('header'); if(h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight+'px'); }
+  setHdrH();
+  window.addEventListener('resize', setHdrH);
+  window.addEventListener('load', setHdrH);
 })();
 
 </script>
