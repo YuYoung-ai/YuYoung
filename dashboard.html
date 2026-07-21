@@ -92,6 +92,20 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .cmp-bar i{display:block;height:100%;border-radius:4px;transition:width .3s}
 .cmp-insight{margin-top:13px;padding:10px 12px;background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;font-size:12px;line-height:1.65;color:var(--text)}
 .cmp-insight b{color:var(--navy)}
+.gcmp-seg{display:flex;gap:4px;margin:16px 0 13px;background:#F0F4F9;border-radius:9px;padding:3px;width:fit-content}
+.gcmp-seg button{border:0;background:transparent;color:var(--text-muted);font-family:inherit;font-size:12px;font-weight:700;padding:6px 15px;border-radius:6px;cursor:pointer}
+.gcmp-seg button.on{background:#fff;color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.gcmp-list{display:flex;flex-direction:column;gap:12px}
+.gcmp-item{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center}
+.gcmp-lb{font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+.gcmp-bars{display:flex;flex-direction:column;gap:3px;min-width:0}
+.gcmp-bar{display:flex;align-items:center;gap:8px}
+.gcmp-track{flex:1;height:11px;background:#F0F4F9;border-radius:5px;overflow:hidden;min-width:0}
+.gcmp-track i{display:block;height:100%;border-radius:5px;min-width:2px;transition:width .35s}
+.gcmp-track i.nc{background:#1A7BA3}
+.gcmp-track i.mg{background:#E08A2B}
+.gcmp-num{font-size:11px;font-weight:700;color:var(--navy);width:30px;text-align:right;flex-shrink:0}
+.gcmp-empty{color:var(--text-muted);font-size:12px;padding:10px 2px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 @media (max-width:560px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch} }
 .chip{border:1px solid var(--gray-line);background:#fff;color:var(--text);border-radius:16px;
@@ -836,10 +850,43 @@ function nozzleStats(rows){
   box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
 }
 
-/* ── 미가입 vs N-Care 비교 (VOC/점검) · 현재 필터 반영 ──
+/* ── 미가입 vs N-Care 비교 (VOC/점검 + 유형·대분류·교체품) · 현재 필터 반영 ──
    ncare(가입여부) × gubun(점검 / 그 외=VOC·A/S) 로 두 그룹을 나눠
-   병원 수 · VOC · 점검 · 병원당 평균 · 무상비율을 나란히 비교한다. */
+   지표(병원수·VOC·점검·병원당·무상비율)와 항목별(유형/대분류/교체품)을 비교한다. */
+var CMP_NC='#1A7BA3', CMP_MG='#E08A2B';   /* CVD 검증 통과 2색(N-Care/미가입) */
+var cmpDim='type';                        /* 'type'(유형) | 'cat'(대분류) | 'part'(교체품) */
 function cmpGroup_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? 'nc' : 'mg'; }
+
+/* 항목별(유형/대분류/교체품) 그룹 상위 집계 */
+function cmpBreakData(rows, key){
+  var nc={}, mg={};
+  rows.forEach(function(r){
+    var v=String(r[key]||'').trim();
+    if(!v || v==='없음' || v==='(비어 있음)') return;
+    var tgt=(cmpGroup_(r.ncare)==='nc')?nc:mg;
+    tgt[v]=(tgt[v]||0)+1;
+  });
+  var all={};
+  Object.keys(nc).forEach(function(k){ all[k]=(all[k]||0)+nc[k]; });
+  Object.keys(mg).forEach(function(k){ all[k]=(all[k]||0)+mg[k]; });
+  return Object.keys(all).map(function(k){ return {k:k, nc:nc[k]||0, mg:mg[k]||0, tot:all[k]}; })
+    .sort(function(a,b){ return b.tot-a.tot; }).slice(0,8);
+}
+function renderCmpBreakdown(rows, dim){
+  var wrap=document.getElementById('cCmpBreak'); if(!wrap) return;
+  var items=cmpBreakData(rows, dim);
+  if(!items.length){ wrap.innerHTML='<div class="gcmp-empty">해당 항목 데이터가 없습니다</div>'; return; }
+  var max=Math.max.apply(null, items.map(function(x){ return Math.max(x.nc,x.mg); }))||1;
+  function bar(cls,val){
+    var w=Math.max(2,Math.round(val/max*100));
+    return '<div class="gcmp-bar"><div class="gcmp-track"><i class="'+cls+'" style="width:'+w+'%"></i></div><div class="gcmp-num">'+val+'</div></div>';
+  }
+  wrap.innerHTML='<div class="gcmp-list">'+items.map(function(x){
+    return '<div class="gcmp-item"><div class="gcmp-lb" title="'+esc(x.k)+'">'+esc(x.k)+'</div>'
+      +'<div class="gcmp-bars">'+bar('nc',x.nc)+bar('mg',x.mg)+'</div></div>';
+  }).join('')+'</div>';
+}
+
 function renderMemberCompare(rows){
   var box=document.getElementById('cCmp'); if(!box) return;
   var G={nc:{h:{},voc:0,insp:0,free:0,tot:0}, mg:{h:{},voc:0,insp:0,free:0,tot:0}};
@@ -853,7 +900,7 @@ function renderMemberCompare(rows){
   var ncH=Object.keys(G.nc.h).length, mgH=Object.keys(G.mg.h).length;
   var tot=document.getElementById('tCmp'); if(tot) tot.textContent=rows.length+'건';
   if(!rows.length){ box.innerHTML='<div class="empty">표시할 데이터가 없습니다</div>'; return; }
-  var C_NC='var(--teal)', C_MG='#E08A2B';
+  var C_NC=CMP_NC, C_MG=CMP_MG;
   function avg(a,b){ return b? a/b : 0; }
   function pct(a,b){ return b? a/b*100 : 0; }
   function fmt(n,dec){ return dec? n.toFixed(dec) : String(Math.round(n)); }
@@ -870,7 +917,7 @@ function renderMemberCompare(rows){
     {lbl:'병원당 점검',    nc:avg(G.nc.insp,ncH),mg:avg(G.mg.insp,mgH),d:function(v){return fmt(v,1)+'<small>건/곳</small>';}},
     {lbl:'무상 비율',      nc:pct(G.nc.free,G.nc.tot), mg:pct(G.mg.free,G.mg.tot), d:function(v){return fmt(v)+'<small>%</small>';}}
   ];
-  var body=defs.map(function(x){
+  var tbody=defs.map(function(x){
     var mx=Math.max(x.nc,x.mg);
     return '<tr><td class="lbl">'+x.lbl+'</td>'
       +'<td>'+cell(x.nc,mx,C_NC,x.d(x.nc))+'</td>'
@@ -885,11 +932,24 @@ function renderMemberCompare(rows){
   }
   ins.push('무상 처리 비율 — N-Care <b>'+fmt(pct(G.nc.free,G.nc.tot))+'%</b> vs 미가입 <b>'+fmt(pct(G.mg.free,G.mg.tot))+'%</b>');
   ins.push('전체 대비 VOC·A/S 비중 — N-Care <b>'+fmt(pct(G.nc.voc,G.nc.tot))+'%</b> vs 미가입 <b>'+fmt(pct(G.mg.voc,G.mg.tot))+'%</b>');
+  var seg=[['type','유형'],['cat','대분류'],['part','교체품']].map(function(s){
+    return '<button type="button" data-dim="'+s[0]+'"'+(cmpDim===s[0]?' class="on"':'')+'>'+s[1]+'</button>';
+  }).join('');
   box.innerHTML=
     '<div class="cmp-legend"><span><i style="background:'+C_NC+'"></i>N-Care 가입</span>'
       +'<span><i style="background:'+C_MG+'"></i>미가입</span></div>'
-    +'<table class="cmp-table"><thead><tr><th>지표</th><th>N-Care</th><th>미가입</th></tr></thead><tbody>'+body+'</tbody></table>'
-    +'<div class="cmp-insight">'+ins.join('<br>')+'</div>';
+    +'<table class="cmp-table"><thead><tr><th>지표</th><th>N-Care</th><th>미가입</th></tr></thead><tbody>'+tbody+'</tbody></table>'
+    +'<div class="cmp-insight">'+ins.join('<br>')+'</div>'
+    +'<div class="gcmp-seg" id="cCmpSeg">'+seg+'</div>'
+    +'<div id="cCmpBreak"></div>';
+  renderCmpBreakdown(rows, cmpDim);
+  var segEl=document.getElementById('cCmpSeg');
+  if(segEl) segEl.addEventListener('click', function(e){
+    var b=e.target.closest('button[data-dim]'); if(!b) return;
+    cmpDim=b.getAttribute('data-dim');
+    segEl.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x===b); });
+    renderCmpBreakdown(rows, cmpDim);
+  });
 }
 
 /* ══════════ 주간업무보고 PPT 생성 ══════════ */
