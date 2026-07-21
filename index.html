@@ -246,6 +246,11 @@
       <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
+    <button type="button" id="appBtnHospitalPc" data-toolid="hospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">🖥️</span>
+      <span style="flex:1;"><span class="tool-name">병원 데이터센터 (PC)</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;">넓은 화면용 · 표/지도/상세 2-pane</span></span>
+      <span style="color:#E0C088;">🔒→</span>
+    </button>
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
     <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
@@ -264,6 +269,11 @@
     <button type="button" id="appBtnDashboard" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">📊</span>
       <span style="flex:1;"><span class="tool-name">현장 처리 대시보드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">집계·필터·주간보고 PPT · Lv.3</span></span>
+      <span style="color:#9FE0CC;">🔐→</span>
+    </button>
+    <button type="button" id="appBtnDashboardPc" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+      <span style="font-size:24px;">🖥️</span>
+      <span style="flex:1;"><span class="tool-name">현장 처리 대시보드 (PC)</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">넓은 화면용 · 미가입vsN-Care 비교 · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
 
@@ -1855,12 +1865,17 @@ document.getElementById('appBtnWeekly').addEventListener('click', function(){ lo
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
+document.getElementById('appBtnHospitalPc').addEventListener('click', function(){ location.href='hospital-pc.html'; });
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
   location.href='dashboard.html';
+});
+document.getElementById('appBtnDashboardPc').addEventListener('click', function(){
+  if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
+  location.href='dashboard-pc.html';
 });
 
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
