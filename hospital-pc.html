@@ -1075,7 +1075,7 @@ function loadKakao(cb){
   if(kakaoLoaded){ cb(); return; }
   if(!KAKAO_JS_KEY || KAKAO_JS_KEY.indexOf('__')===0){ cb(false); return; }
   const s=document.createElement('script');
-  s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+KAKAO_JS_KEY+'&autoload=false&libraries=services';
+  s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+KAKAO_JS_KEY+'&autoload=false&libraries=services,clusterer';
   s.onload=()=>{ kakao.maps.load(()=>{ kakaoLoaded=true; cb(); }); };
   s.onerror=()=>cb(false);
   document.head.appendChild(s);
@@ -2150,7 +2150,7 @@ var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
 var pcList = [];
-var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false, pcMapDrawnKey='';
+var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false, pcMapDrawnKey='', pcMapClusterer=null;
 var pcFocusIW=null, pcMapTimer=null;  // 지도 위 포커스 InfoWindow(이력 보기 버튼 포함)
 var pcMapState=null, pcRestoreView=false;  // 상세→지도 복귀 시 당시 위치/줌 유지용
 // 지도 상태(중심·줌) 저장 — 상세 진입 직전 호출
@@ -2595,16 +2595,36 @@ function pcShowMap(list){
     var restore=pcRestoreView && pcMapState; pcRestoreView=false;
     if(mapKey===pcMapDrawnKey && pcMapMarkers.length){ if(restore) pcApplyMapState(); return; }
     pcMapDrawnKey=mapKey;
+    if(pcMapClusterer){ pcMapClusterer.clear(); }
     pcMapMarkers.forEach(function(m){m.setMap(null);}); pcMapMarkers=[]; pcMarkerByName={};
     var bounds=new kakao.maps.LatLngBounds(), any=false;
+    var clustered=[];
     list.forEach(function(h){
       if(h.lat==null||h.lng==null) return;
       var pos=new kakao.maps.LatLng(h.lat,h.lng);
       var mk=new kakao.maps.Marker({position:pos, title:h.n});
-      mk.setMap(pcMapObj); pcMapMarkers.push(mk); pcMarkerByName[h.n]=mk;
+      pcMapMarkers.push(mk); pcMarkerByName[h.n]=mk;
       kakao.maps.event.addListener(mk,'click',function(){ pcSelect(h.n); });
-      bounds.extend(pos); any=true;
+      clustered.push(mk); bounds.extend(pos); any=true;
     });
+    // [B2] 마커 클러스터링: 400+ 마커를 줌 레벨별로 묶어 가독성·성능 개선.
+    // 라이브러리 로드 실패 시 일반 마커로 폴백.
+    if(typeof kakao.maps.MarkerClusterer==='function'){
+      if(!pcMapClusterer){
+        pcMapClusterer=new kakao.maps.MarkerClusterer({
+          map:pcMapObj, averageCenter:true, minLevel:7, gridSize:70, disableClickZoom:false,
+          styles:[
+            {width:'34px',height:'34px',background:'rgba(27,47,94,.88)',color:'#fff',borderRadius:'17px',textAlign:'center',lineHeight:'34px',fontSize:'12px',fontWeight:'800',border:'2px solid #fff',boxShadow:'0 2px 8px rgba(0,0,0,.3)'},
+            {width:'42px',height:'42px',background:'rgba(46,125,158,.9)',color:'#fff',borderRadius:'21px',textAlign:'center',lineHeight:'42px',fontSize:'13px',fontWeight:'800',border:'2px solid #fff',boxShadow:'0 2px 10px rgba(0,0,0,.32)'},
+            {width:'52px',height:'52px',background:'rgba(192,57,43,.9)',color:'#fff',borderRadius:'26px',textAlign:'center',lineHeight:'52px',fontSize:'14px',fontWeight:'800',border:'2px solid #fff',boxShadow:'0 3px 12px rgba(0,0,0,.35)'}
+          ],
+          calculator:[50,200]
+        });
+      }
+      pcMapClusterer.addMarkers(clustered);
+    } else {
+      clustered.forEach(function(m){ m.setMap(pcMapObj); });
+    }
     // 오늘 완료(현장) 병원 → 초록 마커 + FSE 라벨로 강조
     pcRecentOverlays.forEach(function(o){o.setMap(null);}); pcRecentOverlays=[];
     pcTodayList().forEach(function(r){
