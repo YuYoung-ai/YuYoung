@@ -257,9 +257,12 @@
 
   /* 통계 */
   .stats{display:flex;gap:8px;margin-bottom:12px;}
-  .stats .s{flex:1;background:var(--surface);border:1px solid var(--gray-line);border-radius:10px;padding:9px 6px;text-align:center;}
-  .stats .num{font-size:18px;font-weight:800;}
-  .stats .lbl{font-size:10px;color:var(--text-muted);margin-top:1px;}
+  .stats .s{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 6px;text-align:center;font-family:inherit;transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease);}
+  #stats .s{cursor:pointer;}
+  #stats .s:hover{border-color:var(--teal);}
+  #stats .s.on{border-color:var(--navy);box-shadow:var(--sh-ring);}
+  .stats .num{font-size:19px;font-weight:800;line-height:1.1;}
+  .stats .lbl{font-size:10px;color:var(--text-muted);margin-top:2px;}
 
   .result-count{font-size:12px;color:var(--text-muted);margin-bottom:10px;padding-left:2px;}
   .result-count b{color:var(--navy);}
@@ -864,11 +867,18 @@ function updateStats(){
   document.getElementById('cnt-all').textContent=base.length;
   document.getElementById('cnt-ncare').textContent=base.filter(isNcare).length;
   document.getElementById('cnt-due').textContent=base.filter(isDue).length;
+  const on=f=>curFilter===f?' on':'';
   document.getElementById('stats').innerHTML=
-    '<div class="s"><div class="num" style="color:var(--navy)">'+total+'</div><div class="lbl">'+t('stTotal')+'</div></div>'+
-    '<div class="s"><div class="num" style="color:var(--teal)">'+ncare+'</div><div class="lbl">'+t('stNcare')+'</div></div>'+
-    '<div class="s"><div class="num" style="color:var(--amber)">'+due+'</div><div class="lbl">'+t('stDue')+'</div></div>';
+    '<button type="button" class="s'+on('all')+'" data-sfilter="all"><div class="num" style="color:var(--navy)">'+total+'</div><div class="lbl">'+t('stTotal')+'</div></button>'+
+    '<button type="button" class="s'+on('ncare')+'" data-sfilter="ncare"><div class="num" style="color:var(--teal)">'+ncare+'</div><div class="lbl">'+t('stNcare')+'</div></button>'+
+    '<button type="button" class="s'+on('due')+'" data-sfilter="due"><div class="num" style="color:var(--warn)">'+due+'</div><div class="lbl">'+t('stDue')+'</div></button>';
 }
+// 스탯 타일 클릭 = 해당 필터 적용 (칩과 동기화)
+document.addEventListener('click', function(e){
+  var s=e.target.closest('#stats .s[data-sfilter]'); if(!s) return;
+  var f=s.getAttribute('data-sfilter');
+  var chip=document.querySelector('.chip[data-filter="'+f+'"]'); if(chip) chip.click();
+});
 
 // 필터 변경 시 칩/드롭다운 카운트 재계산
 function updateFilterCounts(){ populateFilters(); updateStats(); }
