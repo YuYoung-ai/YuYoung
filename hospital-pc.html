@@ -157,8 +157,25 @@
   #filterRail{display:contents;}
   #filterSticky{position:sticky;top:var(--hdr-h,56px);z-index:30;background:var(--gray-bg);padding-top:8px;margin-bottom:2px;}
   #filterSticky::after{content:'';position:absolute;left:0;right:0;bottom:-8px;height:8px;background:linear-gradient(rgba(245,247,250,.9),rgba(245,247,250,0));pointer-events:none;}
-  body.mode-window #viewList{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px;align-items:start;}
+  body.mode-window #viewList{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px;align-items:start;transition:grid-template-columns .18s ease;}
+  /* 필터 폭 3단계: 숨김 / 기본(250) / 확장(440) */
+  body.mode-window.filt-wide #viewList{grid-template-columns:440px minmax(0,1fr);}
+  body.mode-window.filt-hide #viewList{grid-template-columns:44px minmax(0,1fr);}
   body.mode-window #filterRail{grid-column:1;position:sticky;top:calc(var(--hdr-h,56px) + 10px);align-self:start;max-height:calc(100vh - var(--hdr-h,56px) - 24px);overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;}
+  /* 필터 폭 토글 버튼 (필터 상단, 스크롤해도 고정) */
+  #filtToggle{display:none;}
+  body.mode-window #filtToggle{display:flex;position:sticky;top:0;z-index:6;justify-content:flex-end;padding:2px 0 4px;background:var(--gray-bg);}
+  #filtToggle button{border:1px solid var(--gray-line);background:#fff;color:var(--navy);font-size:11px;font-weight:800;padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap;line-height:1.1;box-shadow:0 1px 4px rgba(27,47,94,.08);}
+  #filtToggle button:hover{border-color:var(--teal);color:var(--teal);}
+  body.dark #filtToggle{background:var(--gray-bg);}
+  body.dark #filtToggle button{background:var(--surface);color:var(--navy);}
+  /* 숨김 상태: 토글만 남기고 나머지 숨김 + 세로 라벨 */
+  body.mode-window.filt-hide #filterRail{overflow:hidden;padding-right:0;}
+  body.mode-window.filt-hide #filterRail>*:not(#filtToggle){display:none !important;}
+  body.mode-window.filt-hide #filtToggle{justify-content:center;}
+  body.mode-window.filt-hide #filtToggle button{writing-mode:vertical-rl;padding:9px 5px;letter-spacing:1px;}
+  /* 넓게: 주변 이동 소요시간·오늘 완료 병원명 풀네임 표기(생략 없이 줄바꿈) */
+  body.mode-window.filt-wide .prc-nm{white-space:normal;overflow:visible;text-overflow:clip;}
   body.mode-window #filterSticky{position:static;top:auto;background:transparent;padding-top:0;z-index:auto;}
   body.mode-window #filterSticky::after{display:none;}
   body.mode-window #viewList>.result-count,
@@ -477,6 +494,7 @@
   <!-- ===== 조회 탭 ===== -->
   <div id="viewList">
    <div id="filterRail">
+    <div id="filtToggle"><button id="filtToggleBtn" type="button" title="필터 폭: 숨김 → 기본 → 넓게">넓게 ▷</button></div>
     <div class="search-wrap">
       <span class="ico">🔍</span>
       <input type="text" id="searchInput" placeholder="병원명 검색..." autocomplete="off">
@@ -745,6 +763,29 @@ function bazToast(msg){
     var finish=function(){ rb.classList.remove('spin'); bazToast('최신 데이터로 갱신했습니다'); };
     if(typeof window.bazRefreshAll==='function'){ window.bazRefreshAll(finish); }
     else { setTimeout(finish, 600); }
+  });
+})();
+
+// ===== 필터 폭 3단계 (숨김 → 기본 → 넓게) =====
+(function(){
+  var KEY='baz_filt_stage';
+  var STAGES=['hide','base','wide'];
+  var LABEL={hide:'필터', base:'넓게 ▷', wide:'◁ 접기'};
+  var TIP={hide:'클릭: 필터 열기 (기본)', base:'클릭: 넓게 펼치기', wide:'클릭: 필터 숨기기'};
+  var cur=localStorage.getItem(KEY); if(STAGES.indexOf(cur)<0) cur='base';
+  function apply(stage){
+    document.body.classList.remove('filt-hide','filt-base','filt-wide');
+    document.body.classList.add('filt-'+stage);
+    var b=document.getElementById('filtToggleBtn');
+    if(b){ b.textContent=LABEL[stage]; b.title=TIP[stage]; }
+    try{ localStorage.setItem(KEY, stage); }catch(e){}
+    // 지도 폭 변경 반영
+    try{ if(typeof pcMapObj!=='undefined' && pcMapObj && pcMapObj.relayout) setTimeout(function(){ pcMapObj.relayout(); }, 220); }catch(e){}
+  }
+  apply(cur);
+  var btn=document.getElementById('filtToggleBtn');
+  if(btn) btn.addEventListener('click', function(){
+    cur=STAGES[(STAGES.indexOf(cur)+1)%STAGES.length]; apply(cur);
   });
 })();
 
