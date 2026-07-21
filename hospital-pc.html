@@ -329,6 +329,18 @@
   .bar-label{font-size:12px;color:var(--text);width:64px;flex:0 0 auto;}
   .bar-track{flex:1;height:22px;background:var(--gray-bg);border-radius:6px;overflow:hidden;position:relative;}
   .bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:11px;font-weight:700;min-width:28px;}
+  /* N-CARE 점검 운영률 게이지 */
+  .oprate{display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+  .oprate-ring{position:relative;width:104px;height:104px;flex:0 0 auto;}
+  .oprate-ring svg circle{transition:stroke-dasharray var(--dur) var(--ease);}
+  .oprate-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+  .oprate-pct span{font-size:13px;font-weight:700;margin-left:1px;margin-top:6px;}
+  .oprate-info{min-width:0;}
+  .oprate-main{font-size:14px;font-weight:700;color:var(--text);}
+  .oprate-main b{font-weight:800;}
+  .oprate-main span{color:var(--text-muted);font-weight:600;font-size:12.5px;}
+  .oprate-sub{font-size:12px;color:var(--text-muted);margin-top:5px;}
+  .oprate-sub b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums;}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .legend{flex:1;}
   .legend-item{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:7px;}
@@ -1256,12 +1268,36 @@ function renderDash(){
     salesBars+='<div class="bar-row"><div class="bar-label">'+escapeHtml(s)+'</div><div class="bar-track"><div class="bar-fill" style="width:'+Math.max(w,8)+'%;background:var(--purple)">'+v+'</div></div></div>';
   });
 
+  // N-CARE 점검 운영률 = 정상 상태 병원 / 전체 N-CARE (상태 필드 기준)
+  const opTotal=ncare.length, opNormal=stCount['정상']||0;
+  const opRate=opTotal?Math.round(opNormal/opTotal*100):0;
+  const opDue=opTotal-opNormal;
+  const opUrgent=(stCount['경고']||0)+(stCount['미점검']||0);   // 상태 기준 시급(경고·미점검)
+  const opR=44, opC=2*Math.PI*opR, opDash=(opRate/100)*opC;
+  const opColor=opRate>=80?'var(--ok)':opRate>=60?'var(--warn)':'var(--danger)';
+  const opCard=
+    '<div class="dash-card"><div class="dash-title">N-CARE 점검 운영률</div>'+
+      '<div class="oprate">'+
+        '<div class="oprate-ring">'+
+          '<svg viewBox="0 0 104 104" width="104" height="104" role="img" aria-label="점검 운영률 '+opRate+'퍼센트">'+
+            '<circle cx="52" cy="52" r="'+opR+'" fill="none" style="stroke:var(--surface-2)" stroke-width="11"/>'+
+            '<circle cx="52" cy="52" r="'+opR+'" fill="none" style="stroke:'+opColor+'" stroke-width="11" stroke-linecap="round" stroke-dasharray="'+opDash.toFixed(1)+' '+(opC-opDash).toFixed(1)+'" transform="rotate(-90 52 52)"/>'+
+          '</svg>'+
+          '<div class="oprate-pct" style="color:'+opColor+'">'+opRate+'<span>%</span></div>'+
+        '</div>'+
+        '<div class="oprate-info">'+
+          '<div class="oprate-main">정상 운영 <b style="color:var(--ok)">'+opNormal+'</b>곳 <span>/ 전체 '+opTotal+'곳</span></div>'+
+          '<div class="oprate-sub">점검 필요 <b>'+opDue+'</b>곳 · 경고·미점검 <b>'+opUrgent+'</b>곳</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
   document.getElementById('viewDash').innerHTML=
     '<div class="stats" style="margin-bottom:14px;">'+
       '<div class="s"><div class="num" style="color:var(--teal)">'+ncare.length+'</div><div class="lbl">N-CARE</div></div>'+
       '<div class="s"><div class="num" style="color:var(--amber)">'+(ages.target+ages.rec+ages.warn+ages.none)+'</div><div class="lbl">'+t('stDue')+'</div></div>'+
       '<div class="s"><div class="num" style="color:var(--red)">'+(ages.warn+ages.none)+'</div><div class="lbl">'+t('overDue').replace('⚠ ','').replace('⚠','')+'</div></div>'+
     '</div>'+
+    opCard+
     dashTrendCard()+
     '<div class="dash-card"><div class="dash-title">'+t('dashInspTitle')+'</div>'+
       bar(t('bNormal'),ages.normal,'var(--ok)')+
