@@ -425,6 +425,13 @@
   .prc-item{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:8px;cursor:pointer;transition:background .12s;}
   .prc-item:hover{background:var(--teal-soft);}
   .prc-rank{flex:0 0 auto;width:16px;height:16px;border-radius:50%;background:var(--navy);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  /* 정렬 토글 */
+  .prc-sort{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--r-sm);padding:2px;margin-bottom:10px;}
+  .prc-sort button{flex:1;border:0;background:transparent;color:var(--text-muted);font-size:10.5px;font-weight:700;padding:5px 6px;border-radius:5px;cursor:pointer;font-family:inherit;line-height:1.1;}
+  .prc-sort button.on{background:var(--surface);color:var(--navy);box-shadow:var(--sh-1);}
+  /* 후보 심각도 도트 (상태 언어 재사용) */
+  .prc-sev{flex:0 0 auto;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 2px var(--surface);}
+  .prc-item.due .prc-nm{font-weight:800;}
   .prc-nm{flex:1;min-width:0;font-size:11.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .prc-dt{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--teal);white-space:nowrap;}
   .prc-prog{flex:0 0 auto;border:1px solid var(--gray-line);background:transparent;color:var(--text-muted);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:6px;cursor:pointer;font-family:inherit;line-height:1.3;white-space:nowrap;}
@@ -2220,6 +2227,8 @@ function pcEnsureDOM(){
   if(fr && !document.getElementById('pcRouteCard')){
     var rtc=document.createElement('div'); rtc.id='pcRouteCard'; fr.appendChild(rtc);
     rtc.addEventListener('click', function(e){
+      var so=e.target.closest('.prc-sort button[data-rsort]');
+      if(so){ var v=so.getAttribute('data-rsort'); if(v!==pcRouteSort){ pcRouteSort=v; try{ localStorage.setItem('baz_pc_routesort',v); }catch(_){} pcRenderRouteCard(); } return; }
       var pb=e.target.closest('.prc-prog');
       if(pb){ pcToggleInProgress(pb.getAttribute('data-fse'), pb.getAttribute('data-hn')); return; }
       var pc=e.target.closest('.prc-prog-cur');
@@ -2387,7 +2396,16 @@ function pcRenderRecentCard(){
 // ===== 주변 병원 이동 소요시간 카드 =====
 // 오늘 완료한 FSE 담당자별로, 가장 최근 처리 병원 위치 기준 가까운 병원 최대 3곳 + 예상 이동시간
 function pcEstMin(km){ return Math.max(1, Math.round(km * 2.6)); }  // 도로계수 1.3 · 평균 30km/h 추정
-function pcNearestHospitals(from, n){
+// 정렬 모드: 'near'(가까운 순) | 'due'(점검필요 우선). localStorage 저장.
+var pcRouteSort = (function(){ var v=localStorage.getItem('baz_pc_routesort'); return (v==='due'||v==='near')?v:'near'; })();
+// 점검 심각도 랭크(높을수록 시급) — N-CARE 기준
+function pcSevRank(h){ var m={'미점검':4,'경고':3,'권고':2,'점검대상':1}; return m[h.st]||0; }
+function pcSevColor(h){
+  if(!isNcare(h)) return 'var(--neutral)';
+  return {'정상':'var(--ok)','점검대상':'var(--teal)','권고':'var(--warn)','경고':'var(--danger)','미점검':'var(--neutral)'}[h.st]||'var(--neutral)';
+}
+function pcNearestHospitals(from, n, mode){
+  mode = mode || 'near';
   var out=[];
   for(var i=0;i<HOSPITALS.length;i++){
     var h=HOSPITALS[i];
@@ -2397,12 +2415,24 @@ function pcNearestHospitals(from, n){
     if(!isNcare(h)) continue;   // N-CARE 가입 병원만 (미가입 제외)
     out.push({h:h, d:distKm(from.lat,from.lng,h.lat,h.lng)});
   }
-  out.sort(function(a,b){ return a.d-b.d; });
+  out.sort(function(a,b){
+    if(mode==='due'){
+      var da=isDue(a.h)?1:0, db=isDue(b.h)?1:0;
+      if(da!==db) return db-da;                       // 점검필요 병원 먼저
+      var sa=pcSevRank(a.h), sb=pcSevRank(b.h);
+      if(sa!==sb) return sb-sa;                        // 심각도 높은 순
+    }
+    return a.d-b.d;                                    // 거리 가까운 순(공통 tiebreak)
+  });
   return out.slice(0,n);
 }
 function pcRenderRouteCard(){
   var box=document.getElementById('pcRouteCard'); if(!box) return;
-  var head='<div class="prc-head">🚗 주변 이동 소요시간 <span class="prc-sub">오늘 기준</span></div>';
+  var head='<div class="prc-head">🚗 주변 이동 소요시간 <span class="prc-sub">오늘 기준</span></div>'+
+    '<div class="prc-sort" role="group" aria-label="정렬">'+
+      '<button type="button" data-rsort="near"'+(pcRouteSort==='near'?' class="on"':'')+'>가까운 순</button>'+
+      '<button type="button" data-rsort="due"'+(pcRouteSort==='due'?' class="on"':'')+'>점검필요 우선</button>'+
+    '</div>';
   var today=pcTodayList();
   // FSE 담당자별 '가장 최근' 오늘 완료 병원.
   // handover는 시트 하단에 append(오래된→최신)되어 pcTodayList도 오래된→최신 순 →
@@ -2426,11 +2456,12 @@ function pcRenderRouteCard(){
     var fseAttr=escapeHtml(fse);
     var body;
     if(cur.from){
-      var near=pcNearestHospitals(cur.from, 3);
+      var near=pcNearestHospitals(cur.from, 3, pcRouteSort);
       body = near.length ? near.map(function(x,i){
         var on=(prog===x.h.n);
-        return '<div class="prc-item'+(on?' prog':'')+'" data-hn="'+escapeHtml(x.h.n)+'">'+
-          '<span class="prc-rank">'+(i+1)+'</span>'+
+        var dueCls=isDue(x.h)?' due':'';
+        return '<div class="prc-item'+(on?' prog':'')+dueCls+'" data-hn="'+escapeHtml(x.h.n)+'">'+
+          '<span class="prc-sev" style="background:'+pcSevColor(x.h)+'" title="'+escapeHtml(x.h.st||'')+'"></span>'+
           '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
           '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
           '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
