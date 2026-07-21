@@ -344,6 +344,13 @@
   .prc-rank{flex:0 0 auto;width:16px;height:16px;border-radius:50%;background:var(--navy);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;}
   .prc-nm{flex:1;min-width:0;font-size:11.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .prc-dt{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--teal);white-space:nowrap;}
+  .prc-prog{flex:0 0 auto;border:1px solid var(--gray-line);background:transparent;color:var(--text-muted);font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:6px;cursor:pointer;font-family:inherit;line-height:1.3;white-space:nowrap;}
+  .prc-prog:hover{border-color:var(--teal);color:var(--teal);}
+  .prc-item.prog{background:rgba(46,125,158,.12);}
+  .prc-item.prog .prc-nm{color:var(--teal);}
+  .prc-item.prog .prc-prog{background:var(--teal);border-color:var(--teal);color:#fff;}
+  .prc-prog-cur{font-size:10.5px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:4px 9px;margin-bottom:7px;cursor:pointer;display:inline-block;}
+  body.dark .prc-item.prog{background:rgba(84,170,208,.16);}
 
   /* 지도: 검색 반경 5km 주변 병원 마커 */
   .pc-nmk{width:12px;height:12px;border-radius:50%;background:rgba(46,125,158,.6);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer;}
@@ -1958,6 +1965,8 @@ var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' 
 if(pcListView==='recent') pcListView='cards';   // 구버전 값 정리(최근완료는 좌측 카드로 이동)
 var pcRecent=[], pcRecentState='idle', pcRecentRequested=false, pcRecentOverlays=[], pcRecentByIdx={};
 var pcNearbyOverlays=[];   // 검색 반경 5km 주변 병원 마커
+// 담당자별 '진행중' 병원 (fse → 병원명). 오늘 완료 후 이동/처리 진행상태 표시용
+var pcInProgress=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_inprogress')||'{}')||{}; }catch(e){ return {}; } })();
 var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
@@ -2025,6 +2034,10 @@ function pcEnsureDOM(){
   if(fr && !document.getElementById('pcRouteCard')){
     var rtc=document.createElement('div'); rtc.id='pcRouteCard'; fr.appendChild(rtc);
     rtc.addEventListener('click', function(e){
+      var pb=e.target.closest('.prc-prog');
+      if(pb){ pcToggleInProgress(pb.getAttribute('data-fse'), pb.getAttribute('data-hn')); return; }
+      var pc=e.target.closest('.prc-prog-cur');
+      if(pc){ pcFocusHospOnMap(pc.getAttribute('data-hn'), null); return; }
       var it=e.target.closest('.prc-item'); if(!it) return;
       pcFocusHospOnMap(it.getAttribute('data-hn'), it);
     });
@@ -2178,6 +2191,7 @@ function pcNearestHospitals(from, n){
     if(h.lat==null||h.lng==null) continue;
     if(h.n===from.n) continue;
     if(/^데모/.test(h.n)) continue;
+    if(!isNcare(h)) continue;   // N-CARE 가입 병원만 (미가입 제외)
     out.push({h:h, d:distKm(from.lat,from.lng,h.lat,h.lng)});
   }
   out.sort(function(a,b){ return a.d-b.d; });
@@ -2201,18 +2215,36 @@ function pcRenderRouteCard(){
   }
   box.innerHTML=head+fseList.map(function(f){
     var near=pcNearestHospitals(f.from, 3);
-    var items=near.map(function(x,i){
-      return '<div class="prc-item" data-hn="'+escapeHtml(x.h.n)+'">'+
+    var prog=pcInProgress[f.fse]||'';   // 이 담당자의 진행중 병원
+    var fseAttr=escapeHtml(f.fse);
+    var items=near.length ? near.map(function(x,i){
+      var on=(prog===x.h.n);
+      return '<div class="prc-item'+(on?' prog':'')+'" data-hn="'+escapeHtml(x.h.n)+'">'+
         '<span class="prc-rank">'+(i+1)+'</span>'+
         '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
         '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
+        '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
       '</div>';
-    }).join('');
+    }).join('') : '<div class="prc-empty" style="padding:2px 6px;">주변 N-CARE 병원 없음</div>';
+    var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'</div>' : '';
     return '<div class="prc-fse">'+
       '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(f.fse)+'<span class="prc-cur">현재 '+escapeHtml(f.from.n)+'</span></div>'+
+      progLine+
       items+
     '</div>';
   }).join('');
+}
+// 담당자별 진행중 병원 토글 (카드에서 주변 병원 선택 → 진행상태)
+function pcToggleInProgress(fse, hosp){
+  if(!fse||!hosp) return;
+  if(pcInProgress[fse]===hosp) delete pcInProgress[fse];
+  else pcInProgress[fse]=hosp;
+  try{ localStorage.setItem('baz_pc_inprogress', JSON.stringify(pcInProgress)); }catch(e){}
+  pcRenderRouteCard();
+  if(pcInProgress[fse]===hosp){
+    try{ if(typeof bazToast==='function') bazToast('진행중: '+hosp+' ('+fse+')'); }catch(e){}
+    try{ pcFocusHospOnMap(hosp, null); }catch(e){}
+  }
 }
 // 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
 function pcFocusHospOnMap(name, itemEl){
