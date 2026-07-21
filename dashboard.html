@@ -77,6 +77,21 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .nck-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .nck-row .gd{color:var(--teal);font-size:11px;flex-shrink:0}
 .nck-row .dy{color:var(--text-muted);font-size:11px;white-space:nowrap;flex-shrink:0}
+.cmp-legend{display:flex;gap:14px;margin-bottom:11px;font-size:11.5px;color:var(--text-muted)}
+.cmp-legend span{display:inline-flex;align-items:center;gap:5px}
+.cmp-legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.cmp-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.cmp-table th{font-size:11px;color:var(--text-muted);font-weight:700;padding:2px 8px 8px;text-align:right}
+.cmp-table th:first-child{text-align:left}
+.cmp-table td{padding:8px;border-top:1px solid #F0F3F8;vertical-align:middle}
+.cmp-table td.lbl{color:var(--text);font-weight:600;white-space:nowrap}
+.cmp-cell{display:flex;flex-direction:column;gap:4px;min-width:92px}
+.cmp-cell .v{font-size:14px;font-weight:800;color:var(--navy);text-align:right}
+.cmp-cell .v small{font-size:10.5px;font-weight:600;color:var(--text-muted);margin-left:2px}
+.cmp-bar{height:7px;background:#F0F4F9;border-radius:4px;overflow:hidden}
+.cmp-bar i{display:block;height:100%;border-radius:4px;transition:width .3s}
+.cmp-insight{margin-top:13px;padding:10px 12px;background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:9px;font-size:12px;line-height:1.65;color:var(--text)}
+.cmp-insight b{color:var(--navy)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 @media (max-width:560px){ .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch} }
 .chip{border:1px solid var(--gray-line);background:#fff;color:var(--text);border-radius:16px;
@@ -311,6 +326,12 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
     <div class="card">
       <h3>🩺 N-Care 정기점검 현황 <span class="tot" id="tNck"></span></h3>
       <div id="cNck"></div>
+    </div>
+
+    <!-- 미가입 vs N-Care 비교 (VOC/점검) · 현재 필터 반영 -->
+    <div class="card">
+      <h3>⚖️ 미가입 vs N-Care 비교 (VOC/점검) <span class="tot" id="tCmp"></span></h3>
+      <div id="cCmp"></div>
     </div>
 
     <div class="status" id="statusLine"></div>
@@ -778,6 +799,7 @@ function apply(){
   hbars('cHosp', count(rows,'hosp'), 10, 'hosp', 'tHosp');
   hbars('cFse',  count(rows,'fse'),  8,  'fse',  'tFse');
   nozzleStats(rows);
+  renderMemberCompare(rows);
   /* 필터 상태 */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
@@ -812,6 +834,62 @@ function nozzleStats(rows){
   var j=st.nozzle.joined, n=st.nozzle.nonJoined;
   document.getElementById('tNoz').textContent=(j.reuse+n.reuse)+' 재사용';
   box.innerHTML='<div class="nz-wrap">'+nozGroupHtml_('N-care', j)+nozGroupHtml_('미가입', n)+'</div>';
+}
+
+/* ── 미가입 vs N-Care 비교 (VOC/점검) · 현재 필터 반영 ──
+   ncare(가입여부) × gubun(점검 / 그 외=VOC·A/S) 로 두 그룹을 나눠
+   병원 수 · VOC · 점검 · 병원당 평균 · 무상비율을 나란히 비교한다. */
+function cmpGroup_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? 'nc' : 'mg'; }
+function renderMemberCompare(rows){
+  var box=document.getElementById('cCmp'); if(!box) return;
+  var G={nc:{h:{},voc:0,insp:0,free:0,tot:0}, mg:{h:{},voc:0,insp:0,free:0,tot:0}};
+  rows.forEach(function(r){
+    var g=G[cmpGroup_(r.ncare)];
+    if(r.hosp) g.h[nkey(r.hosp)]=1;
+    if(String(r.gubun||'').trim()==='점검') g.insp++; else g.voc++;
+    g.tot++;
+    if(/무상/.test(String(r.paid||''))) g.free++;
+  });
+  var ncH=Object.keys(G.nc.h).length, mgH=Object.keys(G.mg.h).length;
+  var tot=document.getElementById('tCmp'); if(tot) tot.textContent=rows.length+'건';
+  if(!rows.length){ box.innerHTML='<div class="empty">표시할 데이터가 없습니다</div>'; return; }
+  var C_NC='var(--teal)', C_MG='#E08A2B';
+  function avg(a,b){ return b? a/b : 0; }
+  function pct(a,b){ return b? a/b*100 : 0; }
+  function fmt(n,dec){ return dec? n.toFixed(dec) : String(Math.round(n)); }
+  function cell(val,max,color,disp){
+    var w=max>0?Math.max(2,Math.round(val/max*100)):0;
+    return '<div class="cmp-cell"><div class="v">'+disp+'</div>'
+      +'<div class="cmp-bar"><i style="width:'+w+'%;background:'+color+'"></i></div></div>';
+  }
+  var defs=[
+    {lbl:'병원 수',        nc:ncH,               mg:mgH,               d:function(v){return fmt(v)+'<small>곳</small>';}},
+    {lbl:'VOC · A/S 건수', nc:G.nc.voc,          mg:G.mg.voc,          d:function(v){return fmt(v)+'<small>건</small>';}},
+    {lbl:'점검 건수',      nc:G.nc.insp,         mg:G.mg.insp,         d:function(v){return fmt(v)+'<small>건</small>';}},
+    {lbl:'병원당 VOC·A/S', nc:avg(G.nc.voc,ncH), mg:avg(G.mg.voc,mgH), d:function(v){return fmt(v,1)+'<small>건/곳</small>';}},
+    {lbl:'병원당 점검',    nc:avg(G.nc.insp,ncH),mg:avg(G.mg.insp,mgH),d:function(v){return fmt(v,1)+'<small>건/곳</small>';}},
+    {lbl:'무상 비율',      nc:pct(G.nc.free,G.nc.tot), mg:pct(G.mg.free,G.mg.tot), d:function(v){return fmt(v)+'<small>%</small>';}}
+  ];
+  var body=defs.map(function(x){
+    var mx=Math.max(x.nc,x.mg);
+    return '<tr><td class="lbl">'+x.lbl+'</td>'
+      +'<td>'+cell(x.nc,mx,C_NC,x.d(x.nc))+'</td>'
+      +'<td>'+cell(x.mg,mx,C_MG,x.d(x.mg))+'</td></tr>';
+  }).join('');
+  /* 자동 요약 */
+  var ins=[];
+  var ncInsPer=avg(G.nc.insp,ncH), mgInsPer=avg(G.mg.insp,mgH);
+  if(ncH && ncInsPer>mgInsPer){
+    ins.push('N-Care 병원은 <b>병원당 점검</b> '+ncInsPer.toFixed(1)+'건으로 미가입('+mgInsPer.toFixed(1)+'건)보다 '
+      +(mgInsPer>0?(ncInsPer/mgInsPer).toFixed(1)+'배 ':'')+'정기점검이 활발합니다.');
+  }
+  ins.push('무상 처리 비율 — N-Care <b>'+fmt(pct(G.nc.free,G.nc.tot))+'%</b> vs 미가입 <b>'+fmt(pct(G.mg.free,G.mg.tot))+'%</b>');
+  ins.push('전체 대비 VOC·A/S 비중 — N-Care <b>'+fmt(pct(G.nc.voc,G.nc.tot))+'%</b> vs 미가입 <b>'+fmt(pct(G.mg.voc,G.mg.tot))+'%</b>');
+  box.innerHTML=
+    '<div class="cmp-legend"><span><i style="background:'+C_NC+'"></i>N-Care 가입</span>'
+      +'<span><i style="background:'+C_MG+'"></i>미가입</span></div>'
+    +'<table class="cmp-table"><thead><tr><th>지표</th><th>N-Care</th><th>미가입</th></tr></thead><tbody>'+body+'</tbody></table>'
+    +'<div class="cmp-insight">'+ins.join('<br>')+'</div>';
 }
 
 /* ══════════ 주간업무보고 PPT 생성 ══════════ */
