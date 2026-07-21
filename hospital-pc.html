@@ -353,6 +353,14 @@
   .theme-toggle{background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.4);color:#CADCFC;font-size:13px;line-height:1;
     padding:6px 9px;border-radius:8px;cursor:pointer;margin-left:8px;font-family:inherit;}
   .theme-toggle:hover{background:rgba(202,220,252,.28);}
+  #refreshBtn.spin{animation:bazSpin .8s linear infinite;pointer-events:none;opacity:.7;}
+  @keyframes bazSpin{to{transform:rotate(360deg);}}
+  /* 갱신 완료 토스트 */
+  #bazToast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
+    background:var(--navy);color:#fff;font-size:12.5px;font-weight:700;padding:10px 18px;border-radius:22px;
+    box-shadow:0 6px 20px rgba(16,29,61,.35);opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:400;white-space:nowrap;}
+  #bazToast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  body.dark #bazToast{background:#2A3650;border:1px solid var(--gray-line);}
 
   /* ======================= 다크 모드 ======================= */
   body.dark{
@@ -420,6 +428,7 @@
     <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
       <button type="button" data-mode="window">🖥 Window</button><button type="button" data-mode="mobile">📱 Mobile</button>
     </div>
+    <button type="button" class="theme-toggle" id="refreshBtn" aria-label="새로고침" title="데이터 새로고침">🔄</button>
     <button type="button" class="theme-toggle" id="themeToggle" aria-label="다크모드 전환" title="다크모드">🌙</button>
     <a href="index.html" class="home-link" id="homeLink">메뉴</a>
     <div class="hublang" id="langSwitch">
@@ -694,6 +703,25 @@ document.getElementById('langSwitch').addEventListener('click',e=>{
   apply(dark);
   if(btn) btn.addEventListener('click', function(){
     dark=!dark; localStorage.setItem(KEY, dark?'dark':'light'); apply(dark);
+  });
+})();
+
+// ===== 데이터 새로고침 =====
+function bazToast(msg){
+  var el=document.getElementById('bazToast');
+  if(!el){ el=document.createElement('div'); el.id='bazToast'; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(el._t); el._t=setTimeout(function(){ el.classList.remove('show'); }, 2200);
+}
+(function(){
+  var rb=document.getElementById('refreshBtn');
+  if(!rb) return;
+  rb.addEventListener('click', function(){
+    if(rb.classList.contains('spin')) return;
+    rb.classList.add('spin');
+    var finish=function(){ rb.classList.remove('spin'); bazToast('최신 데이터로 갱신했습니다'); };
+    if(typeof window.bazRefreshAll==='function'){ window.bazRefreshAll(finish); }
+    else { setTimeout(finish, 600); }
   });
 })();
 
@@ -1725,7 +1753,7 @@ applyLang();
     }catch(e){}
   }
 
-  (function syncIssueHist(){
+  function syncIssueHist(){
     if(ISSUE_HIST_URL.indexOf('여기에_')===0) return;
 
     // 1) 캐시 먼저 적용
@@ -1759,7 +1787,8 @@ applyLang();
         }
       })
       .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
-  })();
+  }
+  syncIssueHist();
 
   // 날짜를 yyyy-MM-dd로 정규화 (깨진 형식 방어)
   function cleanDate(v){
@@ -1873,7 +1902,7 @@ applyLang();
     return updated;
   }
 
-  (function syncVisitLog(){
+  function syncVisitLog(){
     try{
       var cached=localStorage.getItem(VLOG_CACHE_KEY);
       var ts=parseInt(localStorage.getItem(VLOG_CACHE_TS)||'0',10);
@@ -1896,7 +1925,32 @@ applyLang();
         catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
       })
       .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
-  })();
+  }
+  syncVisitLog();
+
+  // ── 수동 새로고침: 5분 캐시를 무시하고 모든 데이터를 강제 재동기화 ──
+  window.bazRefreshAll=function(done){
+    try{
+      localStorage.removeItem(ISSUE_CACHE_TS);
+      localStorage.removeItem(HDB_CACHE_TS);
+      localStorage.removeItem(VLOG_CACHE_TS);
+      localStorage.removeItem('baz_pc_recent_ts');
+    }catch(e){}
+    try{ syncHospDB(); }catch(e){}
+    try{ syncIssueHist(); }catch(e){}
+    try{ syncVisitLog(); }catch(e){}
+    // 최근 완료(handover) → 오늘 완료·이동시간 카드 갱신
+    try{
+      if(typeof pcLoadRecent==='function'){
+        pcLoadRecent(function(){
+          try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
+          try{ if(typeof pcRenderRouteCard==='function') pcRenderRouteCard(); }catch(e){}
+          try{ if(typeof pcShowMap==='function' && typeof pcRightMode!=='undefined' && pcRightMode!=='detail') pcShowMap(pcList); }catch(e){}
+        });
+      }
+    }catch(e){}
+    if(typeof done==='function') setTimeout(done, 900);
+  };
 })();
 
 // ===== Window 전용: 카드/표 + 지도/상세 2-pane =====
