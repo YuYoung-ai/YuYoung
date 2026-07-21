@@ -2109,7 +2109,7 @@ function pcMergeRecent(rows){
     if(seen[key]) return; seen[key]=1;
     out.push({hosp:hosp, fse:fse, date:date, gubun:String(r.gubun||'').trim()});
   });
-  out.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  out.sort(function(a,b){ return pcDateKey(b.date).localeCompare(pcDateKey(a.date)); });
   return out.slice(0,40);
 }
 function pcLocalRecent(){ try{ return JSON.parse(localStorage.getItem('baz_recent_handover')||'[]')||[]; }catch(e){ return []; } }
@@ -2137,9 +2137,17 @@ function pcTodayStr(){
   var d=new Date(), z=function(n){return (n<10?'0':'')+n;};
   return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
 }
+// 시트 표시형식(getDisplayValues)이 'yyyy. M. d' 등 로케일 형태로 오므로
+// 구분자·공백에 상관없이 yyyy-MM-dd 키로 정규화 (handover 날짜 매칭 안정화)
+function pcDateKey(s){
+  if(!s) return '';
+  var m=String(s).match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  if(!m) return '';
+  return m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2);
+}
 function pcTodayList(){
   var today=pcTodayStr();
-  return pcRecent.filter(function(r){ return String(r.date||'').slice(0,10)===today; });
+  return pcRecent.filter(function(r){ return pcDateKey(r.date)===today; });
 }
 // 좌측 필터 하단: 담당자 오늘 완료 카드
 function pcRenderRecentCard(){
