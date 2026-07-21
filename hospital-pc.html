@@ -46,9 +46,25 @@
   .pc-viewtoggle button{background:transparent;border:0;color:var(--text-muted);font-size:12.5px;font-weight:700;padding:6px 13px;border-radius:6px;cursor:pointer;font-family:inherit;line-height:1.1;}
   .pc-viewtoggle button.on{background:var(--navy);color:#fff;}
   #pcToolbar .pc-hint{font-size:11.5px;color:var(--text-muted);}
-  #pcSplit{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(370px,1fr);gap:16px;align-items:start;}
+  /* Window: 지도(상단 전폭) → 툴바 → 카드/표 세로 스택 */
+  body.mode-window #viewList>.result-count{display:none !important;}   /* '417곳' 표기 제거 */
   #pcLeft{min-width:0;}
-  #pcRight{position:sticky;top:16px;height:calc(100vh - 40px);background:#fff;border:1px solid var(--gray-line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(27,47,94,.05);}
+  #pcRight{background:#fff;border:1px solid var(--gray-line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 2px 10px rgba(27,47,94,.05);}
+  body.mode-window #pcRight{height:400px;margin-bottom:14px;}
+  /* 좌측 필터 하단: 담당자 오늘 완료 카드 */
+  #pcRecentCard{display:none;}
+  body.mode-window #pcRecentCard{display:block;background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:11px 12px;box-shadow:0 2px 8px rgba(27,47,94,.05);}
+  .rrc-head{font-size:12.5px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:6px;margin-bottom:9px;}
+  .rrc-head .rrc-cnt{font-size:11px;font-weight:700;color:#1B7A47;background:#E8F5EE;border-radius:7px;padding:1px 7px;}
+  .rrc-empty{font-size:11.5px;color:var(--text-muted);padding:4px 2px;}
+  .rrc-list{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;}
+  .rrc-item{border:1px solid var(--gray-line);border-radius:9px;padding:8px 9px;cursor:pointer;transition:border-color .12s,box-shadow .12s;}
+  .rrc-item:hover{border-color:var(--teal);box-shadow:0 2px 8px rgba(27,47,94,.08);}
+  .rrc-item.sel{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset;}
+  .rrc-nm{font-size:12.5px;font-weight:800;color:var(--navy);line-height:1.35;margin-bottom:3px;word-break:break-all;}
+  .rrc-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:11px;color:var(--text-muted);}
+  .rrc-meta .fse{color:#1B7A47;font-weight:700;}
+  .rrc-g{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--gray-bg);color:var(--text-muted);}
   #pcRightHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid var(--gray-line);background:var(--gray-bg);flex:0 0 auto;}
   #pcRightHead .ttl{font-size:12.5px;font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #pcRightBody{flex:1 1 auto;position:relative;min-height:0;}
@@ -100,7 +116,7 @@
   .pc-dt-h3{font-size:12.5px;font-weight:800;color:var(--navy);margin:4px 0 9px;padding-bottom:6px;border-bottom:1px solid var(--gray-line);}
   .pc-backmap{background:#fff;border:1px solid var(--gray-line);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;white-space:nowrap;}
   .pc-backmap:hover{background:#fff;border-color:var(--navy);}
-  @media(max-width:980px){ body.mode-window #pcSplit{grid-template-columns:1fr;} body.mode-window #pcRight{position:static;height:auto;min-height:440px;} }
+  @media(max-width:980px){ body.mode-window #pcRight{height:340px;} }
 
   header{background:var(--navy);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
   header .logo-area{display:flex;align-items:center;gap:10px;min-width:0;}
@@ -1788,7 +1804,8 @@ applyLang();
 })();
 
 // ===== Window 전용: 카드/표 + 지도/상세 2-pane =====
-var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' | 'table' | 'recent'
+var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' | 'table'
+if(pcListView==='recent') pcListView='cards';   // 구버전 값 정리(최근완료는 좌측 카드로 이동)
 var pcRecent=[], pcRecentState='idle', pcRecentRequested=false, pcRecentOverlays=[], pcRecentByIdx={};
 var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
@@ -1821,31 +1838,38 @@ function pcEnsureDOM(){
   var pane=document.createElement('div');
   pane.id='pcPane';
   pane.innerHTML=
+    '<div id="pcRight">'+                                   /* 지도/상세 — 상단 전폭 */
+      '<div id="pcRightHead">'+
+        '<span class="ttl" id="pcRightTtl">🗺 지도</span>'+
+        '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">🗺 지도로</button>'+
+      '</div>'+
+      '<div id="pcRightBody">'+
+        '<div id="pcMapPane"></div>'+
+        '<div id="pcDetail"></div>'+
+      '</div>'+
+    '</div>'+
     '<div id="pcToolbar">'+
       '<div class="pc-viewtoggle" id="pcViewToggle">'+
         '<button type="button" data-view="cards">⊞ 카드</button>'+
         '<button type="button" data-view="table">▤ 표</button>'+
-        '<button type="button" data-view="recent">🏁 최근완료</button>'+
       '</div>'+
-      '<span class="pc-hint" id="pcHint">카드·행을 클릭하면 오른쪽에 상세·이력이 열립니다</span>'+
+      '<span class="pc-hint" id="pcHint">카드·행을 클릭하면 위 지도/상세에서 확인됩니다</span>'+
     '</div>'+
-    '<div id="pcSplit">'+
-      '<div id="pcLeft"></div>'+
-      '<div id="pcRight">'+
-        '<div id="pcRightHead">'+
-          '<span class="ttl" id="pcRightTtl">🗺 지도</span>'+
-          '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">🗺 지도로</button>'+
-        '</div>'+
-        '<div id="pcRightBody">'+
-          '<div id="pcMapPane"></div>'+
-          '<div id="pcDetail"></div>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
+    '<div id="pcLeft"></div>';
   // #cardList 다음에 삽입
   var cl=document.getElementById('cardList');
   if(cl && cl.parentNode){ cl.parentNode.insertBefore(pane, cl.nextSibling); }
   else { vl.appendChild(pane); }
+
+  // 좌측 필터 하단: 담당자 오늘 완료 카드
+  var fr=document.getElementById('filterRail');
+  if(fr && !document.getElementById('pcRecentCard')){
+    var rc=document.createElement('div'); rc.id='pcRecentCard'; fr.appendChild(rc);
+    rc.addEventListener('click', function(e){
+      var it=e.target.closest('.rrc-item'); if(!it) return;
+      pcFocusHospOnMap(it.getAttribute('data-hn'), it);
+    });
+  }
 
   // 뷰 토글(카드/표)
   document.getElementById('pcViewToggle').addEventListener('click', function(e){
@@ -1861,8 +1885,6 @@ function pcEnsureDOM(){
       if(pcSort.key===k) pcSort.dir*=-1; else { pcSort.key=k; pcSort.dir=1; }
       pcRenderLeft(pcList); pcHighlight(); return;
     }
-    var ri=e.target.closest('.pc-recent-item');
-    if(ri){ pcRecentFocus(parseInt(ri.getAttribute('data-ri'),10)); return; }
     if(e.target.closest('button, a')) return; // 카드 내 액션버튼은 통과
     var el=e.target.closest('[data-hname]'); if(!el) return;
     pcSelect(el.getAttribute('data-hname'));
@@ -1908,7 +1930,6 @@ function pcTableHTML(list){
 
 function pcRenderLeft(list){
   var left=document.getElementById('pcLeft'); if(!left) return;
-  if(pcListView==='recent'){ left.innerHTML=pcRecentListHTML(); return; }
   if(!list.length){ left.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>'; return; }
   left.innerHTML = (pcListView==='table') ? pcTableHTML(list) : pcCardsHTML(list);
 }
@@ -1953,58 +1974,43 @@ function pcLoadRecent(cb){
     })
     .catch(function(){ pcRecentState=pcRecent.length?'done':'error'; if(cb) cb(); });
 }
-function pcRecentListHTML(){
-  if(!pcRecent.length){
-    var msg=(pcRecentState==='loading')?'최근 완료 내역을 불러오는 중…'
-      :(pcRecentState==='error')?'최근 완료 내역을 불러오지 못했습니다. (네트워크 확인)'
-      :'최근 완료 내역이 없습니다.';
-    return '<div class="empty"><div class="ico">🏁</div>'+msg+'</div>';
+function pcTodayStr(){
+  var d=new Date(), z=function(n){return (n<10?'0':'')+n;};
+  return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate());
+}
+function pcTodayList(){
+  var today=pcTodayStr();
+  return pcRecent.filter(function(r){ return String(r.date||'').slice(0,10)===today; });
+}
+// 좌측 필터 하단: 담당자 오늘 완료 카드
+function pcRenderRecentCard(){
+  var box=document.getElementById('pcRecentCard'); if(!box) return;
+  var list=pcTodayList();
+  var head='<div class="rrc-head">🏁 오늘 완료 <span class="rrc-cnt">'+list.length+'건</span></div>';
+  if(!list.length){
+    var msg=(pcRecentState==='loading')?'불러오는 중…':(pcRecentState==='error')?'불러오기 실패 (네트워크 확인)':'오늘 완료 내역이 없습니다';
+    box.innerHTML=head+'<div class="rrc-empty">'+msg+'</div>'; return;
   }
-  return '<div class="pc-recent-list">'+pcRecent.map(function(r,i){
-    var h=pcHospByName(r.hosp);
-    var hasLoc=!!(h && h.lat!=null && h.lng!=null);
-    var loc=h?(h.rg?escapeHtml(h.rg):(h.a?escapeHtml(h.a):'')):'위치정보 없음';
-    var g=r.gubun?'<span class="pc-recent-g '+(r.gubun==='점검'?'insp':'as')+'">'+escapeHtml(r.gubun)+'</span>':'';
-    return '<div class="pc-recent-item'+(hasLoc?'':' noloc')+'" data-ri="'+i+'"'+(h?' data-hname="'+escapeHtml(h.n)+'"':'')+'>'+
-      '<div class="pc-recent-top"><span class="nm">'+escapeHtml(r.hosp)+'</span>'+g+'</div>'+
-      '<div class="pc-recent-meta">'+
-        '<span class="fse">🧑‍🔧 '+escapeHtml(r.fse||'-')+'</span>'+
-        '<span class="dt">📅 '+escapeHtml(r.date||'-')+'</span>'+
-        '<span class="loc">'+(hasLoc?'📍 ':'')+loc+'</span>'+
-      '</div>'+
+  box.innerHTML=head+'<div class="rrc-list">'+list.map(function(r){
+    var h=pcHospByName(r.hosp); var hn=h?h.n:r.hosp;
+    var g=r.gubun?'<span class="rrc-g">'+escapeHtml(r.gubun)+'</span>':'';
+    return '<div class="rrc-item" data-hn="'+escapeHtml(hn)+'">'+
+      '<div class="rrc-nm">'+escapeHtml(r.hosp)+'</div>'+
+      '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(r.fse||'-')+'</span>'+g+'</div>'+
     '</div>';
   }).join('')+'</div>';
 }
-function pcShowRecentMap(){
-  var pane=document.getElementById('pcMapPane'); if(!pane) return;
-  loadKakao(function(ok){
-    if(ok===false){ pane.innerHTML='<div class="pc-mapfail">지도를 불러올 수 없습니다.<br>네트워크 연결 또는 지도 키 설정을 확인해 주세요.</div>'; return; }
-    if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
-    var center=myPos?new kakao.maps.LatLng(myPos.lat,myPos.lng):new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
-    if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9}); }
-    else { pcMapObj.relayout(); }
-    pcMapMarkers.forEach(function(m){m.setMap(null);}); pcMapMarkers=[]; pcMarkerByName={};
-    pcRecentOverlays.forEach(function(o){o.setMap(null);}); pcRecentOverlays=[]; pcRecentByIdx={};
-    var bounds=new kakao.maps.LatLngBounds(), any=false;
-    pcRecent.forEach(function(r,i){
-      var h=pcHospByName(r.hosp); if(!h||h.lat==null||h.lng==null) return;
-      var pos=new kakao.maps.LatLng(h.lat,h.lng);
-      var el=document.createElement('div');
-      el.className='pc-cmk'; el.setAttribute('data-ri',i);
-      el.innerHTML='<span class="dot"></span><span class="lb">'+escapeHtml(r.fse||r.hosp)+'</span>';
-      el.addEventListener('click',function(){ pcRecentFocus(i); });
-      var ov=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:5});
-      ov.setMap(pcMapObj); pcRecentOverlays.push(ov); pcRecentByIdx[i]=pos;
-      bounds.extend(pos); any=true;
-    });
-    if(any) pcMapObj.setBounds(bounds);
-    setTimeout(function(){ if(pcMapObj){ pcMapObj.relayout(); if(any) pcMapObj.setBounds(bounds); } },120);
-  });
-}
-function pcRecentFocus(i){
-  var pos=pcRecentByIdx[i];
-  if(pos && pcMapObj){ pcMapObj.setLevel(5); pcMapObj.panTo(pos); }
-  document.querySelectorAll('#pcLeft .pc-recent-item').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-ri')===String(i)); });
+// 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
+function pcFocusHospOnMap(name, itemEl){
+  document.querySelectorAll('#pcRecentCard .rrc-item').forEach(function(el){ el.classList.toggle('sel', el===itemEl); });
+  if(pcRightMode==='detail'){ pcBackToMap(); }
+  var h=pcHospByName(name); if(!h||h.lat==null||h.lng==null) return;
+  if(pcMapObj && typeof kakao!=='undefined'){
+    var pos=new kakao.maps.LatLng(h.lat,h.lng);
+    pcMapObj.setLevel(5); pcMapObj.panTo(pos);
+    var mk=pcMarkerByName[h.n];
+    if(mk){ var iw=new kakao.maps.InfoWindow({content:'<div style="padding:5px 9px;font-size:11.5px;font-weight:700;color:#1B2F5E;white-space:nowrap;">'+escapeHtml(h.n)+'</div>'}); iw.open(pcMapObj, mk); setTimeout(function(){ iw.close(); }, 2600); }
+  }
 }
 
 function pcHighlight(){
@@ -2090,6 +2096,18 @@ function pcShowMap(list){
       kakao.maps.event.addListener(mk,'click',function(){ pcSelect(h.n); });
       bounds.extend(pos); any=true;
     });
+    // 오늘 완료(현장) 병원 → 초록 마커 + FSE 라벨로 강조
+    pcRecentOverlays.forEach(function(o){o.setMap(null);}); pcRecentOverlays=[];
+    pcTodayList().forEach(function(r){
+      var h=pcHospByName(r.hosp); if(!h||h.lat==null||h.lng==null) return;
+      var pos=new kakao.maps.LatLng(h.lat,h.lng);
+      var el=document.createElement('div'); el.className='pc-cmk';
+      el.innerHTML='<span class="dot"></span><span class="lb">'+escapeHtml(r.fse||r.hosp)+'</span>';
+      (function(hn){ el.addEventListener('click',function(){ pcFocusHospOnMap(hn,null); }); })(h.n);
+      var ov=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:6});
+      ov.setMap(pcMapObj); pcRecentOverlays.push(ov);
+      bounds.extend(pos); any=true;
+    });
     if(any) pcMapObj.setBounds(bounds);
     setTimeout(function(){ if(pcMapObj){ pcMapObj.relayout(); if(any) pcMapObj.setBounds(bounds); } },120);
   });
@@ -2110,7 +2128,7 @@ function pcBackToMap(){
   pcRightMode='map';
   var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
   var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
-  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 지도 · '+(pcList?pcList.length:0)+'곳';
+  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 지도';
   pcShowMap(pcList||[]);
 }
 
@@ -2118,28 +2136,20 @@ function pcRender(list){
   pcList=list||[];
   pcEnsureDOM();
   document.querySelectorAll('#pcViewToggle button').forEach(function(b){ b.classList.toggle('on', b.dataset.view===pcListView); });
-  var hint=document.getElementById('pcHint');
-  if(hint) hint.textContent=(pcListView==='recent')
-    ? 'handover 시트 기록 기준 · 항목/마커 클릭 시 지도에서 위치 확인'
-    : '카드·행을 클릭하면 오른쪽에 상세·이력이 열립니다';
-  // 최근완료 뷰: 데이터 준비(첫 진입 시 로드)
-  if(pcListView==='recent' && !pcRecentRequested){
+  // 담당자 오늘 완료 데이터(첫 진입 시 로드) + 좌측 카드 렌더
+  if(!pcRecentRequested){
     pcRecentRequested=true;
-    pcLoadRecent(function(){ if(pcListView==='recent') pcRender(pcList); });
+    pcLoadRecent(function(){ pcRenderRecentCard(); if(pcRightMode!=='detail') pcShowMap(pcList); });
   }
+  pcRenderRecentCard();
   pcRenderLeft(pcList);
   if(pcRightMode==='detail' && pcSelName){
     var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=pcSelName;
     var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
     document.getElementById('pcRight').classList.add('detail');
     pcRenderDetail(pcSelName);
-  } else if(pcListView==='recent'){
-    var tlr=document.getElementById('pcRightTtl'); if(tlr) tlr.textContent='🏁 최근 완료 · '+pcRecent.length+'건';
-    var bmr=document.getElementById('pcBackMap'); if(bmr) bmr.style.display='none';
-    document.getElementById('pcRight').classList.remove('detail');
-    pcShowRecentMap();
   } else {
-    var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 지도 · '+pcList.length+'곳';
+    var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 지도';
     var bm2=document.getElementById('pcBackMap'); if(bm2) bm2.style.display='none';
     document.getElementById('pcRight').classList.remove('detail');
     pcShowMap(pcList);
