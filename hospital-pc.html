@@ -297,6 +297,9 @@
   .tl-meta{font-size:12px;color:var(--text-muted);margin-top:3px;line-height:1.6;}
   .tl-cat{display:inline-block;font-size:11px;font-weight:600;color:#534AB7;background:#F3EEFA;padding:2px 8px;border-radius:6px;margin-top:5px;}
   .tl-memo{font-size:12.5px;color:var(--text);margin-top:6px;line-height:1.55;background:var(--gray-bg);border-radius:8px;padding:8px 10px;}
+  .tl-fix{background:#EAF4F8;}   /* 조치내용(↳) 박스 */
+  body.dark .tl-memo{background:#0B1420;color:var(--text);}
+  body.dark .tl-fix{background:#17303a;color:#CFE8F2;}
   .tl-part{font-size:11.5px;color:var(--text-muted);margin-top:5px;}
   .tl-empty{text-align:center;color:var(--text-muted);font-size:13px;padding:30px 0;}
 
@@ -1542,7 +1545,7 @@ function renderHistBody(){
       const typeCls = isInsp ? '점검' : 'AS';
       const symLine = (r.pt||r.sy) ? '<div class="tl-cat">'+escapeHtml([r.pt,r.sy].filter(Boolean).join(' · '))+'</div>' : '';
       const memo = r.m ? '<div class="tl-memo">'+escapeHtml(r.m)+'</div>' : '';
-      const fix = r.fx ? '<div class="tl-memo" style="background:#EAF4F8;">↳ '+escapeHtml(r.fx)+'</div>' : '';
+      const fix = r.fx ? '<div class="tl-memo tl-fix">↳ '+escapeHtml(r.fx)+'</div>' : '';
       let partLine='';
       if(r.p){ partLine='<div class="tl-part">🔧 '+t('histPart')+': '+escapeHtml(r.p)+'</div>'; }
       const meta=[];
@@ -2397,7 +2400,7 @@ function pcHistTimeline(name){
     var typeLabel=isInsp?'점검':'A/S', typeCls=isInsp?'점검':'AS';
     var symLine=(r.pt||r.sy)?'<div class="tl-cat">'+escapeHtml([r.pt,r.sy].filter(Boolean).join(' · '))+'</div>':'';
     var memo=r.m?'<div class="tl-memo">'+escapeHtml(r.m)+'</div>':'';
-    var fix=r.fx?'<div class="tl-memo" style="background:#EAF4F8;">↳ '+escapeHtml(r.fx)+'</div>':'';
+    var fix=r.fx?'<div class="tl-memo tl-fix">↳ '+escapeHtml(r.fx)+'</div>':'';
     var partLine=r.p?'<div class="tl-part">🔧 '+t('histPart')+': '+escapeHtml(r.p)+'</div>':'';
     var meta=[]; if(r.f) meta.push(t('histFse')+' '+escapeHtml(r.f)); if(r.pay) meta.push(escapeHtml(r.pay));
     var metaLine=meta.length?'<div class="tl-meta">'+meta.join(' · ')+'</div>':'';
