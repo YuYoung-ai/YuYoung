@@ -178,8 +178,10 @@
     'weekly.html':     { tool: 'weekly',     level: 1 },
     'user_guide.html': { tool: null,         level: 1 },
     'hospital.html':   { tool: 'hospital',   level: 2 },
+    'hospital-pc.html':{ tool: 'hospital',   level: 2 },
     'survey.html':     { tool: 'survey',     level: 2 },
-    'dashboard.html':  { tool: 'dashboard',  level: 3 }
+    'dashboard.html':  { tool: 'dashboard',  level: 3 },
+    'dashboard-pc.html':{ tool: 'dashboard', level: 3 }
   };
 
   function currentPage_() {

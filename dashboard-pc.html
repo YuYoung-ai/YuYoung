@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
-<title>현장 처리 대시보드 | BAZ CS</title>
+<title>현장 처리 대시보드 (PC) | BAZ CS</title>
 <style>
 :root{
   --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
@@ -26,7 +26,15 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 .hd-btn{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:8px;
   padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
 .hd-btn:active{background:rgba(255,255,255,.15)}
-.wrap{max-width:1080px;margin:0 auto;padding:12px}
+.wrap{max-width:1080px;margin:0 auto;padding:12px;transition:max-width .18s ease}
+
+/* ===== Window(PC) 모드 : 넓은 화면 활용 ===== */
+.mode-toggle{display:flex;gap:2px;background:var(--gray-bg);border:1px solid var(--gray-line);border-radius:8px;padding:2px}
+.mode-toggle button{background:transparent;border:0;color:var(--text-muted);font-size:11px;font-weight:700;padding:6px 9px;border-radius:6px;cursor:pointer;line-height:1;font-family:inherit}
+.mode-toggle button.on{background:var(--navy);color:#fff}
+body.mode-window .wrap{max-width:1480px}
+@media(max-width:720px){ body.mode-window .wrap{max-width:1080px} }
+body.mode-mobile .wrap{max-width:560px}
 
 /* KPI */
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
@@ -193,6 +201,9 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
     <div class="sub" id="metaLine">현장 처리 현황(handover) 집계</div>
   </div>
   <div class="hd-btns">
+    <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
+      <button type="button" data-mode="window">🖥 Window</button><button type="button" data-mode="mobile">📱 Mobile</button>
+    </div>
     <button class="hd-btn" onclick="location.href='index.html'">← 메뉴</button>
     <button class="hd-btn" onclick="location.href='handover.html'">✍ 기록</button>
     <button class="hd-btn" onclick="openWeekly()">📑 주간보고</button>
@@ -1678,6 +1689,29 @@ async function makeWeeklyPPT(){
 function val_(id){ return String(document.getElementById(id).value||'').replace(/[^\d]/g,''); }
 
 loadData(false);
+
+// ===== 화면 모드 (Window / Mobile) =====
+(function(){
+  var KEY='baz_viewmode';
+  function apply(mode){
+    document.body.classList.toggle('mode-window', mode==='window');
+    document.body.classList.toggle('mode-mobile', mode==='mobile');
+    var tg=document.getElementById('modeToggle');
+    if(tg) tg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.mode===mode); });
+    window.dispatchEvent(new Event('resize')); // 차트 리사이즈 유도
+  }
+  function get(){
+    var saved=localStorage.getItem(KEY);
+    if(saved==='window'||saved==='mobile') return saved;
+    return (window.matchMedia && window.matchMedia('(min-width:900px)').matches) ? 'window' : 'mobile';
+  }
+  var cur=get(); apply(cur);
+  var tg=document.getElementById('modeToggle');
+  if(tg) tg.addEventListener('click', function(e){
+    var btn=e.target.closest('button[data-mode]'); if(!btn) return;
+    cur=btn.dataset.mode; localStorage.setItem(KEY, cur); apply(cur);
+  });
+})();
 </script>
 </body>
 </html>
