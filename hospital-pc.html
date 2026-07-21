@@ -480,12 +480,6 @@
       <button class="search-clear" id="searchClear">✕</button>
     </div>
 
-    <button class="nearby-btn" id="nearbyBtn">
-      <span>📍</span><span id="nearbyLabel">내 주변 5km N-CARE 병원 조회</span>
-    </button>
-    <div class="nearby-status" id="nearbyStatus"></div>
-    <div id="mapBox"></div>
-
     <div id="filterSticky">
     <div class="filter-section">
       <div class="filter-row" id="filterRow">
@@ -692,7 +686,6 @@ function applyLang(){
   document.getElementById('tabDash').textContent=d.tabDash;
   document.getElementById('tabRecent').textContent=d.tabRecent;
   document.getElementById('searchInput').placeholder=d.searchPh;
-  document.getElementById('nearbyLabel').textContent=nearbyMode?d.nearbyOff:d.nearby;
   document.querySelector('[data-filter="all"]').childNodes[0].textContent=d.all+' ';
   document.querySelector('[data-filter="ncare"]').childNodes[0].textContent=d.ncare+' ';
   document.querySelector('[data-filter="due"]').childNodes[0].textContent=d.due+' ';
@@ -1047,36 +1040,6 @@ document.getElementById('filterRow').addEventListener('click',e=>{
 document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('loadMore').addEventListener('click',()=>{ showCount+=20; render(); });
-
-const nearbyBtn=document.getElementById('nearbyBtn');
-const nearbyStatus=document.getElementById('nearbyStatus');
-nearbyBtn.addEventListener('click',()=>{
-  if(nearbyMode){
-    nearbyMode=false; nearbyBtn.classList.remove('active');
-    document.getElementById('nearbyLabel').textContent=t('nearby');
-    nearbyStatus.style.display='none';
-    document.getElementById('mapBox').style.display='none';
-    document.getElementById('advFilters').style.opacity='1';
-    document.getElementById('filterRow').style.opacity='1';
-    showCount=20; render(); return;
-  }
-  nearbyStatus.style.display='block'; nearbyStatus.textContent=t('locating');
-  if(!navigator.geolocation){ nearbyStatus.textContent=t('locFail'); return; }
-  navigator.geolocation.getCurrentPosition(
-    pos=>{
-      myPos={lat:pos.coords.latitude, lng:pos.coords.longitude};
-      nearbyMode=true; nearbyBtn.classList.add('active');
-      document.getElementById('nearbyLabel').textContent=t('nearbyOff');
-      document.getElementById('advFilters').style.opacity='.4';
-      document.getElementById('filterRow').style.opacity='.4';
-      nearbyStatus.style.display='none'; showCount=50; render();
-      const near=getFiltered();
-      showMap(near);
-    },
-    err=>{ nearbyStatus.textContent=t('locFail'); },
-    {enableHighAccuracy:true, timeout:10000, maximumAge:60000}
-  );
-});
 
 // ===== 탭 전환 =====
 document.querySelector('.tabs').addEventListener('click',e=>{
@@ -2263,39 +2226,46 @@ function pcRenderRouteCard(){
   var box=document.getElementById('pcRouteCard'); if(!box) return;
   var head='<div class="prc-head">🚗 주변 이동 소요시간 <span class="prc-sub">오늘 기준</span></div>';
   var today=pcTodayList();
-  // FSE 담당자별 '가장 최근' 오늘 처리 병원 — 위치 확인 가능한 것만.
+  // FSE 담당자별 '가장 최근' 오늘 완료 병원.
   // handover는 시트 하단에 append(오래된→최신)되어 pcTodayList도 오래된→최신 순 →
-  // 마지막(최신) 유효 위치가 이기도록 덮어쓴다.
-  var fromByFse={}, order=[];
+  // 마지막(최신)이 이기도록 덮어쓴다. 좌표가 없어도 '현재'는 최신 완료를 표시하고,
+  // 주변 병원 계산은 좌표가 있을 때만 수행한다.
+  var curByFse={}, order=[];
   today.forEach(function(r){
     var fse=String(r.fse||'').trim(); if(!fse) return;
-    var h=pcHospByName(r.hosp); if(!h||h.lat==null||h.lng==null) return;
-    if(!(fse in fromByFse)) order.push(fse);
-    fromByFse[fse]=h;   // 최신 위치로 갱신
+    var name=String(r.hosp||'').trim(); if(!name) return;
+    if(!(fse in curByFse)) order.push(fse);
+    var h=pcHospByName(name);
+    curByFse[fse]={ name:name, from:(h&&h.lat!=null&&h.lng!=null)?h:null };   // 최신으로 갱신
   });
-  var fseList=order.map(function(fse){ return {fse:fse, from:fromByFse[fse]}; });
-  if(!fseList.length){
-    var msg=(pcRecentState==='loading')?'불러오는 중…':'오늘 완료 위치가 없습니다';
+  if(!order.length){
+    var msg=(pcRecentState==='loading')?'불러오는 중…':'오늘 완료 내역이 없습니다';
     box.innerHTML=head+'<div class="prc-empty">'+msg+'</div>'; return;
   }
-  box.innerHTML=head+fseList.map(function(f){
-    var near=pcNearestHospitals(f.from, 3);
-    var prog=pcProgHospOf(f.fse);   // 이 담당자의 진행중 병원
-    var fseAttr=escapeHtml(f.fse);
-    var items=near.length ? near.map(function(x,i){
-      var on=(prog===x.h.n);
-      return '<div class="prc-item'+(on?' prog':'')+'" data-hn="'+escapeHtml(x.h.n)+'">'+
-        '<span class="prc-rank">'+(i+1)+'</span>'+
-        '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
-        '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
-        '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
-      '</div>';
-    }).join('') : '<div class="prc-empty" style="padding:2px 6px;">주변 N-CARE 병원 없음</div>';
+  box.innerHTML=head+order.map(function(fse){
+    var cur=curByFse[fse];
+    var prog=pcProgHospOf(fse);   // 이 담당자의 진행중 병원
+    var fseAttr=escapeHtml(fse);
+    var body;
+    if(cur.from){
+      var near=pcNearestHospitals(cur.from, 3);
+      body = near.length ? near.map(function(x,i){
+        var on=(prog===x.h.n);
+        return '<div class="prc-item'+(on?' prog':'')+'" data-hn="'+escapeHtml(x.h.n)+'">'+
+          '<span class="prc-rank">'+(i+1)+'</span>'+
+          '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
+          '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
+          '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
+        '</div>';
+      }).join('') : '<div class="prc-empty" style="padding:2px 6px;">주변 N-CARE 병원 없음</div>';
+    } else {
+      body = '<div class="prc-empty" style="padding:2px 6px;">📍 좌표 미등록 병원 — 주변 이동 계산 불가</div>';
+    }
     var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'</div>' : '';
     return '<div class="prc-fse">'+
-      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(f.fse)+'<span class="prc-cur">현재 '+escapeHtml(f.from.n)+'</span></div>'+
+      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">현재 '+escapeHtml(cur.name)+'</span></div>'+
       progLine+
-      items+
+      body+
     '</div>';
   }).join('');
 }
