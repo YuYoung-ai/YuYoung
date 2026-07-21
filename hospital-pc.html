@@ -856,7 +856,19 @@ function statusDays(h){
 }
 // 각 병원의 마지막 핸드피스 교체 버전 추출 (이력 기반, 실시간 동기화 반영)
 // 핸드피스 버전은 1.x 대역만 존재 (FW/UI의 2.x·3.x와 구분)
+// [성능] HP/UI 버전 추출은 병원별 HISTORY 정규식 스캔이라 비싸다 →
+// 결과를 메모이즈하고 HISTORY 변경(동기화/편집) 시 무효화한다.
+var verMemo={hp:{},ui:{}};
+function bazClearVerMemo(){ verMemo.hp={}; verMemo.ui={}; }
 function getLastHpVer(name){
+  if(name in verMemo.hp) return verMemo.hp[name];
+  var v=getLastHpVerRaw(name); verMemo.hp[name]=v; return v;
+}
+function getLastUiVer(name){
+  if(name in verMemo.ui) return verMemo.ui[name];
+  var v=getLastUiVerRaw(name); verMemo.ui[name]=v; return v;
+}
+function getLastHpVerRaw(name){
   var recs=HISTORY[name];
   if(!recs||!recs.length) return '';
   function pickHp(s){
@@ -884,7 +896,7 @@ function getLastHpVer(name){
 
 // 각 병원의 마지막 UI 버전 추출 (FW는 제외, UI만)
 // UI 버전은 2.x~3.x 대역, 'UI' 라벨로 FW와 구분
-function getLastUiVer(name){
+function getLastUiVerRaw(name){
   var recs=HISTORY[name];
   if(!recs||!recs.length) return '';
   function pickUI(s){
@@ -1087,8 +1099,12 @@ function showMap(list){
 // ===== 이벤트 =====
 const searchInput=document.getElementById('searchInput');
 const searchClear=document.getElementById('searchClear');
+// 검색 디바운스: 키 입력마다 전체 재렌더(카드 수백 장 + 지도 마커) 방지
+let searchDebTimer=null;
 searchInput.addEventListener('input',()=>{
-  searchQ=searchInput.value; searchClear.style.display=searchQ?'block':'none'; showCount=20; updateFilterCounts(); render();
+  searchQ=searchInput.value; searchClear.style.display=searchQ?'block':'none';
+  clearTimeout(searchDebTimer);
+  searchDebTimer=setTimeout(()=>{ showCount=20; updateFilterCounts(); render(); },180);
 });
 searchClear.addEventListener('click',()=>{ searchInput.value=''; searchQ=''; searchClear.style.display='none'; showCount=20; updateFilterCounts(); render(); });
 
@@ -1607,6 +1623,7 @@ function histSaveEdits(){
     store[histCurName]=HISTORY[histCurName];
     localStorage.setItem('baz_hosp_history', JSON.stringify(store));
     histExitEdit();
+    if(typeof bazClearVerMemo==='function') bazClearVerMemo();   // 이력 편집 → 버전 캐시 무효화
     render(); // 카드 목록도 갱신 (이력 버튼 등)
     showHistToast(t('histSaved'));
   }catch(e){
@@ -1794,6 +1811,7 @@ applyLang();
   }
 
   function refreshHistViews(){
+    try{ if(typeof bazClearVerMemo==='function') bazClearVerMemo(); }catch(e){}   // HISTORY 변경 → 버전 캐시 무효화
     try{ if(typeof render==='function') render(); }catch(e){}
     try{ if(typeof renderRecent==='function' && curTab==='recent') renderRecent(); }catch(e){}
     try{
@@ -2055,7 +2073,7 @@ var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
 var pcList = [];
-var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false;
+var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false, pcMapDrawnKey='';
 var PC_DEFAULT_CENTER={lat:37.5665,lng:126.9780};
 var PC_ST_ORDER={'미점검':0,'경고':1,'권고':2,'점검대상':3,'정상':4};
 
@@ -2143,6 +2161,7 @@ function pcEnsureDOM(){
     }
     var pcg=e.target.closest('.pc-progchip');
     if(pcg){ pcToggleProgHosp(pcg.getAttribute('data-prog-hn')); return; }
+    if(e.target.closest('#pcMoreBtn')){ pcShowCount+=60; pcRenderLeft(pcList); pcHighlight(); return; }
     if(e.target.closest('button, a')) return; // 카드 내 액션버튼은 통과
     var el=e.target.closest('[data-hname]'); if(!el) return;
     pcSelect(el.getAttribute('data-hname'));
@@ -2159,7 +2178,7 @@ function pcCardsHTML(list){
   }).join('') +'</div>';
 }
 
-function pcTableHTML(list){
+function pcTableHTML(list, limit){
   var cols=[
     {k:'n',  label:'병원명',   sv:function(h){return normalize(h.n);},        cell:function(h){return (pcIsProg(h.n)?'<span class="pc-progchip tbl on" data-prog-hn="'+escapeHtml(h.n)+'" title="진행중 해제">🔵</span>':'<span class="pc-progchip tbl" data-prog-hn="'+escapeHtml(h.n)+'" title="진행중 설정">○</span>')+'<b>'+escapeHtml(h.n)+'</b>';}},
     {k:'rg', label:'지역',     sv:function(h){return h.rg||'';},              cell:function(h){return escapeHtml(h.rg||'-');}},
@@ -2181,6 +2200,7 @@ function pcTableHTML(list){
     var ar = (c.k===pcSort.key) ? '<span class="ar">'+(pcSort.dir>0?'▲':'▼')+'</span>' : '<span class="ar">↕</span>';
     return '<th data-sortkey="'+c.k+'">'+c.label+ar+'</th>';
   }).join('')+'</tr>';
+  if(limit) sorted=sorted.slice(0,limit);   // [성능] 정렬 후 표시 개수만 렌더
   var rows=sorted.map(function(h){
     var cls=[]; if(h.n===pcSelName) cls.push('sel'); if(pcIsProg(h.n)) cls.push('prog');
     return '<tr data-hname="'+escapeHtml(h.n)+'"'+(cls.length?' class="'+cls.join(' ')+'"':'')+'>'+
@@ -2189,10 +2209,20 @@ function pcTableHTML(list){
   return '<div class="pc-table-wrap"><table class="pc-table"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
 }
 
+// [성능] Window 목록 페이지네이션: 수백 장 카드를 한 번에 렌더하지 않는다.
+var pcShowCount=60, pcListSig='';
 function pcRenderLeft(list){
   var left=document.getElementById('pcLeft'); if(!left) return;
   if(!list.length){ left.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>'; return; }
-  left.innerHTML = (pcListView==='table') ? pcTableHTML(list) : pcCardsHTML(list);
+  // 목록이 바뀌면(검색/필터 변경) 표시 개수 리셋
+  var sig=list.length+'|'+list[0].n+'|'+list[list.length-1].n+'|'+pcListView;
+  if(sig!==pcListSig){ pcListSig=sig; pcShowCount=60; }
+  var more = (list.length>pcShowCount)
+    ? '<button class="load-more" id="pcMoreBtn" style="display:block;margin-top:10px;">'+t('more')+' ('+pcShowCount+'/'+list.length+')</button>' : '';
+  left.innerHTML = ((pcListView==='table')
+    ? pcTableHTML(list, pcShowCount)                 // 표: 전체 정렬 후 상위 N행만
+    : pcCardsHTML(list.slice(0,pcShowCount))) + more; // 카드: 상위 N장만
+
 }
 
 // ===== 최근 완료(현장 처리) — handover 시트 기록 반영 =====
@@ -2430,6 +2460,13 @@ function pcShowMap(list){
     var center=myPos?new kakao.maps.LatLng(myPos.lat,myPos.lng):new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
     if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9}); }
     else { pcMapObj.relayout(); }
+    // [성능] 목록·오늘완료·검색이 그대로면 마커 수백 개 재생성 생략
+    var mapKey=list.length+'|'+(list[0]?list[0].n:'')+'|'+(list[list.length-1]?list[list.length-1].n:'')
+      +'#'+pcTodayList().map(function(r){return r.hosp+(r.fse||'');}).join(',')
+      +'#'+(searchQ?normalize(searchQ):'')
+      +'#'+list.filter(function(h){return h.lat!=null;}).length;
+    if(mapKey===pcMapDrawnKey && pcMapMarkers.length){ return; }
+    pcMapDrawnKey=mapKey;
     pcMapMarkers.forEach(function(m){m.setMap(null);}); pcMapMarkers=[]; pcMarkerByName={};
     var bounds=new kakao.maps.LatLngBounds(), any=false;
     list.forEach(function(h){
