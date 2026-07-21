@@ -1262,6 +1262,7 @@ function renderDash(){
       '<div class="s"><div class="num" style="color:var(--amber)">'+(ages.target+ages.rec+ages.warn+ages.none)+'</div><div class="lbl">'+t('stDue')+'</div></div>'+
       '<div class="s"><div class="num" style="color:var(--red)">'+(ages.warn+ages.none)+'</div><div class="lbl">'+t('overDue').replace('⚠ ','').replace('⚠','')+'</div></div>'+
     '</div>'+
+    dashTrendCard()+
     '<div class="dash-card"><div class="dash-title">'+t('dashInspTitle')+'</div>'+
       bar(t('bNormal'),ages.normal,'var(--ok)')+
       bar(t('bTarget'),ages.target,'var(--teal)')+
@@ -1320,6 +1321,50 @@ function flattenHistory(){
     });
   });
   return out;
+}
+
+// [B1] 최근 30일 일별 처리 추이 — 인라인 SVG 에어리어(단일 시계열, 범례 없음)
+// dataviz: 얇은 라인 2px, 은은한 그리드, 끝점 강조, 상태색과 무관한 accent(teal)
+function dashTrendCard(){
+  var DAYS=30, now=new Date();
+  var today=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+  var counts=new Array(DAYS).fill(0);
+  flattenHistory().forEach(function(it){
+    if(!it.dt) return;
+    var diff=Math.round((today-it.dt.getTime())/86400000);
+    if(diff>=0 && diff<DAYS) counts[DAYS-1-diff]++;
+  });
+  var total=counts.reduce(function(a,b){return a+b;},0);
+  var max=Math.max.apply(null,counts.concat([1]));
+  var W=600,H=80,padL=8,padR=8,padT=12,padB=18, plotW=W-padL-padR, plotH=H-padT-padB, base=H-padB;
+  var X=function(i){ return padL+(DAYS<=1?0:i/(DAYS-1))*plotW; };
+  var Y=function(v){ return padT+(1-v/max)*plotH; };
+  var pts=counts.map(function(v,i){ return [X(i),Y(v)]; });
+  var L=pts.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' L');
+  var line='M'+L;
+  var area='M'+X(0).toFixed(1)+','+base+' L'+L+' L'+X(DAYS-1).toFixed(1)+','+base+' Z';
+  var midY=Y(max/2).toFixed(1), lp=pts[DAYS-1];
+  var hits='';
+  for(var i=0;i<DAYS;i++){
+    var d=new Date(today-(DAYS-1-i)*86400000);
+    var lbl=(d.getMonth()+1)+'/'+d.getDate()+' · '+counts[i]+'건';
+    var w=plotW/(DAYS-1||1);
+    hits+='<rect x="'+(X(i)-w/2).toFixed(1)+'" y="0" width="'+w.toFixed(1)+'" height="'+base+'" fill="transparent"><title>'+lbl+'</title></rect>';
+  }
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="height:auto;display:block;max-height:96px;" role="img" aria-label="최근 30일 일별 처리 건수 추이">'+
+    '<line x1="'+padL+'" y1="'+base+'" x2="'+(W-padR)+'" y2="'+base+'" style="stroke:var(--line)" stroke-width="1"/>'+
+    '<line x1="'+padL+'" y1="'+midY+'" x2="'+(W-padR)+'" y2="'+midY+'" style="stroke:var(--line)" stroke-width="1" stroke-dasharray="3 4" opacity=".7"/>'+
+    '<path d="'+area+'" style="fill:var(--teal)" opacity=".13"/>'+
+    '<path d="'+line+'" style="stroke:var(--teal)" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<circle cx="'+lp[0].toFixed(1)+'" cy="'+lp[1].toFixed(1)+'" r="3.6" style="fill:var(--teal);stroke:var(--surface)" stroke-width="2"/>'+
+    hits+
+  '</svg>';
+  return '<div class="dash-card">'+
+    '<div class="dash-title" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">최근 30일 처리 추이'+
+      '<span style="font-size:18px;font-weight:800;color:var(--teal);">'+total+'<span style="font-size:11px;color:var(--text-muted);font-weight:600;"> 건</span></span></div>'+
+    svg+
+    '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:3px;"><span>30일 전</span><span>오늘</span></div>'+
+  '</div>';
 }
 
 function renderRecent(){
