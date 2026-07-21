@@ -2077,6 +2077,20 @@ var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
 var pcList = [];
 var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false, pcMapDrawnKey='';
+var pcFocusIW=null, pcMapTimer=null;  // 지도 위 포커스 InfoWindow(이력 보기 버튼 포함)
+var pcMapState=null, pcRestoreView=false;  // 상세→지도 복귀 시 당시 위치/줌 유지용
+// 지도 상태(중심·줌) 저장 — 상세 진입 직전 호출
+function pcSaveMapState(){
+  if(pcMapObj && typeof kakao!=='undefined'){
+    try{ var c=pcMapObj.getCenter(); pcMapState={lat:c.getLat(), lng:c.getLng(), level:pcMapObj.getLevel()}; }catch(e){}
+  }
+  if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
+}
+// 저장한 지도 상태로 복원
+function pcApplyMapState(){
+  if(!pcMapObj || !pcMapState || typeof kakao==='undefined') return;
+  try{ pcMapObj.setLevel(pcMapState.level); pcMapObj.setCenter(new kakao.maps.LatLng(pcMapState.lat, pcMapState.lng)); }catch(e){}
+}
 var PC_DEFAULT_CENTER={lat:37.5665,lng:126.9780};
 var PC_ST_ORDER={'미점검':0,'경고':1,'권고':2,'점검대상':3,'정상':4};
 
@@ -2382,8 +2396,19 @@ function pcFocusHospOnMap(name, itemEl){
   if(pcMapObj && typeof kakao!=='undefined'){
     var pos=new kakao.maps.LatLng(h.lat,h.lng);
     pcMapObj.setLevel(5); pcMapObj.panTo(pos);
+    if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
+    // 오늘 완료 정보(담당자·구분)가 있으면 함께 표기
+    var info='', tl=pcTodayList(), nk=normalize(name);
+    for(var i=0;i<tl.length;i++){ if(normalize(tl[i].hosp)===nk){ info='🧑‍🔧 '+escapeHtml(tl[i].fse||'-')+(tl[i].gubun?' · '+escapeHtml(tl[i].gubun):''); break; } }
+    var nameJs=String(h.n).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var content='<div style="padding:8px 11px;min-width:132px;font-family:\'Noto Sans KR\',sans-serif;">'+
+      '<div style="font-size:12.5px;font-weight:800;color:#1B2F5E;white-space:nowrap;">'+escapeHtml(h.n)+'</div>'+
+      (info?'<div style="font-size:11px;color:#6B7A99;margin-top:3px;white-space:nowrap;">'+info+'</div>':'')+
+      '<button onclick="pcSelect(\''+nameJs+'\')" style="margin-top:8px;width:100%;border:0;background:#2E7D9E;color:#fff;font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:7px;cursor:pointer;font-family:inherit;">🕑 이력 보기</button>'+
+    '</div>';
     var mk=pcMarkerByName[h.n];
-    if(mk){ var iw=new kakao.maps.InfoWindow({content:'<div style="padding:5px 9px;font-size:11.5px;font-weight:700;color:#1B2F5E;white-space:nowrap;">'+escapeHtml(h.n)+'</div>'}); iw.open(pcMapObj, mk); setTimeout(function(){ iw.close(); }, 2600); }
+    pcFocusIW=new kakao.maps.InfoWindow({content:content, position:pos, removable:true});
+    if(mk) pcFocusIW.open(pcMapObj, mk); else pcFocusIW.open(pcMapObj);
   }
 }
 
@@ -2460,6 +2485,7 @@ function pcShowMap(list){
   loadKakao(function(ok){
     if(ok===false){ pane.innerHTML='<div class="pc-mapfail">지도를 불러올 수 없습니다.<br>네트워크 연결 또는 지도 키 설정을 확인해 주세요.</div>'; return; }
     if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
+    if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
     var center=myPos?new kakao.maps.LatLng(myPos.lat,myPos.lng):new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
     if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9}); }
     else { pcMapObj.relayout(); }
@@ -2468,7 +2494,8 @@ function pcShowMap(list){
       +'#'+pcTodayList().map(function(r){return r.hosp+(r.fse||'');}).join(',')
       +'#'+(searchQ?normalize(searchQ):'')
       +'#'+list.filter(function(h){return h.lat!=null;}).length;
-    if(mapKey===pcMapDrawnKey && pcMapMarkers.length){ return; }
+    var restore=pcRestoreView && pcMapState; pcRestoreView=false;
+    if(mapKey===pcMapDrawnKey && pcMapMarkers.length){ if(restore) pcApplyMapState(); return; }
     pcMapDrawnKey=mapKey;
     pcMapMarkers.forEach(function(m){m.setMap(null);}); pcMapMarkers=[]; pcMarkerByName={};
     var bounds=new kakao.maps.LatLngBounds(), any=false;
@@ -2515,12 +2542,14 @@ function pcShowMap(list){
       var rtl=document.getElementById('pcRightTtl');
       if(rtl) rtl.textContent = nearCnt ? ('🗺 지도 · 주변 5km '+nearCnt+'곳') : '🗺 지도';
     }
-    if(any) pcMapObj.setBounds(bounds);
-    setTimeout(function(){ if(pcMapObj){ pcMapObj.relayout(); if(any) pcMapObj.setBounds(bounds); } },120);
+    if(restore){ pcApplyMapState(); }
+    else if(any){ pcMapObj.setBounds(bounds); }
+    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any) pcMapObj.setBounds(bounds); } },120);
   });
 }
 
 function pcSelect(name){
+  if(pcRightMode==='map') pcSaveMapState();   // 지도→상세: 당시 위치 저장(복귀용)
   pcSelName=name; pcRightMode='detail';
   var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
   var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
@@ -2536,6 +2565,7 @@ function pcBackToMap(){
   var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
   var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
   var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 지도';
+  pcRestoreView=true;   // 초기화면(전체 fit)이 아니라 이력 확인 당시 위치/줌으로 복귀
   pcShowMap(pcList||[]);
 }
 
