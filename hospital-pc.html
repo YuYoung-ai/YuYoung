@@ -987,11 +987,72 @@ function loadKakao(cb){
   if(kakaoLoaded){ cb(); return; }
   if(!KAKAO_JS_KEY || KAKAO_JS_KEY.indexOf('__')===0){ cb(false); return; }
   const s=document.createElement('script');
-  s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+KAKAO_JS_KEY+'&autoload=false';
+  s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+KAKAO_JS_KEY+'&autoload=false&libraries=services';
   s.onload=()=>{ kakao.maps.load(()=>{ kakaoLoaded=true; cb(); }); };
   s.onerror=()=>cb(false);
   document.head.appendChild(s);
 }
+
+// ===== 주소 → 좌표 지오코딩 (좌표 없는 병원 자동 보정) =====
+// 병원정보DB에 주소는 있으나 좌표(lat/lng)가 없는 병원을 카카오 지오코더로 채운다.
+// 결과는 주소 문자열 기준으로 localStorage 캐시(성공/실패 모두) → 재호출·쿼터 절약.
+var GEO_CACHE_KEY='baz_geocache';
+var geoCache=(function(){ try{ return JSON.parse(localStorage.getItem(GEO_CACHE_KEY)||'{}')||{}; }catch(e){ return {}; } })();
+var geoRunning=false;
+function geoSaveCache(){ try{ localStorage.setItem(GEO_CACHE_KEY, JSON.stringify(geoCache)); }catch(e){} }
+function geocodeMissing(cb){
+  if(geoRunning){ if(cb) cb(0); return; }
+  var targets=HOSPITALS.filter(function(h){ return (h.lat==null||h.lng==null) && String(h.a||'').trim(); });
+  if(!targets.length){ if(cb) cb(0); return; }
+  // 1) 캐시(성공분) 먼저 적용
+  var applied=0;
+  targets.forEach(function(h){
+    var c=geoCache[String(h.a).trim()];
+    if(c && c.lat!=null){ h.lat=c.lat; h.lng=c.lng; applied++; }
+  });
+  // 캐시에 없는(성공/실패 모두 미기록) 주소만 실제 조회
+  var remain=targets.filter(function(h){ return (h.lat==null||h.lng==null) && !(String(h.a).trim() in geoCache); });
+  if(!remain.length){ if(cb) cb(applied); return; }
+  geoRunning=true;
+  loadKakao(function(ok){
+    if(ok===false || typeof kakao==='undefined' || !kakao.maps || !kakao.maps.services){
+      geoRunning=false; if(cb) cb(applied); return;
+    }
+    var geocoder=new kakao.maps.services.Geocoder();
+    var i=0, filled=0;
+    (function next(){
+      if(i>=remain.length){ geoRunning=false; geoSaveCache(); if(cb) cb(applied+filled); return; }
+      var h=remain[i++], addr=String(h.a).trim();
+      // 같은 주소가 앞선 반복에서 이미 조회됨(중복 병원) → 캐시 재사용, 재호출 안 함
+      if(addr in geoCache){
+        var c=geoCache[addr];
+        if(c && c.lat!=null){ h.lat=c.lat; h.lng=c.lng; filled++; }
+        next(); return;
+      }
+      geocoder.addressSearch(addr, function(result, status){
+        if(status===kakao.maps.services.Status.OK && result && result[0]){
+          var la=parseFloat(result[0].y), ln=parseFloat(result[0].x);
+          if(!isNaN(la)&&!isNaN(ln)){ h.lat=la; h.lng=ln; geoCache[addr]={lat:la,lng:ln}; filled++; }
+          else { geoCache[addr]={lat:null,lng:null}; }
+        } else {
+          geoCache[addr]={lat:null,lng:null};   // 실패도 캐시(주소가 바뀌면 키가 달라져 재시도)
+        }
+        setTimeout(next, 130);   // 쿼터 보호용 throttle
+      });
+    })();
+  });
+}
+// 지오코딩 후 좌표가 채워지면 목록/지도/이동시간 카드 재렌더
+function bazGeocodeRefresh(){
+  geocodeMissing(function(n){
+    if(n>0){
+      try{ if(typeof render==='function') render(); }catch(e){}
+      try{ if(typeof pcRenderRouteCard==='function') pcRenderRouteCard(); }catch(e){}
+      console.log('[지오코딩] 좌표 보정 '+n+'곳');
+    }
+  });
+}
+window.bazGeocodeRefresh=bazGeocodeRefresh;
 function showMap(list){
   const box=document.getElementById('mapBox');
   loadKakao((ok)=>{
@@ -1833,6 +1894,8 @@ applyLang();
       populateFilters();
       updateStats(); render();
       if(curTab==='dash') renderDash();
+      // DB로 주소가 채워졌을 수 있으니 좌표 없는 병원 지오코딩
+      try{ if(typeof bazGeocodeRefresh==='function') bazGeocodeRefresh(); }catch(e){}
       return true;
     }
     return false;
@@ -1929,6 +1992,7 @@ applyLang();
     try{ syncHospDB(); }catch(e){}
     try{ syncIssueHist(); }catch(e){}
     try{ syncVisitLog(); }catch(e){}
+    try{ if(typeof bazGeocodeRefresh==='function') bazGeocodeRefresh(); }catch(e){}
     // 최근 완료(handover) → 오늘 완료·이동시간 카드 갱신
     try{
       if(typeof pcLoadRecent==='function'){
