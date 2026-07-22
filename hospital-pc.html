@@ -2211,11 +2211,49 @@ function pcSetProg(hosp, fse){
   if(fse){ Object.keys(pcInProgress).forEach(function(hn){ if(pcInProgress[hn]===fse) delete pcInProgress[hn]; }); } // 담당자당 1곳
   pcInProgress[hosp]=fse; pcSaveProg();
   if(pcIsDone(hosp)){ delete pcDone[hosp]; pcSaveDone(); }   // 재시작 시 완료 표기 해제
+  pcProgPush('set', hosp, fse);                             // 서버 동기화(사용자 간 연동)
 }
-function pcClearProg(hosp){ delete pcInProgress[hosp]; pcSaveProg(); }
+function pcClearProg(hosp){ delete pcInProgress[hosp]; pcSaveProg(); pcProgPush('clear', hosp); }
 // 완료: 진행중 해제 + 상태를 '정상'으로 표기
-function pcMarkDone(hosp){ if(!hosp) return; delete pcInProgress[hosp]; pcSaveProg(); pcDone[hosp]=1; pcSaveDone(); pcRefreshProgViews(hosp); }
+function pcMarkDone(hosp){ if(!hosp) return; delete pcInProgress[hosp]; pcSaveProg(); pcDone[hosp]=1; pcSaveDone(); pcProgPush('done', hosp); pcRefreshProgViews(hosp); }
 window.pcMarkDone=pcMarkDone;
+
+// ── 진행중/완료 공유 상태 서버 동기화 (HANDOVER_URL, 사용자 간 연동) ──
+var pcProgHold=0;   // 로컬 변경 직후 짧은 시간 폴링이 되돌리지 않도록 보호
+function pcProgPush(op, hosp, fse){
+  if(!HANDOVER_URL || !op || !hosp) return;
+  pcProgHold=Date.now()+3000;
+  var body=JSON.stringify({action:'progress_save', op:op, hosp:hosp, fse:fse||''});
+  try{
+    fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+      .catch(function(){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} });
+  }catch(e){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(_){} }
+}
+function pcProgPull(){
+  if(!HANDOVER_URL || Date.now()<pcProgHold) return;
+  fetch(HANDOVER_URL+'?action=progress',{method:'GET'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d || d.success!==true) return;
+      var np=(d.prog&&typeof d.prog==='object')?d.prog:{};
+      var nd=(d.done&&typeof d.done==='object')?d.done:{};
+      // 변경 없으면 재렌더 생략(깜빡임 방지)
+      if(JSON.stringify(np)===JSON.stringify(pcInProgress) && JSON.stringify(nd)===JSON.stringify(pcDone)) return;
+      pcInProgress=np; pcDone=nd; pcSaveProg(); pcSaveDone();
+      try{ pcRenderRouteCard(); }catch(e){}
+      try{ pcRenderRecentCard(); }catch(e){}
+      try{ if(typeof pcList!=='undefined'){ pcRenderLeft(pcList||[]); pcHighlight(); } }catch(e){}
+      try{ if(pcRightMode==='detail'&&pcSelName) pcRenderDetail(pcSelName); }catch(e){}
+    })
+    .catch(function(){});
+}
+// 초기 동기화 + 주기적 폴링 + 포커스/복귀 시 즉시 갱신
+try{
+  setTimeout(pcProgPull, 900);
+  setInterval(function(){ if(document.visibilityState!=='hidden') pcProgPull(); }, 25000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') pcProgPull(); });
+  window.addEventListener('focus', pcProgPull);
+}catch(e){}
 // 담당자 후보 목록: 영업담당(sa) + 오늘 처리자(fse) 합집합, 가나다 정렬
 function pcAssigneeList(){
   var s={};

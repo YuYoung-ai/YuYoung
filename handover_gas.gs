@@ -207,6 +207,7 @@ function doPost(e){
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
+    if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
 
     var sh = sheet_(CONFIG.SHEET_NAME);
     if(!sh) return json_({success:false, error:'시트 없음: '+CONFIG.SHEET_NAME});
@@ -274,6 +275,7 @@ function doGet(e){
     if(action==='guide')  return json_(gateGuide_(p));          /* [v2.1] Lv.3 토큰 게이트 */
     if(action==='weekly') return json_(wkGetWeekly_(p));        /* [v2.1] 주간 처리 내역 */
     if(action==='menu')   return json_(menuGet_());             /* [v2.1] 허브 메뉴 설정 */
+    if(action==='progress') return json_(progGet_());           /* [v2.4] 진행중 공유 상태 */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
     return json_({success:false, error:String(err)});
@@ -971,4 +973,56 @@ function menuSave_(p){
   });
   sh.getRange(1,1,rows.length,6).setValues(rows);
   return {success:true, count:rows.length-1, updated:now};
+}
+
+/* ═══════════ [v2.4] 진행중(현장 방문) 공유 상태 — 사용자 간 실시간 동기화 ═══════════
+ *  ScriptProperties에 단일 JSON 저장: {prog:{병원명:담당자}, done:{병원명:1}, updated}
+ *   - prog : 현재 진행중 병원 → 담당자 (담당자당 1곳)
+ *   - done : 완료 처리되어 '정상'으로 표기할 병원
+ *  op 기반 원자적 갱신(LockService)으로 다중 사용자 동시 편집 시 덮어쓰기 방지.
+ *  GET  ?action=progress               → {success, prog, done, updated}
+ *  POST {action:'progress_save', op, hosp, fse}  op: 'set'|'clear'|'done'|'replace'
+ */
+function progRead_(){
+  var raw = PropertiesService.getScriptProperties().getProperty('cs_progress') || '{}';
+  var o = {}; try{ o = JSON.parse(raw) || {}; }catch(e){ o = {}; }
+  if(!o.prog || typeof o.prog !== 'object') o.prog = {};
+  if(!o.done || typeof o.done !== 'object') o.done = {};
+  return o;
+}
+function progGet_(){
+  var o = progRead_();
+  return {success:true, prog:o.prog, done:o.done, updated:o.updated||''};
+}
+function progSave_(p){
+  var lock = LockService.getScriptLock();
+  try{
+    lock.waitLock(15000);
+    var o = progRead_();
+    var op = String(p.op||'').trim();
+    var hosp = String(p.hosp||'').trim();
+    if(op==='set' && hosp){
+      var fse = String(p.fse||'').trim();
+      if(fse){ Object.keys(o.prog).forEach(function(hn){ if(o.prog[hn]===fse) delete o.prog[hn]; }); }  // 담당자당 1곳
+      o.prog[hosp] = fse;
+      if(o.done[hosp]) delete o.done[hosp];               // 재시작 시 완료 표기 해제
+    } else if(op==='clear' && hosp){
+      delete o.prog[hosp];
+    } else if(op==='done' && hosp){
+      delete o.prog[hosp];
+      o.done[hosp] = 1;
+    } else if(op==='replace'){
+      o.prog = (p.prog && typeof p.prog==='object') ? p.prog : {};
+      o.done = (p.done && typeof p.done==='object') ? p.done : {};
+    } else {
+      return {success:false, error:'알 수 없는 op: '+op};
+    }
+    o.updated = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
+    PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
+    return {success:true, prog:o.prog, done:o.done, updated:o.updated};
+  }catch(err){
+    return {success:false, error:String(err)};
+  }finally{
+    try{ lock.releaseLock(); }catch(_){}
+  }
 }
