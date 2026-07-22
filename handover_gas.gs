@@ -264,7 +264,7 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
-    if(action==='ping')   return json_({success:true, ver:'2.3.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.5.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -975,51 +975,116 @@ function menuSave_(p){
   return {success:true, count:rows.length-1, updated:now};
 }
 
-/* ═══════════ [v2.4] 진행중(현장 방문) 공유 상태 — 사용자 간 실시간 동기화 ═══════════
- *  ScriptProperties에 단일 JSON 저장: {prog:{병원명:담당자}, done:{병원명:1}, updated}
- *   - prog : 현재 진행중 병원 → 담당자 (담당자당 1곳)
- *   - done : 완료 처리되어 '정상'으로 표기할 병원
+/* ═══════════ [v2.5] 진행중 + 현장 일정(인원별 업무 큐) 공유 상태 ═══════════
+ *  ScriptProperties에 단일 JSON 저장:
+ *    { queues:{담당자:[{h:병원명, s:'wait'|'prog'|'done'} ...]},   // 단일 진실 소스
+ *      prog:{병원명:담당자},   // 파생: 각 큐의 s==='prog'
+ *      done:{병원명:1},        // 파생: s==='done' + 레거시 완료 표기
+ *      updated }
+ *  불변량: 큐당 prog 최대 1개. wait 있고 prog 없으면 맨 앞 wait 자동 승격.
  *  op 기반 원자적 갱신(LockService)으로 다중 사용자 동시 편집 시 덮어쓰기 방지.
- *  GET  ?action=progress               → {success, prog, done, updated}
- *  POST {action:'progress_save', op, hosp, fse}  op: 'set'|'clear'|'done'|'replace'
+ *  GET  ?action=progress
+ *  POST {action:'progress_save', op, ...}
+ *    큐:   q_add{fse,hosp} · q_remove{fse,hosp} · q_move{fse,hosp,to} · q_done{fse,hosp} · q_clear{fse}
+ *    레거시: set{hosp,fse} · clear{hosp} · done{hosp} · replace{prog,done}
  */
 function progRead_(){
   var raw = PropertiesService.getScriptProperties().getProperty('cs_progress') || '{}';
   var o = {}; try{ o = JSON.parse(raw) || {}; }catch(e){ o = {}; }
-  if(!o.prog || typeof o.prog !== 'object') o.prog = {};
-  if(!o.done || typeof o.done !== 'object') o.done = {};
+  if(!o.prog   || typeof o.prog   !== 'object') o.prog = {};
+  if(!o.done   || typeof o.done   !== 'object') o.done = {};
+  if(!o.queues || typeof o.queues !== 'object') o.queues = {};
+  /* 레거시 prog(큐 없이 저장된 진행중)을 큐로 마이그레이션 */
+  Object.keys(o.prog).forEach(function(hosp){
+    var fse = o.prog[hosp];
+    var q = qEnsure_(o, fse);
+    if(qFind_(q, hosp) < 0) q.unshift({h:hosp, s:'prog'});
+  });
   return o;
+}
+function qEnsure_(o, fse){ if(!o.queues[fse]) o.queues[fse] = []; return o.queues[fse]; }
+function qFind_(q, hosp){ for(var i=0;i<q.length;i++){ if(q[i].h===hosp) return i; } return -1; }
+function qRemoveAll_(o, hosp){
+  Object.keys(o.queues).forEach(function(fse){
+    o.queues[fse] = o.queues[fse].filter(function(x){ return x.h !== hosp; });
+  });
+}
+/** 큐 → prog/done 파생 재계산. wait 있고 prog 없으면 맨 앞 wait 승격 */
+function deriveProg_(o){
+  var prog = {};
+  Object.keys(o.queues).forEach(function(fse){
+    var q = o.queues[fse];
+    if(!q.length){ delete o.queues[fse]; return; }
+    if(!q.some(function(x){ return x.s==='prog'; })){
+      for(var i=0;i<q.length;i++){ if(q[i].s==='wait'){ q[i].s='prog'; break; } }
+    }
+    q.forEach(function(it){
+      if(it.s==='prog') prog[it.h] = fse;
+      if(it.s==='done') o.done[it.h] = 1;
+    });
+  });
+  o.prog = prog;
 }
 function progGet_(){
   var o = progRead_();
-  return {success:true, prog:o.prog, done:o.done, updated:o.updated||''};
+  deriveProg_(o);
+  return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated||''};
 }
 function progSave_(p){
   var lock = LockService.getScriptLock();
   try{
     lock.waitLock(15000);
     var o = progRead_();
-    var op = String(p.op||'').trim();
+    var op   = String(p.op||'').trim();
     var hosp = String(p.hosp||'').trim();
-    if(op==='set' && hosp){
-      var fse = String(p.fse||'').trim();
-      if(fse){ Object.keys(o.prog).forEach(function(hn){ if(o.prog[hn]===fse) delete o.prog[hn]; }); }  // 담당자당 1곳
-      o.prog[hosp] = fse;
-      if(o.done[hosp]) delete o.done[hosp];               // 재시작 시 완료 표기 해제
+    var fse  = String(p.fse||'').trim();
+
+    if(op==='q_add' && fse && hosp){
+      qRemoveAll_(o, hosp);                 // 한 병원은 한 사람의 일정에만
+      qEnsure_(o, fse).push({h:hosp, s:'wait'});
+      if(o.done[hosp]) delete o.done[hosp];
+    } else if(op==='q_remove' && fse && hosp){
+      var qr = qEnsure_(o, fse); var ir = qFind_(qr, hosp);
+      if(ir>=0) qr.splice(ir,1);
+    } else if(op==='q_move' && fse && hosp){
+      var qm = qEnsure_(o, fse); var im = qFind_(qm, hosp);
+      if(im>=0){
+        var to = Math.max(0, Math.min(qm.length-1, Number(p.to)));
+        var item = qm.splice(im,1)[0];
+        qm.splice(to, 0, item);
+      }
+    } else if(op==='q_done' && fse && hosp){
+      var qd = qEnsure_(o, fse); var id = qFind_(qd, hosp);
+      if(id>=0){ qd[id].s='done'; o.done[hosp]=1; }
+    } else if(op==='q_clear' && fse){
+      delete o.queues[fse];
+    } else if(op==='set' && hosp){
+      qRemoveAll_(o, hosp);
+      var qs = qEnsure_(o, fse);
+      qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; });   // 기존 prog 강등
+      qs.unshift({h:hosp, s:'prog'});
+      if(o.done[hosp]) delete o.done[hosp];
     } else if(op==='clear' && hosp){
-      delete o.prog[hosp];
+      qRemoveAll_(o, hosp);
     } else if(op==='done' && hosp){
-      delete o.prog[hosp];
-      o.done[hosp] = 1;
+      var found=false;
+      Object.keys(o.queues).forEach(function(f){
+        var q=o.queues[f], i=qFind_(q,hosp);
+        if(i>=0){ q[i].s='done'; found=true; }
+      });
+      o.done[hosp]=1;
     } else if(op==='replace'){
+      o.queues = {};
       o.prog = (p.prog && typeof p.prog==='object') ? p.prog : {};
       o.done = (p.done && typeof p.done==='object') ? p.done : {};
+      Object.keys(o.prog).forEach(function(h){ qEnsure_(o, o.prog[h]).push({h:h, s:'prog'}); });
     } else {
       return {success:false, error:'알 수 없는 op: '+op};
     }
+    deriveProg_(o);
     o.updated = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
     PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
-    return {success:true, prog:o.prog, done:o.done, updated:o.updated};
+    return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated};
   }catch(err){
     return {success:false, error:String(err)};
   }finally{
