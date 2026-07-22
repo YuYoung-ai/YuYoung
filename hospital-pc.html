@@ -1245,6 +1245,11 @@ document.querySelector('.tabs').addEventListener('click',e=>{
   document.getElementById('viewRecent').style.display=(curTab==='recent')?'block':'none';
   if(curTab==='dash') renderDash();
   if(curTab==='recent') renderRecent();
+  // 병원조회 탭 복귀 시 카카오 지도 relayout — display:none 이었다가 복귀하면
+  // 타일이 회색으로 깨지므로 재계산(테마·필터·모드 토글과 동일 패턴)
+  if(curTab==='list'){
+    try{ if(typeof pcMapObj!=='undefined' && pcMapObj && pcMapObj.relayout){ setTimeout(function(){ pcMapObj.relayout(); }, 60); } }catch(e){}
+  }
 });
 
 // ===== 대시보드 =====
