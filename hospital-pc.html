@@ -95,6 +95,10 @@
   .rrc-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:11px;color:var(--text-muted);}
   .rrc-meta .fse{color:var(--ok);font-weight:700;}
   .rrc-g{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--gray-bg);color:var(--text-muted);}
+  .rrc-cnt2{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:var(--ok-soft);color:var(--ok);}
+  .rrc-prog{display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:4px 8px;}
+  .rrc-done{margin-left:auto;border:1px solid var(--teal);background:var(--teal);color:#fff;font-size:10px;font-weight:800;padding:2px 9px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .rrc-done:hover{filter:brightness(1.08);}
   #pcRightHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid var(--gray-line);background:var(--surface-2);flex:0 0 auto;}
   #pcRightHead .ttl{font-size:12.5px;font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #pcRightBody{flex:1 1 auto;position:relative;min-height:0;}
@@ -155,6 +159,11 @@
   .pc-dt-prog:hover{background:var(--teal-soft);}
   .pc-dt-prog.on{background:var(--teal);color:#fff;}
   .pc-dt-prog.on:hover{opacity:.92;background:var(--teal);}
+  .pc-dt-progrow{display:flex;align-items:stretch;gap:8px;margin:0 0 12px;}
+  .pc-dt-progrow .pc-dt-prog{margin:0;flex:1;}
+  .pc-assign{flex:0 0 auto;min-width:96px;max-width:130px;border:1.5px solid var(--gray-line);border-radius:9px;background:var(--surface);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:700;padding:0 8px;cursor:pointer;}
+  .pc-dt-done{flex:0 0 auto;padding:10px 14px;border-radius:9px;border:1.5px solid var(--ok);background:var(--ok);color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .pc-dt-done:hover{filter:brightness(1.06);}
   .pc-dt-acts{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
   .pc-dt-acts button{flex:1;min-width:88px;padding:9px 6px;border-radius:8px;border:1px solid var(--gray-line);background:var(--surface);font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;color:var(--navy);}
   .pc-dt-acts button:hover{background:var(--gray-bg);}
@@ -286,6 +295,8 @@
   .st-badge.권고{background:var(--warn-soft);color:var(--st-warn);}
   .st-badge.경고{background:var(--danger-soft);color:var(--st-danger);}
   .st-badge.미점검{background:var(--neutral-soft);color:var(--st-none);}
+  .st-badge.진행중{background:var(--teal-soft);color:var(--teal);}
+  .st-badge.진행중::before{background:var(--teal);}
   .st-badge.비대상{background:var(--neutral-soft);color:var(--text-muted);font-weight:600;}
 
   .warn-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-top:6px;}
@@ -471,7 +482,9 @@
   .prc-item.prog{background:rgba(46,125,158,.12);}
   .prc-item.prog .prc-nm{color:var(--teal);}
   .prc-item.prog .prc-prog{background:var(--teal);border-color:var(--teal);color:#fff;}
-  .prc-prog-cur{font-size:10.5px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:4px 9px;margin-bottom:7px;cursor:pointer;display:inline-block;}
+  .prc-prog-cur{font-size:10.5px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:4px 9px;margin-bottom:7px;cursor:pointer;display:flex;align-items:center;gap:7px;}
+  .prc-done{margin-left:auto;border:1px solid var(--teal);background:var(--teal);color:#fff;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:6px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .prc-done:hover{filter:brightness(1.08);}
   body.dark .prc-item.prog{background:rgba(84,170,208,.16);}
 
   /* 지도: 검색 반경 5km 주변 병원 마커 */
@@ -1056,7 +1069,7 @@ function cardHTML(h){
   const naverUrl='https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
   const inspUrl='inspection.html?h='+encodeURIComponent(h.n)+'&sn='+encodeURIComponent(h.s||'')+'&nc='+encodeURIComponent(h.nc||'')+'&e='+encodeURIComponent(h.sa||'');
   const survUrl='survey.html?h='+encodeURIComponent(h.n)+'&e='+encodeURIComponent(h.sa||'');
-  const badge=isNcare(h)?'<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>':'<span class="st-badge 비대상">'+t('notTarget')+'</span>';
+  const badge=(typeof pcStatusBadge==='function')?pcStatusBadge(h):(isNcare(h)?'<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>':'<span class="st-badge 비대상">'+t('notTarget')+'</span>');
 
   const lvl=dueLevel(h);
   let cardCls='h-card', warnTag='';
@@ -2186,14 +2199,30 @@ var pcInProgress=(function(){
   try{ return JSON.parse(localStorage.getItem('baz_pc_prog')||'{}')||{}; }catch(e){ return {}; }
 })();
 function pcSaveProg(){ try{ localStorage.setItem('baz_pc_prog', JSON.stringify(pcInProgress)); }catch(e){} }
-function pcIsProg(hosp){ return Object.prototype.hasOwnProperty.call(pcInProgress, hosp); }
-function pcProgHospOf(fse){ var r=''; Object.keys(pcInProgress).forEach(function(hn){ if(pcInProgress[hn]===fse) r=hn; }); return r; }
+// 초기 렌더(applyLang)가 이 var 할당 이전에 실행될 수 있어 방어적으로 null 체크
+function pcIsProg(hosp){ return !!pcInProgress && Object.prototype.hasOwnProperty.call(pcInProgress, hosp); }
+function pcProgHospOf(fse){ var r=''; if(!pcInProgress) return r; Object.keys(pcInProgress).forEach(function(hn){ if(pcInProgress[hn]===fse) r=hn; }); return r; }
+// 완료 처리 오버라이드: 진행중 → 완료 시 상태를 '정상'으로 표기 (localStorage)
+var pcDone=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_done')||'{}')||{}; }catch(e){ return {}; } })();
+function pcSaveDone(){ try{ localStorage.setItem('baz_pc_done', JSON.stringify(pcDone)); }catch(e){} }
+function pcIsDone(hosp){ return !!pcDone && Object.prototype.hasOwnProperty.call(pcDone, hosp); }
 function pcSetProg(hosp, fse){
   fse=(fse||'').trim();
   if(fse){ Object.keys(pcInProgress).forEach(function(hn){ if(pcInProgress[hn]===fse) delete pcInProgress[hn]; }); } // 담당자당 1곳
   pcInProgress[hosp]=fse; pcSaveProg();
+  if(pcIsDone(hosp)){ delete pcDone[hosp]; pcSaveDone(); }   // 재시작 시 완료 표기 해제
 }
 function pcClearProg(hosp){ delete pcInProgress[hosp]; pcSaveProg(); }
+// 완료: 진행중 해제 + 상태를 '정상'으로 표기
+function pcMarkDone(hosp){ if(!hosp) return; delete pcInProgress[hosp]; pcSaveProg(); pcDone[hosp]=1; pcSaveDone(); pcRefreshProgViews(hosp); }
+window.pcMarkDone=pcMarkDone;
+// 담당자 후보 목록: 영업담당(sa) + 오늘 처리자(fse) 합집합, 가나다 정렬
+function pcAssigneeList(){
+  var s={};
+  HOSPITALS.forEach(function(h){ var v=(h.sa||'').trim(); if(v&&v!=='장비OUT') s[v]=1; });
+  pcTodayFseList().forEach(function(f){ if(f) s[f]=1; });
+  return Object.keys(s).sort(function(a,b){ try{ return a.localeCompare(b,'ko'); }catch(e){ return a<b?-1:1; } });
+}
 // 오늘 처리 담당자 목록 / 병원 담당자 추정 (우측 카드에서 담당자 미지정으로 설정 시)
 function pcTodayFseList(){ var s={},o=[]; pcTodayList().forEach(function(r){ var f=(r.fse||'').trim(); if(f&&!s[f]){s[f]=1;o.push(f);} }); return o; }
 function pcGuessFse(hosp){
@@ -2204,6 +2233,7 @@ function pcGuessFse(hosp){
 // 진행중 변경 후 관련 화면 갱신
 function pcRefreshProgViews(hosp){
   try{ pcRenderRouteCard(); }catch(e){}
+  try{ pcRenderRecentCard(); }catch(e){}
   try{ pcRenderLeft(pcList); pcHighlight(); }catch(e){}
   try{ if(pcRightMode==='detail' && pcSelName) pcRenderDetail(pcSelName); }catch(e){}
   if(hosp && pcIsProg(hosp)){
@@ -2218,6 +2248,9 @@ function pcToggleProgHosp(hosp, fse){
   pcRefreshProgViews(hosp);
 }
 window.pcToggleProgHosp=pcToggleProgHosp;
+// 상세 패널: 선택한 담당자로 진행중 설정
+function pcSetProgUI(hosp){ if(!hosp) return; var s=document.getElementById('pcAssignSel'); pcSetProg(hosp, s?s.value:''); pcRefreshProgViews(hosp); }
+window.pcSetProgUI=pcSetProgUI;
 var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
@@ -2252,6 +2285,8 @@ function pcVendorText(h){
   return v||'-';
 }
 function pcStatusBadge(h){
+  if(pcIsProg(h.n)) return '<span class="st-badge 진행중">🔵 진행중</span>';
+  if(pcIsDone(h.n)) return '<span class="st-badge 정상">정상</span>';
   return isNcare(h)
     ? '<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
     : '<span class="st-badge 비대상">'+t('notTarget')+'</span>';
@@ -2291,6 +2326,10 @@ function pcEnsureDOM(){
   if(fr && !document.getElementById('pcRecentCard')){
     var rc=document.createElement('div'); rc.id='pcRecentCard'; fr.appendChild(rc);
     rc.addEventListener('click', function(e){
+      var done=e.target.closest('.rrc-done');
+      if(done){ e.stopPropagation(); pcMarkDone(done.getAttribute('data-done-hn')); return; }
+      var pl=e.target.closest('.rrc-prog');
+      if(pl){ pcFocusHospOnMap(pl.getAttribute('data-hn'), null); return; }
       var it=e.target.closest('.rrc-item'); if(!it) return;
       pcFocusHospOnMap(it.getAttribute('data-hn'), it);
     });
@@ -2303,6 +2342,8 @@ function pcEnsureDOM(){
       if(so){ var v=so.getAttribute('data-rsort'); if(v!==pcRouteSort){ pcRouteSort=v; try{ localStorage.setItem('baz_pc_routesort',v); }catch(_){} pcRenderRouteCard(); } return; }
       var pb=e.target.closest('.prc-prog');
       if(pb){ pcToggleInProgress(pb.getAttribute('data-fse'), pb.getAttribute('data-hn')); return; }
+      var dn=e.target.closest('.prc-done');
+      if(dn){ e.stopPropagation(); pcMarkDone(dn.getAttribute('data-done-hn')); return; }
       var pc=e.target.closest('.prc-prog-cur');
       if(pc){ pcFocusHospOnMap(pc.getAttribute('data-hn'), null); return; }
       var it=e.target.closest('.prc-item'); if(!it) return;
@@ -2450,17 +2491,35 @@ function pcTodayList(){
 function pcRenderRecentCard(){
   var box=document.getElementById('pcRecentCard'); if(!box) return;
   var list=pcTodayList();
+  // 총 건수는 오늘 전체 완료 건수 유지
   var head='<div class="rrc-head">🏁 오늘 완료 <span class="rrc-cnt">'+list.length+'건</span></div>';
   if(!list.length){
     var msg=(pcRecentState==='loading')?'불러오는 중…':(pcRecentState==='error')?'불러오기 실패 (네트워크 확인)':'오늘 완료 내역이 없습니다';
     box.innerHTML=head+'<div class="rrc-empty">'+msg+'</div>'; return;
   }
-  box.innerHTML=head+'<div class="rrc-list">'+list.map(function(r){
+  // 인원(FSE)별 가장 최신 완료 1건 + 건수 (pcTodayList는 오래된→최신 순 → 마지막이 최신)
+  var latestByFse={}, cntByFse={}, order=[];
+  list.forEach(function(r){
+    var fse=String(r.fse||'').trim(); if(!fse) fse='(담당 미상)';
+    if(!(fse in latestByFse)) order.push(fse);
+    latestByFse[fse]=r; cntByFse[fse]=(cntByFse[fse]||0)+1;
+  });
+  box.innerHTML=head+'<div class="rrc-list">'+order.map(function(fse){
+    var r=latestByFse[fse];
     var h=pcHospByName(r.hosp); var hn=h?h.n:r.hosp;
     var g=r.gubun?'<span class="rrc-g">'+escapeHtml(r.gubun)+'</span>':'';
+    var cnt=cntByFse[fse]||1;
+    var cntTag=(cnt>1)?'<span class="rrc-cnt2">오늘 '+cnt+'건</span>':'';
+    // 이 담당자의 현재 진행중 병원
+    var prog=pcProgHospOf(fse);
+    var progLine=prog
+      ? '<div class="rrc-prog" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+
+          '<button class="rrc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">완료</button></div>'
+      : '';
     return '<div class="rrc-item" data-hn="'+escapeHtml(hn)+'">'+
       '<div class="rrc-nm">'+escapeHtml(r.hosp)+'</div>'+
-      '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(r.fse||'-')+'</span>'+g+'</div>'+
+      '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span>'+g+cntTag+'</div>'+
+      progLine+
     '</div>';
   }).join('')+'</div>';
 }
@@ -2478,25 +2537,33 @@ function pcSevColor(h){
 }
 function pcNearestHospitals(from, n, mode){
   mode = mode || 'near';
-  var out=[];
+  var all=[];
   for(var i=0;i<HOSPITALS.length;i++){
     var h=HOSPITALS[i];
     if(h.lat==null||h.lng==null) continue;
     if(h.n===from.n) continue;
     if(/^데모/.test(h.n)) continue;
     if(!isNcare(h)) continue;   // N-CARE 가입 병원만 (미가입 제외)
-    out.push({h:h, d:distKm(from.lat,from.lng,h.lat,h.lng)});
+    all.push({h:h, d:distKm(from.lat,from.lng,h.lat,h.lng)});
   }
-  out.sort(function(a,b){
-    if(mode==='due'){
+  if(mode==='due'){
+    // 점검필요 우선: 반경 15km 이내, 점검필요·심각도 우선 → 거리
+    var pool=all.filter(function(x){ return x.d<=15; });
+    pool.sort(function(a,b){
       var da=isDue(a.h)?1:0, db=isDue(b.h)?1:0;
       if(da!==db) return db-da;                       // 점검필요 병원 먼저
       var sa=pcSevRank(a.h), sb=pcSevRank(b.h);
       if(sa!==sb) return sb-sa;                        // 심각도 높은 순
-    }
-    return a.d-b.d;                                    // 거리 가까운 순(공통 tiebreak)
-  });
-  return out.slice(0,n);
+      return a.d-b.d;
+    });
+    return pool.slice(0,n);
+  }
+  // 가까운 순: 반경 5km 이내 점검대상(점검필요) 병원 → 없으면 10km까지 확장, 거리순
+  var due=all.filter(function(x){ return isDue(x.h); });
+  var within=due.filter(function(x){ return x.d<=5; });
+  if(!within.length) within=due.filter(function(x){ return x.d<=10; });
+  within.sort(function(a,b){ return a.d-b.d; });
+  return within.slice(0,n);
 }
 function pcRenderRouteCard(){
   var box=document.getElementById('pcRouteCard'); if(!box) return;
@@ -2538,11 +2605,11 @@ function pcRenderRouteCard(){
           '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
           '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
         '</div>';
-      }).join('') : '<div class="prc-empty" style="padding:2px 6px;">주변 N-CARE 병원 없음</div>';
+      }).join('') : '<div class="prc-empty" style="padding:2px 6px;">'+(pcRouteSort==='near'?'반경 10km 내 점검대상 병원 없음':'반경 15km 내 점검대상 병원 없음')+'</div>';
     } else {
       body = '<div class="prc-empty" style="padding:2px 6px;">📍 좌표 미등록 병원 — 주변 이동 계산 불가</div>';
     }
-    var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'</div>' : '';
+    var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'<button class="prc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">완료</button></div>' : '';
     return '<div class="prc-fse">'+
       '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">현재 '+escapeHtml(cur.name)+'</span></div>'+
       progLine+
@@ -2639,7 +2706,17 @@ function pcRenderDetail(name){
     '<div class="pc-dt-sub">'+escapeHtml(h.s||'')+(h.rg?' · '+escapeHtml(h.rg):'')+'</div>'+
     '<div class="pc-dt-tags">'+tags+'</div>'+
     '<dl class="pc-dt-rows">'+rows+'</dl>'+
-    '<button class="pc-dt-prog'+(progOn?' on':'')+'" onclick="pcToggleProgHosp(\''+nameJs+'\')">'+(progOn?'🔵 진행중 해제':'🔵 진행중으로 설정')+'</button>'+
+    (progOn
+      ? '<div class="pc-dt-progrow">'+
+          '<button class="pc-dt-prog on" onclick="pcToggleProgHosp(\''+nameJs+'\')">🔵 진행중 해제</button>'+
+          '<button class="pc-dt-done" onclick="pcMarkDone(\''+nameJs+'\')">✅ 완료</button>'+
+        '</div>'
+      : '<div class="pc-dt-progrow">'+
+          '<select id="pcAssignSel" class="pc-assign" aria-label="담당자 선택">'+
+            pcAssigneeList().map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===(h.sa||'').trim()?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+
+          '</select>'+
+          '<button class="pc-dt-prog" onclick="pcSetProgUI(\''+nameJs+'\')">🔵 진행중으로 설정</button>'+
+        '</div>')+
     '<div class="pc-dt-acts">'+
       '<button onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
       '<button onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
