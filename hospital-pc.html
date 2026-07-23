@@ -2358,6 +2358,28 @@ function pcSetProg(hosp, fse){ pcQueueApply('set', fse, hosp); }
 function pcClearProg(hosp){ pcQueueApply('clear', '', hosp); }
 function pcMarkDone(hosp){ if(!hosp) return; pcQueueApply('done', '', hosp); }
 window.pcMarkDone=pcMarkDone;
+// Handover 자동 완료: 진행중 병원이 오늘 handover(오늘 완료)에 기록되면 자동 완료 →
+// 다음 병원 자동 진행중 승격. 담당자(fse)+병원 일치 우선(기록에 담당자 없으면 병원만 일치).
+function pcAutoAdvanceFromHandover(){
+  if(!pcQueues || typeof pcTodayList!=='function') return;
+  var today=pcTodayList(); if(!today.length) return;
+  var byHF={}, byH={};
+  today.forEach(function(r){ var h=normalize(r.hosp); if(!h) return; var f=normalize(r.fse); if(f) byHF[h+'|'+f]=1; else byH[h]=1; });
+  function completed(hosp, fse){ var h=normalize(hosp); return !!(byHF[h+'|'+normalize(fse)] || byH[h]); }
+  var guard=0, advanced=false;
+  while(guard++<60){
+    var found=null;
+    var fses=Object.keys(pcQueues);
+    for(var i=0;i<fses.length && !found;i++){
+      var fse=fses[i], q=pcQueues[fse]||[];
+      for(var j=0;j<q.length;j++){ if(q[j].s==='prog' && completed(q[j].h, fse)){ found={fse:fse, h:q[j].h}; break; } }
+    }
+    if(!found) break;
+    pcQueueApply('q_done', found.fse, found.h);   // 자동 완료 + 다음 승격 + 서버 반영
+    advanced=true;
+  }
+  return advanced;
+}
 
 // ── 서버 동기화 (HANDOVER_URL, 사용자 간 연동) ──
 var pcProgHold=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보호(GAS 콜드스타트 대비 넉넉히)
@@ -2395,6 +2417,7 @@ function pcProgPull(){
       pcDeriveProg();
       Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)) pcDone[h]=1; });
       pcSaveDone();
+      try{ pcAutoAdvanceFromHandover(); }catch(e){}   // handover 기록 반영 자동 승격
       pcRefreshProgViews(null, true);
     })
     .catch(function(){});
@@ -2402,9 +2425,9 @@ function pcProgPull(){
 // 초기 동기화 + 주기적 폴링 + 포커스/복귀 시 즉시 갱신
 try{
   setTimeout(pcProgPull, 900);
-  setInterval(function(){ if(document.visibilityState!=='hidden') pcProgPull(); }, 25000);
-  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') pcProgPull(); });
-  window.addEventListener('focus', pcProgPull);
+  setInterval(function(){ if(document.visibilityState!=='hidden'){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } }, 25000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } });
+  window.addEventListener('focus', function(){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} });
 }catch(e){}
 // 담당자 후보 목록: 영업담당(sa) + 오늘 처리자(fse) 합집합, 가나다 정렬
 function pcAssigneeList(){
@@ -2776,8 +2799,8 @@ function pcLoadRecent(cb){
   var local=pcLocalRecent();
   var cached=null, ts=parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10);
   try{ cached=JSON.parse(localStorage.getItem('baz_pc_recent_cache')||'null'); }catch(e){}
-  if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); if(cb) cb(); }
-  else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); if(cb) cb(); }
+  if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
+  else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
   if(cached && (Date.now()-ts)<5*60*1000) return;      // 5분 캐시 신선
   if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return; }
   if(pcRecentState!=='done') pcRecentState='loading';
@@ -2789,6 +2812,7 @@ function pcLoadRecent(cb){
       pcCollectFse(data, true);   // 전체 handover 응답 기준으로 CS 담당자 목록 갱신(권위)
       pcRecentState='done';
       try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(Date.now())); }catch(e){}
+      try{ pcAutoAdvanceFromHandover(); }catch(e){}
       if(cb) cb();
     })
     .catch(function(){ pcRecentState=pcRecent.length?'done':'error'; if(cb) cb(); });
