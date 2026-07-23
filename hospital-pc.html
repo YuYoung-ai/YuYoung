@@ -505,6 +505,8 @@
   .sch-progress{font-size:11px;font-weight:800;color:var(--ok);background:var(--ok-soft);border-radius:7px;padding:2px 8px;}
   .sch-reset{margin-left:auto;border:1px solid var(--gray-line);background:transparent;color:var(--text-muted);font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:7px;cursor:pointer;font-family:inherit;}
   .sch-reset:hover{border-color:var(--danger);color:var(--danger);}
+  .sch-fse-del{border:1px solid var(--gray-line);background:transparent;color:var(--text-muted);font-size:12px;padding:3px 8px;border-radius:7px;cursor:pointer;font-family:inherit;line-height:1;}
+  .sch-fse-del:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft);}
   .sch-add{position:relative;margin-bottom:10px;}
   .sch-search{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:var(--surface);color:var(--text);}
   .sch-search:focus{border-color:var(--teal);outline:none;box-shadow:0 0 0 3px rgba(46,125,158,.12);}
@@ -710,7 +712,7 @@ const I18N = {
     schTitle:'현장 일정', schAddFse:'담당자 일정 추가', schPickFse:'담당자 선택', schAddHosp:'병원 추가 (검색)',
     schWait:'대기', schProg:'진행중', schDone:'완료', schReset:'초기화', schEmpty:'등록된 일정이 없습니다',
     schNoFse:'담당자를 추가해 하루 방문 순서를 만들어 보세요', schToSchedule:'일정에 추가', schAdded:'일정에 추가됨',
-    schNext:'다음 진행중', schProgress:'진행', schReorder:'순서를 끌어 옮기거나 ▲▼로 조정하세요',
+    schNext:'다음 진행중', schProgress:'진행', schReorder:'순서를 끌어 옮기거나 ▲▼로 조정하세요', schDelFse:'인원 삭제', schActive:'진행중',
     rcToday:'오늘', rc7:'최근 7일', rc14:'최근 14일', rc30:'최근 30일',
     rcCount:'{n}건 · 병원 {h}곳', rcEmpty:'해당 기간에 처리 내역이 없습니다',
     rcInsp:'점검', rcAS:'A/S', rcFse:'처리자', rcPart:'교체품', rcMore:'이력 전체보기',
@@ -743,7 +745,7 @@ const I18N = {
     schTitle:'Field schedule', schAddFse:'Add staff schedule', schPickFse:'Select staff', schAddHosp:'Add hospital (search)',
     schWait:'Waiting', schProg:'In progress', schDone:'Done', schReset:'Reset', schEmpty:'No schedule yet',
     schNoFse:'Add a staff member to build today\'s visit order', schToSchedule:'Add to schedule', schAdded:'Added to schedule',
-    schNext:'Next in progress', schProgress:'Start', schReorder:'Drag or use ▲▼ to reorder',
+    schNext:'Next in progress', schProgress:'Start', schReorder:'Drag or use ▲▼ to reorder', schDelFse:'Remove staff', schActive:'In progress',
     rcToday:'Today', rc7:'Last 7d', rc14:'Last 14d', rc30:'Last 30d',
     rcCount:'{n} records · {h} hospitals', rcEmpty:'No service records in this period',
     rcInsp:'Inspect', rcAS:'A/S', rcFse:'By', rcPart:'Part', rcMore:'View full history',
@@ -776,7 +778,7 @@ const I18N = {
     schTitle:'現場日程', schAddFse:'担当者の日程追加', schPickFse:'担当者選択', schAddHosp:'病院追加(検索)',
     schWait:'待機', schProg:'進行中', schDone:'完了', schReset:'初期化', schEmpty:'登録された日程がありません',
     schNoFse:'担当者を追加して当日の訪問順を作成してください', schToSchedule:'日程に追加', schAdded:'日程に追加しました',
-    schNext:'次の進行中', schProgress:'開始', schReorder:'ドラッグまたは▲▼で並べ替え',
+    schNext:'次の進行中', schProgress:'開始', schReorder:'ドラッグまたは▲▼で並べ替え', schDelFse:'担当者削除', schActive:'進行中',
     rcToday:'今日', rc7:'直近7日', rc14:'直近14日', rc30:'直近30日',
     rcCount:'{n}件 · 病院{h}件', rcEmpty:'この期間の対応履歴はありません',
     rcInsp:'点検', rcAS:'A/S', rcFse:'担当', rcPart:'交換品', rcMore:'履歴を全て表示',
@@ -2297,6 +2299,22 @@ function pcIsDone(hosp){ return !!pcDone && Object.prototype.hasOwnProperty.call
 // 클라이언트에도 두어 낙관적(즉시) 반영 후 서버가 확정한다.
 var pcQueues=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_queues')||'{}')||{}; }catch(e){ return {}; } })();
 function pcSaveQueues(){ try{ localStorage.setItem('baz_pc_queues', JSON.stringify(pcQueues)); }catch(e){} }
+// 삭제 무시목록(tombstone): 삭제한 병원은 서버 폴링이 되살려도 클라이언트가 다시 표시하지 않음
+// (GAS 콜드스타트/POST 지연으로 폴링이 옛 상태를 복원하는 유령 카드 방지). 24h 후 만료.
+var pcGone=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_gone')||'{}')||{}; }catch(e){ return {}; } })();
+function pcSaveGone(){ try{ localStorage.setItem('baz_pc_gone', JSON.stringify(pcGone)); }catch(e){} }
+function pcGoneAdd(hosp){ if(hosp){ pcGone[hosp]=Date.now(); pcSaveGone(); } }
+function pcGoneDel(hosp){ if(hosp && pcGone[hosp]!=null){ delete pcGone[hosp]; pcSaveGone(); } }
+function pcGoneHas(hosp){ var ts=pcGone[hosp]; if(ts==null) return false; if(Date.now()-ts>864e5){ delete pcGone[hosp]; pcSaveGone(); return false; } return true; }
+// 서버 큐에서 tombstone된 병원 제거 + 제거 목록 반환
+function pcGoneFilter(queues){
+  var removed=[], out={};
+  Object.keys(queues||{}).forEach(function(f){
+    var arr=(queues[f]||[]).filter(function(x){ if(x&&x.h&&pcGoneHas(x.h)){ removed.push({fse:f,hosp:x.h}); return false; } return true; });
+    if(arr.length) out[f]=arr;
+  });
+  return {q:out, removed:removed};
+}
 function pcqEnsure(fse){ if(!pcQueues[fse]) pcQueues[fse]=[]; return pcQueues[fse]; }
 function pcqFind(q,hosp){ for(var i=0;i<q.length;i++){ if(q[i].h===hosp) return i; } return -1; }
 function pcqRemoveAll(hosp){ Object.keys(pcQueues).forEach(function(f){ pcQueues[f]=pcQueues[f].filter(function(x){return x.h!==hosp;}); }); }
@@ -2319,18 +2337,20 @@ function pcDeriveProg(){
 // 큐 op 적용(로컬 낙관적) + 서버 반영 + 재렌더. 서버 progSave_와 동일 의미.
 function pcQueueApply(op, fse, hosp, to){
   fse=(fse||'').trim(); hosp=(hosp||'').trim();
-  if(op==='q_add' && fse && hosp){ pcqRemoveAll(hosp); pcqEnsure(fse).push({h:hosp,s:'wait'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
-  else if(op==='q_remove' && fse && hosp){ var qr=pcqEnsure(fse),ir=pcqFind(qr,hosp); if(ir>=0) qr.splice(ir,1); }
+  var extra=null;   // 서버 정합용 보조 op(레거시 clear 등)
+  if(op==='q_add' && fse && hosp){ pcGoneDel(hosp); pcqRemoveAll(hosp); pcqEnsure(fse).push({h:hosp,s:'wait'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
+  else if(op==='q_remove' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); if(pcIsProg(hosp)) delete pcInProgress[hosp]; if(pcIsDone(hosp)){ delete pcDone[hosp]; } extra={action:'progress_save', op:'clear', hosp:hosp}; }
   else if(op==='q_move' && fse && hosp){ var qm=pcqEnsure(fse),im=pcqFind(qm,hosp); if(im>=0){ var t=Math.max(0,Math.min(qm.length-1,Number(to))); var it=qm.splice(im,1)[0]; qm.splice(t,0,it); } }
-  else if(op==='q_clear' && fse){ delete pcQueues[fse]; }
+  else if(op==='q_clear' && fse){ (pcQueues[fse]||[]).forEach(function(x){ if(x&&x.h){ pcGoneAdd(x.h); if(pcIsProg(x.h)) delete pcInProgress[x.h]; } }); delete pcQueues[fse]; }
   else if((op==='q_done'||op==='done') && hosp){ var f2=fse||pcqOf(hosp); if(f2){ var qd=pcqEnsure(f2),idd=pcqFind(qd,hosp); if(idd>=0) qd[idd].s='done'; } pcDone[hosp]=1; }
-  else if(op==='set' && hosp){ pcqRemoveAll(hosp); var qs=pcqEnsure(fse); qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; }); qs.unshift({h:hosp,s:'prog'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
-  else if(op==='clear' && hosp){ pcqRemoveAll(hosp); }
+  else if(op==='set' && hosp){ pcGoneDel(hosp); pcqRemoveAll(hosp); var qs=pcqEnsure(fse); qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; }); qs.unshift({h:hosp,s:'prog'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
+  else if(op==='clear' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); }
   else { return; }
   pcDeriveProg();
   var payload={action:'progress_save', op:op, hosp:hosp, fse:fse};
   if(op==='q_move') payload.to=Number(to);
   pcProgSend(payload);
+  if(extra) pcProgSend(extra);
   pcRefreshProgViews(hosp, true);
 }
 // 레거시 진입점(상세/카드/표) → 큐 op로 라우팅
@@ -2340,10 +2360,10 @@ function pcMarkDone(hosp){ if(!hosp) return; pcQueueApply('done', '', hosp); }
 window.pcMarkDone=pcMarkDone;
 
 // ── 서버 동기화 (HANDOVER_URL, 사용자 간 연동) ──
-var pcProgHold=0;   // 로컬 변경 직후 짧은 시간 폴링이 되돌리지 않도록 보호
+var pcProgHold=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보호(GAS 콜드스타트 대비 넉넉히)
 function pcProgSend(payload){
   if(!HANDOVER_URL) return;
-  pcProgHold=Date.now()+3000;
+  pcProgHold=Date.now()+8000;
   var body=JSON.stringify(payload);
   try{
     fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
@@ -2361,12 +2381,20 @@ function pcProgPull(){
       // (일정이 폴링에 사라지거나 유령처럼 되살아나는 문제 방지).
       var hasQ=Object.prototype.hasOwnProperty.call(d,'queues') && d.queues && typeof d.queues==='object';
       if(!hasQ) return;
-      var nq=d.queues;
-      var np=(d.prog&&typeof d.prog==='object')?d.prog:{};
+      // tombstone: 삭제한 병원이 서버에 남아 되살아나면 걸러내고 서버에 재삭제 요청
+      var f=pcGoneFilter(d.queues);
+      var nq=f.q;
+      if(f.removed.length){ f.removed.forEach(function(r){ pcProgSend({action:'progress_save',op:'q_remove',fse:r.fse,hosp:r.hosp}); pcProgSend({action:'progress_save',op:'clear',hosp:r.hosp}); }); }
       var nd=(d.done&&typeof d.done==='object')?d.done:{};
-      // 변경 없으면 재렌더 생략(깜빡임 방지)
-      if(JSON.stringify(nq)===JSON.stringify(pcQueues) && JSON.stringify(np)===JSON.stringify(pcInProgress) && JSON.stringify(nd)===JSON.stringify(pcDone)) return;
-      pcQueues=nq; pcInProgress=np; pcDone=nd; pcSaveQueues(); pcSaveProg(); pcSaveDone();
+      // 큐가 진실 → 큐에서 prog 파생. done은 tombstone 아닌 항목만 병합 유지.
+      if(JSON.stringify(nq)===JSON.stringify(pcQueues)){
+        var changed=false; Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)&&!pcDone[h]){ pcDone[h]=1; changed=true; } });
+        if(!changed) return;
+      }
+      pcQueues=nq; pcSaveQueues();
+      pcDeriveProg();
+      Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)) pcDone[h]=1; });
+      pcSaveDone();
       pcRefreshProgViews(null, true);
     })
     .catch(function(){});
@@ -2472,7 +2500,8 @@ function renderSchedFse(fse){
   return '<div class="dash-card sch-fse" data-fse="'+fa+'">'+
     '<div class="sch-fse-head"><span class="sch-fse-name">🧑‍🔧 '+escapeHtml(fse)+'</span>'+
       '<span class="sch-progress">'+doneN+' / '+q.length+'</span>'+
-      '<button class="sch-reset" type="button" data-fse="'+fa+'">'+t('schReset')+'</button></div>'+
+      '<button class="sch-reset" type="button" data-fse="'+fa+'">'+t('schReset')+'</button>'+
+      '<button class="sch-fse-del" type="button" data-fse="'+fa+'" title="'+t('schDelFse')+'" aria-label="'+t('schDelFse')+'">🗑</button></div>'+
     '<div class="sch-add"><input type="search" class="sch-search" data-fse="'+fa+'" placeholder="'+t('schAddHosp')+'" autocomplete="off"><div class="sch-results"></div></div>'+
     '<div class="sch-list" data-fse="'+fa+'">'+(cards||('<div class="sch-empty">'+t('schEmpty')+'</div>'))+'</div>'+
   '</div>';
@@ -2503,6 +2532,7 @@ function pcSchedBind(){
     if((t2=e.target.closest('.sch-done'))){ var f2=t2.getAttribute('data-fse'), h2=t2.getAttribute('data-h'); pcQueueApply('q_done', f2, h2); var nx=pcqNextProg(f2); if(nx){ try{ if(typeof bazToast==='function') bazToast('✅ '+h2+' → '+t('schNext')+': '+nx); }catch(_){} } return; }
     if((t2=e.target.closest('.sch-up, .sch-down'))){ if(t2.disabled) return; pcQueueApply('q_move', t2.getAttribute('data-fse'), t2.getAttribute('data-h'), t2.getAttribute('data-to')); return; }
     if((t2=e.target.closest('.sch-del'))){ pcQueueApply('q_remove', t2.getAttribute('data-fse'), t2.getAttribute('data-h')); return; }
+    if((t2=e.target.closest('.sch-fse-del'))){ var fd=t2.getAttribute('data-fse'); pcQueueApply('q_clear', fd); delete pcSchedDraft[fd]; renderSched(); return; }
     if((t2=e.target.closest('.sch-reset'))){ var fr=t2.getAttribute('data-fse'); pcQueueApply('q_clear', fr); delete pcSchedDraft[fr]; renderSched(); return; }
     var nm=e.target.closest('.sch-cn');
     if(nm){ var card=nm.closest('.sch-card'); var hn=card&&card.getAttribute('data-h'); if(hn) pcSchedOpenHosp(hn); return; }
@@ -2785,10 +2815,6 @@ function pcRenderRecentCard(){
   var list=pcTodayList();
   // 총 건수는 오늘 전체 완료 건수 유지
   var head='<div class="rrc-head">🏁 오늘 완료 <span class="rrc-cnt">'+list.length+'건</span></div>';
-  if(!list.length){
-    var msg=(pcRecentState==='loading')?'불러오는 중…':(pcRecentState==='error')?'불러오기 실패 (네트워크 확인)':'오늘 완료 내역이 없습니다';
-    box.innerHTML=head+'<div class="rrc-empty">'+msg+'</div>'; return;
-  }
   // 인원(FSE)별 가장 최신 완료 1건 + 건수 (pcTodayList는 오래된→최신 순 → 마지막이 최신)
   var latestByFse={}, cntByFse={}, order=[];
   list.forEach(function(r){
@@ -2796,21 +2822,31 @@ function pcRenderRecentCard(){
     if(!(fse in latestByFse)) order.push(fse);
     latestByFse[fse]=r; cntByFse[fse]=(cntByFse[fse]||0)+1;
   });
+  // 현장 일정에서 진행중인 담당자(오늘 완료가 없어도 표시 → 일정↔완료 연동)
+  var progByFse={};
+  Object.keys(pcInProgress||{}).forEach(function(hn){ var f=pcInProgress[hn]; if(f){ progByFse[f]=hn; if(order.indexOf(f)<0) order.push(f); } });
+  if(!order.length){
+    var msg=(pcRecentState==='loading')?'불러오는 중…':(pcRecentState==='error')?'불러오기 실패 (네트워크 확인)':'오늘 완료 내역이 없습니다';
+    box.innerHTML=head+'<div class="rrc-empty">'+msg+'</div>'; return;
+  }
   box.innerHTML=head+'<div class="rrc-list">'+order.map(function(fse){
     var r=latestByFse[fse];
-    var h=pcHospByName(r.hosp); var hn=h?h.n:r.hosp;
-    var g=r.gubun?'<span class="rrc-g">'+escapeHtml(r.gubun)+'</span>':'';
-    var cnt=cntByFse[fse]||1;
+    var g=(r&&r.gubun)?'<span class="rrc-g">'+escapeHtml(r.gubun)+'</span>':'';
+    var cnt=cntByFse[fse]||0;
     var cntTag=(cnt>1)?'<span class="rrc-cnt2">오늘 '+cnt+'건</span>':'';
-    // 이 담당자의 현재 진행중 병원
-    var prog=pcProgHospOf(fse);
+    var prog=progByFse[fse]||pcProgHospOf(fse);   // 이 담당자의 현재 진행중 병원(일정 기준)
     var progLine=prog
-      ? '<div class="rrc-prog" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+
-          '<button class="rrc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">완료</button></div>'
+      ? '<div class="rrc-prog" data-hn="'+escapeHtml(prog)+'">🔵 '+t('schProg')+' · '+escapeHtml(prog)+
+          '<button class="rrc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">'+t('schDone')+'</button></div>'
       : '';
-    return '<div class="rrc-item" data-hn="'+escapeHtml(hn)+'">'+
-      '<div class="rrc-nm">'+escapeHtml(r.hosp)+'</div>'+
-      '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span>'+g+cntTag+'</div>'+
+    var nm = r ? escapeHtml(r.hosp) : ('🗺 '+escapeHtml(fse)+' · '+t('schActive'));
+    var dataHn = r ? (function(){ var h=pcHospByName(r.hosp); return escapeHtml(h?h.n:r.hosp); })() : escapeHtml(prog||'');
+    var meta = r
+      ? '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span>'+g+cntTag+'</div>'
+      : '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span><span class="rrc-g">'+t('schActive')+'</span></div>';
+    return '<div class="rrc-item" data-hn="'+dataHn+'">'+
+      (r?'<div class="rrc-nm">'+nm+'</div>':'')+
+      meta+
       progLine+
     '</div>';
   }).join('')+'</div>';
