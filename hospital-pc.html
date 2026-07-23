@@ -514,21 +514,24 @@
   .sch-res b{font-size:12.5px;font-weight:700;color:var(--text);}
   .sch-res span{font-size:10.5px;color:var(--text-muted);}
   .sch-nores{font-size:11.5px;color:var(--text-muted);padding:6px 2px;}
-  .sch-list{display:flex;flex-direction:column;gap:7px;}
-  .sch-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--gray-line);border-radius:10px;background:var(--surface);transition:border-color .12s,background .12s,opacity .12s;}
-  .sch-row.prog{border-color:var(--teal);background:var(--teal-soft);}
-  .sch-row.done{opacity:.62;}
-  .sch-row.dragging{opacity:.4;}
-  .sch-row.drag-over{border-color:var(--navy);box-shadow:0 -2px 0 var(--navy) inset;}
-  .sch-num{flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--surface-2);color:var(--navy);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;}
-  .sch-row.prog .sch-num{background:var(--teal);color:#fff;}
-  .sch-row.done .sch-num{background:var(--ok);color:#fff;}
-  .sch-nm{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
-  .sch-nm:hover{color:var(--navy);text-decoration:underline;}
-  .sch-badge{flex:0 0 auto;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:7px;background:var(--neutral-soft);color:var(--text-muted);white-space:nowrap;}
+  .sch-list{display:flex;flex-direction:column;gap:8px;}
+  .sch-card{display:flex;align-items:center;gap:9px;padding:11px 11px;border:1px solid var(--gray-line);border-radius:11px;background:var(--surface);box-shadow:var(--sh-1);transition:border-color .12s,background .12s,box-shadow .12s,opacity .12s;}
+  .sch-card.prog{border-color:var(--teal);background:var(--teal-soft);}
+  .sch-card.done{opacity:.6;}
+  .sch-card.dragging{opacity:.9;border-color:var(--navy);box-shadow:0 8px 20px rgba(20,34,66,.22);}
+  .sch-handle{flex:0 0 auto;cursor:grab;color:var(--text-muted);font-size:15px;line-height:1;padding:2px 3px;letter-spacing:-2px;touch-action:none;user-select:none;}
+  .sch-handle:active{cursor:grabbing;}
+  .sch-num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--surface-2);color:var(--navy);font-size:11.5px;font-weight:800;display:flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums;}
+  .sch-card.prog .sch-num{background:var(--teal);color:#fff;}
+  .sch-card.done .sch-num{background:var(--ok);color:#fff;}
+  .sch-info{flex:1;min-width:0;}
+  .sch-cn{font-size:13.5px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+  .sch-cn:hover{color:var(--navy);text-decoration:underline;}
+  .sch-cs{font-size:11px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sch-badge{flex:0 0 auto;font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:7px;background:var(--neutral-soft);color:var(--text-muted);white-space:nowrap;}
   .sch-badge.prog{background:var(--teal);color:#fff;}
   .sch-badge.done{background:var(--ok-soft);color:var(--ok);}
-  .sch-done{flex:0 0 auto;border:1px solid var(--ok);background:var(--ok);color:#fff;font-size:10.5px;font-weight:800;padding:4px 11px;border-radius:7px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .sch-done{flex:0 0 auto;border:1px solid var(--ok);background:var(--ok);color:#fff;font-size:10.5px;font-weight:800;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:inherit;white-space:nowrap;}
   .sch-done:hover{filter:brightness(1.07);}
   .sch-move{flex:0 0 auto;display:flex;flex-direction:column;gap:1px;}
   .sch-move button{border:1px solid var(--gray-line);background:var(--surface);color:var(--text-muted);font-size:9px;line-height:1;width:22px;height:15px;border-radius:5px;cursor:pointer;font-family:inherit;padding:0;}
@@ -1326,7 +1329,10 @@ document.querySelector('.tabs').addEventListener('click',e=>{
   document.getElementById('viewRecent').style.display=(curTab==='recent')?'block':'none';
   if(curTab==='dash') renderDash();
   if(curTab==='recent') renderRecent();
-  if(curTab==='sched'){ renderSched(); pcProgPull(); }
+  if(curTab==='sched'){
+    if(!pcRecentRequested){ pcRecentRequested=true; pcLoadRecent(function(){ renderSched(); }); }
+    renderSched(); pcProgPull();
+  }
   // 병원조회 탭 복귀 시 카카오 지도 relayout — display:none 이었다가 복귀하면
   // 타일이 회색으로 깨지므로 재계산(테마·필터·모드 토글과 동일 패턴)
   if(curTab==='list'){
@@ -2261,6 +2267,16 @@ var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' 
 if(pcListView==='recent') pcListView='cards';   // 구버전 값 정리(최근완료는 좌측 카드로 이동)
 var pcRecent=[], pcRecentState='idle', pcRecentRequested=false, pcRecentOverlays=[], pcRecentByIdx={};
 var pcNearbyOverlays=[];   // 검색 반경 5km 주변 병원 마커
+// handover 시트에 기록된 CS 담당자(fse) 목록 — 현장 일정/진행중 담당자 후보의 유일 소스
+var pcFseAll=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_fse')||'[]')||[]; }catch(e){ return []; } })();
+function pcCollectFse(rows, replace){
+  var s={}; if(!replace){ pcFseAll.forEach(function(f){ s[f]=1; }); }
+  (rows||[]).forEach(function(r){ var f=String((r&&r.fse)||'').trim(); if(f) s[f]=1; });
+  pcFseAll=Object.keys(s).sort(function(a,b){ try{ return a.localeCompare(b,'ko'); }catch(e){ return a<b?-1:1; } });
+  try{ localStorage.setItem('baz_pc_fse', JSON.stringify(pcFseAll)); }catch(e){}
+}
+// 현장 일정/진행중 담당자 후보 = handover CS 담당자만 (없으면 오늘 처리자 폴백)
+function pcSchedFseList(){ if(pcFseAll&&pcFseAll.length) return pcFseAll.slice(); var tl=(typeof pcTodayFseList==='function')?pcTodayFseList():[]; return tl.slice(); }
 // '진행중' 병원 상태 (병원명 → 담당자). 오늘 완료 후 이동/처리 진행상태 표시용
 // (담당자는 없을 수 있음 '' — 우측 전체 카드에서 담당자 특정 없이 설정한 경우)
 var pcInProgress=(function(){
@@ -2287,9 +2303,11 @@ function pcqRemoveAll(hosp){ Object.keys(pcQueues).forEach(function(f){ pcQueues
 function pcqOf(hosp){ var r=''; Object.keys(pcQueues).forEach(function(f){ if(pcqFind(pcQueues[f],hosp)>=0) r=f; }); return r; }
 // 큐 → prog/done 파생 (wait 있고 prog 없으면 맨 앞 wait 자동 승격)
 function pcDeriveProg(){
-  var prog={};
+  var prog={}, seen={};
   Object.keys(pcQueues).forEach(function(fse){
-    var q=pcQueues[fse];
+    // 중복 병원 행 제거(같은 병원이 두 번 들어가는 유령 방지) + 잘못된 항목 정리
+    var q=(pcQueues[fse]||[]).filter(function(x){ if(!x||!x.h||seen[x.h]) return false; seen[x.h]=1; return true; });
+    pcQueues[fse]=q;
     if(!q.length){ delete pcQueues[fse]; return; }
     if(!q.some(function(x){return x.s==='prog';})){
       for(var i=0;i<q.length;i++){ if(q[i].s==='wait'){ q[i].s='prog'; break; } }
@@ -2338,7 +2356,12 @@ function pcProgPull(){
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d || d.success!==true) return;
-      var nq=(d.queues&&typeof d.queues==='object')?d.queues:{};
+      // 백엔드(v2.5)가 queues를 줄 때만 서버 상태로 동기화. 구버전(미재배포)은
+      // queues 필드가 없으므로 로컬 큐가 진실 — 서버 prog/done으로 덮어쓰지 않는다
+      // (일정이 폴링에 사라지거나 유령처럼 되살아나는 문제 방지).
+      var hasQ=Object.prototype.hasOwnProperty.call(d,'queues') && d.queues && typeof d.queues==='object';
+      if(!hasQ) return;
+      var nq=d.queues;
       var np=(d.prog&&typeof d.prog==='object')?d.prog:{};
       var nd=(d.done&&typeof d.done==='object')?d.done:{};
       // 변경 없으면 재렌더 생략(깜빡임 방지)
@@ -2398,11 +2421,10 @@ window.pcAddToSchedUI=pcAddToSchedUI;
 // ===== 현장 일정 탭 (인원별 업무 큐) =====
 var pcSchedDraft={};     // 병원 0곳이어도 섹션을 보여줄 담당자(빈 일정 작성 중)
 var pcSchedBound=false;
-var pcSchedDrag=null;    // {fse, h}
 function renderSched(){
   var box=document.getElementById('viewSched'); if(!box) return;
   pcSchedBind();
-  var assignees=pcAssigneeList();
+  var assignees=pcSchedFseList();   // handover CS 담당자만
   var fseList=Object.keys(pcQueues).filter(function(f){ return pcQueues[f]&&pcQueues[f].length; });
   Object.keys(pcSchedDraft).forEach(function(f){ if(fseList.indexOf(f)<0) fseList.push(f); });
   fseList.sort(function(a,b){ try{return a.localeCompare(b,'ko');}catch(e){return a<b?-1:1;} });
@@ -2410,7 +2432,7 @@ function renderSched(){
       '<div class="dash-title">🗺 '+t('schTitle')+'</div>'+
       '<div class="sch-addfse">'+
         '<select id="schFseSel" class="pc-assign" aria-label="'+t('schPickFse')+'">'+
-          assignees.map(function(a){return '<option value="'+escapeHtml(a)+'">'+escapeHtml(a)+'</option>';}).join('')+
+          (assignees.length?assignees:[]).map(function(a){return '<option value="'+escapeHtml(a)+'">'+escapeHtml(a)+'</option>';}).join('')+
         '</select>'+
         '<button class="sch-addfse-btn" id="schAddFseBtn" type="button">＋ '+t('schAddFse')+'</button>'+
       '</div>'+
@@ -2424,30 +2446,38 @@ function renderSched(){
 function renderSchedFse(fse){
   var q=pcQueues[fse]||[];
   var doneN=q.filter(function(x){return x.s==='done';}).length;
-  var rows=q.map(function(it,i){
+  var fa=escapeHtml(fse);
+  var cards=q.map(function(it,i){
+    var ha=escapeHtml(it.h);
     var sLabel=it.s==='prog'?('🔵 '+t('schProg')):it.s==='done'?('✅ '+t('schDone')):t('schWait');
-    var doneBtn=(it.s==='prog')?'<button class="sch-done" type="button" data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(it.h)+'">'+t('schDone')+'</button>':'';
-    return '<div class="sch-row '+it.s+'" draggable="'+(it.s!=='done'?'true':'false')+'" data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(it.h)+'" data-idx="'+i+'">'+
+    var hh=pcHospByName(it.h);
+    var sub=hh?[hh.rg||'', isNcare(hh)?('N-CARE '+hh.nc):''].filter(Boolean).join(' · '):(hh&&hh.s||'');
+    var doneBtn=(it.s==='prog')?'<button class="sch-done" type="button" data-fse="'+fa+'" data-h="'+ha+'">'+t('schDone')+'</button>':'';
+    return '<div class="sch-card '+it.s+'" data-fse="'+fa+'" data-h="'+ha+'">'+
+      '<span class="sch-handle" title="'+t('schReorder')+'" aria-label="이동">⠿</span>'+
       '<span class="sch-num">'+(i+1)+'</span>'+
-      '<span class="sch-nm">'+escapeHtml(it.h)+'</span>'+
+      '<div class="sch-info">'+
+        '<div class="sch-cn">'+escapeHtml(it.h)+'</div>'+
+        (sub?'<div class="sch-cs">'+escapeHtml(sub)+'</div>':'')+
+      '</div>'+
       '<span class="sch-badge '+it.s+'">'+sLabel+'</span>'+
       doneBtn+
       '<span class="sch-move">'+
-        '<button class="sch-up" type="button" '+(i>0?'':'disabled')+' data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(it.h)+'" data-to="'+(i-1)+'">▲</button>'+
-        '<button class="sch-down" type="button" '+(i<q.length-1?'':'disabled')+' data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(it.h)+'" data-to="'+(i+1)+'">▼</button>'+
+        '<button class="sch-up" type="button" '+(i>0?'':'disabled')+' data-fse="'+fa+'" data-h="'+ha+'" data-to="'+(i-1)+'" aria-label="위로">▲</button>'+
+        '<button class="sch-down" type="button" '+(i<q.length-1?'':'disabled')+' data-fse="'+fa+'" data-h="'+ha+'" data-to="'+(i+1)+'" aria-label="아래로">▼</button>'+
       '</span>'+
-      '<button class="sch-del" type="button" data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(it.h)+'" aria-label="삭제">✕</button>'+
+      '<button class="sch-del" type="button" data-fse="'+fa+'" data-h="'+ha+'" aria-label="삭제">✕</button>'+
     '</div>';
   }).join('');
-  return '<div class="dash-card sch-fse" data-fse="'+escapeHtml(fse)+'">'+
+  return '<div class="dash-card sch-fse" data-fse="'+fa+'">'+
     '<div class="sch-fse-head"><span class="sch-fse-name">🧑‍🔧 '+escapeHtml(fse)+'</span>'+
       '<span class="sch-progress">'+doneN+' / '+q.length+'</span>'+
-      '<button class="sch-reset" type="button" data-fse="'+escapeHtml(fse)+'">'+t('schReset')+'</button></div>'+
-    '<div class="sch-add"><input type="search" class="sch-search" data-fse="'+escapeHtml(fse)+'" placeholder="'+t('schAddHosp')+'" autocomplete="off"><div class="sch-results"></div></div>'+
-    '<div class="sch-list">'+(rows||('<div class="sch-empty">'+t('schEmpty')+'</div>'))+'</div>'+
+      '<button class="sch-reset" type="button" data-fse="'+fa+'">'+t('schReset')+'</button></div>'+
+    '<div class="sch-add"><input type="search" class="sch-search" data-fse="'+fa+'" placeholder="'+t('schAddHosp')+'" autocomplete="off"><div class="sch-results"></div></div>'+
+    '<div class="sch-list" data-fse="'+fa+'">'+(cards||('<div class="sch-empty">'+t('schEmpty')+'</div>'))+'</div>'+
   '</div>';
 }
-// 병원 추가 검색 결과 갱신 (해당 섹션만)
+// 병원 추가 검색 결과 갱신 (해당 섹션만 — IME 조합 안정)
 function schSearch(inp){
   var fse=inp.getAttribute('data-fse'); var box=inp.parentNode.querySelector('.sch-results');
   var qn=normalize(inp.value); if(!box) return;
@@ -2462,7 +2492,7 @@ function schSearch(inp){
     ? hits.map(function(h){ return '<button class="sch-res" type="button" data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(h.n)+'"><b>'+escapeHtml(h.n)+'</b><span>'+escapeHtml(h.rg||'')+(isNcare(h)?' · N-CARE '+escapeHtml(h.nc):'')+'</span></button>'; }).join('')
     : '<div class="sch-nores">'+t('empty')+'</div>';
 }
-// 이벤트 위임 (한 번만 바인딩)
+// 이벤트 위임 + 포인터 기반 드래그 (한 번만 바인딩)
 function pcSchedBind(){
   if(pcSchedBound) return; pcSchedBound=true;
   var box=document.getElementById('viewSched'); if(!box) return;
@@ -2474,19 +2504,38 @@ function pcSchedBind(){
     if((t2=e.target.closest('.sch-up, .sch-down'))){ if(t2.disabled) return; pcQueueApply('q_move', t2.getAttribute('data-fse'), t2.getAttribute('data-h'), t2.getAttribute('data-to')); return; }
     if((t2=e.target.closest('.sch-del'))){ pcQueueApply('q_remove', t2.getAttribute('data-fse'), t2.getAttribute('data-h')); return; }
     if((t2=e.target.closest('.sch-reset'))){ var fr=t2.getAttribute('data-fse'); pcQueueApply('q_clear', fr); delete pcSchedDraft[fr]; renderSched(); return; }
-    var nm=e.target.closest('.sch-nm');
-    if(nm){ var row=nm.closest('.sch-row'); var hn=row&&row.getAttribute('data-h'); if(hn){ pcSchedOpenHosp(hn); } return; }
+    var nm=e.target.closest('.sch-cn');
+    if(nm){ var card=nm.closest('.sch-card'); var hn=card&&card.getAttribute('data-h'); if(hn) pcSchedOpenHosp(hn); return; }
   });
   box.addEventListener('input', function(e){ var s=e.target.closest('.sch-search'); if(s) schSearch(s); });
-  // 드래그 앤 드롭 (같은 담당자 내 순서 변경)
-  box.addEventListener('dragstart', function(e){ var r=e.target.closest('.sch-row'); if(!r||r.getAttribute('draggable')!=='true'){ return; } pcSchedDrag={fse:r.getAttribute('data-fse'), h:r.getAttribute('data-h')}; r.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', pcSchedDrag.h); }catch(_){} });
-  box.addEventListener('dragover', function(e){ var r=e.target.closest('.sch-row'); if(!r||!pcSchedDrag||r.getAttribute('data-fse')!==pcSchedDrag.fse) return; e.preventDefault(); box.querySelectorAll('.sch-row.drag-over').forEach(function(x){x.classList.remove('drag-over');}); r.classList.add('drag-over'); });
-  box.addEventListener('drop', function(e){ var r=e.target.closest('.sch-row'); if(!r||!pcSchedDrag||r.getAttribute('data-fse')!==pcSchedDrag.fse){ pcSchedDragEnd(); return; } e.preventDefault(); var to=Number(r.getAttribute('data-idx')); pcQueueApply('q_move', pcSchedDrag.fse, pcSchedDrag.h, to); pcSchedDragEnd(); });
-  box.addEventListener('dragend', pcSchedDragEnd);
+  // 포인터 드래그로 순서 이동(마우스·터치 공용)
+  box.addEventListener('pointerdown', function(e){
+    var handle=e.target.closest('.sch-handle'); if(!handle) return;
+    var card=handle.closest('.sch-card'); var list=card&&card.parentNode; if(!card||!list) return;
+    e.preventDefault();
+    var fse=card.getAttribute('data-fse'), h=card.getAttribute('data-h');
+    card.classList.add('dragging');
+    function onMove(ev){
+      var y=ev.clientY;
+      var others=[].slice.call(list.querySelectorAll('.sch-card:not(.dragging)'));
+      var after=null;
+      for(var i=0;i<others.length;i++){ var r=others[i].getBoundingClientRect(); if(y < r.top + r.height/2){ after=others[i]; break; } }
+      if(after) list.insertBefore(card, after); else list.appendChild(card);
+    }
+    function onUp(){
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      card.classList.remove('dragging');
+      var all=[].slice.call(list.querySelectorAll('.sch-card'));
+      var idx=all.indexOf(card);
+      if(idx>=0) pcQueueApply('q_move', fse, h, idx); else renderSched();
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  });
 }
-function pcSchedDragEnd(){ var box=document.getElementById('viewSched'); if(box){ box.querySelectorAll('.dragging,.drag-over').forEach(function(x){ x.classList.remove('dragging'); x.classList.remove('drag-over'); }); } pcSchedDrag=null; }
 function pcqNextProg(fse){ var q=pcQueues[fse]||[]; for(var i=0;i<q.length;i++){ if(q[i].s==='prog') return q[i].h; } return ''; }
-// 일정 행의 병원명 클릭 → 병원 조회 탭으로 이동해 상세/지도 포커스
+// 일정 카드의 병원명 클릭 → 병원 조회 탭으로 이동해 상세/지도 포커스
 function pcSchedOpenHosp(hosp){
   try{
     var tl=document.getElementById('tabList'); if(tl) tl.click();
@@ -2697,8 +2746,8 @@ function pcLoadRecent(cb){
   var local=pcLocalRecent();
   var cached=null, ts=parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10);
   try{ cached=JSON.parse(localStorage.getItem('baz_pc_recent_cache')||'null'); }catch(e){}
-  if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(cb) cb(); }
-  else if(local.length){ pcRecent=pcMergeRecent(local); if(cb) cb(); }
+  if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); if(cb) cb(); }
+  else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); if(cb) cb(); }
   if(cached && (Date.now()-ts)<5*60*1000) return;      // 5분 캐시 신선
   if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return; }
   if(pcRecentState!=='done') pcRecentState='loading';
@@ -2707,6 +2756,7 @@ function pcLoadRecent(cb){
     .then(function(d){
       var data=(d&&d.data)||[];
       pcRecent=pcMergeRecent(pcLocalRecent().concat(data));
+      pcCollectFse(data, true);   // 전체 handover 응답 기준으로 CS 담당자 목록 갱신(권위)
       pcRecentState='done';
       try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(Date.now())); }catch(e){}
       if(cb) cb();
@@ -2955,7 +3005,7 @@ function pcRenderDetail(name){
         '</div>'
       : '<div class="pc-dt-progrow">'+
           '<select id="pcAssignSel" class="pc-assign" aria-label="담당자 선택">'+
-            pcAssigneeList().map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===(h.sa||'').trim()?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+
+            pcSchedFseList().map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===(h.sa||'').trim()?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+
           '</select>'+
           '<button class="pc-dt-prog" onclick="pcSetProgUI(\''+nameJs+'\')">🔵 진행중으로 설정</button>'+
         '</div>'+
