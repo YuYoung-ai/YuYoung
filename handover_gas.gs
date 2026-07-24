@@ -91,6 +91,10 @@ var MENU = {
   AUTH_VERIFY_URL: 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec'
 };
 
+/* [주간 자동기재 대상] — weekly.html 처리내용 표준문구·비고 태그를 적용할 작성자 목록
+   '주간자동설정' 탭 A열(2행부터)에 작성자명. Lv.3 관리자만 저장 가능. */
+var WEEKLY_AUTO = { SHEET: '주간자동설정' };
+
 /* ================= 공통 유틸 ================= */
 function ss_(){ return SpreadsheetApp.getActiveSpreadsheet(); }
 function sheet_(name){
@@ -207,6 +211,7 @@ function doPost(e){
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
+    if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
     if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
 
     var sh = sheet_(CONFIG.SHEET_NAME);
@@ -275,6 +280,7 @@ function doGet(e){
     if(action==='guide')  return json_(gateGuide_(p));          /* [v2.1] Lv.3 토큰 게이트 */
     if(action==='weekly') return json_(wkGetWeekly_(p));        /* [v2.1] 주간 처리 내역 */
     if(action==='menu')   return json_(menuGet_());             /* [v2.1] 허브 메뉴 설정 */
+    if(action==='weeklyauto') return json_(weeklyAutoGet_());   /* 주간 자동기재 대상 작성자 목록 */
     if(action==='progress') return json_(progGet_());           /* [v2.4] 진행중 공유 상태 */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
@@ -314,6 +320,40 @@ function pickH_(o, cands){
     for(var k2=0;k2<keys.length;k2++){ if(q2 && norm_(keys[k2]).indexOf(q2)>=0) return o[keys[k2]]; }
   }
   return '';
+}
+
+/* 주간 자동기재 대상 작성자 조회 — '주간자동설정' A열 */
+function weeklyAutoGet_(){
+  var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
+  var sh = sheet_(WEEKLY_AUTO.SHEET);
+  if(!sh) return {success:true, writers:[], updated:now};   /* 탭 없으면 대상 없음(전원 미적용) */
+  var v = sh.getDataRange().getDisplayValues();
+  var writers=[];
+  for(var i=0;i<v.length;i++){
+    var name=String(v[i][0]||'').trim();
+    if(!name || norm_(name)==='작성자') continue;            /* 헤더/빈칸 스킵 */
+    if(writers.indexOf(name)<0) writers.push(name);
+  }
+  return {success:true, writers:writers, updated:now};
+}
+
+/* 주간 자동기재 대상 저장 — Lv.3 토큰 필수 */
+function weeklyAutoSave_(p){
+  var lv = verifyLevel_(p.token||'');
+  if(lv < 3){
+    return {success:false, error: MENU.AUTH_VERIFY_URL
+      ? 'unauthorized — 보안레벨 3(수석 매니저) 토큰 필요'
+      : 'AUTH_VERIFY_URL 미설정 — 저장 거부'};
+  }
+  var arr = Array.isArray(p.writers) ? p.writers : null;
+  if(!arr) return {success:false, error:'writers 배열 필요'};
+  var uniq=[];
+  arr.forEach(function(w){ var s=String(w||'').trim(); if(s && uniq.indexOf(s)<0) uniq.push(s); });
+  var sh = sheet_(WEEKLY_AUTO.SHEET) || ss_().insertSheet(WEEKLY_AUTO.SHEET);
+  sh.clear();
+  sh.getRange(1,1).setValue('작성자');
+  if(uniq.length) sh.getRange(2,1,uniq.length,1).setValues(uniq.map(function(w){return [w];}));
+  return {success:true, count:uniq.length, writers:uniq};
 }
 
 /** 헤더맵에서 후보 이름으로 열번호 찾기(정규화 완전일치 → 부분일치) · 없으면 0 */
