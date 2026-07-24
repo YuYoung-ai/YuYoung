@@ -205,6 +205,7 @@
   #filterSticky{position:sticky;top:var(--hdr-h,56px);z-index:30;background:var(--gray-bg);padding-top:8px;margin-bottom:2px;}
   #filterSticky::after{content:'';position:absolute;left:0;right:0;bottom:-8px;height:8px;background:linear-gradient(rgba(245,247,250,.9),rgba(245,247,250,0));pointer-events:none;}
   body.mode-window #viewList{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px;align-items:start;transition:grid-template-columns .18s ease;}
+  body.mode-window #viewList>#schedNotice{grid-column:1/-1;}
   /* 필터 폭 3단계: 숨김 / 기본(250) / 확장(440) */
   body.mode-window.filt-wide #viewList{grid-template-columns:440px minmax(0,1fr);}
   body.mode-window.filt-hide #viewList{grid-template-columns:44px minmax(0,1fr);}
@@ -463,6 +464,7 @@
   .prc-head{font-size:12.5px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:6px;margin-bottom:9px;}
   .prc-head .prc-sub{font-size:10px;font-weight:700;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:1px 7px;}
   .prc-empty{font-size:11.5px;color:var(--text-muted);padding:4px 2px;}
+  .prc-total{font-size:11px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:7px;padding:4px 9px;margin-bottom:7px;}
   .prc-fse{padding:8px 0;border-top:1px dashed var(--gray-line);}
   .prc-fse:first-of-type{border-top:0;padding-top:0;}
   .prc-fse-h{font-size:12px;font-weight:800;color:var(--ok);margin-bottom:6px;display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px;}
@@ -507,6 +509,15 @@
   .sch-reset:hover{border-color:var(--danger);color:var(--danger);}
   .sch-fse-del{border:1px solid var(--gray-line);background:transparent;color:var(--text-muted);font-size:12px;padding:3px 8px;border-radius:7px;cursor:pointer;font-family:inherit;line-height:1;}
   .sch-fse-del:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft);}
+  .sch-fixed-tag{font-size:9.5px;font-weight:800;color:var(--teal);background:var(--teal-soft);border-radius:6px;padding:1px 6px;margin-left:5px;vertical-align:1px;}
+  .sch-fse.fixed{border-color:var(--teal);}
+  /* 병원 조회 상단 현장 일정 알림 배너 */
+  #schedNotice{display:none;margin:0 0 12px;padding:10px 13px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;align-items:center;gap:8px;}
+  #schedNotice.show{display:flex;}
+  #schedNotice.none{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);}
+  #schedNotice.idle{background:var(--info-soft);color:var(--info);border:1px solid var(--info);}
+  #schedNotice .go{margin-left:auto;font-weight:800;white-space:nowrap;opacity:.85;}
+  #schedNotice:hover{filter:brightness(1.03);}
   .sch-add{position:relative;margin-bottom:10px;}
   .sch-search{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:var(--surface);color:var(--text);}
   .sch-search:focus{border-color:var(--teal);outline:none;box-shadow:0 0 0 3px rgba(46,125,158,.12);}
@@ -619,6 +630,7 @@
 
   <!-- ===== 조회 탭 ===== -->
   <div id="viewList">
+   <div id="schedNotice"></div>
    <div id="filterRail">
     <div id="filtToggle"><button id="filtToggleBtn" type="button" title="필터 폭: 숨김 → 기본 → 넓게">넓게 ▷</button></div>
     <div class="search-wrap">
@@ -712,7 +724,7 @@ const I18N = {
     schTitle:'현장 일정', schAddFse:'담당자 일정 추가', schPickFse:'담당자 선택', schAddHosp:'병원 추가 (검색)',
     schWait:'대기', schProg:'진행중', schDone:'완료', schReset:'초기화', schEmpty:'등록된 일정이 없습니다',
     schNoFse:'담당자를 추가해 하루 방문 순서를 만들어 보세요', schToSchedule:'일정에 추가', schAdded:'일정에 추가됨',
-    schNext:'다음 진행중', schProgress:'진행', schReorder:'순서를 끌어 옮기거나 ▲▼로 조정하세요', schDelFse:'인원 삭제', schActive:'진행중',
+    schNext:'다음 진행중', schProgress:'진행', schReorder:'순서를 끌어 옮기거나 ▲▼로 조정하세요', schDelFse:'인원 삭제', schActive:'진행중', schFixed:'고정', schNoticeNone:'📋 오늘 현장 일정이 없습니다 — 현장 일정 탭에서 방문 순서를 등록하세요', schNoticeIdle:'현장 일정에 진행중인 방문이 없습니다 — 다음 방문을 진행중으로 설정하세요', schRouteTotal:'총 {n}곳 · 약 {m}분', schCum:'누적',
     rcToday:'오늘', rc7:'최근 7일', rc14:'최근 14일', rc30:'최근 30일',
     rcCount:'{n}건 · 병원 {h}곳', rcEmpty:'해당 기간에 처리 내역이 없습니다',
     rcInsp:'점검', rcAS:'A/S', rcFse:'처리자', rcPart:'교체품', rcMore:'이력 전체보기',
@@ -745,7 +757,7 @@ const I18N = {
     schTitle:'Field schedule', schAddFse:'Add staff schedule', schPickFse:'Select staff', schAddHosp:'Add hospital (search)',
     schWait:'Waiting', schProg:'In progress', schDone:'Done', schReset:'Reset', schEmpty:'No schedule yet',
     schNoFse:'Add a staff member to build today\'s visit order', schToSchedule:'Add to schedule', schAdded:'Added to schedule',
-    schNext:'Next in progress', schProgress:'Start', schReorder:'Drag or use ▲▼ to reorder', schDelFse:'Remove staff', schActive:'In progress',
+    schNext:'Next in progress', schProgress:'Start', schReorder:'Drag or use ▲▼ to reorder', schDelFse:'Remove staff', schActive:'In progress', schFixed:'Fixed', schNoticeNone:'📋 No field schedule today — set today\'s visit order in the Schedule tab', schNoticeIdle:'No visit in progress — set the next visit to in-progress', schRouteTotal:'{n} stops · ~{m} min', schCum:'cum.',
     rcToday:'Today', rc7:'Last 7d', rc14:'Last 14d', rc30:'Last 30d',
     rcCount:'{n} records · {h} hospitals', rcEmpty:'No service records in this period',
     rcInsp:'Inspect', rcAS:'A/S', rcFse:'By', rcPart:'Part', rcMore:'View full history',
@@ -778,7 +790,7 @@ const I18N = {
     schTitle:'現場日程', schAddFse:'担当者の日程追加', schPickFse:'担当者選択', schAddHosp:'病院追加(検索)',
     schWait:'待機', schProg:'進行中', schDone:'完了', schReset:'初期化', schEmpty:'登録された日程がありません',
     schNoFse:'担当者を追加して当日の訪問順を作成してください', schToSchedule:'日程に追加', schAdded:'日程に追加しました',
-    schNext:'次の進行中', schProgress:'開始', schReorder:'ドラッグまたは▲▼で並べ替え', schDelFse:'担当者削除', schActive:'進行中',
+    schNext:'次の進行中', schProgress:'開始', schReorder:'ドラッグまたは▲▼で並べ替え', schDelFse:'担当者削除', schActive:'進行中', schFixed:'固定', schNoticeNone:'📋 本日の現場日程がありません — 現場日程タブで訪問順を登録してください', schNoticeIdle:'進行中の訪問がありません — 次の訪問を進行中に設定してください', schRouteTotal:'計{n}件 · 約{m}分', schCum:'累計',
     rcToday:'今日', rc7:'直近7日', rc14:'直近14日', rc30:'直近30日',
     rcCount:'{n}件 · 病院{h}件', rcEmpty:'この期間の対応履歴はありません',
     rcInsp:'点検', rcAS:'A/S', rcFse:'担当', rcPart:'交換品', rcMore:'履歴を全て表示',
@@ -1173,6 +1185,7 @@ function render(){
   const list=getFiltered();
   const cl=document.getElementById('cardList');
   const rc=document.getElementById('resultCount');
+  try{ pcUpdateSchedNotice(); }catch(e){}
   // 결과 수 라벨(공통)
   if(list.length===0){ rc.textContent=''; }
   else if(nearbyMode){ rc.innerHTML='<b>'+t('nearbyResult').replace('{n}',list.length)+'</b>'; }
@@ -2315,6 +2328,29 @@ function pcGoneFilter(queues){
   });
   return {q:out, removed:removed};
 }
+// 현장 일정에 항상 고정으로 표시할 담당자 카드(비어 있어도 노출). 매일 자동 초기화됨.
+var PC_FIXED_FSE=['양승주','권오성'];
+// 일일 자동 초기화: 날짜가 바뀌면 어제 일정(큐/진행중/완료)을 비운다.
+// 어제 병원은 tombstone 처리 → (백엔드 미재배포 시) 폴링이 되살리지 않음.
+function pcDailyResetCheck(){
+  var today=(typeof pcTodayStr==='function')?pcTodayStr():'';
+  if(!today) return false;
+  var last=''; try{ last=localStorage.getItem('baz_pc_sched_day')||''; }catch(e){}
+  if(last===today) return false;
+  try{ localStorage.setItem('baz_pc_sched_day', today); }catch(e){}
+  if(!last) return false;                 // 최초 실행 → 기록만(초기화 안 함)
+  var hosps=[], fses=Object.keys(pcQueues);
+  fses.forEach(function(f){ (pcQueues[f]||[]).forEach(function(x){ if(x&&x.h) hosps.push(x.h); }); });
+  pcQueues={}; pcSaveQueues();
+  pcInProgress={}; pcSaveProg();
+  pcDone={}; pcSaveDone();
+  pcGone={}; hosps.forEach(function(h){ pcGone[h]=Date.now(); }); pcSaveGone();
+  fses.forEach(function(f){ try{ pcProgSend({action:'progress_save', op:'q_clear', fse:f}); }catch(e){} });
+  try{ if(typeof curTab!=='undefined' && curTab==='sched') renderSched(); }catch(e){}
+  try{ pcRefreshProgViews(null, true); }catch(e){}
+  return true;
+}
+pcDailyResetCheck();
 function pcqEnsure(fse){ if(!pcQueues[fse]) pcQueues[fse]=[]; return pcQueues[fse]; }
 function pcqFind(q,hosp){ for(var i=0;i<q.length;i++){ if(q[i].h===hosp) return i; } return -1; }
 function pcqRemoveAll(hosp){ Object.keys(pcQueues).forEach(function(f){ pcQueues[f]=pcQueues[f].filter(function(x){return x.h!==hosp;}); }); }
@@ -2422,12 +2458,12 @@ function pcProgPull(){
     })
     .catch(function(){});
 }
-// 초기 동기화 + 주기적 폴링 + 포커스/복귀 시 즉시 갱신
+// 초기 동기화 + 주기적 폴링 + 포커스/복귀 시 즉시 갱신(+ 자정 넘김 자동 초기화)
 try{
   setTimeout(pcProgPull, 900);
-  setInterval(function(){ if(document.visibilityState!=='hidden'){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } }, 25000);
-  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } });
-  window.addEventListener('focus', function(){ pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} });
+  setInterval(function(){ if(document.visibilityState!=='hidden'){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } }, 25000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } });
+  window.addEventListener('focus', function(){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} });
 }catch(e){}
 // 담당자 후보 목록: 영업담당(sa) + 오늘 처리자(fse) 합집합, 가나다 정렬
 function pcAssigneeList(){
@@ -2450,6 +2486,7 @@ function pcRefreshProgViews(hosp, silent){
   try{ if(typeof curTab!=='undefined' && curTab==='sched' && typeof renderSched==='function') renderSched(); }catch(e){}
   try{ if(typeof pcList!=='undefined'){ pcRenderLeft(pcList||[]); pcHighlight(); } }catch(e){}
   try{ if(pcRightMode==='detail' && pcSelName) pcRenderDetail(pcSelName); }catch(e){}
+  try{ pcUpdateSchedNotice(); }catch(e){}
   if(!silent && hosp && pcIsProg(hosp)){
     try{ if(typeof bazToast==='function') bazToast('진행중: '+hosp+(pcInProgress[hosp]?' ('+pcInProgress[hosp]+')':'')); }catch(e){}
   }
@@ -2478,6 +2515,7 @@ function renderSched(){
   var assignees=pcSchedFseList();   // handover CS 담당자만
   var fseList=Object.keys(pcQueues).filter(function(f){ return pcQueues[f]&&pcQueues[f].length; });
   Object.keys(pcSchedDraft).forEach(function(f){ if(fseList.indexOf(f)<0) fseList.push(f); });
+  PC_FIXED_FSE.forEach(function(f){ if(fseList.indexOf(f)<0) fseList.push(f); });   // 고정 담당자 항상 표시
   fseList.sort(function(a,b){ try{return a.localeCompare(b,'ko');}catch(e){return a<b?-1:1;} });
   var head='<div class="dash-card sch-top">'+
       '<div class="dash-title">🗺 '+t('schTitle')+'</div>'+
@@ -2520,11 +2558,12 @@ function renderSchedFse(fse){
       '<button class="sch-del" type="button" data-fse="'+fa+'" data-h="'+ha+'" aria-label="삭제">✕</button>'+
     '</div>';
   }).join('');
-  return '<div class="dash-card sch-fse" data-fse="'+fa+'">'+
-    '<div class="sch-fse-head"><span class="sch-fse-name">🧑‍🔧 '+escapeHtml(fse)+'</span>'+
+  var isFixed=(PC_FIXED_FSE.indexOf(fse)>=0);
+  return '<div class="dash-card sch-fse'+(isFixed?' fixed':'')+'" data-fse="'+fa+'">'+
+    '<div class="sch-fse-head"><span class="sch-fse-name">🧑‍🔧 '+escapeHtml(fse)+(isFixed?' <span class="sch-fixed-tag">'+t('schFixed')+'</span>':'')+'</span>'+
       '<span class="sch-progress">'+doneN+' / '+q.length+'</span>'+
       '<button class="sch-reset" type="button" data-fse="'+fa+'">'+t('schReset')+'</button>'+
-      '<button class="sch-fse-del" type="button" data-fse="'+fa+'" title="'+t('schDelFse')+'" aria-label="'+t('schDelFse')+'">🗑</button></div>'+
+      (isFixed?'':'<button class="sch-fse-del" type="button" data-fse="'+fa+'" title="'+t('schDelFse')+'" aria-label="'+t('schDelFse')+'">🗑</button>')+'</div>'+
     '<div class="sch-add"><input type="search" class="sch-search" data-fse="'+fa+'" placeholder="'+t('schAddHosp')+'" autocomplete="off"><div class="sch-results"></div></div>'+
     '<div class="sch-list" data-fse="'+fa+'">'+(cards||('<div class="sch-empty">'+t('schEmpty')+'</div>'))+'</div>'+
   '</div>';
@@ -2594,6 +2633,17 @@ function pcSchedOpenHosp(hosp){
     var tl=document.getElementById('tabList'); if(tl) tl.click();
     setTimeout(function(){ try{ if(document.body.classList.contains('mode-window') && typeof pcSelect==='function') pcSelect(hosp); else if(typeof pcFocusHospOnMap==='function') pcFocusHospOnMap(hosp, null); }catch(e){} }, 80);
   }catch(e){}
+}
+// 병원 조회 상단 알림: 현장 일정 미등록 / 진행중 없음
+var pcNoticeBound=false;
+function pcUpdateSchedNotice(){
+  var el=document.getElementById('schedNotice'); if(!el) return;
+  if(!pcNoticeBound){ pcNoticeBound=true; el.addEventListener('click', function(){ var ts=document.getElementById('tabSched'); if(ts) ts.click(); }); }
+  var anyQueue=false; Object.keys(pcQueues||{}).forEach(function(f){ if((pcQueues[f]||[]).length) anyQueue=true; });
+  var anyProg=!!(pcInProgress && Object.keys(pcInProgress).length);
+  if(!anyQueue){ el.className='show none'; el.innerHTML='<span>'+t('schNoticeNone')+'</span><span class="go">현장 일정 →</span>'; }
+  else if(!anyProg){ el.className='show idle'; el.innerHTML='<span>'+t('schNoticeIdle')+'</span><span class="go">현장 일정 →</span>'; }
+  else { el.className=''; el.innerHTML=''; }
 }
 var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
@@ -2887,7 +2937,9 @@ function pcSevColor(h){
   if(!isNcare(h)) return 'var(--neutral)';
   return {'정상':'var(--ok)','점검대상':'var(--teal)','권고':'var(--warn)','경고':'var(--danger)','미점검':'var(--neutral)'}[h.st]||'var(--neutral)';
 }
-function pcNearestHospitals(from, n, mode){
+// 후보 병원 풀(현재 위치 from 기준). near=반경 5km(없으면 10km) 점검대상,
+// due=반경 15km 점검대상(심각도 우선).
+function pcRouteCandidates(from, mode){
   mode = mode || 'near';
   var all=[];
   for(var i=0;i<HOSPITALS.length;i++){
@@ -2895,27 +2947,34 @@ function pcNearestHospitals(from, n, mode){
     if(h.lat==null||h.lng==null) continue;
     if(h.n===from.n) continue;
     if(/^데모/.test(h.n)) continue;
-    if(!isNcare(h)) continue;   // N-CARE 가입 병원만 (미가입 제외)
+    if(!isNcare(h)) continue;                          // N-CARE 가입 병원만
+    if(!isDue(h)) continue;                             // 점검대상만
     all.push({h:h, d:distKm(from.lat,from.lng,h.lat,h.lng)});
   }
   if(mode==='due'){
-    // 점검필요 우선: 반경 15km 이내, 점검필요·심각도 우선 → 거리
     var pool=all.filter(function(x){ return x.d<=15; });
-    pool.sort(function(a,b){
-      var da=isDue(a.h)?1:0, db=isDue(b.h)?1:0;
-      if(da!==db) return db-da;                       // 점검필요 병원 먼저
-      var sa=pcSevRank(a.h), sb=pcSevRank(b.h);
-      if(sa!==sb) return sb-sa;                        // 심각도 높은 순
-      return a.d-b.d;
-    });
-    return pool.slice(0,n);
+    pool.sort(function(a,b){ var sa=pcSevRank(a.h), sb=pcSevRank(b.h); if(sa!==sb) return sb-sa; return a.d-b.d; });
+    return pool;
   }
-  // 가까운 순: 반경 5km 이내 점검대상(점검필요) 병원 → 없으면 10km까지 확장, 거리순
-  var due=all.filter(function(x){ return isDue(x.h); });
-  var within=due.filter(function(x){ return x.d<=5; });
-  if(!within.length) within=due.filter(function(x){ return x.d<=10; });
+  var within=all.filter(function(x){ return x.d<=5; });
+  if(!within.length) within=all.filter(function(x){ return x.d<=10; });
   within.sort(function(a,b){ return a.d-b.d; });
-  return within.slice(0,n);
+  return within;
+}
+// 최적 동선(최근접 이웃 그리디): from → 가장 가까운 후보 → 그 지점에서 다시 최근접… 최대 n곳.
+// 각 구간 거리(leg)·소요(legMin)와 누적 시간(cum) 반환.
+function pcOptimalRoute(from, cands, n){
+  var remaining=cands.slice(), route=[], cur={lat:from.lat,lng:from.lng}, cum=0;
+  for(var k=0;k<n && remaining.length;k++){
+    var bi=-1, bd=Infinity;
+    for(var i=0;i<remaining.length;i++){ var d=distKm(cur.lat,cur.lng,remaining[i].h.lat,remaining[i].h.lng); if(d<bd){ bd=d; bi=i; } }
+    if(bi<0) break;
+    var pick=remaining.splice(bi,1)[0];
+    var legMin=pcEstMin(bd); cum+=legMin;
+    route.push({h:pick.h, leg:bd, legMin:legMin, cum:cum});
+    cur={lat:pick.h.lat, lng:pick.h.lng};
+  }
+  return route;
 }
 function pcRenderRouteCard(){
   var box=document.getElementById('pcRouteCard'); if(!box) return;
@@ -2947,17 +3006,25 @@ function pcRenderRouteCard(){
     var fseAttr=escapeHtml(fse);
     var body;
     if(cur.from){
-      var near=pcNearestHospitals(cur.from, 3, pcRouteSort);
-      body = near.length ? near.map(function(x,i){
-        var on=(prog===x.h.n);
-        var dueCls=isDue(x.h)?' due':'';
-        return '<div class="prc-item'+(on?' prog':'')+dueCls+'" data-hn="'+escapeHtml(x.h.n)+'">'+
-          '<span class="prc-sev" style="background:'+pcSevColor(x.h)+'" title="'+escapeHtml(x.h.st||'')+'"></span>'+
-          '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
-          '<span class="prc-dt">'+x.d.toFixed(1)+'km · 약 '+pcEstMin(x.d)+'분</span>'+
-          '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
-        '</div>';
-      }).join('') : '<div class="prc-empty" style="padding:2px 6px;">'+(pcRouteSort==='near'?'반경 10km 내 점검대상 병원 없음':'반경 15km 내 점검대상 병원 없음')+'</div>';
+      var cands=pcRouteCandidates(cur.from, pcRouteSort);
+      var route=pcOptimalRoute(cur.from, cands, 3);
+      if(route.length){
+        var totalMin=route[route.length-1].cum;
+        body = '<div class="prc-total">🧭 '+t('schRouteTotal').replace('{n}',route.length).replace('{m}',totalMin)+'</div>'+
+          route.map(function(x,i){
+            var on=(prog===x.h.n);
+            var dueCls=isDue(x.h)?' due':'';
+            return '<div class="prc-item'+(on?' prog':'')+dueCls+'" data-hn="'+escapeHtml(x.h.n)+'">'+
+              '<span class="prc-rank">'+(i+1)+'</span>'+
+              '<span class="prc-sev" style="background:'+pcSevColor(x.h)+'" title="'+escapeHtml(x.h.st||'')+'"></span>'+
+              '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
+              '<span class="prc-dt">'+x.leg.toFixed(1)+'km · '+t('schCum')+' '+x.cum+'분</span>'+
+              '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
+            '</div>';
+          }).join('');
+      } else {
+        body = '<div class="prc-empty" style="padding:2px 6px;">'+(pcRouteSort==='near'?'반경 10km 내 점검대상 병원 없음':'반경 15km 내 점검대상 병원 없음')+'</div>';
+      }
     } else {
       body = '<div class="prc-empty" style="padding:2px 6px;">📍 좌표 미등록 병원 — 주변 이동 계산 불가</div>';
     }

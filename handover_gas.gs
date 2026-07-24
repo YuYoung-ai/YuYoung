@@ -264,7 +264,7 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
-    if(action==='ping')   return json_({success:true, ver:'2.5.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.6.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -994,6 +994,10 @@ function progRead_(){
   if(!o.prog   || typeof o.prog   !== 'object') o.prog = {};
   if(!o.done   || typeof o.done   !== 'object') o.done = {};
   if(!o.queues || typeof o.queues !== 'object') o.queues = {};
+  /* [v2.6] 일일 자동 초기화: 날짜(Asia/Seoul)가 바뀌면 어제 일정을 비운다 */
+  var today = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
+  if(o.day && o.day !== today){ o.queues = {}; o.prog = {}; o.done = {}; o._reset = true; }
+  o.day = today;
   /* 레거시 prog(큐 없이 저장된 진행중)을 큐로 마이그레이션 */
   Object.keys(o.prog).forEach(function(hosp){
     var fse = o.prog[hosp];
@@ -1028,6 +1032,7 @@ function deriveProg_(o){
 function progGet_(){
   var o = progRead_();
   deriveProg_(o);
+  if(o._reset){ delete o._reset; try{ PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o)); }catch(e){} }  // 일일 초기화 영속화
   return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated||''};
 }
 function progSave_(p){
@@ -1082,6 +1087,7 @@ function progSave_(p){
       return {success:false, error:'알 수 없는 op: '+op};
     }
     deriveProg_(o);
+    if(o._reset) delete o._reset;
     o.updated = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
     PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
     return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated};
