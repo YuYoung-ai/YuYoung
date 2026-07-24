@@ -310,19 +310,64 @@ loadHospDB();
    handover 처리 레코드에는 장비 S/N이 기록되지 않으므로 병원정보DB의 S/N을 사용한다.
    S/N이 "BW3007,BX4007"처럼 여러 대면 콤마·슬래시로 구분(장비 2대 대응). */
 var HOSPSN_MAP=null;   // nkey(병원명) → S/N 원문(콤마/슬래시 구분 가능)
+var HOSPMETA_MAP=null; // nkey(병원명) → {client:거래처, lastVisit:최근방문일} · 비고 자동표기용
 function loadHospSN(){
   try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospsn')||'null');
     if(c){ HOSPSN_MAP=c; } }catch(e){}
+  try{ var cm=JSON.parse(localStorage.getItem('baz_weekly_hospmeta')||'null');
+    if(cm){ HOSPMETA_MAP=cm; } }catch(e){}
   fetch(HOSPITAL_DB_URL).then(function(r){return r.json();}).then(function(d){
     if(!d.success||!d.data) return;
-    var map={};
-    d.data.forEach(function(h){ var sn=String(h.sn||'').trim(); if(h.name&&sn) map[nkey(h.name)]=sn; });
-    HOSPSN_MAP=map;
-    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map)); }catch(e){}
-    if(W_ROWS.length && CUR_MON) buildDays();   /* 맵이 늦게 도착하면 요일별 내용 갱신 */
+    var map={}, meta={};
+    d.data.forEach(function(h){
+      if(!h.name) return;
+      var k=nkey(h.name);
+      var sn=String(h.sn||'').trim(); if(sn) map[k]=sn;
+      meta[k]={ client:String(h.client||'').trim(), lastVisit:String(h.lastVisit||'').trim() };
+    });
+    HOSPSN_MAP=map; HOSPMETA_MAP=meta;
+    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map));
+         localStorage.setItem('baz_weekly_hospmeta', JSON.stringify(meta)); }catch(e){}
+    if(W_ROWS.length && CUR_MON){ refreshHospMemo(); renderRows(); buildDays(); }  /* 맵 늦게 도착 → 비고·요일별 갱신 */
   }).catch(function(){});
 }
 loadHospSN();
+
+/* ── 병원 속성 기반 비고(지연 사유) 자동 표기 태그 ──
+   거래처(client, 병원정보DB K열)와 최근방문일(lastVisit, F열) 기준:
+   · '납품 1년 이내' → '워런티 유효'  (hospital.html 판정과 동일)
+   · '중고' 포함     → '중고 거래처'
+   · '유상 판매' 포함 → '유상 판매'
+   · 최근방문일이 방문일 기준 90일(약 3개월) 이상 경과 → '마지막 방문 YYYY-MM-DD' */
+function hospMemoTags(hosp, visitYmd){
+  var tags=[];
+  var m=HOSPMETA_MAP && HOSPMETA_MAP[nkey(hosp)];
+  if(!m) return tags;
+  var cli=String(m.client||'');
+  if(/납품\s*1년\s*이내|워런티\s*유효/.test(cli)) tags.push('워런티 유효');
+  if(/중고/.test(cli)) tags.push('중고 거래처');
+  if(/유상\s*판매/.test(cli)) tags.push('유상 판매');
+  var lv=normD(m.lastVisit), vd=normD(visitYmd);
+  if(lv && vd){
+    var gap=(vd-lv)/86400000;
+    if(gap>=90) tags.push('마지막 방문 '+ymd(lv));   /* 3개월 이상 미방문 → 마지막 방문일 기재 */
+  }
+  return tags;
+}
+/* 데모 태그 + 병원 속성 태그를 합쳐 비고 문자열 구성 */
+function buildMemo(isDemo, hosp, visitYmd){
+  var parts=[];
+  if(isDemo) parts.push('데모 장비');
+  Array.prototype.push.apply(parts, hospMemoTags(hosp, visitYmd));
+  return parts.join(' / ');
+}
+/* 병원 메타 맵이 늦게 도착했을 때 기존 W_ROWS 비고 재계산 */
+function refreshHospMemo(){
+  W_ROWS.forEach(function(r){
+    var isDemo=r.memo && /데모 장비/.test(r.memo);
+    r.memo=buildMemo(isDemo, r.hosp, r.visit);
+  });
+}
 function ncareOf(hosp, recNcare){
   var nc=String(recNcare||'').trim();
   if(!nc || nc==='미가입'){
@@ -370,6 +415,24 @@ function fallbackAll(w, monK){
     .then(function(){ document.getElementById('btnLoad').disabled=false; });
 }
 
+/* ── 처리내용(A/S 내용 상세) 표준 문구 ──
+   handover '현장 처리 현황'의 대분류/유형/교체품 조합 → 주간보고 기본 문구
+   · 핸드피스 점검 (장비·이상없음·내부 세척)        : 약액 유입 미발생 확인 / 예방적 내부 세척 실시
+   · 핸드피스 세척 (핸드피스·약액 유입·내부 세척)   : 약액 유입 확인 / 내부 세척 완료
+   · 핸드피스 교체 (핸드피스·약액 유입·HP Ass'y)    : 약액 유입에 따른 동작 불량 / HP A'ssy 교체
+   해당 없으면 '' 반환 → 원본 A/S 내용 상세 유지 */
+function stdContent(raw){
+  var type=String(raw&&raw.type||'');
+  var part=String(raw&&raw.part||'');
+  var fluid=/약액\s*유입|노즐\s*누수/.test(type);           /* 유형에 약액 유입 감지 */
+  var pAssy=/ass|assy|assembly|handpiece|핸드피스\s*교체/i.test(part);  /* 교체품: HP Ass'y */
+  var pClean=/세척/.test(part);                             /* 교체품: 내부 세척 */
+  if(pAssy)           return "약액 유입에 따른 동작 불량 / HP A'ssy 교체";
+  if(pClean && fluid) return '약액 유입 확인 / 내부 세척 완료';
+  if(pClean)          return '약액 유입 미발생 확인 / 예방적 내부 세척 실시';
+  return '';
+}
+
 /* ── 표 데이터 구성 ── */
 function buildFromRows(rows, w, monK){
   CUR_MON=new Date(monK+'T00:00:00');
@@ -388,8 +451,10 @@ function buildFromRows(rows, w, monK){
     /* 데모장비 이력: handover가 내용 앞에 [데모장비] 태그를 붙여 기록 →
        weekly에서는 포함하되 N-care=미가입 고정, 비고에 '데모 장비' 표기 (태그는 처리내용에서 제거) */
     var content=String(r.detail||'').trim();
-    var isDemo=/^\[데모\s*장비\]/.test(content) || /\[데모\s*장비\]/.test(content);
+    var isDemo=/\[데모\s*장비\]/.test(content);
     if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
+    var std=stdContent(r);           /* 대분류/유형/교체품 → 표준 처리내용 기본 문구 */
+    if(std) content=std;             /* 매칭 시 기본 문구로 대체(행에서 직접 수정 가능) */
     return {
       rcv:   vd,                                    /* 접수일자: 기본=방문일자, 직접 수정 */
       visit: vd,                                    /* 방문일자 = 처리일 (자동) */
@@ -398,7 +463,7 @@ function buildFromRows(rows, w, monK){
       hosp:  r.hosp||'',
       nozzle:(String(r.nozzleReuse||'').trim().toUpperCase()==='O'?'O':'X'),  /* 노즐 재사용: handover(P열) 자동 반영 · 수정 가능 */
       content:content,                              /* 처리내용 = A/S 내용 상세 그대로 */
-      memo:  isDemo?'데모 장비':'',                 /* 비고(지연 사유): 직접입력 · 데모는 '데모 장비' 자동 */
+      memo:  buildMemo(isDemo, r.hosp||'', vd),     /* 비고: 데모·워런티 유효·중고 거래처·유상 판매·마지막 방문(3개월↑) 자동 */
       _raw:  r
     };
   });
