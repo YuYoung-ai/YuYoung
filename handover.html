@@ -67,6 +67,21 @@ textarea{resize:vertical;min-height:56px}
 @media (max-width:420px){ body{font-size:14.5px} .grid{gap:10px} }
 .hp-arrow{text-align:center;color:var(--text-muted);font-size:18px;padding-bottom:9px}
 .hint{font-size:11px;color:var(--text-muted);margin-top:4px}
+/* 사용자 숙련도 평가 — 탭 1회 세그먼트 선택 */
+.skill-box{border:1.5px solid var(--gray-line);border-radius:11px;padding:12px;background:#FBFCFE}
+.skill-box.need{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.12)}
+.skill-tit{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.skill-tit .req{background:#FBEAE8;color:var(--red);border-radius:9px;padding:1px 7px;font-size:10.5px}
+.skill-row{margin-bottom:11px}
+.skill-row:last-child{margin-bottom:0}
+.skill-lab{font-size:11.5px;font-weight:700;color:var(--navy);margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.skill-lab .std{font-weight:400;color:var(--text-muted);font-size:10.5px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg-btn{flex:1;min-width:64px;padding:10px 8px;border:1.5px solid var(--gray-line);border-radius:9px;
+  background:#fff;color:var(--text-muted);font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;text-align:center}
+.seg-btn:active{filter:brightness(.95)}
+.seg-btn.on{border-color:var(--teal);background:var(--teal-soft,#EAF4F8);color:var(--navy)}
+.seg-btn.on.warn{border-color:var(--red);background:#FBEAE8;color:var(--red)}
 .sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
   text-transform:uppercase;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
 /* 미리보기 (카톡 말풍선 느낌) */
@@ -210,6 +225,35 @@ textarea{resize:vertical;min-height:56px}
         <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)" oninput="render()"></textarea>
         <div class="hint" id="autoDetailHint" style="display:none;color:#2E7D9E;font-weight:700">✨ 템플릿 초안 자동 입력 · 현장 확인 후 수정하세요</div>
       </div>
+      <div class="field full">
+        <div class="skill-box" id="skillBox">
+          <div class="skill-tit">🎓 사용자 숙련도 평가 <span class="req">필수</span>
+            <span class="opt" style="font-weight:400;color:var(--text-muted);font-size:10.5px">병원 담당자 기준</span></div>
+          <div class="skill-row">
+            <div class="skill-lab"><span>NS 충진 여부</span></div>
+            <div class="seg" id="segNsFill">
+              <button type="button" class="seg-btn" onclick="setSkill('nsFill','O',this)">O</button>
+              <button type="button" class="seg-btn" onclick="setSkill('nsFill','X',this)">X</button>
+            </div>
+          </div>
+          <div class="skill-row">
+            <div class="skill-lab"><span>NS 충진량</span><span class="std">기준치 0.9cc</span></div>
+            <div class="seg" id="segNsAmt">
+              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','정상',this)">정상</button>
+              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','부족',this)">부족</button>
+              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','과다',this)">과다</button>
+            </div>
+          </div>
+          <div class="skill-row">
+            <div class="skill-lab"><span>정상적인 젯 분사 판단 <span class="std">[병원담당자]</span></span></div>
+            <div class="seg" id="segJet">
+              <button type="button" class="seg-btn" onclick="setSkill('jet','가능',this)">가능</button>
+              <button type="button" class="seg-btn" onclick="setSkill('jet','교육 필요',this)">교육 필요</button>
+            </div>
+          </div>
+          <div class="hint" id="skillHint">3항목 모두 선택해야 시트 기록이 가능합니다</div>
+        </div>
+      </div>
       <div class="field">
         <label>비고 / 특이사항 <span class="opt">· 없으면 N/A</span></label>
         <textarea id="remark" placeholder="예) 핸드피스 교체 비용 1,650,000원(부가세 포함) 결제 완료" oninput="render()"></textarea>
@@ -293,6 +337,7 @@ function buildText(){
   var d=bulletLines('detail');
   t+='A/S 내용 상세 :\n'+(d.length? d.map(function(l){return '-'+l;}).join('\n') : '-')+'\n';
   t+='A/S 결과 : '+pick('result')+'\n';
+  t+='[사용자 숙련도 평가]\n'+skillLines('- ').join('\n')+'\n';
   var r=bulletLines('remark');
   t+='비고/특이사항 :'+(r.length? '\n'+r.map(function(l){return '-'+l;}).join('\n') : ' N/A');
   return t;
@@ -319,6 +364,9 @@ function buildTextSheet(){
   var d=bulletLines('detail');
   t+='내용 :\n'+(d.length? d.map(function(l){return ' - '+l;}).join('\n') : ' - ')+'\n';
   t+='결과 : '+pick('result')+'\n';
+  t+='숙련도 : '+[ 'NS충진 '+(SKILL.nsFill||'N/A'),
+                   '충진량 '+(SKILL.nsAmt||'N/A'),
+                   '젯분사 판단 '+(SKILL.jet||'N/A') ].join(' / ')+'\n';
   var r=bulletLines('remark');
   t+='비고 : '+(r.length? r.join(' / ') : 'N/A');
   return t;
@@ -437,6 +485,35 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 function postUrl(){ return HANDOVER_URL || AS_URL; }
 
+/* ── 사용자 숙련도 평가 (필수 3항목 · R·S·T열 기록) ── */
+var SKILL={nsFill:'',nsAmt:'',jet:''};
+function setSkill(key, val, btn){
+  SKILL[key]=val;
+  var wrap=btn.parentNode;
+  Array.prototype.forEach.call(wrap.children,function(b){ b.classList.remove('on','warn'); });
+  btn.classList.add('on');
+  /* 주의 필요한 값(X·부족·과다·교육 필요)은 붉게 강조해 현장에서 바로 인지 */
+  if(val==='X'||val==='부족'||val==='과다'||val==='교육 필요') btn.classList.add('warn');
+  var box=document.getElementById('skillBox'); if(box) box.classList.remove('need');
+  var h=document.getElementById('skillHint');
+  if(h) h.textContent = skillMissing().length ? '3항목 모두 선택해야 시트 기록이 가능합니다' : '✅ 숙련도 평가 작성 완료';
+  render();
+}
+function skillMissing(){
+  var miss=[];
+  if(!SKILL.nsFill) miss.push('NS 충진 여부');
+  if(!SKILL.nsAmt)  miss.push('NS 충진량');
+  if(!SKILL.jet)    miss.push('젯 분사 판단');
+  return miss;
+}
+/* 복사 문구·보고용 3줄 (미선택은 N/A) */
+function skillLines(prefix){
+  var p=prefix||'';
+  return [ p+'NS 충진 여부 : '+(SKILL.nsFill||'N/A'),
+           p+'NS 충진량 : '+(SKILL.nsAmt||'N/A')+(SKILL.nsAmt?' (기준 0.9cc)':''),
+           p+'젯 분사 판단[병원담당자] : '+(SKILL.jet||'N/A') ];
+}
+
 /* ── 처리내용 1차 자동완성 (학습 대상 FSE 전용) ──
    '처리내용템플릿'(대분류/유형/교체품→처리내용)을 대상 FSE가 항목 선택 시 #detail에 초안 입력.
    대상 목록은 weekly와 공유하는 '주간자동설정'(action=weeklyauto). 비대상 FSE는 무동작. */
@@ -512,13 +589,22 @@ function rememberRecentHandover_(){
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
+  var miss=skillMissing();
+  if(miss.length){   /* 사용자 숙련도 평가 3항목 필수 — 미선택 시 기록 차단 */
+    toast('사용자 숙련도 평가 필수 — '+miss.join(', '));
+    var box=document.getElementById('skillBox');
+    if(box){ box.classList.add('need');
+      try{ box.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ box.scrollIntoView(); } }
+    return;
+  }
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
   var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
     cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
     cost:(String(val('cost')||'').trim() || '무상'),   /* 교체비용 공란이면 시트에 '무상' 기록 */
     detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
     hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP'),
-    nozzle:val('nozzleReuse') };   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
+    nozzle:val('nozzleReuse'),   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
+    nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet };   /* R·S·T열 사용자 숙련도 평가 */
   try{
     /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
     var ok=false;

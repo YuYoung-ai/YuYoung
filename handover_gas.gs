@@ -181,7 +181,10 @@ function cleanupStray(){
   var stray = findStray();
   var cols = WRITE_COLS.map(function(k){return hdr.map[k];}).filter(Boolean)
     .concat([hdr.map['HP_SN(IN)'],hdr.map['__VER_IN'],hdr.map['HP_SN(OUT)'],hdr.map['__VER_OUT'],
-             colBy_(hdr,['장비SN','장비 SN'])].filter(Boolean));
+             colBy_(hdr,['장비SN','장비 SN']),
+             colBy_(hdr,['NS 충진 여부','NS충진여부']),
+             colBy_(hdr,['NS 충진량','NS충진량']),
+             colBy_(hdr,['젯 분사 판단','젯분사 판단'])].filter(Boolean));
   stray.forEach(function(s){
     cols.forEach(function(c){ sh.getRange(s.row, c).clearContent(); });
   });
@@ -246,6 +249,13 @@ function doPost(e){
     /* 장비 S/N (Q열 '장비SN' 등 · 열이 존재하고 값이 있을 때만) */
     var snCol = colBy_(hdr, ['장비SN','장비 SN','장비 S/N','S/N(장비)']);
     if(snCol && payload.sn) sh.getRange(row, snCol).setValue(payload.sn);
+    /* 사용자 숙련도 평가 (R·S·T열 · 열이 존재하고 값이 있을 때만) */
+    var nsFillCol = colBy_(hdr, ['NS 충진 여부','NS충진여부','NS 충진']);
+    if(nsFillCol && payload.nsFill) sh.getRange(row, nsFillCol).setValue(payload.nsFill);
+    var nsAmtCol  = colBy_(hdr, ['NS 충진량','NS충진량']);
+    if(nsAmtCol && payload.nsAmt) sh.getRange(row, nsAmtCol).setValue(payload.nsAmt);
+    var jetCol    = colBy_(hdr, ['젯 분사 판단','젯분사 판단','젯 분사']);
+    if(jetCol && payload.jet) sh.getRange(row, jetCol).setValue(payload.jet);
     /* HP 교체 정보 (열이 존재할 때만) */
     if(hdr.map['HP_SN(IN)']  && payload.hpIn)  sh.getRange(row, hdr.map['HP_SN(IN)']).setValue(payload.hpIn);
     if(hdr.map['__VER_IN']   && payload.uVer)  sh.getRange(row, hdr.map['__VER_IN']).setValue(payload.uVer);
@@ -403,7 +413,11 @@ function slim_(o){
     paid : pickH_(o,['유/무상','유무상','유·무상']),
     hpIn : o['HP_SN(IN)']||'', verIn: o['VerIN']||'',
     hpOut: o['HP_SN(OUT)']||'', verOut: o['VerOUT']||'',
-    nozzleReuse: (String(pickH_(o,['노즐 재사용','노즐재사용'])||'').trim().toUpperCase()==='O' ? 'O' : 'X')  /* P열 · 기본 X */
+    nozzleReuse: (String(pickH_(o,['노즐 재사용','노즐재사용'])||'').trim().toUpperCase()==='O' ? 'O' : 'X'),  /* P열 · 기본 X */
+    /* 사용자 숙련도 평가 (R·S·T열) */
+    nsFill: pickH_(o,['NS 충진 여부','NS충진여부','NS 충진']),
+    nsAmt : pickH_(o,['NS 충진량','NS충진량']),
+    jet   : pickH_(o,['젯 분사 판단','젯분사 판단','젯 분사'])
   };
 }
 

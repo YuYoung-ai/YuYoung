@@ -712,6 +712,14 @@ function fmtDeviceLines(r, idx, grp){
     L.push(/^-/.test(ln)?ln:'- '+ln);
   });
   L.push('비고 : '+(r.memo && String(r.memo).trim() ? String(r.memo).trim() : 'N/A'));   /* 비고 필수 기재 · 미작성 시 N/A */
+  /* 사용자 숙련도 평가 (handover R·S·T열) — 값이 하나라도 있으면 구조형으로 표기 */
+  if(String(raw.nsFill||'').trim() || String(raw.nsAmt||'').trim() || String(raw.jet||'').trim()){
+    var amt=String(raw.nsAmt||'').trim();
+    L.push('[사용자 숙련도 평가]');
+    L.push('- NS 충진 여부 : '+(String(raw.nsFill||'').trim()||'N/A'));
+    L.push('- NS 충진량 : '+(amt ? amt+' (기준 0.9cc)' : 'N/A'));
+    L.push('- 젯 분사 판단[병원담당자] : '+(String(raw.jet||'').trim()||'N/A'));
+  }
   return L;
 }
 /* 같은 병원(같은 날) 여러 장비를 병원명 1회 + 장비별 상세로 병합 */
