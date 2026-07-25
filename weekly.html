@@ -372,8 +372,7 @@ function loadAutoWriters(){
     AUTO_WRITERS=d.writers.slice();
     try{ localStorage.setItem('baz_weekly_autowriters', JSON.stringify(AUTO_WRITERS)); }catch(e){}
     if(W_ROWS.length && CUR_MON) rebuildAutoFields();      /* 설정 늦게 도착 → 재계산 */
-    if(document.getElementById('autoAdminCard') &&
-       document.getElementById('autoAdminCard').style.display!=='none') renderAutoAdmin();
+    renderAutoAdmin();   /* 목록 도착 → 패널 항상 재렌더(가시성 무관) · 재접속 시 체크 유지 */
   }).catch(function(){});
 }
 loadAutoWriters();

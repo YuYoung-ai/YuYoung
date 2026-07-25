@@ -449,11 +449,13 @@ function loadContentTpl(){
   try{ var a=JSON.parse(localStorage.getItem('baz_handover_autofse')||'null'); if(Array.isArray(a)) AUTO_FSE=a; }catch(e){}
   fetch(postUrl()+'?action=contenttpl').then(function(r){return r.json();}).then(function(d){
     if(d&&d.success&&Array.isArray(d.rows)){ CONTENT_TPL_ROWS=d.rows;
-      try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(d.rows)); }catch(e){} }
+      try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(d.rows)); }catch(e){}
+      autoFillDetail();   /* 템플릿 늦게 도착 → 이미 선택된 항목에 초안 채움 */ }
   }).catch(function(){});
   fetch(postUrl()+'?action=weeklyauto').then(function(r){return r.json();}).then(function(d){
     if(d&&d.success&&Array.isArray(d.writers)){ AUTO_FSE=d.writers.slice();
-      try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){} }
+      try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){}
+      autoFillDetail();   /* 대상 목록 늦게 도착 → 대상 FSE면 초안 채움 */ }
   }).catch(function(){});
 }
 loadContentTpl();
