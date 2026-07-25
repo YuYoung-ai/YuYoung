@@ -479,15 +479,23 @@ function lookupTpl(cat, type, part){
 }
 function autoFillDetail(){
   var hint=document.getElementById('autoDetailHint');
+  function say(msg){ if(hint){ hint.textContent=msg; hint.style.display=''; } }
+  /* 학습 대상 FSE가 아니면 힌트 숨김(무동작) */
   if(!isAutoFse(val('fse'))){ if(hint) hint.style.display='none'; return; }
   var tpl=lookupTpl(val('cat'), subName(), val('part'));
-  if(!tpl) return;
-  var el=document.getElementById('detail'); if(!el) return;
+  var el=document.getElementById('detail');
+  if(!tpl){   /* 대상자지만 이 조합은 템플릿 없음 — 활성 상태만 안내 */
+    say('✨ 학습 대상 · 대분류·유형·교체품이 템플릿과 일치하면 처리내용이 자동 입력됩니다');
+    return;
+  }
+  if(!el) return;
   var cur=String(el.value||'').trim();
   if(cur==='' || cur===String(lastAutoDetail||'').trim()){   /* 비었거나 직전 초안 그대로일 때만 갱신(수정분 보존) */
     el.value=tpl; lastAutoDetail=tpl;
-    if(hint) hint.style.display='';
+    say('✨ 템플릿 초안 자동 입력 · 현장 확인 후 수정하세요');
     render();
+  }else{   /* 사용자가 직접 수정 → 덮어쓰지 않음 */
+    say('✍️ 직접 입력 내용 유지 중(초안 미적용)');
   }
 }
 
@@ -578,6 +586,7 @@ function gv(action,params){
 function saveFse(){ try{ localStorage.setItem('baz_handover_fse', val('fse')); }catch(e){} }
 function loadFse(){
   try{ var f=localStorage.getItem('baz_handover_fse'); if(f) document.getElementById('fse').value=f; }catch(e){}
+  try{ autoFillDetail(); }catch(e){}   /* 복원된 FSE가 학습 대상이면 상태 힌트 즉시 표시 */
 }
 function fillFseList(list){
   var dl=document.getElementById('fseList'); dl.innerHTML='';
