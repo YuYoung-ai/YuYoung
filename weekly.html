@@ -171,7 +171,7 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 
   <!-- ①-A 자동 기재 대상 (Lv.3 관리자 전용) -->
   <div class="card" id="autoAdminCard" style="display:none">
-    <p class="sec-title">⚙️ 자동 기재 대상 작성자 <span class="mini">Lv.3 관리자 전용 · 처리내용 표준문구·비고 태그</span></p>
+    <p class="sec-title">⚙️ 자동 기재 대상 (학습 대상) <span class="mini">Lv.3 관리자 전용 · handover 처리내용 초안 + weekly 비고 태그</span></p>
     <div id="autoWriterList" class="aw-list"></div>
     <div class="aw-add">
       <input id="autoWriterNew" placeholder="작성자 이름 추가" onkeydown="if(event.key==='Enter'){event.preventDefault();addAutoWriter();}">
@@ -179,7 +179,7 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
     </div>
     <button type="button" class="btn-load" id="btnAutoSave" onclick="saveAutoWriters()">💾 대상 저장</button>
     <div class="status" id="autoStatus"></div>
-    <div class="hint">체크된 작성자만 처리내용 표준문구·비고 자동 태그가 적용됩니다. 미체크·미설정 작성자는 원본 그대로.</div>
+    <div class="hint">체크된 인원만 handover 처리내용 초안 자동입력 + weekly 비고 자동태그 대상이 됩니다. 미체크·미설정 인원은 원본 그대로.</div>
   </div>
 
   <!-- ② 건수 + 처리 내역 표 -->
@@ -482,7 +482,6 @@ function rebuildAutoFields(){
     var content=String(raw.detail||'').trim();
     var isDemo=/\[데모\s*장비\]/.test(content);
     if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
-    if(autoOn){ var std=stdContent(raw); if(std) content=std; }
     r.content=content;
     r.memo=buildMemo(isDemo, r.hosp, r.visit, autoOn);
   });
@@ -535,23 +534,8 @@ function fallbackAll(w, monK){
     .then(function(){ document.getElementById('btnLoad').disabled=false; });
 }
 
-/* ── 처리내용(A/S 내용 상세) 표준 문구 ──
-   handover '현장 처리 현황'의 대분류/유형/교체품 조합 → 주간보고 기본 문구
-   · 핸드피스 점검 (장비·이상없음·내부 세척)        : 약액 유입 미발생 확인 / 예방적 내부 세척 실시
-   · 핸드피스 세척 (핸드피스·약액 유입·내부 세척)   : 약액 유입 확인 / 내부 세척 완료
-   · 핸드피스 교체 (핸드피스·약액 유입·HP Ass'y)    : 약액 유입에 따른 동작 불량 / HP A'ssy 교체
-   해당 없으면 '' 반환 → 원본 A/S 내용 상세 유지 */
-function stdContent(raw){
-  var type=String(raw&&raw.type||'');
-  var part=String(raw&&raw.part||'');
-  var fluid=/약액\s*유입|노즐\s*누수/.test(type);           /* 유형에 약액 유입 감지 */
-  var pAssy=/ass|assy|assembly|handpiece|핸드피스\s*교체/i.test(part);  /* 교체품: HP Ass'y */
-  var pClean=/세척/.test(part);                             /* 교체품: 내부 세척 */
-  if(pAssy)           return "약액 유입에 따른 동작 불량 / HP A'ssy 교체";
-  if(pClean && fluid) return '약액 유입 확인 / 내부 세척 완료';
-  if(pClean)          return '약액 유입 미발생 확인 / 예방적 내부 세척 실시';
-  return '';
-}
+/* 처리내용 표준 문구는 handover 입력 단계('처리내용템플릿' + 대상 FSE)로 이관됨.
+   weekly는 저장된 처리내용을 그대로 사용한다. */
 
 /* ── 표 데이터 구성 ── */
 function buildFromRows(rows, w, monK){
@@ -574,7 +558,7 @@ function buildFromRows(rows, w, monK){
     var content=String(r.detail||'').trim();
     var isDemo=/\[데모\s*장비\]/.test(content);
     if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
-    if(autoOn){ var std=stdContent(r); if(std) content=std; }   /* 대상 작성자만 표준 문구로 대체(행에서 직접 수정 가능) */
+    /* 처리내용은 handover 입력 단계에서 1차 자동완성되므로 weekly는 저장값을 그대로 사용(대체 없음) */
     return {
       rcv:   vd,                                    /* 접수일자: 기본=방문일자, 직접 수정 */
       visit: vd,                                    /* 방문일자 = 처리일 (자동) */

@@ -91,9 +91,13 @@ var MENU = {
   AUTH_VERIFY_URL: 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec'
 };
 
-/* [주간 자동기재 대상] — weekly.html 처리내용 표준문구·비고 태그를 적용할 작성자 목록
-   '주간자동설정' 탭 A열(2행부터)에 작성자명. Lv.3 관리자만 저장 가능. */
+/* [주간 자동기재 대상] — 처리내용 자동완성(handover)·비고 태그(weekly)를 적용할 인원(학습 대상) 목록
+   '주간자동설정' 탭 A열(2행부터)에 이름(handover=FSE / weekly=작성자). Lv.3 관리자만 저장 가능. */
 var WEEKLY_AUTO = { SHEET: '주간자동설정' };
+
+/* [처리내용 템플릿] — handover 입력 시 대상 인원에게 1차 자동완성할 처리내용 문구
+   '처리내용템플릿' 탭 헤더: 대분류 | 유형 | 교체품 | 처리내용 (관리자가 직접 편집) */
+var CONTENT_TPL = { SHEET: '처리내용템플릿' };
 
 /* ================= 공통 유틸 ================= */
 function ss_(){ return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -281,6 +285,7 @@ function doGet(e){
     if(action==='weekly') return json_(wkGetWeekly_(p));        /* [v2.1] 주간 처리 내역 */
     if(action==='menu')   return json_(menuGet_());             /* [v2.1] 허브 메뉴 설정 */
     if(action==='weeklyauto') return json_(weeklyAutoGet_());   /* 주간 자동기재 대상 작성자 목록 */
+    if(action==='contenttpl') return json_(contentTplGet_());  /* 처리내용 자동완성 템플릿 */
     if(action==='progress') return json_(progGet_());           /* [v2.4] 진행중 공유 상태 */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
@@ -354,6 +359,27 @@ function weeklyAutoSave_(p){
   sh.getRange(1,1).setValue('작성자');
   if(uniq.length) sh.getRange(2,1,uniq.length,1).setValues(uniq.map(function(w){return [w];}));
   return {success:true, count:uniq.length, writers:uniq};
+}
+
+/* 처리내용 템플릿 조회 — '처리내용템플릿' 시트(대분류|유형|교체품|처리내용) */
+function contentTplGet_(){
+  var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
+  var sh = sheet_(CONTENT_TPL.SHEET);
+  if(!sh || sh.getLastRow()<2) return {success:true, rows:[], updated:now};   /* 없거나 빈 시트 → 무동작 */
+  var v = sh.getDataRange().getDisplayValues();
+  var h = v[0].map(function(s){return String(s).trim();});
+  var ci = { cat:h.indexOf('대분류'), type:h.indexOf('유형'), part:h.indexOf('교체품'), content:h.indexOf('처리내용') };
+  if(ci.cat<0 || ci.type<0 || ci.content<0) return {success:false, error:'처리내용템플릿 헤더(대분류/유형/처리내용) 필요'};
+  var rows=[];
+  for(var i=1;i<v.length;i++){
+    var cat=String(v[i][ci.cat]||'').trim(), type=String(v[i][ci.type]||'').trim(),
+        content=String(v[i][ci.content]||'').trim();
+    if(!cat && !type && !content) continue;
+    rows.push({ cat:cat, type:type,
+                part: ci.part>=0 ? String(v[i][ci.part]||'').trim() : '',
+                content:content });
+  }
+  return {success:true, rows:rows, updated:now};
 }
 
 /** 헤더맵에서 후보 이름으로 열번호 찾기(정규화 완전일치 → 부분일치) · 없으면 0 */
