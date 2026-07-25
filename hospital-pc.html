@@ -1169,7 +1169,8 @@ function cardHTML(h){
   if(lvl==='over'){ cardCls+=' urgent'; warnTag='<span class="warn-tag over">'+t('overDue')+'</span>'; }
   else if(lvl==='near'){ cardCls+=' soon'; warnTag='<span class="warn-tag near">'+t('nearDue')+'</span>'; }
 
-  const skillBadge = pcSkillBadge(h.n);   /* 최신 사용자 숙련도 평가 배지(이력 옆) */
+  /* 최신 사용자 숙련도 평가 배지(이력 옆) — 배지 오류가 카드 목록 전체를 막지 않도록 격리 */
+  let skillBadge=''; try{ skillBadge=pcSkillBadge(h.n); }catch(e){ skillBadge=''; }
   const histBtn = (HISTORY[h.n] && HISTORY[h.n].length)
     ? '<button class="hist" onclick="openHist(\''+escapeHtml(h.n).replace(/'/g,"\\'")+'\')">🕑 '+t('histBtn')+'</button>'
     : '';
