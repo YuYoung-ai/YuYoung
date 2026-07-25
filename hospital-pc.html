@@ -836,6 +836,9 @@ let salesFilter='', regionFilter='';
 let kakaoLoaded=false, mapObj=null, mapMarkers=[];
 
 // ===== 유틸 =====
+/* 사용자 숙련도 평가 맵 — 카드 렌더보다 먼저 초기화되어야 함(캐시로 첫 화면부터 배지 표시) */
+var PC_SKILL={};
+try{ PC_SKILL=JSON.parse(localStorage.getItem('baz_pc_skill_cache')||'{}')||{}; }catch(e){ PC_SKILL={}; }
 function normalize(s){ return (s||'').toLowerCase().replace(/\s+/g,''); }
 function isNcare(h){ return h.nc && h.nc!=='미가입'; }
 function isDue(h){ return isNcare(h) && ['점검대상','권고','경고','미점검'].includes(h.st); }
@@ -2853,9 +2856,8 @@ function pcMergeRecent(rows){
 }
 function pcLocalRecent(){ try{ return JSON.parse(localStorage.getItem('baz_recent_handover')||'[]')||[]; }catch(e){ return []; } }
 
-/* ── 사용자 숙련도 평가 (handover R·S·T열) — 병원별 최신 1건만 카드 배지로 ── */
-var PC_SKILL={};
-try{ PC_SKILL=JSON.parse(localStorage.getItem('baz_pc_skill_cache')||'{}')||{}; }catch(e){ PC_SKILL={}; }
+/* ── 사용자 숙련도 평가 (handover R·S·T열) — 병원별 최신 1건만 카드 배지로 ──
+   ※ PC_SKILL 초기화는 렌더보다 먼저 실행되어야 하므로 상단 유틸 영역에 있음 */
 function pcBuildSkill(rows){
   var map={};
   (rows||[]).forEach(function(r){
@@ -2870,7 +2872,7 @@ function pcBuildSkill(rows){
   try{ localStorage.setItem('baz_pc_skill_cache', JSON.stringify(map)); }catch(e){}
 }
 function pcSkillBadge(name){
-  var s=PC_SKILL[normalize(name)];
+  var s=PC_SKILL && PC_SKILL[normalize(name)];   /* 초기화 전이어도 카드 렌더가 죽지 않도록 방어 */
   if(!s) return '';
   var warn=(s.nsFill==='X'||s.nsAmt==='부족'||s.nsAmt==='과다'||s.jet==='교육 필요');
   var txt=['NS '+(s.nsFill||'-'), (s.nsAmt||'-'), (s.jet==='가능'?'판단가능':(s.jet||'-'))].join(' · ');
