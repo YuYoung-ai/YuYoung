@@ -921,7 +921,7 @@ function skillStats(rows){
     return { total:total, bad:bad.length, percent: total>0 ? Math.round((bad.length/total)*1000)/10 : 0, hospitals:bad };
   }
   var gFill=grp(function(r){return r.nsFill;}, function(v){ return v.toUpperCase()==='X'; });
-  var gAmt =grp(function(r){return r.nsAmt;},  function(v){ return v==='부족'||v==='과다'; });
+  var gAmt =grp(function(r){return r.nsAmt;},  function(v){ return v==='부족'; });   /* 미흡=부족만(과다 제외) */
   var gJet =grp(function(r){return r.jet;},    function(v){ return /교육/.test(v); });
   /* 3) 헤더 요약 = 한 항목이라도 미흡인 병원 수 */
   var badSet={};
