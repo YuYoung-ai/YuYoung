@@ -239,7 +239,7 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 /* ▼▼ 라이브 병원정보DB 배포 URL — hospital.html/handover.html과 동일 · 병원별 장비 S/N 출처 ▼▼ */
-var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2400);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

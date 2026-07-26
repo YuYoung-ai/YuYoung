@@ -456,7 +456,7 @@ document.addEventListener('click',function(e){
 });
 
 /* 라이브 병원정보DB (hospital.html과 동일 엔드포인트) — S/N·UI/HP 버전 최신화 */
-var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
 function loadLiveDB(){
   fetch(HOSPITAL_DB_URL,{method:'GET'})
     .then(function(r){return r.json();})
@@ -482,7 +482,7 @@ function todayISO(){ var d=new Date(),z=function(n){return (n<10?'0':'')+n;}; re
 
 /* ▼▼ 현장 처리 현황(handover) 확장 웹앱 URL — handover_gas.gs 배포 후 붙여넣기 ▼▼ */
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* 예) 'https://script.google.com/macros/s/XXXX/exec' */
-/* 기존 기록용 URL (HANDOVER_URL 미설정 시 폴백) */
+/* 기존 기록용 URL (HANDOVER_URL 미설정 시 폴백) — 기록 전용이므로 조회용 병원정보DB로 바꾸지 말 것 */
 var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 function postUrl(){ return HANDOVER_URL || AS_URL; }
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
