@@ -1610,6 +1610,29 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
   var HDB_CACHE_TS='bazHospDBCacheTs';
   var HDB_CACHE_TTL=5*60*1000; // 5분
 
+  /* 데이터 출처 표시 — 불러오기가 실패하면 앱이 옛 저장본을 그대로 보여주는데
+     아무 표시가 없어 "시트는 고쳤는데 화면이 안 바뀐다"는 혼선이 생긴다.
+     성공 시엔 건수·최신 점검일을 잠깐, 실패 시엔 경고를 계속 띄운다. */
+  function dbNotice(msg, isErr){
+    var el=document.getElementById('dbNotice');
+    if(!el){
+      el=document.createElement('div'); el.id='dbNotice';
+      el.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9999;max-width:calc(100% - 20px);'
+        +'padding:7px 11px;border-radius:9px;font-size:12px;line-height:1.35;font-weight:600;'
+        +'box-shadow:0 2px 10px rgba(0,0,0,.18);pointer-events:none;white-space:pre-line';
+      document.body.appendChild(el);
+    }
+    el.style.background = isErr ? '#fdecea' : '#eef3fb';
+    el.style.color      = isErr ? '#a02020' : '#33507d';
+    el.textContent = msg;
+    clearTimeout(el._t);
+    if(!isErr) el._t=setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 6000);
+  }
+  function maxVisit_(rows){
+    var m=''; (rows||[]).forEach(function(r){ var d=cleanDate(r.lastVisit); if(d&&d>m) m=d; });
+    return m||'-';
+  }
+
   function applyHospDB(rows){
     if(applyDB(rows)){
       populateFilters();
@@ -1641,7 +1664,11 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
     fetch(_tk(HOSPITAL_DB_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
-        if(!d.success||!d.data||!d.data.length) return;
+        if(!d.success||!d.data||!d.data.length){
+          console.warn('[병원정보DB] 응답 실패:', d && d.error);
+          dbNotice('병원정보DB를 불러오지 못했습니다\n('+((d&&d.error)||'빈 응답')+')\n→ 예전 저장본을 표시 중입니다', true);
+          return;
+        }
         try{
           localStorage.setItem(HDB_CACHE_KEY, JSON.stringify(d.data));
           localStorage.setItem(HDB_CACHE_TS, String(Date.now()));
@@ -1650,9 +1677,13 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
           if(applyHospDB(d.data)){
             console.log('[병원정보DB] '+d.data.length+'건 동기화');
           }
+          dbNotice('병원정보DB '+d.data.length+'건 갱신 · 최신 점검일 '+maxVisit_(d.data), false);
         }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
       })
-      .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
+      .catch(function(e){
+        console.warn('[병원정보DB] 읽기 실패:',e);
+        dbNotice('병원정보DB를 불러오지 못했습니다(네트워크)\n→ 예전 저장본을 표시 중입니다', true);
+      });
   }
   // 칩 필터(전체/N-CARE/점검필요) 활성화 시 재동기화 트리거용으로 노출 (5분 캐시 준수)
   window.refreshHospDB=syncHospDB;
