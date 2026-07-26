@@ -18,25 +18,37 @@ function doGet(e) {
     var lastRow = sheet.getLastRow();
     if (lastRow < 3) return ok([]);
 
-    // B~M (12개 열), 3행부터  ← 기존 10 → 12로 변경
-    var values = sheet.getRange(3, 2, lastRow - 2, 12).getValues();
+    // B~O (14개 열), 3행부터  ← 12 → 14 (N:위도, O:경도 추가)
+    //   ※ N·O열이 아직 없어도 안전하게 동작한다(빈 값 → 좌표 null → 지오코딩 폴백).
+    var lastCol = sheet.getLastColumn();
+    var width   = Math.max(1, Math.min(14, lastCol - 1));   // B열부터 최대 14개
+    var values  = sheet.getRange(3, 2, lastRow - 2, width).getValues();
+
+    // 숫자 좌표만 통과(빈칸·문자열·범위 밖은 null)
+    function num_(v, min, max) {
+      var n = parseFloat(v);
+      if (isNaN(n) || n < min || n > max) return null;
+      return n;
+    }
 
     var hospitals = values
       .filter(function(r){ return String(r[0]).trim() !== ""; })
       .map(function(r){
         return {
           name:      String(r[0]).trim(),   // B: 병원명
-          sn:        String(r[1]).trim(),   // C: S/N
-          region:    String(r[2]).trim(),   // D: 지역
-          address:   String(r[3]).trim(),   // E: 주소
-          lastVisit: String(r[4]).trim(),   // F: 최근점검일자
-          status:    String(r[5]).trim(),   // G: 점검상태
-          sales:     String(r[6]).trim(),   // H: 영업담당
-          asType:    String(r[7]).trim(),   // I: AS유무상
-          ncare:     String(r[8]).trim(),   // J: N-CARE
-          client:    String(r[9]).trim(),   // K: 거래처
-          hpVer:     String(r[10]).trim(),  // L: HP_Ver  ← 추가
-          uiVer:     String(r[11]).trim()   // M: UI_Ver  ← 추가
+          sn:        String(r[1]||'').trim(),   // C: S/N
+          region:    String(r[2]||'').trim(),   // D: 지역
+          address:   String(r[3]||'').trim(),   // E: 주소
+          lastVisit: String(r[4]||'').trim(),   // F: 최근점검일자
+          status:    String(r[5]||'').trim(),   // G: 점검상태
+          sales:     String(r[6]||'').trim(),   // H: 영업담당
+          asType:    String(r[7]||'').trim(),   // I: AS유무상
+          ncare:     String(r[8]||'').trim(),   // J: N-CARE
+          client:    String(r[9]||'').trim(),   // K: 거래처
+          hpVer:     String(r[10]||'').trim(),  // L: HP_Ver
+          uiVer:     String(r[11]||'').trim(),  // M: UI_Ver
+          lat:       num_(r[12], 33, 39),       // N: 위도 (대한민국 범위)
+          lng:       num_(r[13], 124, 132)      // O: 경도
         };
       });
 
