@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
 <title>현장 처리완료 · 공유 | BAZ CS</title>
@@ -604,7 +605,8 @@ async function saveToSheet(){
     detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
     hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP'),
     nozzle:val('nozzleReuse'),   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
-    nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet };   /* R·S·T열 사용자 숙련도 평가 */
+    nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet,   /* R·S·T열 사용자 숙련도 평가 */
+    token:(window.BazAuth&&BazAuth.token)?BazAuth.token():'' };   /* [보안] 서버 쓰기 인증 토큰 */
   try{
     /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
     var ok=false;

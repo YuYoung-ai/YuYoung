@@ -215,6 +215,14 @@ function doPost(e){
     lock.waitLock(20000);
     payload = JSON.parse(e.postData.contents||'{}');
 
+    /* [보안] 모든 쓰기는 로그인 토큰 필수 — 외부인의 무단 기록·시트 오염 차단.
+       (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외) */
+    var actName = (payload && payload.action) || '';
+    if(actName !== 'menu_save' && actName !== 'weeklyauto_save'){
+      var denied = requireWrite_(payload);
+      if(denied) return json_(denied);
+    }
+
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
@@ -907,15 +915,36 @@ function getGuide_(type){
 /** 토큰을 인증 서버에 검증 → 레벨(0=무효, 1=일반, 2=관리자, 3=수석 매니저)
  *  ※ 반드시 GET 사용: GAS→GAS POST는 302 리다이렉트를 POST로 재시도해
  *    "Page Not Found"가 되는 UrlFetchApp 고질 문제가 있다 (GET은 정상). */
+/* 토큰 → 보안 레벨. 인증 서버 왕복이 비싸므로 스크립트 캐시에 5분 보관한다.
+   (모든 요청마다 UrlFetchApp을 타면 응답이 크게 느려짐) */
 function verifyLevel_(token){
   try{
     if(!MENU.AUTH_VERIFY_URL || !token) return 0;
+    var key = 'lv_' + Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
+    var cache = CacheService.getScriptCache();
+    try{
+      var hit = cache.get(key);
+      if(hit !== null && hit !== undefined && hit !== '') return Number(hit)||0;
+    }catch(_){}
     var res = UrlFetchApp.fetch(
       MENU.AUTH_VERIFY_URL + '?action=verify&token=' + encodeURIComponent(String(token)),
       { method:'get', muteHttpExceptions:true, followRedirects:true });
     var r = JSON.parse(res.getContentText()||'{}');
-    return (r && r.ok) ? (Number(r.level)||0) : 0;
+    var lv = (r && r.ok) ? (Number(r.level)||0) : 0;
+    /* 유효한 토큰만 캐시(무효 토큰을 캐시하면 로그인 직후 거부가 이어질 수 있음) */
+    try{ if(lv > 0) cache.put(key, String(lv), 300); }catch(_){}
+    return lv;
   }catch(e){ return 0; }
+}
+
+/* 쓰기 공통 게이트 — 로그인(Lv.1 이상) 필수. 거부 시 표준 오류 반환 */
+function requireWrite_(p){
+  var lv = verifyLevel_((p && p.token) || '');
+  if(lv >= 1) return null;
+  return {success:false, error: MENU.AUTH_VERIFY_URL
+    ? 'unauthorized — 로그인이 필요합니다(토큰 없음/만료). 다시 로그인 후 시도하세요.'
+    : 'AUTH_VERIFY_URL 미설정 — 기록 거부'};
 }
 
 /** [v2.1] 수석 매니저 가이드 게이트 — guide는 Lv.3 토큰 필요

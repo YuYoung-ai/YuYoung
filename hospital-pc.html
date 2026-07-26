@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
 <title>BAZ BIOMEDIC — 병원 데이터 센터 (PC)</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2F5E">
@@ -2433,6 +2434,8 @@ var pcProgHold=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보
 function pcProgSend(payload){
   if(!HANDOVER_URL) return;
   pcProgHold=Date.now()+8000;
+  /* [보안] 서버 쓰기 인증 토큰 동봉 */
+  try{ if(window.BazAuth&&BazAuth.token) payload=Object.assign({},payload,{token:BazAuth.token()}); }catch(e){}
   var body=JSON.stringify(payload);
   try{
     fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
