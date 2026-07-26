@@ -1460,6 +1460,8 @@ applyLang();
 
 // ── 구글시트 동기화 (백그라운드, 안전모드) ──
 (function(){
+/* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
   var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
   var VISIT_LOG_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
   // ⬇️ 병원 점검 현황 → 이슈이력(HISTORY) 동기화 배포 URL
@@ -1540,7 +1542,7 @@ applyLang();
     }catch(e){ console.warn('[이슈이력] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(ISSUE_HIST_URL,{method:'GET'})
+    fetch(_tk(ISSUE_HIST_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return; }
@@ -1635,7 +1637,7 @@ applyLang();
     }catch(e){ console.warn('[병원정보DB] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(HOSPITAL_DB_URL,{method:'GET'})
+    fetch(_tk(HOSPITAL_DB_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.success||!d.data||!d.data.length) return;
@@ -1682,7 +1684,7 @@ applyLang();
       }
     }catch(e){ console.warn('[방문로그] 캐시 읽기 오류(무시):',e); }
 
-    fetch(VISIT_LOG_URL,{method:'GET'})
+    fetch(_tk(VISIT_LOG_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.ok||!d.visits) return;

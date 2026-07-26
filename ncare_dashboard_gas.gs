@@ -162,6 +162,9 @@ function filterHospitalDB() {
 // ══════════════════════════════════════════════════════════════════
 function doGet(e) {
   try {
+    /* [보안] 로그인 토큰 필수 — N-Care 운영 지표 */
+    if (!isAuthed_(e)) return _nJson({ success:false, error:'unauthorized — 로그인이 필요합니다(토큰 없음/만료)' });
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName('대시보드');
     if (!sh) return _nJson({ success:false, error:'대시보드 시트 없음' });
@@ -214,4 +217,35 @@ function doGet(e) {
 function _nJson(o){
   return ContentService.createTextOutput(JSON.stringify(o))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ── [보안] 로그인 토큰 검증 ─────────────────────────────
+   auth.js와 동일한 인증 서버에 토큰을 확인해 로그인 사용자만 데이터를 받게 한다.
+   인증 서버 왕복이 비싸므로 스크립트 캐시에 5분 보관한다(유효 토큰만 캐시).
+   ※ 클라이언트는 ?token=... 로 전달한다 (auth.js의 BazAuth.withToken 사용) */
+var AUTH_VERIFY_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec';
+
+function verifyLevel_(token){
+  try{
+    if(!AUTH_VERIFY_URL || !token) return 0;
+    var key = 'lv_' + Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
+    var cache = CacheService.getScriptCache();
+    try{
+      var hit = cache.get(key);
+      if(hit) return Number(hit)||0;
+    }catch(_){}
+    var res = UrlFetchApp.fetch(
+      AUTH_VERIFY_URL + '?action=verify&token=' + encodeURIComponent(String(token)),
+      { method:'get', muteHttpExceptions:true, followRedirects:true });
+    var r = JSON.parse(res.getContentText()||'{}');
+    var lv = (r && r.ok) ? (Number(r.level)||0) : 0;
+    try{ if(lv > 0) cache.put(key, String(lv), 300); }catch(_){}
+    return lv;
+  }catch(e){ return 0; }
+}
+/* 로그인(Lv.1 이상) 여부 */
+function isAuthed_(e){
+  var p = (e && e.parameter) || {};
+  return verifyLevel_(p.token || '') >= 1;
 }

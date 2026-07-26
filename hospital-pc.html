@@ -2108,7 +2108,7 @@ applyLang();
     }catch(e){ console.warn('[이슈이력] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(ISSUE_HIST_URL,{method:'GET'})
+    fetch(_tk(ISSUE_HIST_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return; }
@@ -2206,7 +2206,7 @@ applyLang();
     }catch(e){ console.warn('[병원정보DB] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(HOSPITAL_DB_URL,{method:'GET'})
+    fetch(_tk(HOSPITAL_DB_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.success||!d.data||!d.data.length) return;
@@ -2253,7 +2253,7 @@ applyLang();
       }
     }catch(e){ console.warn('[방문로그] 캐시 읽기 오류(무시):',e); }
 
-    fetch(VISIT_LOG_URL,{method:'GET'})
+    fetch(_tk(VISIT_LOG_URL),{method:'GET'})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.ok||!d.visits) return;

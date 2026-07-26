@@ -1152,7 +1152,7 @@ var WK_NCARE=null;
 function loadNcare(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_ncare')||'null'); if(c) WK_NCARE=c; }catch(e){}
   var p = NCARE_URL
-    ? fetch(NCARE_URL).then(function(r){return r.json();})
+    ? fetch(_tk(NCARE_URL)).then(function(r){return r.json();})
     : gv('ncare',{});
   p.then(function(d){
     if(d&&d.success){ WK_NCARE=d; try{ localStorage.setItem('baz_dash_ncare', JSON.stringify(d)); }catch(e){} }
