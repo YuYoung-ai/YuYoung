@@ -993,8 +993,17 @@ function authSelfTest(){
     Logger.log('⚠️ 응답 형식이 다릅니다: ' + txt.slice(0,200));
     return '형식오류';
   }catch(e){
-    Logger.log('❌ 인증 서버에 닿지 못했습니다: ' + e);
-    Logger.log('   → 권한 승인이 안 됐거나 인증 서버 URL/배포 문제입니다.');
+    var m = String((e && e.message) || e);
+    Logger.log('❌ 인증 서버에 닿지 못했습니다: ' + m);
+    if(/permission|authoriz|권한|승인|scope|external_request/i.test(m)){
+      Logger.log('   원인: 이 프로젝트의 "외부 요청(UrlFetchApp)" 권한이 아직 승인되지 않았습니다.');
+      Logger.log('   조치: 이 함수를 다시 실행 → 권한 검토 → 계정 선택 → 고급 →');
+      Logger.log('         "(안전하지 않음) ...(으)로 이동" → 허용  까지 끝까지 진행하세요.');
+      Logger.log('         (중간에 창을 닫으면 승인이 저장되지 않아 같은 오류가 반복됩니다)');
+    }else{
+      Logger.log('   원인: 권한 문제가 아닙니다. 네트워크·인증 서버 URL·배포 설정 쪽입니다.');
+      Logger.log('   조치: 위 오류 메시지 한 줄을 그대로 알려주세요.');
+    }
     return '실패';
   }
 }
