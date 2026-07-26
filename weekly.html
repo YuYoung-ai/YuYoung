@@ -440,8 +440,11 @@ async function saveAutoWriters(){
   function show(){ var c=document.getElementById('autoAdminCard'); if(c && c.style.display==='none'){ c.style.display=''; } renderAutoAdmin(); }
   try{
     var lv=(window.BazAuth&&BazAuth.cachedLevel)?BazAuth.cachedLevel():0;
-    if(lv>=3) show();
-    if(window.BazAuth&&BazAuth.currentLevel){ BazAuth.currentLevel().then(function(l){ if(l>=3) show(); }).catch(function(){}); }
+    if(lv>=3){ show(); return; }   /* 캐시 레벨로 확정되면 서버 재검증 불필요(인증 왕복 1회 절감) */
+    /* 캐시에 레벨이 없을 때만 서버 확인 — 페이지 가드가 이미 검증 중이므로 중복을 최소화 */
+    if(!lv && window.BazAuth && BazAuth.currentLevel){
+      BazAuth.currentLevel().then(function(l){ if(l>=3) show(); }).catch(function(){});
+    }
   }catch(e){}
 })();
 

@@ -22,7 +22,8 @@ header{background:var(--navy);color:#fff;padding:12px 16px;position:sticky;top:0
 header>div:first-child{min-width:0;flex:1 1 auto}
 header h1{margin:0;font-size:15px;font-weight:700;white-space:nowrap}
 header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hd-btns{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
+/* 좁은 화면에서 헤더 버튼이 넘치지 않도록 축소·줄바꿈 허용 (모바일 가로 스크롤 방지) */
+.hd-btns{display:flex;gap:6px;flex-wrap:wrap;flex:1 1 auto;min-width:0;justify-content:flex-end}
 .hd-btn{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:8px;
   padding:6px 10px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap}
 .hd-btn:active{background:rgba(255,255,255,.15)}
