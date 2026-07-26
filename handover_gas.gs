@@ -928,7 +928,17 @@ function getGuide_(type){
  *    "Page Not Found"가 되는 UrlFetchApp 고질 문제가 있다 (GET은 정상). */
 /* 토큰 → 보안 레벨. 인증 서버 왕복이 비싸므로 스크립트 캐시에 5분 보관한다.
    (모든 요청마다 UrlFetchApp을 타면 응답이 크게 느려짐) */
+/* ★★ [토큰 검증 해제] ★★ ────────────────────────────────────────
+   아래 verifyLevel_ 은 인증 서버로 왕복(UrlFetchApp)해 토큰을 확인한다.
+   그 왕복이 한 번이라도 실패하면(스크립트 권한 미승인·인증 서버 오류·쿼터 등)
+   catch 가 0을 돌려주고, 그 순간 "토큰이 정상이어도" 모든 사용자·모든 도구가
+   통째로 차단된다. 잘못된 토큰과 구분이 안 되기 때문에 재로그인해도 풀리지 않는다.
+   실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
+   ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
+var AUTH_ENFORCE = false;
+
 function verifyLevel_(token){
+  if(!AUTH_ENFORCE) return 3;   /* [해제] 토큰 검증 사용 안 함 — 위 AUTH_ENFORCE 주석 참조 */
   try{
     if(!MENU.AUTH_VERIFY_URL || !token) return 0;
     var key = 'lv_' + Utilities.base64EncodeWebSafe(

@@ -111,7 +111,17 @@ function _json(obj) {
    ※ AUTH_VERIFY_URL 은 auth.js 의 AUTH_URL 과 반드시 같은 값이어야 한다. */
 var AUTH_VERIFY_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec';
 
+/* ★★ [토큰 검증 해제] ★★ ────────────────────────────────────────
+   아래 verifyLevel_ 은 인증 서버로 왕복(UrlFetchApp)해 토큰을 확인한다.
+   그 왕복이 한 번이라도 실패하면(스크립트 권한 미승인·인증 서버 오류·쿼터 등)
+   catch 가 0을 돌려주고, 그 순간 "토큰이 정상이어도" 모든 사용자·모든 도구가
+   통째로 차단된다. 잘못된 토큰과 구분이 안 되기 때문에 재로그인해도 풀리지 않는다.
+   실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
+   ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
+var AUTH_ENFORCE = false;
+
 function verifyLevel_(token) {
+  if(!AUTH_ENFORCE) return 3;   /* [해제] 토큰 검증 사용 안 함 — 위 AUTH_ENFORCE 주석 참조 */
   try {
     if (!AUTH_VERIFY_URL || !token) return 0;
     var key = 'lv_' + Utilities.base64EncodeWebSafe(
