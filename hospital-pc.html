@@ -865,6 +865,27 @@ function statusFromVisit_(li){
   if(d<=90) return '권고';
   return '경고';
 }
+/* 이력(HISTORY)의 '점검' 기록에서 병원별 최신 점검일을 뽑아 최근점검일(li)을 보정한다.
+   병원정보DB 시트의 최근점검일 열은 갱신이 밀리거나(2025 이력 추가 시처럼) 과거 값으로
+   되돌아갈 수 있으므로, 항상 "더 최신인 값"만 채택해 상태가 뒤로 밀리지 않게 한다. */
+function syncVisitFromHistory_(){
+  if(typeof HISTORY!=='object' || !HISTORY) return false;
+  var latest={}, changed=false;
+  Object.keys(HISTORY).forEach(function(name){
+    var d='';
+    (HISTORY[name]||[]).forEach(function(r){
+      if(r && r.t==='점검' && r.d && r.d>d) d=r.d;   /* A/S(Voc)는 점검이 아니므로 제외 */
+    });
+    if(d) latest[name]=d;
+  });
+  HOSPITALS.forEach(function(h){
+    var d=latest[h.n];
+    if(d && d>(h.li||'')){ h.li=d; changed=true; }
+    h.st=statusFromVisit_(h.li);
+  });
+  return changed;
+}
+
 
 function distKm(lat1,lng1,lat2,lng2){
   const R=6371, toR=x=>x*Math.PI/180;
@@ -2086,6 +2107,7 @@ applyLang();
         Object.keys(edits).forEach(function(n){ HISTORY[n]=edits[n]; });
       }
     }catch(e){}
+    try{ syncVisitFromHistory_(); }catch(e){}   /* 이력 기준으로 최근점검일·상태 보정 */
     return true;
   }
 
@@ -2182,6 +2204,7 @@ applyLang();
         updated=true;
       }
     });
+    try{ syncVisitFromHistory_(); }catch(e){}   /* 이력 기준으로 최근점검일·상태 보정 */
     return updated;
   }
 
