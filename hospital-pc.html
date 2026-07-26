@@ -853,18 +853,6 @@ function daysSince(dateStr){
   if(isNaN(d)) return null;
   return Math.floor((TODAY-d.getTime())/86400000);
 }
-/* 최근점검일(li) → 점검상태(st) 계산.
-   시트의 '점검상태' 열은 갱신이 밀려 경고/미점검만 들어 있으므로 신뢰하지 않고
-   최근점검일로부터 직접 계산한다(기존 임베드와 동일 규칙: 395건 재현 검증 완료).
-     ~30일 정상 · ~60 점검대상 · ~90 권고 · 초과 경고 · 기록없음 미점검 */
-function statusFromVisit_(li){
-  var d = daysSince(li);
-  if(d===null) return '미점검';
-  if(d<=30) return '정상';
-  if(d<=60) return '점검대상';
-  if(d<=90) return '권고';
-  return '경고';
-}
 
 function distKm(lat1,lng1,lat2,lng2){
   const R=6371, toR=x=>x*Math.PI/180;
@@ -2159,10 +2147,9 @@ applyLang();
         if(r.sn)        h.s=r.sn;
         if(r.region)    h.rg=r.region;
         if(r.address)   h.a=r.address;
-        /* 최근점검일은 병원정보DB 시트 값을 그대로 따른다(시트가 단일 진실 소스).
-           시트에서 과거로 정정되면 화면도 그대로 따라 내려가야 하므로 비교하지 않는다. */
-        if(r.lastVisit) h.li = cleanDate(r.lastVisit);
-        h.st = statusFromVisit_(h.li);          /* 시트 status 대신 최근점검일로 계산 */
+        /* 최근점검일·점검상태 모두 병원정보DB 시트 값을 그대로 쓴다(시트가 단일 진실 소스) */
+        if(r.lastVisit) h.li=cleanDate(r.lastVisit);
+        if(r.status)    h.st=r.status;
         if(r.sales)     h.sa=r.sales;
         if(r.asType)    h.as=r.asType;
         if(r.ncare)     h.nc=r.ncare;
@@ -2175,7 +2162,7 @@ applyLang();
       }else{
         HOSPITALS.push({
           n:r.name, s:r.sn||'', rg:r.region||'', a:r.address||'',
-          li:cleanDate(r.lastVisit), st:statusFromVisit_(cleanDate(r.lastVisit)), sa:r.sales||'',
+          li:cleanDate(r.lastVisit), st:r.status||'미점검', sa:r.sales||'',
           as:r.asType||'', nc:r.ncare||'미가입', d:r.client||'',
           hpv:r.hpVer||'', uiv:r.uiVer||'',
           lat:(r.lat!=null?r.lat:null), lng:(r.lng!=null?r.lng:null)
@@ -2251,11 +2238,7 @@ applyLang();
     var updated=false;
     HOSPITALS.forEach(function(h){
       var v=visits[h.n];
-      if(v&&v.date&&cleanDate(v.date)>=(h.li||'')){
-        h.li=cleanDate(v.date);
-        h.st=statusFromVisit_(h.li);   /* 방문일이 갱신되면 점검상태도 다시 계산 */
-        updated=true;
-      }
+      if(v&&v.date&&cleanDate(v.date)>=(h.li||'')){ h.li=cleanDate(v.date); updated=true; }
     });
     if(updated){ updateStats(); render(); }
     return updated;
