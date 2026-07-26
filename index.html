@@ -1882,6 +1882,8 @@ document.getElementById('appBtnDashboardPc').addEventListener('click', function(
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
 var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
+/* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
 // ===== 메뉴 구성 (시트 '메뉴설정' 탭 기반 · 표시/레벨/순서 · 로컬 캐시 폴백) =====
 // GET  ?action=menu → {success, menu:[{id,name,show,level,order}…]}  (구버전 hidden 배열도 수용)
@@ -2031,7 +2033,7 @@ function loadMgrTax(){
     return;
   }
   document.getElementById('mgrChips').innerHTML='<span style="font-size:12px;color:#6B7A99;">유형 목록 불러오는 중…</span>';
-  fetch(MGR_GAS_URL+'?action=master').then(function(r){return r.json();}).then(function(d){
+  fetch(_tk(MGR_GAS_URL+'?action=master')).then(function(r){return r.json();}).then(function(d){
     if(!d.success){ document.getElementById('mgrChips').innerHTML=''; return; }
     var list=[];
     Object.keys(d.taxonomy||{}).forEach(function(cat){

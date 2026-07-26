@@ -291,6 +291,17 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
+    /* [보안] 조회 API도 로그인 토큰 필수 — 외부인의 업무 데이터 열람 차단.
+       예외: ping(연결 진단), menu(index.html 로그인 화면이 로그인 전에 호출·업무 데이터 없음).
+       guide는 아래 gateGuide_에서 Lv.3을 별도로 요구한다. */
+    if(action!=='ping' && action!=='menu'){
+      if(verifyLevel_(p.token||'') < 1){
+        return json_({success:false, error: MENU.AUTH_VERIFY_URL
+          ? 'unauthorized — 로그인이 필요합니다(토큰 없음/만료). 다시 로그인 후 시도하세요.'
+          : 'AUTH_VERIFY_URL 미설정 — 조회 거부'});
+      }
+    }
+
     if(action==='ping')   return json_({success:true, ver:'2.6.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());

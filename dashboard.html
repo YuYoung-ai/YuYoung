@@ -359,6 +359,8 @@ header .sub{font-size:11px;color:#B9C6E4;margin-top:2px;white-space:nowrap;overf
 <script>
 /* ▼▼ handover_gas.gs 배포 URL (handover.html의 HANDOVER_URL과 동일) ▼▼ */
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+/* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
 var CACHE_KEY='baz_dash_cache';
 var RAW=[];              // 전체 레코드
@@ -421,7 +423,9 @@ function loadData(force){
    (호출부는 있는데 정의가 빠져 있어 N-Care/재고 연동이 조용히 실패하던 버그 수정) */
 function gv(action, params){
   var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
-  return fetch(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''),{method:'GET'})
+  var _u=HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
+  if(window.BazAuth&&BazAuth.withToken) _u=BazAuth.withToken(_u);   /* [보안] 조회 인증 토큰 */
+  return fetch(_u,{method:'GET'})
     .then(function(r){return r.json();});
 }
 
@@ -446,7 +450,7 @@ function fetchTimeout(url, ms){
     });
 }
 function fetchAllRetry(tries){
-  return fetchTimeout(HANDOVER_URL+'?action=all', 20000)
+  return fetchTimeout(_tk(HANDOVER_URL+'?action=all'), 20000)
     .catch(function(e){
       if(tries>1 && (e.kind==='network'||e.kind==='timeout')){
         toast('연결 재시도 중…');

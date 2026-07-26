@@ -485,6 +485,8 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 /* 기존 기록용 URL (HANDOVER_URL 미설정 시 폴백) */
 var AS_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
 function postUrl(){ return HANDOVER_URL || AS_URL; }
+/* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
 /* ── 사용자 숙련도 평가 (필수 3항목 · R·S·T열 기록) ── */
 var SKILL={nsFill:'',nsAmt:'',jet:''};
@@ -525,12 +527,12 @@ function nkeyH(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 function loadContentTpl(){
   try{ var c=JSON.parse(localStorage.getItem('baz_handover_contenttpl')||'null'); if(Array.isArray(c)) CONTENT_TPL_ROWS=c; }catch(e){}
   try{ var a=JSON.parse(localStorage.getItem('baz_handover_autofse')||'null'); if(Array.isArray(a)) AUTO_FSE=a; }catch(e){}
-  fetch(postUrl()+'?action=contenttpl').then(function(r){return r.json();}).then(function(d){
+  fetch(_tk(postUrl()+'?action=contenttpl')).then(function(r){return r.json();}).then(function(d){
     if(d&&d.success&&Array.isArray(d.rows)){ CONTENT_TPL_ROWS=d.rows;
       try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(d.rows)); }catch(e){}
       autoFillDetail();   /* 템플릿 늦게 도착 → 이미 선택된 항목에 초안 채움 */ }
   }).catch(function(){});
-  fetch(postUrl()+'?action=weeklyauto').then(function(r){return r.json();}).then(function(d){
+  fetch(_tk(postUrl()+'?action=weeklyauto')).then(function(r){return r.json();}).then(function(d){
     if(d&&d.success&&Array.isArray(d.writers)){ AUTO_FSE=d.writers.slice();
       try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){}
       autoFillDetail();   /* 대상 목록 늦게 도착 → 대상 FSE면 초안 채움 */ }
@@ -666,7 +668,9 @@ function contToInspection(){
 function gv(action,params){
   if(!HANDOVER_URL) return Promise.reject('HANDOVER_URL 미설정');
   var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
-  return fetch(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''),{method:'GET'})
+  var _u=HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
+  if(window.BazAuth&&BazAuth.withToken) _u=BazAuth.withToken(_u);   /* [보안] 조회 인증 토큰 */
+  return fetch(_u,{method:'GET'})
     .then(function(r){return r.json();});
 }
 

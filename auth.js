@@ -140,6 +140,16 @@
       try { return sessionStorage.getItem(LOGIN_KEY) || ''; } catch (e) { return ''; }
     },
 
+    // GET URL에 인증 토큰을 붙인다 (?/& 자동 판단). 토큰이 없으면 원본 그대로 반환.
+    // 서버(handover_gas)가 조회 API에 로그인 토큰을 요구하므로 모든 조회 호출부에서 사용한다.
+    //   예) fetch(BazAuth.withToken(URL + '?action=all'))
+    withToken: function (url) {
+      var t = this.token();
+      if (!t) return url;
+      return url + (String(url).indexOf('?') >= 0 ? '&' : '?') +
+             'token=' + encodeURIComponent(t);
+    },
+
     logout: function () {
       var token = this.token();
       clearSession();
