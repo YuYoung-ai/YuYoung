@@ -70,9 +70,8 @@ textarea{resize:vertical;min-height:56px}
 .hint{font-size:11px;color:var(--text-muted);margin-top:4px}
 /* 사용자 숙련도 평가 — 탭 1회 세그먼트 선택 */
 .skill-box{border:1.5px solid var(--gray-line);border-radius:11px;padding:12px;background:#FBFCFE}
-.skill-box.need{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.12)}
 .skill-tit{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.skill-tit .req{background:#FBEAE8;color:var(--red);border-radius:9px;padding:1px 7px;font-size:10.5px}
+.skill-tit .optb{background:#EEF2F6;color:var(--text-muted);border-radius:9px;padding:1px 7px;font-size:10.5px;font-weight:600}
 .skill-row{margin-bottom:11px}
 .skill-row:last-child{margin-bottom:0}
 .skill-lab{font-size:11.5px;font-weight:700;color:var(--navy);margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -228,7 +227,7 @@ textarea{resize:vertical;min-height:56px}
       </div>
       <div class="field full">
         <div class="skill-box" id="skillBox">
-          <div class="skill-tit">🎓 사용자 숙련도 평가 <span class="req">필수</span>
+          <div class="skill-tit">🎓 사용자 숙련도 평가 <span class="optb">선택</span>
             <span class="opt" style="font-weight:400;color:var(--text-muted);font-size:10.5px">병원 담당자 기준</span></div>
           <div class="skill-row">
             <div class="skill-lab"><span>NS 충진 여부</span></div>
@@ -252,7 +251,7 @@ textarea{resize:vertical;min-height:56px}
               <button type="button" class="seg-btn" onclick="setSkill('jet','교육 필요',this)">교육 필요</button>
             </div>
           </div>
-          <div class="hint" id="skillHint">3항목 모두 선택해야 시트 기록이 가능합니다</div>
+          <div class="hint" id="skillHint">선택 항목 · 미선택 항목은 N/A로 기록됩니다</div>
         </div>
       </div>
       <div class="field">
@@ -488,7 +487,7 @@ function postUrl(){ return HANDOVER_URL || AS_URL; }
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
-/* ── 사용자 숙련도 평가 (필수 3항목 · R·S·T열 기록) ── */
+/* ── 사용자 숙련도 평가 (선택 3항목 · R·S·T열 기록 · 미선택은 N/A) ── */
 var SKILL={nsFill:'',nsAmt:'',jet:''};
 function setSkill(key, val, btn){
   SKILL[key]=val;
@@ -497,9 +496,8 @@ function setSkill(key, val, btn){
   btn.classList.add('on');
   /* 주의 필요한 값(X·부족·과다·교육 필요)은 붉게 강조해 현장에서 바로 인지 */
   if(val==='X'||val==='부족'||val==='과다'||val==='교육 필요') btn.classList.add('warn');
-  var box=document.getElementById('skillBox'); if(box) box.classList.remove('need');
   var h=document.getElementById('skillHint');
-  if(h) h.textContent = skillMissing().length ? '3항목 모두 선택해야 시트 기록이 가능합니다' : '✅ 숙련도 평가 작성 완료';
+  if(h) h.textContent = skillMissing().length ? '선택 항목 · 미선택 항목은 N/A로 기록됩니다' : '✅ 숙련도 평가 작성 완료';
   render();
 }
 function skillMissing(){
@@ -592,14 +590,7 @@ function rememberRecentHandover_(){
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
-  var miss=skillMissing();
-  if(miss.length){   /* 사용자 숙련도 평가 3항목 필수 — 미선택 시 기록 차단 */
-    toast('사용자 숙련도 평가 필수 — '+miss.join(', '));
-    var box=document.getElementById('skillBox');
-    if(box){ box.classList.add('need');
-      try{ box.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ box.scrollIntoView(); } }
-    return;
-  }
+  /* 사용자 숙련도 평가는 선택 항목 — 미선택이어도 기록 진행(빈 값은 시트에서 미기록) */
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
   var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
     cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
