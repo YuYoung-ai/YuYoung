@@ -71,6 +71,8 @@
   body.mode-window #pcPane{display:block;}
   body.mode-window #cardList{display:none !important;}
   body.mode-window #mapBox{display:none !important;}
+  /* 표 뷰: 지도/상세 상단 패널 숨김 → 표(#pcLeft)를 전체 폭·전체 높이로 */
+  body.mode-window.pc-table #pcRight{display:none;}
   body.mode-window #loadMore{display:none !important;}
   #pcToolbar{display:flex;align-items:center;gap:10px;margin:2px 0 12px;flex-wrap:wrap;}
   .pc-viewtoggle{display:flex;gap:2px;background:var(--surface);border:1px solid var(--gray-line);border-radius:9px;padding:3px;}
@@ -395,6 +397,12 @@
     background:var(--teal-soft,#EAF4F8);color:var(--navy);border:1px solid var(--line);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .h-skill.warn{background:#FBEAE8;color:#C0392B;border-color:#E8B4AD;}
+  /* 병원 상세 모달 (표 전체화면 뷰에서 행 클릭 시) */
+  #pcDetailModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:190;display:none;align-items:center;justify-content:center;padding:20px;}   /* 이력 편집(histModal 200)·비번(300) 모달이 위에 스택되도록 190 */
+  #pcDetailModal.show{display:flex;}
+  .pc-dm-sheet{position:relative;background:var(--surface);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:16px;padding:18px;box-shadow:var(--sh-2);animation:slideUp .2s ease;}
+  .pc-dm-close{position:absolute;top:10px;right:12px;border:0;background:transparent;font-size:18px;line-height:1;color:var(--text-muted);cursor:pointer;padding:4px;z-index:1;}
+  .pc-dm-close:hover{color:var(--text);}
   /* 이력 모달 */
   #histModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:200;display:none;align-items:flex-end;justify-content:center;}
   #histModal.show{display:flex;}
@@ -708,6 +716,14 @@
       <button class="cancel" id="histCancel">취소</button>
       <button class="save" id="histSave">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- 병원 상세 모달 (표 전체화면 뷰 행 클릭) -->
+<div id="pcDetailModal">
+  <div class="pc-dm-sheet">
+    <button class="pc-dm-close" id="pcDetailModalClose" type="button" aria-label="닫기">✕</button>
+    <div class="pc-dm-body" id="pcDetailModalBody"></div>
   </div>
 </div>
 
@@ -1947,6 +1963,16 @@ document.getElementById('histClose').addEventListener('click', closeHist);
 document.getElementById('histModal').addEventListener('click', e=>{
   if(e.target.id==='histModal') closeHist();
 });
+// 병원 상세 모달 닫기 (✕·배경 클릭·Esc) — 표 전체화면 뷰 전용
+(function(){
+  var dm=document.getElementById('pcDetailModal');
+  var cl=document.getElementById('pcDetailModalClose');
+  if(cl) cl.addEventListener('click', function(){ if(typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
+  if(dm) dm.addEventListener('click', function(e){ if(e.target.id==='pcDetailModal' && typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && dm && dm.classList.contains('show') && typeof pcCloseDetailModal==='function') pcCloseDetailModal();
+  });
+})();
 
 // 🤖 AI 문의 버튼 → 현재 장비 정보·이력을 챗봇으로 전달
 document.getElementById('histAiBtn').addEventListener('click', ()=>{
@@ -2589,8 +2615,10 @@ function pcRefreshProgViews(hosp, silent){
   try{ if(typeof curTab!=='undefined' && curTab==='sched' && typeof renderSched==='function') renderSched(); }catch(e){}
   try{ if(typeof pcList!=='undefined'){ pcRenderLeft(pcList||[]); pcHighlight(); } }catch(e){}
   try{ if(pcRightMode==='detail' && pcSelName) pcRenderDetail(pcSelName); }catch(e){}
-  // 지도 모드면 처리중 마커를 즉시 반영(현재 위치·줌 유지)
-  try{ if(pcRightMode==='map' && pcMapObj && typeof pcShowMap==='function'){ pcSaveMapState(); pcRestoreView=true; pcShowMap(pcList||[]); } }catch(e){}
+  // 상세 모달(표 뷰)이 열려 있으면 모달 본문도 갱신
+  try{ var dm=document.getElementById('pcDetailModal'); if(dm&&dm.classList.contains('show')&&pcSelName) pcRenderDetail(pcSelName, document.getElementById('pcDetailModalBody')); }catch(e){}
+  // 지도 모드(카드 뷰)면 처리중 마커를 즉시 반영(현재 위치·줌 유지). 표 뷰는 지도 숨김이라 생략
+  try{ if(pcRightMode==='map' && pcListView!=='table' && pcMapObj && typeof pcShowMap==='function'){ pcSaveMapState(); pcRestoreView=true; pcShowMap(pcList||[]); } }catch(e){}
   try{ pcUpdateSchedNotice(); }catch(e){}
   if(!silent && hosp && pcIsProg(hosp)){
     try{ if(typeof bazToast==='function') bazToast('진행중: '+hosp+(pcInProgress[hosp]?' ('+pcInProgress[hosp]+')':'')); }catch(e){}
@@ -3218,8 +3246,8 @@ function pcHistTimeline(name){
   }).join('');
 }
 
-function pcRenderDetail(name){
-  var box=document.getElementById('pcDetail'); if(!box) return;
+function pcRenderDetail(name, box){
+  box = box || document.getElementById('pcDetail'); if(!box) return;
   var h=null;
   for(var i=0;i<HOSPITALS.length;i++){ if(HOSPITALS[i].n===name){ h=HOSPITALS[i]; break; } }
   if(!h){ for(var j=0;j<pcList.length;j++){ if(pcList[j].n===name){ h=pcList[j]; break; } } }
@@ -3379,6 +3407,15 @@ function pcShowMap(list){
 }
 
 function pcSelect(name){
+  // 표(전체화면) 뷰: 상단 패널이 숨겨져 있으므로 상세를 중앙 모달로 표시
+  if(pcListView==='table'){
+    pcSelName=name;
+    pcRenderDetail(name, document.getElementById('pcDetailModalBody'));
+    var dm=document.getElementById('pcDetailModal'); if(dm) dm.classList.add('show');
+    var dmb=document.getElementById('pcDetailModalBody'); if(dmb) dmb.scrollTop=0;
+    pcHighlight();
+    return;
+  }
   if(pcRightMode==='map') pcSaveMapState();   // 지도→상세: 당시 위치 저장(복귀용)
   pcSelName=name; pcRightMode='detail';
   var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
@@ -3390,23 +3427,32 @@ function pcSelect(name){
 }
 window.pcSelect=pcSelect;
 
+// 상세 모달 닫기 (배경 클릭·✕·Esc·카드 뷰 전환)
+function pcCloseDetailModal(){
+  var dm=document.getElementById('pcDetailModal');
+  if(dm && dm.classList.contains('show')){ dm.classList.remove('show'); }
+}
+window.pcCloseDetailModal=pcCloseDetailModal;
+
 function pcBackToMap(){
   pcRightMode='map';
   var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
   var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
   var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 지도';
   pcRestoreView=true;   // 초기화면(전체 fit)이 아니라 이력 확인 당시 위치/줌으로 복귀
-  pcShowMap(pcList||[]);
+  if(pcListView!=='table') pcShowMap(pcList||[]);   // 표 뷰(지도 숨김)에서는 지도 렌더 생략
 }
 
 function pcRender(list){
   pcList=list||[];
   pcEnsureDOM();
   document.querySelectorAll('#pcViewToggle button').forEach(function(b){ b.classList.toggle('on', b.dataset.view===pcListView); });
+  document.body.classList.toggle('pc-table', pcListView==='table');   // 표 뷰: 지도/상세 패널 숨김 → 표 전체화면
+  if(pcListView!=='table') pcCloseDetailModal();                      // 카드 뷰로 전환 시 상세 모달 닫기
   // 담당자 오늘 완료 데이터(첫 진입 시 로드) + 좌측 카드 렌더
   if(!pcRecentRequested){
     pcRecentRequested=true;
-    pcLoadRecent(function(){ pcRenderRecentCard(); pcRenderRouteCard(); if(pcRightMode!=='detail') pcShowMap(pcList); });
+    pcLoadRecent(function(){ pcRenderRecentCard(); pcRenderRouteCard(); if(pcRightMode!=='detail' && pcListView!=='table') pcShowMap(pcList); });
   }
   pcRenderRecentCard();
   pcRenderRouteCard();
@@ -3420,7 +3466,7 @@ function pcRender(list){
     var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 지도';
     var bm2=document.getElementById('pcBackMap'); if(bm2) bm2.style.display='none';
     document.getElementById('pcRight').classList.remove('detail');
-    pcShowMap(pcList);
+    if(pcListView!=='table') pcShowMap(pcList);   // 표 뷰(지도 숨김)에서는 지도 렌더 생략
   }
   pcHighlight();
 }
