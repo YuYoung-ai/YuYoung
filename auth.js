@@ -251,75 +251,9 @@
     });
   }
 
-  /************************************************************
-   * 토큰 만료 감지 (전 페이지 공통)
-   * ----------------------------------------------------------
-   * 조회·기록 API가 토큰을 요구하게 되면서, 서버에서 토큰이 만료·폐기되면
-   * 각 화면은 unauthorized 응답을 받는다. 그런데 대부분의 호출부는 실패를
-   * 조용히 무시하고 캐시(예전 저장본)를 계속 보여주기 때문에, 사용자는
-   * "시트를 고쳤는데 화면이 안 바뀐다"로 오해하게 된다.
-   *
-   * 호출부를 하나씩 고치면 빠뜨리는 곳이 생기므로, fetch를 한 번 감싸서
-   * Apps Script 응답에 unauthorized가 있으면 안내 배너를 띄운다.
-   *   - 인증 서버(AUTH_URL) 자신의 응답은 제외(로그인 실패는 화면이 직접 처리)
-   *   - 자동 이동은 하지 않는다(작성 중인 내용이 날아갈 수 있음) → 눌러서 이동
-   ************************************************************/
-  var _expiredShown = false;
-
-  function showExpired_() {
-    if (_expiredShown) return;
-    _expiredShown = true;
-    try {
-      var el = document.getElementById('dbNotice');
-      if (!el) {
-        el = document.createElement('div');
-        el.id = 'dbNotice';
-        el.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:99999;max-width:calc(100% - 20px);'
-          + 'padding:7px 11px;border-radius:9px;font-size:12px;line-height:1.35;font-weight:600;'
-          + 'box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:pre-line';
-        document.body.appendChild(el);
-      }
-      el.style.background = '#fdecea';
-      el.style.color = '#a02020';
-      el.style.pointerEvents = 'auto';
-      el.style.cursor = 'pointer';
-      el.textContent = '로그인이 만료되어 최신 데이터를 못 받았습니다\n'
-                     + '(지금 화면은 예전 저장본입니다)\n\n👉 눌러서 다시 로그인';
-      el.onclick = function () { BazAuth.logout(); global.location.href = 'index.html'; };
-    } catch (e) {}
-  }
-
-  function hookFetch_() {
-    var page = currentPage_();
-    if (PUBLIC_PAGES.hasOwnProperty(page)) return;   // 로그인 화면은 제외
-    var orig = global.fetch;
-    if (typeof orig !== 'function' || orig.__bazWrapped) return;
-
-    var wrapped = function (input, init) {
-      var url = '';
-      try { url = (typeof input === 'string') ? input : ((input && input.url) || ''); } catch (e) {}
-      var p = orig.apply(global, arguments);
-      // Apps Script 응답만 검사 (인증 서버 자신은 제외)
-      if (url && url.indexOf('script.google.com') >= 0 && url.indexOf(AUTH_URL) !== 0) {
-        p.then(function (res) {
-          try {
-            if (!res || !res.ok || !res.clone) return;
-            res.clone().text().then(function (t) {
-              if (/unauthorized/i.test(t || '')) showExpired_();
-            })['catch'](function () {});
-          } catch (e) {}
-        })['catch'](function () {});   // 원본 체인은 그대로 호출부에 넘어간다
-      }
-      return p;
-    };
-    wrapped.__bazWrapped = true;
-    global.fetch = wrapped;
-  }
-
   // 다른 스크립트에서도 쓸 수 있게 공개 (예: 특정 버튼에서 재검사)
   BazAuth.requiredLevel = function () { return requiredLevelFor_(currentPage_()); };
   BazAuth.guard = guardPage_;
-  BazAuth.sessionExpired = showExpired_;
 
   global.BazAuth = BazAuth;
 
@@ -401,6 +335,5 @@
 
   global.Statistics = Statistics;   // Weekly / Excel / Dashboard 공용
 
-  hookFetch_();   // 조회 API의 unauthorized 응답 감지 (전 페이지 공통)
   guardPage_();   // 스크립트 로드 즉시 실행 (렌더링 차단 검사)
 })(window);
