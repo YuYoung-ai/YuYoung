@@ -122,6 +122,11 @@
   .pc-cmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;}
   .pc-cmk .dot{width:13px;height:13px;border-radius:50%;background:var(--ok);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);flex:0 0 auto;}
   .pc-cmk .lb{background:var(--ok);color:#fff;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+  /* 지도 커스텀 마커(현재 처리중: 파란 점 + 라벨 · 현장 일정 진행중 연동) */
+  .pc-pmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;}
+  .pc-pmk .dot{width:14px;height:14px;border-radius:50%;background:var(--teal);border:2px solid #fff;box-shadow:0 0 0 0 rgba(46,125,158,.55);flex:0 0 auto;animation:pcProgPulse 1.8s ease-out infinite;}
+  .pc-pmk .lb{background:var(--teal);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+  @keyframes pcProgPulse{0%{box-shadow:0 0 0 0 rgba(46,125,158,.55);}70%{box-shadow:0 0 0 9px rgba(46,125,158,0);}100%{box-shadow:0 0 0 0 rgba(46,125,158,0);}}
   #pcDetail{position:absolute;inset:0;overflow:auto;padding:15px 16px;display:none;background:var(--surface);}
   #pcRight.detail #pcMapPane{visibility:hidden;}
   #pcRight.detail #pcDetail{display:block;}
@@ -642,7 +647,11 @@
     <div id="filtToggle"><button id="filtToggleBtn" type="button" title="필터 폭: 숨김 → 기본 → 넓게">넓게 ▷</button></div>
     <div class="search-wrap">
       <span class="ico">🔍</span>
-      <input type="text" id="searchInput" placeholder="병원명 검색..." autocomplete="off">
+      <input type="text" id="searchInput" name="hospKw" placeholder="병원명 검색..."
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+        aria-autocomplete="none" inputmode="search"
+        data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore="true"
+        readonly onfocus="this.removeAttribute('readonly')">
       <button class="search-clear" id="searchClear">✕</button>
     </div>
 
@@ -2349,6 +2358,7 @@ applyLang();
 var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' | 'table'
 if(pcListView==='recent') pcListView='cards';   // 구버전 값 정리(최근완료는 좌측 카드로 이동)
 var pcRecent=[], pcRecentState='idle', pcRecentRequested=false, pcRecentOverlays=[], pcRecentByIdx={};
+var pcProgOverlays=[];   // 지도: 현재 처리중(진행중) 병원 강조 마커
 var pcNearbyOverlays=[];   // 검색 반경 5km 주변 병원 마커
 // handover 시트에 기록된 CS 담당자(fse) 목록 — 현장 일정/진행중 담당자 후보의 유일 소스
 var pcFseAll=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_fse')||'[]')||[]; }catch(e){ return []; } })();
@@ -2387,6 +2397,14 @@ function pcSaveGone(){ try{ localStorage.setItem('baz_pc_gone', JSON.stringify(p
 function pcGoneAdd(hosp){ if(hosp){ pcGone[hosp]=Date.now(); pcSaveGone(); } }
 function pcGoneDel(hosp){ if(hosp && pcGone[hosp]!=null){ delete pcGone[hosp]; pcSaveGone(); } }
 function pcGoneHas(hosp){ var ts=pcGone[hosp]; if(ts==null) return false; if(Date.now()-ts>864e5){ delete pcGone[hosp]; pcSaveGone(); return false; } return true; }
+// 최근 추가 보호(anti-tombstone): 방금 로컬에서 추가/설정한 병원을, 서버 왕복(GAS 콜드스타트)
+// 지연 동안 폴링이 지우지 않도록 잠시 보존한다. 서버 큐에 반영이 확인되면 즉시 해제, 30초 후 자동 만료.
+// (새로고침에도 유지되도록 localStorage 저장 → 저장 직후 새로고침해도 낙관적 추가가 유실되지 않음.)
+var pcFresh=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_fresh')||'{}')||{}; }catch(e){ return {}; } })();
+function pcSaveFresh(){ try{ localStorage.setItem('baz_pc_fresh', JSON.stringify(pcFresh)); }catch(e){} }
+function pcFreshMark(hosp){ if(hosp){ pcFresh[hosp]=Date.now(); pcSaveFresh(); } }
+function pcFreshDel(hosp){ if(hosp && pcFresh[hosp]!=null){ delete pcFresh[hosp]; pcSaveFresh(); } }
+function pcFreshHas(hosp){ var ts=pcFresh[hosp]; if(ts==null) return false; if(Date.now()-ts>30000){ delete pcFresh[hosp]; pcSaveFresh(); return false; } return true; }
 // 서버 큐에서 tombstone된 병원 제거 + 제거 목록 반환
 function pcGoneFilter(queues){
   var removed=[], out={};
@@ -2412,6 +2430,7 @@ function pcDailyResetCheck(){
   pcQueues={}; pcSaveQueues();
   pcInProgress={}; pcSaveProg();
   pcDone={}; pcSaveDone();
+  pcFresh={}; pcSaveFresh();
   pcGone={}; hosps.forEach(function(h){ pcGone[h]=Date.now(); }); pcSaveGone();
   fses.forEach(function(f){ try{ pcProgSend({action:'progress_save', op:'q_clear', fse:f}); }catch(e){} });
   try{ if(typeof curTab!=='undefined' && curTab==='sched') renderSched(); }catch(e){}
@@ -2442,13 +2461,13 @@ function pcDeriveProg(){
 function pcQueueApply(op, fse, hosp, to){
   fse=(fse||'').trim(); hosp=(hosp||'').trim();
   var extra=null;   // 서버 정합용 보조 op(레거시 clear 등)
-  if(op==='q_add' && fse && hosp){ pcGoneDel(hosp); pcqRemoveAll(hosp); pcqEnsure(fse).push({h:hosp,s:'wait'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
-  else if(op==='q_remove' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); if(pcIsProg(hosp)) delete pcInProgress[hosp]; if(pcIsDone(hosp)){ delete pcDone[hosp]; } extra={action:'progress_save', op:'clear', hosp:hosp}; }
+  if(op==='q_add' && fse && hosp){ pcGoneDel(hosp); pcFreshMark(hosp); pcqRemoveAll(hosp); pcqEnsure(fse).push({h:hosp,s:'wait'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
+  else if(op==='q_remove' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); pcFreshDel(hosp); if(pcIsProg(hosp)) delete pcInProgress[hosp]; if(pcIsDone(hosp)){ delete pcDone[hosp]; } extra={action:'progress_save', op:'clear', hosp:hosp}; }
   else if(op==='q_move' && fse && hosp){ var qm=pcqEnsure(fse),im=pcqFind(qm,hosp); if(im>=0){ var t=Math.max(0,Math.min(qm.length-1,Number(to))); var it=qm.splice(im,1)[0]; qm.splice(t,0,it); } }
-  else if(op==='q_clear' && fse){ (pcQueues[fse]||[]).forEach(function(x){ if(x&&x.h){ pcGoneAdd(x.h); if(pcIsProg(x.h)) delete pcInProgress[x.h]; } }); delete pcQueues[fse]; }
+  else if(op==='q_clear' && fse){ (pcQueues[fse]||[]).forEach(function(x){ if(x&&x.h){ pcGoneAdd(x.h); pcFreshDel(x.h); if(pcIsProg(x.h)) delete pcInProgress[x.h]; } }); delete pcQueues[fse]; }
   else if((op==='q_done'||op==='done') && hosp){ var f2=fse||pcqOf(hosp); if(f2){ var qd=pcqEnsure(f2),idd=pcqFind(qd,hosp); if(idd>=0) qd[idd].s='done'; } pcDone[hosp]=1; }
-  else if(op==='set' && hosp){ pcGoneDel(hosp); pcqRemoveAll(hosp); var qs=pcqEnsure(fse); qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; }); qs.unshift({h:hosp,s:'prog'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
-  else if(op==='clear' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); }
+  else if(op==='set' && hosp){ pcGoneDel(hosp); pcFreshMark(hosp); pcqRemoveAll(hosp); var qs=pcqEnsure(fse); qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; }); qs.unshift({h:hosp,s:'prog'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
+  else if(op==='clear' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); pcFreshDel(hosp); }
   else { return; }
   pcDeriveProg();
   var payload={action:'progress_save', op:op, hosp:hosp, fse:fse};
@@ -2495,6 +2514,8 @@ function pcProgSend(payload){
   var body=JSON.stringify(payload);
   try{
     fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(d&&d.success===true&&payload&&payload.hosp) pcFreshDel(payload.hosp); })   // 서버 반영 확인 → 보호 표식 해제
       .catch(function(){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} });
   }catch(e){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(_){} }
 }
@@ -2513,6 +2534,18 @@ function pcProgPull(){
       var f=pcGoneFilter(d.queues);
       var nq=f.q;
       if(f.removed.length){ f.removed.forEach(function(r){ pcProgSend({action:'progress_save',op:'q_remove',fse:r.fse,hosp:r.hosp}); pcProgSend({action:'progress_save',op:'clear',hosp:r.hosp}); }); }
+      // 최근 추가 보호: 방금 로컬에서 추가한 병원이 서버 왕복(콜드스타트) 지연으로 서버 큐에
+      // 아직 없을 때, 폴링이 그 추가를 지우지 않도록 다시 넣어준다. 서버에 이미 있으면 표식 해제.
+      // (동시 편집 시 상대의 변경을 반영하면서도 내 최신 추가가 유실되지 않게 함.)
+      Object.keys(pcQueues).forEach(function(fq){
+        (pcQueues[fq]||[]).forEach(function(x){
+          if(!x||!x.h||!pcFreshHas(x.h)) return;
+          var inServer=false;
+          Object.keys(nq).forEach(function(g){ if(nq[g]&&pcqFind(nq[g],x.h)>=0) inServer=true; });
+          if(inServer){ pcFreshDel(x.h); }
+          else { if(!nq[fq]) nq[fq]=[]; nq[fq].push({h:x.h, s:'wait'}); }
+        });
+      });
       var nd=(d.done&&typeof d.done==='object')?d.done:{};
       // 큐가 진실 → 큐에서 prog 파생. done은 tombstone 아닌 항목만 병합 유지.
       if(JSON.stringify(nq)===JSON.stringify(pcQueues)){
@@ -2556,6 +2589,8 @@ function pcRefreshProgViews(hosp, silent){
   try{ if(typeof curTab!=='undefined' && curTab==='sched' && typeof renderSched==='function') renderSched(); }catch(e){}
   try{ if(typeof pcList!=='undefined'){ pcRenderLeft(pcList||[]); pcHighlight(); } }catch(e){}
   try{ if(pcRightMode==='detail' && pcSelName) pcRenderDetail(pcSelName); }catch(e){}
+  // 지도 모드면 처리중 마커를 즉시 반영(현재 위치·줌 유지)
+  try{ if(pcRightMode==='map' && pcMapObj && typeof pcShowMap==='function'){ pcSaveMapState(); pcRestoreView=true; pcShowMap(pcList||[]); } }catch(e){}
   try{ pcUpdateSchedNotice(); }catch(e){}
   if(!silent && hosp && pcIsProg(hosp)){
     try{ if(typeof bazToast==='function') bazToast('진행중: '+hosp+(pcInProgress[hosp]?' ('+pcInProgress[hosp]+')':'')); }catch(e){}
@@ -2749,7 +2784,7 @@ function pcVendorText(h){
   return v||'-';
 }
 function pcStatusBadge(h){
-  if(pcIsProg(h.n)) return '<span class="st-badge 진행중">🔵 진행중</span>';
+  if(pcIsProg(h.n)) return '<span class="st-badge 진행중">🔵 현재 처리중</span>';
   if(pcIsDone(h.n)) return '<span class="st-badge 정상">정상</span>';
   return isNcare(h)
     ? '<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
@@ -3254,7 +3289,8 @@ function pcShowMap(list){
     var mapKey=list.length+'|'+(list[0]?list[0].n:'')+'|'+(list[list.length-1]?list[list.length-1].n:'')
       +'#'+pcTodayList().map(function(r){return r.hosp+(r.fse||'');}).join(',')
       +'#'+(searchQ?normalize(searchQ):'')
-      +'#'+list.filter(function(h){return h.lat!=null;}).length;
+      +'#'+list.filter(function(h){return h.lat!=null;}).length
+      +'#'+Object.keys(pcInProgress||{}).sort().map(function(k){return k+':'+pcInProgress[k];}).join(',');   // 진행중 변경 시 재그리기
     var restore=pcRestoreView && pcMapState; pcRestoreView=false;
     if(mapKey===pcMapDrawnKey && pcMapMarkers.length){ if(restore) pcApplyMapState(); return; }
     pcMapDrawnKey=mapKey;
@@ -3298,6 +3334,19 @@ function pcShowMap(list){
       (function(hn){ el.addEventListener('click',function(){ pcFocusHospOnMap(hn,null); }); })(h.n);
       var ov=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:6});
       ov.setMap(pcMapObj); pcRecentOverlays.push(ov);
+      bounds.extend(pos); any=true;
+    });
+    // 현재 처리중(현장 일정 진행중) 병원 → 파란 마커 + 라벨로 강조 (병원 조회 지도 연동)
+    pcProgOverlays.forEach(function(o){o.setMap(null);}); pcProgOverlays=[];
+    Object.keys(pcInProgress||{}).forEach(function(hn){
+      var h=pcHospByName(hn); if(!h||h.lat==null||h.lng==null) return;
+      var pos=new kakao.maps.LatLng(h.lat,h.lng);
+      var who=pcInProgress[hn]||'';
+      var el=document.createElement('div'); el.className='pc-pmk';
+      el.innerHTML='<span class="dot"></span><span class="lb">🔵 처리중'+(who?' · '+escapeHtml(who):'')+'</span>';
+      (function(nm){ el.addEventListener('click',function(){ pcSelect(nm); }); })(h.n);
+      var ov2=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:9});
+      ov2.setMap(pcMapObj); pcProgOverlays.push(ov2);
       bounds.extend(pos); any=true;
     });
     // 병원명 검색 중 → 검색된 병원 반경 5km 주변 병원도 함께 표시
