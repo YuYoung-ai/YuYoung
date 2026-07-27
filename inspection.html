@@ -111,8 +111,10 @@
   .sigpad-save{background:#fff;color:var(--navy);flex:1.6;}
 
   /* 하단 고정 버튼 */
+  /* z-index: 병원명 행이 자동완성 드롭다운 때문에 z-index:100 을 쓰므로,
+     하단 고정 바는 그보다 위에 있어야 스크롤 위치가 겹쳐도 버튼이 눌린다. */
   .bottom-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--gray-line);
-    padding:12px 16px;display:flex;gap:10px;z-index:60;max-width:560px;margin:0 auto;}
+    padding:12px 16px;display:flex;gap:10px;z-index:110;max-width:560px;margin:0 auto;}
   .btn{flex:1;padding:16px;min-height:52px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
   .btn-primary{background:var(--navy);color:#fff;}
   .btn-secondary{background:#fff;color:var(--navy);border:1.5px solid var(--navy);}
@@ -198,6 +200,44 @@
   .recent-fill:active{filter:brightness(.95);}
   .recent-hint{font-size:12px;color:var(--text-muted);padding:2px 0;}
   body.sign-mode .recent-card{display:none;}
+
+  /* 단계 진행바 */
+  .step-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .step-track{flex:1;display:flex;align-items:center;gap:0;position:relative;}
+  .step-dot{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;
+    padding:2px 0;cursor:pointer;font-family:inherit;position:relative;}
+  /* 단계 사이 연결선 */
+  .step-dot:not(:first-child)::before{content:'';position:absolute;left:-50%;top:13px;width:100%;height:2px;background:var(--gray-line);z-index:0;}
+  .step-dot.done:not(:first-child)::before,.step-dot.on:not(:first-child)::before{background:var(--teal);}
+  .step-num{width:26px;height:26px;border-radius:50%;background:#fff;border:1.5px solid var(--gray-line);
+    color:var(--text-muted);font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;
+    position:relative;z-index:1;transition:.15s;}
+  .step-label{font-size:10.5px;font-weight:700;color:var(--text-muted);}
+  .step-dot.on .step-num{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .step-dot.on .step-label{color:var(--navy);}
+  /* 완료 단계: 숫자 대신 체크 (font-size:0으로 숫자를 감추고 ::after로 표시) */
+  .step-dot.done .step-num{background:var(--teal-soft);border-color:var(--teal);color:var(--teal);font-size:0;}
+  .step-dot.done .step-num::after{content:'✓';font-size:13px;font-weight:800;}
+  .step-dot.done .step-label{color:var(--teal);}
+  .view-toggle{flex:0 0 auto;padding:7px 10px;border:1.5px solid var(--gray-line);border-radius:8px;background:#fff;
+    font-size:11.5px;font-weight:700;color:var(--text-muted);font-family:inherit;cursor:pointer;white-space:nowrap;}
+  .view-toggle:active{background:var(--gray-bg);}
+  /* 스텝 모드: 현재 단계 카드만 노출 */
+  body.step-mode [data-step]{display:none;}
+  body.step-mode [data-step].step-on{display:block;}
+  body.step-mode .bottom-bar{display:none;}          /* 기본은 단계 이동만 노출 */
+  body.step-mode .step-nav{display:flex;}
+  body.step-mode.step-last .step-nav{display:none;}  /* 마지막 단계: 미리보기/PDF 생성 */
+  body.step-mode.step-last .bottom-bar:not(.step-nav){display:flex;}
+  .step-nav{display:none;}
+  /* 전체 보기(스텝 해제) 모드에서는 진행바를 숨긴다 */
+  body:not(.step-mode) .step-bar .step-track{display:none;}
+  body:not(.step-mode) .step-bar{justify-content:flex-end;}
+  /* 사인 모드에서는 단계 UI를 쓰지 않는다 — 담당자가 전체 내용을 보고 서명해야 하므로
+     스텝 모드가 켜져 있어도 모든 카드를 펼친다 */
+  body.sign-mode .step-bar,body.sign-mode .step-nav{display:none;}
+  body.sign-mode.step-mode [data-step]{display:block;}
+  body.sign-mode.step-mode .bottom-bar:not(.step-nav){display:flex;}
 
   /* 필수값 미입력 시각 피드백 */
   .field-invalid{border-color:var(--red)!important;box-shadow:0 0 0 3px rgba(192,57,43,.12)!important;}
@@ -292,6 +332,17 @@
       <button type="button" id="newTaskBtn">➕ 새 점검</button>
     </div>
 
+    <!-- 단계 진행바 (전체 보기 모드에서는 숨김) -->
+    <div id="stepBar" class="step-bar">
+      <div class="step-track">
+        <button type="button" class="step-dot" data-go="1"><span class="step-num">1</span><span class="step-label">접수</span></button>
+        <button type="button" class="step-dot" data-go="2"><span class="step-num">2</span><span class="step-label">점검</span></button>
+        <button type="button" class="step-dot" data-go="3"><span class="step-num">3</span><span class="step-label">조치</span></button>
+        <button type="button" class="step-dot" data-go="4"><span class="step-num">4</span><span class="step-label">서명</span></button>
+      </div>
+      <button type="button" id="viewToggle" class="view-toggle">전체 보기</button>
+    </div>
+
     <!-- 현재 작업 상태 표시 -->
     <div id="taskStatusBar" class="task-status-bar" style="display:none;">
       <span class="task-status-badge" id="taskStatusBadge"></span>
@@ -311,7 +362,7 @@
     </div>
 
     <!-- 접수 정보 -->
-    <div class="card" id="receptionCard">
+    <div class="card" id="receptionCard" data-step="1">
       <div class="card-header"><span class="badge-icon">📋</span><h2>접수 정보</h2></div>
       <div class="card-body">
         <div class="field-group">
@@ -378,7 +429,7 @@
     </div>
 
     <!-- 점검 항목 -->
-    <div class="card" id="inspCard">
+    <div class="card" id="inspCard" data-step="2">
       <div class="card-header"><span class="badge-icon">🔧</span><h2>점검 항목</h2></div>
       <div class="card-body">
         <div id="inspList"></div>
@@ -386,7 +437,7 @@
     </div>
 
     <!-- 조치 / 마무리 -->
-    <div class="card" id="actionCard">
+    <div class="card" id="actionCard" data-step="3">
       <div class="card-header"><span class="badge-icon">📝</span><h2>조치 내용 / 마무리</h2></div>
       <div class="card-body">
         <!-- A/S 항목 분류 (handover.html과 동일한 코드 마스터) -->
@@ -436,7 +487,7 @@
     </div>
 
     <!-- 현장 사진 -->
-    <div class="card" id="photoCard">
+    <div class="card" id="photoCard" data-step="3">
       <div class="card-header"><span class="badge-icon">📷</span><h2>현장 사진</h2><span class="photo-count" id="photoCount">0/5</span></div>
       <div class="card-body">
         <div class="photo-btns">
@@ -450,7 +501,7 @@
     </div>
 
     <!-- 서명 -->
-    <div class="card">
+    <div class="card" id="signCard" data-step="4">
       <div class="card-header"><span class="badge-icon">✍️</span><h2>서명</h2></div>
       <div class="card-body">
         <div class="row-2" style="gap:14px;">
@@ -481,7 +532,13 @@
     </div>
 
     <!-- 수기 작성용 빈 양식 PDF -->
-    <button type="button" class="btn btn-secondary btn-blank" id="blankPdfBtn">🖨 수기 작성용 PDF (빈 양식)</button>
+    <button type="button" class="btn btn-secondary btn-blank" id="blankPdfBtn" data-step="4">🖨 수기 작성용 PDF (빈 양식)</button>
+  </div>
+
+  <!-- 단계 이동 (스텝 모드 · 4단계 전까지) -->
+  <div id="stepNav" class="bottom-bar step-nav">
+    <button type="button" class="btn btn-secondary" id="prevStepBtn">← 이전</button>
+    <button type="button" class="btn btn-primary" id="nextStepBtn">다음 →</button>
   </div>
 
   <div class="bottom-bar">
@@ -1554,20 +1611,105 @@ document.getElementById('recentList').addEventListener('click', (e)=>{
 // ===== 필수값 시각 피드백 =====
 function markInvalid(id){
   const el=document.getElementById(id); if(!el) return;
+  revealField(id);                      // 스텝 모드에서 숨겨진 단계면 그 단계로 이동
   el.classList.add('field-invalid');
   el.scrollIntoView({block:'center', behavior:'smooth'});
   const clear=()=>{ el.classList.remove('field-invalid'); el.removeEventListener('input',clear); el.removeEventListener('change',clear); };
   el.addEventListener('input',clear); el.addEventListener('change',clear);
 }
+// 숨겨진 단계에 있는 필드를 화면에 드러낸다 (스텝 모드가 아니면 무동작)
+function revealField(id){
+  if(!stepModeOn() || _signMode) return;
+  const s=stepOfField(id);
+  if(s!==_step) goStep(s,{noScroll:true});
+}
 function clearAllInvalid(){
   document.querySelectorAll('.field-invalid').forEach(el=>el.classList.remove('field-invalid'));
 }
+
+// ===== 스텝형 폼 =====
+// 카드는 재배치하지 않고 data-step 속성으로 표시만 전환한다.
+// (PDF·서명·Task 저장 로직은 DOM 구조에 의존하므로 그대로 유지)
+const STEP_MODE_KEY='inspection_step_mode';   // 'step' | 'all'
+const STEP_COUNT=4;
+let _step=1;
+// 단계별 필수값 — 그 단계에서 '다음'을 누를 때만 검사
+const STEP_REQUIRED={
+  1:[{check:()=>!!state.pay, msg:'구분(유상/무상)을 선택해주세요', el:'payGroup', group:true},
+     {check:()=>!!v('receiveDate'), msg:'접수 일자를 입력해주세요', el:'receiveDate'},
+     {check:()=>!!v('serialNo'), msg:'장비 S/N을 입력해주세요', el:'serialNo'},
+     {check:()=>!!v('hospital'), msg:'병원명을 입력해주세요', el:'hospital'}],
+  2:[], 3:[], 4:[]
+};
+function stepModeOn(){
+  try{ return localStorage.getItem(STEP_MODE_KEY)!=='all'; }catch(e){ return true; }
+}
+function renderStep(){
+  const on=stepModeOn();
+  document.body.classList.toggle('step-mode', on);
+  document.body.classList.toggle('step-last', on && _step===STEP_COUNT);
+  document.getElementById('viewToggle').textContent = on ? '전체 보기' : '단계별 보기';
+  document.querySelectorAll('[data-step]').forEach(el=>{
+    el.classList.toggle('step-on', el.getAttribute('data-step')===String(_step));
+  });
+  document.querySelectorAll('.step-dot').forEach(d=>{
+    const n=Number(d.getAttribute('data-go'));
+    d.classList.toggle('on', n===_step);
+    d.classList.toggle('done', n<_step);
+  });
+  const prev=document.getElementById('prevStepBtn');
+  prev.style.visibility = _step>1 ? 'visible' : 'hidden';
+}
+function goStep(n, opts){
+  _step=Math.min(STEP_COUNT, Math.max(1, n));
+  renderStep();
+  if(!opts || !opts.noScroll) window.scrollTo({top:0, behavior:'smooth'});
+}
+// 현재 단계 필수값 검사 (통과 못하면 해당 필드 표시)
+function validateStep(n){
+  clearAllInvalid();
+  const rules=STEP_REQUIRED[n]||[];
+  for(const r of rules){
+    if(r.check()) continue;
+    showToast(r.msg);
+    if(r.group){ const g=document.getElementById(r.el);
+      g.classList.add('field-invalid'); g.scrollIntoView({block:'center',behavior:'smooth'}); }
+    else markInvalid(r.el);
+    return false;
+  }
+  return true;
+}
+function nextStep(){ if(validateStep(_step)) goStep(_step+1); }
+// 필드 id로 그 필드가 속한 단계 찾기 (검증 실패 시 해당 단계로 이동)
+function stepOfField(id){
+  const el=document.getElementById(id); if(!el) return _step;
+  const card=el.closest('[data-step]');
+  return card ? Number(card.getAttribute('data-step')) : _step;
+}
+document.getElementById('nextStepBtn').addEventListener('click', nextStep);
+document.getElementById('prevStepBtn').addEventListener('click', ()=>goStep(_step-1));
+document.querySelector('.step-track').addEventListener('click', e=>{
+  const d=e.target.closest('.step-dot'); if(!d) return;
+  const target=Number(d.getAttribute('data-go'));
+  // 뒤로 가는 건 자유, 앞으로 갈 때는 중간 단계 필수값을 확인
+  if(target>_step){ for(let s=_step;s<target;s++){ if(!validateStep(s)){ goStep(s,{noScroll:true}); return; } } }
+  goStep(target);
+});
+document.getElementById('viewToggle').addEventListener('click', ()=>{
+  const next = stepModeOn() ? 'all' : 'step';
+  try{ localStorage.setItem(STEP_MODE_KEY, next); }catch(e){}
+  if(next==='step') _step=1;
+  renderStep();
+  window.scrollTo({top:0,behavior:'smooth'});
+  showToast(next==='step' ? '단계별로 입력합니다' : '전체 항목을 한 번에 봅니다');
+});
 
 // ===== 검증 =====
 function validate(){
   clearAllInvalid();
   if(!state.pay){ showToast('구분(유상/무상)을 선택해주세요');
     const g=document.getElementById('payGroup');
+    revealField('payGroup');
     g.classList.add('field-invalid'); g.scrollIntoView({block:'center',behavior:'smooth'});
     return false; }
   if(!v('receiveDate')){ showToast('접수 일자를 입력해주세요'); markInvalid('receiveDate'); return false; }
@@ -1576,6 +1718,7 @@ function validate(){
   if(!v('csName')){ showToast('CS 담당자 이름을 입력해주세요'); markInvalid('csName'); return false; }
   if(csSig.isEmpty()){ showToast('CS 담당자 서명을 입력해주세요');
     const box=document.getElementById('csSigBox');
+    revealField('csSigBox');
     if(box){ box.classList.add('field-invalid'); box.scrollIntoView({block:'center',behavior:'smooth'}); }
     return false; }
   return true;
@@ -1750,6 +1893,7 @@ function newTask(){
   setCurrentTaskId(task.id);
   persistTasks(tasks);
   updateTaskStatusBar();
+  goStep(1,{noScroll:true});          // 새 점검은 1단계부터
   window.scrollTo({top:0,behavior:'smooth'});
   showToast('새 점검 작업 생성');
 }
@@ -1762,6 +1906,7 @@ function openTask(id){
   applyFormData(task.data);
   closeTaskList();
   if(task.status==='waiting_signature') enterSignMode(); else exitSignMode();
+  goStep(task.status==='waiting_signature' ? STEP_COUNT : 1, {noScroll:true});
   updateTaskStatusBar();
   window.scrollTo({top:0,behavior:'smooth'});
   showToast('작업 불러옴');
@@ -1823,11 +1968,13 @@ function enterSignMode(){
   _signMode=true;
   document.body.classList.add('sign-mode');
   document.getElementById('signBanner').style.display='flex';
+  _step=STEP_COUNT; renderStep();     // 담당자는 서명 단계로 (카드는 전부 펼쳐짐)
 }
 function exitSignMode(){
   _signMode=false;
   document.body.classList.remove('sign-mode');
   document.getElementById('signBanner').style.display='none';
+  renderStep();
 }
 
 // ===== 클라우드 동기화 (Google Sheets 협업, 오프라인 우선) =====
@@ -2475,6 +2622,7 @@ document.getElementById('doneNew').addEventListener('click',()=>{
 buildInspList();
 renderPhotos();
 preloadLogo();
+renderStep();   // 스텝형 폼 초기 표시 (저장된 보기 방식 적용)
 initTax();      // A/S 항목 분류 드롭다운 구성
 masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 값 유지)
 
