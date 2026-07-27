@@ -120,15 +120,17 @@
   .pc-recent-g.as{background:var(--purple-soft);color:var(--purple);}
   .pc-recent-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--text-muted);}
   .pc-recent-meta .fse{color:var(--ok);font-weight:700;}
-  /* 지도 커스텀 마커(최근 완료: 초록 점 + FSE 라벨) */
-  .pc-cmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;}
+  /* 지도 커스텀 마커(최근 완료: 초록 점 + FSE 라벨) — 지도 이동/줌 중 repaint 최소화 위해 합성 레이어로 승격 */
+  .pc-cmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;will-change:transform;}
   .pc-cmk .dot{width:13px;height:13px;border-radius:50%;background:var(--ok);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);flex:0 0 auto;}
   .pc-cmk .lb{background:var(--ok);color:#fff;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.25);}
   /* 지도 커스텀 마커(현재 처리중: 파란 점 + 라벨 · 현장 일정 진행중 연동) */
-  .pc-pmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;}
-  .pc-pmk .dot{width:14px;height:14px;border-radius:50%;background:var(--teal);border:2px solid #fff;box-shadow:0 0 0 0 rgba(46,125,158,.55);flex:0 0 auto;animation:pcProgPulse 1.8s ease-out infinite;}
+  .pc-pmk{display:flex;align-items:center;gap:4px;transform:translateY(-4px);cursor:pointer;will-change:transform;}
+  .pc-pmk .dot{position:relative;width:14px;height:14px;border-radius:50%;background:var(--teal);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3);flex:0 0 auto;}
+  /* 펄스: box-shadow(매 프레임 repaint) 대신 transform+opacity 링(합성 레이어)으로 처리 → 줌 중 버벅임 방지 */
+  .pc-pmk .dot::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--teal);opacity:.6;animation:pcProgPulse 1.8s ease-out infinite;will-change:transform,opacity;}
   .pc-pmk .lb{background:var(--teal);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);}
-  @keyframes pcProgPulse{0%{box-shadow:0 0 0 0 rgba(46,125,158,.55);}70%{box-shadow:0 0 0 9px rgba(46,125,158,0);}100%{box-shadow:0 0 0 0 rgba(46,125,158,0);}}
+  @keyframes pcProgPulse{0%{transform:scale(.7);opacity:.6;}70%{transform:scale(1.9);opacity:0;}100%{transform:scale(1.9);opacity:0;}}
   #pcDetail{position:absolute;inset:0;overflow:auto;padding:15px 16px;display:none;background:var(--surface);}
   #pcRight.detail #pcMapPane{visibility:hidden;}
   #pcRight.detail #pcDetail{display:block;}
@@ -998,7 +1000,7 @@ function searchHaystack(h){
   const vendorLabel=vendor==='납품 1년 이내'?'워런티 유효':'';
   const hpVer=(h.hpv||'').trim()||getLastHpVer(h.n);
   const uiVer=(h.uiv||'').trim()||getLastUiVer(h.n);
-  return normalize([h.n,h.a,h.s,vendor,vendorLabel,hpVer,uiVer,h.as].join(' '));
+  return normalize([h.n,h.a,h.s,vendor,vendorLabel,hpVer,uiVer,h.as,pcSkillLabel(h.n)].join(' '));
 }
 // ===== 필터 카운트 공용 조건 (다른 활성 필터 반영) =====
 function matchSearchQ(h){
@@ -2337,7 +2339,8 @@ var pcListView = localStorage.getItem('baz_pc_listview') || 'cards'; // 'cards' 
 if(pcListView==='recent') pcListView='cards';   // 구버전 값 정리(최근완료는 좌측 카드로 이동)
 var pcRecent=[], pcRecentState='idle', pcRecentRequested=false, pcRecentOverlays=[], pcRecentByIdx={};
 var pcProgOverlays=[];   // 지도: 현재 처리중(진행중) 병원 강조 마커
-var pcNearbyOverlays=[];   // 검색 반경 5km 주변 병원 마커
+var pcNearbyMarkers=[];  // 검색 반경 5km 주변 병원 — 네이티브 마커(줌 중 DOM 오버레이 뒤처짐 방지)
+var pcNearbyImg=null;    // 주변 병원 파란 원 마커 이미지(1회 생성 후 재사용)
 // handover 시트에 기록된 CS 담당자(fse) 목록 — 현장 일정/진행중 담당자 후보의 유일 소스
 var pcFseAll=(function(){ try{ return JSON.parse(localStorage.getItem('baz_pc_fse')||'[]')||[]; }catch(e){ return []; } })();
 function pcCollectFse(rows, replace){
@@ -2946,12 +2949,17 @@ function pcBuildSkill(rows){
   PC_SKILL=map;
   try{ localStorage.setItem('baz_pc_skill_cache', JSON.stringify(map)); }catch(e){}
 }
+/* 병원별 숙련도 라벨: 3항목 중 X·부족·교육 필요면 '교육 필요', 그 외(O·정상·과다·가능)는 '교육 완료'.
+   평가 데이터 없으면 '' — 배지·검색 대상 공용 */
+function pcSkillLabel(name){
+  var s=PC_SKILL && PC_SKILL[normalize(name)];
+  if(!s) return '';
+  return (s.nsFill==='X'||s.nsAmt==='부족'||s.jet==='교육 필요') ? '교육 필요' : '교육 완료';
+}
 function pcSkillBadge(name){
   var s=PC_SKILL && PC_SKILL[normalize(name)];   /* 초기화 전이어도 카드 렌더가 죽지 않도록 방어 */
   if(!s) return '';
-  /* 3항목 중 하나라도 X·부족·교육 필요면 '교육 필요', 그 외(O·정상·과다·가능)는 '교육 완료' */
-  var need=(s.nsFill==='X'||s.nsAmt==='부족'||s.jet==='교육 필요');
-  var label=need?'교육 필요':'교육 완료';
+  var label=pcSkillLabel(name), need=(label==='교육 필요');
   var detail=['NS충진 '+(s.nsFill||'-'), '충진량 '+(s.nsAmt||'-'), '젯 '+(s.jet||'-')].join(' · ');
   return '<span class="h-skill'+(need?' warn':' ok')+'" title="사용자 숙련도 평가 · '+escapeHtml(detail)+(s.dk?' · '+s.dk:'')+'">'+(need?'🎓':'✅')+' '+label+'</span>';
 }
@@ -3273,7 +3281,7 @@ function pcShowMap(list){
     if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
     if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
     var center=myPos?new kakao.maps.LatLng(myPos.lat,myPos.lng):new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
-    if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9}); }
+    if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false}); }   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
     else { pcMapObj.relayout(); }
     // [성능] 목록·오늘완료·검색이 그대로면 마커 수백 개 재생성 생략
     var mapKey=list.length+'|'+(list[0]?list[0].n:'')+'|'+(list[list.length-1]?list[list.length-1].n:'')
@@ -3339,10 +3347,15 @@ function pcShowMap(list){
       ov2.setMap(pcMapObj); pcProgOverlays.push(ov2);
       bounds.extend(pos); any=true;
     });
-    // 병원명 검색 중 → 검색된 병원 반경 5km 주변 병원도 함께 표시
-    pcNearbyOverlays.forEach(function(o){o.setMap(null);}); pcNearbyOverlays=[];
+    // 병원명 검색 중 → 검색된 병원 반경 5km 주변 병원도 함께 표시.
+    // [성능] DOM CustomOverlay(줌 시 뒤처짐) 대신 네이티브 마커 사용 — 파란 원 이미지 재사용.
+    pcNearbyMarkers.forEach(function(m){m.setMap(null);}); pcNearbyMarkers=[];
     var nearCnt=0;
     if(searchQ && list.length){
+      if(!pcNearbyImg){
+        var svg='<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="5" fill="rgba(46,125,158,.75)" stroke="#fff" stroke-width="2"/></svg>';
+        pcNearbyImg=new kakao.maps.MarkerImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg), new kakao.maps.Size(14,14), {offset:new kakao.maps.Point(7,7)});
+      }
       var inList={}; list.forEach(function(h){ inList[h.n]=1; });
       HOSPITALS.forEach(function(o){
         if(o.lat==null||o.lng==null||inList[o.n]) return;
@@ -3351,10 +3364,9 @@ function pcShowMap(list){
           if(distKm(b.lat,b.lng,o.lat,o.lng)<=5){ isNear=true; break; } }
         if(!isNear) return;
         var npos=new kakao.maps.LatLng(o.lat,o.lng);
-        var nel=document.createElement('div'); nel.className='pc-nmk'; nel.title=o.n;
-        (function(nm){ nel.addEventListener('click',function(){ pcSelect(nm); }); })(o.n);
-        var nov=new kakao.maps.CustomOverlay({position:npos, content:nel, yAnchor:0.5, xAnchor:0.5, zIndex:3});
-        nov.setMap(pcMapObj); pcNearbyOverlays.push(nov);
+        var nmk=new kakao.maps.Marker({position:npos, image:pcNearbyImg, title:o.n, zIndex:3});
+        (function(nm){ kakao.maps.event.addListener(nmk,'click',function(){ pcSelect(nm); }); })(o.n);
+        nmk.setMap(pcMapObj); pcNearbyMarkers.push(nmk);
         bounds.extend(npos); any=true; nearCnt++;
       });
     }
