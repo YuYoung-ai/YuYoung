@@ -397,6 +397,7 @@
     background:var(--teal-soft,#EAF4F8);color:var(--navy);border:1px solid var(--line);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .h-skill.warn{background:#FBEAE8;color:#C0392B;border-color:#E8B4AD;}
+  .h-skill.ok{background:var(--ok-soft,#EAF6EE);color:var(--ok,#1E7E4E);border-color:#BFE3CC;}
   /* 병원 상세 모달 (표 전체화면 뷰에서 행 클릭 시) */
   #pcDetailModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:190;display:none;align-items:center;justify-content:center;padding:20px;}   /* 이력 편집(histModal 200)·비번(300) 모달이 위에 스택되도록 190 */
   #pcDetailModal.show{display:flex;}
@@ -2997,9 +2998,11 @@ function pcBuildSkill(rows){
 function pcSkillBadge(name){
   var s=PC_SKILL && PC_SKILL[normalize(name)];   /* 초기화 전이어도 카드 렌더가 죽지 않도록 방어 */
   if(!s) return '';
-  var warn=(s.nsFill==='X'||s.nsAmt==='부족'||s.nsAmt==='과다'||s.jet==='교육 필요');
-  var txt=['NS '+(s.nsFill||'-'), (s.nsAmt||'-'), (s.jet==='가능'?'판단가능':(s.jet||'-'))].join(' · ');
-  return '<span class="h-skill'+(warn?' warn':'')+'" title="사용자 숙련도 평가'+(s.dk?' · '+s.dk:'')+'">🎓 '+escapeHtml(txt)+'</span>';
+  /* 3항목 중 하나라도 X·부족·교육 필요면 '교육 필요', 그 외(O·정상·과다·가능)는 '교육 완료' */
+  var need=(s.nsFill==='X'||s.nsAmt==='부족'||s.jet==='교육 필요');
+  var label=need?'교육 필요':'교육 완료';
+  var detail=['NS충진 '+(s.nsFill||'-'), '충진량 '+(s.nsAmt||'-'), '젯 '+(s.jet||'-')].join(' · ');
+  return '<span class="h-skill'+(need?' warn':' ok')+'" title="사용자 숙련도 평가 · '+escapeHtml(detail)+(s.dk?' · '+s.dk:'')+'">'+(need?'🎓':'✅')+' '+label+'</span>';
 }
 function pcLoadRecent(cb){
   var local=pcLocalRecent();
@@ -3153,6 +3156,14 @@ function pcRenderRouteCard(){
     var h=pcHospByName(name);
     curByFse[fse]={ name:name, from:(h&&h.lat!=null&&h.lng!=null)?h:null };   // 최신으로 갱신
   });
+  // 진행중(현재 처리중) 병원이 있으면 그 병원을 각 담당자의 '현재 위치'로 우선 적용 —
+  // 이동 소요시간을 지금 있는(진행중) 병원 기준으로 계산. 진행중만 있고 오늘 완료가 없는 담당자도 포함.
+  Object.keys(pcInProgress||{}).forEach(function(hn){
+    var fse=String(pcInProgress[hn]||'').trim(); if(!fse) return;
+    if(!(fse in curByFse)) order.push(fse);
+    var h=pcHospByName(hn);
+    curByFse[fse]={ name:hn, from:(h&&h.lat!=null&&h.lng!=null)?h:null };
+  });
   if(!order.length){
     var msg=(pcRecentState==='loading')?'불러오는 중…':'오늘 완료 내역이 없습니다';
     box.innerHTML=head+'<div class="prc-empty">'+msg+'</div>'; return;
@@ -3187,7 +3198,7 @@ function pcRenderRouteCard(){
     }
     var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'<button class="prc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">완료</button></div>' : '';
     return '<div class="prc-fse">'+
-      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">현재 '+escapeHtml(cur.name)+'</span></div>'+
+      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">'+((prog&&prog===cur.name)?'🔵 진행중 ':'현재 ')+escapeHtml(cur.name)+'</span></div>'+
       progLine+
       body+
     '</div>';
