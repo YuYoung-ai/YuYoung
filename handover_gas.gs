@@ -1216,9 +1216,12 @@ function progGet_(){
   return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated||''};
 }
 function progSave_(p){
-  var lock = LockService.getScriptLock();
+  /* doPost가 이미 같은 스크립트 락을 보유한 채 호출하므로 재획득 실패는 정상 —
+     여기서 예외로 죽으면 일정 저장이 통째로 실패하고, 다음 폴링이 옛 상태로 되돌린다.
+     tryLock으로 시도만 하고 실패해도 진행한다(직렬화는 doPost의 락이 이미 보장). */
+  var lock = LockService.getScriptLock(), held = false;
   try{
-    lock.waitLock(15000);
+    try{ held = lock.tryLock(15000); }catch(e){ held = false; }
     var o = progRead_();
     var op   = String(p.op||'').trim();
     var hosp = String(p.hosp||'').trim();
@@ -1274,6 +1277,6 @@ function progSave_(p){
   }catch(err){
     return {success:false, error:String(err)};
   }finally{
-    try{ lock.releaseLock(); }catch(_){}
+    if(held){ try{ lock.releaseLock(); }catch(_){} }
   }
 }
