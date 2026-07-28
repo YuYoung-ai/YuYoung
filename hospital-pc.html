@@ -167,6 +167,9 @@
   .pc-pmk .dot::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--teal);opacity:.6;animation:pcProgPulse 1.8s ease-out infinite;will-change:transform,opacity;}
   .pc-pmk .lb{background:var(--teal);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);}
   @keyframes pcProgPulse{0%{transform:scale(.7);opacity:.6;}70%{transform:scale(1.9);opacity:0;}100%{transform:scale(1.9);opacity:0;}}
+  /* 선택 병원 강조 링 — 클러스터에 묶여도 보이도록 마커 위에 얹는 단일 오버레이 */
+  .pc-selring{width:30px;height:30px;border-radius:50%;border:3px solid var(--navy);background:rgba(27,47,94,.12);box-shadow:0 0 0 2px #fff, 0 2px 8px rgba(20,34,66,.35);pointer-events:none;animation:pcSelPop .18s ease-out;}
+  @keyframes pcSelPop{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
   #pcDetail{position:absolute;inset:0;overflow:auto;padding:15px 16px;display:none;background:var(--surface);}
   #pcRight.detail #pcMapPane{visibility:hidden;}
   #pcRight.detail #pcDetail{display:block;}
@@ -2932,6 +2935,49 @@ function pcApplyMapState(){
   if(!pcMapObj || !pcMapState || typeof kakao==='undefined') return;
   try{ pcMapObj.setLevel(pcMapState.level); pcMapObj.setCenter(new kakao.maps.LatLng(pcMapState.lat, pcMapState.lng)); }catch(e){}
 }
+// ── 뷰포트 영속화 (baz_pc_mapview) — 새로고침해도 보던 구역 유지 ──
+var pcViewSaveT=0, pcViewRestoredOnce=false;
+function pcMapViewSave(){
+  if(!pcMapObj || typeof kakao==='undefined') return;
+  if(pcRightMode==='detail') return;                 // 상세 진입 중엔 지도 중심이 의미 없음
+  try{
+    var c=pcMapObj.getCenter();
+    localStorage.setItem('baz_pc_mapview', JSON.stringify({lat:c.getLat(), lng:c.getLng(), level:pcMapObj.getLevel(), ts:Date.now()}));
+  }catch(e){}
+}
+function pcMapViewSaveDebounced(){ if(pcViewSaveT) clearTimeout(pcViewSaveT); pcViewSaveT=setTimeout(function(){ pcViewSaveT=0; pcMapViewSave(); }, 400); }
+// 세션 첫 지도 생성에서 한 번만, 12h 이내 저장값이 있고 현재 목록 중 하나라도 그 화면에
+// 들어올 때만 복원(빈 지도 회피). 이후에는 목록 변경마다 전체 맞춤을 유지한다.
+function pcMapViewRestore(list){
+  if(pcViewRestoredOnce) return false;
+  // 병원 데이터는 서버에서 비동기로 온다 — 목록이 아직 비었으면 복원 시도를 소비하지 말고
+  // 실제 데이터가 있는 첫 렌더까지 미룬다(빈 목록으로 소비하면 새로고침 복원이 영영 안 됨).
+  var located=false; for(var k=0;k<list.length;k++){ if(list[k].lat!=null){ located=true; break; } }
+  if(!located) return false;
+  pcViewRestoredOnce=true;
+  var v=null; try{ v=JSON.parse(localStorage.getItem('baz_pc_mapview')||'null'); }catch(e){}
+  if(!v || typeof v.lat!=='number' || (Date.now()-(v.ts||0))>432e5) return false;   // 12h
+  try{
+    pcMapObj.setLevel(v.level); pcMapObj.setCenter(new kakao.maps.LatLng(v.lat, v.lng));
+    var b=pcMapObj.getBounds(), inside=false;
+    for(var i=0;i<list.length;i++){ var h=list[i]; if(h.lat==null) continue; if(b.contain(new kakao.maps.LatLng(h.lat,h.lng))){ inside=true; break; } }
+    if(!inside) return false;   // 복원 위치에 목록 병원이 하나도 없으면 전체 맞춤으로 폴백
+    return true;
+  }catch(e){ return false; }
+}
+// 선택 병원 강조 링 — 재사용 단일 오버레이(마커 이미지 교체보다 싸고, 클러스터에 묶여도 보인다)
+var pcSelOv=null;
+function pcMapSelRing(name){
+  if(!pcMapObj || typeof kakao==='undefined') return;
+  var h=name?pcHospByName(name):null;
+  if(!h || h.lat==null || h.lng==null || !pcMapVisible()){ if(pcSelOv){ try{ pcSelOv.setMap(null); }catch(e){} } return; }
+  var pos=new kakao.maps.LatLng(h.lat,h.lng);
+  if(!pcSelOv){
+    var el=document.createElement('div'); el.className='pc-selring';
+    pcSelOv=new kakao.maps.CustomOverlay({content:el, position:pos, xAnchor:0.5, yAnchor:0.5, zIndex:12});
+  } else { pcSelOv.setPosition(pos); }
+  try{ pcSelOv.setMap(pcMapObj); }catch(e){}
+}
 // 지도 컨트롤: 확대·축소·전체 보기 — 카카오 레벨은 값이 작을수록 확대(1=최대, 14=최소)
 var PC_MAP_LMIN=1, PC_MAP_LMAX=14;
 function pcMapZoom(delta){
@@ -3591,11 +3637,20 @@ function pcToggleInProgress(fse, hosp){
 // 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
 function pcFocusHospOnMap(name, itemEl){
   document.querySelectorAll('#pcRecentCard .rrc-item').forEach(function(el){ el.classList.toggle('sel', el===itemEl); });
+  // 표 뷰·접힘 상태에선 지도가 없어 조용히 무시되던 버그 — 사용자 의도가 명확하므로 지도를 되살린다
+  if(!pcMapVisible()){
+    if(pcListView==='table'){ pcListView='cards'; try{ localStorage.setItem('baz_pc_listview','cards'); }catch(e){} }
+    if(document.body.classList.contains('pc-mapcol')){ document.body.classList.remove('pc-mapcol'); try{ localStorage.setItem('baz_pc_mapcol','0'); }catch(e){} }
+    try{ pcRender(pcList||[]); }catch(e){}
+  }
   if(pcRightMode==='detail'){ pcBackToMap(); }
   var h=pcHospByName(name); if(!h||h.lat==null||h.lng==null) return;
   if(pcMapObj && typeof kakao!=='undefined'){
     var pos=new kakao.maps.LatLng(h.lat,h.lng);
-    pcMapObj.setLevel(5); pcMapObj.panTo(pos);
+    // 이미 가까이 본 사용자를 강제로 축소하지 않는다 — 현재보다 확대만(레벨 최소화)
+    var tgt; try{ tgt=Math.min(pcMapObj.getLevel(),5); }catch(e){ tgt=5; }
+    try{ pcMapObj.setLevel(tgt,{animate:{duration:200}}); }catch(e){ try{ pcMapObj.setLevel(tgt); }catch(_){} }
+    pcMapObj.panTo(pos);
     if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
     // 오늘 완료 정보(담당자·구분)가 있으면 함께 표기
     var info='', tl=pcTodayList(), nk=normalize(name);
@@ -3615,6 +3670,7 @@ function pcFocusHospOnMap(name, itemEl){
 function pcHighlight(){
   document.querySelectorAll('#pcLeft .pc-cardwrap').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
   document.querySelectorAll('#pcLeft tr[data-hname]').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
+  try{ pcMapSelRing(pcSelName); }catch(e){}   // 지도에서도 선택 병원 강조(목록↔지도 일치)
 }
 
 function pcHistTimeline(name){
@@ -3809,9 +3865,11 @@ function pcShowMap(list){
     if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
     if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
     var center=new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
-    if(!pcMapObj){
+    var firstCreate=!pcMapObj;
+    if(firstCreate){
       pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false});   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
       try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',pcMapCtlSync); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화
+      try{ kakao.maps.event.addListener(pcMapObj,'idle',pcMapViewSaveDebounced); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장
     }
     else { pcMapObj.relayout(); }
     var restore=pcRestoreView && pcMapState; pcRestoreView=false;
@@ -3827,12 +3885,14 @@ function pcShowMap(list){
       var rtl=document.getElementById('pcRightTtl');
       if(rtl) rtl.textContent = nearCnt ? ('🗺 지도 · 주변 5km '+nearCnt+'곳') : '🗺 지도';
     }
+    var viewRestored=false;
     if(restore){ pcApplyMapState(); }
+    else if(pcMapViewRestore(list)){ viewRestored=true; /* 저장된 뷰포트 복원 성공 → 전체 맞춤 생략 (데이터 있는 첫 렌더 1회) */ }
     else if(any){ pcMapObj.setBounds(bounds); }
     pcMapCtlSync();
     // 컨테이너가 자리잡은 뒤 한 번 더 보정 — sticky·리사이즈로 크기가 늦게 확정될 때의 회색화 방지.
     // 상시 relayout은 ResizeObserver가 담당하고, 여기서는 뷰포트(setBounds/복원)만 재적용한다.
-    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any) pcMapObj.setBounds(bounds); pcMapCtlSync(); } },120);
+    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any && !viewRestored) pcMapObj.setBounds(bounds); pcMapCtlSync(); } },120);
   });
 }
 
