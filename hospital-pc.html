@@ -106,6 +106,12 @@
   #pcRightHead .ttl{font-size:12.5px;font-weight:800;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #pcRightBody{flex:1 1 auto;position:relative;min-height:0;}
   #pcMapPane{position:absolute;inset:0;background:var(--surface-2);}
+  /* 지도 위 컨트롤(확대·축소·전체 보기) — 우하단 세로 스택 */
+  #pcMapCtl{position:absolute;right:10px;bottom:12px;z-index:8;display:flex;flex-direction:column;gap:5px;}
+  .pc-mctl{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--gray-line);background:var(--surface);color:var(--navy);font-size:16px;font-weight:800;line-height:1;border-radius:9px;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(20,34,66,.16);transition:background .12s,border-color .12s,opacity .12s;}
+  .pc-mctl:hover{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .pc-mctl:disabled{opacity:.35;cursor:default;background:var(--surface);color:var(--navy);}
+  #pcRight.detail #pcMapCtl{display:none;}   /* 상세 모드: 지도가 안 보이므로 컨트롤도 숨김 */
   .pc-mapfail{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.6;}
   /* 최근 완료(현장) 리스트 */
   .pc-recent-list{display:flex;flex-direction:column;gap:9px;}
@@ -773,6 +779,7 @@ const I18N = {
     locating:'현재 위치 확인 중...', locFail:'위치를 가져올 수 없습니다. 권한을 확인하세요.',
     nearbyResult:'주변 5km 내 N-CARE 병원 {n}곳',
     resultN:'{n}곳', nmap:'네이버지도', insp:'점검접수', surv:'만족도',
+    mapTitle:'지도', mapControls:'지도 컨트롤', mapZoomIn:'확대', mapZoomOut:'축소', mapFitAll:'전체 보기', mapFullscreen:'전체화면', mapExitFull:'전체화면 해제', mapCollapse:'지도 접기', mapExpand:'지도 펼치기', mapResize:'드래그로 높이 조절', mapPin:'스크롤 고정', mapUnpin:'고정 해제', mapNearby:'주변 5km {n}곳', mapReset:'높이 초기화',
     lastInsp:'최근 점검', lastVisit:'최근 방문', noInsp:'점검 이력 없음', noVisit:'방문 이력 없음',
     sales:'영업', sn:'장비', notTarget:'점검 비대상',
     empty:'검색 결과가 없습니다', emptyNear:'주변 5km 내 N-CARE 가입 병원이 없습니다',
@@ -806,6 +813,7 @@ const I18N = {
     locating:'Getting location...', locFail:'Cannot get location. Check permission.',
     nearbyResult:'{n} N-CARE within 5km',
     resultN:'{n} found', nmap:'Naver Map', insp:'Inspect', surv:'Survey',
+    mapTitle:'Map', mapControls:'Map controls', mapZoomIn:'Zoom in', mapZoomOut:'Zoom out', mapFitAll:'Fit all', mapFullscreen:'Fullscreen', mapExitFull:'Exit fullscreen', mapCollapse:'Collapse map', mapExpand:'Expand map', mapResize:'Drag to resize', mapPin:'Pin on scroll', mapUnpin:'Unpin', mapNearby:'{n} within 5km', mapReset:'Reset height',
     lastInsp:'Last insp.', lastVisit:'Last visit', noInsp:'No record', noVisit:'No visit',
     sales:'Sales', sn:'Unit', notTarget:'Not inspected',
     empty:'No results', emptyNear:'No N-CARE hospitals within 5km',
@@ -839,6 +847,7 @@ const I18N = {
     locating:'現在地確認中...', locFail:'位置情報を取得できません。権限を確認してください。',
     nearbyResult:'周辺5km以内のN-CARE病院 {n}件',
     resultN:'{n}件', nmap:'NAVER地図', insp:'点検受付', surv:'満足度',
+    mapTitle:'地図', mapControls:'地図コントロール', mapZoomIn:'拡大', mapZoomOut:'縮小', mapFitAll:'全体表示', mapFullscreen:'全画面', mapExitFull:'全画面解除', mapCollapse:'地図をたたむ', mapExpand:'地図を開く', mapResize:'ドラッグで高さ調整', mapPin:'スクロール固定', mapUnpin:'固定解除', mapNearby:'周辺5km {n}件', mapReset:'高さリセット',
     lastInsp:'最終点検', lastVisit:'最終訪問', noInsp:'点検履歴なし', noVisit:'訪問履歴なし',
     sales:'営業', sn:'機器', notTarget:'点検対象外',
     empty:'検索結果がありません', emptyNear:'周辺5km以内のN-CARE加入病院がありません',
@@ -2890,6 +2899,29 @@ function pcApplyMapState(){
   if(!pcMapObj || !pcMapState || typeof kakao==='undefined') return;
   try{ pcMapObj.setLevel(pcMapState.level); pcMapObj.setCenter(new kakao.maps.LatLng(pcMapState.lat, pcMapState.lng)); }catch(e){}
 }
+// 지도 컨트롤: 확대·축소·전체 보기 — 카카오 레벨은 값이 작을수록 확대(1=최대, 14=최소)
+var PC_MAP_LMIN=1, PC_MAP_LMAX=14;
+function pcMapZoom(delta){
+  if(!pcMapObj) return;
+  var lv=Math.max(PC_MAP_LMIN, Math.min(PC_MAP_LMAX, pcMapObj.getLevel()+delta));
+  try{ pcMapObj.setLevel(lv, {animate:{duration:180}}); }catch(e){ try{ pcMapObj.setLevel(lv); }catch(_){} }
+  pcMapCtlSync();
+}
+// 현재 목록 전체가 한 화면에 들어오도록 — 마지막으로 계산한 범위를 재사용(재계산 없음)
+function pcMapFitAll(){
+  if(!pcMapObj || !pcMapBounds || !pcMapBoundsAny) return;
+  try{ pcMapObj.setBounds(pcMapBounds); }catch(e){}
+  pcMapCtlSync();
+}
+// 줌 한계에서 +/- 버튼 비활성화
+function pcMapCtlSync(){
+  if(!pcMapObj) return;
+  var box=document.getElementById('pcMapCtl'); if(!box) return;
+  var lv; try{ lv=pcMapObj.getLevel(); }catch(e){ return; }
+  var zin=box.querySelector('[data-mapctl="zin"]'), zout=box.querySelector('[data-mapctl="zout"]');
+  if(zin) zin.disabled=(lv<=PC_MAP_LMIN);
+  if(zout) zout.disabled=(lv>=PC_MAP_LMAX);
+}
 // [성능] 5km 주변 병원 탐색용 격자 인덱스.
 // 예전에는 HOSPITALS(400+) × 목록 전체를 이중 루프로 돌며 distKm을 호출했다.
 // 0.05°(≈5.5km) 셀에 한 번만 담아두고, 검사할 때는 인접 9칸만 본다.
@@ -2964,6 +2996,13 @@ function pcEnsureDOM(){
       '</div>'+
       '<div id="pcRightBody">'+
         '<div id="pcMapPane"></div>'+
+        /* 지도 위 컨트롤(확대·축소·전체 보기). #pcRightBody의 형제라 카카오가 타일을 다시 그려도
+           지워지지 않는다. 상세 모드에선 지도가 안 보이므로 CSS로 함께 숨긴다. */
+        '<div id="pcMapCtl" aria-label="'+t('mapControls')+'">'+
+          '<button type="button" class="pc-mctl" data-mapctl="zin" title="'+t('mapZoomIn')+'" aria-label="'+t('mapZoomIn')+'">＋</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="zout" title="'+t('mapZoomOut')+'" aria-label="'+t('mapZoomOut')+'">－</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="fit" title="'+t('mapFitAll')+'" aria-label="'+t('mapFitAll')+'">⤢</button>'+
+        '</div>'+
         '<div id="pcDetail"></div>'+
       '</div>'+
     '</div>'+
@@ -3032,6 +3071,15 @@ function pcEnsureDOM(){
     pcSelect(el.getAttribute('data-hname'));
   });
   document.getElementById('pcBackMap').addEventListener('click', pcBackToMap);
+  // 지도 컨트롤(확대·축소·전체 보기)
+  var mctl=document.getElementById('pcMapCtl');
+  if(mctl) mctl.addEventListener('click', function(e){
+    var b=e.target.closest('[data-mapctl]'); if(!b) return;
+    var act=b.getAttribute('data-mapctl');
+    if(act==='zin') pcMapZoom(-1);
+    else if(act==='zout') pcMapZoom(1);
+    else if(act==='fit') pcMapFitAll();
+  });
   pcDomReady=true;
 }
 
@@ -3583,7 +3631,10 @@ function pcShowMap(list){
     if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
     if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
     var center=new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
-    if(!pcMapObj){ pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false}); }   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
+    if(!pcMapObj){
+      pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false});   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
+      try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',pcMapCtlSync); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화
+    }
     else { pcMapObj.relayout(); }
     var restore=pcRestoreView && pcMapState; pcRestoreView=false;
 
@@ -3600,7 +3651,8 @@ function pcShowMap(list){
     }
     if(restore){ pcApplyMapState(); }
     else if(any){ pcMapObj.setBounds(bounds); }
-    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any) pcMapObj.setBounds(bounds); } },120);
+    pcMapCtlSync();
+    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any) pcMapObj.setBounds(bounds); pcMapCtlSync(); } },120);
   });
 }
 
