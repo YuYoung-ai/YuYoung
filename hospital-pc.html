@@ -106,6 +106,14 @@
   #pcMapGrip:hover span{background:var(--navy);}
   #pcRight.detail #pcMapGrip{display:none;}
   @media(max-width:980px){ #pcMapGrip{display:none;} }   /* 좁은 화면: 고정 높이 유지 */
+  /* 전체화면 — z-index 160: 페이지 크롬(헤더50) 위, 모든 모달(상세190·이력200) 아래.
+     2클래스 선택자로 L86·L185(모두 1,1,0)를 명시도(1,2,0)로 이긴다(소스 순서 무관). */
+  #pcMapBackdrop{display:none;position:fixed;inset:0;background:rgba(16,29,61,.45);z-index:159;}
+  body.pc-mapfs #pcMapBackdrop{display:block;}
+  body.mode-window.pc-mapfs #pcRight{position:fixed;inset:12px;height:auto;width:auto;margin:0;z-index:160;box-shadow:0 12px 40px rgba(16,29,61,.4);}
+  body.pc-mapfs #pcMapGrip{display:none;}                 /* 전체화면에선 높이 조절 무의미 */
+  /* 접힘 상태로 전체화면 진입해도 펼쳐 보이게 — 접기 규칙(:not(.detail) 포함)보다 명시도 우위 */
+  body.pc-mapfs.pc-mapcol #pcRight:not(.detail) #pcRightBody{display:block;}
   /* 좌측 필터 하단: 담당자 오늘 완료 카드 */
   #pcRecentCard{display:none;}
   body.mode-window #pcRecentCard{display:block;background:var(--surface);border:1px solid var(--gray-line);border-radius:12px;padding:11px 12px;box-shadow:0 2px 8px rgba(20,34,66,.05);}
@@ -2004,7 +2012,10 @@ document.getElementById('histModal').addEventListener('click', e=>{
   if(cl) cl.addEventListener('click', function(){ if(typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
   if(dm) dm.addEventListener('click', function(e){ if(e.target.id==='pcDetailModal' && typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
   document.addEventListener('keydown', function(e){
-    if(e.key==='Escape' && dm && dm.classList.contains('show') && typeof pcCloseDetailModal==='function') pcCloseDetailModal();
+    if(e.key!=='Escape') return;
+    // 상세 모달이 먼저, 그 다음 지도 전체화면
+    if(dm && dm.classList.contains('show') && typeof pcCloseDetailModal==='function'){ pcCloseDetailModal(); return; }
+    if(typeof pcMapIsFull==='function' && pcMapIsFull()){ pcExitFullscreen(); }
   });
 })();
 
@@ -2990,6 +3001,33 @@ function pcMapPinToggle(){
   var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]');
   if(pb){ pb.classList.toggle('on', !unpin); pb.setAttribute('title', unpin?t('mapPin'):t('mapUnpin')); }
 }
+// 전체화면 — position:fixed로 흐름에서 빠지므로 문서가 짧아져 스크롤이 튄다.
+// 진입 직전 패널 높이만큼 #pcPane에 인라인 padding으로 공간을 예약하고, 해제 시 되돌린다.
+// (body 스크롤은 잠그지 않는다 — closeHist가 overflow를 무조건 리셋해 충돌하기 때문.)
+function pcMapIsFull(){ return document.body.classList.contains('pc-mapfs'); }
+function pcEnterFullscreen(){
+  if(pcMapIsFull()) return;
+  if(!pcMapVisible()) return;   // 표 뷰·접힘 등 지도 없는 상태에선 무시
+  var rt=document.getElementById('pcRight'), pane=document.getElementById('pcPane');
+  if(pane && rt){ pane.style.paddingTop=Math.round(rt.getBoundingClientRect().height)+'px'; }
+  document.body.classList.add('pc-mapfs');
+  pcFsBtnSync();
+  // 크기가 확 커지므로 relayout + 현재 목록 전체 맞춤(보던 위치 유지 우선)
+  if(pcMapObj){ pcRestoreView=true; try{ pcShowMap(pcList||[]); }catch(e){} setTimeout(function(){ try{ pcMapObj.relayout(); }catch(_){} }, 60); }
+}
+function pcExitFullscreen(){
+  if(!pcMapIsFull()) return;
+  document.body.classList.remove('pc-mapfs');
+  var pane=document.getElementById('pcPane'); if(pane) pane.style.paddingTop='';
+  pcFsBtnSync();
+  if(pcMapObj){ pcRestoreView=true; try{ pcShowMap(pcList||[]); }catch(e){} setTimeout(function(){ try{ pcMapObj.relayout(); }catch(_){} }, 60); }
+}
+function pcToggleFullscreen(){ if(pcMapIsFull()) pcExitFullscreen(); else pcEnterFullscreen(); }
+function pcFsBtnSync(){
+  var full=pcMapIsFull();
+  var fb=document.querySelector('#pcHeadCtl [data-headctl="fs"]');
+  if(fb){ fb.classList.toggle('on', full); var k=full?'mapExitFull':'mapFullscreen'; fb.setAttribute('title',t(k)); fb.setAttribute('aria-label',t(k)); }
+}
 // 지도가 실제로 보이는 상태인가 — 표 뷰·접힘·비Window면 그리지 않는다(0크기 렌더 = 회색 고착 방지)
 function pcMapVisible(){
   return pcListView!=='table'
@@ -3113,6 +3151,7 @@ function pcEnsureDOM(){
         /* 항상 보이는 헤더 컨트롤 — 접기·고정은 접힌 상태에서도 눌러야 하므로 지도 위가 아니라 헤더에 둔다 */
         '<div class="pc-headctl" id="pcHeadCtl">'+
           '<button type="button" class="pc-hctl" data-headctl="pin" title="'+t('mapPin')+'" aria-label="'+t('mapPin')+'">📌</button>'+
+          '<button type="button" class="pc-hctl" data-headctl="fs" title="'+t('mapFullscreen')+'" aria-label="'+t('mapFullscreen')+'">⛶</button>'+
           '<button type="button" class="pc-hctl" data-headctl="fold" title="'+t('mapCollapse')+'" aria-label="'+t('mapCollapse')+'">▾</button>'+
         '</div>'+
         '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">🗺 '+t('mapTitle')+'로</button>'+
@@ -3137,7 +3176,8 @@ function pcEnsureDOM(){
       '</div>'+
       '<span class="pc-hint" id="pcHint">카드·행을 클릭하면 위 지도/상세에서 확인됩니다</span>'+
     '</div>'+
-    '<div id="pcLeft"></div>';
+    '<div id="pcLeft"></div>'+
+    '<div id="pcMapBackdrop"></div>';
   // #cardList 다음에 삽입
   var cl=document.getElementById('cardList');
   if(cl && cl.parentNode){ cl.parentNode.insertBefore(pane, cl.nextSibling); }
@@ -3211,7 +3251,11 @@ function pcEnsureDOM(){
     var act=b.getAttribute('data-headctl');
     if(act==='pin') pcMapPinToggle();
     else if(act==='fold') pcMapFoldToggle();
+    else if(act==='fs') pcToggleFullscreen();
   });
+  // 딤 배경 클릭 → 전체화면 해제
+  var bd=document.getElementById('pcMapBackdrop');
+  if(bd) bd.addEventListener('click', pcExitFullscreen);
   // 높이 초기화 + 접기/고정 복원 + 드래그·리사이즈 감시
   pcMapHInit(); pcMapFoldInit(); pcMapGripBind(); pcMapROBind();
   pcDomReady=true;
@@ -3835,6 +3879,7 @@ function pcRender(list){
   pcApplyPaneI18n();   // pcEnsureDOM은 1회만 실행 → 언어 전환 시 여기서 라벨을 다시 입힌다
   document.querySelectorAll('#pcViewToggle button').forEach(function(b){ b.classList.toggle('on', b.dataset.view===pcListView); });
   document.body.classList.toggle('pc-table', pcListView==='table');   // 표 뷰: 지도/상세 패널 숨김 → 표 전체화면
+  if(pcListView==='table' && typeof pcExitFullscreen==='function') pcExitFullscreen();   // 지도 사라지면 전체화면 강제 해제(해제 버튼 접근 불가 방지)
   if(pcListView!=='table') pcCloseDetailModal();                      // 카드 뷰로 전환 시 상세 모달 닫기
   // 담당자 오늘 완료 데이터(첫 진입 시 로드) + 좌측 카드 렌더
   if(!pcRecentRequested){
@@ -3869,6 +3914,7 @@ function pcApplyPaneI18n(){
   var col=document.body.classList.contains('pc-mapcol'), unpin=document.body.classList.contains('pc-mapunpin');
   var fb=document.querySelector('#pcHeadCtl [data-headctl="fold"]'); if(fb){ var fk=col?'mapExpand':'mapCollapse'; fb.setAttribute('title',t(fk)); fb.setAttribute('aria-label',t(fk)); }
   var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]'); if(pb){ var pk=unpin?'mapPin':'mapUnpin'; pb.setAttribute('title',t(pk)); pb.setAttribute('aria-label',t(pk)); }
+  var fsb=document.querySelector('#pcHeadCtl [data-headctl="fs"]'); if(fsb){ var fsk=document.body.classList.contains('pc-mapfs')?'mapExitFull':'mapFullscreen'; fsb.setAttribute('title',t(fsk)); fsb.setAttribute('aria-label',t(fsk)); }
   // 지도 모드일 때 제목도 갱신
   if(pcRightMode==='map'){ var rtl=document.getElementById('pcRightTtl'); if(rtl && rtl.textContent.indexOf('🗺')===0 && rtl.textContent.indexOf('5km')<0) rtl.textContent='🗺 '+t('mapTitle'); }
 }
@@ -3885,6 +3931,7 @@ window.addEventListener('load', pcSetHdrH);
 (function(){
   var KEY='baz_viewmode';
   function apply(mode){
+    if(mode!=='window' && typeof pcExitFullscreen==='function'){ try{ pcExitFullscreen(); }catch(e){} }   // 모바일 모드로 나가면 #pcPane이 사라지므로 전체화면 강제 해제
     document.body.classList.toggle('mode-window', mode==='window');
     document.body.classList.toggle('mode-mobile', mode==='mobile');
     try{ pcSetHdrH(); }catch(e){}
