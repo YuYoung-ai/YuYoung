@@ -2442,7 +2442,9 @@ function pcDailyResetCheck(){
   try{ pcRefreshProgViews(null, true); }catch(e){}
   return true;
 }
-pcDailyResetCheck();
+/* 파싱 시점 실행 — 여기서 예외가 새면 이후 스크립트 전체가 정의되지 않아 화면이 통째로
+   먹통이 된다. 일일 초기화 확인 실패는 화면을 못 쓰게 만들 만한 일이 아니므로 반드시 삼킨다. */
+try{ pcDailyResetCheck(); }catch(e){ try{ console.warn('[현장일정] 일일 초기화 확인 실패(무시):', e); }catch(_){} }
 function pcqEnsure(fse){ if(!pcQueues[fse]) pcQueues[fse]=[]; return pcQueues[fse]; }
 function pcqFind(q,hosp){ for(var i=0;i<q.length;i++){ if(q[i].h===hosp) return i; } return -1; }
 function pcqRemoveAll(hosp){ Object.keys(pcQueues).forEach(function(f){ pcQueues[f]=pcQueues[f].filter(function(x){return x.h!==hosp;}); }); }
@@ -3109,17 +3111,19 @@ function pcLoadRecent(cb){
 // 오늘 날짜(yyyy-MM-dd) — 서버(handover_gas.gs)·handover 시트와 동일하게 Asia/Seoul 고정.
 // PC 시계/표준시간대가 어긋나 있으면 하루가 엉뚱한 시각에 넘어가 일정이 근무 중에 초기화되고
 // '오늘 완료' 매칭도 빗나가므로 기기 로컬 시간을 쓰지 않는다(미지원 환경만 로컬로 폴백).
-var _pcDayCache={t:0, v:''};   // 폴링·필터에서 자주 호출되므로 30초 캐시(Intl 생성 비용 절감)
+// 캐시는 함수 객체에 둔다(pcTodayStr._c). 이 함수는 선언보다 앞선 파싱 시점 코드
+// (pcDailyResetCheck)에서 호출되므로, 모듈 스코프 var에 캐시를 두면 그 시점엔 아직
+// undefined라 접근 자체가 예외가 되고 이후 스크립트 전체가 죽는다.
 function pcTodayStr(){
-  var now=Date.now();
-  if(_pcDayCache.v && now-_pcDayCache.t<30000) return _pcDayCache.v;
+  var now=Date.now(), c=pcTodayStr._c;
+  if(c && c.v && now-c.t<30000) return c.v;   // 폴링·필터에서 자주 호출 → 30초 캐시
   var v='';
   try{
     var s=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     if(/^\d{4}-\d{2}-\d{2}$/.test(s)) v=s;
   }catch(e){}
   if(!v){ var d=new Date(), z=function(n){return (n<10?'0':'')+n;}; v=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
-  _pcDayCache={t:now, v:v};
+  pcTodayStr._c={t:now, v:v};
   return v;
 }
 // 시트 표시형식(getDisplayValues)이 'yyyy. M. d' 등 로케일 형태로 오므로
