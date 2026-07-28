@@ -2467,7 +2467,7 @@ function pcQueueApply(op, fse, hosp, to){
   fse=(fse||'').trim(); hosp=(hosp||'').trim();
   var extra=null;   // 서버 정합용 보조 op(레거시 clear 등)
   if(op==='q_add' && fse && hosp){ pcGoneDel(hosp); pcFreshMark(hosp); pcqRemoveAll(hosp); pcqEnsure(fse).push({h:hosp,s:'wait'}); if(pcIsDone(hosp)) delete pcDone[hosp]; }
-  else if(op==='q_remove' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); pcFreshDel(hosp); if(pcIsProg(hosp)) delete pcInProgress[hosp]; if(pcIsDone(hosp)){ delete pcDone[hosp]; } extra={action:'progress_save', op:'clear', hosp:hosp}; }
+  else if(op==='q_remove' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); pcFreshDel(hosp); if(pcIsProg(hosp)) delete pcInProgress[hosp]; if(pcIsDone(hosp)){ delete pcDone[hosp]; } extra={op:'clear', hosp:hosp}; }
   else if(op==='q_move' && fse && hosp){ var qm=pcqEnsure(fse),im=pcqFind(qm,hosp); if(im>=0){ var t=Math.max(0,Math.min(qm.length-1,Number(to))); var it=qm.splice(im,1)[0]; qm.splice(t,0,it); } }
   else if(op==='q_clear' && fse){ (pcQueues[fse]||[]).forEach(function(x){ if(x&&x.h){ pcGoneAdd(x.h); pcFreshDel(x.h); if(pcIsProg(x.h)) delete pcInProgress[x.h]; } }); delete pcQueues[fse]; }
   else if((op==='q_done'||op==='done') && hosp){ var f2=fse||pcqOf(hosp); if(f2){ var qd=pcqEnsure(f2),idd=pcqFind(qd,hosp); if(idd>=0) qd[idd].s='done'; } pcDone[hosp]=1; }
@@ -2475,10 +2475,10 @@ function pcQueueApply(op, fse, hosp, to){
   else if(op==='clear' && hosp){ pcqRemoveAll(hosp); pcGoneAdd(hosp); pcFreshDel(hosp); }
   else { return; }
   pcDeriveProg();
-  var payload={action:'progress_save', op:op, hosp:hosp, fse:fse};
-  if(op==='q_move') payload.to=Number(to);
-  pcProgSend(payload);
-  if(extra) pcProgSend(extra);
+  var spec={op:op, hosp:hosp, fse:fse};
+  if(op==='q_move') spec.to=Number(to);
+  pcProgOp(spec);
+  if(extra) pcProgOp(extra);
   pcRefreshProgViews(hosp, true);
 }
 // 레거시 진입점(상세/카드/표) → 큐 op로 라우팅
@@ -2488,90 +2488,169 @@ function pcMarkDone(hosp){ if(!hosp) return; pcQueueApply('done', '', hosp); }
 window.pcMarkDone=pcMarkDone;
 // Handover 자동 완료: 진행중 병원이 오늘 handover(오늘 완료)에 기록되면 자동 완료 →
 // 다음 병원 자동 진행중 승격. 담당자(fse)+병원 일치 우선(기록에 담당자 없으면 병원만 일치).
+// 연쇄로 여러 건이 한 번에 완료되는 경우가 흔하므로 배치로 감싼다
+// → POST 왕복 1회 + 재렌더 1회 (기존: 완료 1건마다 POST·전체 재렌더)
 function pcAutoAdvanceFromHandover(){
   if(!pcQueues || typeof pcTodayList!=='function') return;
   var today=pcTodayList(); if(!today.length) return;
   var byHF={}, byH={};
   today.forEach(function(r){ var h=normalize(r.hosp); if(!h) return; var f=normalize(r.fse); if(f) byHF[h+'|'+f]=1; else byH[h]=1; });
   function completed(hosp, fse){ var h=normalize(hosp); return !!(byHF[h+'|'+normalize(fse)] || byH[h]); }
-  var guard=0, advanced=false;
-  while(guard++<60){
-    var found=null;
-    var fses=Object.keys(pcQueues);
-    for(var i=0;i<fses.length && !found;i++){
-      var fse=fses[i], q=pcQueues[fse]||[];
-      for(var j=0;j<q.length;j++){ if(q[j].s==='prog' && completed(q[j].h, fse)){ found={fse:fse, h:q[j].h}; break; } }
+  var advanced=false;
+  pcBatchRun(function(){
+    var guard=0;
+    while(guard++<60){
+      var found=null;
+      var fses=Object.keys(pcQueues);
+      for(var i=0;i<fses.length && !found;i++){
+        var fse=fses[i], q=pcQueues[fse]||[];
+        for(var j=0;j<q.length;j++){ if(q[j].s==='prog' && completed(q[j].h, fse)){ found={fse:fse, h:q[j].h}; break; } }
+      }
+      if(!found) break;
+      pcQueueApply('q_done', found.fse, found.h);   // 자동 완료 + 다음 승격 + 서버 반영
+      advanced=true;
     }
-    if(!found) break;
-    pcQueueApply('q_done', found.fse, found.h);   // 자동 완료 + 다음 승격 + 서버 반영
-    advanced=true;
-  }
+  });
   return advanced;
 }
 
 // ── 서버 동기화 (HANDOVER_URL, 사용자 간 연동) ──
-var pcProgHold=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보호(GAS 콜드스타트 대비 넉넉히)
+var pcProgHold=0;    // 로컬 변경 직후 폴링이 되돌리지 않도록 보호(GAS 콜드스타트 대비 넉넉히)
+var pcProgRev=0;     // 서버 리비전 — 폴링에 실어 보내면 변경 없을 때 큐 전체를 받지 않는다
+var pcLastAct=0;     // 마지막 조작 시각 — 직후에는 폴링을 촘촘히(공동 편집 반응 개선)
+var pcOpBatch=null;  // 배치 수집 중이면 op 배열 — 연쇄 변경을 POST 1회로 묶는다
+var pcRenderHold=0, pcRenderPending=null;   // >0이면 재렌더를 미뤘다가 배치 끝에 1회로 합친다
+
+// 요청자(로그 시트의 '요청자' 열) — 누가 지웠는지 추적 가능하게
+function pcWho(){ try{ return (window.BazAuth&&BazAuth.name&&BazAuth.name())||''; }catch(e){ return ''; } }
+// op 1건: 배치 중이면 쌓고, 아니면 즉시 전송
+function pcProgOp(spec){
+  if(pcOpBatch){ pcOpBatch.push(spec); return; }
+  pcProgSend(Object.assign({action:'progress_save', who:pcWho()}, spec));
+}
+// fn 안에서 일어나는 모든 큐 변경을 한 번의 POST + 한 번의 재렌더로 묶는다
+function pcBatchRun(fn){
+  if(pcOpBatch){ return fn(); }               // 이미 배치 중이면 그대로 합류
+  pcOpBatch=[]; pcRenderHold++;
+  try{ fn(); }
+  finally{
+    var ops=pcOpBatch; pcOpBatch=null;
+    pcRenderHold--;
+    if(ops.length===1) pcProgSend(Object.assign({action:'progress_save', who:pcWho()}, ops[0]));
+    else if(ops.length>1) pcProgSend({action:'progress_save', ops:ops, who:pcWho()});
+    var pend=pcRenderPending; pcRenderPending=null;
+    if(pend) pcRefreshProgViews(pend.hosp, pend.silent);
+  }
+}
+// 서버가 확정한 상태(POST 응답·GET 응답 공용)를 로컬에 반영. 반영했으면 true.
+function pcProgAccept(d){
+  if(!d || d.success!==true) return false;
+  // 백엔드(v2.5+)가 queues를 줄 때만 서버 상태로 동기화. 구버전(미재배포)은
+  // queues 필드가 없으므로 로컬 큐가 진실 — 서버 prog/done으로 덮어쓰지 않는다
+  // (일정이 폴링에 사라지거나 유령처럼 되살아나는 문제 방지).
+  var hasQ=Object.prototype.hasOwnProperty.call(d,'queues') && d.queues && typeof d.queues==='object';
+  if(!hasQ) return false;
+  if(typeof d.rev==='number'){
+    if(d.rev < pcProgRev) return false;        // 늦게 도착한 옛 응답은 무시(순서 뒤바뀜 방지)
+    pcProgRev=d.rev;
+  }
+  // tombstone: 삭제한 병원이 서버에 남아 되살아나면 걸러내고 서버에 재삭제 요청
+  var f=pcGoneFilter(d.queues);
+  var nq=f.q;
+  if(f.removed.length){
+    var ops=[];
+    f.removed.forEach(function(r){ ops.push({op:'q_remove',fse:r.fse,hosp:r.hosp}); ops.push({op:'clear',hosp:r.hosp}); });
+    pcProgSend({action:'progress_save', ops:ops, who:pcWho()});
+  }
+  // 최근 추가 보호: 방금 로컬에서 추가한 병원이 서버 왕복(콜드스타트) 지연으로 서버 큐에
+  // 아직 없을 때, 폴링이 그 추가를 지우지 않도록 다시 넣어준다. 서버에 이미 있으면 표식 해제.
+  // (동시 편집 시 상대의 변경을 반영하면서도 내 최신 추가가 유실되지 않게 함.)
+  Object.keys(pcQueues).forEach(function(fq){
+    (pcQueues[fq]||[]).forEach(function(x){
+      if(!x||!x.h||!pcFreshHas(x.h)) return;
+      var inServer=false;
+      Object.keys(nq).forEach(function(g){ if(nq[g]&&pcqFind(nq[g],x.h)>=0) inServer=true; });
+      if(inServer){ pcFreshDel(x.h); }
+      else { if(!nq[fq]) nq[fq]=[]; nq[fq].push({h:x.h, s:'wait'}); }
+    });
+  });
+  var nd=(d.done&&typeof d.done==='object')?d.done:{};
+  // 큐가 진실 → 큐에서 prog 파생. done은 tombstone 아닌 항목만 병합 유지.
+  if(JSON.stringify(nq)===JSON.stringify(pcQueues)){
+    var changed=false; Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)&&!pcDone[h]){ pcDone[h]=1; changed=true; } });
+    if(!changed) return false;
+  }
+  pcQueues=nq; pcSaveQueues();
+  pcDeriveProg();
+  Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)) pcDone[h]=1; });
+  pcSaveDone();
+  try{ pcAutoAdvanceFromHandover(); }catch(e){}   // handover 기록 반영 자동 승격
+  pcRefreshProgViews(null, true);
+  return true;
+}
 function pcProgSend(payload){
   if(!HANDOVER_URL) return;
   pcProgHold=Date.now()+8000;
+  pcLastAct=Date.now();
   /* [보안] 서버 쓰기 인증 토큰 동봉 */
   try{ if(window.BazAuth&&BazAuth.token) payload=Object.assign({},payload,{token:BazAuth.token()}); }catch(e){}
   var body=JSON.stringify(payload);
+  /* POST 응답에 서버가 확정한 큐가 들어 있다 — 이를 바로 반영하면 다음 폴링(최대 25초)을
+     기다리지 않고 왕복 1회로 서버 상태가 확정된다. 응답을 못 읽으면(no-cors 폴백·네트워크
+     오류) 로컬이 서버와 어긋났을 수 있으므로 rev를 지워 다음 폴링이 전체를 다시 받게 한다. */
+  function fallback(){ pcProgRev=0; try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} }
   try{
     fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
       .then(function(r){ return r.json(); })
-      .then(function(d){ if(d&&d.success===true&&payload&&payload.hosp) pcFreshDel(payload.hosp); })   // 서버 반영 확인 → 보호 표식 해제
-      .catch(function(){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} });
-  }catch(e){ try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(_){} }
+      .then(function(d){
+        if(!d || d.success!==true){ pcProgRev=0; return; }
+        var hs=[]; if(payload.hosp) hs.push(payload.hosp);
+        (payload.ops||[]).forEach(function(o){ if(o&&o.hosp) hs.push(o.hosp); });
+        hs.forEach(pcFreshDel);          // 서버 반영 확인 → 보호 표식 해제
+        pcProgHold=0;                    // 서버가 확정 → 폴링을 더 막아둘 이유가 없다
+        pcProgAccept(d);
+      })
+      .catch(fallback);
+  }catch(e){ fallback(); }
 }
 function pcProgPull(){
   if(!HANDOVER_URL || Date.now()<pcProgHold) return;
-  fetch(_tk(HANDOVER_URL+'?action=progress'),{method:'GET'})
+  /* rev 동봉 → 변경이 없으면 서버가 {nochange:true}만 반환(큐 직렬화·전송·파싱 생략) */
+  var url=HANDOVER_URL+'?action=progress'+(pcProgRev?('&rev='+pcProgRev):'');
+  fetch(_tk(url),{method:'GET'})
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d || d.success!==true) return;
-      // 백엔드(v2.5)가 queues를 줄 때만 서버 상태로 동기화. 구버전(미재배포)은
-      // queues 필드가 없으므로 로컬 큐가 진실 — 서버 prog/done으로 덮어쓰지 않는다
-      // (일정이 폴링에 사라지거나 유령처럼 되살아나는 문제 방지).
-      var hasQ=Object.prototype.hasOwnProperty.call(d,'queues') && d.queues && typeof d.queues==='object';
-      if(!hasQ) return;
-      // tombstone: 삭제한 병원이 서버에 남아 되살아나면 걸러내고 서버에 재삭제 요청
-      var f=pcGoneFilter(d.queues);
-      var nq=f.q;
-      if(f.removed.length){ f.removed.forEach(function(r){ pcProgSend({action:'progress_save',op:'q_remove',fse:r.fse,hosp:r.hosp}); pcProgSend({action:'progress_save',op:'clear',hosp:r.hosp}); }); }
-      // 최근 추가 보호: 방금 로컬에서 추가한 병원이 서버 왕복(콜드스타트) 지연으로 서버 큐에
-      // 아직 없을 때, 폴링이 그 추가를 지우지 않도록 다시 넣어준다. 서버에 이미 있으면 표식 해제.
-      // (동시 편집 시 상대의 변경을 반영하면서도 내 최신 추가가 유실되지 않게 함.)
-      Object.keys(pcQueues).forEach(function(fq){
-        (pcQueues[fq]||[]).forEach(function(x){
-          if(!x||!x.h||!pcFreshHas(x.h)) return;
-          var inServer=false;
-          Object.keys(nq).forEach(function(g){ if(nq[g]&&pcqFind(nq[g],x.h)>=0) inServer=true; });
-          if(inServer){ pcFreshDel(x.h); }
-          else { if(!nq[fq]) nq[fq]=[]; nq[fq].push({h:x.h, s:'wait'}); }
-        });
-      });
-      var nd=(d.done&&typeof d.done==='object')?d.done:{};
-      // 큐가 진실 → 큐에서 prog 파생. done은 tombstone 아닌 항목만 병합 유지.
-      if(JSON.stringify(nq)===JSON.stringify(pcQueues)){
-        var changed=false; Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)&&!pcDone[h]){ pcDone[h]=1; changed=true; } });
-        if(!changed) return;
-      }
-      pcQueues=nq; pcSaveQueues();
-      pcDeriveProg();
-      Object.keys(nd).forEach(function(h){ if(!pcGoneHas(h)) pcDone[h]=1; });
-      pcSaveDone();
-      try{ pcAutoAdvanceFromHandover(); }catch(e){}   // handover 기록 반영 자동 승격
-      pcRefreshProgViews(null, true);
+      if(d.nochange===true){ if(typeof d.rev==='number') pcProgRev=d.rev; return; }
+      pcProgAccept(d);
     })
     .catch(function(){});
 }
-// 초기 동기화 + 주기적 폴링 + 포커스/복귀 시 즉시 갱신(+ 자정 넘김 자동 초기화)
+// 초기 동기화 + 적응형 폴링 + 포커스/복귀 시 즉시 갱신(+ 자정 넘김 자동 초기화)
+// 조작 직후 90초는 7초 간격 — 같은 일정을 함께 보는 다른 사용자에게 빠르게 전파된다.
+// 그 외에는 25초, 숨은 탭은 정지. rev 덕분에 촘촘한 폴링도 대부분 빈 응답이라 비용이 낮다.
+var pcPollTimer=null;
+function pcPollDelay(){ return (Date.now()-pcLastAct < 90000) ? 7000 : 25000; }
+function pcPollTick(){
+  if(document.visibilityState!=='hidden'){
+    try{ pcDailyResetCheck(); }catch(e){}
+    pcProgPull();
+    try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
+  }
+  pcPollSchedule();
+}
+function pcPollSchedule(){ try{ clearTimeout(pcPollTimer); }catch(e){} pcPollTimer=setTimeout(pcPollTick, pcPollDelay()); }
+function pcProgWake(){
+  try{ pcDailyResetCheck(); }catch(e){}
+  pcProgPull();
+  try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
+  pcPollSchedule();
+}
 try{
-  setTimeout(pcProgPull, 900);
-  setInterval(function(){ if(document.visibilityState!=='hidden'){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } }, 25000);
-  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} } });
-  window.addEventListener('focus', function(){ try{ pcDailyResetCheck(); }catch(e){} pcProgPull(); try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){} });
+  setTimeout(pcProgPull, 250);   // GAS 콜드스타트 예열 겸 첫 동기화를 최대한 앞당긴다
+  pcPollSchedule();
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') pcProgWake(); });
+  window.addEventListener('focus', pcProgWake);
 }catch(e){}
 // 담당자 후보 목록: 영업담당(sa) + 오늘 처리자(fse) 합집합, 가나다 정렬
 function pcAssigneeList(){
@@ -2587,8 +2666,18 @@ function pcGuessFse(hosp){
   for(var i=0;i<t.length;i++){ if(normalize(t[i].hosp)===k && (t[i].fse||'').trim()) return String(t[i].fse).trim(); }
   var fl=pcTodayFseList(); return fl.length===1?fl[0]:'';
 }
-// 진행중 변경 후 관련 화면 갱신
+// 진행중 변경 후 관련 화면 갱신.
+// 배치(pcBatchRun) 중에는 마지막 1회로 합친다 — 자동 완료가 연쇄로 일어날 때
+// 지도·좌측 목록·일정·상세를 건마다 다시 그리던 비용(최대 60회)을 1회로 줄인다.
 function pcRefreshProgViews(hosp, silent){
+  if(pcRenderHold>0){
+    pcRenderPending={hosp:hosp||(pcRenderPending&&pcRenderPending.hosp)||null,
+                     silent:(pcRenderPending&&pcRenderPending.silent===false)?false:silent};
+    return;
+  }
+  pcRefreshProgViewsNow(hosp, silent);
+}
+function pcRefreshProgViewsNow(hosp, silent){
   try{ pcRenderRouteCard(); }catch(e){}
   try{ pcRenderRecentCard(); }catch(e){}
   try{ if(typeof curTab!=='undefined' && curTab==='sched' && typeof renderSched==='function') renderSched(); }catch(e){}

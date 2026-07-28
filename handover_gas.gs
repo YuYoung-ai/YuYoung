@@ -228,6 +228,7 @@ function doPost(e){
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
     if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
     if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
+    if(payload && payload.action==='progress_restore') return json_(progRestore_(payload));  /* [v2.7] 스냅샷에서 일정 복구(Lv.3) */
 
     var sh = sheet_(CONFIG.SHEET_NAME);
     if(!sh) return json_({success:false, error:'시트 없음: '+CONFIG.SHEET_NAME});
@@ -302,7 +303,7 @@ function doGet(e){
       }
     }
 
-    if(action==='ping')   return json_({success:true, ver:'2.6.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.7.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -315,7 +316,7 @@ function doGet(e){
     if(action==='menu')   return json_(menuGet_());             /* [v2.1] 허브 메뉴 설정 */
     if(action==='weeklyauto') return json_(weeklyAutoGet_());   /* 주간 자동기재 대상 작성자 목록 */
     if(action==='contenttpl') return json_(contentTplGet_());  /* 처리내용 자동완성 템플릿 */
-    if(action==='progress') return json_(progGet_());           /* [v2.4] 진행중 공유 상태 */
+    if(action==='progress') return json_(progGet_(p));          /* [v2.4] 진행중 공유 상태 ([v2.7] rev 조건부 응답) */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
     return json_({success:false, error:String(err)});
@@ -1167,6 +1168,12 @@ function menuSave_(p){
  *  POST {action:'progress_save', op, ...}
  *    큐:   q_add{fse,hosp} · q_remove{fse,hosp} · q_move{fse,hosp,to} · q_done{fse,hosp} · q_clear{fse}
  *    레거시: set{hosp,fse} · clear{hosp} · done{hosp} · replace{prog,done}
+ *  [v2.7]
+ *   · 배치   POST {action:'progress_save', ops:[{op,fse,hosp,to},…], who}  → 왕복 1회
+ *   · 조건부 GET  ?action=progress&rev=N  → 변경 없으면 {success,nochange,rev} 만 반환
+ *   · 이력   모든 op를 '현장일정로그' 시트에 append (락 밖에서 · 실패 무시)
+ *   · 스냅샷 일일 초기화 시 어제 큐를 '현장일정' 시트에 보존
+ *   · 복구   POST {action:'progress_restore', day:'YYYY-MM-DD', token}  (Lv.3)
  */
 function progRead_(){
   var raw = PropertiesService.getScriptProperties().getProperty('cs_progress') || '{}';
@@ -1174,9 +1181,14 @@ function progRead_(){
   if(!o.prog   || typeof o.prog   !== 'object') o.prog = {};
   if(!o.done   || typeof o.done   !== 'object') o.done = {};
   if(!o.queues || typeof o.queues !== 'object') o.queues = {};
-  /* [v2.6] 일일 자동 초기화: 날짜(Asia/Seoul)가 바뀌면 어제 일정을 비운다 */
+  if(typeof o.rev !== 'number') o.rev = 0;   /* [v2.7] 리비전 — 폴링이 변경 여부만 싸게 확인 */
+  /* [v2.6] 일일 자동 초기화: 날짜(Asia/Seoul)가 바뀌면 어제 일정을 비운다.
+     [v2.7] 비우기 전 어제 큐를 _snap 으로 넘겨 호출부가 스냅샷 시트에 보존한다. */
   var today = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
-  if(o.day && o.day !== today){ o.queues = {}; o.prog = {}; o.done = {}; o._reset = true; }
+  if(o.day && o.day !== today){
+    o._snap = {day:o.day, queues:o.queues};
+    o.queues = {}; o.prog = {}; o.done = {}; o._reset = true;
+  }
   o.day = today;
   /* 레거시 prog(큐 없이 저장된 진행중)을 큐로 마이그레이션 */
   Object.keys(o.prog).forEach(function(hosp){
@@ -1209,74 +1221,272 @@ function deriveProg_(o){
   });
   o.prog = prog;
 }
-function progGet_(){
+/** 저장 전 내부 전용 필드 제거 — ScriptProperties 에 새어 나가지 않게 한다 */
+function progStrip_(o){ var s=o._snap; delete o._snap; delete o._reset; return s; }
+function progGet_(p){
   var o = progRead_();
   deriveProg_(o);
-  if(o._reset){ delete o._reset; try{ PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o)); }catch(e){} }  // 일일 초기화 영속화
-  return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated||''};
+  var snap = null, wasReset = !!o._reset;
+  if(wasReset){
+    snap = progStrip_(o);
+    o.rev = (o.rev||0)+1;
+    try{ PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o)); }catch(e){}   // 일일 초기화 영속화
+  }
+  var rev = o.rev||0;
+  /* 일일 초기화 부산물(스냅샷 보존·로그 정리)은 상태 저장 뒤에 — 시트 I/O 실패가 초기화를 되돌리지 않게 */
+  if(wasReset){
+    try{ if(snap) schedSnapshotWrite_(snap.day, snap.queues); }catch(e){}
+    try{ schedLog_([[schedNow_(), '', '', 'day_reset', snap?snap.day:'', '', 'system']]); }catch(e){}
+    try{ schedLogPrune_(); }catch(e){}
+  }
+  /* [v2.7] 변경 없으면 큐 전체 대신 rev 만 반환 — 25초 폴링의 응답·파싱 비용 제거 */
+  if(p && String(p.rev||'')!=='' && Number(p.rev)===rev) return {success:true, nochange:true, rev:rev};
+  return {success:true, queues:o.queues, prog:o.prog, done:o.done, rev:rev, updated:o.updated||''};
 }
+/** 큐에서 병원의 현재 상태 문자열(없으면 '') — 로그의 '이전 상태' 기록용 */
+function qStateOf_(o, hosp){
+  var s = '';
+  Object.keys(o.queues).forEach(function(f){
+    var i = qFind_(o.queues[f], hosp);
+    if(i>=0) s = o.queues[f][i].s || '';
+  });
+  return s;
+}
+/** op 1건 적용. 적용되면 true, 알 수 없는 op면 op 이름을 반환. logs 에 변경 이력 행을 쌓는다 */
+function progApplyOp_(o, spec, logs, who){
+  var op   = String((spec&&spec.op)||'').trim();
+  var hosp = String((spec&&spec.hosp)||'').trim();
+  var fse  = String((spec&&spec.fse)||'').trim();
+  var now  = schedNow_();
+  function put(f,h,prev,next){ logs.push([now, f, h, op, prev, next, who]); }
+
+  if(op==='q_add' && fse && hosp){
+    var prevA = qStateOf_(o, hosp);
+    qRemoveAll_(o, hosp);                 // 한 병원은 한 사람의 일정에만
+    qEnsure_(o, fse).push({h:hosp, s:'wait'});
+    if(o.done[hosp]) delete o.done[hosp];
+    put(fse, hosp, prevA, 'wait');
+  } else if(op==='q_remove' && fse && hosp){
+    var qr = qEnsure_(o, fse); var ir = qFind_(qr, hosp);
+    if(ir>=0){ put(fse, hosp, qr[ir].s||'', '(삭제)'); qr.splice(ir,1); }
+  } else if(op==='q_move' && fse && hosp){
+    var qm = qEnsure_(o, fse); var im = qFind_(qm, hosp);
+    if(im>=0){
+      var to = Math.max(0, Math.min(qm.length-1, Number(spec.to)));
+      var item = qm.splice(im,1)[0];
+      qm.splice(to, 0, item);
+      put(fse, hosp, '#'+(im+1), '#'+(to+1));
+    }
+  } else if(op==='q_done' && fse && hosp){
+    var qd = qEnsure_(o, fse); var id = qFind_(qd, hosp);
+    if(id>=0){ put(fse, hosp, qd[id].s||'', 'done'); qd[id].s='done'; o.done[hosp]=1; }
+  } else if(op==='q_clear' && fse){
+    /* 인원 일정 전체 삭제 — 되돌릴 수 없으므로 지워지는 병원을 한 줄씩 남긴다 */
+    (o.queues[fse]||[]).forEach(function(x){ if(x&&x.h) put(fse, x.h, x.s||'', '(삭제)'); });
+    delete o.queues[fse];
+  } else if(op==='set' && hosp){
+    var prevS = qStateOf_(o, hosp);
+    qRemoveAll_(o, hosp);
+    var qs = qEnsure_(o, fse);
+    qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; });   // 기존 prog 강등
+    qs.unshift({h:hosp, s:'prog'});
+    if(o.done[hosp]) delete o.done[hosp];
+    put(fse, hosp, prevS, 'prog');
+  } else if(op==='clear' && hosp){
+    put(qOwnerOf_(o, hosp), hosp, qStateOf_(o, hosp), '(삭제)');
+    qRemoveAll_(o, hosp);
+  } else if(op==='done' && hosp){
+    var owner = qOwnerOf_(o, hosp), prevD = qStateOf_(o, hosp);
+    Object.keys(o.queues).forEach(function(f){
+      var q=o.queues[f], i=qFind_(q,hosp);
+      if(i>=0) q[i].s='done';
+    });
+    o.done[hosp]=1;
+    put(owner, hosp, prevD, 'done');
+  } else if(op==='replace'){
+    o.queues = {};
+    o.prog = (spec.prog && typeof spec.prog==='object') ? spec.prog : {};
+    o.done = (spec.done && typeof spec.done==='object') ? spec.done : {};
+    Object.keys(o.prog).forEach(function(h){ qEnsure_(o, o.prog[h]).push({h:h, s:'prog'}); });
+    put('', '', '', '(전체 교체)');
+  } else {
+    return op || '(빈 op)';
+  }
+  return true;
+}
+function qOwnerOf_(o, hosp){
+  var f2 = '';
+  Object.keys(o.queues).forEach(function(f){ if(qFind_(o.queues[f], hosp)>=0) f2 = f; });
+  return f2;
+}
+/**
+ * 진행 상태 저장. 단건 {op,hosp,fse,to} 또는 배치 {ops:[{op,…},…]} 를 받는다.
+ * [v2.7] 배치: 자동 완료 연쇄처럼 여러 op가 한 번에 나는 경우 POST 왕복을 1회로 줄인다.
+ */
 function progSave_(p){
   /* doPost가 이미 같은 스크립트 락을 보유한 채 호출하므로 재획득 실패는 정상 —
      여기서 예외로 죽으면 일정 저장이 통째로 실패하고, 다음 폴링이 옛 상태로 되돌린다.
      tryLock으로 시도만 하고 실패해도 진행한다(직렬화는 doPost의 락이 이미 보장). */
   var lock = LockService.getScriptLock(), held = false;
+  var res = null, logs = [], snap = null;
   try{
     try{ held = lock.tryLock(15000); }catch(e){ held = false; }
     var o = progRead_();
-    var op   = String(p.op||'').trim();
-    var hosp = String(p.hosp||'').trim();
-    var fse  = String(p.fse||'').trim();
-
-    if(op==='q_add' && fse && hosp){
-      qRemoveAll_(o, hosp);                 // 한 병원은 한 사람의 일정에만
-      qEnsure_(o, fse).push({h:hosp, s:'wait'});
-      if(o.done[hosp]) delete o.done[hosp];
-    } else if(op==='q_remove' && fse && hosp){
-      var qr = qEnsure_(o, fse); var ir = qFind_(qr, hosp);
-      if(ir>=0) qr.splice(ir,1);
-    } else if(op==='q_move' && fse && hosp){
-      var qm = qEnsure_(o, fse); var im = qFind_(qm, hosp);
-      if(im>=0){
-        var to = Math.max(0, Math.min(qm.length-1, Number(p.to)));
-        var item = qm.splice(im,1)[0];
-        qm.splice(to, 0, item);
-      }
-    } else if(op==='q_done' && fse && hosp){
-      var qd = qEnsure_(o, fse); var id = qFind_(qd, hosp);
-      if(id>=0){ qd[id].s='done'; o.done[hosp]=1; }
-    } else if(op==='q_clear' && fse){
-      delete o.queues[fse];
-    } else if(op==='set' && hosp){
-      qRemoveAll_(o, hosp);
-      var qs = qEnsure_(o, fse);
-      qs.forEach(function(x){ if(x.s==='prog') x.s='wait'; });   // 기존 prog 강등
-      qs.unshift({h:hosp, s:'prog'});
-      if(o.done[hosp]) delete o.done[hosp];
-    } else if(op==='clear' && hosp){
-      qRemoveAll_(o, hosp);
-    } else if(op==='done' && hosp){
-      var found=false;
-      Object.keys(o.queues).forEach(function(f){
-        var q=o.queues[f], i=qFind_(q,hosp);
-        if(i>=0){ q[i].s='done'; found=true; }
-      });
-      o.done[hosp]=1;
-    } else if(op==='replace'){
-      o.queues = {};
-      o.prog = (p.prog && typeof p.prog==='object') ? p.prog : {};
-      o.done = (p.done && typeof p.done==='object') ? p.done : {};
-      Object.keys(o.prog).forEach(function(h){ qEnsure_(o, o.prog[h]).push({h:h, s:'prog'}); });
-    } else {
-      return {success:false, error:'알 수 없는 op: '+op};
+    snap = progStrip_(o);            // 저장 중 날짜가 넘어갔으면 어제 큐를 넘겨받아 뒤에서 보존
+    var who = String(p.who||'').trim();
+    var ops = (p.ops && p.ops.length) ? p.ops.slice(0, 100)
+            : [{op:p.op, hosp:p.hosp, fse:p.fse, to:p.to, prog:p.prog, done:p.done}];
+    var applied = 0, unknown = '';
+    for(var i=0;i<ops.length;i++){
+      var r = progApplyOp_(o, ops[i], logs, who);
+      if(r===true) applied++; else if(!unknown) unknown = r;
     }
+    if(!applied) return {success:false, error:'알 수 없는 op: '+unknown};
     deriveProg_(o);
-    if(o._reset) delete o._reset;
+    o.rev = (o.rev||0)+1;
     o.updated = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
     PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
-    return {success:true, queues:o.queues, prog:o.prog, done:o.done, updated:o.updated};
+    res = {success:true, queues:o.queues, prog:o.prog, done:o.done, rev:o.rev, updated:o.updated};
   }catch(err){
     return {success:false, error:String(err)};
   }finally{
     if(held){ try{ lock.releaseLock(); }catch(_){} }
   }
+  /* 시트 기록은 락을 놓은 뒤에 — 시트 I/O가 저장 경로의 락 보유 시간을 늘리지 않게 한다.
+     실패해도 상태 저장은 이미 끝났으므로 응답에 영향을 주지 않는다. */
+  try{ if(snap) schedSnapshotWrite_(snap.day, snap.queues); }catch(e){}
+  try{ schedLog_(logs); }catch(e){}
+  return res;
+}
+/* ═══════════ [v2.7] 현장 일정 — 시트 이력·스냅샷·복구 ═══════════
+ *  왜 시트인가: 실시간 상태는 ScriptProperties(cs_progress)에 두어 25초 폴링을 싸게 유지하되,
+ *  '누가 언제 무엇을 지웠는가'와 '그날 일정이 무엇이었는가'는 시트에 남긴다.
+ *  ScriptProperties는 지워지면 흔적도 복구 수단도 없어, 일정이 통째로 초기화된 사고의
+ *  원인 규명과 되돌리기가 불가능했다.
+ *
+ *  현장일정로그 : 일시 | 담당자 | 병원 | op | 이전상태 | 새상태 | 요청자   (append-only)
+ *  현장일정     : 날짜 | 담당자 | 순번 | 병원 | 상태 | 기록일시            (일자별 스냅샷)
+ *
+ *  ※ 시트 I/O는 반드시 쓰기 경로의 락 밖에서, 실패해도 무시한다(본 저장에 영향 없음).
+ *  ※ 읽기(폴링) 경로에는 절대 시트를 넣지 않는다 — 25초 폴링 × 인원수가 GAS 일일
+ *    실행시간 한도를 그대로 소모한다.
+ */
+var SCHED = {
+  LOG_SHEET : '현장일정로그',
+  SNAP_SHEET: '현장일정',
+  KEEP_DAYS : 90               // 로그 보관 기간(초과 행은 일일 초기화 때 정리)
+};
+var SCHED_LOG_HEAD  = ['일시','담당자','병원','op','이전상태','새상태','요청자'];
+var SCHED_SNAP_HEAD = ['날짜','담당자','순번','병원','상태','기록일시'];
+
+function schedNow_(){ return Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss'); }
+/** 시트를 얻고, 없으면 만들고 헤더를 세운다 */
+function schedSheet_(name, head){
+  var sh = sheet_(name);
+  if(!sh){ sh = ss_().insertSheet(name); }
+  if(sh.getLastRow() < 1){
+    sh.getRange(1,1,1,head.length).setValues([head]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    /* A열(일시·날짜)은 텍스트 고정 — 시트가 날짜로 재해석해 표시형식을 바꾸면
+       보관기간 정리(schedLogPrune_)와 날짜 매칭(progRestore_)이 어긋난다 */
+    try{ sh.getRange(1,1,sh.getMaxRows(),1).setNumberFormat('@'); }catch(e){}
+  }
+  return sh;
+}
+/** 변경 이력 append (여러 행 한 번에) */
+function schedLog_(rows){
+  if(!rows || !rows.length) return;
+  var sh = schedSheet_(SCHED.LOG_SHEET, SCHED_LOG_HEAD);
+  sh.getRange(sh.getLastRow()+1, 1, rows.length, SCHED_LOG_HEAD.length).setValues(rows);
+}
+/** 보관 기간이 지난 로그 행 정리 — 일일 초기화 때 하루 1회만 호출된다 */
+function schedLogPrune_(){
+  var sh = sheet_(SCHED.LOG_SHEET);
+  if(!sh) return;
+  var last = sh.getLastRow();
+  if(last < 2) return;
+  var cutoff = Utilities.formatDate(new Date(Date.now() - SCHED.KEEP_DAYS*864e5),'Asia/Seoul','yyyy-MM-dd');
+  var col = sh.getRange(2,1,last-1,1).getDisplayValues();
+  var n = 0;
+  while(n < col.length){                                   // 시간순 append → 앞에서부터
+    var s = String(col[n][0]).trim();
+    if(!/^\d{4}-\d{2}-\d{2}/.test(s)) break;               // 형식이 다르면 손대지 않는다(오삭제 방지)
+    if(s.slice(0,10) >= cutoff) break;
+    n++;
+  }
+  if(n > 0) sh.deleteRows(2, n);
+}
+/** 하루치 큐 스냅샷 기록 (같은 날짜가 이미 있으면 건너뜀) */
+function schedSnapshotWrite_(day, queues){
+  if(!day || !queues) return;
+  var props = PropertiesService.getScriptProperties();
+  if(props.getProperty('cs_sched_snap_day') === day) return;   // 중복 기록 방지
+  var rows = [], now = schedNow_();
+  Object.keys(queues).forEach(function(fse){
+    (queues[fse]||[]).forEach(function(x, i){
+      if(x && x.h) rows.push([day, fse, i+1, x.h, x.s||'', now]);
+    });
+  });
+  /* 시트 기록이 성공한 뒤에 '기록함' 표시 — 먼저 찍으면 쓰기가 실패했을 때 스냅샷이 영영 유실된다 */
+  if(rows.length){
+    var sh = schedSheet_(SCHED.SNAP_SHEET, SCHED_SNAP_HEAD);
+    sh.getRange(sh.getLastRow()+1, 1, rows.length, SCHED_SNAP_HEAD.length).setValues(rows);
+  }
+  props.setProperty('cs_sched_snap_day', day);                 // 빈 일정도 '기록함'으로 표시
+}
+/** 현재 큐를 즉시 스냅샷으로 남긴다 (수동 백업 · 복구 전 안전장치) */
+function schedSnapshotNow_(day){
+  var o = progRead_(); progStrip_(o);
+  var d = String(day || o.day || Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'));
+  try{ PropertiesService.getScriptProperties().deleteProperty('cs_sched_snap_day'); }catch(e){}
+  schedSnapshotWrite_(d, o.queues);
+  return {success:true, day:d};
+}
+/**
+ * 스냅샷 시트에서 해당 날짜의 일정을 되살린다 (사고 복구).
+ * 되돌리기 자체가 파괴적이므로 Lv.3 토큰 필요 + 복구 직전 현재 상태를 스냅샷으로 남긴다.
+ * POST {action:'progress_restore', day:'YYYY-MM-DD', token}
+ */
+function progRestore_(p){
+  if(verifyLevel_(p.token||'') < 3) return {success:false, error:'unauthorized — 보안레벨 3(수석 매니저) 토큰 필요'};
+  var day = String(p.day||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return {success:false, error:'day=YYYY-MM-DD 필요'};
+  var sh = sheet_(SCHED.SNAP_SHEET);
+  if(!sh || sh.getLastRow() < 2) return {success:false, error:'스냅샷 시트 없음: '+SCHED.SNAP_SHEET};
+
+  var v = sh.getRange(2, 1, sh.getLastRow()-1, SCHED_SNAP_HEAD.length).getDisplayValues();
+  var picked = [];
+  v.forEach(function(r){ if(String(r[0]).trim() === day) picked.push(r); });
+  if(!picked.length) return {success:false, error:day+' 스냅샷이 없습니다'};
+  picked.sort(function(a,b){ return (Number(a[2])||0) - (Number(b[2])||0); });   // 순번대로
+
+  var queues = {};
+  picked.forEach(function(r){
+    var fse = String(r[1]).trim(), hosp = String(r[3]).trim(), st = String(r[4]).trim();
+    if(!fse || !hosp) return;
+    if(!queues[fse]) queues[fse] = [];
+    queues[fse].push({h:hosp, s:(st==='prog'||st==='done')?st:'wait'});
+  });
+
+  var lock = LockService.getScriptLock(), held = false, res = null;
+  try{
+    try{ held = lock.tryLock(15000); }catch(e){ held = false; }
+    var o = progRead_(); progStrip_(o);
+    var before = o.queues;
+    o.queues = queues; o.done = {};
+    deriveProg_(o);
+    o.rev = (o.rev||0)+1;
+    o.updated = schedNow_();
+    PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
+    res = {success:true, restored:day, queues:o.queues, prog:o.prog, done:o.done, rev:o.rev, updated:o.updated};
+    /* 복구 직전 상태를 되돌릴 수 있게 남긴다 */
+    try{ PropertiesService.getScriptProperties().deleteProperty('cs_sched_snap_day'); }catch(e){}
+    try{ schedSnapshotWrite_('복구전-'+schedNow_().slice(0,10), before); }catch(e){}
+  }catch(err){
+    return {success:false, error:String(err)};
+  }finally{
+    if(held){ try{ lock.releaseLock(); }catch(_){} }
+  }
+  try{ schedLog_([[schedNow_(), '', '', 'restore', '', day, String(p.who||'')]]); }catch(e){}
+  return res;
 }
