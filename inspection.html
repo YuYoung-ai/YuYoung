@@ -149,6 +149,42 @@
   .spinner{width:38px;height:38px;border:4px solid var(--gray-line);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .loading p{font-size:13px;color:var(--text-muted);font-weight:600;}
+
+  .btn-ghost{background:#EAF4F8;color:var(--teal);border:1.5px solid var(--teal);font-size:14px;}
+
+  /* ===== 인쇄용 빈 양식 (화면에서는 숨김) ===== */
+  #blankSheet{display:none;}
+  #blankSheet *{box-sizing:border-box;}
+  #blankSheet{color:#000;font-family:'Malgun Gothic','Noto Sans KR',sans-serif;}
+  #blankSheet .bs-title{text-align:center;font-size:20px;font-weight:800;letter-spacing:2px;margin:0 0 2px;}
+  #blankSheet .bs-sub{text-align:center;font-size:10px;color:#333;margin:0 0 10px;letter-spacing:1px;}
+  #blankSheet .bs-sec{font-size:12px;font-weight:800;background:#1B2F5E;color:#fff;padding:4px 8px;margin:12px 0 0;}
+  #blankSheet table{width:100%;border-collapse:collapse;font-size:11px;}
+  #blankSheet td,#blankSheet th{border:1px solid #444;padding:5px 6px;vertical-align:middle;}
+  #blankSheet .lbl{background:#EDF0F5;font-weight:700;text-align:center;white-space:nowrap;width:80px;}
+  #blankSheet .bs-chkline{font-size:11px;}
+  #blankSheet .bs-chkline .cb{font-size:13px;margin-right:3px;}
+  #blankSheet .bs-chkline .gap{display:inline-block;width:14px;}
+  #blankSheet table.insp td{text-align:center;}
+  #blankSheet table.insp td.c-name{text-align:left;}
+  #blankSheet table.insp th{background:#1B2F5E;color:#fff;font-weight:700;font-size:11px;}
+  #blankSheet .c-num{width:26px;}
+  #blankSheet .c-chk{width:34px;font-size:15px;}
+  #blankSheet .c-memo{width:26%;}
+  #blankSheet .c-desc{font-size:9.5px;color:#333;font-weight:400;margin-top:1px;}
+  #blankSheet .writein{height:22px;}
+  #blankSheet .writein.tall{height:52px;}
+  #blankSheet .sigcell{height:70px;vertical-align:bottom;text-align:right;font-size:10px;color:#666;padding-right:8px;}
+  #blankSheet .bs-foot{margin-top:10px;font-size:9px;color:#555;text-align:right;}
+
+  @media print{
+    body{padding:0 !important;background:#fff !important;}
+    body.print-blank .wrap,body.print-blank .bottom-bar,
+    body.print-blank .toast,body.print-blank .loading,
+    body.print-blank .done-overlay{display:none !important;}
+    body.print-blank #blankSheet{display:block !important;}
+    @page{size:A4;margin:10mm;}
+  }
 </style>
 </head>
 <body>
@@ -304,9 +340,13 @@
   </div>
 
   <div class="bottom-bar">
+    <button type="button" class="btn btn-ghost" id="blankPrintBtn">🖨 빈양식</button>
     <button type="button" class="btn btn-secondary" id="previewBtn">미리보기</button>
     <button type="button" class="btn btn-primary" id="generateBtn">PDF 생성</button>
   </div>
+
+  <!-- 인쇄용 빈 양식 (수기 입력용) -->
+  <div id="blankSheet" aria-hidden="true"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1362,6 +1402,80 @@ async function generatePDF(preview){
 
 document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
 document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
+
+// ===== 인쇄용 빈 양식 (수기 입력용) =====
+function buildBlankSheet(){
+  const cb='<span class="cb">□</span>';
+  const rows=INSP_ITEMS.map(it=>`
+    <tr>
+      <td class="c-num">${it.n}</td>
+      <td class="c-name"><b>${it.name}</b><div class="c-desc">${it.desc}</div></td>
+      <td class="c-chk">□</td><td class="c-chk">□</td><td class="c-chk">□</td>
+      <td class="c-memo"></td>
+    </tr>`).join('');
+  document.getElementById('blankSheet').innerHTML=`
+    <div class="bs-title">A/S 점검 내역서</div>
+    <div class="bs-sub">BAZ BIOMEDIC FIELD SERVICE</div>
+
+    <div class="bs-sec">접수 정보</div>
+    <table>
+      <tr>
+        <td class="lbl">구분</td>
+        <td colspan="3" class="bs-chkline">${cb}유상<span class="gap"></span>${cb}무상
+          <span class="gap"></span><span class="gap"></span>
+          ${cb}A/S<span class="gap"></span>${cb}장비 점검<span class="gap"></span>${cb}장비 교체<span class="gap"></span>${cb}장비 업그레이드</td>
+      </tr>
+      <tr>
+        <td class="lbl">접수 일자</td><td class="writein"></td>
+        <td class="lbl">접수처</td><td class="writein"></td>
+      </tr>
+      <tr>
+        <td class="lbl">제품명</td>
+        <td class="bs-chkline">${cb}CUREJET<span class="gap"></span>${cb}NOVOJET</td>
+        <td class="lbl">장비 S/N</td><td class="writein"></td>
+      </tr>
+      <tr>
+        <td class="lbl">구독 서비스</td><td class="writein"></td>
+        <td class="lbl">장비 Ver.</td><td class="writein"></td>
+      </tr>
+      <tr>
+        <td class="lbl">병원명</td><td colspan="3" class="writein"></td>
+      </tr>
+    </table>
+
+    <div class="bs-sec">점검 항목</div>
+    <table class="insp">
+      <tr><th class="c-num">No</th><th>점검 항목</th><th class="c-chk">정상</th><th class="c-chk">수리</th><th class="c-chk">교체</th><th>메모</th></tr>
+      ${rows}
+    </table>
+
+    <div class="bs-sec">조치 내용 / 마무리</div>
+    <table>
+      <tr><td class="lbl">조치 내용</td><td class="writein tall"></td></tr>
+      <tr><td class="lbl">권고 사항</td><td class="writein tall"></td></tr>
+      <tr>
+        <td class="lbl">점검 일자</td><td class="writein"></td>
+        <td class="lbl">희망 예정일</td><td class="writein"></td>
+      </tr>
+      <tr>
+        <td class="lbl">교환품</td><td class="writein"></td>
+        <td class="lbl">비용(원)</td><td class="writein"></td>
+      </tr>
+    </table>
+
+    <div class="bs-sec">서명</div>
+    <table>
+      <tr><td class="lbl">CS 담당자</td><td class="lbl">병원 담당자</td></tr>
+      <tr><td class="sigcell">(서명)</td><td class="sigcell">(서명)</td></tr>
+    </table>
+    <div class="bs-foot">※ 본 양식은 현장 수기 작성용입니다. — BAZ BIOMEDIC CS</div>`;
+}
+document.getElementById('blankPrintBtn').addEventListener('click',()=>{
+  buildBlankSheet();
+  document.body.classList.add('print-blank');
+  window.print();
+});
+window.addEventListener('afterprint',()=>{ document.body.classList.remove('print-blank'); });
 document.getElementById('doneDl').addEventListener('click',()=>{ if(_lastPdf) _lastPdf.save(_lastFname); });
 document.getElementById('doneSurvey').addEventListener('click',()=>{
   const hosp=encodeURIComponent(v('hospital')||'');
