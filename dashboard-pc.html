@@ -280,7 +280,7 @@ body.mode-mobile .wrap{max-width:560px}
     <div class="mrow">
       <label>보고 월</label>
       <select id="mnSel" onchange="suggestMnDetail()"></select>
-      <div class="mhint">시트 처리일 기준 최근 12개월 · 1페이지 VOC/Call(월별 추이) + 2페이지 N-care 정기점검(주차별 추이)</div>
+      <div class="mhint">시트 처리일 기준 최근 12개월 · 1페이지 VOC/Call(월별 추이 1월~보고월) + 2페이지 N-care 정기점검(월별 추이 최근 4개월)</div>
     </div>
     <div class="mrow">
       <label>고장 상세 <span style="font-weight:400;color:var(--text-muted)">· 1페이지(VOC/Call)에 반영</span></label>
@@ -1825,7 +1825,7 @@ async function makeWeeklyPPT(){
 
 /* ══════════════════════ 월간업무보고 PPT 생성 ══════════════════════
    주간보고와 동일한 좌표(L)·색상(C)·폰트(FT)·헬퍼를 재사용한다.
-   차이점: ① 델타 기준 '전월 대비' ② 1페이지 추이=월별 막대 / 2페이지 추이=주차별 막대
+   차이점: ① 델타 기준 '전월 대비' ② 1페이지 추이=월별(1월~보고월) / 2페이지 추이=월별(최근 4개월)
           ③ 유형 = 노즐 누수/이상 없음/풋스위치 작동 불량 3종만 개별 표기, 나머지는 '기타 단발성 사례'로 합산
           ④ 고장 상세 = 노즐 누수 설명 + 기타 단발성 사례 유형 나열 */
 
@@ -1845,13 +1845,15 @@ function monthCat(t){
 }
 var MCAT_LABEL={nozzle:'노즐 누수(약액 유입)', ok:'이상 없음', foot:'풋스위치 작동 불량', etc:'기타 단발성 사례'};
 var MCAT_ORDER=['nozzle','ok','foot','etc'];
+/* 고장 상세 · 기타 단발성 사례 기본 표기 (1페이지 VOC/Call) — 3건 고정, 모달에서 수정 가능 */
+var MN_ETC_DEFAULT=['케이블 단선에 의한 오작동','사용자 환경에 따른 일시적 오작동','영업 요청에 의한 UI 업그레이드'];
 function catCount(rows){
   var c={nozzle:0,ok:0,foot:0,etc:0};
   rows.forEach(function(r){ c[monthCat(r.type)]++; });
   return c;
 }
 
-/* ── 데이터 계층: 스코프별 월간 집계 (trendMode: 'month' 월별 / 'week' 주차별) ── */
+/* ── 데이터 계층: 스코프별 월간 집계 (trendMode: 'ytd' 1월~보고월 / 'recent4' 최근 4개월) ── */
 function buildMonthData(m0, scope, manualDetail, trendMode){
   var pm=addMonth(m0,-1);
   var cur =gubunRows(RAW.filter(function(r){return inMonth(r,m0);}),scope);
@@ -1871,24 +1873,18 @@ function buildMonthData(m0, scope, manualDetail, trendMode){
   var partC=cnt(cur,'part'), partP=cnt(prev,'part'); delete partC['없음']; delete partP['없음'];
   var parts=anchorFirst(topOf(partC), "Handpiece Ass'y").slice(0,5);
   var partTot=Object.keys(partC).reduce(function(a,k){return a+partC[k];},0);
-  /* 추이 막대 */
+  /* 추이 막대 — 모두 월별, 보고월(마지막)은 주황 강조. trendMode:
+       'recent4' → 보고월 포함 최근 4개월 · N-care 점검 페이지
+       그 외('ytd') → 해당 연도 1월부터 보고월까지 · VOC/Call 페이지 */
   var bars=[];
-  if(trendMode==='week'){
-    var maxD=cur.reduce(function(a,r){return Math.max(a,r._d||0);},0)
-           || RAW.filter(function(r){return inMonth(r,m0);}).reduce(function(a,r){return Math.max(a,r._d||0);},0)
-           || daysInMonth(m0);
-    var wc=wkNo(new Date(m0.getFullYear(),m0.getMonth(),maxD));
-    for(var i=1;i<=wc;i++){
-      bars.push({label:i+'주차', n:cur.filter(function(r){return wkNo(new Date(r._y,r._m-1,r._d))===i;}).length, cur:false});
-    }
+  function monRows(mm){ return gubunRows(RAW.filter(function(r){return inMonth(r,mm);}),scope).length; }
+  if(trendMode==='recent4'){
+    for(var k=3;k>=0;k--){ var mm=addMonth(m0,-k);
+      bars.push({label:monthNum(mm)+'월', n:monRows(mm), cur:k===0}); }
   }else{
-    /* 월별 추이 — 해당 연도 1월부터 보고(선택) 월까지, 마지막(선택) 월 주황 강조 */
     var em=monthNum(m0);
-    for(var mo=1;mo<=em;mo++){
-      var mm=new Date(m0.getFullYear(), mo-1, 1);
-      bars.push({label:mo+'월',
-        n:gubunRows(RAW.filter(function(r){return inMonth(r,mm);}),scope).length, cur:mo===em});
-    }
+    for(var mo=1;mo<=em;mo++){ var mm2=new Date(m0.getFullYear(), mo-1, 1);
+      bars.push({label:mo+'월', n:monRows(mm2), cur:mo===em}); }
   }
   /* 고장 상세: {nozzle:설명, etc:[항목…]} — 수기(manualDetail) 우선, 없으면 자동 초안 */
   var det=parseMonthDetail(manualDetail);
@@ -1923,8 +1919,8 @@ function collectMonthCtx(){
   return {
     m0:m0,
     headerLabel:'필드 현황 ('+monthNum(m0)+'월) '+monthNum(m0)+'월 1일 ~ '+monthNum(m0)+'월 '+maxD+'일',
-    dataAS:  buildMonthData(m0, 'A/S',  document.getElementById('mnDetail').value, 'month'),
-    dataInsp:buildMonthData(m0, '점검', null,                                     'week'),
+    dataAS:  buildMonthData(m0, 'A/S',  document.getElementById('mnDetail').value, 'ytd'),
+    dataInsp:buildMonthData(m0, '점검', null,                                     'recent4'),
     inv:{inv1:val_('mnInv1'),inv2:val_('mnInv2'),inv3:val_('mnInv3'),inv4:val_('mnInv4')},
     callIn:Number(val_('mnCallInInp'))||0, callOut:Number(val_('mnCallOutInp'))||0
   };
@@ -1985,10 +1981,9 @@ function suggestMnDetail(){
   var nzRow=cur.filter(function(r){return monthCat(r.type)==='nozzle' && String(r.detail||'').trim();})[0];
   var nzDesc=nzRow?String(nzRow.detail).split('\n')[0].trim():'';
   if(nzDesc.length>44) nzDesc=nzDesc.slice(0,44)+'…';
-  var etcC=cnt(cur.filter(function(r){return monthCat(r.type)==='etc';}),'type');
-  var etcList=topOf(etcC).map(function(p){return p[0];}).slice(0,6);
+  /* 기타 단발성 사례 — 3건 고정 기본값(수정 가능). 노즐 설명은 데이터 초안 or 기본값 */
   document.getElementById('mnDetail').value=
-    ['노즐 누수(약액 유입): '+(nzDesc||'약액 유입에 의한 핸드피스 동작 불능')].concat(etcList).join('\n');
+    ['노즐 누수(약액 유입): '+(nzDesc||'약액 유입에 의한 핸드피스 동작 불능')].concat(MN_ETC_DEFAULT).join('\n');
 }
 
 /* ── 미리보기 ── */
