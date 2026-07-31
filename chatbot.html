@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
 <title>AI 트러블슈팅 — BAZ BIOMEDIC CS</title>
 <style>
   :root{
@@ -465,6 +466,9 @@ let convoContext = [];
 let deviceContext = null;
 
 // ── 하위 호환 별칭 (기존 코드가 참조) — 모두 단일 BASE URL ──
+/* [보안] GAS 호출 인증 토큰 헬퍼 (auth.js의 BazAuth 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
+function _tok(){ try{ return (window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){ return ''; } }
 const GAS_LOG_URL = CONFIG.GAS_BASE_URL;
 const GAS_KB_URL  = CONFIG.GAS_BASE_URL;
 
@@ -594,7 +598,7 @@ function applyKB(kbArr){
 const KB_VER_KEY = 'bazKbVersion';
 function checkKbVersion(){
   if(!CONFIG.GAS_BASE_URL){ syncKB(); return; }
-  fetchWithTimeout(CONFIG.GAS_BASE_URL + '?action=kb_version', {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+  fetchWithTimeout(_tk(CONFIG.GAS_BASE_URL + '?action=kb_version'), {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
     .then(r=>r.json())
     .then(d=>{
       const ver = d && d.success && (d.version!=null) ? String(d.version) : '';
@@ -639,7 +643,7 @@ function syncKB(){
   }catch(e){ console.warn('[챗봇 KB] 캐시 읽기 오류(무시):', e); }
 
   // 2) 시트에서 최신 fetch
-  fetchWithTimeout(CONFIG.GAS_BASE_URL + '?action=chatbot_kb', {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+  fetchWithTimeout(_tk(CONFIG.GAS_BASE_URL + '?action=chatbot_kb'), {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
     .then(r=>r.json())
     .then(d=>{
       if(!d.success || !d.data || !d.data.length) return;
@@ -675,7 +679,7 @@ function syncAdminKB(){
     if(cached && (Date.now() - ts) < KB_CACHE_TTL) return;
   }catch(e){}
 
-  fetchWithTimeout(CONFIG.GAS_BASE_URL + '?action=admin_kb', {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
+  fetchWithTimeout(_tk(CONFIG.GAS_BASE_URL + '?action=admin_kb'), {method:'GET'}, CONFIG.LOG_FETCH_TIMEOUT)
     .then(r=>r.json())
     .then(d=>{
       if(!d.success || !d.data || !d.data.length) return;
@@ -1001,7 +1005,7 @@ async function callClaude(systemPrompt, messages, maxTokens){
   // 프록시(GAS) 우선 — API 키를 서버에 보관. 미설정 시 직접 호출.
   const useProxy = !!CONFIG.GAS_BASE_URL;
   const url = useProxy ? CONFIG.GAS_BASE_URL : 'https://api.anthropic.com/v1/messages';
-  const payload = JSON.stringify(useProxy ? {type:'ai_proxy', payload:body} : body);
+  const payload = JSON.stringify(useProxy ? {type:'ai_proxy', payload:body, token:_tok()} : body);
 
   // GAS 콜드스타트로 첫 호출이 실패/타임아웃할 수 있어 1회 재시도.
   let lastErr;
@@ -1059,7 +1063,7 @@ async function sendOne(item){
     const resp = await fetchWithTimeout(CONFIG.GAS_BASE_URL, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(item),
+      body: JSON.stringify(Object.assign({}, item, {token:_tok()})),
       redirect:'follow'
     }, CONFIG.LOG_FETCH_TIMEOUT);
 

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="robots" content="noindex,nofollow">
 <title>주간업무보고 | BAZ CS</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2F5E">
@@ -127,6 +128,15 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 .pv-day b{display:block;background:var(--teal-soft);color:var(--navy);font-size:11.5px;padding:4px 7px;border-bottom:1px solid var(--gray-line)}
 .pv-day pre{margin:0;padding:7px;font-size:11px;white-space:pre-wrap;font-family:inherit;line-height:1.5;min-height:40px}
 .pv-special{white-space:pre-wrap;font-size:12px;border:1px solid var(--gray-line);border-radius:8px;padding:9px;background:#FBFCFE;line-height:1.55}
+/* 관리자(Lv.3) 자동기재 대상 설정 */
+.aw-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.aw-item{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--text);
+  background:var(--gray-bg);border:1.5px solid var(--gray-line);border-radius:9px;padding:7px 11px;cursor:pointer}
+.aw-item input{width:auto;margin:0}
+.aw-item.on{border-color:var(--teal);background:var(--teal-soft);color:var(--navy)}
+.aw-add{display:flex;gap:8px;margin-bottom:10px}
+.aw-add input{flex:1}
+.aw-add button{flex:0 0 auto;width:auto;padding:0 14px}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -158,6 +168,19 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
     </div>
     <button type="button" class="btn-load" id="btnLoad" onclick="loadWeek()">📥 주간 처리 내역 불러오기</button>
     <div class="status" id="loadStatus"></div>
+  </div>
+
+  <!-- ①-A 자동 기재 대상 (Lv.3 관리자 전용) -->
+  <div class="card" id="autoAdminCard" style="display:none">
+    <p class="sec-title">⚙️ 자동 기재 대상 (학습 대상) <span class="mini">Lv.3 관리자 전용 · handover 처리내용 초안 + weekly 비고 태그</span></p>
+    <div id="autoWriterList" class="aw-list"></div>
+    <div class="aw-add">
+      <input id="autoWriterNew" placeholder="작성자 이름 추가" onkeydown="if(event.key==='Enter'){event.preventDefault();addAutoWriter();}">
+      <button type="button" class="btn-load" onclick="addAutoWriter()">＋ 추가</button>
+    </div>
+    <button type="button" class="btn-load" id="btnAutoSave" onclick="saveAutoWriters()">💾 대상 저장</button>
+    <div class="status" id="autoStatus"></div>
+    <div class="hint">체크된 인원만 handover 처리내용 초안 자동입력 + weekly 비고 자동태그 대상이 됩니다. 미체크·미설정 인원은 원본 그대로.</div>
   </div>
 
   <!-- ② 건수 + 처리 내역 표 -->
@@ -213,8 +236,10 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 <script>
 /* ▼▼ handover_gas.gs 배포 URL — handover.html/dashboard.html의 HANDOVER_URL과 동일 ▼▼ */
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+/* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
+function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 /* ▼▼ 라이브 병원정보DB 배포 URL — hospital.html/handover.html과 동일 · 병원별 장비 S/N 출처 ▼▼ */
-var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbyczlPA1LiQtO-425-zJXsL3UGpRvlkijetDn3Oo4mffqYysjmN4VpK7z_j4lZqgN8/exec';
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},2400);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -296,7 +321,7 @@ function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 function loadHospDB(){
   try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospdb')||'null');
     if(c){ HOSPDB_MAP=c; } }catch(e){}
-  fetch(HANDOVER_URL+'?action=hospdb').then(function(r){return r.json();}).then(function(d){
+  fetch(_tk(HANDOVER_URL+'?action=hospdb')).then(function(r){return r.json();}).then(function(d){
     if(!d.success||!d.data) return;
     var map={};
     d.data.forEach(function(h){ var nc=String(h.ncare||'').trim(); if(h.n&&nc) map[nkey(h.n)]=nc; });
@@ -310,19 +335,163 @@ loadHospDB();
    handover 처리 레코드에는 장비 S/N이 기록되지 않으므로 병원정보DB의 S/N을 사용한다.
    S/N이 "BW3007,BX4007"처럼 여러 대면 콤마·슬래시로 구분(장비 2대 대응). */
 var HOSPSN_MAP=null;   // nkey(병원명) → S/N 원문(콤마/슬래시 구분 가능)
+var HOSPMETA_MAP=null; // nkey(병원명) → {client:거래처, lastVisit:최근방문일} · 비고 자동표기용
 function loadHospSN(){
   try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospsn')||'null');
     if(c){ HOSPSN_MAP=c; } }catch(e){}
+  try{ var cm=JSON.parse(localStorage.getItem('baz_weekly_hospmeta')||'null');
+    if(cm){ HOSPMETA_MAP=cm; } }catch(e){}
   fetch(HOSPITAL_DB_URL).then(function(r){return r.json();}).then(function(d){
     if(!d.success||!d.data) return;
-    var map={};
-    d.data.forEach(function(h){ var sn=String(h.sn||'').trim(); if(h.name&&sn) map[nkey(h.name)]=sn; });
-    HOSPSN_MAP=map;
-    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map)); }catch(e){}
-    if(W_ROWS.length && CUR_MON) buildDays();   /* 맵이 늦게 도착하면 요일별 내용 갱신 */
+    var map={}, meta={};
+    d.data.forEach(function(h){
+      if(!h.name) return;
+      var k=nkey(h.name);
+      var sn=String(h.sn||'').trim(); if(sn) map[k]=sn;
+      meta[k]={ client:String(h.client||'').trim(), lastVisit:String(h.lastVisit||'').trim(),
+                asType:String(h.asType||'').trim() };   /* I열 AS유무상 — '유상 판매' 판정용 */
+    });
+    HOSPSN_MAP=map; HOSPMETA_MAP=meta;
+    try{ localStorage.setItem('baz_weekly_hospsn', JSON.stringify(map));
+         localStorage.setItem('baz_weekly_hospmeta', JSON.stringify(meta)); }catch(e){}
+    if(W_ROWS.length && CUR_MON){ rebuildAutoFields(); }  /* 맵 늦게 도착 → 처리내용·비고·요일별 갱신 */
   }).catch(function(){});
 }
 loadHospSN();
+
+/* ── 자동기재 대상 작성자 — Lv.3 관리자가 지정(서버 저장) ──
+   대상 작성자만 처리내용 표준문구·비고 병원속성 태그가 적용된다.
+   (미설정/로드 전이면 전원 미적용 — 안전 기본값) */
+var AUTO_WRITERS=null;   // 대상 작성자 표시명 배열
+function isAutoWriter(name){
+  if(!AUTO_WRITERS || !AUTO_WRITERS.length) return false;
+  var k=nkey(name);
+  return AUTO_WRITERS.some(function(w){ return nkey(w)===k; });
+}
+function loadAutoWriters(){
+  try{ var c=JSON.parse(localStorage.getItem('baz_weekly_autowriters')||'null'); if(Array.isArray(c)) AUTO_WRITERS=c; }catch(e){}
+  fetch(_tk(HANDOVER_URL+'?action=weeklyauto')).then(function(r){return r.json();}).then(function(d){
+    if(!d.success||!Array.isArray(d.writers)) return;
+    AUTO_WRITERS=d.writers.slice();
+    try{ localStorage.setItem('baz_weekly_autowriters', JSON.stringify(AUTO_WRITERS)); }catch(e){}
+    if(W_ROWS.length && CUR_MON) rebuildAutoFields();      /* 설정 늦게 도착 → 재계산 */
+    renderAutoAdmin();   /* 목록 도착 → 패널 항상 재렌더(가시성 무관) · 재접속 시 체크 유지 */
+  }).catch(function(){});
+}
+loadAutoWriters();
+
+/* ── 자동기재 대상 관리자(Lv.3) 패널 ── */
+var autoExtra=[];   // 관리자가 입력창으로 추가한 후보 이름
+function autoCandidates(){
+  var cands=[];
+  var sel=document.getElementById('writer');
+  if(sel) Array.prototype.forEach.call(sel.options,function(o){
+    var t=String(o.textContent||'').trim();
+    if(o.value!=='__c' && t && cands.indexOf(t)<0) cands.push(t);
+  });
+  (AUTO_WRITERS||[]).forEach(function(w){ if(cands.indexOf(w)<0) cands.push(w); });
+  autoExtra.forEach(function(w){ if(cands.indexOf(w)<0) cands.push(w); });
+  return cands;
+}
+function renderAutoAdmin(){
+  var box=document.getElementById('autoWriterList'); if(!box) return;
+  var html=autoCandidates().map(function(w){
+    var on=isAutoWriter(w);
+    return '<label class="aw-item'+(on?' on':'')+'">'
+      +'<input type="checkbox" value="'+esc(w)+'"'+(on?' checked':'')
+      +' onchange="this.parentNode.classList.toggle(\'on\',this.checked)"> '+esc(w)+'</label>';
+  }).join('');
+  box.innerHTML=html || '<span class="empty">작성자 후보 없음 — 아래에서 추가</span>';
+}
+function addAutoWriter(){
+  var el=document.getElementById('autoWriterNew'); var v=String(el.value||'').trim();
+  if(!v) return;
+  if(autoExtra.indexOf(v)<0 && !isAutoWriter(v)) autoExtra.push(v);
+  el.value=''; renderAutoAdmin();
+  var box=document.getElementById('autoWriterList');
+  Array.prototype.forEach.call(box.querySelectorAll('input[type=checkbox]'),function(cb){
+    if(cb.value===v){ cb.checked=true; cb.parentNode.classList.add('on'); }
+  });
+}
+function setAutoStatus(msg,cls){ var el=document.getElementById('autoStatus'); if(el){ el.textContent=msg; el.className='status'+(cls?' '+cls:''); } }
+async function saveAutoWriters(){
+  var token=(window.BazAuth&&BazAuth.token)?BazAuth.token():'';
+  if(!token){ setAutoStatus('로그인 토큰 없음 — 재로그인 필요','err'); return; }
+  var box=document.getElementById('autoWriterList');
+  var writers=[];
+  Array.prototype.forEach.call(box.querySelectorAll('input[type=checkbox]:checked'),function(cb){ writers.push(cb.value); });
+  var btn=document.getElementById('btnAutoSave'); btn.disabled=true; setAutoStatus('저장 중…');
+  try{
+    var res=await fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'weeklyauto_save', token:token, writers:writers}), redirect:'follow'});
+    var d=await res.json();
+    if(d && d.success){
+      AUTO_WRITERS=Array.isArray(d.writers)?d.writers.slice():writers.slice();
+      try{ localStorage.setItem('baz_weekly_autowriters', JSON.stringify(AUTO_WRITERS)); }catch(e){}
+      autoExtra=[];
+      setAutoStatus('✅ 저장됨 — 대상 '+AUTO_WRITERS.length+'명','ok');
+      renderAutoAdmin();
+      if(W_ROWS.length && CUR_MON) rebuildAutoFields();
+    }else{
+      setAutoStatus('❌ '+((d&&d.error)||'저장 실패')+(/토큰|unauth/i.test((d&&d.error)||'')?' (Lv.3 재로그인 필요)':''),'err');
+    }
+  }catch(e){ setAutoStatus('❌ 네트워크 오류 — 재시도','err'); }
+  btn.disabled=false;
+}
+/* Lv.3 이면 관리자 패널 노출 */
+(function initAutoAdmin(){
+  function show(){ var c=document.getElementById('autoAdminCard'); if(c && c.style.display==='none'){ c.style.display=''; } renderAutoAdmin(); }
+  try{
+    var lv=(window.BazAuth&&BazAuth.cachedLevel)?BazAuth.cachedLevel():0;
+    if(lv>=3){ show(); return; }   /* 캐시 레벨로 확정되면 서버 재검증 불필요(인증 왕복 1회 절감) */
+    /* 캐시에 레벨이 없을 때만 서버 확인 — 페이지 가드가 이미 검증 중이므로 중복을 최소화 */
+    if(!lv && window.BazAuth && BazAuth.currentLevel){
+      BazAuth.currentLevel().then(function(l){ if(l>=3) show(); }).catch(function(){});
+    }
+  }catch(e){}
+})();
+
+/* ── 병원 속성 기반 비고(지연 사유) 자동 표기 태그 ──
+   거래처(client, 병원정보DB K열) / AS유무상(asType, I열) / 최근방문일(lastVisit, F열) 기준:
+   · 거래처 '납품 1년 이내' → '워런티 유효'  (hospital.html 판정과 동일)
+   · 거래처 '중고' 포함     → '중고 거래처'
+   · AS유무상 '유상 판매' 포함 → '유상 판매'   (I열 기준)
+   · 최근방문일이 방문일 기준 90일(약 3개월) 이상 경과 → '마지막 방문 YYYY-MM-DD' */
+function hospMemoTags(hosp, visitYmd){
+  var tags=[];
+  var m=HOSPMETA_MAP && HOSPMETA_MAP[nkey(hosp)];
+  if(!m) return tags;
+  var cli=String(m.client||''), as=String(m.asType||'');
+  if(/납품\s*1년\s*이내|워런티\s*유효/.test(cli)) tags.push('워런티 유효');
+  if(/중고/.test(cli)) tags.push('중고 거래처');
+  if(/유상\s*판매/.test(as)) tags.push('유상 판매');            /* I열 AS유무상 기준 */
+  var lv=normD(m.lastVisit), vd=normD(visitYmd);
+  if(lv && vd){
+    var gap=(vd-lv)/86400000;
+    if(gap>=90) tags.push('마지막 방문 '+ymd(lv));   /* 3개월 이상 미방문 → 마지막 방문일 기재 */
+  }
+  return tags;
+}
+/* 데모 태그 + (자동기재 대상일 때) 병원 속성 태그를 합쳐 비고 문자열 구성 */
+function buildMemo(isDemo, hosp, visitYmd, autoOn){
+  var parts=[];
+  if(isDemo) parts.push('데모 장비');
+  if(autoOn) Array.prototype.push.apply(parts, hospMemoTags(hosp, visitYmd));
+  return parts.join(' / ');
+}
+/* 자동기재 대상/맵이 늦게 도착했을 때 W_ROWS의 처리내용·비고 재계산 후 재렌더 */
+function rebuildAutoFields(){
+  var autoOn=isAutoWriter(writerName());
+  W_ROWS.forEach(function(r){
+    var raw=r._raw||{};
+    var content=String(raw.detail||'').trim();
+    var isDemo=/\[데모\s*장비\]/.test(content);
+    if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
+    r.content=content;
+    r.memo=buildMemo(isDemo, r.hosp, r.visit, autoOn);
+  });
+  renderRows(); buildDays();
+}
 function ncareOf(hosp, recNcare){
   var nc=String(recNcare||'').trim();
   if(!nc || nc==='미가입'){
@@ -352,7 +521,7 @@ function loadWeek(){
   fallbackAll(w, monK);
 }
 function fallbackAll(w, monK){
-  fetch(HANDOVER_URL+'?action=all')
+  fetch(_tk(HANDOVER_URL+'?action=all'))
     .then(function(r){return r.json();})
     .then(function(d){
       if(!d.success||!d.data){ throw (d&&d.error)||'로드 실패'; }
@@ -370,6 +539,9 @@ function fallbackAll(w, monK){
     .then(function(){ document.getElementById('btnLoad').disabled=false; });
 }
 
+/* 처리내용 표준 문구는 handover 입력 단계('처리내용템플릿' + 대상 FSE)로 이관됨.
+   weekly는 저장된 처리내용을 그대로 사용한다. */
+
 /* ── 표 데이터 구성 ── */
 function buildFromRows(rows, w, monK){
   CUR_MON=new Date(monK+'T00:00:00');
@@ -382,14 +554,16 @@ function buildFromRows(rows, w, monK){
       return ha<hb?-1:ha>hb?1:0;
     });
 
+  var autoOn=isAutoWriter(w);   /* 이 작성자가 자동기재 대상인지(Lv.3 설정) — 처리내용 표준문구·비고 태그 적용 여부 */
   W_ROWS=inRange.map(function(r){
     var d=normD(r.date);
     var vd=d?ymd(d):'';
     /* 데모장비 이력: handover가 내용 앞에 [데모장비] 태그를 붙여 기록 →
        weekly에서는 포함하되 N-care=미가입 고정, 비고에 '데모 장비' 표기 (태그는 처리내용에서 제거) */
     var content=String(r.detail||'').trim();
-    var isDemo=/^\[데모\s*장비\]/.test(content) || /\[데모\s*장비\]/.test(content);
+    var isDemo=/\[데모\s*장비\]/.test(content);
     if(isDemo) content=content.replace(/\[데모\s*장비\]\s*/g,'').trim();
+    /* 처리내용은 handover 입력 단계에서 1차 자동완성되므로 weekly는 저장값을 그대로 사용(대체 없음) */
     return {
       rcv:   vd,                                    /* 접수일자: 기본=방문일자, 직접 수정 */
       visit: vd,                                    /* 방문일자 = 처리일 (자동) */
@@ -398,7 +572,7 @@ function buildFromRows(rows, w, monK){
       hosp:  r.hosp||'',
       nozzle:(String(r.nozzleReuse||'').trim().toUpperCase()==='O'?'O':'X'),  /* 노즐 재사용: handover(P열) 자동 반영 · 수정 가능 */
       content:content,                              /* 처리내용 = A/S 내용 상세 그대로 */
-      memo:  isDemo?'데모 장비':'',                 /* 비고(지연 사유): 직접입력 · 데모는 '데모 장비' 자동 */
+      memo:  buildMemo(isDemo, r.hosp||'', vd, autoOn),  /* 비고: 데모(전원) + 대상 작성자면 워런티/중고/유상판매/마지막방문 자동 */
       _raw:  r
     };
   });
@@ -544,6 +718,14 @@ function fmtDeviceLines(r, idx, grp){
     L.push(/^-/.test(ln)?ln:'- '+ln);
   });
   L.push('비고 : '+(r.memo && String(r.memo).trim() ? String(r.memo).trim() : 'N/A'));   /* 비고 필수 기재 · 미작성 시 N/A */
+  /* 사용자 숙련도 평가 (handover R·S·T열) — 값이 하나라도 있으면 구조형으로 표기 */
+  if(String(raw.nsFill||'').trim() || String(raw.nsAmt||'').trim() || String(raw.jet||'').trim()){
+    var amt=String(raw.nsAmt||'').trim();
+    L.push('[사용자 숙련도 평가]');
+    L.push('- NS 충진 여부 : '+(String(raw.nsFill||'').trim()||'N/A'));
+    L.push('- NS 충진량 : '+(amt ? amt+' (기준 0.9cc)' : 'N/A'));
+    L.push('- 젯 분사 판단[병원담당자] : '+(String(raw.jet||'').trim()||'N/A'));
+  }
   return L;
 }
 /* 같은 병원(같은 날) 여러 장비를 병원명 1회 + 장비별 상세로 병합 */

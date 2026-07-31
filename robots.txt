@@ -1,0 +1,4 @@
+# BAZ BIOMEDIC CS Field Tools — 사내 업무 도구
+# 공개 호스팅이지만 검색엔진 색인 대상이 아니므로 전체 차단한다.
+User-agent: *
+Disallow: /

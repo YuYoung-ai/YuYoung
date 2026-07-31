@@ -11,6 +11,9 @@
 // ──────────────────────────────────────────────
 function doGet(e) {
   try {
+    /* [보안] 로그인 토큰 필수 — 병원 주소·S/N·담당자·좌표가 담긴 데이터 */
+    if (!isAuthed_(e)) return fail('unauthorized — 로그인이 필요합니다(토큰 없음/만료)');
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("병원정보DB");
     if (!sheet) throw new Error("'병원정보DB' 시트를 찾을 수 없습니다.");
@@ -18,25 +21,37 @@ function doGet(e) {
     var lastRow = sheet.getLastRow();
     if (lastRow < 3) return ok([]);
 
-    // B~M (12개 열), 3행부터  ← 기존 10 → 12로 변경
-    var values = sheet.getRange(3, 2, lastRow - 2, 12).getValues();
+    // B~O (14개 열), 3행부터  ← 12 → 14 (N:위도, O:경도 추가)
+    //   ※ N·O열이 아직 없어도 안전하게 동작한다(빈 값 → 좌표 null → 지오코딩 폴백).
+    var lastCol = sheet.getLastColumn();
+    var width   = Math.max(1, Math.min(14, lastCol - 1));   // B열부터 최대 14개
+    var values  = sheet.getRange(3, 2, lastRow - 2, width).getValues();
+
+    // 숫자 좌표만 통과(빈칸·문자열·범위 밖은 null)
+    function num_(v, min, max) {
+      var n = parseFloat(v);
+      if (isNaN(n) || n < min || n > max) return null;
+      return n;
+    }
 
     var hospitals = values
       .filter(function(r){ return String(r[0]).trim() !== ""; })
       .map(function(r){
         return {
           name:      String(r[0]).trim(),   // B: 병원명
-          sn:        String(r[1]).trim(),   // C: S/N
-          region:    String(r[2]).trim(),   // D: 지역
-          address:   String(r[3]).trim(),   // E: 주소
-          lastVisit: String(r[4]).trim(),   // F: 최근점검일자
-          status:    String(r[5]).trim(),   // G: 점검상태
-          sales:     String(r[6]).trim(),   // H: 영업담당
-          asType:    String(r[7]).trim(),   // I: AS유무상
-          ncare:     String(r[8]).trim(),   // J: N-CARE
-          client:    String(r[9]).trim(),   // K: 거래처
-          hpVer:     String(r[10]).trim(),  // L: HP_Ver  ← 추가
-          uiVer:     String(r[11]).trim()   // M: UI_Ver  ← 추가
+          sn:        String(r[1]||'').trim(),   // C: S/N
+          region:    String(r[2]||'').trim(),   // D: 지역
+          address:   String(r[3]||'').trim(),   // E: 주소
+          lastVisit: String(r[4]||'').trim(),   // F: 최근점검일자
+          status:    String(r[5]||'').trim(),   // G: 점검상태
+          sales:     String(r[6]||'').trim(),   // H: 영업담당
+          asType:    String(r[7]||'').trim(),   // I: AS유무상
+          ncare:     String(r[8]||'').trim(),   // J: N-CARE
+          client:    String(r[9]||'').trim(),   // K: 거래처
+          hpVer:     String(r[10]||'').trim(),  // L: HP_Ver
+          uiVer:     String(r[11]||'').trim(),  // M: UI_Ver
+          lat:       num_(r[12], 33, 39),       // N: 위도 (대한민국 범위)
+          lng:       num_(r[13], 124, 132)      // O: 경도
         };
       });
 
@@ -141,4 +156,95 @@ function filterHospitalDB() {
   } else {
     ui.alert("안내: 일치하는 데이터가 없습니다.");
   }
+}
+/* ── [보안] 로그인 토큰 검증 ─────────────────────────────
+   auth.js와 동일한 인증 서버에 토큰을 확인해 로그인 사용자만 데이터를 받게 한다.
+   인증 서버 왕복이 비싸므로 스크립트 캐시에 5분 보관한다(유효 토큰만 캐시).
+   ※ 클라이언트는 ?token=... 로 전달한다 (auth.js의 BazAuth.withToken 사용) */
+var AUTH_VERIFY_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec';
+
+/* ★★ [토큰 검증 해제] ★★ ────────────────────────────────────────
+   아래 verifyLevel_ 은 인증 서버로 왕복(UrlFetchApp)해 토큰을 확인한다.
+   그 왕복이 한 번이라도 실패하면(스크립트 권한 미승인·인증 서버 오류·쿼터 등)
+   catch 가 0을 돌려주고, 그 순간 "토큰이 정상이어도" 모든 사용자·모든 도구가
+   통째로 차단된다. 잘못된 토큰과 구분이 안 되기 때문에 재로그인해도 풀리지 않는다.
+   실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
+   ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
+var AUTH_ENFORCE = true;              /* 토큰 검증 사용 (문제 시 false 로 끄면 전면 개방) */
+var AUTH_FAILOPEN_LEVEL = 3;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+
+function verifyLevel_(token){
+  if(!AUTH_ENFORCE) return 3;                 /* 검증 끄기 스위치 */
+  if(!AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
+  if(!token) return 0;                        /* 토큰이 아예 없으면 왕복 없이 차단 */
+
+  var key = 'lv_' + Utilities.base64EncodeWebSafe(
+    Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
+  var cache = null;
+  try{
+    cache = CacheService.getScriptCache();
+    var hit = cache.get(key);
+    if(hit) return Number(hit)||0;
+  }catch(_){}
+
+  /* 인증 서버 왕복 — "토큰이 틀렸다"와 "서버에 닿지 못했다"를 반드시 구분한다.
+     둘을 뭉뚱그려 0을 돌려주면, 서버가 잠깐 흔들리거나 스크립트 권한이 빠졌을 때
+     토큰이 멀쩡한 사람까지 전부 차단되고 재로그인으로도 풀리지 않는다(실제 발생). */
+  var lv = 0, reached = false;
+  try{
+    var res = UrlFetchApp.fetch(
+      AUTH_VERIFY_URL + '?action=verify&token=' + encodeURIComponent(String(token)),
+      { method:'get', muteHttpExceptions:true, followRedirects:true });
+    var r = JSON.parse(res.getContentText()||'{}');
+    if(r && typeof r.ok !== 'undefined'){     /* 인증 서버가 제대로 답한 경우만 판정 */
+      reached = true;
+      lv = r.ok ? (Number(r.level)||0) : 0;
+    }
+  }catch(err){
+    Logger.log('[auth] 인증 서버 확인 실패(통과 처리): ' + err);
+  }
+
+  if(!reached) return AUTH_FAILOPEN_LEVEL;    /* 서버에 못 닿음 → 차단하지 않는다 */
+  try{ if(lv > 0 && cache) cache.put(key, String(lv), 300); }catch(_){}
+  return lv;
+}
+
+/** 권한 승인 + 인증 서버 연결 자가진단.
+ *  편집기에서 이 함수를 한 번 실행하면 (1) UrlFetchApp 권한 승인 창이 뜨고
+ *  (2) 인증 서버 왕복이 실제로 되는지 로그로 확인된다. 배포 전에 실행할 것. */
+function authSelfTest(){
+  var url = AUTH_VERIFY_URL;
+  if(!url){ Logger.log('❌ AUTH_VERIFY_URL 이 비어 있습니다'); return '미설정'; }
+  try{
+    var res = UrlFetchApp.fetch(url + '?action=verify&token=SELFTEST_BOGUS',
+      { method:'get', muteHttpExceptions:true, followRedirects:true });
+    var txt = res.getContentText()||'';
+    var r = JSON.parse(txt);
+    if(r && typeof r.ok !== 'undefined'){
+      Logger.log('✅ 인증 서버 연결 정상 (응답: ' + txt + ')');
+      Logger.log('   → AUTH_ENFORCE = true 로 두고 배포해도 됩니다.');
+      return 'OK';
+    }
+    Logger.log('⚠️ 응답 형식이 다릅니다: ' + txt.slice(0,200));
+    return '형식오류';
+  }catch(e){
+    var m = String((e && e.message) || e);
+    Logger.log('❌ 인증 서버에 닿지 못했습니다: ' + m);
+    if(/permission|authoriz|권한|승인|scope|external_request/i.test(m)){
+      Logger.log('   원인: 이 프로젝트의 "외부 요청(UrlFetchApp)" 권한이 아직 승인되지 않았습니다.');
+      Logger.log('   조치: 이 함수를 다시 실행 → 권한 검토 → 계정 선택 → 고급 →');
+      Logger.log('         "(안전하지 않음) ...(으)로 이동" → 허용  까지 끝까지 진행하세요.');
+      Logger.log('         (중간에 창을 닫으면 승인이 저장되지 않아 같은 오류가 반복됩니다)');
+    }else{
+      Logger.log('   원인: 권한 문제가 아닙니다. 네트워크·인증 서버 URL·배포 설정 쪽입니다.');
+      Logger.log('   조치: 위 오류 메시지 한 줄을 그대로 알려주세요.');
+    }
+    return '실패';
+  }
+}
+
+/* 로그인(Lv.1 이상) 여부 */
+function isAuthed_(e){
+  var p = (e && e.parameter) || {};
+  return verifyLevel_(p.token || '') >= 1;
 }
