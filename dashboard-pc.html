@@ -1882,10 +1882,12 @@ function buildMonthData(m0, scope, manualDetail, trendMode){
       bars.push({label:i+'주차', n:cur.filter(function(r){return wkNo(new Date(r._y,r._m-1,r._d))===i;}).length, cur:false});
     }
   }else{
-    for(var k=6;k>=0;k--){
-      var mm=addMonth(m0,-k);
-      bars.push({label:monthNum(mm)+'월',
-        n:gubunRows(RAW.filter(function(r){return inMonth(r,mm);}),scope).length, cur:k===0});
+    /* 월별 추이 — 해당 연도 1월부터 보고(선택) 월까지, 마지막(선택) 월 주황 강조 */
+    var em=monthNum(m0);
+    for(var mo=1;mo<=em;mo++){
+      var mm=new Date(m0.getFullYear(), mo-1, 1);
+      bars.push({label:mo+'월',
+        n:gubunRows(RAW.filter(function(r){return inMonth(r,mm);}),scope).length, cur:mo===em});
     }
   }
   /* 고장 상세: {nozzle:설명, etc:[항목…]} — 수기(manualDetail) 우선, 없으면 자동 초안 */
