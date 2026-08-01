@@ -1855,9 +1855,13 @@ var LM=(function(){
     voc:{ x:8.67, w:4.35, titleX:8.87, headX:9.07, headW:1.6, hlX:8.87, hlW:1.85,
           nameX:8.97, nameW:1.7, nameSize:9.5, nameAlign:'center',
           deltaX:10.82, deltaW:1.2, cntX:12.07, cntW:0.75, lineW:3.95, gapMax:0.4, lastRowY:3.36, RY:R1 },
-    part:{ x:9.5, w:3.55, titleX:9.7, headX:9.9, headW:1.6, hlX:9.7, hlW:1.55,
-           nameX:9.8, nameW:1.5, nameSize:9, nameAlign:'left',
-           deltaX:11.3, deltaW:1.06, cntX:12.15, cntW:0.7, lineW:3.15, gapMax:0.5, lastRowY:6.28, RY:R2 }
+    /* 교체품 현황 — VOC 유형과 동일 열(x·폭)로 오와열 정렬, 하단(row2) */
+    part:{ x:8.67, w:4.35, titleX:8.87, headX:9.07, headW:1.6, hlX:8.87, hlW:1.85,
+           nameX:8.97, nameW:1.85, nameSize:9, nameAlign:'left',
+           deltaX:10.82, deltaW:1.2, cntX:12.07, cntW:0.75, lineW:3.95, gapMax:0.5, lastRowY:6.28, RY:R2 },
+    /* 고객센터 Call — 우측 끝을 월별 추이 카드 우측(x=8.47)에 맞춰 축소 */
+    call:{ x:4.95, w:3.52, titleX:5.03, titleY:4.53,
+           total:{x:5.12,w:1.3}, inb:{x:6.52,w:0.86}, outb:{x:7.48,w:0.86} }
   };
 })();
 /* 페이지별 표 카드 레이아웃 (as=VOC/Call → LM, insp=N-care → 표준 L) */
@@ -2101,7 +2105,7 @@ function mvSlide(ctx, sp){
 
   if(sp.bottom==='as'){
     (function(){   /* 고객센터 Call 현황 (하단 중앙) — 교체품은 상단 표 카드(우하단)에서 이미 렌더 */
-      var T=L.call, tot=ctx.callIn+ctx.callOut;
+      var T=LM.call, tot=ctx.callIn+ctx.callOut;
       card(T.x,L.row2.y,T.w,L.row2.h); cardTitle('고객센터 Call 현황',T.titleX,T.titleY);
       mvStatBox(T.total.x,T.total.w,'총 Call',tot,{accent:C.callBd,numColor:C.green});
       mvStatBox(T.inb.x,T.inb.w,'INBOUND',ctx.callIn,{numColor:C.blue});
@@ -2269,7 +2273,7 @@ async function makeMonthlyPPT(){
       v.tx('BAZ BIOMEDIC',{x:L.header.padX,y:L.foot.textY,w:L.foot.textW,h:L.foot.textH,fontSize:FT.footer,color:C.white});
     }
     function drawCallStatus(v){
-      var T=L.call;
+      var T=LM.call;
       v.metricCard(T, '고객센터 Call 현황', [
         {x:T.total.x, w:T.total.w, label:'총 Call',  val:callTot, o:{accent:C.callBd,numColor:C.green}},
         {x:T.inb.x,   w:T.inb.w,   label:'INBOUND',  val:callIn,  o:{numColor:C.blue}},
