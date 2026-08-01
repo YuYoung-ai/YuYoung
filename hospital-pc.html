@@ -624,6 +624,14 @@
   #bazToast.show{opacity:1;transform:translateX(-50%) translateY(0);}
   body.dark #bazToast{background:#2A3650;border:1px solid var(--gray-line);}
 
+  /* 서버 연동 끊김(토큰 만료) 배너 — 조회가 연속 2회 unauthorized일 때만 뜬다.
+     토스트(400)보다 위, 화면 최상단 고정. 작업을 막지 않도록 모달이 아니라 배너다. */
+  #bazAuthBanner{position:fixed;top:0;left:0;right:0;z-index:420;display:flex;align-items:center;
+    justify-content:center;gap:12px;padding:9px 14px;background:#C0392B;color:#fff;
+    font-size:12.5px;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.28);}
+  #bazAuthBanner button{background:#fff;color:#C0392B;border:0;border-radius:14px;
+    padding:5px 14px;font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;}
+
   /* ======================= 다크 모드 ======================= */
   /* elevation은 그림자 대신 표면 명도로: bg < surface < surface-2(헤더 인셋) */
   body.dark{
@@ -784,6 +792,69 @@ const TODAY = new Date();
 const HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
+
+/* ===== 공통 조회 계층 (bazGet) =====
+   예전에는 조회마다 fetch(...).then(r=>r.json()).catch(()=>{}) 를 직접 썼다. 그 결과
+   ① 응답이 오지 않아도 영원히 매달려 있고(타임아웃 없음)
+   ② GAS가 데이터 대신 로그인/권한 HTML을 주면 r.json()이 던지고 catch가 삼키고
+   ③ 서버가 {success:false, error:'unauthorized …'}(토큰 만료)를 줘도 그냥 무시했다.
+   → 화면은 캐시된 옛 데이터로 멀쩡해 보이는데 연동만 조용히 죽어, 재접속해야 풀렸다.
+   dashboard-pc.html의 fetchTimeout/diagnoseFail과 같은 계층을 여기에도 둔다.
+   실패는 {kind:'timeout'|'html'|'parse'|'network'|'auth'|'server'} 로 분류해 던진다. */
+var BAZ_GET_TIMEOUT=20000;
+function bazGet(url, ms){
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var t=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(_){} }, ms||BAZ_GET_TIMEOUT):null;
+  return fetch(_tk(url), ctl?{method:'GET', signal:ctl.signal}:{method:'GET'})
+    .then(function(r){
+      if(t){ clearTimeout(t); t=null; }
+      return r.text().then(function(txt){
+        if(/^\s*</.test(txt)) throw {kind:'html'};        /* 데이터 대신 로그인/권한 페이지 */
+        var d; try{ d=JSON.parse(txt); }catch(e){ throw {kind:'parse'}; }
+        /* 서버가 명시적으로 인증 거부 → 조용히 무시하지 않고 위로 올린다 */
+        if(d && d.success===false && /unauthorized|토큰|로그인/i.test(String(d.error||''))) throw {kind:'auth', error:d.error};
+        bazAuthOk();                                      /* 정상 응답 1회 → 만료 배너 해제 */
+        return d;
+      });
+    })
+    .catch(function(e){
+      if(t){ clearTimeout(t); t=null; }
+      if(e && e.kind){ if(e.kind==='auth'||e.kind==='html') bazAuthFail(); throw e; }
+      if(e && e.name==='AbortError') throw {kind:'timeout'};
+      throw {kind:'network'};
+    });
+}
+
+/* ===== 인증 만료 배너 =====
+   토큰 검사는 auth.js의 guardPage_가 페이지 로드 시 1회만 한다. 세션 도중 토큰이
+   만료·폐기되면 모든 조회가 unauthorized로 떨어지는데 예전에는 아무 표시가 없었다.
+   단, 한 번의 실패로 배너를 띄우면 오탐이 난다(커밋 06f43ef에서 실제로 되돌린 이력).
+   → 연속 2회 실패에서만 띄우고, 정상 응답이 한 번 오면 즉시 해제한다. */
+var bazAuthFailN=0, bazAuthBannerOn=false;
+function bazAuthFail(){
+  bazAuthFailN++;
+  if(bazAuthFailN>=2) bazAuthBanner(true);
+}
+function bazAuthOk(){
+  bazAuthFailN=0;
+  if(bazAuthBannerOn) bazAuthBanner(false);
+}
+function bazAuthBanner(show){
+  bazAuthBannerOn=!!show;
+  var el=document.getElementById('bazAuthBanner');
+  if(!show){ if(el) el.remove(); return; }
+  if(el) return;
+  el=document.createElement('div');
+  el.id='bazAuthBanner';
+  el.innerHTML='<span>⚠️ 서버 연동이 끊겼습니다 — 로그인이 만료되었을 수 있습니다.</span>'+
+               '<button type="button" id="bazAuthBannerGo">다시 로그인</button>';
+  document.body.appendChild(el);
+  var go=document.getElementById('bazAuthBannerGo');
+  if(go) go.addEventListener('click', function(){ location.href='index.html'; });
+}
+/* 배너가 떠 있는 동안(=서버가 계속 거부) 7초 폴링을 유지할 이유가 없다 — 폴링 간격 계산에서 참조 */
+function bazAuthBlocked(){ return bazAuthBannerOn; }
+
 /* [보안] 처리 이력도 정적 파일에 두지 않는다 — 인증된 이슈이력 API에서 런타임 로드(applyIssueHist) */
 const HISTORY = {};
 
@@ -1287,13 +1358,28 @@ function render(){
 }
 
 // ===== 카카오맵 지도 =====
+// [안정성] 예전에는 "로딩 완료" 가드(kakaoLoaded)만 있고 "로딩 중" 가드가 없었다.
+// 부팅 직후 pcShowMap과 geocodeMissing이 거의 동시에 호출하므로 SDK <script>가 2개 이상 붙고,
+// SDK가 두 번 평가되면 kakao.maps 네임스페이스가 재초기화되어 이미 만들어진 지도·마커가
+// 옛 네임스페이스를 참조한 채 남는다(타일 회색화·마커 실종).
+// → 로딩 중이면 콜백 큐에 합류시키고 <script>는 단 하나만 붙인다.
+var kakaoWaiters=null;
 function loadKakao(cb){
   if(kakaoLoaded){ cb(); return; }
   if(!KAKAO_JS_KEY || KAKAO_JS_KEY.indexOf('__')===0){ cb(false); return; }
+  if(kakaoWaiters){ kakaoWaiters.push(cb); return; }     // ★ in-flight 합류 — 중복 로드 차단
+  kakaoWaiters=[cb];
+  function drain(arg){
+    var q=kakaoWaiters||[]; kakaoWaiters=null;
+    q.forEach(function(fn){ try{ fn(arg); }catch(e){ console.warn('[지도] SDK 콜백 오류:',e); } });
+  }
   const s=document.createElement('script');
   s.src='https://dapi.kakao.com/v2/maps/sdk.js?appkey='+KAKAO_JS_KEY+'&autoload=false&libraries=services,clusterer';
-  s.onload=()=>{ kakao.maps.load(()=>{ kakaoLoaded=true; cb(); }); };
-  s.onerror=()=>cb(false);
+  s.onload=()=>{
+    try{ kakao.maps.load(()=>{ kakaoLoaded=true; drain(); }); }
+    catch(e){ console.warn('[지도] SDK 초기화 실패:',e); drain(false); }
+  };
+  s.onerror=()=>{ try{ s.remove(); }catch(_){}  drain(false); };   // 실패한 태그는 치워 다음 시도가 새로 붙게
   document.head.appendChild(s);
 }
 
@@ -2155,8 +2241,7 @@ applyLang();
     }catch(e){ console.warn('[이슈이력] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(_tk(ISSUE_HIST_URL),{method:'GET'})
-      .then(function(r){return r.json();})
+    bazGet(ISSUE_HIST_URL)
       .then(function(d){
         if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return; }
         try{
@@ -2254,8 +2339,7 @@ applyLang();
     }catch(e){ console.warn('[병원정보DB] 캐시 읽기 오류(무시):',e); }
 
     // 2) 시트에서 최신 fetch
-    fetch(_tk(HOSPITAL_DB_URL),{method:'GET'})
-      .then(function(r){return r.json();})
+    bazGet(HOSPITAL_DB_URL)
       .then(function(d){
         if(!d.success||!d.data||!d.data.length) return;
         try{
@@ -2301,8 +2385,7 @@ applyLang();
       }
     }catch(e){ console.warn('[방문로그] 캐시 읽기 오류(무시):',e); }
 
-    fetch(_tk(VISIT_LOG_URL),{method:'GET'})
-      .then(function(r){return r.json();})
+    bazGet(VISIT_LOG_URL)
       .then(function(d){
         if(!d.ok||!d.visits) return;
         try{
@@ -2324,6 +2407,7 @@ applyLang();
       localStorage.removeItem(VLOG_CACHE_TS);
       localStorage.removeItem('baz_pc_recent_ts');
     }catch(e){}
+    try{ pcRecentTs=0; }catch(e){}   // 신선도 판정은 메모리가 진실 — 강제 새로고침에 함께 초기화
     try{ syncHospDB(); }catch(e){}
     try{ syncIssueHist(); }catch(e){}
     try{ syncVisitLog(); }catch(e){}
@@ -2525,7 +2609,11 @@ function pcAutoAdvanceFromHandover(){
 }
 
 // ── 서버 동기화 (HANDOVER_URL, 사용자 간 연동) ──
-var pcProgHold=0;    // 로컬 변경 직후 폴링이 되돌리지 않도록 보호(GAS 콜드스타트 대비 넉넉히)
+// [안정성] hold는 4초. 예전 8초는 조작 직후 폴링 간격(7초)보다 길어, 쓰기가 계속 실패하는 동안
+// (pcAutoAdvanceFromHandover가 매 폴링마다 재전송) hold가 항상 미래에 있게 되어
+// pcProgPull이 한 번도 실행되지 않는 자기지속 교착이 생겼다. 폴링 간격보다 짧게 둔다.
+var pcProgHold=0, pcProgHoldAt=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보호 + 설정 시각(안전밸브용)
+var PC_HOLD_MS=4000, PC_HOLD_MAX=30000;
 var pcProgRev=0;     // 서버 리비전 — 폴링에 실어 보내면 변경 없을 때 큐 전체를 받지 않는다
 var pcLastAct=0;     // 마지막 조작 시각 — 직후에는 폴링을 촘촘히(공동 편집 반응 개선)
 var pcOpBatch=null;  // 배치 수집 중이면 op 배열 — 연쇄 변경을 POST 1회로 묶는다
@@ -2600,7 +2688,7 @@ function pcProgAccept(d){
 }
 function pcProgSend(payload){
   if(!HANDOVER_URL) return;
-  pcProgHold=Date.now()+8000;
+  pcProgHold=Date.now()+PC_HOLD_MS; pcProgHoldAt=Date.now();
   pcLastAct=Date.now();
   /* [보안] 서버 쓰기 인증 토큰 동봉 */
   try{ if(window.BazAuth&&BazAuth.token) payload=Object.assign({},payload,{token:BazAuth.token()}); }catch(e){}
@@ -2609,52 +2697,87 @@ function pcProgSend(payload){
      기다리지 않고 왕복 1회로 서버 상태가 확정된다. 응답을 못 읽으면(no-cors 폴백·네트워크
      오류) 로컬이 서버와 어긋났을 수 있으므로 rev를 지워 다음 폴링이 전체를 다시 받게 한다. */
   function fallback(){ pcProgRev=0; try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} }
+  /* [중요] 재전송(fallback)은 "요청이 서버에 닿지 못했을 때"만 해야 한다.
+     예전에는 .then(...).then(...).catch(fallback) 구조라, 서버 쓰기가 이미 성공했는데
+     응답 처리(pcProgAccept) 안에서 예외가 나도 catch에 걸려 같은 op를 한 번 더 POST했다.
+     q_done 같은 op가 두 번 적용되면 큐가 한 칸 더 진행돼 "유령 진행중/건너뜀"이 생긴다.
+     → 전송 실패는 fetch/파싱 단계에서만 판정하고, 응답 처리 예외는 여기서 삼킨다. */
   try{
     fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if(!d || d.success!==true){ pcProgRev=0; return; }
-        var hs=[]; if(payload.hosp) hs.push(payload.hosp);
-        (payload.ops||[]).forEach(function(o){ if(o&&o.hosp) hs.push(o.hosp); });
-        hs.forEach(pcFreshDel);          // 서버 반영 확인 → 보호 표식 해제
-        pcProgHold=0;                    // 서버가 확정 → 폴링을 더 막아둘 이유가 없다
-        pcProgAccept(d);
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        if(/^\s*</.test(txt)) throw {kind:'html'};     // 데이터 대신 로그인/권한 HTML
+        return JSON.parse(txt);
       })
-      .catch(fallback);
+      .then(function(d){
+        /* 여기부터는 "서버에 닿았다"가 확정 — 무슨 일이 나도 재전송하지 않는다 */
+        try{
+          if(!d || d.success!==true){
+            pcProgRev=0;
+            if(d && /unauthorized|토큰|로그인/i.test(String(d.error||''))) bazAuthFail();
+            return;
+          }
+          bazAuthOk();
+          var hs=[]; if(payload.hosp) hs.push(payload.hosp);
+          (payload.ops||[]).forEach(function(o){ if(o&&o.hosp) hs.push(o.hosp); });
+          hs.forEach(pcFreshDel);          // 서버 반영 확인 → 보호 표식 해제
+          pcProgHold=0;                    // 서버가 확정 → 폴링을 더 막아둘 이유가 없다
+          pcProgAccept(d);
+        }catch(e){ pcProgRev=0; console.warn('[동기화] 쓰기 응답 처리 오류(재전송 안 함):',e); }
+      })
+      .catch(function(e){
+        if(e && e.kind==='html'){ pcProgRev=0; bazAuthFail(); return; }   // 인증 문제 → 재전송해도 소용없다
+        fallback();
+      });
   }catch(e){ fallback(); }
 }
 function pcProgPull(){
-  if(!HANDOVER_URL || Date.now()<pcProgHold) return;
+  if(!HANDOVER_URL) return;
+  /* [안전밸브] hold가 비정상적으로 오래 유지되면(쓰기 연속 실패 등) 강제로 푼다.
+     이게 없으면 실패하는 쓰기가 반복될 때 읽기가 영원히 막혀 다른 사용자의 변경이 안 들어온다. */
+  if(pcProgHold && Date.now()-pcProgHoldAt > PC_HOLD_MAX){ pcProgHold=0; }
+  if(Date.now()<pcProgHold) return;
   /* rev 동봉 → 변경이 없으면 서버가 {nochange:true}만 반환(큐 직렬화·전송·파싱 생략) */
   var url=HANDOVER_URL+'?action=progress'+(pcProgRev?('&rev='+pcProgRev):'');
-  fetch(_tk(url),{method:'GET'})
-    .then(function(r){ return r.json(); })
+  bazGet(url)
     .then(function(d){
+      pcPollFailN=0;                                    // 성공 → 백오프 해제
       if(!d || d.success!==true) return;
       if(d.nochange===true){ if(typeof d.rev==='number') pcProgRev=d.rev; return; }
       pcProgAccept(d);
     })
-    .catch(function(){});
+    .catch(function(e){ pcPollFailN++; console.warn('[동기화] progress 실패:', (e&&e.kind)||e); });
 }
 // 초기 동기화 + 적응형 폴링 + 포커스/복귀 시 즉시 갱신(+ 자정 넘김 자동 초기화)
 // 조작 직후 90초는 7초 간격 — 같은 일정을 함께 보는 다른 사용자에게 빠르게 전파된다.
 // 그 외에는 25초, 숨은 탭은 정지. rev 덕분에 촘촘한 폴링도 대부분 빈 응답이라 비용이 낮다.
-var pcPollTimer=null;
-function pcPollDelay(){ return (Date.now()-pcLastAct < 90000) ? 7000 : 25000; }
+// [안정성] 연속 실패 시 백오프(7/25 → 60초)로 죽은 서버를 7초마다 두드리지 않는다.
+var pcPollTimer=null, pcPollFailN=0;
+function pcPollDelay(){
+  if(bazAuthBlocked() || pcPollFailN>=3) return 60000;               // 인증 끊김·연속 실패 → 느리게
+  return (Date.now()-pcLastAct < 90000) ? 7000 : 25000;
+}
 function pcPollTick(){
-  if(document.visibilityState!=='hidden'){
-    try{ pcDailyResetCheck(); }catch(e){}
-    pcProgPull();
-    try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
+  try{
+    if(document.visibilityState!=='hidden'){
+      try{ pcDailyResetCheck(); }catch(e){}
+      try{ pcProgPull(); }catch(e){ console.warn('[동기화] pcProgPull 예외:',e); }
+      try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
+    }
+  } finally {
+    // ★ 무슨 일이 있어도 다음 틱을 반드시 예약한다.
+    //   예전에는 pcProgPull()이 감싸지지 않아, 여기서 동기 예외가 한 번만 나면
+    //   pcPollSchedule()에 도달하지 못해 폴링 체인이 영구히 끊겼다(= 연동 먹통, 새로고침해야 복구).
+    pcPollSchedule();
   }
-  pcPollSchedule();
 }
 function pcPollSchedule(){ try{ clearTimeout(pcPollTimer); }catch(e){} pcPollTimer=setTimeout(pcPollTick, pcPollDelay()); }
 function pcProgWake(){
-  try{ pcDailyResetCheck(); }catch(e){}
-  pcProgPull();
-  try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
-  pcPollSchedule();
+  try{
+    try{ pcDailyResetCheck(); }catch(e){}
+    try{ pcProgPull(); }catch(e){ console.warn('[동기화] pcProgPull 예외:',e); }
+    try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
+  } finally { pcPollSchedule(); }
 }
 try{
   setTimeout(pcProgPull, 250);   // GAS 콜드스타트 예열 겸 첫 동기화를 최대한 앞당긴다
@@ -2877,12 +3000,19 @@ var pcBaseKey='', pcOverlayKey='', pcNearKey='';
 var pcMapBounds=null, pcMapBoundsAny=false;   // 마지막으로 계산한 전체 범위 — '전체 보기'가 재계산 없이 사용
 // 목록 동일성 판정용 해시. 예전 키는 첫·마지막 이름만 봐서, 길이와 양끝이 같은 필터 변경을
 // 놓치고 지도를 갱신하지 않았다. 전체 이름을 훑되 문자열 연결 없이 32bit로 접는다.
+// [수정] 좌표는 "있음/없음"이 아니라 실제 값을 섞는다. 병원정보DB 동기화(applyDB)가 기존 병원의
+// lat/lng를 덮어써도 예전 해시는 그대로여서 pcDrawBase가 early-return했고, 마커가 옛 좌표에
+// 그대로 남아 데이터와 어긋났다. 1e4 스케일 ≈ 10m 해상도면 실사용에 충분하다.
 function pcListHash(list){
   var h=2166136261, n=list.length;
   for(var i=0;i<n;i++){
-    var s=list[i].n||'', geo=(list[i].lat!=null)?1:0;
+    var o=list[i], s=o.n||'';
     for(var j=0;j<s.length;j++){ h^=s.charCodeAt(j); h=(h*16777619)>>>0; }
-    h^=geo; h=(h*16777619)>>>0;
+    if(o.lat==null||o.lng==null){ h^=1; h=(h*16777619)>>>0; }
+    else {
+      h^=(Math.round(o.lat*1e4)|0); h=(h*16777619)>>>0;
+      h^=(Math.round(o.lng*1e4)|0); h=(h*16777619)>>>0;
+    }
   }
   return n+':'+h;
 }
@@ -3089,16 +3219,25 @@ function pcMapROBind(){
 }
 // [성능] 5km 주변 병원 탐색용 격자 인덱스.
 // 예전에는 HOSPITALS(400+) × 목록 전체를 이중 루프로 돌며 distKm을 호출했다.
-// 0.05°(≈5.5km) 셀에 한 번만 담아두고, 검사할 때는 인접 9칸만 본다.
-var PC_GRID_DEG=0.05, pcGrid=null, pcGridN=0;
+// 0.05° 셀(위도 ≈5.6km · 경도 ≈4.4km@37.5°N)에 한 번만 담아두고, 인접 셀만 검사한다.
+var PC_GRID_DEG=0.05, pcGrid=null, pcGridSig='';
 function pcGridKey(lat,lng){ return Math.floor(lat/PC_GRID_DEG)+','+Math.floor(lng/PC_GRID_DEG); }
+// [수정] 무효화 기준이 "좌표를 가진 병원 개수"뿐이었다. 개수는 그대로인데 좌표만 바뀌면
+// (병원정보DB 동기화가 lat/lng를 덮어쓰는 경우) 재구축되지 않아 병원이 틀린 셀에 남았다.
+// → 개수 + 좌표 합계 체크섬으로 판정한다.
+function pcGridSignature(){
+  var n=0, s=0;
+  for(var i=0;i<HOSPITALS.length;i++){
+    var o=HOSPITALS[i]; if(o.lat==null||o.lng==null) continue;
+    n++; s+=(o.lat*1e4|0)+(o.lng*1e4|0)*3;
+  }
+  return n+':'+s;
+}
 function pcGridBuild(){
-  // 지오코딩으로 좌표가 채워지면 개수가 늘어난다 → 개수가 바뀌었을 때만 재구축
-  var withLoc=0, i;
-  for(i=0;i<HOSPITALS.length;i++){ if(HOSPITALS[i].lat!=null&&HOSPITALS[i].lng!=null) withLoc++; }
-  if(pcGrid && pcGridN===withLoc) return pcGrid;
-  pcGrid={}; pcGridN=withLoc;
-  for(i=0;i<HOSPITALS.length;i++){
+  var sig=pcGridSignature();
+  if(pcGrid && pcGridSig===sig) return pcGrid;
+  pcGrid={}; pcGridSig=sig;
+  for(var i=0;i<HOSPITALS.length;i++){
     var o=HOSPITALS[i]; if(o.lat==null||o.lng==null) continue;
     var k=pcGridKey(o.lat,o.lng);
     (pcGrid[k]||(pcGrid[k]=[])).push(o);
@@ -3109,12 +3248,20 @@ function pcGridBuild(){
 function pcNearbyOf(list, km){
   var g=pcGridBuild(), seen={}, out=[], inList={};
   list.forEach(function(h){ inList[h.n]=1; });
-  var span=Math.ceil(km/111/PC_GRID_DEG);   // 위도 1° ≈ 111km
+  // [수정] 예전 span은 위도만 봤다: ceil(5/111/0.05)=1 → 3×3 셀.
+  // 그런데 경도 0.05°는 위도 37.5°에서 111.32·cos(37.5°) ≈ 4.42km밖에 안 된다.
+  // 5km ÷ 4.42km = 1.13셀이라, 기준 병원이 셀 동/서 끝에 있으면 5km 이내 병원이
+  // +2번째 셀에 들어가 3×3 스캔에서 빠졌다(주변 5km 개수가 검색마다 흔들림).
+  // → 위도·경도 span을 따로 구하고, 경도는 cos φ 압축을 병원별로 반영한다.
+  //   셀 안 위치 f∈[0,1)에서 최대 오프셋은 floor(f+d) ≤ ceil(d)+1 이므로 +1이 안전 상한.
+  var latSpan=Math.ceil(km/111.32/PC_GRID_DEG)+1;
   list.forEach(function(b){
     if(b.lat==null||b.lng==null) return;
+    var kmPerDegLng=Math.max(1, 111.32*Math.cos(b.lat*Math.PI/180));
+    var lngSpan=Math.ceil(km/kmPerDegLng/PC_GRID_DEG)+1;
     var ci=Math.floor(b.lat/PC_GRID_DEG), cj=Math.floor(b.lng/PC_GRID_DEG);
-    for(var di=-span; di<=span; di++){
-      for(var dj=-span; dj<=span; dj++){
+    for(var di=-latSpan; di<=latSpan; di++){
+      for(var dj=-lngSpan; dj<=lngSpan; dj++){
         var cell=g[(ci+di)+','+(cj+dj)]; if(!cell) continue;
         for(var i=0;i<cell.length;i++){
           var o=cell[i];
@@ -3326,11 +3473,20 @@ function pcRenderLeft(list){
 }
 
 // ===== 최근 완료(현장 처리) — handover 시트 기록 반영 =====
+// handover 시트의 병원명 → HOSPITALS 항목.
+// [수정] 예전 2차 폴백은 양방향 부분 문자열 매칭(n.indexOf(k)>=0 || k.indexOf(n)>=0)이라
+// "○○병원"이 "○○병원 별관"에 붙는 식으로 엉뚱한 병원을 집었고, 그 좌표에 오늘완료(초록)·
+// 진행중(파랑) 마커가 찍혀 지도 표시가 어긋났다. 접두 일치까지만 허용하고, 후보가 둘 이상이면
+// 판단하지 않는다(틀린 곳에 찍느니 안 찍는 편이 낫다).
 function pcHospByName(name){
   var k=normalize(name); if(!k) return null;
   for(var i=0;i<HOSPITALS.length;i++){ if(normalize(HOSPITALS[i].n)===k) return HOSPITALS[i]; }
-  for(var j=0;j<HOSPITALS.length;j++){ var n=normalize(HOSPITALS[j].n); if(n && (n.indexOf(k)>=0||k.indexOf(n)>=0)) return HOSPITALS[j]; }
-  return null;
+  var hit=null, cnt=0;
+  for(var j=0;j<HOSPITALS.length && cnt<2;j++){
+    var n=normalize(HOSPITALS[j].n); if(!n) continue;
+    if(n.indexOf(k)===0 || k.indexOf(n)===0){ hit=HOSPITALS[j]; cnt++; }
+  }
+  return cnt===1 ? hit : null;   // 모호하면 null
 }
 function pcMergeRecent(rows){
   var seen={}, out=[];
@@ -3375,28 +3531,52 @@ function pcSkillBadge(name){
   var detail=['NS충진 '+(s.nsFill||'-'), '충진량 '+(s.nsAmt||'-'), '젯 '+(s.jet||'-')].join(' · ');
   return '<span class="h-skill'+(need?' warn':' ok')+'" title="사용자 숙련도 평가 · '+escapeHtml(detail)+(s.dk?' · '+s.dk:'')+'">'+(need?'🎓':'✅')+' '+label+'</span>';
 }
+/* [부하] action=all은 handover 시트 전체를 받는 무거운 요청이라 5분 캐시가 필수다.
+   그런데 예전에는 신선도 판정을 localStorage의 baz_pc_recent_ts에만 의존해서,
+   localStorage 쓰기가 실패하면(용량 초과 등) ts가 영영 안 써지고 폴링마다(최소 7초)
+   시트 전체를 다시 받았다. → 메모리 변수를 진실로 삼고 localStorage는 부가 캐시로만 쓴다. */
+var PC_RECENT_TTL=5*60*1000;
+var pcRecentTs=(function(){ try{ return parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10)||0; }catch(e){ return 0; } })();
+var pcRecentInFlight=false, pcRecentBooted=false;
 function pcLoadRecent(cb){
   var local=pcLocalRecent();
-  var cached=null, ts=parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10);
+  var cached=null;
   try{ cached=JSON.parse(localStorage.getItem('baz_pc_recent_cache')||'null'); }catch(e){}
+  if(!pcRecentBooted){
+    pcRecentBooted=true;
+    // 저장된 ts는 캐시 본문이 실제로 있을 때만 신뢰한다(본문만 날아간 경우 첫 조회를 건너뛰지 않게)
+    if(!(cached && cached.length)) pcRecentTs=0;
+  }
   if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
   else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
-  if(cached && (Date.now()-ts)<5*60*1000) return;      // 5분 캐시 신선
+  // 신선도 기준은 "마지막으로 성공한 조회 시각" — 응답이 0건이어도 다시 받지 않는다.
+  // (예전처럼 결과 개수로 판단하면 빈 응답이 계속 재요청을 부른다)
+  if(pcRecentTs && (Date.now()-pcRecentTs)<PC_RECENT_TTL) return;
   if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return; }
+  if(pcRecentInFlight) return;                                            // 중복 요청 방지
+  pcRecentInFlight=true;
   if(pcRecentState!=='done') pcRecentState='loading';
-  fetch(_tk(HANDOVER_URL+'?action=all'),{method:'GET'})
-    .then(function(r){ return r.json(); })
+  bazGet(HANDOVER_URL+'?action=all')
     .then(function(d){
+      pcRecentInFlight=false;
       var data=(d&&d.data)||[];
       pcRecent=pcMergeRecent(pcLocalRecent().concat(data));
       pcCollectFse(data, true);   // 전체 handover 응답 기준으로 CS 담당자 목록 갱신(권위)
       pcBuildSkill(data);         // 같은 응답에서 숙련도 평가 맵 생성(추가 요청 없음)
       pcRecentState='done';
-      try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(Date.now())); }catch(e){}
+      pcRecentTs=Date.now();      // ★ 메모리가 진실 — localStorage 실패와 무관하게 캐시가 신선해진다
+      try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(pcRecentTs)); }catch(e){}
       try{ pcAutoAdvanceFromHandover(); }catch(e){}
       if(cb) cb();
     })
-    .catch(function(){ pcRecentState=pcRecent.length?'done':'error'; if(cb) cb(); });
+    .catch(function(e){
+      pcRecentInFlight=false;
+      /* 실패해도 곧바로 재시도하지 않도록 절반 TTL만큼 물린다(7초 폭주 방지) */
+      pcRecentTs=Date.now()-PC_RECENT_TTL/2;
+      pcRecentState=pcRecent.length?'done':'error';
+      console.warn('[최근처리] 읽기 실패:', (e&&e.kind)||e);
+      if(cb) cb();
+    });
 }
 // 오늘 날짜(yyyy-MM-dd) — 서버(handover_gas.gs)·handover 시트와 동일하게 Asia/Seoul 고정.
 // PC 시계/표준시간대가 어긋나 있으면 하루가 엉뚱한 시각에 넘어가 일정이 근무 중에 초기화되고
@@ -3821,11 +4001,29 @@ function pcDrawNearby(list, bounds){
   return pcNearbyMarkers.length;
 }
 
+// 지도 인스턴스를 버리고 처음부터 다시 만들 수 있는 상태로 되돌린다.
+// 예전에는 로드 실패 시 #pcMapPane.innerHTML만 지우고 pcMapObj는 그대로 뒀다.
+// 그러면 다음 호출에서 firstCreate=false가 되어 "DOM이 사라진 지도"에 relayout만 부르고,
+// 새로고침 전까지 영구 빈 화면이 됐다. 컨테이너를 지울 땐 항상 이 함수로 함께 초기화한다.
+function pcMapReset(){
+  if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }
+  pcMapObj=null; pcMapClusterer=null; pcSelOv=null; pcFocusIW=null;
+  pcMapMarkers=[]; pcMarkerByName={}; pcRecentOverlays=[]; pcProgOverlays=[]; pcNearbyMarkers=[];
+  pcBaseKey=''; pcOverlayKey=''; pcNearKey='';    // 레이어 키도 비워야 다음 렌더가 실제로 그린다
+  pcMapBounds=null; pcMapBoundsAny=false;
+}
 function pcShowMap(list){
   var pane=document.getElementById('pcMapPane'); if(!pane) return;
   loadKakao(function(ok){
-    if(ok===false){ pane.innerHTML='<div class="pc-mapfail">지도를 불러올 수 없습니다.<br>네트워크 연결 또는 지도 키 설정을 확인해 주세요.</div>'; return; }
-    if(pane.querySelector('.pc-mapfail')) pane.innerHTML='';
+    if(ok===false){
+      // 이미 살아 있는 지도가 있으면 건드리지 않는다 — 동시 요청 중 하나만 실패한 경우
+      // 멀쩡한 지도의 DOM을 날려 영구 빈 화면이 되던 문제 방지.
+      if(pcMapObj) return;
+      pcMapReset();
+      pane.innerHTML='<div class="pc-mapfail">지도를 불러올 수 없습니다.<br>네트워크 연결 또는 지도 키 설정을 확인해 주세요.</div>';
+      return;
+    }
+    if(pane.querySelector('.pc-mapfail')){ pane.innerHTML=''; pcMapReset(); }   // 실패 화면 → 지도 새로 생성
     if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
     var center=new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
     var firstCreate=!pcMapObj;
@@ -3837,25 +4035,48 @@ function pcShowMap(list){
     else { pcMapObj.relayout(); }
     var restore=pcRestoreView && pcMapState; pcRestoreView=false;
 
-    var bounds=new kakao.maps.LatLngBounds();
-    var a1=pcDrawBase(list, bounds);
-    var a2=pcDrawOverlays(bounds);
-    var nearCnt=pcDrawNearby(list, bounds);
-    var any=a1||a2||nearCnt>0;
-    pcMapBounds=bounds; pcMapBoundsAny=any;   // '전체 보기' 버튼이 재계산 없이 사용
+    /* [프레이밍] 범위를 둘로 나눈다.
+       focus = 지금 보고 있는 목록(검색·필터 결과) + 그 주변 5km  → 화면을 맞출 대상
+       all   = focus + 오늘 완료·진행중 오버레이                  → '전체 보기(⤢)' 버튼 전용
+       예전에는 하나의 bounds에 오버레이까지 합쳐 setBounds를 걸었다. 그래서 부산 병원 하나를
+       검색해도 서울에 오늘 완료 건이 있으면 전국이 한 화면에 들어오도록 축소됐고, 그 레벨에선
+       클러스터러(minLevel:7)가 켜져 검색한 병원이 숫자 버블에 삼켜져 보이지 않았다. */
+    var focus=new kakao.maps.LatLngBounds();
+    var all=new kakao.maps.LatLngBounds();
+    var a1=pcDrawBase(list, focus);
+    var nearCnt=pcDrawNearby(list, focus);
+    var a2=pcDrawOverlays(all);              // 오버레이는 focus를 넓히지 않는다
+    var focusAny=a1||nearCnt>0;
+    var any=focusAny||a2;
+    // '전체 보기'는 focus + 오버레이 전부. focus 쪽 마커 위치를 all에도 합친다.
+    pcMapMarkers.forEach(function(m){ var p=m.getPosition(); if(p) all.extend(p); });
+    pcNearbyMarkers.forEach(function(m){ var p=m.getPosition(); if(p) all.extend(p); });
+    pcMapBounds=all; pcMapBoundsAny=any;      // '전체 보기' 버튼이 재계산 없이 사용
 
     if(pcRightMode==='map'){
       var rtl=document.getElementById('pcRightTtl');
       if(rtl) rtl.textContent = nearCnt ? ('🗺 지도 · 주변 5km '+nearCnt+'곳') : '🗺 지도';
     }
+    // 결과가 1곳이면 setBounds가 의미 없는 점 범위라 줌이 튄다 → 중심 이동 + 충분한 확대로 확실히 보이게
+    var single=(function(){
+      var c=0, only=null;
+      for(var i=0;i<list.length && c<2;i++){ if(list[i].lat!=null&&list[i].lng!=null){ c++; only=list[i]; } }
+      return (c===1)?only:null;
+    })();
+    function applyFocus(){
+      if(single){
+        pcMapObj.setCenter(new kakao.maps.LatLng(single.lat, single.lng));
+        try{ pcMapObj.setLevel(Math.min(pcMapObj.getLevel(), 4)); }catch(e){}
+      } else if(focusAny){ pcMapObj.setBounds(focus); }
+    }
     var viewRestored=false;
     if(restore){ pcApplyMapState(); }
     else if(pcMapViewRestore(list)){ viewRestored=true; /* 저장된 뷰포트 복원 성공 → 전체 맞춤 생략 (데이터 있는 첫 렌더 1회) */ }
-    else if(any){ pcMapObj.setBounds(bounds); }
+    else { applyFocus(); }
     pcMapCtlSync();
     // 컨테이너가 자리잡은 뒤 한 번 더 보정 — sticky·리사이즈로 크기가 늦게 확정될 때의 회색화 방지.
     // 상시 relayout은 ResizeObserver가 담당하고, 여기서는 뷰포트(setBounds/복원)만 재적용한다.
-    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(any && !viewRestored) pcMapObj.setBounds(bounds); pcMapCtlSync(); } },120);
+    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(!viewRestored) applyFocus(); pcMapCtlSync(); } },120);
   });
 }
 
