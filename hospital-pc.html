@@ -3082,6 +3082,7 @@ function pcMapZoom(delta){
 // 현재 목록 전체가 한 화면에 들어오도록 — 마지막으로 계산한 범위를 재사용(재계산 없음)
 function pcMapFitAll(){
   if(!pcMapObj || !pcMapBounds || !pcMapBoundsAny) return;
+  pcFocusName=null;   // '전체 보기'는 명시적 요청 — 병원 하나에 묶어 두던 포커스를 푼다
   try{ pcMapObj.setBounds(pcMapBounds); }catch(e){}
   pcMapCtlSync();
 }
@@ -3780,6 +3781,11 @@ function pcToggleInProgress(fse, hosp){
 // 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
 function pcFocusHospOnMap(name, itemEl){
   document.querySelectorAll('#pcRecentCard .rrc-item').forEach(function(el){ el.classList.toggle('sel', el===itemEl); });
+  var h=pcHospByName(name); if(!h||h.lat==null||h.lng==null) return;
+  // ★ 지도를 다시 그리는 어떤 호출보다 먼저 '이 병원을 보고 있다'를 기록한다.
+  //   아래 pcRender·pcBackToMap이 부르는 pcShowMap의 applyFocus가 전체 맞춤(setBounds)으로
+  //   되돌려, 방금 맞춘 확대가 120ms 뒤에 전국 축척으로 풀리던 문제를 막는다.
+  pcFocusName=h.n;
   // 표 뷰·접힘 상태에선 지도가 없어 조용히 무시되던 버그 — 사용자 의도가 명확하므로 지도를 되살린다
   if(!pcMapVisible()){
     if(pcListView==='table'){ pcListView='cards'; try{ localStorage.setItem('baz_pc_listview','cards'); }catch(e){} }
@@ -3787,7 +3793,6 @@ function pcFocusHospOnMap(name, itemEl){
     try{ pcRender(pcList||[]); }catch(e){}
   }
   if(pcRightMode==='detail'){ pcBackToMap(); }
-  var h=pcHospByName(name); if(!h||h.lat==null||h.lng==null) return;
   if(pcMapObj && typeof kakao!=='undefined'){
     var pos=new kakao.maps.LatLng(h.lat,h.lng);
     // 이미 가까이 본 사용자를 강제로 축소하지 않는다 — 현재보다 확대만(레벨 최소화)
@@ -3805,7 +3810,9 @@ function pcFocusHospOnMap(name, itemEl){
       '<button onclick="pcSelect(\''+nameJs+'\')" style="margin-top:8px;width:100%;border:0;background:#2E7D9E;color:#fff;font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:7px;cursor:pointer;font-family:inherit;">🕑 이력 보기</button>'+
     '</div>';
     var mk=pcMarkerByName[h.n];
-    pcFocusIW=new kakao.maps.InfoWindow({content:content, position:pos, removable:true});
+    // zIndex는 선택 링(12)·진행중(9)보다 위 — 클러스터 숫자 버블이 말풍선을 덮어
+    // '이력 보기' 버튼이 가려지던 문제 방지
+    pcFocusIW=new kakao.maps.InfoWindow({content:content, position:pos, removable:true, zIndex:20});
     if(mk) pcFocusIW.open(pcMapObj, mk); else pcFocusIW.open(pcMapObj);
   }
 }
@@ -3821,9 +3828,24 @@ function pcHighlight(){
 // (#pcRight.detail #pcMapPane{visibility:hidden}). 목록에서 고른 병원이 지도 어디인지
 // 확인할 방법이 없었다. 이제 카드 클릭은 지도를 그 병원으로 줌하고, 상세는
 // 카드의 '🕑 이력' 버튼과 지도 말풍선의 '🕑 이력 보기' 버튼으로 연다(둘 다 기존 기능).
+// 지도에 띄워 둔 병원(카드 클릭·검색 1곳). pcShowMap이 재렌더마다 전체 맞춤으로
+// 되돌리지 않도록 applyFocus가 이 값을 먼저 본다.
+var pcFocusName=null;
+// 카드 해제 = 지도 포커스·선택·말풍선을 모두 풀고 현재 목록 전체로 되돌린다
+function pcClearHospFocus(){
+  pcFocusName=null; pcSelName=null;
+  if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
+  document.querySelectorAll('#pcRecentCard .rrc-item.sel').forEach(function(el){ el.classList.remove('sel'); });
+  pcHighlight();
+  if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }
+}
+window.pcClearHospFocus=pcClearHospFocus;
+
 function pcPickHosp(name){
   // 표 뷰는 지도가 없는 화면(표 전체화면) — 기존 중앙 상세 모달을 그대로 쓴다
   if(pcListView==='table'){ pcSelect(name); return; }
+  // 이미 지도에 띄워 둔 카드를 다시 누르면 해제 — 목록 전체 보기로 초기화된다
+  if(pcFocusName===name && pcSelName===name){ pcClearHospFocus(); return; }
   var h=pcHospByName(name);
   // 지도를 쓸 수 없거나(접힘·모바일) 좌표가 없으면 예전처럼 상세를 연다.
   // '🕑 이력' 버튼은 이력이 있을 때만 렌더되므로(cardHTML), 이 폴백이 없으면
@@ -3860,24 +3882,23 @@ function pcApplySearchView(){
   } else {
     // 여러 곳이면 자동으로 고르지 않는다 — 결과 전체를 보여주고(아래 pcShowMap),
     // 사용자가 원하는 카드를 누르면 그때 pcPickHosp가 줌한다.
-    pcSelName=null;
+    pcFocusName=null; pcSelName=null;
     if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
     pcHighlight();
+    if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }   // 이전 포커스를 풀고 결과 전체로 맞춤
   }
 }
 // 검색을 지웠을 때의 초기화. ✕ 버튼과 백스페이스로 비운 경우 모두 여기로 온다
 // (pcApplySearchView가 질의 변화를 감지하므로 호출 지점이 하나뿐이다).
 function pcResetSearchView(){
-  pcSelName=null;
-  if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
   if(pcRightMode==='detail'){
     pcBackToMap();
     pcRestoreView=false;   // pcBackToMap은 '보던 위치 복귀'를 켜지만, 초기화는 전체 맞춤이 맞다
   }
   try{ pcCloseDetailModal(); }catch(e){}
-  pcHighlight();
+  // 선택·말풍선 해제 + 전체 목록으로 화면 맞춤은 카드 해제와 같은 처리를 쓴다
+  pcClearHospFocus();
   // 주변 5km 마커는 검색어가 비면 pcDrawNearby가 스스로 지운다 → 추가 작업 없음
-  if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }
 }
 
 function pcHistTimeline(name){
@@ -4097,7 +4118,10 @@ function pcShowMap(list){
       try{ kakao.maps.event.addListener(pcMapObj,'idle',pcMapViewSaveDebounced); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장
     }
     else { pcMapObj.relayout(); }
-    var restore=pcRestoreView && pcMapState; pcRestoreView=false;
+    // 명시적 포커스(pcFocusName)가 있으면 '보던 위치 복귀'보다 우선한다.
+    // pcBackToMap이 pcRestoreView를 켜므로, 상세에서 카드를 눌러 다른 병원으로 갈 때
+    // pcApplyMapState가 상세 진입 전(전국) 화면을 되살려 방금 맞춘 확대를 지웠다.
+    var restore=pcRestoreView && pcMapState && !pcFocusName; pcRestoreView=false;
 
     /* [프레이밍] 범위를 둘로 나눈다.
        focus = 지금 보고 있는 목록(검색·필터 결과) 그 자체  → 화면을 맞출 대상
@@ -4130,6 +4154,17 @@ function pcShowMap(list){
       return (c===1)?only:null;
     })();
     function applyFocus(){
+      // ① 사용자가 명시적으로 띄운 병원(카드 클릭·검색 1곳)이 있으면 그 중심을 지킨다.
+      //    배율은 건드리지 않는다 — 사용자가 직접 조정한 확대를 재렌더가 되돌리면 안 된다.
+      //    (이 가드가 없으면 아래 setBounds가 목록 전체를 맞춰 전국 축척으로 풀린다)
+      if(pcFocusName){
+        var fh=pcHospByName(pcFocusName);
+        if(fh && fh.lat!=null && fh.lng!=null){
+          pcMapObj.setCenter(new kakao.maps.LatLng(fh.lat, fh.lng));
+          return;
+        }
+        pcFocusName=null;   // 필터·검색으로 목록에서 사라진 병원 → 포커스 해제하고 일반 맞춤으로
+      }
       if(single){
         pcMapObj.setCenter(new kakao.maps.LatLng(single.lat, single.lng));
         try{ pcMapObj.setLevel(Math.min(pcMapObj.getLevel(), 4)); }catch(e){}
