@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.3.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.8.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -29,6 +29,28 @@
  *  GET ?action=guide&type=유형&token=… : 3단계 원칙 답변 [v2.1: Lv.3 토큰 게이트]
  *  GET ?action=weekly&fse=이름&mon=YYYY-MM-DD : [v2.1] 해당 주(월~금) 처리 내역
  *  GET ?action=menu              : [v2.2] 허브 메뉴 설정(표시/레벨/순서, 메뉴설정 탭)
+ *  GET ?action=labellist&from=&to=&fse= : [v2.8] label.html 장비 Label List 원본
+ *  GET ?action=snphoto&ids=ID,ID : [v2.8] 장비 S/N 사진 base64 (Drive CORS 우회 프록시)
+ *
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║ ★★ v2.8 적용 순서 — 이 순서를 지키지 않으면 웹앱 전체가 멈춥니다 ★★  ║
+ * ╚═══════════════════════════════════════════════════════════════╝
+ *  v2.8은 사진 저장 때문에 Drive 서비스(DriveApp)를 새로 씁니다. Apps Script는
+ *  코드에 있는 서비스로 필요한 권한을 정하는데, 새 권한을 "승인하기 전"에 배포하면
+ *  ping·all·recent·menu 까지 전부 권한 오류로 실패합니다.
+ *  → 대시보드·허브·현장 처리완료가 한꺼번에 "접속 오류"로 먹통이 됩니다.
+ *
+ *  1) 편집기에 이 코드를 붙여넣고 [저장]
+ *  2) ★먼저★ 함수 목록에서 setupSnPhotoColumn 을 골라 [실행]
+ *     → 권한 승인 창이 뜨면 승인 (U열 '장비 S/N 사진' 헤더도 이때 생깁니다)
+ *  3) 그 다음에 [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]
+ *     ※ "새 배포"가 아님 — URL이 바뀌면 앱 전체가 깨집니다
+ *  4) 확인: 브라우저로 배포 URL + ?action=ping 을 열어
+ *     {"success":true,"ver":"2.8.0"} 이 보이면 정상입니다.
+ *     구글 권한 오류 페이지가 보이면 2)를 아직 안 한 것입니다.
+ *
+ *  ※ 조직 정책으로 이 스크립트에 Drive 권한을 줄 수 없다면 v2.8은 쓸 수 없습니다.
+ *    (사진 기능만 끄는 방법은 없습니다 — 코드에 DriveApp 이 있으면 권한이 필요합니다)
  *******************************************************************/
 
 var CONFIG = {
@@ -68,9 +90,24 @@ var NCARE = {
   TIERS: ['Basic','Standard','Pro','Premium','CurePass']   // 마지막(미가입) 라벨은 CurePass로 표기
 };
 
+/* [v2.8] 장비 S/N 사진 — Drive 업로드 + 시트 U열 =IMAGE() 썸네일
+   ※ =IMAGE()가 그림을 그리려면 파일이 "링크가 있는 사람은 보기 가능" 이어야 한다.
+     (URL을 아는 사람은 사진을 볼 수 있다는 뜻 — 사내 공유 범위로만 쓸 것)
+   ※ 사진을 시트에 노출하고 싶지 않으면 SHARE:false 로 두면 되지만,
+     그 경우 U열 썸네일은 렌더링되지 않고 label.html 불러오기만 동작한다. */
+var PHOTO = {
+  FOLDER_ID  : '',                    // 비우면 아래 이름으로 자동 생성 후 ScriptProperties에 기억
+  FOLDER_NAME: '현장처리_장비SN사진',
+  COL_NAME   : '장비 S/N 사진',       // 시트 헤더(U열)
+  SHARE      : true,                  // 링크 공유(=IMAGE 렌더링에 필요)
+  THUMB_W    : 600,                   // =IMAGE()가 부르는 썸네일 가로폭(px)
+  ROW_HEIGHT : 80                     // 사진이 있는 행의 높이(pt) · 0이면 행 높이를 바꾸지 않음
+};
+var PHOTO_COLS = ['장비 S/N 사진','장비SN사진','장비 SN 사진','SN 사진'];
+
 /* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·N-Care·보증기한 등
    수식/자동 열)은 절대 건드리지 않는다.
-   ※ 장비SN(Q열)·HP_SN(IN/OUT)·Ver는 payload 값이 있을 때만 별도로 기록 */
+   ※ 장비SN(Q열)·장비 S/N 사진(U열)·HP_SN(IN/OUT)·Ver는 payload 값이 있을 때만 별도로 기록 */
 var WRITE_COLS = ['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용','노즐 재사용'];
 
 /* [v2.1] 주간업무보고 — weekly.html 연동
@@ -184,7 +221,8 @@ function cleanupStray(){
              colBy_(hdr,['장비SN','장비 SN']),
              colBy_(hdr,['NS 충진 여부','NS충진여부']),
              colBy_(hdr,['NS 충진량','NS충진량']),
-             colBy_(hdr,['젯 분사 판단','젯분사 판단'])].filter(Boolean));
+             colBy_(hdr,['젯 분사 판단','젯분사 판단']),
+             colBy_(hdr, PHOTO_COLS)].filter(Boolean));
   stray.forEach(function(s){
     cols.forEach(function(c){ sh.getRange(s.row, c).clearContent(); });
   });
@@ -207,21 +245,68 @@ function pickCols_(hdr){
   return o;
 }
 
+/** [v2.8] 로그용 payload — base64 사진은 요약 문자열로 대체한다.
+ *  (dataURL을 그대로 남기면 전송로그 셀이 5만자 한도를 넘겨 기록 자체가 실패한다) */
+function logSafe_(payload){
+  if(!payload || typeof payload !== 'object') return payload;
+  var o = {}, keys = Object.keys(payload);
+  for(var i=0;i<keys.length;i++) o[keys[i]] = payload[keys[i]];
+  if(o.snPhoto){
+    var kb = Math.round(String(o.snPhoto).length * 3 / 4 / 1024);
+    o.snPhoto = '[photo ' + kb + 'KB]';
+  }
+  return o;
+}
+
 /* ================= POST: 행 기록 ================= */
 function doPost(e){
   var lock = LockService.getScriptLock();
   var payload = {};
+  var photoFile = null;      /* [v2.8] 락 잡기 전에 끝내 둔 사진 업로드 결과 */
   try{
-    lock.waitLock(20000);
     payload = JSON.parse(e.postData.contents||'{}');
 
     /* [보안] 모든 쓰기는 로그인 토큰 필수 — 외부인의 무단 기록·시트 오염 차단.
-       (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외) */
+       (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외)
+       ※ 사진 업로드보다 반드시 먼저 — 인증 없는 요청이 Drive에 파일을 남기면 안 된다. */
     var actName = (payload && payload.action) || '';
     if(actName !== 'menu_save' && actName !== 'weeklyauto_save'){
       var denied = requireWrite_(payload);
       if(denied) return json_(denied);
     }
+
+    /* [v2.8] 같은 기록의 재전송을 걸러낸다(멱등성).
+       콜드스타트 때 GAS가 JSON 대신 HTML을 돌려주면 프런트의 1차 요청은 "실패"로 보이고
+       no-cors 로 같은 내용을 한 번 더 보낸다. 그런데 1차 요청이 서버에서는 이미 기록됐을
+       수 있어, 그대로 두면 같은 행이 두 줄 쌓이고 사진도 Drive에 두 번 올라간다.
+       프런트가 붙여 보낸 reqId 를 10분간 기억해 두 번째 요청은 첫 결과를 그대로 돌려준다. */
+    var reqId = String((payload && payload.reqId) || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
+    var dkey = reqId ? 'req_' + reqId : '';
+    var dcache = null;
+    if(dkey){
+      try{
+        dcache = CacheService.getScriptCache();
+        var seen = dcache.get(dkey);
+        if(seen) return ContentService.createTextOutput(seen).setMimeType(ContentService.MimeType.JSON);
+      }catch(_){ dcache = null; }
+    }
+
+    /* [v2.8] 사진 업로드는 락 "밖"에서 먼저 끝낸다.
+       Drive는 콜드스타트 때 몇 초씩 걸리는데, 그걸 락 안에서 하면 동시에 기록하는
+       두 번째 FSE가 20초 대기를 넘겨 통째로 실패한다. 업로드는 행 번호와 무관하므로
+       미리 해 두고, 락 안에서는 수식 한 줄만 쓴다. */
+    if(payload && payload.snPhoto && !actName){
+      try{
+        photoFile = savePhoto_(payload.snPhoto, {
+          date: payload.date || '', hosp: payload.hosp || '', sn: payload.sn || ''
+        });
+      }catch(pe){
+        photoFile = null;    /* 업로드 실패해도 본 기록은 그대로 진행한다 */
+        log_('PHOTO_ERR:'+pe, null, {hosp:payload.hosp||'', sn:payload.sn||''});
+      }
+    }
+
+    lock.waitLock(20000);
 
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
@@ -270,17 +355,26 @@ function doPost(e){
     if(hdr.map['__VER_IN']   && payload.uVer)  sh.getRange(row, hdr.map['__VER_IN']).setValue(payload.uVer);
     if(hdr.map['HP_SN(OUT)'] && payload.hpOut) sh.getRange(row, hdr.map['HP_SN(OUT)']).setValue(payload.hpOut);
     if(hdr.map['__VER_OUT']  && payload.wVer)  sh.getRange(row, hdr.map['__VER_OUT']).setValue(payload.wVer);
+    /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다 */
+    var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
+    if(photoCol){
+      sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
+      if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
+    }
 
-    log_('OK', hdr, payload);
+    log_('OK', hdr, logSafe_(payload));
     try{ CacheService.getScriptCache().remove('handover_all'); }catch(_){}
     /* 재고 원장 사용처 자동 기입 (실패해도 본 기록에는 영향 없음) */
     var inv = invRecordUsage_(payload);
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
     var msg = '✅ '+ (payload.hosp||'') +' 기록 완료 (행 '+row+')';
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
-    return json_({success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg});
+    var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg};
+    /* 재전송이 같은 결과를 받도록 결과를 10분 기억 (위 reqId 중복 차단과 한 쌍) */
+    if(dkey && dcache){ try{ dcache.put(dkey, JSON.stringify(out), 600); }catch(_){} }
+    return json_(out);
   }catch(err){
-    log_('ERR:'+err, null, payload);
+    log_('ERR:'+err, null, logSafe_(payload));
     return json_({success:false, error:String(err)});
   }finally{
     try{ lock.releaseLock(); }catch(_){}
@@ -303,7 +397,7 @@ function doGet(e){
       }
     }
 
-    if(action==='ping')   return json_({success:true, ver:'2.7.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.8.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -317,14 +411,19 @@ function doGet(e){
     if(action==='weeklyauto') return json_(weeklyAutoGet_());   /* 주간 자동기재 대상 작성자 목록 */
     if(action==='contenttpl') return json_(contentTplGet_());  /* 처리내용 자동완성 템플릿 */
     if(action==='progress') return json_(progGet_(p));          /* [v2.4] 진행중 공유 상태 ([v2.7] rev 조건부 응답) */
+    if(action==='labellist') return json_(labelList_(p));       /* [v2.8] 장비 Label List 원본 */
+    if(action==='snphoto')   return json_(snPhotos_(p));        /* [v2.8] 장비 S/N 사진 base64 */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
     return json_({success:false, error:String(err)});
   }
 }
 
-/** 시트 전체를 객체 배열로 (수식 결과 포함 표시값) */
-function readAll_(){
+/** 시트 전체를 객체 배열로 (수식 결과 포함 표시값)
+ *  withPhoto=true 일 때만 사진 열을 한 번 더 읽는다 — 대시보드·주간보고가 쓰는
+ *  기본 경로(all/recent/today/weekly)에 읽기 왕복과 응답 크기를 늘리지 않기 위해서다.
+ *  (사진 ID가 실제로 필요한 곳은 labelList_ 뿐) */
+function readAll_(withPhoto){
   var sh = sheet_(CONFIG.SHEET_NAME);
   if(!sh) return {hdr:null, rows:[]};
   var hdr = findHeader_(sh);
@@ -332,12 +431,18 @@ function readAll_(){
   var last = lastDataRow_(sh, hdr);
   if(last <= hdr.row) return {hdr:hdr, rows:[]};
   var vals = sh.getRange(hdr.row+1, 1, last-hdr.row, sh.getLastColumn()).getDisplayValues();
+  /* [v2.8] 사진 열은 =IMAGE() 수식이라 표시값이 비어 있다 → 그 열만 수식으로 한 번 더 읽는다.
+     요청한 경우에만 — 이 추가 왕복이 대시보드 로딩까지 느리게 만들면 안 된다. */
+  var pCol = withPhoto ? colBy_(hdr, PHOTO_COLS) : 0, pFx = null;
+  if(pCol) pFx = sh.getRange(hdr.row+1, pCol, last-hdr.row, 1).getFormulas();
   var rows = vals.map(function(v, i){
     var o = {_row: hdr.row+1+i};
     hdr.headers.forEach(function(h,c){ if(h) o[h]=v[c]; });
     /* 중복 Ver 분리 */
     if(hdr.map['__VER_IN'])  o['VerIN']  = v[hdr.map['__VER_IN']-1];
     if(hdr.map['__VER_OUT']) o['VerOUT'] = v[hdr.map['__VER_OUT']-1];
+    /* 사진: 수식 → 파일 ID (수식이 아니라 URL만 적힌 셀도 흡수) */
+    if(pFx) o['__SNPHOTO'] = photoIdFromFormula_(pFx[i][0] || v[pCol-1]);
     return o;
   }).filter(function(o){ return String(o['처리일']||'').trim()!==''; });
   return {hdr:hdr, rows:rows};
@@ -412,6 +517,163 @@ function contentTplGet_(){
   return {success:true, rows:rows, updated:now};
 }
 
+/* ═══════════ [v2.8] 장비 S/N 사진 — Drive 업로드 · U열 =IMAGE() ═══════════ */
+
+/** 사진 저장 폴더 확보: PHOTO.FOLDER_ID → ScriptProperties → 없으면 새로 만들고 기억 */
+function photoFolder_(){
+  if(PHOTO.FOLDER_ID) return DriveApp.getFolderById(PHOTO.FOLDER_ID);
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SN_PHOTO_FOLDER_ID');
+  if(id){
+    try{ return DriveApp.getFolderById(id); }
+    catch(e){ props.deleteProperty('SN_PHOTO_FOLDER_ID'); }   /* 폴더가 지워졌으면 새로 만든다 */
+  }
+  var folder = DriveApp.createFolder(PHOTO.FOLDER_NAME);
+  props.setProperty('SN_PHOTO_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+/** 파일명에 못 쓰는 문자 제거 */
+function safeName_(s){
+  return String(s==null?'':s).replace(/[\\\/:*?"<>|\r\n\t]/g,'').trim().slice(0,60);
+}
+
+/** dataURL(base64 JPEG) → Drive 파일 저장 · {id, url} 반환 */
+function savePhoto_(dataUrl, meta){
+  var s = String(dataUrl||'');
+  var mm = s.match(/^data:(image\/[a-z+.-]+);base64,([\s\S]+)$/i);
+  if(!mm) throw new Error('사진 형식 오류 (dataURL 아님)');
+  var mime = mm[1], b64 = mm[2].replace(/\s/g,'');
+  var ext  = mime.indexOf('png')>=0 ? 'png' : (mime.indexOf('webp')>=0 ? 'webp' : 'jpg');
+  var name = [safeName_((meta&&meta.date)||''), safeName_((meta&&meta.hosp)||''),
+              safeName_((meta&&meta.sn)||'')].filter(Boolean).join('_') || 'sn_photo';
+  var blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, name + '.' + ext);
+  var file = photoFolder_().createFile(blob);
+  if(PHOTO.SHARE){
+    /* 링크 공유 실패(도메인 정책 등)해도 파일 자체는 남기고 계속 진행한다 */
+    try{ file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); }
+    catch(e){ Logger.log('[photo] 링크 공유 설정 실패: ' + e); }
+  }
+  return {id:file.getId(), url:file.getUrl()};
+}
+
+/** Drive 파일 ID → U열에 넣을 =IMAGE() 수식 (모드 1 = 비율 유지하며 셀에 맞춤) */
+function photoFormula_(id){
+  return '=IMAGE("https://drive.google.com/thumbnail?id=' + id +
+         '&sz=w' + (PHOTO.THUMB_W||600) + '", 1)';
+}
+
+/** =IMAGE(...)/URL 문자열에서 Drive 파일 ID 추출 · 없으면 '' */
+function photoIdFromFormula_(f){
+  var s = String(f||'');
+  var m = s.match(/[?&]id=([A-Za-z0-9_-]{20,})/) || s.match(/\/d\/([A-Za-z0-9_-]{20,})/);
+  return m ? m[1] : '';
+}
+
+/** 현장 처리 현황 시트에 '장비 S/N 사진' 열(U열)을 만든다 — 편집기에서 1회 실행.
+ *  이미 있으면 그대로 두고, 없으면 마지막 헤더 오른쪽에 헤더를 쓰고 열 너비를 넓힌다.
+ *  (첫 실행 시 Drive 권한 승인 창이 뜨도록 폴더 확보도 함께 수행) */
+function setupSnPhotoColumn(){
+  var sh = sheet_(CONFIG.SHEET_NAME);
+  if(!sh){ Logger.log('❌ 시트 없음: ' + CONFIG.SHEET_NAME); return '시트없음'; }
+  var hdr = findHeader_(sh);
+  if(!hdr){ Logger.log('❌ 헤더(처리일/병원명) 탐지 실패'); return '헤더없음'; }
+
+  var col = colBy_(hdr, PHOTO_COLS);
+  if(col){
+    Logger.log('✅ 이미 있습니다: %s열(%s) — 헤더 행 %s',
+      colLetter_(col), PHOTO.COL_NAME, hdr.row);
+  }else{
+    /* 마지막으로 "글자가 있는" 헤더의 오른쪽 = U열.
+       headers 길이는 시트의 마지막 열까지라, 빈 헤더 칸이 뒤에 있으면 엉뚱하게 멀어진다 */
+    var lastNamed = 0;
+    hdr.headers.forEach(function(h,i){ if(String(h).trim()) lastNamed = i+1; });
+    col = lastNamed + 1;
+    if(col > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), col - sh.getMaxColumns());
+    sh.getRange(hdr.row, col).setValue(PHOTO.COL_NAME);
+    sh.setColumnWidth(col, 100);
+    Logger.log('✅ %s열에 "%s" 헤더를 만들었습니다 (헤더 행 %s)',
+      colLetter_(col), PHOTO.COL_NAME, hdr.row);
+  }
+
+  var folder = photoFolder_();                          /* Drive 권한 승인 유도 */
+  Logger.log('📁 사진 저장 폴더: %s (%s)', folder.getName(), folder.getId());
+  Logger.log('   → 이 폴더 ID를 PHOTO.FOLDER_ID 에 넣어 고정할 수도 있습니다.');
+  return 'OK';
+}
+
+/** 1-based 열번호 → 열 문자(A, B, … AA) */
+function colLetter_(n){
+  var s = '';
+  while(n > 0){ var r = (n-1) % 26; s = String.fromCharCode(65+r) + s; n = Math.floor((n-1)/26); }
+  return s;
+}
+
+/** GET ?action=labellist&from=YYYY-MM-DD&to=YYYY-MM-DD&fse=이름
+ *  label.html(장비 Label List 생성기)이 표를 채우는 원본.
+ *  같은 병원+S/N 이 여러 번 나오면 가장 최근 기록 1건만 남긴다. */
+function labelList_(p){
+  var from = parseD_(String(p.from||'').trim());
+  var to   = parseD_(String(p.to||'').trim());
+  if(!from || !to) return {success:false, error:'from/to(YYYY-MM-DD) 파라미터 필요'};
+  if(from > to){ var t = from; from = to; to = t; }
+  to.setHours(23,59,59,0);
+
+  var qf = norm_(String(p.fse||'').trim());
+  var hit = readAll_(true).rows.map(slim_).filter(function(r){   /* true = 사진 열까지 읽기 */
+    var d = parseD_(r.date);
+    if(!d || d < from || d > to) return false;
+    if(!String(r.hosp||'').trim()) return false;
+    if(!qf) return true;
+    var f = norm_(r.fse);
+    return !!f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0);
+  });
+
+  /* 병원+S/N 중복 제거 — 뒤(최근) 기록이 앞 기록을 덮어쓴다 */
+  var seen = {}, order = [];
+  hit.forEach(function(r){
+    var key = norm_(r.hosp) + '|' + norm_(r.sn);
+    if(!(key in seen)) order.push(key);
+    seen[key] = r;
+  });
+
+  var rows = order.map(function(key){
+    var r = seen[key];
+    return {
+      date: r.date, hosp: r.hosp, sn: r.sn, fse: r.fse, gubun: r.gubun,
+      note: /\[데모장비\]/.test(String(r.detail||'')) ? '데모 장비' : '병원 장비',
+      photoId: r.snPhotoId || ''
+    };
+  });
+
+  return {success:true, count:rows.length, rows:rows,
+          from:Utilities.formatDate(from,'Asia/Seoul','yyyy-MM-dd'),
+          to:  Utilities.formatDate(to,'Asia/Seoul','yyyy-MM-dd'),
+          updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+}
+
+/** GET ?action=snphoto&ids=ID1,ID2,…  (한 번에 최대 SNPHOTO_MAX개)
+ *  Drive 이미지를 base64 dataURL로 돌려준다.
+ *  브라우저가 drive.google.com 을 직접 fetch 하면 CORS 로 막히므로 이 프록시가 필요하다. */
+var SNPHOTO_MAX = 4;
+function snPhotos_(p){
+  var ids = String(p.ids||'').split(',')
+    .map(function(s){ return String(s).trim(); })
+    .filter(function(s){ return /^[A-Za-z0-9_-]{20,}$/.test(s); });
+  if(!ids.length) return {success:false, error:'ids 파라미터 필요'};
+  if(ids.length > SNPHOTO_MAX) ids = ids.slice(0, SNPHOTO_MAX);
+
+  var photos = {}, failed = [];
+  ids.forEach(function(id){
+    try{
+      var blob = DriveApp.getFileById(id).getBlob();
+      photos[id] = 'data:' + (blob.getContentType()||'image/jpeg') + ';base64,' +
+                   Utilities.base64Encode(blob.getBytes());
+    }catch(e){ failed.push(id); }
+  });
+  return {success:true, count:Object.keys(photos).length, photos:photos, failed:failed};
+}
+
 /** 헤더맵에서 후보 이름으로 열번호 찾기(정규화 완전일치 → 부분일치) · 없으면 0 */
 function colBy_(hdr, cands){
   var keys=Object.keys(hdr.map);
@@ -423,7 +685,7 @@ function colBy_(hdr, cands){
 }
 
 function slim_(o){
-  return {
+  var s = {
     date : o['처리일']||'', hosp: o['병원명']||'', fse: o['CS 담당자']||'',
     gubun: o['점검/AS']||'', cat: o['대분류']||'', type: o['유형']||'',
     part : o['교체품']||'', cost: o['교체비용']||'', detail: o['내용']||'',
@@ -439,6 +701,11 @@ function slim_(o){
     nsAmt : pickH_(o,['NS 충진량','NS충진량']),
     jet   : pickH_(o,['젯 분사 판단','젯분사 판단','젯 분사'])
   };
+  /* [v2.8] 장비 S/N 사진(U열) Drive 파일 ID — readAll_(true) 로 읽었을 때만 붙인다.
+     실제 이미지는 ?action=snphoto 로 받는다. 항상 넣으면 대시보드가 쓰는
+     ?action=all 응답이 행마다 커져 스크립트 캐시(95KB) 한도를 더 빨리 넘긴다. */
+  if(o['__SNPHOTO']) s.snPhotoId = o['__SNPHOTO'];
+  return s;
 }
 
 /** 대시보드용 전체 데이터 — 5분 스크립트 캐시 (100KB 이내일 때만) */
@@ -938,6 +1205,11 @@ function getGuide_(type){
    ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
 var AUTH_ENFORCE = true;              /* 토큰 검증 사용 (문제 시 false 로 끄면 전면 개방) */
 var AUTH_FAILOPEN_LEVEL = 3;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+/* [v2.8] 인증 서버 차단기(circuit breaker) — "못 닿음"을 잠깐 기억하는 시간(초).
+   이게 없으면 인증 GAS가 느릴 때 모든 조회가 각자 왕복을 다시 시도하며 지연이 곱해진다.
+   (요청 10개 × 타임아웃 = 10배 지연) 60초만 기억해도 그 증폭이 끊긴다. */
+var AUTH_DOWN_TTL = 60;
+var AUTH_DOWN_KEY = 'auth_down';
 
 function verifyLevel_(token){
   if(!AUTH_ENFORCE) return 3;                 /* 검증 끄기 스위치 */
@@ -951,6 +1223,9 @@ function verifyLevel_(token){
     cache = CacheService.getScriptCache();
     var hit = cache.get(key);
     if(hit) return Number(hit)||0;
+    /* 직전에 인증 서버가 죽어 있었다면 왕복하지 않고 곧바로 통과시킨다.
+       (어차피 결과는 AUTH_FAILOPEN_LEVEL 인데, 왕복 비용만 사용자마다 반복된다) */
+    if(cache.get(AUTH_DOWN_KEY)) return AUTH_FAILOPEN_LEVEL;
   }catch(_){}
 
   /* 인증 서버 왕복 — "토큰이 틀렸다"와 "서버에 닿지 못했다"를 반드시 구분한다.
@@ -970,8 +1245,17 @@ function verifyLevel_(token){
     Logger.log('[auth] 인증 서버 확인 실패(통과 처리): ' + err);
   }
 
-  if(!reached) return AUTH_FAILOPEN_LEVEL;    /* 서버에 못 닿음 → 차단하지 않는다 */
-  try{ if(lv > 0 && cache) cache.put(key, String(lv), 300); }catch(_){}
+  if(!reached){
+    /* 못 닿음을 짧게 기억 → 뒤따르는 요청들은 왕복 없이 즉시 통과 */
+    try{ if(cache) cache.put(AUTH_DOWN_KEY, '1', AUTH_DOWN_TTL); }catch(_){}
+    return AUTH_FAILOPEN_LEVEL;               /* 서버에 못 닿음 → 차단하지 않는다 */
+  }
+  try{
+    if(cache){
+      cache.remove(AUTH_DOWN_KEY);            /* 살아났으니 차단기 해제 */
+      if(lv > 0) cache.put(key, String(lv), 300);
+    }
+  }catch(_){}
   return lv;
 }
 

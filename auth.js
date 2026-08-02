@@ -232,6 +232,7 @@
     'guide.html':      { tool: 'guide',      level: 1 },
     'inspection.html': { tool: 'inspection', level: 1 },
     'handover.html':   { tool: 'handover',   level: 1 },
+    'label.html':      { tool: 'label',      level: 1 },
     'chatbot.html':    { tool: 'chatbot',    level: 1 },
     'weekly.html':     { tool: 'weekly',     level: 1 },
     'user_guide.html': { tool: null,         level: 1 },
