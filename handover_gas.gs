@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.8.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.9.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -104,6 +104,21 @@ var PHOTO = {
   ROW_HEIGHT : 80                     // 사진이 있는 행의 높이(pt) · 0이면 행 높이를 바꾸지 않음
 };
 var PHOTO_COLS = ['장비 S/N 사진','장비SN사진','장비 SN 사진','SN 사진'];
+
+/* [v2.9] 장비 Label list 시트 — 이미 작성한 병원 제외 + 작성일자 기록
+   실제 구성:  A 병원명 | B 작성 유/무(체크박스) | C 작성일자 | D 작성 완료 | E 잔여 병원 수 | … | I 병원명
+   B가 체크된 병원 = 이미 라벨을 만든 곳 → 다시 뽑으면 중복이므로 불러오기에서 뺀다.
+   내려받으면 그 병원들의 B를 체크하고 C에 그날 날짜를 적는다(이미 적힌 날짜는 보존).
+   ※ I열(작성 대기 목록)과 D·E 수식은 건드리지 않는다 — 수기 관리 영역.
+   ※ 열 위치가 바뀌어도 헤더 이름으로 찾고, 못 찾으면 FALLBACK 위치를 쓴다. */
+var LABELS = {
+  SHEET     : '장비 Label list',
+  HOSP_COLS : ['병원명','병원','거래처명'],
+  DONE_COLS : ['작성 유/무','작성유무','작성 유무','작성여부','작성 여부','중복','체크'],
+  DATE_COLS : ['작성일자','작성 일자','작성일','기록일'],
+  FALLBACK  : { hosp:1, done:2 },  // 헤더를 못 찾을 때: A열 병원명 · B열 체크박스
+  HEADER_SCAN: 5                   // 헤더 행 탐색 범위
+};
 
 /* 앱이 직접 기록하는 열 — 이 외의 열(NO·거래처·N-Care·보증기한 등
    수식/자동 열)은 절대 건드리지 않는다.
@@ -314,6 +329,7 @@ function doPost(e){
     if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
     if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
     if(payload && payload.action==='progress_restore') return json_(progRestore_(payload));  /* [v2.7] 스냅샷에서 일정 복구(Lv.3) */
+    if(payload && payload.action==='labeldone')    return json_(labelDone_(payload));  /* [v2.9] 내려받은 병원 작성 일자 기록 */
 
     var sh = sheet_(CONFIG.SHEET_NAME);
     if(!sh) return json_({success:false, error:'시트 없음: '+CONFIG.SHEET_NAME});
@@ -405,7 +421,7 @@ function doGet(e){
       }
     }
 
-    if(action==='ping')   return json_({success:true, ver:'2.8.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'2.9.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='inventory') return json_(getInventory_());
@@ -617,9 +633,171 @@ function colLetter_(n){
   return s;
 }
 
+/* ═══════════ [v2.9] 장비 Label list 시트 — 중복 제외 · 작성 일자 ═══════════ */
+
+/** '장비 Label list' 시트의 헤더 행과 열 위치를 찾는다.
+ *  헤더 이름이 있으면 그걸 쓰고, 없으면 A열 병원명·B열 체크박스로 본다.
+ *  → {sh, row, hosp, dup, date} · 시트가 없으면 null */
+function labelMap_(){
+  var sh = sheet_(LABELS.SHEET);
+  if(!sh || sh.getLastRow() < 1) return null;
+
+  var scan = Math.min(LABELS.HEADER_SCAN, sh.getLastRow());
+  var grid = sh.getRange(1, 1, scan, Math.max(sh.getLastColumn(),1)).getDisplayValues();
+
+  /* 병원명 헤더가 있는 행을 찾는다 */
+  var hdrRow = 0, cols = {};
+  for(var r=0; r<grid.length && !hdrRow; r++){
+    var names = grid[r].map(function(h){ return String(h).trim(); });
+    var found = {};
+    names.forEach(function(h, i){
+      if(!h) return;
+      var q = norm_(h);
+      /* 병원명은 A열과 I열에 둘 다 있다 — 먼저 나온 쪽(A열)을 쓴다 */
+      if(!found.hosp && LABELS.HOSP_COLS.some(function(c){ return norm_(c)===q; })) found.hosp = i+1;
+      if(!found.done && LABELS.DONE_COLS.some(function(c){ return q.indexOf(norm_(c))>=0; })) found.done = i+1;
+      if(!found.date && LABELS.DATE_COLS.some(function(c){ return norm_(c)===q; })) found.date = i+1;
+    });
+    if(found.hosp){ hdrRow = r+1; cols = found; }
+  }
+  if(!hdrRow){
+    /* 헤더 이름을 못 찾았다. 대개는 1행이 헤더인데(A2:A417 처럼 데이터가 2행부터),
+       헤더 없이 1행부터 병원명이 들어간 시트도 있다. 체크박스 칸이 실제 boolean 이면
+       그 행은 데이터다 — 헤더 칸이라면 글자가 들어 있을 것이기 때문이다. */
+    cols = {};
+    var probe = sh.getRange(1, LABELS.FALLBACK.done, 1, 1).getValues()[0][0];
+    hdrRow = isCheckToken_(probe) ? 0 : 1;
+  }
+
+  return {
+    sh   : sh,
+    row  : hdrRow,
+    hosp : cols.hosp || LABELS.FALLBACK.hosp,
+    done : cols.done || LABELS.FALLBACK.done,
+    date : cols.date || 0                            /* 작성일자 열은 없을 수도 있다 */
+  };
+}
+
+/** 체크박스가 켜져 있는가 — 체크박스는 true, 수기 입력은 O/Y/1 등도 받아 준다 */
+function isChecked_(v){
+  if(v === true) return true;
+  var s = String(v==null?'':v).trim().toUpperCase();
+  return s==='TRUE' || s==='O' || s==='Y' || s==='1' || s==='V' || s==='중복';
+}
+
+/** 체크 여부를 나타내는 값처럼 보이는가(켜짐·꺼짐 모두) — 헤더 행 판별에 쓴다.
+ *  헤더 칸이라면 '중복'·'체크' 같은 낱말이 들어가지 이런 표기가 오지 않는다. */
+function isCheckToken_(v){
+  if(typeof v === 'boolean') return true;
+  var s = String(v==null?'':v).trim().toUpperCase();
+  return s==='TRUE' || s==='FALSE' || s==='O' || s==='X' || s==='Y' || s==='N' ||
+         s==='1' || s==='0' || s==='V' || s==='중복';
+}
+
+/** 이미 작성한(B열 체크) 병원명 집합(정규화된 이름 → true) · 시트가 없으면 빈 객체 */
+function labelDoneSet_(){
+  var m = labelMap_();
+  if(!m) return {};
+  var last = m.sh.getLastRow();
+  if(last <= m.row) return {};
+  var n = last - m.row;
+  var names = m.sh.getRange(m.row+1, m.hosp, n, 1).getDisplayValues();
+  var flags = m.sh.getRange(m.row+1, m.done, n, 1).getValues();
+  var set = {};
+  for(var i=0;i<n;i++){
+    var nm = String(names[i][0]||'').trim();
+    if(nm && isChecked_(flags[i][0])) set[norm_(nm)] = true;
+  }
+  return set;
+}
+
+/** POST {action:'labeldone', hosps:[병원명…], date:'YYYY-MM-DD'}
+ *  내려받기에 포함된 병원을 "작성 완료"로 표시한다 —
+ *  B열 '작성 유/무' 체크 + C열 '작성일자'에 그날 날짜.
+ *  이 둘이 같이 움직여야 다음 내려받기에서 그 병원이 빠진다(체크만 보고 거른다).
+ *  ※ 이미 날짜가 적힌 행은 덮어쓰지 않는다. I열(작성 대기 목록)과 D·E 수식은 손대지 않는다. */
+function labelDone_(p){
+  var hosps = (p && p.hosps) || [];
+  if(!hosps.length) return {success:false, error:'hosps 배열 필요'};
+  var date = String((p && p.date) || '').trim() ||
+             Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
+
+  var m = labelMap_();
+  if(!m) return {success:false, error:"시트 없음: "+LABELS.SHEET};
+  if(!m.date){
+    return {success:false,
+      error:"'"+LABELS.DATE_COLS[0]+"' 열을 찾지 못했습니다 — 편집기에서 setupLabelListSheet() 를 실행하세요."};
+  }
+  var last = m.sh.getLastRow();
+  if(last <= m.row) return {success:true, written:0, checked:0, matched:0, missed:0, date:date};
+
+  var n = last - m.row;
+  var names = m.sh.getRange(m.row+1, m.hosp, n, 1).getDisplayValues();
+  var dRange = m.sh.getRange(m.row+1, m.date, n, 1);
+  var cRange = m.sh.getRange(m.row+1, m.done, n, 1);
+  var dates  = dRange.getValues();
+  var checks = cRange.getValues();
+
+  /* 요청받은 병원명을 정규화해 한 번에 찾는다 */
+  var want = {};
+  hosps.forEach(function(h){ var q=norm_(h); if(q) want[q]=true; });
+
+  var written = 0, checked = 0, hit = {};
+  for(var i=0;i<n;i++){
+    var q = norm_(String(names[i][0]||'').trim());
+    if(!q || !want[q]) continue;
+    hit[q] = true;
+    if(String(dates[i][0]||'').trim() === ''){   /* 이미 적힌 날짜는 덮어쓰지 않는다 */
+      dates[i][0] = date;
+      written++;
+    }
+    if(!isChecked_(checks[i][0])){
+      checks[i][0] = true;                       /* 체크박스 열이므로 boolean 으로 쓴다 */
+      checked++;
+    }
+  }
+  if(written) dRange.setValues(dates);
+  if(checked) cRange.setValues(checks);
+
+  var missed = Object.keys(want).filter(function(q){ return !hit[q]; }).length;
+  return {success:true, written:written, checked:checked,
+          matched:Object.keys(hit).length, missed:missed,
+          date:date, sheet:LABELS.SHEET};
+}
+
+/** '장비 Label list' 시트를 점검하고 '작성 일자' 열이 없으면 만든다 — 편집기에서 실행.
+ *  어떤 열을 병원명/중복/작성일자로 인식했는지 로그로 보여 준다. */
+function setupLabelListSheet(){
+  var m = labelMap_();
+  if(!m){ Logger.log('❌ 시트를 찾지 못했습니다: %s', LABELS.SHEET); return '시트없음'; }
+  Logger.log('시트 "%s" · 헤더 행 %s', m.sh.getName(), m.row || '(없음 — 1행부터 데이터)');
+  Logger.log('  병원명   → %s열', colLetter_(m.hosp));
+  Logger.log('  작성유무 → %s열', colLetter_(m.done));
+
+  if(!m.row){
+    Logger.log('⚠️ 헤더 행이 없어 \'%s\' 열을 만들 수 없습니다.', LABELS.DATE_COLS[0]);
+    Logger.log('   1행에 헤더(병원명 / 작성 유/무 / %s)를 넣고 다시 실행하세요.', LABELS.DATE_COLS[0]);
+    return '헤더없음';
+  }
+  if(!m.date){
+    var col = m.sh.getLastColumn() + 1;
+    m.sh.getRange(m.row, col).setValue(LABELS.DATE_COLS[0]);
+    m.sh.setColumnWidth(col, 110);
+    Logger.log('  작성일자 → %s열에 새로 만들었습니다', colLetter_(col));
+  }else{
+    Logger.log('  작성일자 → %s열 (이미 있음)', colLetter_(m.date));
+  }
+
+  var done = labelDoneSet_();
+  Logger.log('✅ 작성 완료로 체크된 병원 %s곳 — 이 병원들은 label.html 불러오기에서 빠집니다.',
+    Object.keys(done).length);
+  return 'OK';
+}
+
 /** GET ?action=labellist&from=YYYY-MM-DD&to=YYYY-MM-DD&fse=이름
  *  label.html(장비 Label List 생성기)이 표를 채우는 원본.
- *  같은 병원+S/N 이 여러 번 나오면 가장 최근 기록 1건만 남긴다. */
+ *  같은 병원+S/N 이 여러 번 나오면 가장 최근 기록 1건만 남긴다.
+ *  [v2.9] '장비 Label list' 시트에서 작성 완료로 체크(B열)한 병원은 빼고 돌려준다. */
 function labelList_(p){
   var from = parseD_(String(p.from||'').trim());
   var to   = parseD_(String(p.to||'').trim());
@@ -627,11 +805,17 @@ function labelList_(p){
   if(from > to){ var t = from; from = to; to = t; }
   to.setHours(23,59,59,0);
 
+  /* 이미 작성한 병원 (시트가 없으면 빈 목록 → 예전처럼 전부 내려간다) */
+  var doneSet = labelDoneSet_();
+  var doneHit = {};
+
   var qf = norm_(String(p.fse||'').trim());
   var hit = readAll_(true).rows.map(slim_).filter(function(r){   /* true = 사진 열까지 읽기 */
     var d = parseD_(r.date);
     if(!d || d < from || d > to) return false;
-    if(!String(r.hosp||'').trim()) return false;
+    var nm = String(r.hosp||'').trim();
+    if(!nm) return false;
+    if(doneSet[norm_(nm)]){ doneHit[norm_(nm)] = nm; return false; }   /* 이미 작성 → 제외 */
     if(!qf) return true;
     var f = norm_(r.fse);
     return !!f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0);
@@ -654,7 +838,10 @@ function labelList_(p){
     };
   });
 
+  var excluded = Object.keys(doneHit);
   return {success:true, count:rows.length, rows:rows,
+          excluded:excluded.length,                       /* 이미 작성해서 빠진 병원 수 */
+          excludedNames:excluded.map(function(k){ return doneHit[k]; }),
           from:Utilities.formatDate(from,'Asia/Seoul','yyyy-MM-dd'),
           to:  Utilities.formatDate(to,'Asia/Seoul','yyyy-MM-dd'),
           updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};

@@ -84,6 +84,8 @@ table.list input[type=text]:focus{border-color:var(--teal);background:#fff;box-s
 .export-row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
 .status-msg{font-size:12px;color:var(--text-muted);margin-top:8px;text-align:right;min-height:16px}
 .empty-note{text-align:center;padding:26px;color:var(--text-muted);font-size:13px}
+.dup-note{display:none;margin-top:10px;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;
+  background:#FDF1DE;border:1px solid #F0D9AE;color:#8A5B00}
 footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;font-size:11.5px}
 </style>
 <script src="auth.js"></script>
@@ -139,7 +141,12 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
         <button class="btn-primary" id="btnLoad" onclick="loadFromSheet()">📥 시트에서 불러오기</button>
       </div>
     </div>
-    <div class="hint" id="loadHint" style="margin-bottom:0">기본 기간은 지난 주(토~금)로 맞춰져 있습니다.</div>
+    <div class="hint" id="loadHint" style="margin-bottom:0">
+      기본 기간은 지난 주(토~금)로 맞춰져 있습니다.
+      '장비 Label list' 시트에서 <b>작성 유/무가 체크된 병원은 자동으로 빠집니다.</b><br>
+      내려받으면 그 병원들의 <b>작성 유/무가 체크되고 작성일자에 오늘 날짜가 적힙니다.</b>
+    </div>
+    <div class="dup-note" id="dupNote"></div>
   </div>
 
   <div class="card">
@@ -418,13 +425,15 @@ async function loadFromSheet(){
       return { hospital:r.hosp||'', sn:r.sn||'', note:r.note||'병원 장비',
                imageDataUrl:null, photoId:r.photoId||'' };
     });
+    LAST_EXCLUDED = d.excluded || 0;   /* '장비 Label list'에서 작성 완료로 체크되어 빠진 병원 수 */
+    showExcluded(d.excludedNames || []);
     render();
 
     /* 기준 주차 칸이 비어 있으면 조회 기간으로 채워 준다 */
     var dd = document.getElementById('docDate');
     if(!dd.value.trim()) dd.value = d.from + ' ~ ' + d.to;
 
-    setStatus(d.count+'건 불러옴 · 사진 받는 중…');
+    setStatus(d.count+'건 불러옴'+dupText()+' · 사진 받는 중…');
     await loadPhotos();
   }catch(e){
     console.error(e);
@@ -461,8 +470,21 @@ async function loadPhotos(){
     setStatus('사진 '+done+'/'+targets.length+'장 받는 중…');
   }
   setStatus(done===targets.length
-    ? rows.length+'건 불러옴 · 사진 '+done+'장'
-    : rows.length+'건 불러옴 · 사진 '+done+'/'+targets.length+'장 (일부 실패 — 표에서 직접 첨부 가능)');
+    ? rows.length+'건 불러옴'+dupText()+' · 사진 '+done+'장'
+    : rows.length+'건 불러옴'+dupText()+' · 사진 '+done+'/'+targets.length+'장 (일부 실패 — 표에서 직접 첨부 가능)');
+}
+
+/* ── 중복 병원 안내 ──────────────────────────────────────────────────── */
+var LAST_EXCLUDED = 0;
+function dupText(){ return LAST_EXCLUDED ? ' · 작성 완료 '+LAST_EXCLUDED+'곳 제외' : ''; }
+function showExcluded(names){
+  var box = document.getElementById('dupNote');
+  if(!names.length){ box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML = '🔁 <b>이미 작성한 '+names.length+'곳</b>은 빼고 불러왔습니다 — '
+    + escapeAttr(names.slice(0,8).join(', '))
+    + (names.length>8 ? ' 외 '+(names.length-8)+'곳' : '')
+    + '<br><span style="opacity:.8">\'장비 Label list\' 시트의 작성 유/무 체크 기준입니다.</span>';
 }
 
 /* 지난 주(토~금) 기본값 — handover 주간 보고 기준과 같다 */
@@ -532,6 +554,38 @@ function fileBaseName(){
   var title = document.getElementById('docTitle').value.trim() || '장비Label리스트';
   var date = document.getElementById('docDate').value.trim();
   return date ? title+'_'+date : title;
+}
+
+/* ── 내려받은 병원의 '작성 일자'를 시트에 기록 ────────────────────────
+   내려받은 병원을 '장비 Label list' 시트에서 작성 완료로 표시한다 —
+   작성 유/무 체크 + 작성일자에 그날 날짜(이미 적힌 날짜는 서버에서 보존).
+   이렇게 해야 다음 내려받기에서 그 병원들이 빠진다.
+   기록에 실패해도 파일은 이미 내려간 뒤이므로 안내만 하고 막지 않는다. */
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+async function markDownloaded(){
+  var hosps = rows.map(function(r){ return String(r.hospital||'').trim(); })
+                  .filter(function(h){ return h; });
+  if(!hosps.length) return '';
+  var payload = { action:'labeldone', hosps:hosps, date:todayISO(),
+                  token:(window.BazAuth&&BazAuth.token)?BazAuth.token():'' };
+  try{
+    var res = await fetch(HANDOVER_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(payload)
+    });
+    var txt = await res.text();
+    if(/^\s*</.test(txt)) return ' · 시트 기록 실패(서버 깨우는 중)';
+    var d = JSON.parse(txt);
+    if(!d.success) return ' · 시트 기록 실패: '+(d.error||'');
+    return ' · 시트에 작성 완료 '+d.checked+'곳 표시'
+         + (d.written ? ', 작성일자 '+d.written+'곳 기록' : '')
+         + (d.missed ? ' (시트에 없는 병원 '+d.missed+'곳)' : '');
+  }catch(e){
+    return ' · 시트 기록 실패(네트워크)';
+  }
 }
 
 /* ── 외부 라이브러리 지연 로드 (weekly.html·dashboard.html 과 같은 방식) ──
@@ -646,7 +700,8 @@ async function exportExcel(){
     var buf = await wb.xlsx.writeBuffer();
     var blob = new Blob([buf], {type:'application/octet-stream'});
     saveAs(blob, fileBaseName()+'.xlsx');
-    setStatus('엑셀 파일 생성 완료 ('+rows.length+'건)');
+    setStatus('엑셀 파일 생성 완료 ('+rows.length+'건) · 시트 기록 중…');
+    setStatus('엑셀 파일 생성 완료 ('+rows.length+'건)' + await markDownloaded());
   }catch(err){
     console.error(err);
     setStatus('엑셀 생성 중 오류가 발생했습니다.');
@@ -760,7 +815,9 @@ async function exportPPT(){
     }
 
     await pptx.writeFile({fileName: fileBaseName()+'.pptx'});
-    setStatus('PPT 파일 생성 완료 ('+rows.length+'건, 슬라이드 '+Math.ceil(rows.length/rowsPerSlide)+'장)');
+    var head = 'PPT 파일 생성 완료 ('+rows.length+'건, 슬라이드 '+Math.ceil(rows.length/rowsPerSlide)+'장)';
+    setStatus(head + ' · 시트 기록 중…');
+    setStatus(head + await markDownloaded());
   }catch(err){
     console.error(err);
     setStatus('PPT 생성 중 오류가 발생했습니다.');
