@@ -667,17 +667,52 @@ function rememberRecentHandover_(){
     localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
   }catch(e){}
 }
+/* ── 시트 웹앱 버전 확인 ─────────────────────────────────────────────
+   프런트는 git push 로 즉시 바뀌지만 GAS는 사람이 직접 재배포해야 해서, 한동안
+   "새 화면 + 구버전 시트" 상태가 된다. 구버전(v2.7 이하)은 사진을 받아도 버리기만
+   하므로, 그대로 보내면 사용자는 첨부한 사진이 저장된 줄 알고 잃게 된다.
+   → 버전을 확인해 지원할 때만 보내고, 아니면 사진을 지우지 않고 그대로 알린다. */
+var GAS_VER='';
+function verGte(a, b){
+  var x=String(a||'').split('.'), y=String(b||'').split('.');
+  for(var i=0;i<3;i++){
+    var d=(parseInt(x[i],10)||0)-(parseInt(y[i],10)||0);
+    if(d) return d>0;
+  }
+  return true;
+}
+function gasPing(){
+  return fetch(postUrl()+'?action=ping')
+    .then(function(r){ return r.text(); })
+    .then(function(t){
+      if(/^\s*</.test(t)) return '';        /* 콜드스타트 HTML — 아직 모름 */
+      var d=JSON.parse(t); GAS_VER=d.ver||''; return GAS_VER;
+    })
+    .catch(function(){ return ''; });
+}
+function gasSupportsPhoto(){ return verGte(GAS_VER, '2.8.0'); }
+
 /* 기록 1건에 붙는 고유 키 — 아래 no-cors 재전송이 같은 키를 그대로 다시 보내므로
    서버가 "같은 요청"임을 알아보고 두 번째는 첫 결과만 돌려준다(행 중복·사진 중복 방지) */
 function newReqId(){
   try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
   return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
 }
+/* 사진을 붙였는데 못 보낸 경우, 저장된 줄 알고 넘어가지 않도록 분명히 알린다.
+   (사진은 화면에 그대로 남겨 두므로 시트 재배포 후 다시 [시트 기록]만 누르면 된다) */
+function afterSaveMsg(base, sentPhoto){
+  if(!SN_PHOTO || sentPhoto) return base;
+  return base + '\n⚠️ 사진은 저장되지 않았습니다 — 시트 웹앱이 아직 이전 버전('
+       + (GAS_VER || '확인 불가') + ')입니다.\n재배포 후 다시 [시트 기록]을 눌러 주세요.';
+}
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
   /* 사용자 숙련도 평가는 선택 항목 — 미선택이어도 기록 진행(빈 값은 시트에서 미기록) */
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
+  /* 사진이 붙어 있는데 아직 버전을 모르면 한 번 더 물어본다(첫 ping이 콜드스타트로 비었을 수 있음) */
+  if(SN_PHOTO && !gasSupportsPhoto()) await gasPing();
+  var sendPhoto = !!SN_PHOTO && gasSupportsPhoto();
   var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
     cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
     cost:(String(val('cost')||'').trim() || '무상'),   /* 교체비용 공란이면 시트에 '무상' 기록 */
@@ -685,7 +720,7 @@ async function saveToSheet(){
     hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP'),
     nozzle:val('nozzleReuse'),   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
     nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet,   /* R·S·T열 사용자 숙련도 평가 */
-    snPhoto:SN_PHOTO||'',   /* U열 장비 S/N 사진 — 서버가 Drive에 올리고 =IMAGE() 썸네일로 기록 */
+    snPhoto:sendPhoto?SN_PHOTO:'',   /* U열 장비 S/N 사진 — 서버가 Drive에 올리고 =IMAGE() 썸네일로 기록 */
     reqId:newReqId(),   /* 콜드스타트 재전송이 같은 행을 두 번 쌓지 않도록 하는 멱등성 키 */
     token:(window.BazAuth&&BazAuth.token)?BazAuth.token():'' };   /* [보안] 서버 쓰기 인증 토큰 */
   try{
@@ -694,15 +729,16 @@ async function saveToSheet(){
     try{
       var r=await fetch(postUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
       var d=await r.json();
-      if(d&&d.success){ toast(d.msg||'✅ 시트 기록 완료'); ok=true; enableCopy(); rememberRecentHandover_(); clearSnPhoto(); }
+      if(d&&d.success){ toast(afterSaveMsg(d.msg||'✅ 시트 기록 완료', sendPhoto)); ok=true;
+        enableCopy(); rememberRecentHandover_(); if(sendPhoto) clearSnPhoto(); }
       else if(d&&d.error){ toast('❌ '+d.error); ok=true; }   /* 오류는 복사 활성화 안 함 */
     }catch(_){}
     if(!ok){
       await fetch(postUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-      toast('시트에 기록됐어요');
+      toast(afterSaveMsg('시트에 기록됐어요', sendPhoto));
       enableCopy();   /* 응답 확인 불가(no-cors)여도 기록 요청은 전송됨 → 복사 허용 */
       rememberRecentHandover_();
-      clearSnPhoto();   /* 다음 병원 입력 때 직전 사진이 다시 전송되지 않도록 비운다 */
+      if(sendPhoto) clearSnPhoto();   /* 다음 병원 입력 때 직전 사진이 다시 전송되지 않도록 비운다 */
     }
   }catch(e){ toast('기록 실패 — 네트워크 확인'); }
   setTimeout(function(){btn.disabled=false;btn.textContent='📥 시트 기록';},1200);
@@ -844,7 +880,7 @@ function showToday(){
 
 initTax(); fillParts(); fillSN([]); loadLiveDB(); loadFse();
 document.getElementById('date').value=todayISO();
-if(HANDOVER_URL){ masterSync(); fetch(HANDOVER_URL+'?action=ping').catch(function(){}); } /* 콜드스타트 예열 */
+if(HANDOVER_URL){ masterSync(); gasPing(); } /* 콜드스타트 예열 + 시트 웹앱 버전 확인 */
 
 function toast(msg){
   var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('on');
