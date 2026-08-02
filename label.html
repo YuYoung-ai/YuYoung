@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<title>주간 병원별 장비 Label List | BAZ CS</title>
+<style>
+:root{
+  --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+  --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--gray-bg);color:var(--text);
+  font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px;line-height:1.5}
+header{background:var(--navy);color:#fff;padding:16px 18px;position:relative}
+header h1{margin:0;font-size:17px;font-weight:700}
+header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
+.home-link{position:absolute;top:16px;right:14px;display:flex;align-items:center;gap:4px;
+  background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.3);color:#cfdbf0;
+  font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none}
+.wrap{max-width:1240px;margin:0 auto;padding:16px}
+.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:16px;margin-bottom:14px}
+.sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
+  margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--navy);margin-bottom:5px}
+label .opt{color:var(--text-muted);font-weight:400}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-line);
+  border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;min-width:0}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+textarea{resize:vertical;min-height:88px;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.row>div{flex:1 1 180px;min-width:150px}
+.row>div.grow{flex:2 1 300px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:860px){ .two{grid-template-columns:1fr} }
+.hint{font-size:11.5px;color:var(--text-muted);margin:6px 0 8px;line-height:1.6}
+button{cursor:pointer;border:none;border-radius:8px;font-size:13px;padding:9px 14px;
+  font-weight:700;font-family:inherit;transition:.15s}
+button:hover{filter:brightness(.95)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-dark{background:var(--navy);color:#fff}
+.btn-muted{background:#EEF1F6;color:var(--text)}
+.btn-danger{background:#FBEAE8;color:var(--red)}
+.btn-sm{padding:4px 9px;font-size:11.5px}
+input[type=file]{font-size:12px;border:none;padding:0}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.count-badge{font-size:12.5px;font-weight:700;color:var(--navy);background:var(--teal-soft);
+  padding:5px 11px;border-radius:20px}
+.count-badge.warn{color:#8A5B00;background:#FDF1DE}
+
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table.list{width:100%;border-collapse:collapse;font-size:12.5px;min-width:720px}
+table.list th{background:var(--navy);color:#fff;padding:9px 6px;font-size:12px;font-weight:700}
+table.list td{border:1px solid var(--gray-line);padding:6px;vertical-align:middle;text-align:center}
+table.list tr:nth-child(even) td{background:#FAFBFD}
+.col-no{width:42px}
+.col-hospital{min-width:190px}
+.col-sn{width:120px}
+.col-photo{width:130px}
+.col-note{width:150px}
+.col-actions{width:70px}
+table.list input[type=text]{width:100%;border:1px solid transparent;background:transparent;
+  padding:5px 4px;font-size:12.5px;border-radius:4px;text-align:inherit;min-height:0}
+table.list input[type=text]:focus{border-color:var(--teal);background:#fff;box-shadow:none}
+.col-hospital input{text-align:left}
+
+.img-cell{width:96px;height:96px;margin:0 auto;border:1.5px dashed #B8C4D1;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--text-muted);
+  cursor:pointer;overflow:hidden;position:relative;background:#F7F9FB;line-height:1.4}
+.img-cell:focus{outline:2px solid var(--teal)}
+.img-cell img{width:100%;height:100%;object-fit:cover}
+.img-cell .remove-x{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.55);color:#fff;
+  width:16px;height:16px;border-radius:50%;font-size:11px;line-height:16px;text-align:center;display:none}
+.img-cell:hover .remove-x{display:block}
+.row-actions{display:flex;flex-direction:column;gap:3px;align-items:center}
+
+.export-row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.status-msg{font-size:12px;color:var(--text-muted);margin-top:8px;text-align:right;min-height:16px}
+.empty-note{text-align:center;padding:26px;color:var(--text-muted);font-size:13px}
+footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;font-size:11.5px}
+</style>
+<script src="auth.js"></script>
+</head>
+<body>
+
+<header>
+  <a href="index.html" class="home-link">← 메뉴</a>
+  <h1>주간 병원별 장비 Label List</h1>
+  <p>현장 처리 현황 시트에서 불러오거나 직접 입력 → 엑셀(.xlsx)·PPT(.pptx) 생성</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <p class="sec-title">문서 정보</p>
+    <div class="row">
+      <div class="grow">
+        <label>문서 제목</label>
+        <input type="text" id="docTitle" value="주간 병원별 장비 Label List">
+      </div>
+      <div>
+        <label>기준 주차 / 작성일</label>
+        <input type="text" id="docDate" placeholder="예: 2026-07-28 (7월 4주차)">
+      </div>
+      <div>
+        <label>작성자</label>
+        <input type="text" id="docAuthor" placeholder="예: CS팀 유영">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="sec-title">① 현장 처리 현황 시트에서 불러오기</p>
+    <div class="hint">
+      handover(현장 처리완료·공유)로 기록한 내용에서 <b>병원명 · 장비 S/N · 장비 S/N 사진</b>을 그대로 가져옵니다.<br>
+      같은 병원+S/N이 여러 번 기록됐으면 가장 최근 1건만 남습니다. 불러온 뒤에도 표에서 자유롭게 수정할 수 있습니다.
+    </div>
+    <div class="row">
+      <div>
+        <label>시작일</label>
+        <input type="date" id="loadFrom">
+      </div>
+      <div>
+        <label>종료일</label>
+        <input type="date" id="loadTo">
+      </div>
+      <div>
+        <label>담당 FSE <span class="opt">· 비우면 전체</span></label>
+        <input type="text" id="loadFse" placeholder="예) 권오성">
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button class="btn-primary" id="btnLoad" onclick="loadFromSheet()">📥 시트에서 불러오기</button>
+      </div>
+    </div>
+    <div class="hint" id="loadHint" style="margin-bottom:0">기본 기간은 지난 주(토~금)로 맞춰져 있습니다.</div>
+  </div>
+
+  <div class="card">
+    <p class="sec-title">② 직접 입력 · 사진 일괄 배치</p>
+    <div class="two">
+      <div>
+        <div class="hint">
+          엑셀에서 <b>병원명 → 장비 S/N → 비고</b> 3개 열을 복사(Ctrl+C)해 아래에 붙여넣으세요.<br>
+          한 줄에 한 병원, 열은 Tab으로 구분됩니다. (비고를 비우면 '병원 장비'로 채워집니다)
+        </div>
+        <textarea id="bulkText" placeholder="오가나셀피부과의원 청담 본점&#9;BV5026&#9;병원 장비&#10;더힐피부과의원 마포공덕&#9;BV5027&#9;데모 장비"></textarea>
+        <div style="margin-top:8px">
+          <button class="btn-dark" onclick="applyBulkText()">텍스트를 표에 반영</button>
+          <button class="btn-muted" onclick="document.getElementById('bulkText').value=''">지우기</button>
+        </div>
+      </div>
+      <div>
+        <div class="hint">
+          휴대폰/카메라로 찍은 <b>사진 여러 장을 한 번에 선택</b>하면 표의 빈 사진 칸에 위→아래 순서로 채워집니다.<br>
+          선택 전 파일 탐색기에서 병원 리스트 순서대로 정렬해두면 편리합니다.
+        </div>
+        <input type="file" id="bulkPhotos" accept="image/*" multiple onchange="applyBulkPhotos(event)">
+        <div class="hint" style="margin-top:10px">
+          개별 사진은 아래 표의 사진 칸을 클릭하거나, 칸을 클릭한 뒤 Ctrl+V로 붙여넣어도 됩니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="sec-title">③ 병원별 장비 리스트</p>
+    <div class="toolbar">
+      <div>
+        <button class="btn-dark" onclick="addRow()">+ 행 추가</button>
+        <button class="btn-muted" onclick="addRows(5)">+ 5행 추가</button>
+        <button class="btn-danger" onclick="clearAll()">전체 초기화</button>
+      </div>
+      <div id="countBadge" class="count-badge">총 0건</div>
+    </div>
+
+    <div class="table-scroll"><div id="tableHolder"></div></div>
+
+    <div class="export-row">
+      <button class="btn-primary" onclick="exportExcel()">📊 엑셀 다운로드 (.xlsx)</button>
+      <button class="btn-dark" onclick="exportPPT()">📑 PPT 다운로드 (.pptx)</button>
+    </div>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+
+</div>
+
+<footer class="appbar">BAZ BIOMEDIC · CS팀 내부 도구 — 파일은 브라우저에서 직접 생성되며 서버로 전송되지 않습니다.</footer>
+
+<input type="file" id="hiddenFileInput" accept="image/*" style="display:none">
+
+<script>
+/* ── 시트 연동 (handover.html 의 HANDOVER_URL 과 같은 배포 URL) ────────── */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+var PHOTO_BATCH=4;   /* ?action=snphoto 한 번에 요청할 사진 수 (GAS SNPHOTO_MAX 와 동일) */
+
+var rows = [];
+var activeImgIdx = null;
+
+function newRow(){
+  return { hospital:'', sn:'', note:'병원 장비', imageDataUrl:null, photoId:'' };
+}
+
+function addRow(){ rows.push(newRow()); render(); }
+function addRows(n){ for(var i=0;i<n;i++) rows.push(newRow()); render(); }
+function removeRow(idx){ rows.splice(idx,1); render(); }
+function moveRow(idx, dir){
+  var target = idx+dir;
+  if(target<0 || target>=rows.length) return;
+  var tmp = rows[idx]; rows[idx] = rows[target]; rows[target] = tmp;
+  render();
+}
+function clearAll(){
+  if(rows.length===0) return;
+  if(confirm('입력된 모든 행과 사진을 삭제할까요? 되돌릴 수 없습니다.')){
+    rows = [];
+    render();
+  }
+}
+
+function updateField(idx, key, value){ rows[idx][key] = value; }
+
+function resizeImage(dataUrl, maxDim, quality){
+  maxDim = maxDim || 1600; quality = quality || 0.92;
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      var width = img.width, height = img.height;
+      if(width>height){
+        if(width>maxDim){ height = Math.round(height*maxDim/width); width = maxDim; }
+      } else {
+        if(height>maxDim){ width = Math.round(width*maxDim/height); height = maxDim; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img,0,0,width,height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = function(){ resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+
+function readFileAsDataUrl(file){
+  return new Promise(function(resolve,reject){
+    var r = new FileReader();
+    r.onload = function(){ resolve(r.result); };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function setRowImageFromFile(idx, file){
+  if(!file || file.type.indexOf('image/')!==0) return;
+  var raw = await readFileAsDataUrl(file);
+  var resized = await resizeImage(raw);
+  rows[idx].imageDataUrl = resized;
+  render();
+}
+
+function openFilePicker(idx){
+  activeImgIdx = idx;
+  document.getElementById('hiddenFileInput').click();
+}
+document.getElementById('hiddenFileInput').addEventListener('change', async function(e){
+  var file = e.target.files[0];
+  if(file && activeImgIdx!==null){ await setRowImageFromFile(activeImgIdx, file); }
+  e.target.value = '';
+});
+
+function removeImage(idx, evt){
+  evt.stopPropagation();
+  rows[idx].imageDataUrl = null;
+  render();
+}
+
+async function handleCellPaste(idx, evt){
+  var items = evt.clipboardData && evt.clipboardData.items;
+  if(!items) return;
+  for(var i=0;i<items.length;i++){
+    if(items[i].type.indexOf('image/')===0){
+      evt.preventDefault();
+      await setRowImageFromFile(idx, items[i].getAsFile());
+      break;
+    }
+  }
+}
+
+function applyBulkText(){
+  var text = document.getElementById('bulkText').value;
+  if(!text.trim()) return;
+  var lines = text.split(/\r?\n/).filter(function(l){ return l.trim().length>0; });
+  lines.forEach(function(line){
+    var cols = line.split('\t');
+    rows.push({
+      hospital: (cols[0]||'').trim(),
+      sn: (cols[1]||'').trim(),
+      note: (cols[2]||'').trim() || '병원 장비',
+      imageDataUrl: null,
+      photoId: ''
+    });
+  });
+  document.getElementById('bulkText').value='';
+  render();
+}
+
+async function applyBulkPhotos(evt){
+  var files = Array.prototype.slice.call(evt.target.files || []);
+  if(files.length===0) return;
+  /* 사진이 없는 행을 위에서부터 채우고, 모자라면 행을 새로 만든다 */
+  var emptySlots = [];
+  rows.forEach(function(r,i){ if(!r.imageDataUrl) emptySlots.push(i); });
+  while(emptySlots.length < files.length){
+    rows.push(newRow());
+    emptySlots.push(rows.length-1);
+  }
+  for(var i=0;i<files.length;i++){
+    var raw = await readFileAsDataUrl(files[i]);
+    rows[emptySlots[i]].imageDataUrl = await resizeImage(raw);
+  }
+  evt.target.value='';
+  render();
+}
+
+/* ── 시트에서 불러오기 ───────────────────────────────────────────────── */
+function gvUrl(action, params){
+  var qs = Object.keys(params||{}).map(function(k){
+    return k+'='+encodeURIComponent(params[k]);
+  }).join('&');
+  var u = HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
+  if(window.BazAuth && BazAuth.withToken) u = BazAuth.withToken(u);   /* [보안] 조회 인증 토큰 */
+  return u;
+}
+
+async function loadFromSheet(){
+  var from = document.getElementById('loadFrom').value;
+  var to   = document.getElementById('loadTo').value;
+  var fse  = document.getElementById('loadFse').value.trim();
+  if(!from || !to){ alert('시작일과 종료일을 선택하세요.'); return; }
+
+  var btn = document.getElementById('btnLoad');
+  btn.disabled = true; btn.textContent = '불러오는 중…';
+  setStatus('시트 조회 중…');
+  try{
+    var res = await fetch(gvUrl('labellist', {from:from, to:to, fse:fse}));
+    var d = await res.json();
+    if(!d.success) throw new Error(d.error||'조회 실패');
+    if(!d.count){
+      setStatus('해당 기간에 기록이 없습니다.');
+      alert('해당 기간('+d.from+' ~ '+d.to+')에 기록이 없습니다.');
+      return;
+    }
+
+    rows = d.rows.map(function(r){
+      return { hospital:r.hosp||'', sn:r.sn||'', note:r.note||'병원 장비',
+               imageDataUrl:null, photoId:r.photoId||'' };
+    });
+    render();
+
+    /* 기준 주차 칸이 비어 있으면 조회 기간으로 채워 준다 */
+    var dd = document.getElementById('docDate');
+    if(!dd.value.trim()) dd.value = d.from + ' ~ ' + d.to;
+
+    setStatus(d.count+'건 불러옴 · 사진 받는 중…');
+    await loadPhotos();
+  }catch(e){
+    console.error(e);
+    setStatus('불러오기 실패');
+    alert('불러오기 실패: '+e.message+'\n\n로그인이 만료됐거나 시트 웹앱이 재배포되지 않았을 수 있습니다.');
+  }finally{
+    btn.disabled = false; btn.textContent = '📥 시트에서 불러오기';
+  }
+}
+
+/* 사진은 Drive를 브라우저에서 직접 못 읽으므로(CORS) GAS 프록시로 나눠 받는다 */
+async function loadPhotos(){
+  var targets = [];
+  rows.forEach(function(r,i){ if(r.photoId && !r.imageDataUrl) targets.push(i); });
+  if(!targets.length){ setStatus(rows.length+'건 불러옴 · 첨부된 사진 없음'); return; }
+
+  var done = 0;
+  for(var s=0; s<targets.length; s+=PHOTO_BATCH){
+    var chunk = targets.slice(s, s+PHOTO_BATCH);
+    var ids = chunk.map(function(i){ return rows[i].photoId; });
+    try{
+      var res = await fetch(gvUrl('snphoto', {ids: ids.join(',')}));
+      var d = await res.json();
+      if(d && d.success){
+        chunk.forEach(function(i){
+          var url = d.photos[rows[i].photoId];
+          if(url){ rows[i].imageDataUrl = url; done++; }
+        });
+        render();
+      }
+    }catch(e){ console.warn('[label] 사진 조회 실패:', e); }
+    setStatus('사진 '+done+'/'+targets.length+'장 받는 중…');
+  }
+  setStatus(rows.length+'건 불러옴 · 사진 '+done+'/'+targets.length+'장');
+}
+
+/* 지난 주(토~금) 기본값 — handover 주간 보고 기준과 같다 */
+function setDefaultRange(){
+  var today = new Date();
+  var mon = new Date(today);
+  mon.setDate(mon.getDate() - ((today.getDay()+6) % 7));   /* 이번 주 월요일 */
+  var sat = new Date(mon); sat.setDate(sat.getDate()-2);   /* 전주 토요일 */
+  var fri = new Date(mon); fri.setDate(fri.getDate()+4);   /* 이번 주 금요일 */
+  document.getElementById('loadFrom').value = isoDate(sat);
+  document.getElementById('loadTo').value   = isoDate(fri);
+}
+function isoDate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* ── 표 렌더링 ───────────────────────────────────────────────────────── */
+function render(){
+  var holder = document.getElementById('tableHolder');
+  if(rows.length===0){
+    holder.innerHTML = '<div class="empty-note">아직 입력된 병원이 없습니다. 위에서 시트를 불러오거나 텍스트를 붙여넣으세요.</div>';
+  } else {
+    var html = '<table class="list"><thead><tr>'+
+      '<th class="col-no">No.</th>'+
+      '<th class="col-hospital">병원명</th>'+
+      '<th class="col-sn">장비 S/N</th>'+
+      '<th class="col-photo">장비 사진</th>'+
+      '<th class="col-note">비고</th>'+
+      '<th class="col-actions">관리</th>'+
+      '</tr></thead><tbody>';
+    rows.forEach(function(row, idx){
+      html += '<tr>'+
+        '<td class="col-no">'+(idx+1)+'</td>'+
+        '<td class="col-hospital"><input type="text" value="'+escapeAttr(row.hospital)+'" placeholder="병원명" oninput="updateField('+idx+',\'hospital\',this.value)"></td>'+
+        '<td class="col-sn"><input type="text" value="'+escapeAttr(row.sn)+'" placeholder="S/N" oninput="updateField('+idx+',\'sn\',this.value)"></td>'+
+        '<td class="col-photo">'+
+          '<div class="img-cell" tabindex="0" onclick="openFilePicker('+idx+')" onpaste="handleCellPaste('+idx+', event)">'+
+            (row.imageDataUrl
+              ? '<img src="'+row.imageDataUrl+'"><span class="remove-x" onclick="removeImage('+idx+', event)">✕</span>'
+              : (row.photoId ? '사진 받는 중…' : '클릭 또는<br>Ctrl+V 붙여넣기'))+
+          '</div>'+
+        '</td>'+
+        '<td class="col-note"><input type="text" value="'+escapeAttr(row.note)+'" placeholder="병원 장비 / 데모 장비" oninput="updateField('+idx+',\'note\',this.value)"></td>'+
+        '<td class="col-actions">'+
+          '<div class="row-actions">'+
+            '<button class="btn-muted btn-sm" onclick="moveRow('+idx+',-1)">▲</button>'+
+            '<button class="btn-muted btn-sm" onclick="moveRow('+idx+',1)">▼</button>'+
+            '<button class="btn-danger btn-sm" onclick="removeRow('+idx+')">삭제</button>'+
+          '</div>'+
+        '</td>'+
+      '</tr>';
+    });
+    html += '</tbody></table>';
+    holder.innerHTML = html;
+  }
+  var badge = document.getElementById('countBadge');
+  badge.textContent = '총 '+rows.length+'건';
+  badge.className = rows.length>30 ? 'count-badge warn' : 'count-badge';
+}
+
+function escapeAttr(str){
+  return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function setStatus(msg){ document.getElementById('statusMsg').textContent = msg; }
+
+function fileBaseName(){
+  var title = document.getElementById('docTitle').value.trim() || '장비Label리스트';
+  var date = document.getElementById('docDate').value.trim();
+  return date ? title+'_'+date : title;
+}
+
+/* ── 외부 라이브러리 지연 로드 (weekly.html·dashboard.html 과 같은 방식) ──
+   내려받기 버튼을 누른 순간에만 받아오고, CDN 하나가 막혀도 다음 것으로 넘어간다.
+   ※ pptxgenjs 는 cdnjs 에 없다 — jsDelivr/unpkg 만 유효하다. */
+var XLSX_CDNS=[
+  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+  'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+  'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'
+];
+var SAVER_CDNS=[
+  'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js',
+  'https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js',
+  'https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js'
+];
+var PPTX_CDNS=[
+  'https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+  'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
+];
+function loadLib(urls, globalName, label){
+  if(window[globalName]) return Promise.resolve();
+  return urls.reduce(function(chain,url){
+    return chain.catch(function(){
+      return new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src=url;
+        s.onload=function(){ window[globalName] ? res() : rej('로드 후 초기화 실패'); };
+        s.onerror=function(){ rej('CDN 실패: '+url); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.reject('start'))
+  .catch(function(){ throw new Error(label+' 라이브러리 로드 실패 — 네트워크 확인'); });
+}
+
+/* ── 엑셀 (.xlsx) ────────────────────────────────────────────────────── */
+async function exportExcel(){
+  if(rows.length===0){ alert('입력된 행이 없습니다.'); return; }
+  setStatus('엑셀 생성 중...');
+  try{
+    await loadLib(XLSX_CDNS, 'ExcelJS', '엑셀');
+    await loadLib(SAVER_CDNS, 'saveAs', '파일 저장');
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet('장비 이력');
+    /* 사진 셀을 정사각형으로 구성 (약 120x120px) */
+    var PHOTO_COL_WIDTH = 16.4;  // ≈120px 열 너비
+    var PHOTO_ROW_HEIGHT = 90;   // ≈120px 행 높이(pt)
+
+    ws.columns = [{width:6},{width:38},{width:16},{width:PHOTO_COL_WIDTH},{width:16}];
+
+    var title = document.getElementById('docTitle').value.trim() || '주간 병원별 장비 Label List';
+    var date = document.getElementById('docDate').value.trim();
+    var author = document.getElementById('docAuthor').value.trim();
+
+    ws.mergeCells('A1:E1');
+    ws.getCell('A1').value = title;
+    ws.getCell('A1').font = {size:14,bold:true};
+    ws.getRow(1).height = 24;
+
+    if(date || author){
+      ws.mergeCells('A2:E2');
+      ws.getCell('A2').value = [date, author ? '작성자: '+author : ''].filter(Boolean).join('   |   ');
+      ws.getCell('A2').font = {size:10, color:{argb:'FF666666'}};
+      ws.getRow(2).height = 16;
+    }
+
+    var headerRowIdx = (date||author) ? 3 : 2;
+    var headerRow = ws.getRow(headerRowIdx);
+    ['No.','병원명','장비 S/N','장비 사진','비고'].forEach(function(h,i){
+      var cell = headerRow.getCell(i+1);
+      cell.value = h;
+      cell.font = {bold:true};
+      cell.alignment = {horizontal:'center', vertical:'middle'};
+      cell.border = thinBorder();
+      cell.fill = {type:'pattern', pattern:'solid', fgColor:{argb:'FFEFF3F8'}};
+    });
+    headerRow.height = 20;
+
+    var currentRowIdx = headerRowIdx + 1;
+    for(var i=0;i<rows.length;i++){
+      var row = rows[i];
+      var r = ws.getRow(currentRowIdx);
+      r.height = PHOTO_ROW_HEIGHT;
+      var vals = [i+1, row.hospital, row.sn, '', row.note];
+      vals.forEach(function(v,ci){
+        var cell = r.getCell(ci+1);
+        cell.value = v;
+        cell.border = thinBorder();
+        cell.alignment = {horizontal: ci===1?'left':'center', vertical:'middle', wrapText:true};
+      });
+      if(row.imageDataUrl){
+        /* 정사각형으로 크롭 후 셀 전체를 채우도록 twoCell 앵커 사용 */
+        var dataRow = currentRowIdx - 1; // 0-based row index
+        var colIdx  = 3;                 // 0-based col index (D열)
+
+        var SQ = 1000; // 크롭 해상도(정사각형) - 라벨 글씨 판독 가능하도록 고해상도
+        var filled = await cropToCover(row.imageDataUrl, SQ, SQ);
+        var base64 = filled.split(',')[1];
+        var imgId = wb.addImage({base64:base64, extension:'jpeg'});
+
+        /* tl=셀 좌상단, br=셀 우하단 → 정사각형 셀에 딱 맞게 채움 */
+        ws.addImage(imgId, {
+          tl: { col: colIdx,     row: dataRow },
+          br: { col: colIdx + 1, row: dataRow + 1 },
+          editAs: 'oneCell'
+        });
+      }
+      currentRowIdx++;
+    }
+
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], {type:'application/octet-stream'});
+    saveAs(blob, fileBaseName()+'.xlsx');
+    setStatus('엑셀 파일 생성 완료 ('+rows.length+'건)');
+  }catch(err){
+    console.error(err);
+    setStatus('엑셀 생성 중 오류가 발생했습니다.');
+    alert('엑셀 생성 중 오류가 발생했습니다: ' + err.message);
+  }
+}
+
+/* 이미지를 목표 상자에 꽉 차게 크롭+확대 (CSS object-fit: cover 와 같은 계산) */
+function cropToCover(dataUrl, targetW, targetH){
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      var canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      var ctx = canvas.getContext('2d');
+      var srcRatio = img.width / img.height;
+      var dstRatio = targetW / targetH;
+      var sx, sy, sw, sh;
+      if(srcRatio > dstRatio){
+        sh = img.height;
+        sw = sh * dstRatio;
+        sx = (img.width - sw) / 2;
+        sy = 0;
+      } else {
+        sw = img.width;
+        sh = sw / dstRatio;
+        sx = 0;
+        sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, targetW, targetH);
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = function(){ resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+
+function thinBorder(){
+  return {top:{style:'thin',color:{argb:'FFCCCCCC'}}, left:{style:'thin',color:{argb:'FFCCCCCC'}},
+          bottom:{style:'thin',color:{argb:'FFCCCCCC'}}, right:{style:'thin',color:{argb:'FFCCCCCC'}}};
+}
+
+/* ── PPT (.pptx) ─────────────────────────────────────────────────────── */
+async function exportPPT(){
+  if(rows.length===0){ alert('입력된 행이 없습니다.'); return; }
+  setStatus('PPT 생성 중...');
+  var rowsPerSlide = 5;
+  try{
+    await loadLib(PPTX_CDNS, 'PptxGenJS', 'PPT');
+    var pptx = new PptxGenJS();
+    pptx.defineLayout({name:'CUSTOM', width:13.33, height:7.5});
+    pptx.layout = 'CUSTOM';
+
+    var title = document.getElementById('docTitle').value.trim() || '주간 병원별 장비 Label List';
+    var date = document.getElementById('docDate').value.trim();
+    var author = document.getElementById('docAuthor').value.trim();
+
+    var marginX = 0.4;
+    var colWidths = [0.6, 4.0, 1.9, 2.8, 2.2];
+    var colX = [];
+    var x = marginX;
+    colWidths.forEach(function(w){ colX.push(x); x+=w; });
+    var totalW = x - marginX;
+
+    var rowHeight = 1.15;
+    var headerH = 0.42;
+    var topStart = 1.1;
+
+    for(var start=0; start<rows.length; start+=rowsPerSlide){
+      var slide = pptx.addSlide();
+      slide.background = {color:'FFFFFF'};
+      slide.addText(title, {x:marginX, y:0.25, w:totalW, h:0.45, fontSize:20, bold:true, color:'1B2F5E'});
+      var sub = [date, author ? '작성자: '+author : ''].filter(Boolean).join('   |   ');
+      if(sub){
+        slide.addText(sub, {x:marginX, y:0.68, w:totalW, h:0.3, fontSize:11, color:'666666'});
+      }
+
+      var y = topStart;
+      ['No.','병원명','장비 S/N','장비 사진','비고'].forEach(function(h,idx){
+        slide.addShape('rect', {x:colX[idx], y:y, w:colWidths[idx], h:headerH, fill:{color:'1B2F5E'}, line:{color:'1B2F5E'}});
+        slide.addText(h, {x:colX[idx], y:y, w:colWidths[idx], h:headerH, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle'});
+      });
+      y += headerH;
+
+      /* forEach 안에서 y를 갱신하므로 클로저 대신 인덱스 루프를 쓴다 */
+      var chunk = rows.slice(start, start+rowsPerSlide);
+      for(var i=0;i<chunk.length;i++){
+        var row = chunk[i];
+        var globalIdx = start+i;
+        var vals = [String(globalIdx+1), row.hospital||'', row.sn||'', '', row.note||''];
+        for(var ci=0; ci<vals.length; ci++){
+          slide.addShape('rect', {x:colX[ci], y:y, w:colWidths[ci], h:rowHeight, fill:{color:'FFFFFF'}, line:{color:'D9DEE5', width:0.75}});
+          if(ci!==3 && vals[ci]){
+            slide.addText(vals[ci], {
+              x:colX[ci]+0.06, y:y, w:colWidths[ci]-0.12, h:rowHeight,
+              fontSize:11, align: ci===1 ? 'left':'center', valign:'middle', wrap:true, color:'1A1A2E'
+            });
+          }
+        }
+        if(row.imageDataUrl){
+          slide.addImage({
+            data: row.imageDataUrl,
+            x: colX[3]+0.12, y: y+0.1,
+            w: colWidths[3]-0.24, h: rowHeight-0.2,
+            sizing: {type:'contain', w: colWidths[3]-0.24, h: rowHeight-0.2}
+          });
+        }
+        y += rowHeight;
+      }
+    }
+
+    await pptx.writeFile({fileName: fileBaseName()+'.pptx'});
+    setStatus('PPT 파일 생성 완료 ('+rows.length+'건, 슬라이드 '+Math.ceil(rows.length/rowsPerSlide)+'장)');
+  }catch(err){
+    console.error(err);
+    setStatus('PPT 생성 중 오류가 발생했습니다.');
+    alert('PPT 생성 중 오류가 발생했습니다: ' + err.message);
+  }
+}
+
+/* ── 시작 ────────────────────────────────────────────────────────────── */
+setDefaultRange();
+render();
+if(HANDOVER_URL){ fetch(HANDOVER_URL+'?action=ping').catch(function(){}); }   /* 콜드스타트 예열 */
+</script>
+
+</body>
+</html>

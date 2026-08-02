@@ -232,6 +232,11 @@
       <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">카톡/Flow 양식 생성 · 시트 자동 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
+    <button type="button" id="appBtnLabel" data-toolid="label" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">🏷</span>
+      <span style="flex:1;"><span class="tool-name">장비 Label List</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">주간 병원별 장비 사진 · 엑셀/PPT 생성</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
     <button type="button" id="appBtnChatbot" data-toolid="chatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
       <span style="font-size:24px;">🤖</span>
       <span style="flex:1;"><span class="tool-name">CS AI 챗봇</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">증상 입력 → 점검·조치 트러블슈팅</span></span>
@@ -1887,6 +1892,7 @@ document.getElementById('appBtnHospital').addEventListener('click', function(){ 
 document.getElementById('appBtnHospitalPc').addEventListener('click', function(){ location.href='hospital-pc.html'; });
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
+document.getElementById('appBtnLabel').addEventListener('click', function(){ location.href='label.html'; });
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
@@ -1912,13 +1918,14 @@ var MENU_DEFAULTS={
   guide:     {name:'📖 현장 대응 가이드',   level:1, show:true, order:2},
   inspection:{name:'🔧 A/S 점검 내역서',    level:1, show:true, order:3},
   handover:  {name:'✍ 현장 처리완료·공유', level:1, show:true, order:4},
-  chatbot:   {name:'🤖 CS AI 챗봇',         level:1, show:true, order:5},
-  weekly:    {name:'📅 주간업무보고',       level:1, show:true, order:6},
-  hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:7},
-  survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:8},
-  manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:9},
-  dashboard: {name:'📊 현장 처리 대시보드', level:3, show:true, order:10},
-  autodoc:   {name:'📄 AutoDoc',            level:1, show:true, order:11}
+  label:     {name:'🏷 장비 Label List',    level:1, show:true, order:5},
+  chatbot:   {name:'🤖 CS AI 챗봇',         level:1, show:true, order:6},
+  weekly:    {name:'📅 주간업무보고',       level:1, show:true, order:7},
+  hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:8},
+  survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:9},
+  manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:10},
+  dashboard: {name:'📊 현장 처리 대시보드', level:3, show:true, order:11},
+  autodoc:   {name:'📄 AutoDoc',            level:1, show:true, order:12}
 };
 var MENU_CFG=null;
 try{ MENU_CFG=JSON.parse(localStorage.getItem('baz_menu_cfg')||'null'); }catch(e){}
