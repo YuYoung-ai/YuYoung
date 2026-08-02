@@ -35,12 +35,54 @@
 
   // Apps Script는 프리플라이트(CORS preflight)를 싫어하므로
   // text/plain 으로 보내 단순요청(simple request)으로 처리합니다.
-  function postJSON(payload) {
-    return fetch(AUTH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    }).then(function (res) { return res.json(); });
+  //
+  // [콜드스타트 대응] Apps Script 웹앱은 한동안 호출이 없으면 잠들고, 깨어나는 첫 요청이
+  // 30~60초 걸리거나 JSON 대신 구글의 리다이렉트/오류 HTML(302·404)을 돌려줍니다.
+  // 예전에는 그 HTML에 res.json()이 그대로 터져 "네트워크 오류"로 표시됐고, 연결이
+  // 멀쩡한 사용자에게 연결을 확인하라고 안내하게 됐습니다(실제 로그인 실패 사례).
+  // → 요청마다 타임아웃을 두고, HTML 응답을 '깨우는 중'으로 판별해 자동 재시도합니다.
+  //   콜드스타트는 대개 두 번째 시도에서 붙습니다.
+  //
+  // opts: { tries, timeoutMs, onAttempt(n, tries) }
+  // 실패 시 {kind:'warmup'|'timeout'|'network'} 로 reject 합니다.
+  function postJSON(payload, opts) {
+    opts = opts || {};
+    var tries = opts.tries || 1;
+    var timeoutMs = opts.timeoutMs || 25000;
+    var attempt = 0;
+
+    function once() {
+      attempt++;
+      if (opts.onAttempt) { try { opts.onAttempt(attempt, tries); } catch (e) {} }
+      var ctl = ('AbortController' in global) ? new AbortController() : null;
+      var timer = ctl ? setTimeout(function () { try { ctl.abort(); } catch (e) {} }, timeoutMs) : null;
+      var init = {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      };
+      if (ctl) init.signal = ctl.signal;
+      return fetch(AUTH_URL, init)
+        .then(function (res) {
+          if (timer) { clearTimeout(timer); timer = null; }
+          return res.text().then(function (txt) {
+            if (/^\s*</.test(txt)) throw { kind: 'warmup' };   // JSON이 아니라 HTML → 아직 깨는 중
+            try { return JSON.parse(txt); }
+            catch (e) { throw { kind: 'warmup' }; }
+          });
+        })
+        .catch(function (e) {
+          if (timer) { clearTimeout(timer); timer = null; }
+          var kind = (e && e.kind) ? e.kind
+                   : (e && e.name === 'AbortError') ? 'timeout' : 'network';
+          if (attempt < tries) {
+            var wait = 1500 * attempt;   // 1.5s → 3s 백오프
+            return new Promise(function (r) { setTimeout(r, wait); }).then(once);
+          }
+          throw { kind: kind };
+        });
+    }
+    return once();
   }
 
   function saveSession(token, level, expires, name) {
@@ -71,11 +113,14 @@
     },
 
     // 로그인: 비번 → 토큰. 성공 시 {ok:true, level} 반환
-    login: function (password) {
+    // onAttempt(n, tries): 재시도 진행 상황(화면에 '깨우는 중' 안내를 띄우는 용도)
+    // 실패 코드: 'network'(정말 연결 안 됨) / 'server_busy'(서버 콜드스타트·응답 지연)
+    login: function (password, onAttempt) {
       if (!AUTH_URL) {
         return Promise.resolve({ ok: false, error: 'auth_url_missing' });
       }
-      return postJSON({ action: 'login', password: password })
+      return postJSON({ action: 'login', password: password },
+                      { tries: 3, timeoutMs: 25000, onAttempt: onAttempt })
         .then(function (r) {
           if (r && r.ok) {
             saveSession(r.token, r.level, r.expires, r.name);
@@ -83,7 +128,8 @@
           return r || { ok: false, error: 'no_response' };
         })
         .catch(function (e) {
-          return { ok: false, error: 'network', detail: String(e) };
+          var kind = (e && e.kind) || 'network';
+          return { ok: false, error: (kind === 'network' ? 'network' : 'server_busy'), detail: kind };
         });
     },
 
@@ -97,7 +143,9 @@
         clearSession();
         return Promise.resolve(0);
       }
-      return postJSON({ action: 'verify', token: token })
+      // 페이지 가드용 검증도 콜드스타트에 한 번은 더 기회를 준다.
+      // 실패해도 아래 catch가 로컬 캐시 레벨로 폴백하므로 화면을 막지는 않는다.
+      return postJSON({ action: 'verify', token: token }, { tries: 2, timeoutMs: 15000 })
         .then(function (r) {
           if (r && r.ok) {
             try {

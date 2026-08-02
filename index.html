@@ -1732,21 +1732,21 @@ initCounters();
 // ===== 허브: 다국어 =====
 const HUB_I18N = {
   ko:{ subtitle:'CS Field Tools', lockHint:'로고를 눌러 잠금을 해제하세요', chooseTool:'사용할 도구를 선택하세요',
-    pwTitle:'잠금 해제', pwDesc:'비밀번호를 입력하세요.', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.', checking:'확인 중...',
+    pwTitle:'잠금 해제', pwDesc:'비밀번호를 입력하세요.', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.', checking:'확인 중...', warming:'서버를 깨우는 중…', sec:'초', retry:'재시도', serverBusy:'서버 응답이 지연됩니다(첫 접속은 30초까지 걸릴 수 있습니다). 잠시 후 다시 눌러 주세요.', netErr:'네트워크 오류. 연결을 확인해 주세요.',
     'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
     'hosp-name':'병원 데이터센터','hosp-desc':'병원 검색 · 점검 현황 · 지도',
     'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
-    pwTitle:'Unlock', pwDesc:'Enter the password.', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.', checking:'Checking...',
+    pwTitle:'Unlock', pwDesc:'Enter the password.', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
     'hosp-name':'Hospital Data Center','hosp-desc':'Search · Status · Map',
     'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
-    pwTitle:'ロック解除', pwDesc:'パスワードを入力してください。', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。', checking:'確認中...',
+    pwTitle:'ロック解除', pwDesc:'パスワードを入力してください。', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
@@ -1815,23 +1815,41 @@ async function checkHubPw(){
   errEl.style.color='#6B7A99';
   errEl.textContent=(HUB_I18N[HUBLANG].checking||'확인 중...');
   const t0=performance.now();
+  // 인증 GAS는 한동안 호출이 없으면 잠들고, 깨우는 첫 로그인이 30초 넘게 걸릴 수 있다.
+  // 멈춘 것처럼 보이지 않도록 경과 시간을 세어 보여준다(재시도 횟수도 함께).
+  let attemptN=1, tick=null;
+  const L=()=>HUB_I18N[HUBLANG]||HUB_I18N.ko;
+  function showWaiting(){
+    const s=Math.round((performance.now()-t0)/1000);
+    errEl.style.color='#6B7A99';
+    errEl.textContent = (s<4)
+      ? (L().checking||'확인 중...')
+      : (L().warming||'서버를 깨우는 중…')+' '+s+(L().sec||'초')+(attemptN>1?' ('+(L().retry||'재시도')+' '+attemptN+')':'');
+  }
   try{
-    const r=await BazAuth.login(v);
-    console.log('[로그인 소요] '+Math.round(performance.now()-t0)+'ms');
+    tick=setInterval(showWaiting, 500);
+    const r=await BazAuth.login(v, function(n){ attemptN=n; });
+    console.log('[로그인 소요] '+Math.round(performance.now()-t0)+'ms / 시도 '+attemptN+'회');
+    clearInterval(tick); tick=null;
     errEl.style.color='#C0392B';
     errEl.textContent='';
     if(r.ok){ closeHubPw(); unlockTools(r.level); }
     else if(r.error==='auth_url_missing'){
       errEl.textContent='인증 서버 미설정 (auth.js의 AUTH_URL을 입력하세요)';
     }
-    else if(r.error==='network'){
-      errEl.textContent='네트워크 오류. 연결을 확인해 주세요.';
+    else if(r.error==='server_busy'){
+      // 연결은 되는데 서버가 아직 안 깨어난 경우 — 연결을 탓하지 않는다
+      errEl.textContent=L().serverBusy||'서버 응답이 지연됩니다. 잠시 후 다시 눌러 주세요.';
     }
-    else{ errEl.textContent=HUB_I18N[HUBLANG].wrongPw; }
+    else if(r.error==='network'){
+      errEl.textContent=L().netErr||'네트워크 오류. 연결을 확인해 주세요.';
+    }
+    else{ errEl.textContent=L().wrongPw; }
   }catch(e){
     errEl.style.color='#C0392B';
-    errEl.textContent='네트워크 오류. 연결을 확인해 주세요.';
+    errEl.textContent=L().netErr||'네트워크 오류. 연결을 확인해 주세요.';
   }finally{
+    if(tick) clearInterval(tick);
     okBtn.disabled=false; inp.disabled=false; okBtn.textContent=prev;
   }
 }
