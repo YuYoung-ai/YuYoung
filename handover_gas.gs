@@ -357,9 +357,16 @@ function doPost(e){
     if(hdr.map['__VER_OUT']  && payload.wVer)  sh.getRange(row, hdr.map['__VER_OUT']).setValue(payload.wVer);
     /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다 */
     var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
+    var photoWarn = '';
     if(photoCol){
       sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
       if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
+    }else if(photoFile){
+      /* 사진은 Drive에 올라갔는데 넣을 열이 없다 → 그냥 두면 조용히 사라진다.
+         (setupSnPhotoColumn() 을 아직 실행하지 않은 시트) */
+      photoWarn = '시트에 \''+PHOTO.COL_NAME+'\' 열이 없어 사진이 기록되지 않았습니다 — '
+                + '편집기에서 setupSnPhotoColumn() 을 실행하세요.';
+      log_('PHOTO_NOCOL', hdr, {file:photoFile.id, url:photoFile.url});
     }
 
     log_('OK', hdr, logSafe_(payload));
@@ -368,6 +375,7 @@ function doPost(e){
     var inv = invRecordUsage_(payload);
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
     var msg = '✅ '+ (payload.hosp||'') +' 기록 완료 (행 '+row+')';
+    if(photoWarn) msg += '\n⚠️ ' + photoWarn;
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
     var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg};
     /* 재전송이 같은 결과를 받도록 결과를 10분 기억 (위 reqId 중복 차단과 한 쌍) */

@@ -84,11 +84,17 @@ textarea{resize:vertical;min-height:56px}
 .seg-btn.on.warn{border-color:var(--red);background:#FBEAE8;color:var(--red)}
 .sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
   text-transform:uppercase;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
-/* 장비 S/N 사진 첨부 */
+/* 장비 S/N 사진 첨부 (필수) */
+label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red);
+  background:#FBEAE8;border-radius:4px;padding:1px 5px;margin-left:2px;vertical-align:1px}
 .snphoto-zone{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
   min-height:64px;padding:12px;border:1.5px dashed var(--gray-line);border-radius:9px;
   background:#fff;color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;text-align:center}
 .snphoto-zone:active{border-color:var(--teal);background:var(--teal-soft)}
+/* 아직 안 붙인 필수 항목임을 눈에 띄게 — 첨부되면 .need 가 빠진다 */
+.snphoto-zone.need{border-color:#E8B4AE;background:#FDF7F6;color:var(--red)}
+.snphoto-zone.miss{animation:snShake .4s;border-color:var(--red);background:#FBEAE8}
+@keyframes snShake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 .snphoto-zone input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .snphoto-prev{display:none;position:relative;margin-top:8px;border:1px solid var(--gray-line);
   border-radius:9px;overflow:hidden;background:#F0F2F6}
@@ -174,8 +180,8 @@ textarea{resize:vertical;min-height:56px}
         <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
       </div>
       <div class="field full">
-        <label>장비 S/N 사진 <span class="opt">· 선택 · 시트 U열에 기록</span></label>
-        <div class="snphoto-zone" id="snPhotoZone">
+        <label>장비 S/N 사진 <span class="req">필수</span> <span class="opt">· 시트 U열에 기록</span></label>
+        <div class="snphoto-zone need" id="snPhotoZone">
           <span id="snPhotoLabel">📷 S/N 라벨 촬영 · 사진 선택</span>
           <input type="file" accept="image/*" id="snPhotoFile" onchange="onSnPhoto(event)">
         </div>
@@ -444,6 +450,7 @@ async function onSnPhoto(evt){
     document.getElementById('snPhotoImg').src=jpeg;
     document.getElementById('snPhotoPrev').style.display='block';
     lab.textContent='✅ 첨부됨 · 다시 누르면 교체';
+    snPhotoZoneState();
     render();
   }catch(e){
     toast('사진 처리 실패 — '+e.message);
@@ -456,7 +463,25 @@ function clearSnPhoto(){
   document.getElementById('snPhotoImg').src='';
   document.getElementById('snPhotoPrev').style.display='none';
   document.getElementById('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
+  snPhotoZoneState();
   render();
+}
+
+/* 필수 항목 표시 갱신 — 사진이 없을 때만 붉은 점선으로 눈에 띄게 둔다 */
+function snPhotoZoneState(){
+  var z=document.getElementById('snPhotoZone');
+  if(!z) return;
+  z.classList.toggle('need', !SN_PHOTO);
+  z.classList.remove('miss');
+}
+
+/* 사진 없이 [시트 기록]을 누른 경우 — 해당 칸으로 데려가서 흔들어 알린다 */
+function flagMissingPhoto(){
+  var z=document.getElementById('snPhotoZone');
+  if(!z) return;
+  z.classList.add('miss');
+  try{ z.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ z.scrollIntoView(); }
+  setTimeout(function(){ z.classList.remove('miss'); }, 1200);
 }
 
 /* 병원정보DB (index.html 임베드본 재사용: n=병원명 s=장비S/N c=N-Care sa=영업담당 r=지역) */
@@ -708,6 +733,8 @@ function afterSaveMsg(base, sentPhoto){
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
+  /* 장비 S/N 사진 필수 — 라벨 사진이 없으면 주간 Label List를 만들 수 없다 */
+  if(!SN_PHOTO){ toast('장비 S/N 사진은 필수입니다\nS/N 라벨을 촬영해 주세요'); flagMissingPhoto(); return; }
   /* 사용자 숙련도 평가는 선택 항목 — 미선택이어도 기록 진행(빈 값은 시트에서 미기록) */
   var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
   /* 사진이 붙어 있는데 아직 버전을 모르면 한 번 더 물어본다(첫 ping이 콜드스타트로 비었을 수 있음) */
