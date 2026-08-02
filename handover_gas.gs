@@ -32,9 +32,25 @@
  *  GET ?action=labellist&from=&to=&fse= : [v2.8] label.html 장비 Label List 원본
  *  GET ?action=snphoto&ids=ID,ID : [v2.8] 장비 S/N 사진 base64 (Drive CORS 우회 프록시)
  *
- * ★ v2.8 최초 적용 시 ★
- *  편집기에서 setupSnPhotoColumn() 을 한 번 실행하면 현장 처리 현황 시트의
- *  마지막 열 오른쪽(U열)에 '장비 S/N 사진' 헤더가 생기고 Drive 권한 승인 창이 뜹니다.
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║ ★★ v2.8 적용 순서 — 이 순서를 지키지 않으면 웹앱 전체가 멈춥니다 ★★  ║
+ * ╚═══════════════════════════════════════════════════════════════╝
+ *  v2.8은 사진 저장 때문에 Drive 서비스(DriveApp)를 새로 씁니다. Apps Script는
+ *  코드에 있는 서비스로 필요한 권한을 정하는데, 새 권한을 "승인하기 전"에 배포하면
+ *  ping·all·recent·menu 까지 전부 권한 오류로 실패합니다.
+ *  → 대시보드·허브·현장 처리완료가 한꺼번에 "접속 오류"로 먹통이 됩니다.
+ *
+ *  1) 편집기에 이 코드를 붙여넣고 [저장]
+ *  2) ★먼저★ 함수 목록에서 setupSnPhotoColumn 을 골라 [실행]
+ *     → 권한 승인 창이 뜨면 승인 (U열 '장비 S/N 사진' 헤더도 이때 생깁니다)
+ *  3) 그 다음에 [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]
+ *     ※ "새 배포"가 아님 — URL이 바뀌면 앱 전체가 깨집니다
+ *  4) 확인: 브라우저로 배포 URL + ?action=ping 을 열어
+ *     {"success":true,"ver":"2.8.0"} 이 보이면 정상입니다.
+ *     구글 권한 오류 페이지가 보이면 2)를 아직 안 한 것입니다.
+ *
+ *  ※ 조직 정책으로 이 스크립트에 Drive 권한을 줄 수 없다면 v2.8은 쓸 수 없습니다.
+ *    (사진 기능만 끄는 방법은 없습니다 — 코드에 DriveApp 이 있으면 권한이 필요합니다)
  *******************************************************************/
 
 var CONFIG = {
@@ -246,17 +262,51 @@ function logSafe_(payload){
 function doPost(e){
   var lock = LockService.getScriptLock();
   var payload = {};
+  var photoFile = null;      /* [v2.8] 락 잡기 전에 끝내 둔 사진 업로드 결과 */
   try{
-    lock.waitLock(20000);
     payload = JSON.parse(e.postData.contents||'{}');
 
     /* [보안] 모든 쓰기는 로그인 토큰 필수 — 외부인의 무단 기록·시트 오염 차단.
-       (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외) */
+       (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외)
+       ※ 사진 업로드보다 반드시 먼저 — 인증 없는 요청이 Drive에 파일을 남기면 안 된다. */
     var actName = (payload && payload.action) || '';
     if(actName !== 'menu_save' && actName !== 'weeklyauto_save'){
       var denied = requireWrite_(payload);
       if(denied) return json_(denied);
     }
+
+    /* [v2.8] 같은 기록의 재전송을 걸러낸다(멱등성).
+       콜드스타트 때 GAS가 JSON 대신 HTML을 돌려주면 프런트의 1차 요청은 "실패"로 보이고
+       no-cors 로 같은 내용을 한 번 더 보낸다. 그런데 1차 요청이 서버에서는 이미 기록됐을
+       수 있어, 그대로 두면 같은 행이 두 줄 쌓이고 사진도 Drive에 두 번 올라간다.
+       프런트가 붙여 보낸 reqId 를 10분간 기억해 두 번째 요청은 첫 결과를 그대로 돌려준다. */
+    var reqId = String((payload && payload.reqId) || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
+    var dkey = reqId ? 'req_' + reqId : '';
+    var dcache = null;
+    if(dkey){
+      try{
+        dcache = CacheService.getScriptCache();
+        var seen = dcache.get(dkey);
+        if(seen) return ContentService.createTextOutput(seen).setMimeType(ContentService.MimeType.JSON);
+      }catch(_){ dcache = null; }
+    }
+
+    /* [v2.8] 사진 업로드는 락 "밖"에서 먼저 끝낸다.
+       Drive는 콜드스타트 때 몇 초씩 걸리는데, 그걸 락 안에서 하면 동시에 기록하는
+       두 번째 FSE가 20초 대기를 넘겨 통째로 실패한다. 업로드는 행 번호와 무관하므로
+       미리 해 두고, 락 안에서는 수식 한 줄만 쓴다. */
+    if(payload && payload.snPhoto && !actName){
+      try{
+        photoFile = savePhoto_(payload.snPhoto, {
+          date: payload.date || '', hosp: payload.hosp || '', sn: payload.sn || ''
+        });
+      }catch(pe){
+        photoFile = null;    /* 업로드 실패해도 본 기록은 그대로 진행한다 */
+        log_('PHOTO_ERR:'+pe, null, {hosp:payload.hosp||'', sn:payload.sn||''});
+      }
+    }
+
+    lock.waitLock(20000);
 
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
@@ -305,18 +355,11 @@ function doPost(e){
     if(hdr.map['__VER_IN']   && payload.uVer)  sh.getRange(row, hdr.map['__VER_IN']).setValue(payload.uVer);
     if(hdr.map['HP_SN(OUT)'] && payload.hpOut) sh.getRange(row, hdr.map['HP_SN(OUT)']).setValue(payload.hpOut);
     if(hdr.map['__VER_OUT']  && payload.wVer)  sh.getRange(row, hdr.map['__VER_OUT']).setValue(payload.wVer);
-    /* [v2.8] 장비 S/N 사진 (U열 · 값이 있을 때만 · 업로드 실패해도 본 기록은 유지) */
-    var photoCol = colBy_(hdr, PHOTO_COLS);
-    if(photoCol && payload.snPhoto){
-      try{
-        var pf = savePhoto_(payload.snPhoto, {
-          date: m['처리일'], hosp: m['병원명'], sn: payload.sn || ''
-        });
-        sh.getRange(row, photoCol).setFormula(photoFormula_(pf.id));
-        if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
-      }catch(pe){
-        log_('PHOTO_ERR:'+pe, hdr, {hosp:m['병원명'], sn:payload.sn||''});
-      }
+    /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다 */
+    var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
+    if(photoCol){
+      sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
+      if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
     }
 
     log_('OK', hdr, logSafe_(payload));
@@ -326,7 +369,10 @@ function doPost(e){
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
     var msg = '✅ '+ (payload.hosp||'') +' 기록 완료 (행 '+row+')';
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
-    return json_({success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg});
+    var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg};
+    /* 재전송이 같은 결과를 받도록 결과를 10분 기억 (위 reqId 중복 차단과 한 쌍) */
+    if(dkey && dcache){ try{ dcache.put(dkey, JSON.stringify(out), 600); }catch(_){} }
+    return json_(out);
   }catch(err){
     log_('ERR:'+err, null, logSafe_(payload));
     return json_({success:false, error:String(err)});
@@ -373,8 +419,11 @@ function doGet(e){
   }
 }
 
-/** 시트 전체를 객체 배열로 (수식 결과 포함 표시값) */
-function readAll_(){
+/** 시트 전체를 객체 배열로 (수식 결과 포함 표시값)
+ *  withPhoto=true 일 때만 사진 열을 한 번 더 읽는다 — 대시보드·주간보고가 쓰는
+ *  기본 경로(all/recent/today/weekly)에 읽기 왕복과 응답 크기를 늘리지 않기 위해서다.
+ *  (사진 ID가 실제로 필요한 곳은 labelList_ 뿐) */
+function readAll_(withPhoto){
   var sh = sheet_(CONFIG.SHEET_NAME);
   if(!sh) return {hdr:null, rows:[]};
   var hdr = findHeader_(sh);
@@ -382,8 +431,9 @@ function readAll_(){
   var last = lastDataRow_(sh, hdr);
   if(last <= hdr.row) return {hdr:hdr, rows:[]};
   var vals = sh.getRange(hdr.row+1, 1, last-hdr.row, sh.getLastColumn()).getDisplayValues();
-  /* [v2.8] 사진 열은 =IMAGE() 수식이라 표시값이 비어 있다 → 그 열만 수식으로 한 번 더 읽는다 */
-  var pCol = colBy_(hdr, PHOTO_COLS), pFx = null;
+  /* [v2.8] 사진 열은 =IMAGE() 수식이라 표시값이 비어 있다 → 그 열만 수식으로 한 번 더 읽는다.
+     요청한 경우에만 — 이 추가 왕복이 대시보드 로딩까지 느리게 만들면 안 된다. */
+  var pCol = withPhoto ? colBy_(hdr, PHOTO_COLS) : 0, pFx = null;
   if(pCol) pFx = sh.getRange(hdr.row+1, pCol, last-hdr.row, 1).getFormulas();
   var rows = vals.map(function(v, i){
     var o = {_row: hdr.row+1+i};
@@ -570,7 +620,7 @@ function labelList_(p){
   to.setHours(23,59,59,0);
 
   var qf = norm_(String(p.fse||'').trim());
-  var hit = readAll_().rows.map(slim_).filter(function(r){
+  var hit = readAll_(true).rows.map(slim_).filter(function(r){   /* true = 사진 열까지 읽기 */
     var d = parseD_(r.date);
     if(!d || d < from || d > to) return false;
     if(!String(r.hosp||'').trim()) return false;
@@ -635,7 +685,7 @@ function colBy_(hdr, cands){
 }
 
 function slim_(o){
-  return {
+  var s = {
     date : o['처리일']||'', hosp: o['병원명']||'', fse: o['CS 담당자']||'',
     gubun: o['점검/AS']||'', cat: o['대분류']||'', type: o['유형']||'',
     part : o['교체품']||'', cost: o['교체비용']||'', detail: o['내용']||'',
@@ -649,10 +699,13 @@ function slim_(o){
     /* 사용자 숙련도 평가 (R·S·T열) */
     nsFill: pickH_(o,['NS 충진 여부','NS충진여부','NS 충진']),
     nsAmt : pickH_(o,['NS 충진량','NS충진량']),
-    jet   : pickH_(o,['젯 분사 판단','젯분사 판단','젯 분사']),
-    /* [v2.8] 장비 S/N 사진(U열) Drive 파일 ID — 실제 이미지는 ?action=snphoto 로 받는다 */
-    snPhotoId: o['__SNPHOTO'] || ''
+    jet   : pickH_(o,['젯 분사 판단','젯분사 판단','젯 분사'])
   };
+  /* [v2.8] 장비 S/N 사진(U열) Drive 파일 ID — readAll_(true) 로 읽었을 때만 붙인다.
+     실제 이미지는 ?action=snphoto 로 받는다. 항상 넣으면 대시보드가 쓰는
+     ?action=all 응답이 행마다 커져 스크립트 캐시(95KB) 한도를 더 빨리 넘긴다. */
+  if(o['__SNPHOTO']) s.snPhotoId = o['__SNPHOTO'];
+  return s;
 }
 
 /** 대시보드용 전체 데이터 — 5분 스크립트 캐시 (100KB 이내일 때만) */

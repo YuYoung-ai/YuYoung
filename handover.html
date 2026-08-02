@@ -667,6 +667,12 @@ function rememberRecentHandover_(){
     localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
   }catch(e){}
 }
+/* 기록 1건에 붙는 고유 키 — 아래 no-cors 재전송이 같은 키를 그대로 다시 보내므로
+   서버가 "같은 요청"임을 알아보고 두 번째는 첫 결과만 돌려준다(행 중복·사진 중복 방지) */
+function newReqId(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+}
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
@@ -680,6 +686,7 @@ async function saveToSheet(){
     nozzle:val('nozzleReuse'),   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
     nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet,   /* R·S·T열 사용자 숙련도 평가 */
     snPhoto:SN_PHOTO||'',   /* U열 장비 S/N 사진 — 서버가 Drive에 올리고 =IMAGE() 썸네일로 기록 */
+    reqId:newReqId(),   /* 콜드스타트 재전송이 같은 행을 두 번 쌓지 않도록 하는 멱등성 키 */
     token:(window.BazAuth&&BazAuth.token)?BazAuth.token():'' };   /* [보안] 서버 쓰기 인증 토큰 */
   try{
     /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
