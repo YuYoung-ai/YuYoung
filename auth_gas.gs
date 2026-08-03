@@ -244,6 +244,30 @@ function doGet(e){
   }
 }
 
+/* ── keep-warm(예열) ────────────────────────────────────────
+   검증을 로컬로 옮긴 뒤 auth는 로그인 때만 호출돼 자주 잠든다 → 로그인 첫 요청이 콜드스타트.
+   5분마다 auth·handover 를 스스로 ping 해 상시 깨워 둔다. 로그인 지연 제거.
+   ★ 설정: 이 코드를 auth 프로젝트에 저장 → 편집기에서 setupKeepWarm 1회 실행(트리거 설치). */
+var KEEP_WARM_URLS = [
+  'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec',   /* auth */
+  'https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec'    /* handover */
+];
+function keepWarm(){
+  KEEP_WARM_URLS.forEach(function(u){
+    try{ UrlFetchApp.fetch(u + '?action=ping', {muteHttpExceptions:true, followRedirects:true}); }catch(e){}
+  });
+}
+/** 편집기에서 1회 실행 — 5분 주기 keepWarm 트리거 설치(중복 제거 후 재설치). */
+function setupKeepWarm(){
+  /* 첫 실행 시 외부요청(UrlFetchApp) 권한 승인을 강제(오류 안 잡음). 승인창 뜨면 끝까지 허용. */
+  UrlFetchApp.fetch(KEEP_WARM_URLS[0] + '?action=ping', {muteHttpExceptions:true, followRedirects:true});
+  ScriptApp.getProjectTriggers().forEach(function(t){
+    if(t.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(5).create();
+  Logger.log('✅ keepWarm 5분 트리거 설치 — auth·handover 상시 예열(로그인 콜드스타트 제거)');
+}
+
 /* ── 성능 실측 — 편집기에서 실행해 단계별 ms를 로그로 확인 ──
    목표: 로그인 ≤2000ms. 캐시 웜/콜드 두 번 돌려 비교하세요. */
 function authSelfTime(){
