@@ -937,6 +937,9 @@ function bazDropHandoverCaches_(hosp){
   try{
     bazCacheDrop_('handover_all');
     bazCacheDrop_('hv_master');
+    bazCacheDrop_('handover_issuehist');    /* [Core] 이슈이력 */
+    bazCacheDrop_('handover_hospdb_rich');  /* [Core] 병원정보DB(rich) */
+    bazCacheDrop_('handover_hospdb');       /* thin(N-Care 산출용) */
     if(hosp){
       var n = norm_(hosp);
       /* getRecent_ 는 limit 별로 키가 갈린다 — 클라이언트가 쓰는 범위만 지운다 */
@@ -945,6 +948,10 @@ function bazDropHandoverCaches_(hosp){
     }
   }catch(e){}
 }
+
+/** 편집기 실행용 — 재배포 직후 캐시(이슈이력·병원정보DB 등)를 즉시 비운다.
+    Run 드롭다운에서 runDropCaches 선택해 실행. */
+function runDropCaches(){ bazDropHandoverCaches_(); Logger.log('✅ handover 캐시 비움(이슈이력·병원정보DB 포함)'); }
 
 /** 대시보드용 전체 데이터 — 5분 캐시.
     [수정] 예전에는 `if(s.length < 95000)` 이라, 시트가 자라 그 선을 넘는 순간 캐시가
@@ -1037,6 +1044,16 @@ function getHospDBRich_(){
   return res;
 }
 
+/** 날짜 표시값('2026. 8. 3' 등)을 'yyyy-MM-dd'로 정규화 — 클라이언트 parseDateYMD 호환.
+    (옛 hospital_issue_gas의 _date()와 동일: 구분자 뒤 공백을 허용해 매칭·zero-pad) */
+function _issueDateNorm_(v){
+  if(!v) return '';
+  var s = String(v).trim();
+  var m = s.match(/(\d{4})[-.\/]\s*(\d{1,2})[-.\/]\s*(\d{1,2})/);
+  if(m) return m[1] + '-' + ('0'+m[2]).slice(-2) + '-' + ('0'+m[3]).slice(-2);
+  return '';
+}
+
 /** [Core] 병원별 이슈이력 — hospital_issue_gas 를 대체. 현장 처리 기록에서 직접 산출한다.
     필드 매핑(현장기록 → 이슈이력): 처리일→d · CS담당자→f · 점검/AS→t · 대분류→pt · 유형→sy ·
     교체품→p · 내용→fx · 유무상→pay. (기존 hospital_issue_gas 응답과 동일 형태) */
@@ -1049,10 +1066,11 @@ function getIssueHist_(){
     var name = String(o['병원명']||'').trim();
     if(!name) return;
     var s = slim_(o);
-    if(!s.date) return;
+    var d = _issueDateNorm_(s.date);   /* '2026. 8. 3' → '2026-08-03' (클라 parseDateYMD 호환) */
+    if(!d) return;
     var g = String(s.gubun||'');
     var t = /점검/.test(g) ? '점검' : (/AS/i.test(g) ? 'AS' : g.trim());
-    var rec = { d:s.date, f:s.fse, t:t, pt:s.cat, sy:s.type, fx:s.detail, pay:(s.paid || s.cost || '') };
+    var rec = { d:d, f:s.fse, t:t, pt:s.cat, sy:s.type, fx:s.detail, pay:(s.paid || s.cost || '') };
     var part = String(s.part||'').trim(); if(part) rec.p = part;
     (history[name] = history[name] || []).push(rec);
   });
