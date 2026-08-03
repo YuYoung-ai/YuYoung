@@ -37,15 +37,33 @@
  *  GET  ?action=ping                 → {ok, ver, mode, ...}  (배포 확인용)
  ************************************************************/
 
-var AUTH_VER = '4.0.0-opaque';   /* ping 에 노출 — 밖에서 배포 여부를 눈으로 확인하는 표식 */
+var AUTH_VER = '5.0.0-hybrid';   /* ping 에 노출 — 밖에서 배포 여부를 눈으로 확인하는 표식 */
 
 var AUTH_CFG = {
   CRED_SHEET  : 'Credentials',
   TOKEN_SHEET : 'Tokens',
   LOG_SHEET   : 'LoginLog',
   TTL_HOURS   : 12,        /* 토큰 유효 시간 */
-  MAX_TOKENS  : 2000       /* Tokens 시트 상한(넘으면 오래된 행부터 정리) */
+  MAX_TOKENS  : 2000,      /* Tokens 시트 상한(넘으면 오래된 행부터 정리) */
+  CRED_TTL    : 300        /* Credentials 캐시(초) — 로그인 핫패스에서 시트 읽기 제거 */
 };
+
+/* ── 토큰 발급(하이브리드) ─────────────────────────────────
+   비밀이 있으면 HMAC 서명 토큰(무상태·검증 왕복 0), 없으면 불투명 토큰으로 폴백.
+   ★ 어떤 경우에도 예외를 던지지 않는다 — 비밀이 없어도 로그인은 죽지 않는다. */
+function _authIssue_(name, level, hours){
+  try{
+    if(typeof bazIssueToken_ === 'function' && typeof bazTokenConf_ === 'function' && bazTokenConf_().secret){
+      var s = bazIssueToken_(name, level, hours);
+      return { token:s.token, expires:s.expires, signed:true };
+    }
+  }catch(e){}
+  return {
+    token:   _authNewToken_(),
+    expires: new Date(Date.now() + hours*3600*1000).toISOString(),
+    signed:  false
+  };
+}
 
 /* ── 시트 헬퍼 (어떤 오류도 밖으로 던지지 않는다) ──────────── */
 function _authSS_(){ try{ return SpreadsheetApp.getActiveSpreadsheet(); }catch(e){ return null; } }
@@ -67,6 +85,14 @@ function _authNewToken_(){
    열 이름을 자동 인식한다(비밀번호/password, 레벨/level, 이름/name).
    시트 구조가 조금 달라도 동작하도록 방어적으로 처리한다. */
 function _authCreds_(){
+  /* [성능] 로그인 핫패스의 Credentials 전체읽기를 CacheService로 감춘다(캐시 히트 시 시트 0회).
+     서버측 스크립트 캐시라 외부 노출 없음. 비밀번호 변경은 최대 CRED_TTL 후 반영. */
+  try{ var c = CacheService.getScriptCache().get('auth_creds'); if(c) return JSON.parse(c); }catch(e){}
+  var out = _authCredsRead_();
+  try{ if(out.length) CacheService.getScriptCache().put('auth_creds', JSON.stringify(out), AUTH_CFG.CRED_TTL); }catch(e){}
+  return out;
+}
+function _authCredsRead_(){
   var sh = _authSheet_(AUTH_CFG.CRED_SHEET);
   if(!sh) return [];
   var v;
@@ -106,10 +132,15 @@ function _authLog_(kind, name, level, note){
   }catch(e){}
 }
 
-/* ── 토큰 검증 = Tokens 시트 조회 ──────────────────────────
-   col A: 토큰 · col B: 레벨 · col C: 만료(ISO) · col D: 발급(ISO) */
+/* ── 토큰 검증 ─────────────────────────────────────────────
+   1순위: 서명 토큰이면 로컬 HMAC 검증(시트 0회) — baz_token_lib.gs
+   2순위: 불투명 토큰이면 Tokens 시트 조회(col A:토큰 B:레벨 C:만료 D:발급) */
 function authVerify_(token){
   if(!token) return {ok:false, error:'no_token'};
+  if(typeof bazVerifyLocal_ === 'function'){
+    var loc = bazVerifyLocal_(token);            /* 서명 토큰이 아니면 null → 시트 조회로 폴백 */
+    if(loc) return loc.ok ? {ok:true, level:loc.level, name:loc.name} : {ok:false, error:loc.why};
+  }
   var sh = _authSheet_(AUTH_CFG.TOKEN_SHEET);
   if(!sh) return {ok:false, error:'no_token_sheet'};
   var v;
@@ -136,22 +167,23 @@ function authLogin_(password){
   for(var i=0;i<creds.length;i++){ if(creds[i].pw === pw){ hit = creds[i]; break; } }
   if(!hit){ _authLog_('LOGIN_FAIL','', '', '비밀번호 불일치'); return {ok:false, error:'invalid_password'}; }
 
-  var token   = _authNewToken_();
-  var expires = new Date(Date.now() + AUTH_CFG.TTL_HOURS*3600*1000).toISOString();
+  var iss = _authIssue_(hit.name, hit.level, AUTH_CFG.TTL_HOURS);
 
-  /* 발급 기록 = 세션 목록. 시트 쓰기가 실패해도 토큰은 돌려준다
-     (데이터 GAS 가 못 찾으면 fail-open 으로 통과하므로 로그인은 살아 있다). */
-  try{
-    var sh = _authSheet_(AUTH_CFG.TOKEN_SHEET);
-    if(sh){
-      sh.appendRow([token, hit.level, expires, new Date().toISOString()]);
-      var last = sh.getLastRow();
-      if(last > AUTH_CFG.MAX_TOKENS) sh.deleteRows(2, last - Math.floor(AUTH_CFG.MAX_TOKENS*0.75));
-    }
-  }catch(e){}
+  /* 서명 토큰은 무상태 — Tokens 시트에 안 적어도 검증된다(로그인 핫패스에서 시트 쓰기 제거).
+     불투명 폴백 토큰만 검증용으로 Tokens 시트에 기록한다. */
+  if(!iss.signed){
+    try{
+      var sh = _authSheet_(AUTH_CFG.TOKEN_SHEET);
+      if(sh){
+        sh.appendRow([iss.token, hit.level, iss.expires, new Date().toISOString()]);
+        var last = sh.getLastRow();
+        if(last > AUTH_CFG.MAX_TOKENS) sh.deleteRows(2, last - Math.floor(AUTH_CFG.MAX_TOKENS*0.75));
+      }
+    }catch(e){}
+  }
 
-  _authLog_('LOGIN_OK', hit.name, hit.level, '');
-  return {ok:true, token:token, level:hit.level, name:hit.name, expires:expires};
+  _authLog_('LOGIN_OK', hit.name, hit.level, iss.signed ? 'signed' : 'opaque');
+  return {ok:true, token:iss.token, level:hit.level, name:hit.name, expires:iss.expires};
 }
 
 /* ── 로그아웃 — 해당 토큰 행을 지운다 ─────────────────────── */
@@ -188,12 +220,20 @@ function doGet(e){
     var p = (e && e.parameter) || {};
     var a = p.action || 'ping';
     if(a === 'ping'){
-      var creds = 0, tok = -1;
+      var creds = 0, tok = -1, mode = 'opaque', fp = '';
       try{ creds = _authCreds_().length; }catch(_){}
       try{ var ts = _authSheet_(AUTH_CFG.TOKEN_SHEET); tok = ts ? Math.max(0, ts.getLastRow()-1) : -1; }catch(_){}
+      try{
+        var conf = (typeof bazTokenConf_ === 'function') ? bazTokenConf_() : {secret:''};
+        if(conf.secret){
+          mode = 'signed';
+          fp = Utilities.base64EncodeWebSafe(
+                 Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, conf.secret)).slice(0,8);
+        }
+      }catch(_){}
       return _authJson_({
-        ok:true, ver:AUTH_VER, mode:'opaque',
-        creds:creds, tokens:tok,          /* 배포·상태를 밖에서 눈으로 확인 */
+        ok:true, ver:AUTH_VER, mode:mode, fp:fp,   /* fp = 비밀 지문(원문 아님) — 8개 프로젝트 정합 확인용 */
+        creds:creds, tokens:tok,
         pong:new Date().toISOString()
       });
     }
@@ -204,10 +244,37 @@ function doGet(e){
   }
 }
 
+/* ── 성능 실측 — 편집기에서 실행해 단계별 ms를 로그로 확인 ──
+   목표: 로그인 ≤2000ms. 캐시 웜/콜드 두 번 돌려 비교하세요. */
+function authSelfTime(){
+  var t0 = Date.now();
+  var conf = (typeof bazTokenConf_ === 'function') ? bazTokenConf_() : {secret:''};
+  var t1 = Date.now();
+  var creds = _authCreds_();                       /* 캐시 히트면 시트 0회 */
+  var t2 = Date.now();
+  var pw = creds[0] && creds[0].pw;
+  var r = pw ? authLogin_(pw) : {ok:false, error:'no_cred'};
+  var t3 = Date.now();
+  var vr = r.ok ? authVerify_(r.token) : {ok:false};
+  var t4 = Date.now();
+  if(r.ok && !r.signed) authLogout_(r.token);      /* 불투명 시뮬 토큰만 정리(서명은 무상태) */
+  var lines = [
+    'mode: ' + (conf.secret ? 'signed' : 'opaque'),
+    'bazTokenConf_ : ' + (t1-t0) + 'ms  (자가 프로비저닝 포함)',
+    '_authCreds_   : ' + (t2-t1) + 'ms  (' + creds.length + '행, 캐시히트면 시트0회)',
+    'authLogin_    : ' + (t3-t2) + 'ms  (' + (r.ok ? (r.signed?'signed·무상태':'opaque·Tokens쓰기') : '❌'+r.error) + ')',
+    'authVerify_   : ' + (t4-t3) + 'ms  (' + (vr.ok?'✅':'❌') + ')',
+    '── 로그인 총계 : ' + (t3-t0) + 'ms  (목표 ≤2000)'
+  ];
+  lines.forEach(function(l){ Logger.log(l); });
+  return lines.join('\n');
+}
+
 /* ── 배포 전 자가진단 — 편집기 실행 드롭다운에서 돌려 보세요 ── */
 function authSelfCheck(){
   var out = [];
-  out.push('버전: ' + AUTH_VER + ' (mode: opaque · 비밀 불필요)');
+  var _m = (typeof bazTokenConf_==='function' && bazTokenConf_().secret) ? 'signed' : 'opaque';
+  out.push('버전: ' + AUTH_VER + ' (mode: ' + _m + ')');
   out.push('시트: ' + [AUTH_CFG.CRED_SHEET, AUTH_CFG.TOKEN_SHEET, AUTH_CFG.LOG_SHEET]
     .map(function(n){ return n + (_authSheet_(n) ? '✓' : '✗'); }).join(' '));
   out.push('Credentials 행 수: ' + _authCreds_().length);
