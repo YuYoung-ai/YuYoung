@@ -21,7 +21,7 @@
 1. **보안시트 ID 확보** — 보안시트(Credentials 등이 있는 스프레드시트)의 ID.
    `baz_token_lib.gs` 의 `BAZ_SECURITY_SHEET_ID` 에 넣거나, 각 데이터 GAS 스크립트 속성 `BAZ_SECURITY_SHEET_ID` 로 지정.
    (auth 프로젝트는 그 시트에 바인딩돼 있어 비워둬도 됨.)
-2. **비밀 생성** — auth 프로젝트에서 **`bazEnsureSecret_()` 1회 실행** → 보안시트에 `Config` 탭이 생기고
+2. **비밀 생성** — auth 프로젝트 편집기 Run 드롭다운에서 **`runEnsureSecret` 1회 실행**(= `bazEnsureSecret_`) → 보안시트에 `Config` 탭이 생기고
    `TOKEN_SECRET`/`TOKEN_EPOCH` 가 기록된다. 데이터 GAS들은 여기서 **자동으로** 비밀을 읽어간다(수동 8곳 복붙 없음).
    ※ 각 데이터 GAS는 최초 1회 보안시트 접근 OAuth 승인이 필요(편집기에서 아무 함수나 실행 → 권한 허용).
 
@@ -31,7 +31,7 @@
    → 서명 토큰을 로컬 검증할 준비. 아직 auth가 불투명이어도 폴백으로 정상 동작.
    → handover 의 병원정보DB(rich)는 handover **자신의 바인딩 시트**에서 읽는다(별도 ID 불필요).
      병원정보DB가 다른 스프레드시트에 있는 경우에만 `RICH_HOSPDB_SS_ID` override 설정.
-2. **auth 프로젝트**: `bazEnsureSecret_()` 실행 → `auth_gas.gs`(+lib) 배포
+2. **auth 프로젝트**: `runEnsureSecret` 실행 → `auth_gas.gs`(+lib) 배포
    → 이때부터 **서명 토큰 발급**. `?action=ping` 이 `mode:'signed'` + `fp`(지문) 반환.
 3. **정적 파일**(`auth.js`·`sw.js`·HTML) push → GitHub Pages 반영.
 4. (선택) auth·handover 에 5분 keep-warm 시간트리거로 콜드스타트 완화.
@@ -40,7 +40,7 @@
 
 - `인증GAS/exec?action=ping` → `{"mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
 - `handoverGAS/exec?action=ping` → `ver:"3.0.0"` (Core 확장 반영 확인).
-- 각 데이터 GAS 편집기에서 `bazTokenSelfTest_()` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
+- 각 데이터 GAS 편집기에서 `runTokenSelfTest` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
   **모두 같아야** 왕복 0(전부 로컬 검증). 다르면 그 프로젝트만 왕복(감속, 장애 아님).
 - auth 편집기 `authSelfTime()` → 로그인/검증 단계별 실측 ms(목표 로그인 ≤2000ms).
 
@@ -48,7 +48,7 @@
 
 - auth에 비밀이 없어도 **불투명 토큰으로 로그인은 살아 있다**(로그인 불사).
 - 데이터 GAS의 비밀이 어긋나도 **로컬 검증 실패 → 인증 왕복 폴백**으로 작동(락아웃 아님, 감속만).
-- 일괄 로그아웃은 auth에서 `bazBumpTokenEpoch_()` 1회(보안시트 Config 한 곳 → 전 프로젝트 자동 반영).
+- 일괄 로그아웃은 auth에서 `runBumpEpoch` 1회(= `bazBumpTokenEpoch_`, 보안시트 Config 한 곳 → 전 프로젝트 자동 반영).
 
 ## 프론트(GitHub Pages) 변경 요지
 

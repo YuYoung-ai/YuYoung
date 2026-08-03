@@ -315,3 +315,11 @@ function bazTokenSelfTest_(){
   Logger.log('❌ 검증 실패: ' + JSON.stringify(v));
   return 'FAIL';
 }
+
+/* ── 편집기 실행용 래퍼 ─────────────────────────────────────
+   Apps Script 의 Run 드롭다운은 이름이 '_' 로 끝나는 함수를 숨긴다.
+   배포 시 사람이 직접 돌려야 하는 함수들을 아래 비-언더스코어 래퍼로 노출한다.
+   → 편집기 드롭다운에서 runEnsureSecret / runTokenSelfTest / runBumpEpoch 선택해 실행. */
+function runEnsureSecret(){ return bazEnsureSecret_(); }   /* auth: 보안시트 Config에 비밀 생성(1회) */
+function runTokenSelfTest(){ return bazTokenSelfTest_(); } /* 각 프로젝트: 지문 8자 일치 확인 */
+function runBumpEpoch(){ return bazBumpTokenEpoch_(); }    /* auth: 전원 강제 로그아웃(일괄 무효화) */
