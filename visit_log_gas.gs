@@ -47,6 +47,8 @@ function doPost(e) {
       String(data.handler || ''),    // 처리자
       String(data.serial || '')      // 시리얼
     ]);
+    /* 방금 쓴 방문이 조회에 바로 보이도록 응답 캐시를 비운다 */
+    try{ if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('visitlog_latest'); }catch(_){}
     return _json({ ok: true });
   } catch (err) {
     return _json({ ok: false, error: String(err) });
@@ -59,6 +61,13 @@ function doGet(e) {
     // [보안] 로그인 토큰 필수 — 병원명·방문일·담당자가 담긴 데이터
     if (!isAuthed_(e)) {
       return _json({ ok: false, error: 'unauthorized — 로그인이 필요합니다(토큰 없음/만료)' });
+    }
+
+    /* [성능] 응답 캐시(5분). 방문로그는 append-only 라 계속 자라는데 캐시가 없어
+       매 요청 전체 스캔이었다. 쓰기(doPost)에서 캐시를 비우므로 최신성도 유지된다. */
+    var cached = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('visitlog_latest') : null;
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
     }
 
     var sh = getLogSheet_();
@@ -80,7 +89,9 @@ function doGet(e) {
       }
     }
 
-    return _json({ ok: true, visits: latest });
+    var body = JSON.stringify({ ok: true, visits: latest });
+    try{ if(typeof bazCachePut_ === 'function') bazCachePut_('visitlog_latest', body, 300); }catch(_){}
+    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return _json({ ok: false, error: String(err) });
   }

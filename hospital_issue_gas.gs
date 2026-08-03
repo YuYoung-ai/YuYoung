@@ -42,6 +42,14 @@ function doGet(e){
     /* [보안] 로그인 토큰 필수 — 병원별 처리 이력(내용 포함) */
     if (!isAuthed_(e)) return _json({ success:false, error:'unauthorized — 로그인이 필요합니다(토큰 없음/만료)' });
 
+    /* [성능] 응답 캐시(10분). 처리 이력도 보안 재구성으로 정적 HTML에서 빠지면서
+       매 페이지 로드마다 시트 전체 스캔이 됐는데 캐시가 없었다. 이력은 계속 쌓이므로
+       데이터가 늘수록 그대로 느려졌다. 조각 캐시라 100KB를 넘어도 동작한다. */
+    var cached = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('issuehist_all') : null;
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sh = ss.getSheetByName(SHEET_NAME);
     if(!sh) return _json({ success:false, error:'시트 없음: ' + SHEET_NAME });
@@ -86,11 +94,19 @@ function doGet(e){
       history[name].sort(function(a,b){ return (b.d||'').localeCompare(a.d||''); });
     });
 
-    return _json({ success:true, data:history, headerRow: hdr?hdr.row:null, mapped: hdr?hdr.col:null });
+    var body = JSON.stringify({ success:true, data:history, headerRow: hdr?hdr.row:null, mapped: hdr?hdr.col:null });
+    try{ if(typeof bazCachePut_ === 'function') bazCachePut_('issuehist_all', body, 600); }catch(_){}
+    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
 
   } catch(err){
     return _json({ success:false, error:String(err) });
   }
+}
+
+/** 이력 시트를 편집한 뒤 캐시를 즉시 비우고 싶을 때 편집기에서 실행 */
+function bazDropIssueCache(){
+  if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('issuehist_all');
+  Logger.log('처리이력 응답 캐시를 비웠습니다');
 }
 
 // ── 헤더 탐지 ─────────────────────────────────────

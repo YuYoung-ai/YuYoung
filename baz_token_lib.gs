@@ -149,6 +149,83 @@ function bazMakeSecret_(){
   return s;
 }
 
+/************************************************************
+ * 조각 캐시 (bazCacheGet_ / bazCachePut_ / bazCacheDrop_)
+ * ----------------------------------------------------------
+ * CacheService 는 키 하나에 100KB까지만 담을 수 있다. 그래서 예전 코드는
+ *   if(s.length < 95000) cache.put(...)
+ * 처럼 크면 그냥 포기했다. 시트가 자라 그 선을 넘는 순간 캐시가 조용히
+ * 무력화되고, 이후 모든 요청이 시트를 통째로 다시 읽었다.
+ * "데이터가 늘수록 점점 느려지는" 원인이 이것이다.
+ *
+ * 여기서는 큰 값을 조각으로 나눠 저장해 크기 제한을 없앤다.
+ * 한글은 UTF-8에서 최대 3바이트이므로 조각을 30000자로 잡아
+ * 최악의 경우에도 90KB < 100KB 를 지킨다.
+ ************************************************************/
+var BAZ_CHUNK = 30000;      /* 조각당 문자 수 (한글 최악 3바이트 → 90KB) */
+var BAZ_MAX_CHUNKS = 40;    /* 상한(≈1.2MB). 넘으면 캐시하지 않고 그냥 계산해서 준다 */
+
+function bazCachePut_(key, str, ttlSec){
+  if(!key || typeof str !== 'string') return false;
+  var ttl = Number(ttlSec) || 300;
+  var n = Math.ceil(str.length / BAZ_CHUNK);
+  if(n > BAZ_MAX_CHUNKS) return false;
+  try{
+    var cache = CacheService.getScriptCache();
+    var obj = {};
+    for(var i=0;i<n;i++) obj[key+'#'+i] = str.substr(i*BAZ_CHUNK, BAZ_CHUNK);
+    obj[key+'#m'] = JSON.stringify({n:n, len:str.length});
+    cache.putAll(obj, ttl);
+    return true;
+  }catch(e){ return false; }
+}
+
+function bazCacheGet_(key){
+  if(!key) return null;
+  try{
+    var cache = CacheService.getScriptCache();
+    var meta = cache.get(key+'#m');
+    if(!meta) return null;
+    var m = JSON.parse(meta);
+    /* n===0(빈 문자열)도 정상 값이다 — `!m.n` 으로 걸러내면 빈 응답이 영영 캐시되지 않는다 */
+    if(!m || typeof m.n !== 'number' || m.n < 0) return null;
+    var keys = [];
+    for(var i=0;i<m.n;i++) keys.push(key+'#'+i);
+    var got = cache.getAll(keys);
+    var out = '';
+    for(var j=0;j<m.n;j++){
+      var part = got[key+'#'+j];
+      if(part === null || part === undefined) return null;   /* 조각이 하나라도 빠지면 무효 */
+      out += part;
+    }
+    if(out.length !== m.len) return null;                    /* 길이 불일치 → 무효 */
+    return out;
+  }catch(e){ return null; }
+}
+
+function bazCacheDrop_(key){
+  if(!key) return;
+  try{
+    var cache = CacheService.getScriptCache();
+    var meta = cache.get(key+'#m');
+    var keys = [key+'#m'];
+    if(meta){
+      var m = JSON.parse(meta);
+      for(var i=0;i<(m.n||0);i++) keys.push(key+'#'+i);
+    }
+    cache.removeAll(keys);
+  }catch(e){}
+}
+
+/** JSON 응답 캐시 도우미 — build()는 캐시 미스일 때만 실행된다 */
+function bazCachedJson_(key, ttlSec, build){
+  var hit = bazCacheGet_(key);
+  if(hit){ try{ return JSON.parse(hit); }catch(e){} }
+  var out = build();
+  try{ bazCachePut_(key, JSON.stringify(out), ttlSec); }catch(e){}
+  return out;
+}
+
 /** 설치 자가진단 — 각 프로젝트에서 한 번씩 실행해 OK가 나오는지 확인한다 */
 function bazTokenSelfTest_(){
   var c = bazTokenConf_();

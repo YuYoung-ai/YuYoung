@@ -2755,7 +2755,10 @@ function pcProgPull(){
 var pcPollTimer=null, pcPollFailN=0;
 function pcPollDelay(){
   if(bazAuthBlocked() || pcPollFailN>=3) return 60000;               // 인증 끊김·연속 실패 → 느리게
-  return (Date.now()-pcLastAct < 90000) ? 7000 : 25000;
+  /* [부하] 열린 탭 하나가 하루 종일 도는 폴링이다. 사용자·탭이 늘수록 GAS 실행 슬롯을
+     그대로 잡아먹어 접속 지연으로 이어졌다. 공동 편집 반응성을 크게 해치지 않는 선에서
+     완화한다(조작 직후 7→10초, 평상시 25→40초). 서버측 캐시 개선과 함께 적용된다. */
+  return (Date.now()-pcLastAct < 90000) ? 10000 : 40000;
 }
 function pcPollTick(){
   try{

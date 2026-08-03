@@ -14,6 +14,15 @@ function doGet(e) {
     /* [보안] 로그인 토큰 필수 — 병원 주소·S/N·담당자·좌표가 담긴 데이터 */
     if (!isAuthed_(e)) return fail('unauthorized — 로그인이 필요합니다(토큰 없음/만료)');
 
+    /* [성능] 응답 캐시(10분). 보안 재구성으로 병원 데이터가 정적 HTML에서 빠지면서
+       이 엔드포인트가 매 페이지 로드마다 시트를 통째로 읽게 됐는데, 여기엔 캐시가
+       하나도 없었다. 데이터가 늘수록 비용이 그대로 커져 접속 지연으로 이어졌다.
+       조각 캐시라 응답이 100KB를 넘어도 정상 동작한다(baz_token_lib.gs). */
+    var cached = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('hospdb_all') : null;
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName("병원정보DB");
     if (!sheet) throw new Error("'병원정보DB' 시트를 찾을 수 없습니다.");
@@ -55,10 +64,18 @@ function doGet(e) {
         };
       });
 
-    return ok(hospitals);
+    var body = JSON.stringify({ success: true, data: hospitals });
+    try{ if(typeof bazCachePut_ === 'function') bazCachePut_('hospdb_all', body, 600); }catch(_){}
+    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return fail(err.message);
   }
+}
+
+/** 병원정보DB를 편집한 뒤 캐시를 즉시 비우고 싶을 때 편집기에서 실행 */
+function bazDropHospCache(){
+  if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('hospdb_all');
+  Logger.log('병원정보DB 응답 캐시를 비웠습니다 — 다음 요청부터 시트를 다시 읽습니다');
 }
 
 function ok(data) {
