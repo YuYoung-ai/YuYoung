@@ -32,6 +32,13 @@
   var NAME_KEY  = 'baz_auth_name';
   var EXP_KEY   = 'baz_auth_expires';
   var LOGIN_KEY = 'baz_auth_login_time';
+  var VERIFY_KEY = 'baz_auth_verified_ts';   // 마지막 서버 검증 성공 시각(ms) — 재검증 스로틀용
+
+  // [성능] 서버 재검증 스로틀. 로그인/검증 직후 이 시간 안에는 페이지를 옮겨도
+  // 서버 verify 왕복을 생략하고 로컬 세션을 신뢰한다(진짜 검증은 각 데이터 GAS가
+  // 요청마다 서버측에서 하므로, 클라이언트 재검증은 안전하게 건너뛸 수 있다).
+  // 매 페이지 진입마다 auth로 왕복하던 것이 이 세션 내내 0회가 된다.
+  var VERIFY_TTL = 5 * 60 * 1000;   // 5분
 
   // Apps Script는 프리플라이트(CORS preflight)를 싫어하므로
   // text/plain 으로 보내 단순요청(simple request)으로 처리합니다.
@@ -92,6 +99,7 @@
       sessionStorage.setItem(EXP_KEY, expires || '');
       sessionStorage.setItem(NAME_KEY, name || '');
       sessionStorage.setItem(LOGIN_KEY, new Date().toISOString());
+      sessionStorage.setItem(VERIFY_KEY, String(Date.now()));   // 로그인 = 방금 검증됨
     } catch (e) {}
   }
 
@@ -102,6 +110,7 @@
       sessionStorage.removeItem(NAME_KEY);
       sessionStorage.removeItem(EXP_KEY);
       sessionStorage.removeItem(LOGIN_KEY);
+      sessionStorage.removeItem(VERIFY_KEY);
     } catch (e) {}
   }
 
@@ -134,7 +143,9 @@
     },
 
     // 저장된 토큰을 서버에 검증. 유효하면 level(1/2), 아니면 0
-    currentLevel: function () {
+    // currentLevel(force): 저장된 토큰을 서버에 검증. 유효하면 level(1/2/3), 아니면 0.
+    // force=true 를 넘기면 스로틀을 무시하고 반드시 서버에 재검증한다(권한 강등 즉시 확인 등).
+    currentLevel: function (force) {
       var token = this.token();
       if (!token || !AUTH_URL) return Promise.resolve(0);
       // 로컬 만료 선검사(서버 왕복 절약)
@@ -143,7 +154,17 @@
         clearSession();
         return Promise.resolve(0);
       }
-      // 페이지 가드용 검증도 콜드스타트에 한 번은 더 기회를 준다.
+      // [성능] 재검증 스로틀 — 최근 VERIFY_TTL(5분) 안에 검증됐고 만료 임박(10분 이내)이
+      // 아니면 서버 왕복 없이 로컬 레벨을 즉시 반환. 세션 내 페이지 이동이 네트워크 0회가 된다.
+      // (진짜 검증은 각 데이터 GAS가 요청마다 서버측에서 수행하므로 안전)
+      if (!force) {
+        var vts = parseInt(sessionStorage.getItem(VERIFY_KEY) || '0', 10);
+        var nearExpiry = exp && (new Date(exp) - new Date()) < 10 * 60 * 1000;
+        if (vts && (Date.now() - vts) < VERIFY_TTL && !nearExpiry) {
+          return Promise.resolve(this.cachedLevel());
+        }
+      }
+      // 스로틀 밖(또는 force): 서버 검증. 콜드스타트에 한 번 더 기회를 준다.
       // 실패해도 아래 catch가 로컬 캐시 레벨로 폴백하므로 화면을 막지는 않는다.
       return postJSON({ action: 'verify', token: token }, { tries: 2, timeoutMs: 15000 })
         .then(function (r) {
@@ -151,6 +172,7 @@
             try {
               sessionStorage.setItem(LEVEL_KEY, String(r.level));
               if (r.name) sessionStorage.setItem(NAME_KEY, r.name);
+              sessionStorage.setItem(VERIFY_KEY, String(Date.now()));   // 검증 성공 시각 갱신
             } catch (e) {}
             return r.level;
           }
@@ -223,23 +245,20 @@
    *   3) 아래 PAGE_RULES 기본값 — 목록에 없는 새 페이지는 레벨 1
    ************************************************************/
 
-  // 인증 없이 접근 가능한 페이지 (로그인 화면)
-  var PUBLIC_PAGES = { 'index.html': 1, '': 1 };
+  // 인증 없이 접근 가능한 페이지 (로그인 화면 + 보안 불필요 페이지)
+  //   guide/survey 는 업무 데이터가 없어 로그인 없이 열람 가능(페이지 가드 skip → verify 왕복 0).
+  var PUBLIC_PAGES = { 'index.html': 1, '': 1, 'guide.html': 1, 'survey.html': 1 };
 
   // 페이지별 기본 규칙: tool = 메뉴설정 탭의 도구 id, level = 기본 최소 레벨
   // (index.html의 MENU_DEFAULTS 와 동일한 기준)
+  // (제거된 페이지 hospital.html·dashboard.html·user_guide.html·chatbot.html 은 목록에서 뺐고,
+  //  guide.html·survey.html 은 PUBLIC_PAGES 로 이동했다.)
   var PAGE_RULES = {
-    'guide.html':      { tool: 'guide',      level: 1 },
     'inspection.html': { tool: 'inspection', level: 1 },
     'handover.html':   { tool: 'handover',   level: 1 },
     'label.html':      { tool: 'label',      level: 1 },
-    'chatbot.html':    { tool: 'chatbot',    level: 1 },
     'weekly.html':     { tool: 'weekly',     level: 1 },
-    'user_guide.html': { tool: null,         level: 1 },
-    'hospital.html':   { tool: 'hospital',   level: 2 },
     'hospital-pc.html':{ tool: 'hospital',   level: 2 },
-    'survey.html':     { tool: 'survey',     level: 2 },
-    'dashboard.html':  { tool: 'dashboard',  level: 3 },
     'dashboard-pc.html':{ tool: 'dashboard', level: 3 }
   };
 

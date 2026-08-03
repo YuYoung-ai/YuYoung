@@ -151,6 +151,18 @@ var WEEKLY_AUTO = { SHEET: '주간자동설정' };
    '처리내용템플릿' 탭 헤더: 대분류 | 유형 | 교체품 | 처리내용 (관리자가 직접 편집) */
 var CONTENT_TPL = { SHEET: '처리내용템플릿' };
 
+/* [Core 통합] 병원정보DB(rich) — 주소·S/N·좌표(N·O열)·상태·최근점검·HP/UI버전 전체 필드.
+   ★ 이 병원정보DB 는 handover 자신의 바인딩 스프레드시트에 '병원정보DB' 탭으로 이미 존재한다
+     (기존 hospital_gas 가 읽던 것과 같은 시트 — 원본은 handover). 그래서 기본은 로컬 시트를 읽는다.
+   ★ SS_ID 는 병원정보DB 가 '다른' 스프레드시트에 있을 때만 채우는 선택 override(대개 비워둔다). */
+var HOSPDB_RICH = { SHEET: '병원정보DB', SS_ID: '' };
+function richHospSS_(){
+  var id = HOSPDB_RICH.SS_ID;
+  if(!id){ try{ id = PropertiesService.getScriptProperties().getProperty('RICH_HOSPDB_SS_ID') || ''; }catch(e){} }
+  if(id){ try{ return SpreadsheetApp.openById(id); }catch(e){} }
+  return ss_();   /* 기본: handover 자신의 바인딩 스프레드시트 */
+}
+
 /* ================= 공통 유틸 ================= */
 function ss_(){ return SpreadsheetApp.getActiveSpreadsheet(); }
 function sheet_(name){
@@ -431,9 +443,12 @@ function doGet(e){
       }
     }
 
-    if(action==='ping')   return json_({success:true, ver:'2.9.0', pong:new Date().toISOString()});
+    if(action==='ping')   return json_({success:true, ver:'3.0.0', pong:new Date().toISOString()});
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
+    if(action==='hospdbrich') return json_(getHospDBRich_());   /* [Core] 병원정보DB 전체필드(hospital_gas 대체) */
+    if(action==='issuehist')  return json_(getIssueHist_());    /* [Core] 병원별 이슈이력(hospital_issue_gas 대체) */
+    if(action==='bootstrap')  return json_(getBootstrap_());    /* [Core] hospital-pc 부트 1콜(hospdbrich+issuehist) */
     if(action==='inventory') return json_(getInventory_());
     if(action==='ncare')  return json_(getNcare_());            /* [v2.3] N-care 가입 현황 */
     if(action==='recent') return json_(getRecent_(p.hosp||'', Number(p.limit)||5));
@@ -990,6 +1005,71 @@ function getHospDB_(){
   return res;
 }
 
+/** [Core] 병원정보DB(rich) — hospital_gas 를 대체. openById 로 rich 스프레드시트를 읽어
+    hospital-pc 가 기대하는 전체 필드({name,sn,region,address,lastVisit,status,sales,asType,
+    ncare,client,hpVer,uiVer,lat,lng})로 반환한다. (기존 hospital_gas 응답과 동일 형태) */
+function getHospDBRich_(){
+  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
+  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
+  var ss = richHospSS_();
+  if(!ss) return {success:false, error:'스프레드시트 접근 불가'};
+  var sheet = ss.getSheetByName(HOSPDB_RICH.SHEET);
+  if(!sheet) return {success:false, error:"'"+HOSPDB_RICH.SHEET+"' 탭 없음"};
+  var lastRow = sheet.getLastRow();
+  if(lastRow < 3) return {success:true, data:[]};
+  var lastCol = sheet.getLastColumn();
+  var width   = Math.max(1, Math.min(14, lastCol - 1));   // B열부터 최대 14개(B~O)
+  var values  = sheet.getRange(3, 2, lastRow - 2, width).getValues();
+  function num_(v, min, max){ var n = parseFloat(v); return (isNaN(n) || n < min || n > max) ? null : n; }
+  var hospitals = values
+    .filter(function(r){ return String(r[0]).trim() !== ''; })
+    .map(function(r){
+      return {
+        name:String(r[0]).trim(), sn:String(r[1]||'').trim(), region:String(r[2]||'').trim(),
+        address:String(r[3]||'').trim(), lastVisit:String(r[4]||'').trim(), status:String(r[5]||'').trim(),
+        sales:String(r[6]||'').trim(), asType:String(r[7]||'').trim(), ncare:String(r[8]||'').trim(),
+        client:String(r[9]||'').trim(), hpVer:String(r[10]||'').trim(), uiVer:String(r[11]||'').trim(),
+        lat:num_(r[12], 33, 39), lng:num_(r[13], 124, 132)
+      };
+    });
+  var res = {success:true, data:hospitals};
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb_rich', JSON.stringify(res), 600); }catch(e){}
+  return res;
+}
+
+/** [Core] 병원별 이슈이력 — hospital_issue_gas 를 대체. 현장 처리 기록에서 직접 산출한다.
+    필드 매핑(현장기록 → 이슈이력): 처리일→d · CS담당자→f · 점검/AS→t · 대분류→pt · 유형→sy ·
+    교체품→p · 내용→fx · 유무상→pay. (기존 hospital_issue_gas 응답과 동일 형태) */
+function getIssueHist_(){
+  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
+  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
+  var all = readAll_();
+  var history = {};
+  all.rows.forEach(function(o){
+    var name = String(o['병원명']||'').trim();
+    if(!name) return;
+    var s = slim_(o);
+    if(!s.date) return;
+    var g = String(s.gubun||'');
+    var t = /점검/.test(g) ? '점검' : (/AS/i.test(g) ? 'AS' : g.trim());
+    var rec = { d:s.date, f:s.fse, t:t, pt:s.cat, sy:s.type, fx:s.detail, pay:(s.paid || s.cost || '') };
+    var part = String(s.part||'').trim(); if(part) rec.p = part;
+    (history[name] = history[name] || []).push(rec);
+  });
+  Object.keys(history).forEach(function(n){
+    history[n].sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+  });
+  var res = {success:true, data:history};
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
+  return res;
+}
+
+/** [Core] hospital-pc 부트 1콜 — rich 병원정보DB + 이슈이력을 한 응답에 합친다.
+    각각 조각캐시라 대개 캐시 히트. 클라이언트는 d.hospdb.data / d.issuehist.data 로 사용. */
+function getBootstrap_(){
+  return { success:true, ver:'3.0.0', hospdb:getHospDBRich_(), issuehist:getIssueHist_() };
+}
+
 /** 특정 병원 최근 이력 */
 function getRecent_(hosp, limit){
   if(!hosp) return {success:false, error:'hosp 파라미터 필요'};
@@ -1464,7 +1544,9 @@ function verifyLevel_(token){
      통째로 사라진다(인증 서버가 죽어도, Tokens를 비워도 영향 없음). */
   var loc = null;
   try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
-  if(loc) return loc.ok ? (Number(loc.level)||0) : 0;
+  if(loc && loc.ok) return Number(loc.level)||0;
+  /* 로컬 검증 실패(bad_signature·revoked·expired)는 하드 차단하지 않고 아래 인증 서버 왕복으로
+     폴백한다 — 비밀 불일치가 락아웃이 아니라 감속으로 degrade("무조건 장애 안 남"). auth가 최종 판정. */
 
   /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
      모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */

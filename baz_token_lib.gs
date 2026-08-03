@@ -41,6 +41,15 @@
  * 비밀값은 인증 프로젝트에서 bazMakeSecret_()를 실행해 만들면 된다.
  ************************************************************/
 
+/* ── 자가 프로비저닝 앵커 ───────────────────────────────────────────
+   ★ 보안시트(Credentials/Tokens/LoginLog 가 있는 스프레드시트)의 ID.
+     이 값 하나만 채우면(비-비밀) 데이터 GAS들이 여기 Config 탭에서 토큰 비밀을
+     자동으로 읽어 온다 → 8개 프로젝트에 비밀을 손으로 맞출 필요가 사라진다.
+     · auth 프로젝트는 이 시트에 바인딩돼 있어 비워둬도 된다(getActiveSpreadsheet 폴백).
+     · 스크립트 속성 BAZ_SECURITY_SHEET_ID 로도 지정 가능(코드 수정 없이).
+     · 비었거나 접근 실패해도 장애 아님 — 검증이 레거시 왕복으로 degrade 될 뿐. */
+var BAZ_SECURITY_SHEET_ID = '';   // 예: '1AbCdEf...'
+
 /** 스크립트 속성은 실행 1회 안에서 여러 번 읽히므로 메모리에 담아 둔다 */
 var _BAZ_TOK_CACHE = null;
 function bazTokenConf_(){
@@ -51,8 +60,60 @@ function bazTokenConf_(){
     secret = sp.getProperty('BAZ_TOKEN_SECRET') || '';
     epoch  = Number(sp.getProperty('BAZ_TOKEN_EPOCH') || '0') || 0;
   }catch(e){}
+  /* 스크립트 속성에 비밀이 없으면 보안시트 Config 탭에서 자가 획득(수동 동기화 제거).
+     실패하면 secret='' 그대로 → 호출부가 레거시 왕복으로 안전하게 폴백한다. */
+  if(!secret){
+    var prov = bazProvisionFromSheet_();
+    if(prov && prov.secret){ secret = prov.secret; if(prov.epoch) epoch = prov.epoch; }
+  }
   _BAZ_TOK_CACHE = { secret: secret, epoch: epoch };
   return _BAZ_TOK_CACHE;
+}
+
+/** 보안 스프레드시트 핸들 — 상수 → 스크립트 속성 → 바인딩(getActive) 순으로 시도 */
+function bazSecuritySS_(){
+  var id = BAZ_SECURITY_SHEET_ID;
+  if(!id){ try{ id = PropertiesService.getScriptProperties().getProperty('BAZ_SECURITY_SHEET_ID') || ''; }catch(e){} }
+  if(id){ try{ return SpreadsheetApp.openById(id); }catch(e){} }
+  try{ return SpreadsheetApp.getActiveSpreadsheet(); }catch(e){}   /* auth(바인딩) 폴백 */
+  return null;
+}
+
+/** 보안시트 Config 탭에서 TOKEN_SECRET/TOKEN_EPOCH 획득(6시간 캐시). 없으면 null. */
+function bazProvisionFromSheet_(){
+  try{ var c = CacheService.getScriptCache().get('baz_prov_secret'); if(c) return JSON.parse(c); }catch(e){}
+  var ss = bazSecuritySS_(); if(!ss) return null;
+  var sh; try{ sh = ss.getSheetByName('Config'); }catch(e){ return null; }
+  if(!sh) return null;
+  var v; try{ v = sh.getDataRange().getDisplayValues(); }catch(e){ return null; }
+  var secret = '', epoch = 0;
+  for(var r=0;r<v.length;r++){
+    var k = String(v[r][0]||'').trim().toUpperCase();
+    if(k === 'TOKEN_SECRET')      secret = String(v[r][1]||'').trim();
+    else if(k === 'TOKEN_EPOCH')  epoch  = Number(v[r][1]||'0') || 0;
+  }
+  var out = secret ? { secret: secret, epoch: epoch } : null;
+  if(out){ try{ CacheService.getScriptCache().put('baz_prov_secret', JSON.stringify(out), 6*3600); }catch(e){} }
+  return out;
+}
+
+/** ★ auth 프로젝트에서 한 번 실행 — 보안시트 Config 탭에 비밀을 생성·기록한다.
+   이후 데이터 GAS들이 자동으로 읽어가므로 수동 복붙이 필요 없다. 이미 있으면 유지. */
+function bazEnsureSecret_(){
+  var ss = bazSecuritySS_();
+  if(!ss){ Logger.log('❌ 보안 스프레드시트를 찾지 못했습니다 — BAZ_SECURITY_SHEET_ID를 채우세요'); return null; }
+  var sh = ss.getSheetByName('Config') || ss.insertSheet('Config');
+  var v = []; try{ v = sh.getDataRange().getDisplayValues(); }catch(e){}
+  var have = '';
+  for(var r=0;r<v.length;r++){ if(String(v[r][0]||'').trim().toUpperCase()==='TOKEN_SECRET') have = String(v[r][1]||'').trim(); }
+  if(have){ Logger.log('ℹ️ TOKEN_SECRET 이미 존재 — 유지(지문 ' + have.slice(0,8) + '…)'); return have; }
+  var secret = bazMakeSecret_();          /* 로그+반환 */
+  sh.appendRow(['TOKEN_SECRET', secret]);
+  sh.appendRow(['TOKEN_EPOCH', 1]);
+  _BAZ_TOK_CACHE = null;
+  try{ CacheService.getScriptCache().remove('baz_prov_secret'); }catch(e){}
+  Logger.log('✅ 보안시트 Config 탭에 TOKEN_SECRET 기록 완료 — 데이터 GAS들이 자동으로 읽어갑니다');
+  return secret;
 }
 
 /** base64url 인코딩 (문자열 또는 byte[]) — '=' 패딩 제거 */
@@ -128,15 +189,29 @@ function bazVerifyLocal_(token){
 
 /**
  * 발급된 모든 토큰을 즉시 무효화한다(예전의 "Tokens 시트 비우기"를 대체).
- * ★ 8개 프로젝트 모두에서 같은 값으로 올려야 전체에 적용된다.
- *   인증 프로젝트에서 실행해 나온 숫자를 나머지 7개 속성에도 넣으세요.
+ * ★ 자가 프로비저닝 구조에서는 보안시트 Config 탭의 TOKEN_EPOCH 한 곳만 올리면
+ *   데이터 GAS들이 자동으로 새 값을 읽어간다(수동 8곳 동기화 불필요).
+ *   auth 프로젝트에서 이 함수를 한 번 실행하세요.
  */
 function bazBumpTokenEpoch_(){
-  var sp = PropertiesService.getScriptProperties();
-  var next = (Number(sp.getProperty('BAZ_TOKEN_EPOCH')||'0')||0) + 1;
-  sp.setProperty('BAZ_TOKEN_EPOCH', String(next));
+  var ss = bazSecuritySS_();
+  var next;
+  if(ss){
+    var sh = ss.getSheetByName('Config') || ss.insertSheet('Config');
+    var v = []; try{ v = sh.getDataRange().getDisplayValues(); }catch(e){}
+    var row = -1, cur = 0;
+    for(var r=0;r<v.length;r++){ if(String(v[r][0]||'').trim().toUpperCase()==='TOKEN_EPOCH'){ row=r; cur=Number(v[r][1]||'0')||0; break; } }
+    next = cur + 1;
+    if(row>=0) sh.getRange(row+1, 2).setValue(next); else sh.appendRow(['TOKEN_EPOCH', next]);
+    try{ CacheService.getScriptCache().remove('baz_prov_secret'); }catch(e){}
+    Logger.log('BAZ_TOKEN_EPOCH = ' + next + ' (보안시트 Config) → 데이터 GAS들이 자동 반영');
+  }else{
+    var sp = PropertiesService.getScriptProperties();
+    next = (Number(sp.getProperty('BAZ_TOKEN_EPOCH')||'0')||0) + 1;
+    sp.setProperty('BAZ_TOKEN_EPOCH', String(next));
+    Logger.log('BAZ_TOKEN_EPOCH = ' + next + ' (스크립트 속성) — 보안시트 미접근');
+  }
   _BAZ_TOK_CACHE = null;
-  Logger.log('BAZ_TOKEN_EPOCH = ' + next + '  → 8개 프로젝트 모두 이 값으로 맞추세요');
   return next;
 }
 

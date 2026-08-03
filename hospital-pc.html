@@ -2160,10 +2160,12 @@ applyLang();
 
 // ── 구글시트 동기화 (백그라운드, 안전모드) ──
 (function(){
-  var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
-  var VISIT_LOG_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
-  // ⬇️ 병원 점검 현황 → 이슈이력(HISTORY) 동기화 배포 URL
-  var ISSUE_HIST_URL='https://script.google.com/macros/s/AKfycbxxUilWbM4DkNu_W8DBIXIyAQmPBexYrZjbL8E36XC7yl0DknCx_yI1Dm1LN4wtDiH5/exec';
+  // [Core 통합] 병원정보DB·이슈이력을 handover(Core) 단일 백엔드로 일원화
+  //   (기존 hospital_gas·hospital_issue_gas·visit_log 3개 백엔드 팬아웃 → handover 1개)
+  var HANDOVER_CORE='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+  var HOSPITAL_DB_URL=HANDOVER_CORE+'?action=hospdbrich';   // was hospital_gas
+  var ISSUE_HIST_URL =HANDOVER_CORE+'?action=issuehist';    // was hospital_issue_gas
+  var VISIT_LOG_URL='';                                     // 방문로그 비활성화(사용 안 함) — 아래 동기화 skip
 
   var ISSUE_CACHE_KEY='bazIssueHistCache';
   var ISSUE_CACHE_TS='bazIssueHistCacheTs';
@@ -2375,6 +2377,7 @@ applyLang();
   }
 
   function syncVisitLog(){
+    if(!VISIT_LOG_URL) return;   // 방문로그 비활성화 — 동기화 skip
     try{
       var cached=localStorage.getItem(VLOG_CACHE_KEY);
       var ts=parseInt(localStorage.getItem(VLOG_CACHE_TS)||'0',10);
