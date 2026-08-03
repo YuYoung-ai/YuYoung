@@ -321,14 +321,22 @@ function doPost(e){
       }
     }
 
+    /* [성능] 현장 일정(진행중) 저장은 전역 락 "밖"에서 처리한다.
+       hospital-pc 가 진행중 토글마다 쏘는 고빈도 경로인데, 예전에는 handover 행 기록과
+       같은 20초 락에 묶여 직렬화됐다. 기록 쓰기가 느려지면(시트가 커질수록) 이쪽까지
+       waitLock 20초를 넘겨 통째로 실패했다. 이 둘은 서로 다른 저장소를 쓰고
+       (progress = ScriptProperties, 기록 = 시트) progSave_/progRestore_ 는 각자 자체
+       락을 갖고 있으므로 전역 락이 필요 없다. */
+    if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
+    if(payload && payload.action==='progress_restore') return json_(progRestore_(payload));  /* [v2.7] 스냅샷에서 일정 복구(Lv.3) */
+
     lock.waitLock(20000);
 
-    /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저 */
+    /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저
+       (아래 액션들은 자체 락이 없어 전역 락 안에 둔다) */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
     if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
-    if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
-    if(payload && payload.action==='progress_restore') return json_(progRestore_(payload));  /* [v2.7] 스냅샷에서 일정 복구(Lv.3) */
     if(payload && payload.action==='labeldone')    return json_(labelDone_(payload));  /* [v2.9] 내려받은 병원 작성 일자 기록 */
 
     var sh = sheet_(CONFIG.SHEET_NAME);
@@ -386,7 +394,9 @@ function doPost(e){
     }
 
     log_('OK', hdr, logSafe_(payload));
-    try{ CacheService.getScriptCache().remove('handover_all'); }catch(_){}
+    /* 방금 쓴 기록이 조회에 바로 보이도록 관련 캐시를 전부 비운다.
+       (조각 캐시라 remove 하나로는 안 되고 bazCacheDrop_ 를 써야 한다) */
+    bazDropHandoverCaches_(payload && payload.hosp);
     /* 재고 원장 사용처 자동 기입 (실패해도 본 기록에는 영향 없음) */
     var inv = invRecordUsage_(payload);
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
@@ -903,28 +913,44 @@ function slim_(o){
   return s;
 }
 
-/** 대시보드용 전체 데이터 — 5분 스크립트 캐시 (100KB 이내일 때만) */
-function getAll_(){
-  var cache = CacheService.getScriptCache();
+/** 기록을 쓴 뒤 관련 조회 캐시를 비운다.
+    getRecent_ 는 병원명별 키라, 방금 기록한 병원의 것만 정확히 지운다.
+    getToday_ 는 오늘 날짜 + 담당자별 키인데 담당자 조합을 다 알 수 없으므로,
+    TTL을 60초로 짧게 잡아 자연 만료에 맡긴다(현장 반응 지연 최대 1분). */
+function bazDropHandoverCaches_(hosp){
+  if(typeof bazCacheDrop_ !== 'function') return;
   try{
-    var hit = cache.get('handover_all');
-    if(hit) return JSON.parse(hit);
+    bazCacheDrop_('handover_all');
+    bazCacheDrop_('hv_master');
+    if(hosp){
+      var n = norm_(hosp);
+      /* getRecent_ 는 limit 별로 키가 갈린다 — 클라이언트가 쓰는 범위만 지운다 */
+      for(var i=0;i<=20;i++) bazCacheDrop_('hv_recent_' + n + '_' + i);
+      bazCacheDrop_('hv_recent_' + n + '_0');
+    }
   }catch(e){}
+}
+
+/** 대시보드용 전체 데이터 — 5분 캐시.
+    [수정] 예전에는 `if(s.length < 95000)` 이라, 시트가 자라 그 선을 넘는 순간 캐시가
+    조용히 무력화되고 모든 요청이 시트를 통째로 다시 읽었다("데이터가 늘수록 느려짐"의
+    핵심 원인). 조각 캐시로 바꿔 크기 제한을 없앤다(baz_token_lib.gs). */
+function getAll_(){
+  var hit = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
+  if(hit){ try{ return JSON.parse(hit); }catch(e){} }
   var all = readAll_();
   var out = {success:true, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
              data:all.rows.map(slim_)};
-  try{
-    var s = JSON.stringify(out);
-    if(s.length < 95000) cache.put('handover_all', s, 300);
-  }catch(e){}
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', JSON.stringify(out), 300); }catch(e){}
   return out;
 }
 
 /** 병원정보DB 탭 → 병원명·N-Care·지역 목록 (N-Care 미점검 산출용, 10분 캐시) */
 function getHospDB_(){
   var cache = CacheService.getScriptCache();
-  try{ var hit=cache.get('handover_hospdb'); if(hit) return JSON.parse(hit); }catch(e){}
+  var _h = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb') : null;
+  if(_h){ try{ return JSON.parse(_h); }catch(e){} }
   var sh = sheet_('병원정보DB');
   if(!sh) return {success:false, error:'병원정보DB 탭 없음'};
   var v = sh.getDataRange().getDisplayValues();
@@ -959,23 +985,35 @@ function getHospDB_(){
   }
   var res={success:true, count:out.length, data:out,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
-  try{ var s=JSON.stringify(res); if(s.length<95000) cache.put('handover_hospdb', s, 600); }catch(e){}
+  /* [수정] 95KB 절벽 제거 — 조각 캐시로 크기 제한 없이 저장 */
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb', JSON.stringify(res), 600); }catch(e){}
   return res;
 }
 
 /** 특정 병원 최근 이력 */
 function getRecent_(hosp, limit){
   if(!hosp) return {success:false, error:'hosp 파라미터 필요'};
+  /* [성능] readAll_ 는 시트 전 행 스캔이다. 예전에는 이 경로에 캐시가 하나도 없어
+     호출마다 전체를 다시 읽었다(데이터가 늘수록 선형으로 느려짐). */
+  var _k = 'hv_recent_' + norm_(hosp) + '_' + (Number(limit)||0);
+  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
+  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
   var all = readAll_();
   var q = norm_(hosp);
   var hit = all.rows.filter(function(o){ return norm_(o['병원명'])===q || norm_(o['병원명']).indexOf(q)>=0; });
   hit = hit.slice(-Math.min(limit, CONFIG.RECENT_MAX)).reverse().map(slim_);
-  return {success:true, hosp:hosp, count:hit.length, data:hit};
+  var _r = {success:true, hosp:hosp, count:hit.length, data:hit};
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_(_k, JSON.stringify(_r), 120); }catch(e){}
+  return _r;
 }
 
 /** 오늘 기록 */
 function getToday_(fse){
   var today = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
+  /* [성능] 위와 같은 이유로 캐시. 오늘 기록은 자주 바뀌므로 짧게(60초)만 잡는다. */
+  var _k = 'hv_today_' + today + '_' + norm_(fse||'');
+  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
+  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
   var all = readAll_();
   var hit = all.rows.filter(function(o){
     var d = String(o['처리일']||'').replace(/\./g,'-').replace(/\s/g,'');
@@ -983,11 +1021,16 @@ function getToday_(fse){
     var okFse = !fse || norm_(o['CS 담당자'])===norm_(fse);
     return okDate && okFse;
   }).map(slim_);
-  return {success:true, date:today, count:hit.length, data:hit};
+  var _r = {success:true, date:today, count:hit.length, data:hit};
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_(_k, JSON.stringify(_r), 60); }catch(e){}
+  return _r;
 }
 
 /** 유형 마스터: 유형마스터 시트가 있으면 우선, 없으면 데이터에서 추출 */
 function getMaster_(){
+  /* [성능] 유형마스터는 거의 안 바뀌는데 readAll_ 전체 스캔까지 하고 있었다 → 10분 캐시 */
+  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('hv_master') : null;
+  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
   var out = {success:true, source:'', taxonomy:{}, parts:[], fse:[], guides:{}};
   var msh = sheet_(CONFIG.MASTER_SHEET);
   if(msh && msh.getLastRow()>1){
@@ -1020,6 +1063,7 @@ function getMaster_(){
     if(f && out.fse.indexOf(f)<0) out.fse.push(f);
   });
   if(!out.source) out.source='기록 데이터 추출';
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('hv_master', JSON.stringify(out), 600); }catch(e){}
   return out;
 }
 
@@ -1399,7 +1443,7 @@ function getGuide_(type){
    실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
    ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
 var AUTH_ENFORCE = true;              /* 토큰 검증 사용 (문제 시 false 로 끄면 전면 개방) */
-var AUTH_FAILOPEN_LEVEL = 3;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+var AUTH_FAILOPEN_LEVEL = 1;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
 /* [v2.8] 인증 서버 차단기(circuit breaker) — "못 닿음"을 잠깐 기억하는 시간(초).
    이게 없으면 인증 GAS가 느릴 때 모든 조회가 각자 왕복을 다시 시도하며 지연이 곱해진다.
    (요청 10개 × 타임아웃 = 10배 지연) 60초만 기억해도 그 증폭이 끊긴다. */
@@ -1408,8 +1452,23 @@ var AUTH_DOWN_KEY = 'auth_down';
 
 function verifyLevel_(token){
   if(!AUTH_ENFORCE) return 3;                 /* 검증 끄기 스위치 */
-  if(!MENU.AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
   if(!token) return 0;                        /* 토큰이 아예 없으면 왕복 없이 차단 */
+
+  /* ── 1순위: 서명 토큰을 로컬에서 검증 (baz_token_lib.gs) ───────────────────
+     ★ 네트워크 호출 0회.
+     예전에는 요청마다 인증 서버로 UrlFetchApp 왕복을 해서, 인증 서버 하나가 7개
+     프로젝트의 단일 병목이 됐다. 게다가 보안 시트 Tokens 탭을 비우면 기기에 남은
+     토큰이 전부 lv=0이 되는데 그 결과가 캐시되지 않아(옛 조건 `lv > 0`), 죽은 세션
+     하나하나가 매 요청마다 왕복을 무한 반복하는 영구 부하가 됐다 — 접속 오류가
+     "점점 잦아지던" 직접 원인. 서명 토큰은 스스로 유효성을 증명하므로 그 구조가
+     통째로 사라진다(인증 서버가 죽어도, Tokens를 비워도 영향 없음). */
+  var loc = null;
+  try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
+  if(loc) return loc.ok ? (Number(loc.level)||0) : 0;
+
+  /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
+     모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */
+  if(!MENU.AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
 
   var key = 'lv_' + Utilities.base64EncodeWebSafe(
     Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
@@ -1424,8 +1483,8 @@ function verifyLevel_(token){
   }catch(_){}
 
   /* 인증 서버 왕복 — "토큰이 틀렸다"와 "서버에 닿지 못했다"를 반드시 구분한다.
-     둘을 뭉뚱그려 0을 돌려주면, 서버가 잠깐 흔들리거나 스크립트 권한이 빠졌을 때
-     토큰이 멀쩡한 사람까지 전부 차단되고 재로그인으로도 풀리지 않는다(실제 발생). */
+     둘을 뭉뚱그려 0을 돌려주면, 서버가 잠깐 흔들릴 때 토큰이 멀쩡한 사람까지
+     전부 차단되고 재로그인으로도 풀리지 않는다(실제 발생). */
   var lv = 0, reached = false;
   try{
     var res = UrlFetchApp.fetch(
@@ -1437,7 +1496,7 @@ function verifyLevel_(token){
       lv = r.ok ? (Number(r.level)||0) : 0;
     }
   }catch(err){
-    Logger.log('[auth] 인증 서버 확인 실패(통과 처리): ' + err);
+    Logger.log('[auth] 인증 서버 확인 실패: ' + err);
   }
 
   if(!reached){
@@ -1448,7 +1507,9 @@ function verifyLevel_(token){
   try{
     if(cache){
       cache.remove(AUTH_DOWN_KEY);            /* 살아났으니 차단기 해제 */
-      if(lv > 0) cache.put(key, String(lv), 300);
+      /* ★ 무효 토큰(lv===0)도 캐시한다. 옛 조건 `lv > 0`이 죽은 토큰을 캐시에서 빼
+         매 요청 왕복을 유발했다 — 이번 접속 장애의 직접 원인. */
+      cache.put(key, String(lv), lv > 0 ? 300 : 60);
     }
   }catch(_){}
   return lv;

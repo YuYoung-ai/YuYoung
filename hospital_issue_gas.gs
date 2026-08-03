@@ -42,6 +42,14 @@ function doGet(e){
     /* [보안] 로그인 토큰 필수 — 병원별 처리 이력(내용 포함) */
     if (!isAuthed_(e)) return _json({ success:false, error:'unauthorized — 로그인이 필요합니다(토큰 없음/만료)' });
 
+    /* [성능] 응답 캐시(10분). 처리 이력도 보안 재구성으로 정적 HTML에서 빠지면서
+       매 페이지 로드마다 시트 전체 스캔이 됐는데 캐시가 없었다. 이력은 계속 쌓이므로
+       데이터가 늘수록 그대로 느려졌다. 조각 캐시라 100KB를 넘어도 동작한다. */
+    var cached = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('issuehist_all') : null;
+    if (cached) {
+      return ContentService.createTextOutput(cached).setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sh = ss.getSheetByName(SHEET_NAME);
     if(!sh) return _json({ success:false, error:'시트 없음: ' + SHEET_NAME });
@@ -86,11 +94,19 @@ function doGet(e){
       history[name].sort(function(a,b){ return (b.d||'').localeCompare(a.d||''); });
     });
 
-    return _json({ success:true, data:history, headerRow: hdr?hdr.row:null, mapped: hdr?hdr.col:null });
+    var body = JSON.stringify({ success:true, data:history, headerRow: hdr?hdr.row:null, mapped: hdr?hdr.col:null });
+    try{ if(typeof bazCachePut_ === 'function') bazCachePut_('issuehist_all', body, 600); }catch(_){}
+    return ContentService.createTextOutput(body).setMimeType(ContentService.MimeType.JSON);
 
   } catch(err){
     return _json({ success:false, error:String(err) });
   }
+}
+
+/** 이력 시트를 편집한 뒤 캐시를 즉시 비우고 싶을 때 편집기에서 실행 */
+function bazDropIssueCache(){
+  if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('issuehist_all');
+  Logger.log('처리이력 응답 캐시를 비웠습니다');
 }
 
 // ── 헤더 탐지 ─────────────────────────────────────
@@ -191,12 +207,31 @@ var AUTH_VERIFY_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwX
    실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
    ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
 var AUTH_ENFORCE = true;              /* 토큰 검증 사용 (문제 시 false 로 끄면 전면 개방) */
-var AUTH_FAILOPEN_LEVEL = 3;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+var AUTH_FAILOPEN_LEVEL = 1;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+/* [v2.8] 인증 서버 차단기(circuit breaker) — "못 닿음"을 잠깐 기억하는 시간(초).
+   이게 없으면 인증 GAS가 느릴 때 모든 조회가 각자 왕복을 다시 시도하며 지연이 곱해진다. */
+var AUTH_DOWN_TTL = 60;
+var AUTH_DOWN_KEY = 'auth_down';
 
 function verifyLevel_(token){
   if(!AUTH_ENFORCE) return 3;                 /* 검증 끄기 스위치 */
-  if(!AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
   if(!token) return 0;                        /* 토큰이 아예 없으면 왕복 없이 차단 */
+
+  /* ── 1순위: 서명 토큰을 로컬에서 검증 (baz_token_lib.gs) ───────────────────
+     ★ 네트워크 호출 0회.
+     예전에는 요청마다 인증 서버로 UrlFetchApp 왕복을 해서, 인증 서버 하나가 7개
+     프로젝트의 단일 병목이 됐다. 게다가 보안 시트 Tokens 탭을 비우면 기기에 남은
+     토큰이 전부 lv=0이 되는데 그 결과가 캐시되지 않아(옛 조건 `lv > 0`), 죽은 세션
+     하나하나가 매 요청마다 왕복을 무한 반복하는 영구 부하가 됐다 — 접속 오류가
+     "점점 잦아지던" 직접 원인. 서명 토큰은 스스로 유효성을 증명하므로 그 구조가
+     통째로 사라진다(인증 서버가 죽어도, Tokens를 비워도 영향 없음). */
+  var loc = null;
+  try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
+  if(loc) return loc.ok ? (Number(loc.level)||0) : 0;
+
+  /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
+     모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */
+  if(!AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
 
   var key = 'lv_' + Utilities.base64EncodeWebSafe(
     Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
@@ -205,11 +240,14 @@ function verifyLevel_(token){
     cache = CacheService.getScriptCache();
     var hit = cache.get(key);
     if(hit) return Number(hit)||0;
+    /* 직전에 인증 서버가 죽어 있었다면 왕복하지 않고 곧바로 통과시킨다.
+       (어차피 결과는 AUTH_FAILOPEN_LEVEL 인데, 왕복 비용만 사용자마다 반복된다) */
+    if(cache.get(AUTH_DOWN_KEY)) return AUTH_FAILOPEN_LEVEL;
   }catch(_){}
 
   /* 인증 서버 왕복 — "토큰이 틀렸다"와 "서버에 닿지 못했다"를 반드시 구분한다.
-     둘을 뭉뚱그려 0을 돌려주면, 서버가 잠깐 흔들리거나 스크립트 권한이 빠졌을 때
-     토큰이 멀쩡한 사람까지 전부 차단되고 재로그인으로도 풀리지 않는다(실제 발생). */
+     둘을 뭉뚱그려 0을 돌려주면, 서버가 잠깐 흔들릴 때 토큰이 멀쩡한 사람까지
+     전부 차단되고 재로그인으로도 풀리지 않는다(실제 발생). */
   var lv = 0, reached = false;
   try{
     var res = UrlFetchApp.fetch(
@@ -221,11 +259,22 @@ function verifyLevel_(token){
       lv = r.ok ? (Number(r.level)||0) : 0;
     }
   }catch(err){
-    Logger.log('[auth] 인증 서버 확인 실패(통과 처리): ' + err);
+    Logger.log('[auth] 인증 서버 확인 실패: ' + err);
   }
 
-  if(!reached) return AUTH_FAILOPEN_LEVEL;    /* 서버에 못 닿음 → 차단하지 않는다 */
-  try{ if(lv > 0 && cache) cache.put(key, String(lv), 300); }catch(_){}
+  if(!reached){
+    /* 못 닿음을 짧게 기억 → 뒤따르는 요청들은 왕복 없이 즉시 통과 */
+    try{ if(cache) cache.put(AUTH_DOWN_KEY, '1', AUTH_DOWN_TTL); }catch(_){}
+    return AUTH_FAILOPEN_LEVEL;               /* 서버에 못 닿음 → 차단하지 않는다 */
+  }
+  try{
+    if(cache){
+      cache.remove(AUTH_DOWN_KEY);            /* 살아났으니 차단기 해제 */
+      /* ★ 무효 토큰(lv===0)도 캐시한다. 옛 조건 `lv > 0`이 죽은 토큰을 캐시에서 빼
+         매 요청 왕복을 유발했다 — 이번 접속 장애의 직접 원인. */
+      cache.put(key, String(lv), lv > 0 ? 300 : 60);
+    }
+  }catch(_){}
   return lv;
 }
 

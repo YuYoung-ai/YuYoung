@@ -1946,7 +1946,18 @@ function applyMenu(){
   var adm=document.getElementById('appBtnMenuAdmin');
   if(adm) adm.style.display=(unlockLevel>=3)?'flex':'none';
 }
-function loadMenuCfg(){
+/* [부하] 메뉴 설정은 거의 바뀌지 않는데, 예전에는 index.html 을 열 때마다 캐시 신선도와
+   무관하게 매번 GAS를 호출했다. 로그인 화면이 GAS 응답(실측 3~16초)을 그대로 기다리게 되고,
+   로그인 전이라 인증 왕복까지 겹쳐 "로그인 접속 지연"의 한 축이 됐다.
+   → 10분 TTL. 캐시가 신선하면 요청 자체를 보내지 않는다. */
+var MENU_CFG_TS_KEY='baz_menu_cfg_ts', MENU_CFG_TTL=10*60*1000;
+function loadMenuCfg(force){
+  if(!force){
+    try{
+      var ts=parseInt(localStorage.getItem(MENU_CFG_TS_KEY)||'0',10);
+      if(MENU_CFG && ts && (Date.now()-ts)<MENU_CFG_TTL) return;   /* 신선 → 요청 생략 */
+    }catch(e){}
+  }
   fetch(MGR_GAS_URL+'?action=menu')
     .then(function(r){return r.json();})
     .then(function(d){
@@ -1969,7 +1980,10 @@ function loadMenuCfg(){
       }
       if(!cfg) return;
       MENU_CFG=cfg;
-      try{ localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg)); }catch(e){}
+      try{
+        localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg));
+        localStorage.setItem(MENU_CFG_TS_KEY, String(Date.now()));   /* 10분간 재요청 안 함 */
+      }catch(e){}
       applyMenu();
     })
     .catch(function(){ /* 오프라인: 캐시/기본값 유지 */ });
@@ -2021,7 +2035,10 @@ function saveMenuAdmin(){
     if(d&&(d.success||d.ok)){
       var cfg={}; menu.forEach(function(m){ cfg[m.id]={name:m.name,show:m.show,level:m.level,order:m.order}; });
       MENU_CFG=cfg;
-      try{ localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg)); }catch(e){}
+      try{
+        localStorage.setItem('baz_menu_cfg', JSON.stringify(cfg));
+        localStorage.setItem(MENU_CFG_TS_KEY, String(Date.now()));   /* 방금 저장한 값이 최신 */
+      }catch(e){}
       applyMenu();
       msg.style.color='#1E7E4E'; msg.textContent='✅ 저장됨 — 모든 사용자에게 적용됩니다.';
       setTimeout(closeMenuAdmin, 900);
