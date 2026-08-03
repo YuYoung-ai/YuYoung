@@ -253,7 +253,9 @@ function verifyLevel_(token){
      통째로 사라진다(인증 서버가 죽어도, Tokens를 비워도 영향 없음). */
   var loc = null;
   try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
-  if(loc) return loc.ok ? (Number(loc.level)||0) : 0;
+  if(loc && loc.ok) return Number(loc.level)||0;
+  /* 로컬 검증 실패(bad_signature·revoked·expired)는 하드 차단하지 않고 아래 인증 서버 왕복으로
+     폴백한다 — 비밀 불일치가 락아웃이 아니라 감속으로 degrade("무조건 장애 안 남"). auth가 최종 판정. */
 
   /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
      모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */

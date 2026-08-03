@@ -106,7 +106,9 @@ function verifyLevel_(token){
      통째로 사라진다(인증 서버가 죽어도, Tokens를 비워도 영향 없음). */
   var loc = null;
   try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
-  if(loc) return loc.ok ? (Number(loc.level)||0) : 0;
+  if(loc && loc.ok) return Number(loc.level)||0;
+  /* 로컬 검증 실패(bad_signature·revoked·expired)는 하드 차단하지 않고 아래 인증 서버 왕복으로
+     폴백한다 — 비밀 불일치가 락아웃이 아니라 감속으로 degrade("무조건 장애 안 남"). auth가 최종 판정. */
 
   /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
      모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */
@@ -210,10 +212,12 @@ function doPost(e){
   var lock = LockService.getScriptLock();
   var p = {};
   try{
-    lock.waitLock(20000);
+    /* [성능] 검증을 20초 쓰기 락 '밖'에서 먼저 한다 — 인증 왕복(또는 타임아웃)이 전역 락에
+       직렬화돼 다른 쓰기를 막던 것을 제거(7개 데이터 GAS 중 유일한 락-내부 검증이었음). */
     p = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if(!authed_(p.token)) return json_({success:false, error:'unauthorized'});
 
+    lock.waitLock(20000);
     if(p.action === 'upsert')   return json_(upsert_(p));
     if(p.action === 'complete') return json_(complete_(p));
     if(p.action === 'remove')   return json_(remove_(p));
