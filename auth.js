@@ -245,23 +245,20 @@
    *   3) 아래 PAGE_RULES 기본값 — 목록에 없는 새 페이지는 레벨 1
    ************************************************************/
 
-  // 인증 없이 접근 가능한 페이지 (로그인 화면)
-  var PUBLIC_PAGES = { 'index.html': 1, '': 1 };
+  // 인증 없이 접근 가능한 페이지 (로그인 화면 + 보안 불필요 페이지)
+  //   guide/survey 는 업무 데이터가 없어 로그인 없이 열람 가능(페이지 가드 skip → verify 왕복 0).
+  var PUBLIC_PAGES = { 'index.html': 1, '': 1, 'guide.html': 1, 'survey.html': 1 };
 
   // 페이지별 기본 규칙: tool = 메뉴설정 탭의 도구 id, level = 기본 최소 레벨
   // (index.html의 MENU_DEFAULTS 와 동일한 기준)
+  // (제거된 페이지 hospital.html·dashboard.html·user_guide.html·chatbot.html 은 목록에서 뺐고,
+  //  guide.html·survey.html 은 PUBLIC_PAGES 로 이동했다.)
   var PAGE_RULES = {
-    'guide.html':      { tool: 'guide',      level: 1 },
     'inspection.html': { tool: 'inspection', level: 1 },
     'handover.html':   { tool: 'handover',   level: 1 },
     'label.html':      { tool: 'label',      level: 1 },
-    'chatbot.html':    { tool: 'chatbot',    level: 1 },
     'weekly.html':     { tool: 'weekly',     level: 1 },
-    'user_guide.html': { tool: null,         level: 1 },
-    'hospital.html':   { tool: 'hospital',   level: 2 },
     'hospital-pc.html':{ tool: 'hospital',   level: 2 },
-    'survey.html':     { tool: 'survey',     level: 2 },
-    'dashboard.html':  { tool: 'dashboard',  level: 3 },
     'dashboard-pc.html':{ tool: 'dashboard', level: 3 }
   };
 

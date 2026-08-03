@@ -560,7 +560,8 @@ document.addEventListener('click',function(e){
 });
 
 /* 라이브 병원정보DB (hospital.html과 동일 엔드포인트) — S/N·UI/HP 버전 최신화 */
-var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbxmOwdE4ijr6KSxyaAJEuJhdJgLbUnZtFxVH535xbeuYwwoLK0FqXTAI_bI9pVYb2PW/exec';
+/* [Core 통합] hospital_gas → handover(Core) hospdbrich (동일 응답 형태) */
+var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec?action=hospdbrich';
 function loadLiveDB(){
   fetch(HOSPITAL_DB_URL,{method:'GET'})
     .then(function(r){return r.json();})

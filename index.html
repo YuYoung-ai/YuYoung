@@ -1884,11 +1884,11 @@ document.getElementById('appBtnReport').addEventListener('click', function(){
   else{ document.getElementById('appSelectStage').style.display='none'; document.getElementById('langSelectStage').style.display='flex'; }
 });
 document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
-document.getElementById('appBtnChatbot').addEventListener('click', function(){ location.href='chatbot.html'; });
+document.getElementById('appBtnChatbot').addEventListener('click', function(){ alert('AI 챗봇은 현재 사용하지 않습니다.'); });
 document.getElementById('appBtnWeekly').addEventListener('click', function(){ location.href='weekly.html'; });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
-document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital.html'; });
+document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital-pc.html'; });   /* hospital.html 미사용 → -pc로 통합 */
 document.getElementById('appBtnHospitalPc').addEventListener('click', function(){ location.href='hospital-pc.html'; });
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
@@ -1896,7 +1896,7 @@ document.getElementById('appBtnLabel').addEventListener('click', function(){ loc
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
-  location.href='dashboard.html';
+  location.href='dashboard-pc.html';   /* dashboard.html 미사용 → -pc로 통합 */
 });
 document.getElementById('appBtnDashboardPc').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }

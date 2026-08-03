@@ -2579,20 +2579,8 @@ async function generatePDF(arg){
       saveCurrentTask({status:'completed', documentNo:docNo});
       // Google Sheets 도 완료 처리 (설정 시). 다른 기기에서 조회·재생성 가능
       if(_currentTaskId) cloudSyncTask(getTask(_currentTaskId), {silent:true});
-      // ── 구글시트 방문 기록 전송 (백그라운드) ──
-      (function(){
-        var GAS_URL='https://script.google.com/macros/s/AKfycbyiQtaK1rWBVKQpGj2HVf8DUvryaXxmUYYAcixDlFo9nMAKytOOPnMTSzhD2Az2eVGl/exec';
-        var payload={
-          hospital:v('hospital')||'',
-          visitDate:v('inspectDate')||today,
-          type:(v('subscription')&&v('subscription')!=='미가입')?'점검':'AS',
-          handler:v('csName')||v('receiver')||'',
-          serial:v('serialNo')||'',
-          token:(window.BazAuth&&BazAuth.token)?BazAuth.token():''   /* [보안] 기록 인증 토큰 */
-        };
-        fetch(GAS_URL,{method:'POST',body:JSON.stringify(payload)})
-          .catch(function(e){console.warn('[방문로그] 전송 실패:',e);});
-      })();
+      // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
+      //   (현장 처리 기록은 handover 로 일원화. 방문로그 백엔드는 은퇴.)
     }
   }catch(e){
     hideLoading();
