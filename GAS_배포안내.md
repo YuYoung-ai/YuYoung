@@ -21,9 +21,7 @@
 1. **보안시트 ID 확보** — 보안시트(Credentials 등이 있는 스프레드시트)의 ID.
    `baz_token_lib.gs` 의 `BAZ_SECURITY_SHEET_ID` 에 넣거나, 각 데이터 GAS 스크립트 속성 `BAZ_SECURITY_SHEET_ID` 로 지정.
    (auth 프로젝트는 그 시트에 바인딩돼 있어 비워둬도 됨.)
-2. **rich 병원정보DB ID 확보** — `hospital_gas` 편집기에서 `getActiveSpreadsheet().getId()` 실행 → 나온 ID를
-   handover 의 `RICH_HOSPDB_SS_ID`(또는 handover 스크립트 속성 `RICH_HOSPDB_SS_ID`)에 넣는다.
-3. **비밀 생성** — auth 프로젝트에서 **`bazEnsureSecret_()` 1회 실행** → 보안시트에 `Config` 탭이 생기고
+2. **비밀 생성** — auth 프로젝트에서 **`bazEnsureSecret_()` 1회 실행** → 보안시트에 `Config` 탭이 생기고
    `TOKEN_SECRET`/`TOKEN_EPOCH` 가 기록된다. 데이터 GAS들은 여기서 **자동으로** 비밀을 읽어간다(수동 8곳 복붙 없음).
    ※ 각 데이터 GAS는 최초 1회 보안시트 접근 OAuth 승인이 필요(편집기에서 아무 함수나 실행 → 권한 허용).
 
@@ -31,7 +29,8 @@
 
 1. **baz_token_lib.gs + 데이터 GAS(handover·ncare·inspection)** 먼저 배포
    → 서명 토큰을 로컬 검증할 준비. 아직 auth가 불투명이어도 폴백으로 정상 동작.
-   → handover 에 `RICH_HOSPDB_SS_ID` 설정 필수(hospital-pc 지도·상태·S/N 소스).
+   → handover 의 병원정보DB(rich)는 handover **자신의 바인딩 시트**에서 읽는다(별도 ID 불필요).
+     병원정보DB가 다른 스프레드시트에 있는 경우에만 `RICH_HOSPDB_SS_ID` override 설정.
 2. **auth 프로젝트**: `bazEnsureSecret_()` 실행 → `auth_gas.gs`(+lib) 배포
    → 이때부터 **서명 토큰 발급**. `?action=ping` 이 `mode:'signed'` + `fp`(지문) 반환.
 3. **정적 파일**(`auth.js`·`sw.js`·HTML) push → GitHub Pages 반영.

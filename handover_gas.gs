@@ -152,16 +152,15 @@ var WEEKLY_AUTO = { SHEET: '주간자동설정' };
 var CONTENT_TPL = { SHEET: '처리내용템플릿' };
 
 /* [Core 통합] 병원정보DB(rich) — 주소·S/N·좌표(N·O열)·상태·최근점검·HP/UI버전 전체 필드.
-   기존 hospital_gas가 서빙하던 것을 handover(Core)로 흡수한다. 그 스프레드시트를 openById로 읽는다.
-   ★ RICH_HOSPDB_SS_ID = 병원정보DB(rich)가 있는 스프레드시트 ID
-     (hospital_gas 편집기에서 getActiveSpreadsheet().getId() 로 확인해 채우거나,
-      스크립트 속성 RICH_HOSPDB_SS_ID 로 지정). 비어 있으면 hospdbrich/bootstrap이 에러를 반환한다. */
+   ★ 이 병원정보DB 는 handover 자신의 바인딩 스프레드시트에 '병원정보DB' 탭으로 이미 존재한다
+     (기존 hospital_gas 가 읽던 것과 같은 시트 — 원본은 handover). 그래서 기본은 로컬 시트를 읽는다.
+   ★ SS_ID 는 병원정보DB 가 '다른' 스프레드시트에 있을 때만 채우는 선택 override(대개 비워둔다). */
 var HOSPDB_RICH = { SHEET: '병원정보DB', SS_ID: '' };
 function richHospSS_(){
   var id = HOSPDB_RICH.SS_ID;
   if(!id){ try{ id = PropertiesService.getScriptProperties().getProperty('RICH_HOSPDB_SS_ID') || ''; }catch(e){} }
   if(id){ try{ return SpreadsheetApp.openById(id); }catch(e){} }
-  return null;
+  return ss_();   /* 기본: handover 자신의 바인딩 스프레드시트 */
 }
 
 /* ================= 공통 유틸 ================= */
@@ -1013,9 +1012,9 @@ function getHospDBRich_(){
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
   var ss = richHospSS_();
-  if(!ss) return {success:false, error:'RICH_HOSPDB_SS_ID 미설정 — 병원정보DB(rich) 스프레드시트 ID를 채우세요'};
+  if(!ss) return {success:false, error:'스프레드시트 접근 불가'};
   var sheet = ss.getSheetByName(HOSPDB_RICH.SHEET);
-  if(!sheet) return {success:false, error:"'"+HOSPDB_RICH.SHEET+"' 시트 없음"};
+  if(!sheet) return {success:false, error:"'"+HOSPDB_RICH.SHEET+"' 탭 없음"};
   var lastRow = sheet.getLastRow();
   if(lastRow < 3) return {success:true, data:[]};
   var lastCol = sheet.getLastColumn();
