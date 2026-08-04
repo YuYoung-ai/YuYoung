@@ -34,12 +34,29 @@
 2. **auth 프로젝트**: `runEnsureSecret` 실행 → `auth_gas.gs`(+lib) 배포
    → 이때부터 **서명 토큰 발급**. `?action=ping` 이 `mode:'signed'` + `fp`(지문) 반환.
 3. **정적 파일**(`auth.js`·`sw.js`·HTML) push → GitHub Pages 반영.
-4. (선택) auth·handover 에 5분 keep-warm 시간트리거로 콜드스타트 완화.
+4. **keep-warm(콜드스타트 제거)** — auth 편집기에서 **`setupKeepWarm` 1회 실행**.
+   - **1분** 시간트리거로 auth·handover 를 `?action=ping&warm=1` 로 상시 예열한다.
+     (5분은 Apps Script 가 그보다 빨리 인스턴스를 재워 예열 공백에 콜드스타트가 났다 →
+      수동 doGet 이 그때만 깨우던 증상. 1분=최소 주기로 공백 제거.)
+   - `warm=1` 은 GAS 인스턴스뿐 아니라 **스프레드시트 핸들까지** 열어 둔다 →
+     '첫 시트 불러오기·첫 기록' 지연도 사라진다.
+   - 클라이언트는 `index.html` 접속 즉시 `BazAuth.prewarm()` 으로 auth·handover 를 선제 예열
+     (비밀번호 입력 사이 백엔드가 깨어남). 서버 트리거가 놓친 공백을 접속 순간에 메운다.
+
+## 배포 버전 정리 (버전 누적 재구성)
+
+Apps Script 는 배포할 때마다 버전이 쌓인다. 오래 운영해 버전이 많이 쌓였다면:
+
+- **URL 을 바꾸지 않는 재배포**: 편집기 → `배포 관리` → **기존 배포의 연필(수정)** →
+  버전 `새 버전` 선택 → 저장. **`/exec` URL 이 그대로 유지**되므로 클라이언트/타 GAS 무수정.
+  (새 배포를 만들면 URL 이 바뀌어 8곳을 다시 맞춰야 하므로, 정리 시엔 반드시 '기존 배포 수정'.)
+- **오래된 버전 아카이브**: 안 쓰는 옛 버전은 `배포 관리` 에서 보관/삭제해 목록을 정리.
+- 반영 확인은 `?action=ping` 의 `ver`(auth=`5.1.0-warm`) / handover ping 의 `warmed:true` 로.
 
 ## 배포 확인 (밖에서 curl)
 
-- `인증GAS/exec?action=ping` → `{"mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
-- `handoverGAS/exec?action=ping` → `ver:"3.0.0"` (Core 확장 반영 확인).
+- `인증GAS/exec?action=ping` → `{"ver":"5.1.0-warm","mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
+- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.0.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
 - 각 데이터 GAS 편집기에서 `runTokenSelfTest` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
   **모두 같아야** 왕복 0(전부 로컬 검증). 다르면 그 프로젝트만 왕복(감속, 장애 아님).
 - auth 편집기 `authSelfTime()` → 로그인/검증 단계별 실측 ms(목표 로그인 ≤2000ms).
