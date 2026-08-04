@@ -27,9 +27,10 @@
   // 콜드스타트 없는 Deno Deploy 로 옮기려면 이 한 줄만 Deno 주소로 교체한다(끝에 /exec 없음).
   //   예) var AUTH_URL = 'https://baz-auth.deno.dev';
   //   토큰 형식이 동일해 데이터 GAS·프런트는 무수정. 자세한 절차: deno-auth/README.md
-  //   문제 시 아래 GAS /exec 주소로 되돌리면 무중단 롤백.
-  var AUTH_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec';
-  // ▲▲▲ GAS 사용 시: 'https://script.google.com/macros/s/XXXX/exec' ▲▲▲
+  //   문제 시 아래 롤백용 GAS /exec 주소로 되돌리면 무중단 롤백(토큰 형식 동일).
+  var AUTH_URL = 'https://yuyoung.yuyoung-ai.deno.net';   /* Deno Deploy 로그인 서버(콜드스타트 없음) */
+  // 롤백용 GAS: 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec'
+  // ▲▲▲ Deno 사용 중 — 롤백 시 위 GAS /exec 로 교체 ▲▲▲
 
   var TOKEN_KEY = 'baz_auth_token';
   var LEVEL_KEY = 'baz_auth_level';
