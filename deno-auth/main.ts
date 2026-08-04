@@ -34,7 +34,7 @@
  *     pwsha 생성:  deno run --allow-read deno-auth/hash.ts '평문비밀번호'
  ************************************************************/
 
-const VER = "deno-1.0.0";
+const VER = "deno-1.0.1";
 
 const enc = new TextEncoder();
 
