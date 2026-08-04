@@ -238,6 +238,19 @@ textarea{resize:vertical;line-height:1.6;font-size:13px}
 var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
+/* [콜드스타트 내성] Apps Script 웹앱이 잠들어 있으면 첫 요청이 JSON 대신 HTML(<!DOCTYPE…)을
+   돌려준다. 그대로 r.json() 하면 "Unexpected token '<'"로 터진다. HTML을 감지해 잠깐 뒤
+   재시도하고(대개 2번째에 붙는다), 그래도 안 되면 예열 오류로 reject 한다. (auth.js와 동일 개념) */
+function wkJson(url, tries){
+  tries = tries || 3;
+  return fetch(url).then(function(r){ return r.text(); }).then(function(t){
+    if(/^\s*</.test(t)){
+      if(tries>1) return new Promise(function(res){ setTimeout(res,1200); }).then(function(){ return wkJson(url, tries-1); });
+      throw new Error('서버 예열 중 — 잠시 후 다시');
+    }
+    return JSON.parse(t);
+  });
+}
 /* ▼▼ 라이브 병원정보DB 배포 URL — hospital.html/handover.html과 동일 · 병원별 장비 S/N 출처 ▼▼ */
 /* [Core 통합] hospital_gas → handover(Core) hospdbrich (동일 응답 형태) */
 var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec?action=hospdbrich';
@@ -322,7 +335,7 @@ function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 function loadHospDB(){
   try{ var c=JSON.parse(localStorage.getItem('baz_weekly_hospdb')||'null');
     if(c){ HOSPDB_MAP=c; } }catch(e){}
-  fetch(_tk(HANDOVER_URL+'?action=hospdb')).then(function(r){return r.json();}).then(function(d){
+  wkJson(_tk(HANDOVER_URL+'?action=hospdb')).then(function(d){
     if(!d.success||!d.data) return;
     var map={};
     d.data.forEach(function(h){ var nc=String(h.ncare||'').trim(); if(h.n&&nc) map[nkey(h.n)]=nc; });
@@ -342,7 +355,7 @@ function loadHospSN(){
     if(c){ HOSPSN_MAP=c; } }catch(e){}
   try{ var cm=JSON.parse(localStorage.getItem('baz_weekly_hospmeta')||'null');
     if(cm){ HOSPMETA_MAP=cm; } }catch(e){}
-  fetch(HOSPITAL_DB_URL).then(function(r){return r.json();}).then(function(d){
+  wkJson(_tk(HOSPITAL_DB_URL)).then(function(d){
     if(!d.success||!d.data) return;
     var map={}, meta={};
     d.data.forEach(function(h){
@@ -371,7 +384,7 @@ function isAutoWriter(name){
 }
 function loadAutoWriters(){
   try{ var c=JSON.parse(localStorage.getItem('baz_weekly_autowriters')||'null'); if(Array.isArray(c)) AUTO_WRITERS=c; }catch(e){}
-  fetch(_tk(HANDOVER_URL+'?action=weeklyauto')).then(function(r){return r.json();}).then(function(d){
+  wkJson(_tk(HANDOVER_URL+'?action=weeklyauto')).then(function(d){
     if(!d.success||!Array.isArray(d.writers)) return;
     AUTO_WRITERS=d.writers.slice();
     try{ localStorage.setItem('baz_weekly_autowriters', JSON.stringify(AUTO_WRITERS)); }catch(e){}
@@ -522,8 +535,7 @@ function loadWeek(){
   fallbackAll(w, monK);
 }
 function fallbackAll(w, monK){
-  fetch(_tk(HANDOVER_URL+'?action=all'))
-    .then(function(r){return r.json();})
+  wkJson(_tk(HANDOVER_URL+'?action=all'))
     .then(function(d){
       if(!d.success||!d.data){ throw (d&&d.error)||'로드 실패'; }
       var mon=new Date(monK+'T00:00:00'), sat=addD(mon,-2), fri=addD(mon,4);
