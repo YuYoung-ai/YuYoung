@@ -39,6 +39,15 @@
   var LOGIN_KEY = 'baz_auth_login_time';
   var VERIFY_KEY = 'baz_auth_verified_ts';   // 마지막 서버 검증 성공 시각(ms) — 재검증 스로틀용
 
+  // ── [기기 자동 로그인] 기능 스위치 ────────────────────────────────
+  // false = 완전 비활성(현행과 동일: 매 세션 로그인). 운영 적용 시 true 로 바꾼다.
+  //   켜기 전 준비: (1) Deno 에 KV 사용 설정  (2) main.ts 재배포(ver deno-1.1.0)
+  //   확인: AUTH_URL/?action=ping 응답에 "kv":true 가 보이면 준비 완료.
+  // 켜면: '이 기기 기억하기' 체크 시 기기 토큰을 localStorage 에 저장하고,
+  //   다음 접속부터 비밀번호 없이 자동 로그인(30일 슬라이딩, Deno KV 에서 개별 해지 가능).
+  var DEVICE_REMEMBER = false;
+  var DEVICE_KEY = 'baz_device_token';       // localStorage(영구) — 기억된 기기 토큰
+
   // [성능] 서버 재검증 스로틀. 로그인/검증 직후 이 시간 안에는 페이지를 옮겨도
   // 서버 verify 왕복을 생략하고 로컬 세션을 신뢰한다(진짜 검증은 각 데이터 GAS가
   // 요청마다 서버측에서 하므로, 클라이언트 재검증은 안전하게 건너뛸 수 있다).
@@ -119,6 +128,11 @@
     } catch (e) {}
   }
 
+  // 기억된 기기 토큰(localStorage) — DEVICE_REMEMBER 가 켜졌을 때만 사용
+  function saveDevice(dev) { try { if (dev) localStorage.setItem(DEVICE_KEY, dev); } catch (e) {} }
+  function clearDevice() { try { localStorage.removeItem(DEVICE_KEY); } catch (e) {} }
+  function deviceToken() { try { return localStorage.getItem(DEVICE_KEY) || ''; } catch (e) { return ''; } }
+
   // [콜드스타트 선제 예열] 페이지가 열리는 '즉시' 인증·데이터 백엔드를 깨워 둔다.
   // 사용자가 비밀번호를 입력하는 몇 초 사이 백엔드가 이미 웜업되므로, 로그인 버튼을
   // 누를 때는 콜드스타트가 이미 끝나 있다(첫 로그인·첫 시트가 빨라진다).
@@ -162,16 +176,20 @@
 
     // 로그인: 비번 → 토큰. 성공 시 {ok:true, level} 반환
     // onAttempt(n, tries): 재시도 진행 상황(화면에 '깨우는 중' 안내를 띄우는 용도)
+    // remember: true & 기능 활성 시, 이 기기를 기억(기기 토큰을 localStorage 에 저장)
     // 실패 코드: 'network'(정말 연결 안 됨) / 'server_busy'(서버 콜드스타트·응답 지연)
-    login: function (password, onAttempt) {
+    login: function (password, onAttempt, remember) {
       if (!AUTH_URL) {
         return Promise.resolve({ ok: false, error: 'auth_url_missing' });
       }
-      return postJSON({ action: 'login', password: password },
-                      { tries: 3, timeoutMs: 25000, onAttempt: onAttempt })
+      var wantRemember = DEVICE_REMEMBER && !!remember;
+      var payload = { action: 'login', password: password };
+      if (wantRemember) payload.remember = true;
+      return postJSON(payload, { tries: 3, timeoutMs: 25000, onAttempt: onAttempt })
         .then(function (r) {
           if (r && r.ok) {
             saveSession(r.token, r.level, r.expires, r.name);
+            if (wantRemember && r.device) saveDevice(r.device);   // 기기 기억
           }
           return r || { ok: false, error: 'no_response' };
         })
@@ -179,6 +197,30 @@
           var kind = (e && e.kind) || 'network';
           return { ok: false, error: (kind === 'network' ? 'network' : 'server_busy'), detail: kind };
         });
+    },
+
+    // 기능 활성 여부(화면에서 '이 기기 기억하기' 노출 판단용)
+    deviceEnabled: function () { return !!DEVICE_REMEMBER; },
+    hasDevice: function () { return DEVICE_REMEMBER && !!deviceToken(); },
+
+    // 기기 자동 로그인: 저장된 기기 토큰으로 세션을 복구한다(비밀번호 불필요).
+    // 성공 시 level(1/2/3), 실패/미보유/비활성 시 0. 화면을 막지 않도록 실패는 조용히 0.
+    tryDeviceLogin: function () {
+      if (!DEVICE_REMEMBER || !AUTH_URL) return Promise.resolve(0);
+      var dev = deviceToken();
+      if (!dev) return Promise.resolve(0);
+      return postJSON({ action: 'device_login', device: dev }, { tries: 2, timeoutMs: 15000 })
+        .then(function (r) {
+          if (r && r.ok) {
+            saveSession(r.token, r.level, r.expires, r.name);
+            if (r.device) saveDevice(r.device);   // 서버가 갱신한 토큰(동일값) 유지
+            return r.level || 0;
+          }
+          // 기기가 해지/만료됨 → 저장된 토큰 폐기(다음엔 정상 로그인 유도)
+          if (r && (r.error === 'device_not_found' || r.error === 'revoked')) clearDevice();
+          return 0;
+        })
+        .catch(function () { return 0; });   // 네트워크 오류 등은 조용히(정상 로그인으로 폴백)
     },
 
     // 저장된 토큰을 서버에 검증. 유효하면 level(1/2), 아니면 0
@@ -261,10 +303,13 @@
 
     logout: function () {
       var token = this.token();
+      var dev = deviceToken();
       clearSession();
-      if (token && AUTH_URL) {
-        // 서버에서도 폐기(실패해도 무방)
-        postJSON({ action: 'logout', token: token }).catch(function () {});
+      clearDevice();   // 명시적 로그아웃 = 이 기기 기억도 해제
+      if (AUTH_URL) {
+        if (token) postJSON({ action: 'logout', token: token }).catch(function () {});
+        // 기억된 기기도 서버(KV)에서 폐기 — 실패해도 무방
+        if (DEVICE_REMEMBER && dev) postJSON({ action: 'device_logout', device: dev }).catch(function () {});
       }
     }
   };
@@ -336,7 +381,17 @@
     var required = requiredLevelFor_(page);
 
     // ── 1) 동기 선검사: 화면이 그려지기 전에 즉시 차단 ──
-    if (!BazAuth.token()) { goLogin_(); return; }
+    if (!BazAuth.token()) {
+      // 세션은 없지만 '기억된 기기'가 있으면 자동 로그인 시도 후 판정(즉시 차단하지 않음)
+      if (DEVICE_REMEMBER && deviceToken()) {
+        BazAuth.tryDeviceLogin().then(function (lv) {
+          if (lv >= required) { global.location.reload(); }   // 세션 확보 → 정상 상태로 재로드
+          else goLogin_();
+        });
+        return;
+      }
+      goLogin_(); return;
+    }
     var exp = BazAuth.expires();
     if (exp && new Date(exp) < new Date()) {         // 토큰 만료 → 자동 로그아웃
       clearSession();

@@ -5,36 +5,39 @@
  *   보안 재설계로 각 데이터 GAS 가 토큰을 '로컬 HMAC 검증'하게 되면서,
  *   auth 를 깨워 두던 검증 왕복 트래픽이 사라졌다. 그 결과 auth GAS 는
  *   로그인 때만 호출돼 자주 잠들고, 첫 로그인이 콜드스타트(30~50초)가 됐다.
- *   keepWarm/prewarm 은 임시방편이고 GAS 트리거 한도에 걸린다.
- *
- *   → 로그인 발급기만 '콜드스타트가 없는' Deno Deploy 로 옮긴다.
- *     토큰은 기존 baz_token_lib.gs 와 100% 동일한 형식(HMAC-SHA256 서명)으로
- *     발급하므로, 데이터 GAS·프런트는 한 줄도 바꿀 필요가 없다.
- *     (auth.js 의 AUTH_URL 만 이 서버 주소로 교체)
+ *   → 로그인 발급기만 '콜드스타트가 없는' Deno Deploy 로 옮긴다. 토큰은 기존
+ *     baz_token_lib.gs 와 100% 동일한 HMAC-SHA256 서명 형식이라 데이터 GAS·프런트 무수정.
  *
  * 토큰 형식(기존과 동일):
  *   token   = base64url(payload) + "." + base64url(HMAC_SHA256(secret, base64url(payload)))
  *   payload = {"n":이름,"l":레벨,"e":만료(초),"ep":에폭}
  *
- * API 계약(기존 auth_gas.gs 와 동일):
- *   POST {action:'login',  password}  → {ok, token, level, name, expires}
- *   POST {action:'verify', token}     → {ok, level, name}
- *   POST {action:'logout', token}     → {ok:true}            (서명 토큰은 무상태 — 클라이언트 세션만 정리)
- *   GET  ?action=verify&token=…       → {ok, level, name}    (데이터 GAS용)
- *   GET  ?action=ping                 → {ok, ver, mode, fp}  (배포 확인·health)
+ * API 계약:
+ *   POST {action:'login',  password, remember?} → {ok, token, level, name, expires, device?}
+ *   POST {action:'verify', token}               → {ok, level, name}
+ *   POST {action:'logout', token}               → {ok:true}
+ *   GET  ?action=verify&token=…                 → {ok, level, name}   (데이터 GAS용)
+ *   GET  ?action=ping                           → {ok, ver, mode, fp, creds, kv}
+ *   ── 기기 자동 로그인(선택 기능, Deno KV 필요) ──
+ *   POST {action:'device_login',  device}       → {ok, token, level, name, expires, device}
+ *   POST {action:'device_logout', device}       → {ok:true}
+ *   POST {action:'devices',       token}        → {ok, devices:[…]}   (Lv.3 토큰 필요)
+ *   POST {action:'device_revoke', token, did}   → {ok, revoked}       (Lv.3 토큰 필요)
  *
- * 필요한 환경변수(Deno Deploy → Settings → Environment Variables):
- *   TOKEN_SECRET     : 기존 보안시트 Config 의 TOKEN_SECRET 과 '동일한 값'(필수)
- *   TOKEN_EPOCH      : 기존 TOKEN_EPOCH 와 동일(기본 "1"). 전원 로그아웃(bump) 시 양쪽 다 올린다
- *   TOKEN_TTL_HOURS  : 토큰 유효시간(기본 "12")
- *   CREDENTIALS      : 계정 목록 JSON 배열(아래 형식). 비밀번호는 해시 저장 권장.
- *       [{"pwsha":"<sha256(base64url)>","level":2,"name":"홍길동"}, ...]
- *     또는 마이그레이션 편의용 평문(권장하지 않음):
- *       [{"pw":"평문비밀번호","level":1,"name":"홍길동"}, ...]
- *     pwsha 생성:  deno run --allow-read deno-auth/hash.ts '평문비밀번호'
+ * 환경변수(Deno Deploy → 각 timeline → Environment Variables):
+ *   TOKEN_SECRET     : 보안시트 Config 의 TOKEN_SECRET 과 '동일'(필수)
+ *   TOKEN_EPOCH      : 보안시트와 동일(기본 "1"). 전원 로그아웃 시 양쪽 다 올린다
+ *   TOKEN_TTL_HOURS  : 세션 토큰 유효시간(기본 "12")
+ *   CREDENTIALS      : 계정 목록 JSON 배열
+ *       [{"pwsha":"<sha256(base64url)>","level":2,"name":"홍길동"}, ...]  (해시 권장)
+ *       또는 [{"pw":"평문","level":1,"name":"홍길동"}, ...]              (편의용)
+ *   DEVICE_TTL_DAYS  : 기억된 기기 유효기간(기본 "30", 사용 시마다 슬라이딩 갱신)
+ *
+ * ※ 기기 기능은 Deno KV 가 있어야 동작한다(Deploy 의 Databases 에서 KV 사용 설정).
+ *   KV 가 없으면 device_* 는 kv_unavailable 을 반환할 뿐, 일반 로그인은 정상 동작한다.
  ************************************************************/
 
-const VER = "deno-1.0.1";
+const VER = "deno-1.1.0";
 
 const enc = new TextEncoder();
 
@@ -68,6 +71,7 @@ function safeEq(a: string, b: string): boolean {
 const SECRET = Deno.env.get("TOKEN_SECRET") || "";
 const EPOCH = Number(Deno.env.get("TOKEN_EPOCH") || "1") || 0;
 const TTL_HOURS = Number(Deno.env.get("TOKEN_TTL_HOURS") || "12") || 12;
+const DEVICE_TTL_MS = (Number(Deno.env.get("DEVICE_TTL_DAYS") || "30") || 30) * 24 * 3600 * 1000;
 
 type Cred = { pw?: string; pwsha?: string; level: number; name: string };
 let CREDS: Cred[] = [];
@@ -84,6 +88,19 @@ try {
   }
 } catch (_e) {
   console.error("CREDENTIALS 환경변수 JSON 파싱 실패 — 로그인 전부 거부됩니다");
+}
+
+/* ── Deno KV (지연 오픈 — 없으면 null, 기기 기능만 비활성) ── */
+let _kv: Deno.Kv | null | undefined = undefined;
+async function getKv(): Promise<Deno.Kv | null> {
+  if (_kv !== undefined) return _kv;
+  try {
+    _kv = await Deno.openKv();
+  } catch (e) {
+    console.error("Deno KV 사용 불가 — 기기 자동로그인 비활성:", e);
+    _kv = null;
+  }
+  return _kv;
 }
 
 /* ── HMAC 키(1회 import 후 재사용) ── */
@@ -149,6 +166,20 @@ async function matchCred(password: string): Promise<Cred | null> {
   return hit;
 }
 
+/* ── 기기 토큰 ── */
+type DevRec = { n: string; l: number; ep: number; created: number; seen: number; ua: string };
+function newDeviceToken(): string {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return b64url(b);
+}
+async function requireAdmin(p: Record<string, unknown>) {
+  const r = await verifyToken(String(p.token ?? ""));
+  if (!r.ok) return { ok: false as const, error: "unauthorized" };
+  if ((r.level || 0) < 3) return { ok: false as const, error: "forbidden" };
+  return { ok: true as const };
+}
+
 /* ── HTTP ── */
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -170,20 +201,84 @@ async function handleAction(action: string, p: Record<string, unknown>): Promise
     const hit = await matchCred(String(p.password ?? ""));
     if (!hit) return json({ ok: false, error: "invalid_password" });
     const iss = await issueToken(hit.name, hit.level, TTL_HOURS);
-    return json({ ok: true, token: iss.token, level: hit.level, name: hit.name, expires: iss.expires });
+    let device = "";
+    if (p.remember) {
+      const kv = await getKv();
+      if (kv) {
+        device = newDeviceToken();
+        const now = Date.now();
+        const rec: DevRec = { n: hit.name, l: hit.level, ep: EPOCH, created: now, seen: now, ua: String(p.__ua || "") };
+        await kv.set(["dev", device], rec, { expireIn: DEVICE_TTL_MS });
+      }
+    }
+    return json({ ok: true, token: iss.token, level: hit.level, name: hit.name, expires: iss.expires, device });
   }
+
   if (action === "verify") {
     const r = await verifyToken(String(p.token ?? ""));
     return json(r.ok ? { ok: true, level: r.level, name: r.name } : { ok: false, error: r.error });
   }
+
   if (action === "logout") {
-    /* 서명 토큰은 무상태 — 개별 폐기 불가(전원 폐기는 TOKEN_EPOCH bump). 클라이언트가 세션을 지운다. */
+    return json({ ok: true });   /* 서명 토큰은 무상태 — 클라이언트가 세션을 지운다 */
+  }
+
+  if (action === "device_login") {
+    const kv = await getKv();
+    if (!kv) return json({ ok: false, error: "kv_unavailable" });
+    const dev = String(p.device ?? "");
+    if (!dev) return json({ ok: false, error: "no_device" });
+    const r = await kv.get<DevRec>(["dev", dev]);
+    const v = r.value;
+    if (!v) return json({ ok: false, error: "device_not_found" });
+    if (Number(v.ep || 0) < EPOCH) { await kv.delete(["dev", dev]); return json({ ok: false, error: "revoked" }); }
+    const iss = await issueToken(v.n, v.l, TTL_HOURS);
+    await kv.set(["dev", dev], { ...v, seen: Date.now() }, { expireIn: DEVICE_TTL_MS });   /* 슬라이딩 갱신 */
+    return json({ ok: true, token: iss.token, level: v.l, name: v.n, expires: iss.expires, device: dev });
+  }
+
+  if (action === "device_logout") {
+    const kv = await getKv();
+    if (kv) { const dev = String(p.device ?? ""); if (dev) await kv.delete(["dev", dev]); }
     return json({ ok: true });
   }
+
+  if (action === "devices") {
+    const gate = await requireAdmin(p);
+    if (!gate.ok) return json(gate);
+    const kv = await getKv();
+    if (!kv) return json({ ok: false, error: "kv_unavailable" });
+    const out: Array<Record<string, unknown>> = [];
+    for await (const e of kv.list<DevRec>({ prefix: ["dev"] })) {
+      const tok = String(e.key[1]);
+      const did = (await sha256B64u(tok)).slice(0, 10);
+      const v = e.value;
+      out.push({ did, name: v.n, level: v.l, created: v.created, seen: v.seen, ua: v.ua });
+    }
+    out.sort((a, b) => Number(b.seen || 0) - Number(a.seen || 0));
+    return json({ ok: true, devices: out });
+  }
+
+  if (action === "device_revoke") {
+    const gate = await requireAdmin(p);
+    if (!gate.ok) return json(gate);
+    const kv = await getKv();
+    if (!kv) return json({ ok: false, error: "kv_unavailable" });
+    const did = String(p.did ?? "");
+    let n = 0;
+    for await (const e of kv.list<DevRec>({ prefix: ["dev"] })) {
+      const tok = String(e.key[1]);
+      if ((await sha256B64u(tok)).slice(0, 10) === did) { await kv.delete(e.key); n++; }
+    }
+    return json({ ok: true, revoked: n });
+  }
+
   if (action === "ping") {
     const fp = SECRET ? (await sha256B64u(SECRET)).slice(0, 8) : "";
-    return json({ ok: true, ver: VER, mode: SECRET ? "signed" : "no_secret", fp, creds: CREDS.length, pong: new Date().toISOString() });
+    const kv = await getKv();
+    return json({ ok: true, ver: VER, mode: SECRET ? "signed" : "no_secret", fp, creds: CREDS.length, kv: kv !== null, pong: new Date().toISOString() });
   }
+
   return json({ ok: false, error: "unknown_action" });
 }
 
@@ -194,6 +289,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "POST") {
       let p: Record<string, unknown> = {};
       try { p = JSON.parse((await req.text()) || "{}"); } catch (_e) { p = {}; }
+      p.__ua = req.headers.get("user-agent") || "";
       return await handleAction(String(p.action || ""), p);
     }
     if (req.method === "GET") {
@@ -201,6 +297,7 @@ Deno.serve(async (req: Request) => {
       const action = u.searchParams.get("action") || "ping";
       const p: Record<string, unknown> = {};
       u.searchParams.forEach((v, k) => (p[k] = v));
+      p.__ua = req.headers.get("user-agent") || "";
       return await handleAction(action, p);
     }
     return json({ ok: false, error: "method_not_allowed" }, 405);
