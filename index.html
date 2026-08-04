@@ -347,6 +347,10 @@
       <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">비밀번호를 입력하세요.</p>
       <input type="password" id="hubPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:2px;">
       <div id="hubPwErr" style="color:#C0392B;font-size:12px;min-height:16px;margin-top:6px;text-align:center;"></div>
+      <label id="hubRememberWrap" style="display:none;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:#4A5A7A;cursor:pointer;justify-content:center;">
+        <input type="checkbox" id="hubRemember" checked style="width:16px;height:16px;cursor:pointer;">
+        <span>이 기기 기억하기 (다음부터 자동 로그인)</span>
+      </label>
       <div style="display:flex;gap:8px;margin-top:12px;">
         <button type="button" id="hubPwCancel" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #DDE3EE;background:#fff;color:#6B7A99;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">취소</button>
         <button type="button" id="hubPwOk" style="flex:1;padding:12px;border-radius:9px;border:none;background:#1B2F5E;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
@@ -1803,6 +1807,11 @@ function openHubPw(){
   applyHubLang();
   document.getElementById('hubPwInput').value='';
   document.getElementById('hubPwErr').textContent='';
+  /* '이 기기 기억하기'는 기능이 켜졌을 때만 노출(기본 비활성 시 숨김 → 현행과 동일) */
+  try{
+    var rw=document.getElementById('hubRememberWrap');
+    if(rw) rw.style.display=(window.BazAuth&&BazAuth.deviceEnabled&&BazAuth.deviceEnabled())?'flex':'none';
+  }catch(e){}
   hubPwModal.style.display='flex';
   setTimeout(()=>document.getElementById('hubPwInput').focus(),50);
 }
@@ -1834,7 +1843,9 @@ async function checkHubPw(){
   }
   try{
     tick=setInterval(showWaiting, 500);
-    const r=await BazAuth.login(v, function(n){ attemptN=n; });
+    const rememberEl=document.getElementById('hubRemember');
+    const remember=!!(rememberEl && rememberEl.checked);
+    const r=await BazAuth.login(v, function(n){ attemptN=n; }, remember);
     console.log('[로그인 소요] '+Math.round(performance.now()-t0)+'ms / 시도 '+attemptN+'회');
     clearInterval(tick); tick=null;
     errEl.style.color='#C0392B';
@@ -1874,7 +1885,11 @@ if(LANG) applyLang();
 // (탭을 닫으면 sessionStorage가 비워져 다시 잠김)
 (async function(){
   try{
-    const lv = await BazAuth.currentLevel();   // 0=미인증/만료, 1=일반, 2=관리자
+    let lv = await BazAuth.currentLevel();   // 0=미인증/만료, 1=일반, 2=관리자
+    // 세션이 없고 '기억된 기기'가 있으면 비밀번호 없이 자동 로그인 시도(기능 켜졌을 때만)
+    if(lv<1 && window.BazAuth && BazAuth.hasDevice && BazAuth.hasDevice()){
+      lv = await BazAuth.tryDeviceLogin();
+    }
     if(lv>=1) unlockTools(lv);
   }catch(e){}
 })();
