@@ -8,13 +8,6 @@
 > 없는 Deno Deploy 로 옮기면** 토큰 형식이 동일해 데이터 GAS·프런트 무수정으로 문제가 사라진다.
 > → 절차: [`deno-auth/README.md`](deno-auth/README.md). 전환은 `auth.js` 의 `AUTH_URL` 한 줄.
 
-> **데이터 콜드스타트 완화(hospital-pc 우선):** 로그인은 위처럼 해결됐지만 hospital-pc 의 데이터
-> 경로(hospdbrich·issuehist·progress)는 아직 handover Core GAS 를 직접 호출해 그 콜드스타트를
-> 프런트 방어 코드로 견딘다. **항상 켜진 Deno 데이터 앞단(`deno-data/`)이 handover 를 감싸** 조회는
-> 엣지 캐시(SWR, 콜드스타트 HTML 흡수)·진행큐는 투명 프록시·`Deno.cron` keep-warm 을 제공한다.
-> 데이터 GAS 는 유지(시트가 소스오브트루스), 전환은 `hospital-pc.html` 의 `HANDOVER_URL` 한 줄.
-> → 절차: [`deno-data/README.md`](deno-data/README.md). 이후 weekly·handover·inspection 등도 동일 확장.
-
 ## 실사용 백엔드 (통합 후 5개)
 
 | 백엔드 | 역할 | 바인딩/소스 |
