@@ -45,7 +45,7 @@
   //   확인: AUTH_URL/?action=ping 응답에 "kv":true 가 보이면 준비 완료.
   // 켜면: '이 기기 기억하기' 체크 시 기기 토큰을 localStorage 에 저장하고,
   //   다음 접속부터 비밀번호 없이 자동 로그인(30일 슬라이딩, Deno KV 에서 개별 해지 가능).
-  var DEVICE_REMEMBER = false;
+  var DEVICE_REMEMBER = true;   // [활성] Deno KV 준비 완료(ping kv:true) — 기기 자동 로그인 ON
   var DEVICE_KEY = 'baz_device_token';       // localStorage(영구) — 기억된 기기 토큰
 
   // [성능] 서버 재검증 스로틀. 로그인/검증 직후 이 시간 안에는 페이지를 옮겨도
