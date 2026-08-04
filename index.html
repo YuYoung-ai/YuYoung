@@ -1906,6 +1906,13 @@ document.getElementById('appBtnDashboardPc').addEventListener('click', function(
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
 var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
+/* [콜드스타트 제거] 페이지가 열리는 '즉시' auth·handover 백엔드를 선제 예열한다.
+   비밀번호를 입력하는 사이 백엔드가 깨어나므로 첫 로그인·첫 시트가 빨라진다.
+   탭을 오래 열어 둬 백엔드가 다시 잠든 경우엔 포커스 복귀 때 다시 예열한다(15초 스로틀). */
+function _prewarmBackends(){ try{ if(window.BazAuth&&BazAuth.prewarm) BazAuth.prewarm(MGR_GAS_URL); }catch(e){} }
+_prewarmBackends();
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) _prewarmBackends(); });
+window.addEventListener('pageshow', _prewarmBackends);
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 

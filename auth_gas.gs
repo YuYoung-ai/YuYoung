@@ -37,7 +37,7 @@
  *  GET  ?action=ping                 → {ok, ver, mode, ...}  (배포 확인용)
  ************************************************************/
 
-var AUTH_VER = '5.0.0-hybrid';   /* ping 에 노출 — 밖에서 배포 여부를 눈으로 확인하는 표식 */
+var AUTH_VER = '5.1.0-warm';   /* ping 에 노출 — 밖에서 배포 여부를 눈으로 확인하는 표식(5.1=콜드스타트 예열 강화) */
 
 var AUTH_CFG = {
   CRED_SHEET  : 'Credentials',
@@ -221,6 +221,9 @@ function doGet(e){
     var a = p.action || 'ping';
     if(a === 'ping'){
       var creds = 0, tok = -1, mode = 'opaque', fp = '';
+      /* warm=1 → 스프레드시트 핸들까지 예열. _authCreds_ 는 캐시 히트 시 시트를 건너뛰므로
+         (인스턴스만 웜·시트 콜드) 여기서 스프레드시트를 한 번 열어 첫 로그인의 시트 지연 제거. */
+      if(p.warm){ try{ var _ws=_authSS_(); if(_ws) _ws.getSheetByName(AUTH_CFG.CRED_SHEET); }catch(_){} }
       try{ creds = _authCreds_().length; }catch(_){}
       try{ var ts = _authSheet_(AUTH_CFG.TOKEN_SHEET); tok = ts ? Math.max(0, ts.getLastRow()-1) : -1; }catch(_){}
       try{
@@ -246,7 +249,12 @@ function doGet(e){
 
 /* ── keep-warm(예열) ────────────────────────────────────────
    검증을 로컬로 옮긴 뒤 auth는 로그인 때만 호출돼 자주 잠든다 → 로그인 첫 요청이 콜드스타트.
-   5분마다 auth·handover 를 스스로 ping 해 상시 깨워 둔다. 로그인 지연 제거.
+   ★ 왜 5분→1분: Apps Script 웹앱은 5분보다 빨리 인스턴스를 재우기도 한다. 5분 간격이면
+     예열 핑 사이 공백에 콜드스타트가 그대로 났다(수동 doGet 이 그때그때 깨우던 이유).
+     1분(=time-based 트리거 최소 주기)으로 좁혀 공백을 없앤다.
+   ★ 왜 &warm=1: 그냥 ping 은 GAS 인스턴스만 깨우고 스프레드시트 핸들은 여전히 콜드다
+     → 인스턴스가 웜이어도 '첫 시트 불러오기·첫 기록'이 늦었다. warm=1 이면 대상이
+     스프레드시트까지 열어 둬(핸들 예열) 첫 시트 로드/기록 지연까지 제거한다.
    ★ 설정: 이 코드를 auth 프로젝트에 저장 → 편집기에서 setupKeepWarm 1회 실행(트리거 설치). */
 var KEEP_WARM_URLS = [
   'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec',   /* auth */
@@ -254,18 +262,19 @@ var KEEP_WARM_URLS = [
 ];
 function keepWarm(){
   KEEP_WARM_URLS.forEach(function(u){
-    try{ UrlFetchApp.fetch(u + '?action=ping', {muteHttpExceptions:true, followRedirects:true}); }catch(e){}
+    /* warm=1 → 대상이 스프레드시트 핸들까지 예열(첫 시트 로드/기록 지연 제거). */
+    try{ UrlFetchApp.fetch(u + '?action=ping&warm=1', {muteHttpExceptions:true, followRedirects:true}); }catch(e){}
   });
 }
-/** 편집기에서 1회 실행 — 5분 주기 keepWarm 트리거 설치(중복 제거 후 재설치). */
+/** 편집기에서 1회 실행 — 1분 주기 keepWarm 트리거 설치(중복 제거 후 재설치). */
 function setupKeepWarm(){
   /* 첫 실행 시 외부요청(UrlFetchApp) 권한 승인을 강제(오류 안 잡음). 승인창 뜨면 끝까지 허용. */
-  UrlFetchApp.fetch(KEEP_WARM_URLS[0] + '?action=ping', {muteHttpExceptions:true, followRedirects:true});
+  UrlFetchApp.fetch(KEEP_WARM_URLS[0] + '?action=ping&warm=1', {muteHttpExceptions:true, followRedirects:true});
   ScriptApp.getProjectTriggers().forEach(function(t){
     if(t.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(5).create();
-  Logger.log('✅ keepWarm 5분 트리거 설치 — auth·handover 상시 예열(로그인 콜드스타트 제거)');
+  ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(1).create();   /* 1분 = 최소 주기 · 예열 공백 제거 */
+  Logger.log('✅ keepWarm 1분 트리거 설치 — auth·handover 상시 예열(GAS+스프레드시트, 로그인 콜드스타트 제거)');
 }
 
 /* ── 성능 실측 — 편집기에서 실행해 단계별 ms를 로그로 확인 ──

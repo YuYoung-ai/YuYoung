@@ -114,11 +114,40 @@
     } catch (e) {}
   }
 
+  // [콜드스타트 선제 예열] 페이지가 열리는 '즉시' 인증·데이터 백엔드를 깨워 둔다.
+  // 사용자가 비밀번호를 입력하는 몇 초 사이 백엔드가 이미 웜업되므로, 로그인 버튼을
+  // 누를 때는 콜드스타트가 이미 끝나 있다(첫 로그인·첫 시트가 빨라진다).
+  // 서버측 keepWarm(1분 트리거)이 놓친 공백을 클라이언트가 접속 순간에 메운다.
+  var _lastPrewarm = 0;
+
   var BazAuth = {
 
     // 설정 여부 확인 (URL이 비어 있으면 false)
     isConfigured: function () {
       return !!AUTH_URL;
+    },
+
+    // 선제 예열: AUTH_URL(항상) + 넘겨준 데이터 백엔드(handover 등)를 ping&warm=1 로 깨운다.
+    // fire-and-forget(no-cors·keepalive) — 응답을 기다리지 않아 화면을 막지 않는다.
+    // 포커스 복귀 등으로 여러 번 불려도 15초 안에는 실제 요청을 한 번만 보낸다.
+    //   extraUrls: 문자열 1개 또는 배열(예: handover 배포 URL)
+    prewarm: function (extraUrls) {
+      var now = Date.now();
+      if (now - _lastPrewarm < 15000) return;   // 과도한 중복 핑 방지(스로틀)
+      _lastPrewarm = now;
+      var urls = [];
+      if (AUTH_URL) urls.push(AUTH_URL);
+      if (extraUrls) {
+        (typeof extraUrls === 'string' ? [extraUrls] : extraUrls)
+          .forEach(function (u) { if (u) urls.push(u); });
+      }
+      urls.forEach(function (u) {
+        try {
+          fetch(u + (String(u).indexOf('?') >= 0 ? '&' : '?') + 'action=ping&warm=1',
+                { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true })
+            .catch(function () {});
+        } catch (e) {}
+      });
     },
 
     // 로그인: 비번 → 토큰. 성공 시 {ok:true, level} 반환

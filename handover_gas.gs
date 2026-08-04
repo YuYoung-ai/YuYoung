@@ -443,7 +443,14 @@ function doGet(e){
       }
     }
 
-    if(action==='ping')   return json_({success:true, ver:'3.0.0', pong:new Date().toISOString()});
+    if(action==='ping'){
+      /* warm=1(keepWarm·클라이언트 선제 예열) → 스프레드시트 핸들까지 열어 둔다.
+         그냥 ping 은 GAS 인스턴스만 깨우고 시트는 콜드로 남아 '첫 시트 불러오기·첫 기록'이
+         늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
+      var warmed = false;
+      if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
+      return json_({success:true, ver:'3.0.0', warmed:warmed, pong:new Date().toISOString()});
+    }
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
     if(action==='hospdbrich') return json_(getHospDBRich_());   /* [Core] 병원정보DB 전체필드(hospital_gas 대체) */
