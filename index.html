@@ -253,11 +253,8 @@
       <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
-    <button type="button" id="appBtnHospitalPc" data-toolid="hospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
-      <span style="font-size:24px;">🖥️</span>
-      <span style="flex:1;"><span class="tool-name">병원 데이터센터 (PC)</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;">넓은 화면용 · 표/지도/상세 2-pane</span></span>
-      <span style="color:#E0C088;">🔒→</span>
-    </button>
+    <!-- [메뉴 통합] '병원 데이터센터 (PC)' 중복 카드 제거 — 위 '병원 데이터센터'가 hospital-pc.html로
+         이동하며, 그 페이지가 화면 크기로 모바일/PC 모드를 자동 선택하고 Window/Mobile 토글도 제공한다. -->
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
     <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
@@ -278,11 +275,8 @@
       <span style="flex:1;"><span class="tool-name">현장 처리 대시보드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">집계·필터·주간보고 PPT · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
-    <button type="button" id="appBtnDashboardPc" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
-      <span style="font-size:24px;">🖥️</span>
-      <span style="flex:1;"><span class="tool-name">현장 처리 대시보드 (PC)</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">넓은 화면용 · 미가입vsN-Care 비교 · Lv.3</span></span>
-      <span style="color:#9FE0CC;">🔐→</span>
-    </button>
+    <!-- [메뉴 통합] '현장 처리 대시보드 (PC)' 중복 카드 제거 — 위 '현장 처리 대시보드'가 dashboard-pc.html로
+         이동하며, 그 페이지가 화면 크기로 모바일/PC 모드를 자동 선택하고 Window/Mobile 토글도 제공한다. -->
 
     <!-- AutoDoc — 회사 문서 자동화 플랫폼 (별도 앱 · /autodoc/) -->
     <button type="button" id="appBtnAutodoc" data-toolid="autodoc" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
@@ -1904,19 +1898,14 @@ document.getElementById('appBtnChatbot').addEventListener('click', function(){ a
 document.getElementById('appBtnWeekly').addEventListener('click', function(){ location.href='weekly.html'; });
 document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
-document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital-pc.html'; });   /* hospital.html 미사용 → -pc로 통합 */
-document.getElementById('appBtnHospitalPc').addEventListener('click', function(){ location.href='hospital-pc.html'; });
+document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital-pc.html'; });   /* [메뉴 통합] 모바일/PC 단일 카드 — hospital-pc.html이 화면 크기 자동 감지 + 모바일 전환 토글 제공 */
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnLabel').addEventListener('click', function(){ location.href='label.html'; });
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
 document.getElementById('appBtnDashboard').addEventListener('click', function(){
   if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
-  location.href='dashboard-pc.html';   /* dashboard.html 미사용 → -pc로 통합 */
-});
-document.getElementById('appBtnDashboardPc').addEventListener('click', function(){
-  if(unlockLevel < (parseInt(toolCfg('dashboard').level,10)||3)){ alert('보안레벨이 부족합니다. (메뉴설정 기준)'); return; }
-  location.href='dashboard-pc.html';
+  location.href='dashboard-pc.html';   /* [메뉴 통합] 모바일/PC 단일 카드 — dashboard-pc.html이 화면 크기 자동 감지 + 모바일 전환 토글 제공 */
 });
 
 // ===== 수석 매니저 가이드 (보안레벨 3) =====
