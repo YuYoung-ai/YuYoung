@@ -23,9 +23,13 @@
 (function (global) {
   'use strict';
 
-  // ▼▼▼ 배포 후 여기에 인증 Apps Script의 /exec URL을 넣으세요 ▼▼▼
+  // ▼▼▼ 로그인 서버 주소 ▼▼▼
+  // 콜드스타트 없는 Deno Deploy 로 옮기려면 이 한 줄만 Deno 주소로 교체한다(끝에 /exec 없음).
+  //   예) var AUTH_URL = 'https://baz-auth.deno.dev';
+  //   토큰 형식이 동일해 데이터 GAS·프런트는 무수정. 자세한 절차: deno-auth/README.md
+  //   문제 시 아래 GAS /exec 주소로 되돌리면 무중단 롤백.
   var AUTH_URL = 'https://script.google.com/macros/s/AKfycbykXiS7tXXx_nNuwXwQ--hgIXMrBSNdBPxOCn8b6H_zg9AWkbdLLqmF0Wn8L8zLaAI/exec';
-  // ▲▲▲ 예: 'https://script.google.com/macros/s/XXXX/exec' ▲▲▲
+  // ▲▲▲ GAS 사용 시: 'https://script.google.com/macros/s/XXXX/exec' ▲▲▲
 
   var TOKEN_KEY = 'baz_auth_token';
   var LEVEL_KEY = 'baz_auth_level';
