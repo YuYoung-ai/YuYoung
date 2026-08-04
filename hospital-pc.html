@@ -819,7 +819,13 @@ function bazGet(url, ms){
     })
     .catch(function(e){
       if(t){ clearTimeout(t); t=null; }
-      if(e && e.kind){ if(e.kind==='auth'||e.kind==='html') bazAuthFail(); throw e; }
+      /* [오탐 수정] HTML 응답은 토큰 만료가 아니라 GAS 콜드스타트·리다이렉트 등 '일시적'
+         현상이다(auth.js도 HTML을 'warmup'으로 보고 재시도한다). 실제 만료는 서버가
+         {success:false, error:'unauthorized …'} JSON을 주며 여기선 kind:'auth'로 온다.
+         예전엔 HTML도 만료로 세어, 로그인이 멀쩡한데도 서버가 잠깐 식으면 배너가 떴다
+         (새로고침하면 백엔드가 데워지고 카운터가 0으로 리셋돼 사라졌다가, 다음 콜드스타트에
+         다시 뜨는 증상). → 서버가 명시적으로 거부한 kind:'auth'만 만료 배너로 센다. */
+      if(e && e.kind){ if(e.kind==='auth') bazAuthFail(); throw e; }
       if(e && e.name==='AbortError') throw {kind:'timeout'};
       throw {kind:'network'};
     });
@@ -829,7 +835,10 @@ function bazGet(url, ms){
    토큰 검사는 auth.js의 guardPage_가 페이지 로드 시 1회만 한다. 세션 도중 토큰이
    만료·폐기되면 모든 조회가 unauthorized로 떨어지는데 예전에는 아무 표시가 없었다.
    단, 한 번의 실패로 배너를 띄우면 오탐이 난다(커밋 06f43ef에서 실제로 되돌린 이력).
-   → 연속 2회 실패에서만 띄우고, 정상 응답이 한 번 오면 즉시 해제한다. */
+   → 연속 2회 실패에서만 띄우고, 정상 응답이 한 번 오면 즉시 해제한다.
+   또한 '실패'는 서버가 명시적으로 거부한 것(kind:'auth' = unauthorized JSON)만 센다.
+   GAS 콜드스타트가 돌려주는 HTML 페이지는 만료 신호가 아니므로 배너 카운터에서 제외한다
+   (예전엔 HTML도 세어, 로그인이 멀쩡한데도 서버가 잠깐 식으면 배너가 떴다). */
 var bazAuthFailN=0, bazAuthBannerOn=false;
 function bazAuthFail(){
   bazAuthFailN++;
@@ -2729,7 +2738,7 @@ function pcProgSend(payload){
         }catch(e){ pcProgRev=0; console.warn('[동기화] 쓰기 응답 처리 오류(재전송 안 함):',e); }
       })
       .catch(function(e){
-        if(e && e.kind==='html'){ pcProgRev=0; bazAuthFail(); return; }   // 인증 문제 → 재전송해도 소용없다
+        if(e && e.kind==='html'){ pcProgRev=0; fallback(); return; }   // GAS 콜드스타트·리다이렉트(일시적) — 쓰기가 서버에 닿지 못했으니 재전송, 만료 배너는 띄우지 않는다
         fallback();
       });
   }catch(e){ fallback(); }
