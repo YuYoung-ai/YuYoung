@@ -128,7 +128,12 @@
     },
 
     // 선제 예열: AUTH_URL(항상) + 넘겨준 데이터 백엔드(handover 등)를 ping&warm=1 로 깨운다.
-    // fire-and-forget(no-cors·keepalive) — 응답을 기다리지 않아 화면을 막지 않는다.
+    // ★ 반드시 '평범한 fetch'로 보낸다(로그인/메뉴 호출과 동일 방식).
+    //   no-cors·keepalive 조합은 Apps Script 의 302 리다이렉트에서 브라우저가
+    //   ERR_ABORTED 로 요청을 취소해(서버에 닿지도 못함) 예열이 전혀 안 됐다.
+    //   평범한 fetch 는 리다이렉트를 따라가 서버에 실제로 도달하므로, 콜드면 그
+    //   요청이 콜드스타트를 '대신' 흡수한다(사용자가 비번 입력하는 사이 웜업 완료).
+    //   응답은 읽지 않는다(.catch 로 흡수) — 목적은 서버를 미리 깨우는 것뿐이다.
     // 포커스 복귀 등으로 여러 번 불려도 15초 안에는 실제 요청을 한 번만 보낸다.
     //   extraUrls: 문자열 1개 또는 배열(예: handover 배포 URL)
     prewarm: function (extraUrls) {
@@ -144,8 +149,8 @@
       urls.forEach(function (u) {
         try {
           fetch(u + (String(u).indexOf('?') >= 0 ? '&' : '?') + 'action=ping&warm=1',
-                { method: 'GET', mode: 'no-cors', cache: 'no-store', keepalive: true })
-            .catch(function () {});
+                { method: 'GET', cache: 'no-store' })
+            .catch(function () {});   // 콜드스타트 중 404/HTML 이어도 무시 — 예열은 이미 시작됨
         } catch (e) {}
       });
     },
