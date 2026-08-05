@@ -6,3 +6,6 @@
 병원좌표_*.xlsx
 2025이력_*.xlsx
 2026이력_*.xlsx
+
+# 생성 산출물 — portfolio.html에서 재생성(인쇄/PDF)되므로 커밋 불필요
+portfolio.pdf
