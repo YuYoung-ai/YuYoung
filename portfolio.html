@@ -136,8 +136,8 @@
   .proj{
     background:var(--bg-card);border:1px solid var(--line);border-radius:20px;
     overflow:hidden;box-shadow:var(--shadow);
-    display:grid;grid-template-columns:230px 1fr;
   }
+  .proj-top{display:grid;grid-template-columns:230px 1fr;}
   .proj .side{
     background:linear-gradient(160deg,var(--navy) 0%,var(--navy-2) 100%);
     color:#fff;padding:26px 22px;position:relative;overflow:hidden;display:flex;flex-direction:column;
@@ -170,6 +170,126 @@
     background:var(--chip);border:1px solid var(--line);
     padding:4px 10px;border-radius:8px;
   }
+
+  /* ===== Preview (화면 예시) ===== */
+  .preview{border-top:1px solid var(--line);background:var(--bg-soft);padding:20px 28px 26px;}
+  .preview-cap{
+    display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:.03em;
+    color:var(--ink-3);text-transform:uppercase;margin-bottom:14px;
+  }
+  .preview-cap .badge{
+    background:#fff;border:1px solid var(--line);color:var(--accent-2);
+    padding:3px 9px;border-radius:7px;font-size:11px;letter-spacing:0;
+  }
+  .preview-cap .note{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:600;color:var(--ink-3);font-size:11.5px;}
+  /* browser chrome frame */
+  .mock{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 6px 20px rgba(16,32,64,.07);}
+  .mock .bar{display:flex;align-items:center;gap:6px;padding:9px 12px;background:#eef1f7;border-bottom:1px solid var(--line);}
+  .mock .bar i{width:9px;height:9px;border-radius:50%;background:#cfd6e4;display:inline-block;}
+  .mock .bar .url{margin-left:8px;font-size:11px;color:var(--ink-3);background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 10px;font-weight:600;}
+  .mock .screen{padding:16px;}
+  .mock .apphead{background:var(--navy);color:#fff;margin:-16px -16px 14px;padding:12px 16px;font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:8px;}
+  .mock .apphead .t2{margin-left:auto;font-weight:600;font-size:11px;color:#9fb4dc;}
+
+  /* KPI tiles inside mock */
+  .mk-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+  .mk-kpi{background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 12px;}
+  .mk-kpi .mk-n{font-size:20px;font-weight:800;color:var(--navy);line-height:1;}
+  .mk-kpi .mk-n small{font-size:12px;color:var(--accent-2);}
+  .mk-kpi .mk-l{margin-top:6px;font-size:11px;color:var(--ink-2);font-weight:600;}
+  .mk-cols{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;align-items:start;}
+  .mk-panel{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff;}
+  .mk-panel .mk-h{font-size:12px;font-weight:800;color:var(--navy);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .mk-panel .mk-h .pill{margin-left:auto;font-size:10px;font-weight:700;color:var(--accent-2);background:rgba(18,181,176,.1);padding:2px 7px;border-radius:6px;}
+  /* bar chart */
+  .mk-chart{display:flex;align-items:flex-end;gap:10px;height:118px;padding-top:6px;}
+  .mk-chart .col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;}
+  .mk-chart .col .b{width:70%;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--accent),var(--accent-2));}
+  .mk-chart .col .b.alt{background:linear-gradient(180deg,#4d69a8,var(--navy));}
+  .mk-chart .col .x{font-size:10px;color:var(--ink-3);font-weight:600;}
+  /* mini table */
+  .mk-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+  .mk-table th{text-align:left;color:var(--ink-3);font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line);}
+  .mk-table td{padding:6px 8px;border-bottom:1px solid var(--line);color:var(--ink);}
+  .mk-table td:last-child,.mk-table th:last-child{text-align:right;}
+  .mk-table .up{color:var(--accent-2);font-weight:700;}
+  /* ppt slides */
+  .mk-slides{display:flex;gap:10px;margin-top:12px;}
+  .mk-slide{flex:1;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff;}
+  .mk-slide .sh{background:var(--navy);color:#fff;font-size:9.5px;font-weight:700;padding:6px 8px;}
+  .mk-slide .sb{padding:8px;display:flex;flex-direction:column;gap:4px;}
+  .mk-slide .ln{height:5px;border-radius:3px;background:var(--chip);}
+  .mk-slide .ln.a{width:80%;} .mk-slide .ln.b{width:60%;} .mk-slide .ln.c{width:90%;}
+  .mk-slide .mini-bars{display:flex;align-items:flex-end;gap:3px;height:26px;margin-top:3px;}
+  .mk-slide .mini-bars b{flex:1;background:var(--accent);border-radius:2px 2px 0 0;display:block;}
+
+  /* inspection report */
+  .mk-doc{border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:12px;}
+  .mk-doc .dh{background:var(--navy);color:#fff;padding:10px 14px;font-weight:800;font-size:13px;display:flex;align-items:center;}
+  .mk-doc .dh .badge2{margin-left:auto;font-size:10px;font-weight:700;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:6px;}
+  .mk-doc .drow{display:grid;grid-template-columns:90px 1fr 90px 1fr;border-bottom:1px solid var(--line);}
+  .mk-doc .drow > div{padding:7px 10px;}
+  .mk-doc .drow .k{background:var(--bg-soft);color:var(--ink-2);font-weight:700;border-right:1px solid var(--line);}
+  .mk-doc .drow .v{border-right:1px solid var(--line);}
+  .mk-doc .drow .v:last-child{border-right:0;}
+  .mk-check{padding:10px 14px;border-bottom:1px solid var(--line);}
+  .mk-check .ci{display:flex;align-items:center;gap:8px;padding:4px 0;color:var(--ink);}
+  .mk-check .ci .ck{width:16px;height:16px;border-radius:5px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:800;flex:none;}
+  .mk-check .ci .ck.warn{background:#e8a13a;}
+  .mk-check .ci .ck.na{background:#cfd6e4;color:#fff;}
+  .mk-sign{display:flex;justify-content:space-between;align-items:flex-end;padding:12px 14px;gap:16px;}
+  .mk-sign .sg{flex:1;}
+  .mk-sign .sg .sl{font-size:11px;color:var(--ink-3);font-weight:700;margin-bottom:4px;}
+  .mk-sign .sg .sv{border-bottom:1.5px solid var(--ink-2);padding-bottom:4px;min-height:30px;}
+
+  /* handover card */
+  .mk-hand{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#fff;}
+  .mk-hand .hh{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+  .mk-badge{font-size:11px;font-weight:800;color:#fff;background:var(--navy);padding:3px 10px;border-radius:7px;}
+  .mk-badge.tag2{background:rgba(18,181,176,.14);color:var(--accent-2);}
+  .mk-badge.done{background:#2e9e6b;}
+  .mk-hand .hbody{font-size:12.5px;color:var(--ink);line-height:1.7;}
+  .mk-photos{display:flex;gap:8px;margin:12px 0;}
+  .mk-photos .ph{flex:1;height:64px;border-radius:8px;background:linear-gradient(135deg,#dfe6f1,#eef2f9);border:1px solid var(--line);display:grid;place-items:center;color:#aeb9cc;font-size:18px;}
+  .mk-hand .hfoot{display:flex;align-items:center;gap:8px;margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;flex-wrap:wrap;}
+  .mk-hand .meta{font-size:11px;color:var(--ink-3);font-weight:600;}
+  .mk-btn{font-size:11px;font-weight:800;padding:5px 11px;border-radius:7px;border:1px solid var(--line);color:var(--navy);background:#fff;}
+  .mk-btn.kakao{background:#FEE500;border-color:#FEE500;color:#3b1e1e;}
+  .mk-btn.pdf{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+  /* hospital map */
+  .mk-map{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;}
+  .mk-mapview{position:relative;height:210px;border-radius:10px;overflow:hidden;border:1px solid var(--line);
+    background:
+      linear-gradient(rgba(210,220,235,.6) 1px,transparent 1px) 0 0/100% 30px,
+      linear-gradient(90deg,rgba(210,220,235,.6) 1px,transparent 1px) 0 0/34px 100%,
+      #eaf0f8;}
+  .mk-mapview .road{position:absolute;background:#fff;box-shadow:0 0 0 1px #dbe3ef;}
+  .mk-pin{position:absolute;transform:translate(-50%,-100%);font-size:12px;font-weight:800;color:#fff;
+    background:var(--accent-2);padding:2px 7px;border-radius:9px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);}
+  .mk-pin::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--accent-2);}
+  .mk-pin.navy{background:var(--navy);} .mk-pin.navy::after{border-top-color:var(--navy);}
+  .mk-tabs{display:flex;gap:6px;margin-bottom:10px;}
+  .mk-tabs .tb{font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:#fff;}
+  .mk-tabs .tb.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .mk-list .li{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid var(--line);font-size:12px;}
+  .mk-list .li .nm{font-weight:700;color:var(--navy);}
+  .mk-list .li .st{margin-left:auto;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:6px;}
+  .mk-list .li .st.ok{background:rgba(46,158,107,.12);color:#2e9e6b;}
+  .mk-list .li .st.due{background:rgba(232,161,58,.14);color:#c07d16;}
+
+  /* guide accordion */
+  .mk-search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:9px 12px;color:var(--ink-3);font-size:12px;background:#fff;margin-bottom:10px;}
+  .mk-chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .mk-chips .c{font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:#fff;}
+  .mk-chips .c.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .mk-acc .row2{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:8px;background:#fff;}
+  .mk-acc .row2 .no2{font-size:12px;font-weight:800;color:var(--navy-soft);background:var(--chip);border-radius:7px;padding:5px 8px;min-width:30px;text-align:center;}
+  .mk-acc .row2 .tx .a2{font-size:13px;font-weight:800;color:var(--ink);}
+  .mk-acc .row2 .tx .b2{font-size:10.5px;color:var(--ink-3);font-weight:600;}
+  .mk-acc .row2 .chev{margin-left:auto;color:var(--ink-3);}
+  .mk-acc .row2.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(18,181,176,.1);}
+  .mk-acc .panel2{background:var(--bg-soft);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;margin:-8px 0 8px;padding:10px 14px 12px;font-size:11.5px;color:var(--ink-2);line-height:1.7;}
 
   /* ===== Architecture ===== */
   .arch{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;}
@@ -224,7 +344,7 @@
   @media (max-width:860px){
     .stats{grid-template-columns:repeat(2,1fr);}
     .caps{grid-template-columns:1fr;}
-    .proj{grid-template-columns:1fr;}
+    .proj-top{grid-template-columns:1fr;}
     .proj .side{flex-direction:row;align-items:center;gap:16px;}
     .proj .side .emoji{margin:0;font-size:30px;}
     .proj .side .plat{margin:0 0 0 auto;}
@@ -246,7 +366,9 @@
     .proj,.stat,.cap,.point,.stackcol,.arch .flow,.contact,.eyebrow,.tag,.btn.primary,.proj .side,.node{
       -webkit-print-color-adjust:exact;print-color-adjust:exact;
     }
-    .proj{grid-template-columns:200px 1fr;break-inside:avoid;page-break-inside:avoid;}
+    .proj{break-inside:avoid;page-break-inside:avoid;}
+    .proj-top{grid-template-columns:200px 1fr;}
+    .preview-stage{break-inside:avoid;}
     .stat,.cap,.point,.stackcol{break-inside:avoid;}
     section.pb{break-before:page;page-break-before:always;}
     .fillme{background:none;border-bottom:1px solid #999;color:#000;}
@@ -351,13 +473,14 @@
     <div class="sec-head">
       <span class="sec-tag">Projects</span>
       <h2>대표 프로젝트</h2>
-      <p>모두 실제 현장에서 사용 중인 도구입니다. 각 프로젝트는 <b>현장 문제 → 직접 구축 → 사용 기술 → 효과</b> 순으로 정리했습니다.</p>
+      <p>모두 실제 현장에서 사용 중인 도구입니다. 각 프로젝트는 <b>현장 문제 → 직접 구축 → 사용 기술 → 효과</b> 순으로 정리했고, 카드 하단의 <b>화면 예시</b>로 실제 사용 모습을 바로 확인할 수 있습니다.</p>
     </div>
 
     <div class="projects">
 
       <!-- 1 handover -->
       <div class="proj">
+       <div class="proj-top">
         <div class="side">
           <div>
             <div class="no">PROJECT 01 · CORE</div>
@@ -391,10 +514,39 @@
             <p>데이터 단일화로 재입력·누락 제거, 병원별 처리 이력이 자동 축적되어 재방문·인수인계 시 즉시 참조 가능.</p>
           </div>
         </div>
+       </div><!-- /proj-top -->
+       <div class="preview">
+         <div class="preview-cap"><span class="badge">화면 예시</span> 현장 처리완료 공유 카드 <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
+         <div class="mock">
+           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / handover</span></div>
+           <div class="screen">
+             <div class="apphead">📤 현장 처리완료 · 공유<span class="t2">2025-07-18 14:32</span></div>
+             <div class="mk-hand">
+               <div class="hh">
+                 <span class="mk-badge">○○정형외과의원</span>
+                 <span class="mk-badge tag2">A/S · 노즐 교체</span>
+                 <span class="mk-badge done">처리완료</span>
+               </div>
+               <div class="hbody">
+                 · 증상: 출력 저하 및 노즐 막힘 &nbsp; · 조치: 노즐 어셈블리 교체, 냉각라인 세척<br>
+                 · 소모품: 노즐 1EA (유상) &nbsp; · 특이사항: 재방문 불필요, 정상 출력 확인
+               </div>
+               <div class="mk-photos"><div class="ph">🖼</div><div class="ph">🖼</div><div class="ph">🖼</div></div>
+               <div class="hfoot">
+                 <span class="meta">담당 [이름] · 방문 40분</span>
+                 <span style="margin-left:auto"></span>
+                 <span class="mk-btn kakao">💬 카카오 공유</span>
+                 <span class="mk-btn pdf">PDF 저장</span>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
       </div>
 
       <!-- 2 hospital-pc -->
       <div class="proj">
+       <div class="proj-top">
         <div class="side">
           <div>
             <div class="no">PROJECT 02</div>
@@ -427,10 +579,43 @@
             <p>병원 위치·일정·이력을 한 화면에서 파악해 방문 동선과 일정 계획을 최적화.</p>
           </div>
         </div>
+       </div><!-- /proj-top -->
+       <div class="preview">
+         <div class="preview-cap"><span class="badge">화면 예시</span> 병원 데이터 센터 (지도 · 목록) <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
+         <div class="mock">
+           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / hospital-pc</span></div>
+           <div class="screen">
+             <div class="apphead">🏥 병원 데이터 센터<span class="t2">담당 병원 142곳</span></div>
+             <div class="mk-tabs">
+               <span class="tb on">조회</span><span class="tb">현장 일정</span><span class="tb">대시보드</span><span class="tb">최근 처리</span>
+             </div>
+             <div class="mk-map">
+               <div class="mk-mapview">
+                 <div class="road" style="left:0;top:64px;width:100%;height:8px"></div>
+                 <div class="road" style="left:120px;top:0;width:8px;height:100%"></div>
+                 <div class="mk-pin navy" style="left:28%;top:44%">○○정형외과</div>
+                 <div class="mk-pin" style="left:60%;top:30%">△△의원</div>
+                 <div class="mk-pin" style="left:47%;top:72%">□□병원</div>
+                 <div class="mk-pin navy" style="left:78%;top:60%">◇◇의원</div>
+               </div>
+               <div>
+                 <div class="mk-list">
+                   <div class="li"><span class="nm">○○정형외과의원</span><span class="st ok">최근 07/18</span></div>
+                   <div class="li"><span class="nm">△△재활의학과</span><span class="st due">점검 예정</span></div>
+                   <div class="li"><span class="nm">□□병원 통증센터</span><span class="st ok">최근 07/09</span></div>
+                   <div class="li"><span class="nm">◇◇의원</span><span class="st due">방문 요청</span></div>
+                   <div class="li"><span class="nm">☆☆정형외과</span><span class="st ok">최근 06/28</span></div>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
       </div>
 
       <!-- 3 dashboard-pc -->
       <div class="proj">
+       <div class="proj-top">
         <div class="side">
           <div>
             <div class="no">PROJECT 03</div>
@@ -463,10 +648,65 @@
             <p>반복적인 보고서 작성 시간을 크게 단축하고 보고 형식을 표준화 <span class="fillme">(예: 주 ○시간 → ○분)</span>.</p>
           </div>
         </div>
+       </div><!-- /proj-top -->
+       <div class="preview">
+         <div class="preview-cap"><span class="badge">화면 예시</span> 대시보드 데이터 출력 &amp; 보고서 PPT 자동 생성 <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
+         <div class="mock">
+           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / dashboard-pc</span></div>
+           <div class="screen">
+             <div class="apphead">📊 현장 처리 대시보드<span class="t2">기간: 2025년 상반기</span></div>
+             <div class="mk-kpis">
+               <div class="mk-kpi"><div class="mk-n">1,284<small>건</small></div><div class="mk-l">누적 처리 건수</div></div>
+               <div class="mk-kpi"><div class="mk-n">186<small>건</small></div><div class="mk-l">이번 달 처리</div></div>
+               <div class="mk-kpi"><div class="mk-n">142<small>곳</small></div><div class="mk-l">담당 병원</div></div>
+               <div class="mk-kpi"><div class="mk-n">42<small>분</small></div><div class="mk-l">평균 처리시간</div></div>
+             </div>
+             <div class="mk-cols">
+               <div class="mk-panel">
+                 <div class="mk-h">월별 처리 추이 <span class="pill">건수</span></div>
+                 <div class="mk-chart">
+                   <div class="col"><div class="b" style="height:48%"></div><div class="x">1월</div></div>
+                   <div class="col"><div class="b" style="height:62%"></div><div class="x">2월</div></div>
+                   <div class="col"><div class="b" style="height:55%"></div><div class="x">3월</div></div>
+                   <div class="col"><div class="b" style="height:78%"></div><div class="x">4월</div></div>
+                   <div class="col"><div class="b" style="height:70%"></div><div class="x">5월</div></div>
+                   <div class="col"><div class="b" style="height:92%"></div><div class="x">6월</div></div>
+                 </div>
+               </div>
+               <div class="mk-panel">
+                 <div class="mk-h">노즐 재사용 현황 <span class="pill">병원 기준</span></div>
+                 <table class="mk-table">
+                   <thead><tr><th>병원</th><th>방문</th><th>재사용률</th></tr></thead>
+                   <tbody>
+                     <tr><td>○○정형외과</td><td>7</td><td class="up">86%</td></tr>
+                     <tr><td>△△재활의학과</td><td>5</td><td class="up">80%</td></tr>
+                     <tr><td>□□병원</td><td>9</td><td class="up">78%</td></tr>
+                     <tr><td>◇◇의원</td><td>4</td><td class="up">75%</td></tr>
+                   </tbody>
+                 </table>
+               </div>
+             </div>
+             <div class="mk-slides">
+               <div class="mk-slide">
+                 <div class="sh">주간업무보고 · 표지</div>
+                 <div class="sb"><div class="ln a"></div><div class="ln b"></div><div class="ln c"></div><div class="ln b"></div></div>
+               </div>
+               <div class="mk-slide">
+                 <div class="sh">주간업무보고 · 실적</div>
+                 <div class="sb"><div class="ln c"></div><div class="mini-bars"><b style="height:40%"></b><b style="height:70%"></b><b style="height:55%"></b><b style="height:90%"></b><b style="height:65%"></b></div></div>
+               </div>
+               <div class="mk-slide" style="flex:.7;display:flex;align-items:center;justify-content:center;background:var(--bg-soft);border-style:dashed">
+                 <div style="text-align:center;padding:10px"><div style="font-size:20px">📥</div><div style="font-size:10px;font-weight:800;color:var(--accent-2);margin-top:4px">버튼 1회<br>→ .pptx 다운로드</div></div>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
       </div>
 
       <!-- 4 inspection -->
       <div class="proj">
+       <div class="proj-top">
         <div class="side">
           <div>
             <div class="no">PROJECT 04</div>
@@ -500,10 +740,39 @@
             <p>현장에서 즉시 내역서를 완성·전달해 종이와 재작성 이중 작업을 제거.</p>
           </div>
         </div>
+       </div><!-- /proj-top -->
+       <div class="preview">
+         <div class="preview-cap"><span class="badge">화면 예시</span> A/S 점검 내역서 (완성본 · 서명 포함) <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
+         <div class="mock">
+           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / inspection</span></div>
+           <div class="screen">
+             <div class="mk-doc">
+               <div class="dh">A/S 점검 내역서<span class="badge2">CUREJET</span></div>
+               <div class="drow"><div class="k">병원명</div><div class="v">○○정형외과의원</div><div class="k">점검일</div><div class="v">2025-07-18</div></div>
+               <div class="drow"><div class="k">장비</div><div class="v">CUREJET (S/N 24-0xxx)</div><div class="k">담당자</div><div class="v">[이름]</div></div>
+               <div class="mk-check">
+                 <div class="ci"><span class="ck">✓</span> 전원·제어부 정상 동작 확인</div>
+                 <div class="ci"><span class="ck">✓</span> 출력/노즐 상태 점검 — 노즐 교체 완료</div>
+                 <div class="ci"><span class="ck warn">!</span> 냉각수 라인 세척 (재점검 권장)</div>
+                 <div class="ci"><span class="ck na">–</span> S/W 업데이트 (해당 없음)</div>
+               </div>
+               <div style="padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink)"><b style="color:var(--navy)">조치 내용</b> &nbsp; 노즐 어셈블리 교체 및 냉각라인 세척 후 정상 출력 확인. 소모품 노즐 1EA 사용(유상).</div>
+               <div class="mk-sign">
+                 <div class="sg"><div class="sl">고객 확인 서명</div><div class="sv"><svg viewBox="0 0 140 34" width="120" height="30"><path d="M6 26 C18 6, 26 30, 38 14 S60 6, 70 22 S92 10, 104 20 128 12 134 18" fill="none" stroke="#1B2F5E" stroke-width="2.2" stroke-linecap="round"/></svg></div></div>
+                 <div class="sg"><div class="sl">담당 엔지니어</div><div class="sv"><svg viewBox="0 0 140 34" width="110" height="30"><path d="M8 22 C16 10, 24 26, 34 16 S52 26, 64 14 82 24 96 16 122 20" fill="none" stroke="#1B2F5E" stroke-width="2.2" stroke-linecap="round"/></svg></div></div>
+               </div>
+             </div>
+             <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+               <span class="mk-btn">🖊 손서명(전체화면)</span><span class="mk-btn">🖼 현장사진</span><span class="mk-btn pdf">PDF 생성</span>
+             </div>
+           </div>
+         </div>
+       </div>
       </div>
 
       <!-- 5 guide -->
       <div class="proj">
+       <div class="proj-top">
         <div class="side">
           <div>
             <div class="no">PROJECT 05</div>
@@ -535,6 +804,25 @@
             <p>대응 지식을 표준화·공유해 신규 담당자 온보딩과 현장 대응 품질을 균일화.</p>
           </div>
         </div>
+       </div><!-- /proj-top -->
+       <div class="preview">
+         <div class="preview-cap"><span class="badge">화면 예시</span> 증상별 현장 대응 가이드 <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
+         <div class="mock">
+           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / guide</span></div>
+           <div class="screen">
+             <div class="apphead">📖 CUREJET 현장 대응 가이드<span class="t2">증상 → 점검 → 조치</span></div>
+             <div class="mk-search">🔍 증상 검색 (예: 누수, 노즐, 출력)</div>
+             <div class="mk-chips"><span class="c on">전체</span><span class="c">전원·제어</span><span class="c">노즐·출력</span><span class="c">누수·냉각</span><span class="c">S/W·교육</span></div>
+             <div class="mk-acc">
+               <div class="row2 open"><span class="no2">01</span><div class="tx"><div class="a2">장비 출력 저하</div><div class="b2">노즐·출력</div></div><span class="chev">▾</span></div>
+               <div class="panel2"><b>점검</b> 노즐 막힘·마모, 압력 게이지 확인 → <b>조치</b> 노즐 세척/교체, 압력 재설정 → <b>확인</b> 시험 출력으로 정상 분사 확인</div>
+               <div class="row2"><span class="no2">02</span><div class="tx"><div class="a2">냉각수 누수</div><div class="b2">누수·냉각</div></div><span class="chev">▾</span></div>
+               <div class="row2"><span class="no2">03</span><div class="tx"><div class="a2">풋 스위치 동작 불능</div><div class="b2">전원·제어</div></div><span class="chev">▾</span></div>
+               <div class="row2"><span class="no2">04</span><div class="tx"><div class="a2">Touch Screen 무반응</div><div class="b2">전원·제어</div></div><span class="chev">▾</span></div>
+             </div>
+           </div>
+         </div>
+       </div>
       </div>
 
     </div>
