@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이직 포트폴리오 | 의료기기 현장 CS · 기술지원</title>
+<meta name="description" content="의료기기 현장 CS/기술지원 실무자가 현장의 문제를 직접 도구로 해결한 포트폴리오. 처리 기록·점검 내역서·대시보드·병원 데이터센터·대응 가이드 등 실사용 웹앱과 인증 아키텍처.">
+<style>
+  :root{
+    --navy:#1B2F5E;
+    --navy-2:#132447;
+    --navy-soft:#2b437a;
+    --accent:#12b5b0;      /* medical teal */
+    --accent-2:#0e8f8b;
+    --ink:#1c2431;
+    --ink-2:#4a5568;
+    --ink-3:#6b7688;
+    --line:#e4e8ef;
+    --bg:#ffffff;
+    --bg-soft:#f5f7fb;
+    --bg-card:#ffffff;
+    --chip:#eef2f9;
+    --radius:16px;
+    --shadow:0 1px 2px rgba(16,32,64,.05), 0 8px 24px rgba(16,32,64,.06);
+    --maxw:1040px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    font-family:"Pretendard Variable","Pretendard",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    color:var(--ink);
+    background:var(--bg-soft);
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    letter-spacing:-.01em;
+  }
+  a{color:inherit;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;}
+
+  /* ===== Top nav ===== */
+  nav.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,.82);
+    backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  nav.top .wrap{display:flex;align-items:center;gap:20px;height:58px;}
+  nav.top .brand{font-weight:800;color:var(--navy);letter-spacing:-.02em;font-size:15px;}
+  nav.top .links{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
+  nav.top .links a{
+    color:var(--ink-2);text-decoration:none;font-size:13.5px;font-weight:600;
+    padding:7px 12px;border-radius:9px;transition:.15s;
+  }
+  nav.top .links a:hover{background:var(--chip);color:var(--navy);}
+
+  /* ===== Hero ===== */
+  header.hero{
+    background:
+      radial-gradient(1200px 500px at 85% -10%, rgba(18,181,176,.22), transparent 60%),
+      radial-gradient(900px 500px at 0% 0%, rgba(43,67,122,.55), transparent 55%),
+      linear-gradient(160deg,var(--navy) 0%, var(--navy-2) 100%);
+    color:#fff;position:relative;overflow:hidden;
+  }
+  header.hero::after{
+    content:"";position:absolute;inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:44px 44px;
+    -webkit-mask-image:radial-gradient(700px 400px at 80% 20%,#000,transparent 75%);
+            mask-image:radial-gradient(700px 400px at 80% 20%,#000,transparent 75%);
+    pointer-events:none;
+  }
+  header.hero .wrap{position:relative;padding:64px 24px 60px;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:700;letter-spacing:.02em;
+    color:#bfe9e7;background:rgba(18,181,176,.14);
+    border:1px solid rgba(18,181,176,.4);
+    padding:6px 13px;border-radius:999px;margin-bottom:22px;
+  }
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(18,181,176,.25);}
+  header.hero h1{
+    margin:0 0 6px;font-size:clamp(28px,4.6vw,46px);line-height:1.18;font-weight:800;letter-spacing:-.03em;
+  }
+  header.hero h1 .em{color:#7ff0ec;}
+  header.hero .role{font-size:clamp(15px,2vw,19px);font-weight:600;color:#c7d3ec;margin:10px 0 22px;}
+  header.hero .lead{max-width:640px;font-size:clamp(15px,1.7vw,17.5px);color:#dbe4f5;margin:0 0 30px;}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;color:#c7d3ec;}
+  .hero-meta .item{display:inline-flex;align-items:center;gap:8px;}
+  .hero-meta .k{color:#8fa6d1;font-weight:600;}
+  .hero-cta{margin-top:30px;display:flex;gap:12px;flex-wrap:wrap;}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:700;font-size:14.5px;
+    padding:12px 20px;border-radius:11px;transition:.15s;border:1px solid transparent;
+  }
+  .btn.primary{background:var(--accent);color:#04302f;}
+  .btn.primary:hover{background:#2fd0cb;transform:translateY(-1px);}
+  .btn.ghost{background:rgba(255,255,255,.06);color:#eaf1ff;border-color:rgba(255,255,255,.24);}
+  .btn.ghost:hover{background:rgba(255,255,255,.13);}
+
+  /* ===== Section shells ===== */
+  section{padding:64px 0;}
+  section.alt{background:var(--bg);}
+  .sec-head{max-width:720px;margin:0 0 36px;}
+  .sec-tag{font-size:13px;font-weight:800;color:var(--accent-2);letter-spacing:.06em;text-transform:uppercase;}
+  .sec-head h2{font-size:clamp(23px,3vw,30px);margin:8px 0 10px;font-weight:800;letter-spacing:-.02em;color:var(--navy);}
+  .sec-head p{margin:0;color:var(--ink-2);font-size:15.5px;}
+
+  /* ===== Summary stat row ===== */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .stat{
+    background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px 20px;box-shadow:var(--shadow);
+  }
+  .stat .n{font-size:30px;font-weight:800;color:var(--navy);letter-spacing:-.02em;line-height:1;}
+  .stat .n small{font-size:15px;color:var(--accent-2);font-weight:700;}
+  .stat .l{margin-top:10px;font-size:13.5px;color:var(--ink-2);font-weight:600;}
+
+  /* ===== Capability grid ===== */
+  .caps{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+  .cap{
+    background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px;box-shadow:var(--shadow);
+  }
+  .cap h3{margin:0 0 8px;font-size:17px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:10px;}
+  .cap .ic{
+    width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;
+    background:linear-gradient(135deg,rgba(18,181,176,.16),rgba(27,47,94,.12));flex:none;
+  }
+  .cap p{margin:0;color:var(--ink-2);font-size:14.5px;}
+
+  /* ===== Project cards ===== */
+  .projects{display:flex;flex-direction:column;gap:22px;}
+  .proj{
+    background:var(--bg-card);border:1px solid var(--line);border-radius:20px;
+    overflow:hidden;box-shadow:var(--shadow);
+    display:grid;grid-template-columns:230px 1fr;
+  }
+  .proj .side{
+    background:linear-gradient(160deg,var(--navy) 0%,var(--navy-2) 100%);
+    color:#fff;padding:26px 22px;position:relative;overflow:hidden;display:flex;flex-direction:column;
+  }
+  .proj .side::after{
+    content:"";position:absolute;right:-30px;bottom:-30px;width:150px;height:150px;border-radius:50%;
+    background:radial-gradient(circle,rgba(18,181,176,.35),transparent 70%);
+  }
+  .proj .side .no{font-size:13px;font-weight:800;color:#7ff0ec;letter-spacing:.05em;}
+  .proj .side .emoji{font-size:34px;margin:8px 0 12px;}
+  .proj .side h3{margin:0 0 4px;font-size:19px;font-weight:800;letter-spacing:-.02em;}
+  .proj .side .sub{font-size:13px;color:#c1cfe9;font-weight:600;}
+  .proj .side .plat{
+    margin-top:auto;position:relative;z-index:1;
+    font-size:11.5px;font-weight:700;color:#9fb4dc;letter-spacing:.03em;text-transform:uppercase;
+  }
+  .proj .body{padding:26px 28px;}
+  .proj .row{margin-bottom:16px;}
+  .proj .row:last-child{margin-bottom:0;}
+  .proj .row .lab{
+    font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--accent-2);margin-bottom:5px;display:flex;align-items:center;gap:7px;
+  }
+  .proj .row .lab.problem{color:#c26a3d;}
+  .proj .row p{margin:0;font-size:14.7px;color:var(--ink);}
+  .proj .row.problem p{color:var(--ink-2);}
+  .tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px;}
+  .tag{
+    font-size:12px;font-weight:700;color:var(--navy-soft);
+    background:var(--chip);border:1px solid var(--line);
+    padding:4px 10px;border-radius:8px;
+  }
+
+  /* ===== Architecture ===== */
+  .arch{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;}
+  .arch .flow{
+    background:var(--navy);border-radius:20px;padding:28px 26px;color:#fff;box-shadow:var(--shadow);
+  }
+  .arch .flow h3{margin:0 0 18px;font-size:16px;font-weight:800;color:#7ff0ec;}
+  .node{
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);
+    border-radius:12px;padding:13px 15px;font-size:14px;font-weight:600;
+  }
+  .node .t{font-weight:800;color:#fff;}
+  .node .d{font-size:12.5px;color:#b9c8e6;margin-top:2px;font-weight:500;}
+  .node.accent{border-color:rgba(18,181,176,.55);background:rgba(18,181,176,.12);}
+  .arrow{text-align:center;color:#6f86b5;font-size:13px;margin:8px 0;font-weight:600;}
+  .arch .points{display:flex;flex-direction:column;gap:14px;}
+  .point{
+    background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);
+  }
+  .point h4{margin:0 0 5px;font-size:15px;font-weight:800;color:var(--navy);display:flex;gap:9px;align-items:center;}
+  .point h4 .ic{color:var(--accent-2);}
+  .point p{margin:0;font-size:14px;color:var(--ink-2);}
+
+  /* ===== Stack ===== */
+  .stack{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .stackcol{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);}
+  .stackcol h3{margin:0 0 14px;font-size:14px;font-weight:800;color:var(--accent-2);letter-spacing:.04em;text-transform:uppercase;}
+  .stackcol ul{margin:0;padding:0;list-style:none;}
+  .stackcol li{font-size:14.5px;color:var(--ink);padding:6px 0;border-bottom:1px dashed var(--line);}
+  .stackcol li:last-child{border-bottom:0;}
+  .stackcol li b{color:var(--navy);}
+
+  /* ===== Contact ===== */
+  .contact{background:linear-gradient(160deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;border-radius:22px;padding:44px 40px;text-align:center;position:relative;overflow:hidden;}
+  .contact::after{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(18,181,176,.3),transparent 70%);}
+  .contact h2{margin:0 0 10px;font-size:26px;font-weight:800;letter-spacing:-.02em;position:relative;}
+  .contact p{margin:0 auto 24px;max-width:520px;color:#cfd9ef;font-size:15px;position:relative;}
+  .contact .cbtns{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;position:relative;}
+  .contact .cbtn{
+    display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.24);border-radius:11px;padding:12px 18px;
+    font-size:14px;font-weight:700;text-decoration:none;color:#eaf1ff;transition:.15s;
+  }
+  .contact .cbtn:hover{background:rgba(255,255,255,.16);}
+  .contact .cbtn.mail{background:var(--accent);color:#04302f;border-color:transparent;}
+
+  footer{text-align:center;color:var(--ink-3);font-size:13px;padding:34px 24px 46px;}
+
+  .fillme{background:#fff6d6;border-bottom:1px dashed #d9a300;color:#8a6a00;padding:0 3px;border-radius:3px;font-weight:700;}
+
+  /* ===== Responsive ===== */
+  @media (max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .caps{grid-template-columns:1fr;}
+    .proj{grid-template-columns:1fr;}
+    .proj .side{flex-direction:row;align-items:center;gap:16px;}
+    .proj .side .emoji{margin:0;font-size:30px;}
+    .proj .side .plat{margin:0 0 0 auto;}
+    .proj .side::after{display:none;}
+    .arch{grid-template-columns:1fr;}
+    .stack{grid-template-columns:1fr;}
+    nav.top .links{display:none;}
+  }
+
+  /* ===== Print / PDF ===== */
+  @media print{
+    :root{--shadow:none;}
+    body{background:#fff;font-size:11pt;line-height:1.5;}
+    nav.top{display:none;}
+    .hero-cta,.contact .cbtns{display:none;}
+    section{padding:22px 0;}
+    header.hero{color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    header.hero .wrap{padding:34px 24px 30px;}
+    .proj,.stat,.cap,.point,.stackcol,.arch .flow,.contact,.eyebrow,.tag,.btn.primary,.proj .side,.node{
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    .proj{grid-template-columns:200px 1fr;break-inside:avoid;page-break-inside:avoid;}
+    .stat,.cap,.point,.stackcol{break-inside:avoid;}
+    section.pb{break-before:page;page-break-before:always;}
+    .fillme{background:none;border-bottom:1px solid #999;color:#000;}
+    a{text-decoration:none;color:inherit;}
+    .wrap{max-width:100%;}
+  }
+  @page{margin:14mm 12mm;}
+</style>
+</head>
+<body>
+
+<!-- ===== NAV ===== -->
+<nav class="top">
+  <div class="wrap">
+    <span class="brand">PORTFOLIO</span>
+    <div class="links">
+      <a href="#summary">요약</a>
+      <a href="#capability">핵심 역량</a>
+      <a href="#projects">프로젝트</a>
+      <a href="#architecture">아키텍처</a>
+      <a href="#stack">기술 스택</a>
+      <a href="#contact">연락처</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>의료기기 현장 CS · 기술지원</span>
+    <h1>현장을 가장 잘 아는 사람이,<br><span class="em">현장의 문제를 직접 도구로</span> 풉니다.</h1>
+    <p class="role"><span class="fillme">[이름]</span> · 의료기기 현장 CS / 기술지원 담당</p>
+    <p class="lead">
+      의료기기 A/S·설치·점검 현장에서 반복되던 수기 기록, 흩어진 병원 이력, 손 많이 가던 업무보고를
+      &mdash; 외주가 아니라 <b style="color:#fff">제가 직접 웹앱으로 만들어</b> 팀의 실사용 도구로 정착시켰습니다.
+      현장 실무와 자동화 역량을 함께 가진 CS 담당자입니다.
+    </p>
+    <div class="hero-meta">
+      <span class="item"><span class="k">경력</span> <span class="fillme">[의료기기 현장 CS ○년]</span></span>
+      <span class="item"><span class="k">담당</span> 설치 · A/S · 점검 · 병원 응대</span>
+      <span class="item"><span class="k">강점</span> 현장 문제 정의 → 직접 도구화 → 운영 정착</span>
+    </div>
+    <div class="hero-cta">
+      <a class="btn primary" href="#projects">▶ 프로젝트 보기</a>
+      <a class="btn ghost" href="#contact">연락처</a>
+    </div>
+  </div>
+</header>
+
+<!-- ===== SUMMARY ===== -->
+<section id="summary">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Overview</span>
+      <h2>한눈에 보는 요약</h2>
+      <p>현장 CS 실무자가 직접 기획·개발·운영까지 담당한, 실사용 중인 사내 현장 도구 모음입니다.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">5<small>종</small></div><div class="l">직접 만들어 운영 중인<br>현장 웹앱</div></div>
+      <div class="stat"><div class="n">PWA</div><div class="l">오프라인·설치형으로<br>현장 네트워크 대응</div></div>
+      <div class="stat"><div class="n">2<small>종</small></div><div class="l">백엔드 런타임 운영<br>(Apps Script · Deno)</div></div>
+      <div class="stat"><div class="n">0<small>원</small></div><div class="l">외주 없이 사내 인력<br>(본인)만으로 구축</div></div>
+    </div>
+    <p style="margin-top:20px;font-size:13.5px;color:var(--ink-3)">
+      * <span class="fillme">[대괄호]</span> 표기는 이름·경력·정량 수치 등 본인이 채워 넣을 항목입니다. 실제 성과 수치(예: 보고서 작성 시간 단축, 처리 건수)를 넣으면 설득력이 크게 올라갑니다.
+    </p>
+  </div>
+</section>
+
+<!-- ===== CAPABILITY ===== -->
+<section id="capability" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Core Strengths</span>
+      <h2>핵심 역량</h2>
+      <p>단순 개발이 아니라, 현장을 겪은 CS의 시선으로 "무엇이 진짜 문제인지"를 정의하고 도구로 해결합니다.</p>
+    </div>
+    <div class="caps">
+      <div class="cap">
+        <h3><span class="ic">🩺</span>의료기기 현장 CS 실무</h3>
+        <p>설치·A/S·정기점검·병원 응대까지 현장 전 과정을 직접 수행. 장비 증상별 대응, 병원별 이력, 소모품(노즐 등) 관리 등 도메인 지식을 도구 설계에 그대로 녹였습니다.</p>
+      </div>
+      <div class="cap">
+        <h3><span class="ic">🛠️</span>현장 문제의 도구화</h3>
+        <p>수기 기록·중복 입력·구두 인수인계 같은 현장 비효율을 직접 웹앱으로 대체. "쓰는 사람이 곧 만든 사람"이라 현장에 붙는 도구를 만듭니다.</p>
+      </div>
+      <div class="cap">
+        <h3><span class="ic">💻</span>풀스택 구현력</h3>
+        <p>프런트(HTML/CSS/Vanilla JS·PWA)부터 백엔드(Google Apps Script·Deno/TypeScript), 데이터(Google Sheets)까지 혼자 처음부터 끝까지 구축·배포합니다.</p>
+      </div>
+      <div class="cap">
+        <h3><span class="ic">🔐</span>운영·보안 감각</h3>
+        <p>서명 토큰 인증, 콜드스타트 제거를 위한 런타임 이전, keep-warm, 시크릿 자가 프로비저닝 등 "만드는 것"을 넘어 "안정적으로 굴러가게" 만드는 운영을 챙깁니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== PROJECTS ===== -->
+<section id="projects" class="pb">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Projects</span>
+      <h2>대표 프로젝트</h2>
+      <p>모두 실제 현장에서 사용 중인 도구입니다. 각 프로젝트는 <b>현장 문제 → 직접 구축 → 사용 기술 → 효과</b> 순으로 정리했습니다.</p>
+    </div>
+
+    <div class="projects">
+
+      <!-- 1 handover -->
+      <div class="proj">
+        <div class="side">
+          <div>
+            <div class="no">PROJECT 01 · CORE</div>
+            <div class="emoji">📤</div>
+            <h3>현장 처리완료 · 공유</h3>
+            <div class="sub">handover</div>
+          </div>
+          <div class="plat">Web · PWA · 핵심 허브</div>
+        </div>
+        <div class="body">
+          <div class="row problem">
+            <div class="lab problem">◆ 현장 문제</div>
+            <p>현장 처리 내역을 카톡·수기로 공유하다 보니 누락·재입력이 잦고, 병원별 처리 이력이 개인에게 흩어져 축적되지 않았습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 직접 구축</div>
+            <p>처리 내역 작성부터 공유까지 원스톱으로 처리하는 <b>중심 허브</b>. 병원 정보 DB·이슈 이력·재고·주간보고·라벨 기능을 하나의 백엔드(handover_gas Core)로 통합해, 여러 도구가 같은 데이터를 공유하도록 설계했습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 사용 기술</div>
+            <div class="tags">
+              <span class="tag">Google Apps Script (통합 백엔드)</span>
+              <span class="tag">Google Sheets DB</span>
+              <span class="tag">서명 토큰 검증</span>
+              <span class="tag">조각 캐시</span>
+              <span class="tag">Vanilla JS · PWA</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 효과</div>
+            <p>데이터 단일화로 재입력·누락 제거, 병원별 처리 이력이 자동 축적되어 재방문·인수인계 시 즉시 참조 가능.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2 hospital-pc -->
+      <div class="proj">
+        <div class="side">
+          <div>
+            <div class="no">PROJECT 02</div>
+            <div class="emoji">🏥</div>
+            <h3>병원 데이터 센터</h3>
+            <div class="sub">hospital-pc</div>
+          </div>
+          <div class="plat">Web · PC 대화면</div>
+        </div>
+        <div class="body">
+          <div class="row problem">
+            <div class="lab problem">◆ 현장 문제</div>
+            <p>담당 병원의 위치·방문 일정·최근 처리 현황이 여러 곳에 흩어져, 동선 계획과 현황 파악에 시간이 들었습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 직접 구축</div>
+            <p>지도 기반의 <b>병원 통합 조회 화면</b>. 조회 · 현장 일정 · 대시보드 · 최근 처리의 4개 탭으로 구성하고, 점검 이력·병원 상세를 모달로 즉시 확인. PC 대화면에 맞춰 정보 밀도를 최적화했습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 사용 기술</div>
+            <div class="tags">
+              <span class="tag">Kakao Maps SDK</span>
+              <span class="tag">커스텀 오버레이 · 인포윈도우</span>
+              <span class="tag">탭 UI · 모달</span>
+              <span class="tag">반응형 레이아웃</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 효과</div>
+            <p>병원 위치·일정·이력을 한 화면에서 파악해 방문 동선과 일정 계획을 최적화.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 dashboard-pc -->
+      <div class="proj">
+        <div class="side">
+          <div>
+            <div class="no">PROJECT 03</div>
+            <div class="emoji">📊</div>
+            <h3>현장 처리 대시보드</h3>
+            <div class="sub">dashboard-pc</div>
+          </div>
+          <div class="plat">Web · 보고 자동화</div>
+        </div>
+        <div class="body">
+          <div class="row problem">
+            <div class="lab problem">◆ 현장 문제</div>
+            <p>주간·월간 업무보고를 매번 손으로 집계·작성하느라 반복 시간이 컸고, 담당자마다 형식이 제각각이었습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 직접 구축</div>
+            <p>KPI·월별/주차별 추이·노즐 재사용 현황·사용자 숙련도 지표를 필터(슬라이서)로 탐색하는 대시보드. 나아가 <b>주간·월간 보고 PPT를 버튼 한 번으로 자동 생성</b>하고, 생성 전 슬라이드를 미리보기로 확인하도록 만들었습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 사용 기술</div>
+            <div class="tags">
+              <span class="tag">PptxGenJS (PPT 자동 생성)</span>
+              <span class="tag">데이터 집계 · 지표화</span>
+              <span class="tag">필터 · 슬라이서</span>
+              <span class="tag">차트 시각화</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 효과</div>
+            <p>반복적인 보고서 작성 시간을 크게 단축하고 보고 형식을 표준화 <span class="fillme">(예: 주 ○시간 → ○분)</span>.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 inspection -->
+      <div class="proj">
+        <div class="side">
+          <div>
+            <div class="no">PROJECT 04</div>
+            <div class="emoji">📝</div>
+            <h3>A/S 점검 내역서</h3>
+            <div class="sub">inspection</div>
+          </div>
+          <div class="plat">Web · 모바일 현장용</div>
+        </div>
+        <div class="body">
+          <div class="row problem">
+            <div class="lab problem">◆ 현장 문제</div>
+            <p>종이 점검 내역서는 사진·서명 첨부와 전달이 번거롭고, 현장에서 작성 후 사무실에서 다시 옮겨 적는 이중 작업이 발생했습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 직접 구축</div>
+            <p>접수 → 점검 항목 → 조치 → 현장 사진 → 서명으로 이어지는 <b>단계별 입력 폼</b>. 가로 전체화면 손서명 패드, 현장 사진 첨부, 병원 선택 시 최근 방문 이력 자동 조회, 수기 작성용 빈 양식 PDF까지 포함. 완성본은 화면에서 바로 PDF로 렌더됩니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 사용 기술</div>
+            <div class="tags">
+              <span class="tag">Canvas 손서명</span>
+              <span class="tag">html2canvas (PDF 렌더)</span>
+              <span class="tag">사진 첨부</span>
+              <span class="tag">단계형 폼 UX</span>
+              <span class="tag">A/S 코드 마스터 공유</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 효과</div>
+            <p>현장에서 즉시 내역서를 완성·전달해 종이와 재작성 이중 작업을 제거.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5 guide -->
+      <div class="proj">
+        <div class="side">
+          <div>
+            <div class="no">PROJECT 05</div>
+            <div class="emoji">📖</div>
+            <h3>CUREJET 현장 대응 가이드</h3>
+            <div class="sub">guide</div>
+          </div>
+          <div class="plat">Web · 지식 표준화</div>
+        </div>
+        <div class="body">
+          <div class="row problem">
+            <div class="lab problem">◆ 현장 문제</div>
+            <p>장비(CUREJET) 증상별 대응 노하우가 개인 경험에만 흩어져 있어, 신규 담당자와 숙련자 간 대응 편차가 컸습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 직접 구축</div>
+            <p>증상별 현장 대응법을 빠르게 찾는 가이드. <b>관리자 모드(비밀번호)</b>에서 증상을 추가·편집·삭제할 수 있는 경량 편집형 구조로 만들어, 현장에서 쌓인 노하우를 계속 반영·공유하도록 했습니다.</p>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 사용 기술</div>
+            <div class="tags">
+              <span class="tag">관리자 편집형 구조 (경량 CMS)</span>
+              <span class="tag">비밀번호 보호</span>
+              <span class="tag">단일 파일 경량 앱</span>
+            </div>
+          </div>
+          <div class="row">
+            <div class="lab">◆ 효과</div>
+            <p>대응 지식을 표준화·공유해 신규 담당자 온보딩과 현장 대응 품질을 균일화.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ===== ARCHITECTURE ===== -->
+<section id="architecture" class="alt pb">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">System & Operations</span>
+      <h2>공통 아키텍처 &amp; 운영</h2>
+      <p>도구를 만드는 데서 그치지 않고, 현장에서 안정적으로 돌아가게 만드는 데 집중했습니다. 아래는 개별 앱을 넘어선 시스템·운영 차원의 고민입니다.</p>
+    </div>
+    <div class="arch">
+      <div class="flow">
+        <h3>인증 · 데이터 흐름</h3>
+        <div class="node accent">
+          <div class="t">브라우저 (현장 도구)</div>
+          <div class="d">handover · inspection · dashboard · hospital · guide</div>
+        </div>
+        <div class="arrow">│ ① 로그인 / 검증 ▼</div>
+        <div class="node">
+          <div class="t">인증 서버 &mdash; Deno Deploy</div>
+          <div class="d">엣지 상시 실행 · 콜드스타트 없음 · HMAC-SHA256 서명 토큰 발급</div>
+        </div>
+        <div class="arrow">│ ② 데이터 요청 (토큰 동봉) ▼</div>
+        <div class="node">
+          <div class="t">데이터 백엔드 &mdash; Google Apps Script</div>
+          <div class="d">토큰을 <b>로컬 HMAC 검증</b> (인증 서버 왕복 없음) · Google Sheets 운영 DB</div>
+        </div>
+      </div>
+      <div class="points">
+        <div class="point">
+          <h4><span class="ic">📴</span>PWA · 오프라인 대응</h4>
+          <p>Service Worker 캐시와 매니페스트로 설치형 앱처럼 동작. 병원 지하·전파 취약 등 현장 네트워크 환경을 고려했습니다.</p>
+        </div>
+        <div class="point">
+          <h4><span class="ic">🚀</span>콜드스타트 근본 해결</h4>
+          <p>"첫 로그인 30~50초" 문제를 인증 발급기만 GAS→Deno Deploy로 이전해 해결. <b>토큰 형식이 동일</b>해 데이터 백엔드·프런트를 한 줄도 바꾸지 않고 전환했고, 문제 시 무중단 롤백이 가능합니다.</p>
+        </div>
+        <div class="point">
+          <h4><span class="ic">🔑</span>서명 토큰 · 로컬 검증</h4>
+          <p>데이터 백엔드가 토큰을 스스로 검증하도록 재설계해, 인증 서버로의 검증 왕복을 없애 응답 속도를 개선했습니다.</p>
+        </div>
+        <div class="point">
+          <h4><span class="ic">⚙️</span>운영 자동화</h4>
+          <p>keep-warm 예열, 시크릿 자가 프로비저닝(수동 복붙 제거), epoch 증가로 전원 강제 로그아웃, 선택적 기기 기억 등 운영 편의를 함께 설계했습니다.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== STACK ===== -->
+<section id="stack">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="sec-tag">Tech Stack</span>
+      <h2>기술 스택</h2>
+      <p>모두 실제 프로젝트에서 직접 사용한 기술입니다.</p>
+    </div>
+    <div class="stack">
+      <div class="stackcol">
+        <h3>Frontend</h3>
+        <ul>
+          <li><b>HTML · CSS · Vanilla JavaScript</b></li>
+          <li><b>PWA</b> — Service Worker, Web Manifest</li>
+          <li>반응형 · 모바일/PC 최적화</li>
+          <li>단계형 폼 · 모달 · 탭 UX</li>
+        </ul>
+      </div>
+      <div class="stackcol">
+        <h3>Backend · Data</h3>
+        <ul>
+          <li><b>Google Apps Script</b> (통합 백엔드)</li>
+          <li><b>Deno Deploy</b> (TypeScript, 인증 서버)</li>
+          <li><b>Google Sheets</b> 운영 DB</li>
+          <li>조각 캐시 · 데이터 집계</li>
+        </ul>
+      </div>
+      <div class="stackcol">
+        <h3>라이브러리 · 운영</h3>
+        <ul>
+          <li><b>PptxGenJS</b> — PPT 자동 생성</li>
+          <li><b>html2canvas</b> — PDF 렌더</li>
+          <li><b>Kakao Maps SDK</b> — 지도</li>
+          <li><b>HMAC-SHA256</b> 서명 토큰 인증</li>
+          <li>Git / GitHub · GitHub Pages 배포</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== CONTACT ===== -->
+<section id="contact" class="alt">
+  <div class="wrap">
+    <div class="contact">
+      <h2>현장을 아는 CS, 문제를 푸는 엔지니어</h2>
+      <p>현장 CS·기술지원 실무와 자동화 역량을 함께 필요로 하는 팀과 이야기 나누고 싶습니다.</p>
+      <div class="cbtns">
+        <a class="cbtn mail" href="mailto:coaptation@gmail.com">✉ coaptation@gmail.com</a>
+        <a class="cbtn" href="tel:">📞 <span class="fillme">[연락처]</span></a>
+        <a class="cbtn" href="#">🔗 <span class="fillme">[GitHub / 링크]</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  © <span id="yr"></span> <span class="fillme">[이름]</span> · 의료기기 현장 CS / 기술지원 포트폴리오
+</footer>
+
+<script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
+</body>
+</html>
