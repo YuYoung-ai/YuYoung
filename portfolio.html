@@ -291,6 +291,23 @@
   .mk-acc .row2.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(18,181,176,.1);}
   .mk-acc .panel2{background:var(--bg-soft);border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;margin:-8px 0 8px;padding:10px 14px 12px;font-size:11.5px;color:var(--ink-2);line-height:1.7;}
 
+  /* ===== Real screenshot gallery ===== */
+  .shots{display:flex;gap:14px;overflow-x:auto;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;}
+  .shot{flex:0 0 auto;width:190px;}
+  .shot img{width:100%;display:block;border-radius:14px;border:1px solid var(--line);box-shadow:0 6px 18px rgba(16,32,64,.12);background:#fff;}
+  .shot .scap{margin-top:8px;font-size:12px;font-weight:700;color:var(--ink-2);text-align:center;}
+  .shot .scap b{display:block;color:var(--navy);font-size:12.5px;}
+  .result{display:grid;grid-template-columns:1fr 260px;gap:20px;align-items:center;margin-top:20px;
+    background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);}
+  .result .rdoc img{width:100%;display:block;border-radius:8px;border:1px solid var(--line);box-shadow:0 4px 14px rgba(16,32,64,.1);}
+  .result .rtx h4{margin:0 0 8px;font-size:15px;font-weight:800;color:var(--navy);}
+  .result .rtx p{margin:0 0 12px;font-size:13.5px;color:var(--ink-2);}
+  .result .rtx .rlist{margin:0;padding:0;list-style:none;}
+  .result .rtx .rlist li{font-size:13px;color:var(--ink);padding:4px 0 4px 20px;position:relative;}
+  .result .rtx .rlist li::before{content:"✓";position:absolute;left:0;color:var(--accent-2);font-weight:800;}
+  .shots-note{font-size:12px;color:var(--ink-3);margin:2px 0 0;}
+  @media (max-width:720px){ .result{grid-template-columns:1fr;} .result .rdoc{order:-1;} }
+
   /* ===== Architecture ===== */
   .arch{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start;}
   .arch .flow{
@@ -370,6 +387,11 @@
     .proj-top{grid-template-columns:200px 1fr;}
     .preview-stage{break-inside:avoid;}
     .stat,.cap,.point,.stackcol{break-inside:avoid;}
+    /* screenshots: wrap instead of scroll so nothing clips on paper */
+    .shots{overflow:visible;flex-wrap:wrap;justify-content:center;gap:8px;}
+    .shot{width:150px;}
+    .shot img,.result .rdoc img{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .result{break-inside:avoid;page-break-inside:avoid;}
     section.pb{break-before:page;page-break-before:always;}
     .fillme{background:none;border-bottom:1px solid #999;color:#000;}
     a{text-decoration:none;color:inherit;}
@@ -400,7 +422,7 @@
   <div class="wrap">
     <span class="eyebrow"><span class="dot"></span>의료기기 현장 CS · 기술지원</span>
     <h1>현장을 가장 잘 아는 사람이,<br><span class="em">현장의 문제를 직접 도구로</span> 풉니다.</h1>
-    <p class="role"><span class="fillme">[이름]</span> · 의료기기 현장 CS / 기술지원 담당</p>
+    <p class="role">지유영 · 의료기기 현장 CS / 기술지원 담당</p>
     <p class="lead">
       의료기기 A/S·설치·점검 현장에서 반복되던 수기 기록, 흩어진 병원 이력, 손 많이 가던 업무보고를
       &mdash; 외주가 아니라 <b style="color:#fff">제가 직접 웹앱으로 만들어</b> 팀의 실사용 도구로 정착시켰습니다.
@@ -533,7 +555,7 @@
                </div>
                <div class="mk-photos"><div class="ph">🖼</div><div class="ph">🖼</div><div class="ph">🖼</div></div>
                <div class="hfoot">
-                 <span class="meta">담당 [이름] · 방문 40분</span>
+                 <span class="meta">담당 지유영 · 방문 40분</span>
                  <span style="margin-left:auto"></span>
                  <span class="mk-btn kakao">💬 카카오 공유</span>
                  <span class="mk-btn pdf">PDF 저장</span>
@@ -742,30 +764,26 @@
         </div>
        </div><!-- /proj-top -->
        <div class="preview">
-         <div class="preview-cap"><span class="badge">화면 예시</span> A/S 점검 내역서 (완성본 · 서명 포함) <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
-         <div class="mock">
-           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / inspection</span></div>
-           <div class="screen">
-             <div class="mk-doc">
-               <div class="dh">A/S 점검 내역서<span class="badge2">CUREJET</span></div>
-               <div class="drow"><div class="k">병원명</div><div class="v">○○정형외과의원</div><div class="k">점검일</div><div class="v">2025-07-18</div></div>
-               <div class="drow"><div class="k">장비</div><div class="v">CUREJET (S/N 24-0xxx)</div><div class="k">담당자</div><div class="v">[이름]</div></div>
-               <div class="mk-check">
-                 <div class="ci"><span class="ck">✓</span> 전원·제어부 정상 동작 확인</div>
-                 <div class="ci"><span class="ck">✓</span> 출력/노즐 상태 점검 — 노즐 교체 완료</div>
-                 <div class="ci"><span class="ck warn">!</span> 냉각수 라인 세척 (재점검 권장)</div>
-                 <div class="ci"><span class="ck na">–</span> S/W 업데이트 (해당 없음)</div>
-               </div>
-               <div style="padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink)"><b style="color:var(--navy)">조치 내용</b> &nbsp; 노즐 어셈블리 교체 및 냉각라인 세척 후 정상 출력 확인. 소모품 노즐 1EA 사용(유상).</div>
-               <div class="mk-sign">
-                 <div class="sg"><div class="sl">고객 확인 서명</div><div class="sv"><svg viewBox="0 0 140 34" width="120" height="30"><path d="M6 26 C18 6, 26 30, 38 14 S60 6, 70 22 S92 10, 104 20 128 12 134 18" fill="none" stroke="#1B2F5E" stroke-width="2.2" stroke-linecap="round"/></svg></div></div>
-                 <div class="sg"><div class="sl">담당 엔지니어</div><div class="sv"><svg viewBox="0 0 140 34" width="110" height="30"><path d="M8 22 C16 10, 24 26, 34 16 S52 26, 64 14 82 24 96 16 122 20" fill="none" stroke="#1B2F5E" stroke-width="2.2" stroke-linecap="round"/></svg></div></div>
-               </div>
-             </div>
-             <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-               <span class="mk-btn">🖊 손서명(전체화면)</span><span class="mk-btn">🖼 현장사진</span><span class="mk-btn pdf">PDF 생성</span>
-             </div>
+         <div class="preview-cap"><span class="badge">실제 화면</span> 현장에서 작성하는 실사용 스크린샷 <span class="note">※ 병원명·고객정보는 비공개 처리</span></div>
+         <div class="shots">
+           <div class="shot"><img src="img/inspection/01-reception.jpg" alt="접수 정보 입력 화면" loading="lazy"><div class="scap"><b>① 접수 정보</b>병원·장비·S/N 입력</div></div>
+           <div class="shot"><img src="img/inspection/02-checklist.jpg" alt="점검 항목 체크 화면" loading="lazy"><div class="scap"><b>② 점검 항목</b>정상·수리·교체 선택</div></div>
+           <div class="shot"><img src="img/inspection/03-action.jpg" alt="조치 내용 및 현장 사진 화면" loading="lazy"><div class="scap"><b>③ 조치·사진</b>비용·현장 사진 첨부</div></div>
+           <div class="shot"><img src="img/inspection/04-sign.jpg" alt="서명 화면" loading="lazy"><div class="scap"><b>④ 서명</b>손서명 · 수기 양식 PDF</div></div>
+         </div>
+         <p class="shots-note">↔ 실제 휴대폰에서 단계별로 입력 → 서명까지 현장에서 즉시 완료합니다.</p>
+         <div class="result">
+           <div class="rtx">
+             <h4>⬇ 버튼 한 번 → 완성 문서 자동 생성</h4>
+             <p>입력이 끝나면 <b>정식 A/S 점검 내역서 PDF</b>가 즉시 만들어져 병원에 바로 전달됩니다.</p>
+             <ul class="rlist">
+               <li>회사 로고·문서번호가 들어간 정식 양식</li>
+               <li>점검 항목 11종 체크 결과가 표로 정리</li>
+               <li>CS·병원 담당자 서명까지 포함된 완성본</li>
+               <li>종이 없이 현장에서 작성·전달·보관</li>
+             </ul>
            </div>
+           <div class="rdoc"><img src="img/inspection/05-result-pdf.jpg" alt="완성된 A/S 점검 내역서 PDF 결과물" loading="lazy"></div>
          </div>
        </div>
       </div>
@@ -806,22 +824,13 @@
         </div>
        </div><!-- /proj-top -->
        <div class="preview">
-         <div class="preview-cap"><span class="badge">화면 예시</span> 증상별 현장 대응 가이드 <span class="note">※ 실제 화면 재현 · 샘플 데이터</span></div>
-         <div class="mock">
-           <div class="bar"><i></i><i></i><i></i><span class="url">baz-cs / guide</span></div>
-           <div class="screen">
-             <div class="apphead">📖 CUREJET 현장 대응 가이드<span class="t2">증상 → 점검 → 조치</span></div>
-             <div class="mk-search">🔍 증상 검색 (예: 누수, 노즐, 출력)</div>
-             <div class="mk-chips"><span class="c on">전체</span><span class="c">전원·제어</span><span class="c">노즐·출력</span><span class="c">누수·냉각</span><span class="c">S/W·교육</span></div>
-             <div class="mk-acc">
-               <div class="row2 open"><span class="no2">01</span><div class="tx"><div class="a2">장비 출력 저하</div><div class="b2">노즐·출력</div></div><span class="chev">▾</span></div>
-               <div class="panel2"><b>점검</b> 노즐 막힘·마모, 압력 게이지 확인 → <b>조치</b> 노즐 세척/교체, 압력 재설정 → <b>확인</b> 시험 출력으로 정상 분사 확인</div>
-               <div class="row2"><span class="no2">02</span><div class="tx"><div class="a2">냉각수 누수</div><div class="b2">누수·냉각</div></div><span class="chev">▾</span></div>
-               <div class="row2"><span class="no2">03</span><div class="tx"><div class="a2">풋 스위치 동작 불능</div><div class="b2">전원·제어</div></div><span class="chev">▾</span></div>
-               <div class="row2"><span class="no2">04</span><div class="tx"><div class="a2">Touch Screen 무반응</div><div class="b2">전원·제어</div></div><span class="chev">▾</span></div>
-             </div>
-           </div>
+         <div class="preview-cap"><span class="badge">실제 화면</span> 증상 하나를 열면 3단계 응대 스크립트가 순서대로 <span class="note">※ 실사용 스크린샷</span></div>
+         <div class="shots">
+           <div class="shot"><img src="img/guide/01-step1.jpg" alt="STEP 1 증상 확인 고객 응대 스크립트" loading="lazy"><div class="scap"><b>STEP 1 · 증상 확인</b>고객 응대 멘트·질문</div></div>
+           <div class="shot"><img src="img/guide/02-step2.jpg" alt="STEP 2 점검 및 결과 안내" loading="lazy"><div class="scap"><b>STEP 2 · 결과 안내</b>원인별 설명·비용 안내</div></div>
+           <div class="shot"><img src="img/guide/03-step3.jpg" alt="STEP 3 처리 사항 안내 및 다른 증상 목록" loading="lazy"><div class="scap"><b>STEP 3 · 처리 안내</b>조치 완료·재발 방지</div></div>
          </div>
+         <p class="shots-note">경력자의 응대 노하우를 <b>증상별 스크립트로 표준화</b> — 신규 담당자도 같은 품질로 현장 대응이 가능합니다. (한국어·EN·日本語 전환 지원)</p>
        </div>
       </div>
 
@@ -934,7 +943,7 @@
 </section>
 
 <footer>
-  © <span id="yr"></span> <span class="fillme">[이름]</span> · 의료기기 현장 CS / 기술지원 포트폴리오
+  © <span id="yr"></span> 지유영 · 의료기기 현장 CS / 기술지원 포트폴리오
 </footer>
 
 <script>document.getElementById('yr').textContent=new Date().getFullYear();</script>
