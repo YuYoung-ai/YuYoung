@@ -976,23 +976,14 @@ function isDemoRecord(r){
 /* 보고 범위 — 'customer'(고객 서비스) | 'demo'(데모 운영) */
 function recScope(r){ return isDemoRecord(r) ? 'demo' : 'customer'; }
 
-/* ══════ N-Care 정기점검으로 인정할 기록 판정 ══════
-   기존에는 병원의 "마지막 처리일"을 그대로 점검일로 썼기 때문에 일반 A/S·교육 방문이
-   점검 완료로 잡혔다. 실제 저장값 중 점검을 가릴 수 있는 필드만 써서 좁힌다.
-     · gubun(시트 '점검/AS')  — 저장값은 '점검' 과 'A/S' 두 가지뿐이므로 '점검' 만 인정
-     · ncare(시트 'N-Care')   — 가입 병원 기록만 인정(미가입·공란 제외)
-     · detail 의 [데모장비] 표식 — 데모 장비 점검은 제외
-     · type(시트 '유형')      — '장비 교육'·'사용 설명' 등 교육만 진행한 방문 제외
-   ※ 시트에 "N-Care 정기점검" 전용 플래그는 없다. 가입 병원의 '점검' 기록을 정기점검으로 본다. */
-var EDU_TYPE=/교육|사용\s*설명/;
-function isNcareInspection(r){
+/* ══════ N-Care 점검일로 인정할 기록 판정 ══════
+   실제 운영 기준: N-Care 가입 병원은 어떤 사유로 방문하든 그 자리에서 정기점검이 이뤄지므로
+   "마지막 방문일 = 마지막 점검일" 이다. 구분(A/S·점검)이나 유형(교육 등)으로 좁히면
+   실제로 점검이 끝난 병원이 잔여 점검으로 남아 현황이 실제보다 나쁘게 나온다.
+   → 방문 이력 전체를 쓰되, 보고 대상이 아닌 데모 운영 기록만 뺀다. */
+function isNcareVisit(r){
   if(!r || !r.hosp || !rowDate(r)) return false;
-  if(String(r.gubun||'').trim()!=='점검') return false;      /* 일반 A/S 방문 제외 */
-  if(isDemoRecord(r)) return false;                          /* 데모 장비 점검 제외 */
-  var nc=String(r.ncare||'').trim();
-  if(!nc || /미가입/.test(nc)) return false;                 /* N-Care 가입 기록만 */
-  if(EDU_TYPE.test(String(r.type||''))) return false;        /* 교육만 진행한 방문 제외 */
-  return true;
+  return !isDemoRecord(r);          /* 데모 운영 기록은 보고 대상이 아니다 */
 }
 
 /* N-Care 상태 색/이름 — 상세 분석 모드와 보고 모드가 공유.
@@ -1001,19 +992,14 @@ var NCK_ST=[['최근 점검 완료','var(--green)'],['점검 예정','var(--ambe
 /* 오늘 기준 N-Care 정기점검 상태 집계 (기간 필터와 무관 — 두 모드가 같은 함수를 쓴다) */
 function buildNcareStatus(){
   var today=new Date(); today.setHours(0,0,0,0);
-  /* 마지막 점검일: 실제 N-Care 정기점검으로 판별되는 기록만 본다(방문 이력 전체가 아니다) */
-  var visit={};
+  /* 마지막 점검일 = 병원별 마지막 방문일 (데모 운영 기록 제외) · 기록의 ncare 도 확보 */
+  var visit={}, seenNc={};
   RAW.forEach(function(r){
-    if(!isNcareInspection(r)) return;
-    var d=rowDate(r), k=nkey(r.hosp);
-    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:String(r.ncare||'').trim()};
-  });
-  /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다(점검 여부와 무관하게 가입만 본다) */
-  var seenNc={};
-  RAW.forEach(function(r){
-    if(!r.hosp || isDemoRecord(r)) return;
-    var nc=String(r.ncare||'').trim();
-    if(nc && !/미가입/.test(nc)) seenNc[nkey(r.hosp)]={name:r.hosp, ncare:nc};
+    if(!isNcareVisit(r)) return;
+    var d=rowDate(r), k=nkey(r.hosp), nc=String(r.ncare||'').trim();
+    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:nc};
+    /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다 */
+    if(nc && !/미가입/.test(nc)) seenNc[k]={name:r.hosp, ncare:nc};
   });
   /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
   var subs={};
