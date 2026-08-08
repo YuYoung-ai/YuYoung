@@ -3438,6 +3438,10 @@ function exCmpNoteNum(G){
 function exCmpNoteText(G){ return exCmpNoteNum(G)+' — '+EX_NOTE_CMP; }
 /* 미평가 대상 표기 — 0곳이면 "미평가 대상 없음" */
 function exUnratedHtml(n){ return n ? '미평가 대상 <b>'+exNum(n)+'곳</b>' : '미평가 대상 없음'; }
+/* 미평가 대상이 없으면 원인 문구를 붙이지 않는다.
+   카드 특이사항과 주간 핵심보고 특이사항이 같은 표시 규칙을 쓴다. */
+function exUnratedNoteText_(n, reason){ return n ? reason : '미평가 대상 없음'; }
+function exUnratedSummaryHtml_(n, reason){ return exUnratedHtml(n)+(n?' — '+esc(reason):''); }
 /* role="button" 을 준 지표(미평가 대상)는 키보드로도 같은 모달을 열 수 있어야 한다 */
 function exKeyOpen(e, fn){
   if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){ e.preventDefault(); fn(); }
@@ -3552,8 +3556,8 @@ function renderExecutiveSummary(x){
   if(remain)     s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
   s.push('N-CARE 비교: 총 <b>'+exNum(G.total)+'건</b>, 고유 병원 <b>'+exNum(G.hosp)+'곳</b>으로 '
     +'중복 처리 기록이 <b>'+exNum(G.dup)+'건</b> 있습니다.');
-  s.push('사용자 교육 관리: '+exUnratedHtml(K.unratedCount)+' — '+EX_NOTE_SKILL);
-  s.push('노즐 재사용: '+exUnratedHtml(U.unrated)+' — '+EX_NOTE_NOZ);
+  s.push('사용자 교육 관리: '+exUnratedSummaryHtml_(K.unratedCount, EX_NOTE_SKILL));
+  s.push('노즐 재사용: '+exUnratedSummaryHtml_(U.unrated, EX_NOTE_NOZ));
   if(!x.rows.length)  s=['선택한 조건에 해당하는 데이터가 없습니다.'];
   document.getElementById('exSummaryCard').innerHTML=
     exH3('특이사항', per+' · 사실 기반')
@@ -3705,7 +3709,8 @@ function renderExecutiveActions(x){
           }).join('')+'</div>'
         : '<div class="ex-empty">미평가 대상 없음</div>')
       +(K.unratedCount>5 ? '<button type="button" class="ex-more" onclick="exShowSkillUnrated()">전체 명단 보기 ('+K.unratedCount+')</button>' : '')
-      +exNote(esc(EX_NOTE_SKILL), EX_NOTE_SKILL)
+      +exNote(esc(exUnratedNoteText_(K.unratedCount, EX_NOTE_SKILL)),
+              exUnratedNoteText_(K.unratedCount, EX_NOTE_SKILL))
     +'</div>';
 
   /* ── 노즐 재사용 (선택 기간 방문 병원 기준) ── */
@@ -3754,7 +3759,8 @@ function renderExecutiveActions(x){
          : '<div class="ex-empty">미평가 대상 없음</div>')
        +(U.unrated>5 ? '<button type="button" class="ex-more" onclick="exShowNozUnrated()">전체 명단 보기 ('+U.unrated+')</button>' : '')
       : '<div class="ex-empty">통계 모듈 로드 실패</div>')
-    +exNote(esc(EX_NOTE_NOZ), EX_NOTE_NOZ)
+    +exNote(esc(exUnratedNoteText_(U.unrated, EX_NOTE_NOZ)),
+            exUnratedNoteText_(U.unrated, EX_NOTE_NOZ))
     +'</div>';
 }
 function exShowNck(){
