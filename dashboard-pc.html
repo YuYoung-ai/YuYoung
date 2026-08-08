@@ -958,17 +958,20 @@ function enrichNcare(){
 function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 
 /* ══════ 데모 운영 기록 판정 (모든 집계가 이 함수 하나만 쓴다) ══════
-   실제 저장값 확인 결과, 데모 여부를 담는 별도 열은 없다.
-   handover.html 의 "장비 구분" select 가 "데모 장비" 일 때 내용(detail) 맨 앞에
-   `[데모장비]` 표식 줄을 붙여 저장하며(handover.html 의 payload.detail),
-   handover_gas.gs 도 같은 표식으로 "데모 장비 / 병원 장비"를 되읽는다.
-   → 대괄호 표식만 인정한다. 병원명이나 설명에 "데모" 라는 낱말이 들어 있다는
-     이유만으로는 절대 제외하지 않는다(표식이 없으면 고객 서비스).
-   대괄호 안팎의 공백 차이만 허용하도록 정규화한다. */
+   두 가지 신호 중 하나라도 걸리면 데모 운영으로 본다.
+     ① 병원명에 "데모" 포함 — 데모 장비를 두고 운영하는 곳이라 방문 자체가 데모 업무다.
+     ② 내용(detail)의 `[데모장비]` 표식 — handover.html 의 "장비 구분" select 가
+        "데모 장비" 일 때 내용 맨 앞에 붙여 저장하고, handover_gas.gs 도 같은 표식으로
+        "데모 장비 / 병원 장비" 를 되읽는다. 병원명이 평범한 곳에서 진행한 데모 업무를
+        놓치지 않으려면 ①만으로는 부족하다.
+   ①은 병원명, ②는 내용만 본다. 내용에 "데모" 라는 낱말이 스쳐 지나갔다는 이유만으로는
+   제외하지 않는다(대괄호 표식이어야 한다). 대괄호 안팎의 공백 차이는 허용한다. */
 var DEMO_MARK=/\[\s*데모\s*장비\s*\]/;
+var DEMO_HOSP=/데모/;
+function isDemoHospital(name){ return DEMO_HOSP.test(String(name||'')); }
 function isDemoRecord(r){
   if(!r) return false;
-  return DEMO_MARK.test(String(r.detail||''));
+  return isDemoHospital(r.hosp) || DEMO_MARK.test(String(r.detail||''));
 }
 /* 보고 범위 — 'customer'(고객 서비스) | 'demo'(데모 운영) */
 function recScope(r){ return isDemoRecord(r) ? 'demo' : 'customer'; }
@@ -1015,6 +1018,7 @@ function buildNcareStatus(){
   /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
   var subs={};
   HOSPDB.forEach(function(h){
+    if(isDemoHospital(h.n)) return;                 /* 데모 병원은 보고 대상이 아니라 모집단에서도 뺀다 */
     var nc=String(h.ncare||'').trim();
     if(nc && !/미가입/.test(nc)) subs[nkey(h.n)]={name:h.n, ncare:nc};
   });
