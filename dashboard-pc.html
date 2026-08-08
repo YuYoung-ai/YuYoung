@@ -983,7 +983,9 @@ function recScope(r){ return isDemoRecord(r) ? 'demo' : 'customer'; }
    → 방문 이력 전체를 쓰되, 보고 대상이 아닌 데모 운영 기록만 뺀다. */
 function isNcareVisit(r){
   if(!r || !r.hosp || !rowDate(r)) return false;
-  return !isDemoRecord(r);          /* 데모 운영 기록은 보고 대상이 아니다 */
+  /* 점검 대상은 N-Care 가입 병원과 데모 장비 둘 다지만, 점검 현황 파악은 N-Care 만 한다.
+     데모 장비 점검은 별도 운영이라 이 집계(와 보고 모드 전체)에서 뺀다. */
+  return !isDemoRecord(r);
 }
 
 /* N-Care 상태 색/이름 — 상세 분석 모드와 보고 모드가 공유.
@@ -1001,10 +1003,11 @@ function buildNcareStatus(){
     /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다 */
     if(nc && !/미가입/.test(nc)) seenNc[k]={name:r.hosp, ncare:nc};
   });
-  /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
+  /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반.
+     병원정보DB에는 데모가 등재되지 않으므로 여기서 데모를 따로 거를 필요가 없다.
+     (기록 기반 대체 경로는 위 seenNc 에서 이미 데모를 뺀다) */
   var subs={};
   HOSPDB.forEach(function(h){
-    if(isDemoHospital(h.n)) return;                 /* 데모 병원은 보고 대상이 아니라 모집단에서도 뺀다 */
     var nc=String(h.ncare||'').trim();
     if(nc && !/미가입/.test(nc)) subs[nkey(h.n)]={name:h.n, ncare:nc};
   });
@@ -3467,7 +3470,7 @@ function renderExecutiveActions(x){
   /* ── N-CARE 점검 현황 (전체 가입 병원 기준 · 오늘 현황) ── */
   var S=x.ncare, ST=NCK_ST;
   document.getElementById('exNckCard').innerHTML=
-    exH3('N-CARE 점검 현황', '전체 가입 병원 기준 · 오늘 현황', true)
+    exH3('N-CARE 점검 현황', '전체 가입 병원 기준 · 오늘 현황', true)   /* 데모 장비 점검은 별도 운영 · 현황 집계 대상 아님 */
     +'<div class="ex-cbody">'
     +(S.list.length
       ? '<div class="ex-rate"><b>잔여 점검 '+exNum(S.remain)+'곳</b><span>전체 가입 '+S.list.length+'곳 · 최근 점검 완료 '+S.cnt[0]+'곳</span></div>'
