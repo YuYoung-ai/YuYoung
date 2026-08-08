@@ -950,25 +950,19 @@ function buildNcareStatus(){
     return {hosp:subs[k].name, ncare:subs[k].ncare, days:days, last:vz.last, si:si};
   });
   var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
-  var pend=list.filter(function(x){return x.si>0;});
-  /* 상세 분석 모드(기존 카드) 정렬 — 미점검을 맨 뒤로, 그 외는 경과일 긴 순 */
-  var needLegacy=pend.slice().sort(function(a,b){
-    if(a.si===4&&b.si!==4) return 1;
-    if(b.si===4&&a.si!==4) return -1;
-    return (b.days||0)-(a.days||0);
-  });
-  /* 보고 모드 우선 조치 순서 — 방문 기록 없음 → 경고 → 권고 → 점검대상 → 경과일 긴 순 */
+  /* 우선 조치 순서 — 방문 기록 없음 → 경고 → 권고 → 점검대상 → 경과일 긴 순.
+     보고 모드와 상세 분석 모드가 같은 순서를 쓴다. */
   var ORD=[0,1,2,3,9];   /* si(정상/점검대상/권고/경고/미점검) → 우선순위(클수록 먼저) */
-  var need=pend.slice().sort(function(a,b){
+  var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
     if(ORD[a.si]!==ORD[b.si]) return ORD[b.si]-ORD[a.si];
     return (b.days||0)-(a.days||0);
   });
-  return {list:list, cnt:cnt, need:need, needLegacy:needLegacy,
+  return {list:list, cnt:cnt, need:need,
           rate: list.length?Math.round(cnt[0]/list.length*100):0};
 }
 function ncareCheck(){
   var S=buildNcareStatus(), ST=NCK_ST;
-  var list=S.list, cnt=S.cnt, need=S.needLegacy, rate=S.rate;
+  var list=S.list, cnt=S.cnt, need=S.need, rate=S.rate;
   var el=document.getElementById('cNck'); if(!el) return;
   if(!list.length){
     document.getElementById('tNck').textContent='가입 병원 0'+(HOSPDB.length?' · 병원정보DB 연동':'');
