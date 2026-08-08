@@ -382,8 +382,21 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-skhd em{font-style:normal;font-size:10.5px;color:var(--text-muted);min-width:0;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 
+/* 특이사항 — 카드 하단의 구분된 한 줄 영역.
+   문장이 길면 말줄임하고 전체 내용은 title 속성(또는 전체 명단 모달)에서 확인한다. */
+.ex-note{flex:0 0 auto;display:flex;align-items:baseline;gap:6px;min-width:0;
+  margin-top:7px;padding-top:6px;border-top:1px solid var(--gray-line);font-size:11px;color:var(--text-muted)}
+.ex-note>b{flex:0 0 auto;color:var(--navy);font-weight:700}
+.ex-note>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ex-note em{font-style:normal;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+/* 눌러서 전체 명단을 여는 지표(미평가 대상) */
+.ex-skf.click,.ex-tile.click{cursor:pointer}
+.ex-skf.click:hover,.ex-tile.click:hover{background:var(--gray-bg)}
+.ex-skf.warn b,.ex-tile.warn b{color:#9A5A0F}
+
 /* 소형 지표 타일 · 요약 */
 .ex-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:0 0 auto}
+.ex-tiles.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .ex-tile{border:1px solid var(--gray-line);border-radius:9px;padding:8px 6px;text-align:center;background:var(--surface-2);min-width:0}
 .ex-tile span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -442,6 +455,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   .ex-kpi{padding:7px 10px 8px}
   .ex-card{padding:7px 10px 8px}
   .ex-tile b{font-size:17px}
+  .ex-skf b{font-size:17px}
+  .ex-sumlist{font-size:12px;line-height:1.5;gap:4px 14px}
+  .ex-note{margin-top:5px;padding-top:5px}
 }
 /* 좁은 보기 — 한 화면 고정을 풀고 세로 스크롤 레이아웃으로 바꾼다.
    body.ex-narrow 는 (뷰포트 ≤900px) 이거나 (Window/Mobile 토글이 Mobile) 일 때 붙는다.
@@ -1262,6 +1278,12 @@ function activeCnt(){
    반복 발생 30일 조회가 선택 기간 밖(전월·전주)까지 볼 수 있어야 하기 때문이다.
    연/월/분기를 빼지 않으면 8월 칩이 켜진 상태에서 7월 비교 데이터가 통째로 사라진다. */
 function filtered(opt){
+  return hospStateFilter_(filteredRows_(opt));
+}
+/* 행 단위 필터만 적용한 결과 (병원 상태 필터는 붙이지 않는다).
+   집계 대상 기간을 따로 자른 뒤 그 기간 기록만으로 병원 상태를 판정하려면
+   자르기 전에 상태 필터가 걸려서는 안 되므로 두 단계를 분리해 둔다. */
+function filteredRows_(opt){
   var noPeriod=!!(opt&&opt.noPeriod);
   /* opt.scope 를 주면 F.scope 대신 그 범위를 강제한다. 보고 모드는 항상 'customer' 로 부른다. */
   var scope=(opt&&opt.scope) ? [opt.scope] : F.scope;
@@ -1291,7 +1313,21 @@ function filtered(opt){
     if(F.hospQ && String(r.hosp||'').replace(/\s+/g,'').toLowerCase().indexOf(F.hospQ)<0) return false;
     return true;
   });
-  return hospStateFilter_(base);
+  return base;
+}
+/* ── 집계 대상 기간을 직접 지정한 보고 모드 모집단 ──
+   이전 동일 기간 · 최근 8주 추이 · 반복 발생처럼 선택 기간 밖을 봐야 하는 계산은
+   "그 계산이 실제로 보는 구간"으로만 잘라서 쓴다. 자른 뒤에 병원 상태(노즐 재사용·
+   사용자 숙련도)를 판정하므로 아직 오지 않은 미래 기록이 과거 구간의 병원 상태를
+   바꾸지 못한다(예: 다음 달 노즐 "O" 기록으로 지난달이 재사용 병원이 되는 문제). */
+function exWindowRows(a, b){
+  return hospStateFilter_(filteredRows_({noPeriod:true, scope:'customer'}).filter(function(r){
+    var d=rowDate(r);
+    if(!d) return false;
+    if(a && d<a) return false;
+    if(b && d>b) return false;
+    return true;
+  }));
 }
 
 /* ── 병원 상태 필터 (노즐 재사용 · 사용자 숙련도) ──
@@ -1465,6 +1501,35 @@ function buildNozzleStatusMap(rows){
   Object.keys(m).forEach(function(k){ out[k]= m[k].o ? 'reuse' : (m[k].x ? 'noreuse' : 'unknown'); });
   return out;
 }
+/* ── 노즐 재사용 미평가 대상 (방문 병원 = 확인 완료 + 미평가) ──
+   기존 재사용률·재사용 병원 명단은 Statistics.build() 결과를 그대로 두고,
+   여기서는 "O·X 가 하나도 없어 판단할 수 없는 병원"만 따로 뽑는다(계산식 변경 없음).
+   병원명 정규화(skNorm_)와 N-Care 가입 판정(nzNcare_)은 Statistics.build() 와 같은 기준이라
+   visited = joined.total + nonJoined.total, done = 확인 완료 로 항상 맞아떨어진다.
+     visited   : 방문 병원 수(병원명이 있는 고유 병원)
+     done      : 확인 완료 병원 수(재사용 또는 미재사용으로 판정된 병원)
+     joined    : 미평가 대상 중 N-Care 가입 병원 명단(가나다순)
+     nonJoined : 미평가 대상 중 미가입 병원 명단(가나다순)
+     unrated   : 미평가 대상 병원 수 = 두 명단 길이의 합(뺄셈이 아니라 명단 기준) */
+function buildNozzleUnrated(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    var name=String(r.hosp||'').trim(); if(!name) return;
+    var k=skNorm_(name);
+    var rec=m[k]||(m[k]={name:name, joined:false, o:false, x:false});
+    if(nzNcare_(r.ncare)==='가입') rec.joined=true;          /* 한 번이라도 가입 → 가입 */
+    var v=String(r.nozzleReuse||'').trim().toUpperCase();
+    if(v==='O') rec.o=true; else if(v==='X') rec.x=true;
+  });
+  var visited=0, done=0, uj=[], un=[];
+  Object.keys(m).forEach(function(k){
+    var rec=m[k]; visited++;
+    if(rec.o||rec.x) done++;                                  /* 재사용(O) 또는 미재사용(X 만) */
+    else (rec.joined?uj:un).push(rec.name);                   /* O·X 둘 다 없음 → 미평가 대상 */
+  });
+  uj.sort(skCmpKo_); un.sort(skCmpKo_);
+  return {visited:visited, done:done, unrated:uj.length+un.length, joined:uj, nonJoined:un};
+}
 function nozzleStats(rows){
   var box=document.getElementById('cNoz'); if(!box) return;
   var nz=buildNozzleData(rows);
@@ -1496,18 +1561,22 @@ function skGroupHtml_(title, g){
 /* 숙련도 판정 집계 — 판정 기준(NS 충진 X / 충진량 부족 / 젯 분사 "교육" 포함)은 그대로 두고
    상세 분석 모드와 보고 모드가 같은 결과를 쓰도록 계산만 분리했다.
    사용자 숙련도 필터와 보고 모드 "사용자 교육 관리" 카드는 이 함수 하나의 결과를 함께 쓴다.
-     status     : 정규화 병원명 → 'good'(평가 양호) | 'need'(교육 필요) | 'none'(미평가)
-     evaluated  : 평가 병원 수(세 항목 중 하나 이상 값이 있는 병원, 중복 제거)
-     needCount  : 교육 필요 병원 수(중복 제거 · 여러 항목 미흡이어도 1곳)
-     rate       : 미흡률(%) = needCount / evaluated * 100 · 평가 병원 0곳이면 null
-     need       : 교육 보완 필요 병원 명단(항목별 미흡 사유 포함) */
+     status      : 정규화 병원명 → 'good'(평가 양호) | 'need'(교육 필요) | 'none'(미평가)
+     visited     : 방문 병원 수(선택 기간·현재 필터에 포함된 고유 병원 수)
+     evaluated   : 평가 병원 수(세 항목 중 하나 이상 값이 있는 병원, 중복 제거)
+     unrated     : 미평가 대상 병원 명단(방문했으나 평가값이 전혀 없는 병원 · 가나다순)
+     unratedCount: 미평가 대상 병원 수 — 뺄셈이 아니라 명단 길이라 수치와 명단이 항상 같다
+     needCount   : 교육 필요 병원 수(중복 제거 · 여러 항목 미흡이어도 1곳)
+     rate        : 미흡률(%) = needCount / evaluated * 100 · 평가 병원 0곳이면 null
+     need        : 교육 보완 필요 병원 명단(항목별 미흡 사유 포함)
+   관계: visited = evaluated + unratedCount (seen 에서 map 이 있는 병원만 평가 병원이므로 항상 성립) */
 function buildSkillData(rows){
   /* 1) 병원별 최신 방문 평가값 수집 (선택 기간 내 최신 방문만) */
   var map={}, seen={};
   (rows||[]).forEach(function(r){
     var name=String(r.hosp||'').trim(); if(!name) return;
     var k=skNorm_(name);
-    seen[k]=1;                                       /* 평가 유무와 무관하게 등장한 병원 */
+    if(!seen[k]) seen[k]=name;                       /* 평가 유무와 무관하게 등장한 병원(표시용 이름 보관) */
     var f=String(r.nsFill||'').trim(), a=String(r.nsAmt||'').trim(), t=String(r.jet||'').trim();
     if(!f && !a && !t) return;                       /* 평가 없는 행은 제외 */
     var key=(r._y||0)*10000+(r._m||0)*100+(r._d||0);  /* boot()에서 계산된 연/월/일 */
@@ -1540,12 +1609,18 @@ function buildSkillData(rows){
     return b.items.length-a.items.length || skCmpKo_(a.name,b.name);
   });
   /* 4) 병원별 평가 상태 · 평가 병원 수 · 미흡률 — 필터와 카드가 반드시 같은 값을 쓰도록 여기서만 만든다 */
-  var status={};
-  Object.keys(seen).forEach(function(k){ status[k]= map[k] ? 'good' : 'none'; });
+  var status={}, unrated=[];
+  Object.keys(seen).forEach(function(k){
+    if(map[k]){ status[k]='good'; return; }
+    status[k]='none';
+    unrated.push(seen[k]);                           /* 미평가 대상은 상태 맵에서 실제 명단으로 뽑는다 */
+  });
   Object.keys(per).forEach(function(k){ status[k]='need'; });
+  unrated.sort(skCmpKo_);
   var evaluated=recs.length, needCount=need.length;
   return {recs:recs, gFill:gFill, gAmt:gAmt, gJet:gJet, need:need, badCount:needCount,
-          status:status, evaluated:evaluated, needCount:needCount,
+          status:status, visited:Object.keys(seen).length, evaluated:evaluated, needCount:needCount,
+          unrated:unrated, unratedCount:unrated.length,
           rate: evaluated>0 ? Math.round(needCount/evaluated*1000)/10 : null};
 }
 /* 미흡률 표기 — 평가 병원이 0곳이면 "-" */
@@ -1604,18 +1679,27 @@ function renderCmpBreakdown(rows, dim){
   }).join('')+'</div>';
 }
 
-/* N-Care 가입/미가입 비교 집계 — 상세 분석 모드와 보고 모드가 공유 */
+/* N-Care 가입/미가입 비교 집계 — 상세 분석 모드와 보고 모드가 공유
+   두 가지 서로 다른 기준이 한 표에 함께 나오므로 그 차이도 여기서 같이 계산한다.
+     total : 전체 처리 건수 = 현재 필터가 적용된 행 수(방문·장비별 작성 기록 1건 = 1행)
+     hosp  : 고유 병원 수  = 병원명 정규화(nkey) 후 중복 제거 · 병원명이 없는 기록은 제외
+     dup   : 중복 처리 기록 = total − hosp (음수가 되지 않도록 0에서 끊는다)
+   카드 특이사항과 주간 핵심보고 특이사항이 이 값 하나만 함께 쓴다(중복 계산 없음). */
 function buildNcareCompare(rows){
-  var G={nc:{h:{},voc:0,insp:0,free:0,tot:0}, mg:{h:{},voc:0,insp:0,free:0,tot:0}};
+  var G={nc:{h:{},voc:0,insp:0,free:0,tot:0}, mg:{h:{},voc:0,insp:0,free:0,tot:0}}, all={};
   (rows||[]).forEach(function(r){
     var g=G[cmpGroup_(r.ncare)];
-    if(r.hosp) g.h[nkey(r.hosp)]=1;
+    var k=r.hosp?nkey(r.hosp):'';
+    if(k){ g.h[k]=1; all[k]=1; }
     if(String(r.gubun||'').trim()==='점검') g.insp++; else g.voc++;
     g.tot++;
     if(/무상/.test(String(r.paid||''))) g.free++;
   });
   G.nc.hosp=Object.keys(G.nc.h).length;
   G.mg.hosp=Object.keys(G.mg.h).length;
+  G.total=(rows||[]).length;
+  G.hosp=Object.keys(all).length;
+  G.dup=Math.max(0, G.total-G.hosp);
   return G;
 }
 function renderMemberCompare(rows){
@@ -3154,9 +3238,10 @@ function buildComparisonPeriod(){
 }
 function exPrevRows(cp){
   if(!cp) return null;
-  var a=new Date(cp.from+'T00:00:00'), b=new Date(cp.to+'T23:59:59');
-  /* 이전 기간 모집단도 보고 모드와 같은 범위(고객 서비스)여야 비교가 성립한다 */
-  return filtered({noPeriod:true, scope:'customer'}).filter(function(r){ var d=rowDate(r); return d && d>=a && d<=b; });
+  /* 이전 기간 모집단도 보고 모드와 같은 범위(고객 서비스)여야 비교가 성립한다.
+     병원 상태(노즐·숙련도)는 이전 기간 기록만으로 판정한다 — 그 시점에 아직 없던
+     기록으로 과거 병원 상태가 바뀌면 비교 자체가 성립하지 않는다. */
+  return exWindowRows(new Date(cp.from+'T00:00:00'), new Date(cp.to+'T23:59:59'));
 }
 
 /* ══════ 보고 모드 집계 ══════ */
@@ -3203,7 +3288,10 @@ function exDimCompare(rows, prev, key, onlyAS){
 function buildWeekTrend(){
   var base=F.to?new Date(F.to+'T00:00:00'):exToday();
   var endMon=monday(base), m={};
-  filtered({noPeriod:true, scope:'customer'}).forEach(function(r){
+  /* 모집단은 화면에 그리는 8주(마지막 주 일요일까지)로 자른다.
+     막대 값은 종전과 같고(원래도 이 구간만 읽었다), 병원 상태만 이 구간 기록으로 판정된다. */
+  var winA=addD(endMon,-7*7), winB=addD(endMon,6); winB.setHours(23,59,59,999);
+  exWindowRows(winA, winB).forEach(function(r){
     var d=rowDate(r); if(!d) return;
     var w=d.getDay(); if(w===0||w===6) return;        /* 보고 기준과 동일하게 월~금만 집계 */
     var k=ymd(monday(d)); m[k]=(m[k]||0)+1;
@@ -3245,8 +3333,12 @@ function repeatEvents_(rows){
 }
 function buildRepeatIssues(rows){
   var DAY=86400000, LOOK=30*DAY;
-  /* 1) 판정 대상 추출 + 2) 중복 제거 — 모집단은 기간 필터만 뺀 전체(직전 30일까지 봐야 한다) */
-  var pop=repeatEvents_(filtered({noPeriod:true, scope:'customer'})), popDays={};
+  /* 1) 판정 대상 추출 + 2) 중복 제거 — 모집단은 "선택 기간 시작 30일 전 ~ 선택 기간 종료"다.
+     재발 판정은 선택 기간 안의 발생일보다 앞선 30일만 참조하므로 값은 종전과 같고,
+     선택 기간 이후(미래) 기록이 병원 상태 판정에 끼어드는 경로만 막는다. */
+  var lookA=F.from?addD(new Date(F.from+'T00:00:00'),-30):null;
+  var lookB=F.to?new Date(F.to+'T23:59:59'):null;
+  var pop=repeatEvents_(exWindowRows(lookA, lookB)), popDays={};
   /* 3) 서로 다른 발생일 정렬 */
   Object.keys(pop).forEach(function(k){
     popDays[k]=Object.keys(pop[k].days).map(Number).sort(function(a,b){ return a-b; });
@@ -3283,6 +3375,7 @@ function exBuild(rows){
     ncare:buildNcareStatus(),
     skill:buildSkillData(rows),
     noz:buildNozzleData(rows),
+    nozUn:buildNozzleUnrated(rows),
     cmpNc:buildNcareCompare(rows)
   };
   return EX_CACHE;
@@ -3331,6 +3424,28 @@ function exBars(items, opt){
     +'</div>';
   }).join('')+'</div>';
 }
+/* ── 특이사항 ──
+   카드 하단의 구분된 한 줄 영역. 문장이 길면 말줄임되고 전체 내용은 title 속성에서 읽는다.
+   같은 문구를 주간 핵심보고 "특이사항" 카드가 그대로 다시 쓴다(문구·수치를 한 곳에서만 만든다). */
+var EX_NOTE_CMP='처리 건수는 방문·장비별 작성 기록 기준이며, 병원 수는 병원명을 중복 제거한 고유 병원 기준입니다. '
+  +'동일 병원 재방문 또는 장비별 복수 작성으로 두 수치는 다를 수 있습니다.';
+var EX_NOTE_SKILL='담당자 불분명, 부재로 확인 불가';
+var EX_NOTE_NOZ='재사용 판단 불분명';
+/* N-CARE 비교 수치 요약 — "건"(처리 기록)과 "곳"(고유 병원)을 명확히 구분해 적는다 */
+function exCmpNoteNum(G){
+  return '총 '+exNum(G.total)+'건 / 고유 병원 '+exNum(G.hosp)+'곳 / 중복 처리 기록 '+exNum(G.dup)+'건';
+}
+function exCmpNoteText(G){ return exCmpNoteNum(G)+' — '+EX_NOTE_CMP; }
+/* 미평가 대상 표기 — 0곳이면 "미평가 대상 없음" */
+function exUnratedHtml(n){ return n ? '미평가 대상 <b>'+exNum(n)+'곳</b>' : '미평가 대상 없음'; }
+/* role="button" 을 준 지표(미평가 대상)는 키보드로도 같은 모달을 열 수 있어야 한다 */
+function exKeyOpen(e, fn){
+  if(e.key==='Enter'||e.key===' '||e.key==='Spacebar'){ e.preventDefault(); fn(); }
+}
+function exNote(html, plain){
+  return '<div class="ex-note" title="'+esc(plain)+'"><b>특이사항</b><span>'+html+'</span></div>';
+}
+
 /* 전체 명단 모달 */
 function openExList(title, sub, html){
   document.getElementById('exListTitle').textContent=title;
@@ -3419,7 +3534,10 @@ function renderExecutiveSummary(x){
       +'<div class="ex-tile"><span>N-CARE 점검 운영률</span><b>'+(nck.list.length?nck.rate+'%':'–')+'</b></div>'
     +'</div></div>';
 
-  /* ── 자동 요약 (사실 기반 문장만) ── */
+  /* ── 특이사항 (사실 기반 문장만) ──
+     N-CARE 처리 건수·고유 병원 차이, 사용자 교육 미평가 대상, 노즐 재사용 미평가 대상은
+     각 카드가 쓰는 집계(x.cmpNc · x.skill · x.nozUn)를 그대로 재사용한다 — 여기서 다시 세지 않는다. */
+  var G=x.cmpNc, K=x.skill, U=x.nozUn;
   var s=[];
   if(!x.prev) s.push('이전 동일 기간 비교 데이터 없음 — 증감은 표시하지 않습니다.');
   else{
@@ -3429,12 +3547,16 @@ function renderExecutiveSummary(x){
                  : lb+'와 A/S 건수가 <b>동일</b>합니다.');
     if(up.length) s.push('<b>'+esc(up[0].k)+'</b> 유형이 '+lb+' 대비 <b class="ex-up">'+up[0].d+'건 증가</b>했습니다.');
   }
-  if(x.skill.badCount) s.push('교육이 필요한 병원이 <b>'+x.skill.badCount+'곳</b> 확인됐습니다.');
-  if(nozReuse)        s.push('노즐을 재사용한 병원이 <b>'+nozReuse+'곳</b>입니다.');
-  if(remain)          s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
+  if(K.badCount) s.push('교육이 필요한 병원이 <b>'+K.badCount+'곳</b> 확인됐습니다.');
+  if(nozReuse)   s.push('노즐을 재사용한 병원이 <b>'+nozReuse+'곳</b>입니다.');
+  if(remain)     s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
+  s.push('N-CARE 비교: 총 <b>'+exNum(G.total)+'건</b>, 고유 병원 <b>'+exNum(G.hosp)+'곳</b>으로 '
+    +'중복 처리 기록이 <b>'+exNum(G.dup)+'건</b> 있습니다.');
+  s.push('사용자 교육 관리: '+exUnratedHtml(K.unratedCount)+' — '+EX_NOTE_SKILL);
+  s.push('노즐 재사용: '+exUnratedHtml(U.unrated)+' — '+EX_NOTE_NOZ);
   if(!x.rows.length)  s=['선택한 조건에 해당하는 데이터가 없습니다.'];
   document.getElementById('exSummaryCard').innerHTML=
-    exH3('자동 요약', per+' · 사실 기반')
+    exH3('특이사항', per+' · 사실 기반')
     +'<ul class="ex-sumlist">'+s.map(function(t){ return '<li>· '+t+'</li>'; }).join('')+'</ul>';
 }
 
@@ -3490,6 +3612,8 @@ function renderExecutiveCause(x){
             return '<tr><td>'+d[0]+'</td><td class="ex-nc">'+d[1]+'</td><td class="ex-mg">'+d[2]+'</td></tr>';
           }).join('')+'</tbody></table>'
         : '<div class="ex-empty">표시할 데이터가 없습니다</div>')
+      /* 표에 "건"(처리 기록)과 "곳"(고유 병원)이 함께 나오므로 두 기준의 차이를 한 줄로 밝힌다 */
+      +exNote('<em>'+exCmpNoteNum(G)+'</em> — '+esc(EX_NOTE_CMP), exCmpNoteText(G))
     +'</div>';
 }
 function exShowRepeat(){
@@ -3539,18 +3663,26 @@ function renderExecutiveActions(x){
     +'</div>';
 
   /* ── 사용자 교육 관리 (선택 기간 내 최신 평가 기준) ──
-     평가 병원 수 · 교육 필요 병원 수 · 미흡률 · 교육 보완 필요 병원 명단을
-     buildSkillData() 한 곳의 결과로만 그린다(필터와도 같은 값). */
+     방문 병원 = 평가 병원 + 미평가 대상 관계와 교육 필요 · 미흡률 · 두 명단을
+     buildSkillData() 한 곳의 결과로만 그린다(필터·모달과도 같은 값). */
   var K=x.skill, kRate=skRateTxt_(K);
   document.getElementById('exSkillCard').innerHTML=
     exH3('사용자 교육 관리', '병원별 최신 평가 기준 · '+per)
     +'<div class="ex-cbody">'
+      /* 방문 병원 70곳 = 평가 병원 23곳 + 미평가 대상 47곳 이 한 줄로 읽히게 둔다 */
       +'<div class="ex-skflow">'
-        +'<div class="ex-skf"><span>평가 병원</span><b>'+exNum(K.evaluated)+'<u>곳</u></b></div>'
-        +'<i class="ex-skar">›</i>'
-        +'<div class="ex-skf need"><span>교육 필요</span><b>'+exNum(K.needCount)+'<u>곳</u></b></div>'
+        +'<div class="ex-skf"><span>방문 병원</span><b>'+exNum(K.visited)+'<u>곳</u></b></div>'
         +'<i class="ex-skar">=</i>'
-        +'<div class="ex-skf rate"><span>미흡률</span><b>'+kRate+'</b></div>'
+        +'<div class="ex-skf"><span>평가 병원</span><b>'+exNum(K.evaluated)+'<u>곳</u></b></div>'
+        +'<i class="ex-skar">+</i>'
+        +'<div class="ex-skf warn'+(K.unratedCount?' click':'')+'"'
+          +(K.unratedCount?' role="button" tabindex="0" title="미평가 대상 전체 명단 보기"'
+              +' onclick="exShowSkillUnrated()" onkeydown="exKeyOpen(event, exShowSkillUnrated)"':'')
+          +'><span>미평가 대상</span><b>'+exNum(K.unratedCount)+'<u>곳</u></b></div>'
+      +'</div>'
+      +'<div class="ex-tiles c2" style="margin-bottom:7px">'
+        +'<div class="ex-tile"><span>교육 필요</span><b>'+exNum(K.needCount)+'</b></div>'
+        +'<div class="ex-tile"><span>미흡률</span><b>'+kRate+'</b></div>'
       +'</div>'
       +'<div class="ex-skhd"><span>교육 보완 필요 병원</span>'
         +'<em>NS 충진 '+K.gFill.bad+' · 충진량 부족 '+K.gAmt.bad+' · 젯 분사 교육 '+K.gJet.bad+'</em></div>'
@@ -3563,6 +3695,17 @@ function renderExecutiveActions(x){
              }).join('')+'</div>'
            : '<div class="ex-empty">교육이 필요한 병원 없음</div>'))
       +(K.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowSkill()">전체 명단 보기 ('+K.needCount+')</button>' : '')
+      /* 미평가 대상 명단 — 수치와 같은 배열을 그대로 쓴다(뺄셈으로 만든 숫자가 아니다) */
+      +'<div class="ex-skhd"><span>미평가 대상 병원</span>'
+        +'<em>NS 충진 · 충진량 · 젯 분사 평가값 없음</em></div>'
+      +(K.unratedCount
+        ? '<div class="ex-rows">'+K.unrated.slice(0,5).map(function(nm){
+            return '<div class="ex-li"><span class="nm" title="'+esc(nm)+'">'+esc(nm)+'</span>'
+              +'<span class="rt">미평가</span></div>';
+          }).join('')+'</div>'
+        : '<div class="ex-empty">미평가 대상 없음</div>')
+      +(K.unratedCount>5 ? '<button type="button" class="ex-more" onclick="exShowSkillUnrated()">전체 명단 보기 ('+K.unratedCount+')</button>' : '')
+      +exNote(esc(EX_NOTE_SKILL), EX_NOTE_SKILL)
     +'</div>';
 
   /* ── 노즐 재사용 (선택 기간 방문 병원 기준) ── */
@@ -3578,11 +3721,21 @@ function renderExecutiveActions(x){
           }).join('')
         : '<div class="ex-li"><span class="nm" style="color:var(--text-muted)">재사용 병원 없음</span><span class="rt"></span></div>');
   }
+  var U=x.nozUn;
   document.getElementById('exNozCard').innerHTML=
     exH3('노즐 재사용', '선택 기간 방문 병원 기준 · '+per)
     +'<div class="ex-cbody">'
     +(nz
-      ? '<div class="ex-tiles" style="margin-bottom:9px">'
+      /* 방문 병원 = 확인 완료(재사용 또는 미재사용) + 미평가 대상 — 아래 재사용률은 종전 계산 그대로다 */
+      ? '<div class="ex-tiles" style="margin-bottom:7px">'
+         +'<div class="ex-tile"><span>방문 병원</span><b>'+exNum(U.visited)+'</b></div>'
+         +'<div class="ex-tile"><span>확인 완료</span><b>'+exNum(U.done)+'</b></div>'
+         +'<div class="ex-tile warn'+(U.unrated?' click':'')+'"'
+           +(U.unrated?' role="button" tabindex="0" title="미평가 대상 전체 명단 보기"'
+               +' onclick="exShowNozUnrated()" onkeydown="exKeyOpen(event, exShowNozUnrated)"':'')
+           +'><span>미평가 대상</span><b>'+exNum(U.unrated)+'</b></div>'
+        +'</div>'
+       +'<div class="ex-tiles" style="margin-bottom:9px">'
          +'<div class="ex-tile"><span>N-Care 재사용률</span><b>'+j.percent.toFixed(1)+'%</b></div>'
          +'<div class="ex-tile"><span>미가입 재사용률</span><b>'+n.percent.toFixed(1)+'%</b></div>'
          +'<div class="ex-tile"><span>재사용 병원</span><b>'+reuseTot+'</b></div>'
@@ -3590,7 +3743,18 @@ function renderExecutiveActions(x){
        +'<div class="ex-rows">'+nozList('N-Care', j)+nozList('미가입', n)+'</div>'
        +((j.hospitals.length>5||n.hospitals.length>5)
          ? '<button type="button" class="ex-more" onclick="exShowNoz()">전체 명단 보기 ('+reuseTot+')</button>' : '')
+       /* 미평가 대상 명단 — 가입/미가입을 나눠 보여주고 전체는 모달에서 확인한다 */
+       +'<div class="ex-skhd"><span>미평가 대상 병원</span>'
+         +'<em>N-Care '+U.joined.length+'곳 · 미가입 '+U.nonJoined.length+'곳</em></div>'
+       +(U.unrated
+         ? '<div class="ex-rows">'+U.joined.concat(U.nonJoined).slice(0,5).map(function(nm,i){
+             return '<div class="ex-li"><span class="nm" title="'+esc(nm)+'">'+esc(nm)+'</span>'
+               +'<span class="rt">'+(i<U.joined.length?'N-Care':'미가입')+'</span></div>';
+           }).join('')+'</div>'
+         : '<div class="ex-empty">미평가 대상 없음</div>')
+       +(U.unrated>5 ? '<button type="button" class="ex-more" onclick="exShowNozUnrated()">전체 명단 보기 ('+U.unrated+')</button>' : '')
       : '<div class="ex-empty">통계 모듈 로드 실패</div>')
+    +exNote(esc(EX_NOTE_NOZ), EX_NOTE_NOZ)
     +'</div>';
 }
 function exShowNck(){
@@ -3612,6 +3776,15 @@ function exShowSkill(){
       return esc(h.name)+'<em>'+esc(h.items.join(' · '))+'</em>';
     }));
 }
+/* 미평가 대상 전체 명단 — 카드와 같은 모집단(EX_ROWS)에서 다시 만들어 수치와 명단이 항상 같다 */
+function exShowSkillUnrated(){
+  var K=buildSkillData(EX_ROWS);
+  openExList('사용자 교육 미평가 대상 전체 명단',
+    '선택 기간 방문 병원 중 NS 충진 · 충진량 · 젯 분사 평가값이 하나도 없는 병원 · '+exPeriodLabel()
+      +' · 방문 병원 '+K.visited+'곳 = 평가 병원 '+K.evaluated+'곳 + 미평가 대상 '+K.unratedCount+'곳'
+      +' · 특이사항 · '+EX_NOTE_SKILL,
+    exListGroup('미평가 대상', K.unrated));
+}
 function exShowNoz(){
   var nz=buildNozzleData(EX_ROWS);
   if(!nz) return;
@@ -3619,6 +3792,14 @@ function exShowNoz(){
     '선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 가나다순',
     exListGroup('N-Care 가입', nz.joined.hospitals)
     +exListGroup('미가입', nz.nonJoined.hospitals));
+}
+function exShowNozUnrated(){
+  var U=buildNozzleUnrated(EX_ROWS);
+  openExList('노즐 재사용 미평가 대상 전체 명단',
+    '선택 기간 방문 병원 중 노즐 재사용 값(O · X)이 하나도 없는 병원 · '+exPeriodLabel()
+      +' · 방문 병원 '+U.visited+'곳 = 확인 완료 '+U.done+'곳 + 미평가 대상 '+U.unrated+'곳'
+      +' · 특이사항 · '+EX_NOTE_NOZ,
+    exListGroup('N-Care 가입', U.joined)+exListGroup('미가입', U.nonJoined));
 }
 
 /* 집계 캐시를 버리고 보고 모드만 다시 그린다 (필터 변경이 아닌 데이터 보강용) */
