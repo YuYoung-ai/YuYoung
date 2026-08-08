@@ -3247,7 +3247,110 @@ function exShowRepeat(){
     }));
 }
 
-function renderExecutiveActions(x){}
+/* ══════ 탭 ③ 관리 대상 ══════ */
+function exNckDays(r){
+  return r.last ? (r.days+'일 경과 · '+(r.last.getMonth()+1)+'/'+r.last.getDate()) : '방문 기록 없음';
+}
+function renderExecutiveActions(x){
+  var per=exPeriodLabel();
+
+  /* ── N-Care 점검 관리 (오늘 기준) ── */
+  var S=x.ncare, ST=NCK_ST;
+  document.getElementById('exNckCard').innerHTML=
+    exH3('N-Care 점검 관리', '오늘 기준', true)
+    +'<div class="ex-cbody">'
+    +(S.list.length
+      ? '<div class="ex-rate"><b>정상 점검률 '+S.rate+'%</b><span>30일 이내 점검 '+S.cnt[0]+' / '+S.list.length+'곳</span></div>'
+       +'<div class="ex-ratebar"><i style="width:'+Math.max(2,S.rate)+'%"></i></div>'
+       +'<div class="ex-nckbar">'+ST.map(function(s,i){
+           return '<div style="background:'+s[1]+'"><b>'+S.cnt[i]+'</b>'+s[0]+'</div>';
+         }).join('')+'</div>'
+       +(S.need.length
+         ? '<div class="ex-rows">'+S.need.slice(0,5).map(function(r){
+             return '<div class="ex-li">'
+               +'<span class="nm" title="'+esc(r.hosp)+'"><i class="ex-dot" style="background:'+ST[r.si][1]+'"></i>'
+                 +esc(r.hosp)+'<em>'+esc(ST[r.si][0])+'</em></span>'
+               +'<span class="rt">'+exNckDays(r)+'</span></div>';
+           }).join('')+'</div>'
+         : '<div class="ex-empty">🎉 모든 가입 병원이 30일 이내 점검 완료</div>')
+       +(S.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowNck()">전체 명단 보기 ('+S.need.length+')</button>' : '')
+      : '<div class="ex-empty">N-Care 가입 병원 기록 없음</div>')
+    +'</div>';
+
+  /* ── 교육 필요 병원 (선택 기간 내 최신 평가 기준) ── */
+  var K=x.skill;
+  document.getElementById('exSkillCard').innerHTML=
+    exH3('교육 필요 병원', '선택 기간 내 최신 평가 기준 · '+per)
+    +'<div class="ex-cbody">'
+    +(K.recs.length
+      ? '<div class="ex-tiles" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:9px">'
+         +'<div class="ex-tile"><span>교육 필요</span><b>'+K.badCount+'</b></div>'
+         +'<div class="ex-tile"><span>NS 충진 미흡</span><b>'+K.gFill.bad+'</b></div>'
+         +'<div class="ex-tile"><span>충진량 부족</span><b>'+K.gAmt.bad+'</b></div>'
+         +'<div class="ex-tile"><span>젯 분사 교육</span><b>'+K.gJet.bad+'</b></div>'
+       +'</div>'
+       +(K.need.length
+         ? '<div class="ex-rows">'+K.need.slice(0,5).map(function(h){
+             return '<div class="ex-li"><span class="nm" title="'+esc(h.name)+'">'+esc(h.name)+'</span>'
+               +'<span class="rt">'+esc(h.items.join(' · '))+'</span></div>';
+           }).join('')+'</div>'
+         : '<div class="ex-empty">교육이 필요한 병원 없음</div>')
+       +(K.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowSkill()">전체 명단 보기 ('+K.need.length+')</button>' : '')
+      : '<div class="ex-empty">숙련도 평가 데이터 없음</div>')
+    +'</div>';
+
+  /* ── 노즐 재사용 (선택 기간 방문 병원 기준) ── */
+  var nz=x.noz, j=nz?nz.joined:null, n=nz?nz.nonJoined:null;
+  var reuseTot=nz?(j.reuse+n.reuse):0;
+  function nozList(title, g){
+    return '<div class="ex-li" style="border-bottom:none;padding-bottom:2px">'
+      +'<span class="nm" style="font-weight:700;color:var(--navy)">'+esc(title)+'</span>'
+      +'<span class="rt">'+g.reuse+' / '+g.total+'곳 · <b>'+g.percent.toFixed(1)+'%</b></span></div>'
+      +(g.hospitals.length
+        ? g.hospitals.slice(0,5).map(function(h){
+            return '<div class="ex-li"><span class="nm" title="'+esc(h)+'">· '+esc(h)+'</span><span class="rt"></span></div>';
+          }).join('')
+        : '<div class="ex-li"><span class="nm" style="color:var(--text-muted)">재사용 병원 없음</span><span class="rt"></span></div>');
+  }
+  document.getElementById('exNozCard').innerHTML=
+    exH3('노즐 재사용', '선택 기간 방문 병원 기준 · '+per)
+    +'<div class="ex-cbody">'
+    +(nz
+      ? '<div class="ex-tiles" style="margin-bottom:9px">'
+         +'<div class="ex-tile"><span>N-Care 재사용률</span><b>'+j.percent.toFixed(1)+'%</b></div>'
+         +'<div class="ex-tile"><span>미가입 재사용률</span><b>'+n.percent.toFixed(1)+'%</b></div>'
+         +'<div class="ex-tile"><span>재사용 병원</span><b>'+reuseTot+'</b></div>'
+        +'</div>'
+       +'<div class="ex-rows">'+nozList('N-Care', j)+nozList('미가입', n)+'</div>'
+       +((j.hospitals.length>5||n.hospitals.length>5)
+         ? '<button type="button" class="ex-more" onclick="exShowNoz()">전체 명단 보기 ('+reuseTot+')</button>' : '')
+      : '<div class="ex-empty">통계 모듈 로드 실패</div>')
+    +'</div>';
+}
+function exShowNck(){
+  var S=buildNcareStatus(), ST=NCK_ST;
+  openExList('N-Care 우선 조치 병원 전체 명단',
+    '오늘 기준 · 방문 기록 없음 → 경고 → 권고 → 점검대상 → 경과일이 긴 순',
+    exListGroup('조치 필요', S.need, function(r){
+      return esc(r.hosp)+'<em>'+esc(ST[r.si][0])+' · '+esc(r.ncare)+' · '+exNckDays(r)+'</em>';
+    }));
+}
+function exShowSkill(){
+  var K=buildSkillData(CUR_ROWS);
+  openExList('교육 필요 병원 전체 명단',
+    '선택 기간 내 최신 평가 기준 · '+exPeriodLabel()+' · 미흡 항목이 많은 병원 우선',
+    exListGroup('교육 필요', K.need, function(h){
+      return esc(h.name)+'<em>'+esc(h.items.join(' · '))+'</em>';
+    }));
+}
+function exShowNoz(){
+  var nz=buildNozzleData(CUR_ROWS);
+  if(!nz) return;
+  openExList('노즐 재사용 병원 전체 명단',
+    '선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 가나다순',
+    exListGroup('N-Care 가입', nz.joined.hospitals)
+    +exListGroup('미가입', nz.nonJoined.hospitals));
+}
 
 /* ── 보고 모드 렌더링 진입점 (활성 탭만 그린다) ── */
 function renderExecutiveDashboard(rows){
