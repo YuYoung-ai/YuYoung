@@ -232,6 +232,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-btn.ex-reset{color:var(--red);border-color:#E7C9C5}
 .ex-fspacer{flex:1 1 auto}
 .ex-fcount{font-size:11.5px;font-weight:700;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* 보고 대상 범위 고지 — 보고 모드는 항상 고객 서비스 기준이라 상시 노출한다 */
+.ex-scope{font-size:11px;font-weight:700;color:#1A6B54;background:#E8F4EF;border:1px solid #BFDDD1;
+  border-radius:9px;padding:2px 8px;white-space:nowrap}
 /* 상세 필터 팝오버 */
 .ex-drawer{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:26;background:#fff;
   border:1px solid var(--gray-line);border-radius:10px;padding:12px 14px 14px;
@@ -580,6 +583,7 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <button type="button" class="ex-btn" id="exMoreBtn">⚙ 상세 필터 <b id="exMoreCnt"></b></button>
       <button type="button" class="ex-btn ex-reset" id="exResetBtn">✕ 전체 초기화</button>
       <span class="ex-fspacer"></span>
+      <span class="ex-scope" id="exScopeNote"></span>
       <span class="ex-fcount" id="exFCount"></span>
 
       <!-- 상세 필터 팝오버 — 기존 필터 항목을 그대로 재사용 -->
@@ -679,6 +683,7 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
       <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
       <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>보고 범위 <em class="fnote">데모 운영 데이터 분리 · 기본 전체</em></h5><div class="chips" id="fScope"></div></div>
       <div class="fgroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="fNoz"></div></div>
       <div class="fgroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="fSkill"></div></div>
       <div class="fgroup"><h5>유형</h5>
@@ -769,9 +774,13 @@ var CACHE_KEY='baz_dash_cache';
 var RAW=[];              // 전체 레코드
 /* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
    두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
-var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],hospQ:'',from:'',to:''};
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
 var NOZ_OPT=[['reuse','재사용'],['noreuse','미재사용'],['unknown','미확인']];
 var SKILL_OPT=[['good','평가 양호'],['need','교육 필요'],['none','미평가']];
+/* 보고 범위 — 상세 분석 전용 필터. 기본(빈 배열)은 "전체" 라 기존 데이터가 사라져 보이지 않는다.
+   보고 모드는 이 선택과 무관하게 항상 고객 서비스 기준으로 집계한다. */
+var SCOPE_OPT=[['customer','고객 서비스'],['demo','데모 운영']];
+var EX_BASIS='보고 대상: 고객 서비스 기준 · 데모 관련 데이터 제외';
 
 /* ── 화면 모드 상태 (보고 모드 / 상세 분석 모드는 RAW·F·filtered()를 공유한다) ── */
 var VIEW_KEY='baz_dash_view';
@@ -779,7 +788,8 @@ var VIEW='exec';          /* 'exec'(보고) | 'detail'(상세 분석) */
 var EX_TAB='summary';     /* 'summary' | 'cause' | 'actions' */
 var EX_CMP=true;          /* 이전 동일 기간 비교 표시 여부 */
 var DATA_READY=false;
-var CUR_ROWS=[];          /* 마지막 filtered() 결과 — 모드·탭 전환 시 재필터 방지 */
+var CUR_ROWS=[];          /* 마지막 filtered() 결과(상세 분석 모집단) — 모드·탭 전환 시 재필터 방지 */
+var EX_ROWS=[];           /* 보고 모드 모집단 — 항상 고객 서비스(데모 제외) 기준 */
 var EX_CACHE=null;        /* apply() 1회당 집계 캐시(메모이제이션) */
 var EX_DRAWN={};          /* 이번 apply()에서 이미 그린 탭 */
 var DETAIL_DIRTY=true;    /* 상세 분석 모드 재렌더 필요 여부 */
@@ -917,7 +927,7 @@ function boot(d, fromCache){
   buildFilters(); initCombos(); initExecFilterBar(); apply(); ncareCheck(); loadHospDB();
 }
 
-/* ── N-Care 정기점검 현황 (기준: 30일 정상 / ~60 점검대상 / ~90 권고 / 초과 경고 / 기록없음 미점검) ── */
+/* ── N-CARE 점검 현황 (구간 유지: ~30일 최근 점검 완료 / ~60 점검 예정 / ~90 점검 필요 / 91일~ 우선 점검 / 기록 없음) ── */
 var HOSPDB=[];
 function loadHospDB(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
@@ -946,17 +956,61 @@ function enrichNcare(){
   if(changed){ buildFilters(); apply(); }
 }
 function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
-/* N-Care 상태 색/이름 — 상세 분석 모드와 보고 모드가 공유 */
-var NCK_ST=[['정상','var(--green)'],['점검대상','var(--amber)'],['권고','#E67E22'],['경고','var(--red)'],['미점검','#6B7A99']];
+
+/* ══════ 데모 운영 기록 판정 (모든 집계가 이 함수 하나만 쓴다) ══════
+   실제 저장값 확인 결과, 데모 여부를 담는 별도 열은 없다.
+   handover.html 의 "장비 구분" select 가 "데모 장비" 일 때 내용(detail) 맨 앞에
+   `[데모장비]` 표식 줄을 붙여 저장하며(handover.html 의 payload.detail),
+   handover_gas.gs 도 같은 표식으로 "데모 장비 / 병원 장비"를 되읽는다.
+   → 대괄호 표식만 인정한다. 병원명이나 설명에 "데모" 라는 낱말이 들어 있다는
+     이유만으로는 절대 제외하지 않는다(표식이 없으면 고객 서비스).
+   대괄호 안팎의 공백 차이만 허용하도록 정규화한다. */
+var DEMO_MARK=/\[\s*데모\s*장비\s*\]/;
+function isDemoRecord(r){
+  if(!r) return false;
+  return DEMO_MARK.test(String(r.detail||''));
+}
+/* 보고 범위 — 'customer'(고객 서비스) | 'demo'(데모 운영) */
+function recScope(r){ return isDemoRecord(r) ? 'demo' : 'customer'; }
+
+/* ══════ N-Care 정기점검으로 인정할 기록 판정 ══════
+   기존에는 병원의 "마지막 처리일"을 그대로 점검일로 썼기 때문에 일반 A/S·교육 방문이
+   점검 완료로 잡혔다. 실제 저장값 중 점검을 가릴 수 있는 필드만 써서 좁힌다.
+     · gubun(시트 '점검/AS')  — 저장값은 '점검' 과 'A/S' 두 가지뿐이므로 '점검' 만 인정
+     · ncare(시트 'N-Care')   — 가입 병원 기록만 인정(미가입·공란 제외)
+     · detail 의 [데모장비] 표식 — 데모 장비 점검은 제외
+     · type(시트 '유형')      — '장비 교육'·'사용 설명' 등 교육만 진행한 방문 제외
+   ※ 시트에 "N-Care 정기점검" 전용 플래그는 없다. 가입 병원의 '점검' 기록을 정기점검으로 본다. */
+var EDU_TYPE=/교육|사용\s*설명/;
+function isNcareInspection(r){
+  if(!r || !r.hosp || !rowDate(r)) return false;
+  if(String(r.gubun||'').trim()!=='점검') return false;      /* 일반 A/S 방문 제외 */
+  if(isDemoRecord(r)) return false;                          /* 데모 장비 점검 제외 */
+  var nc=String(r.ncare||'').trim();
+  if(!nc || /미가입/.test(nc)) return false;                 /* N-Care 가입 기록만 */
+  if(EDU_TYPE.test(String(r.type||''))) return false;        /* 교육만 진행한 방문 제외 */
+  return true;
+}
+
+/* N-Care 상태 색/이름 — 상세 분석 모드와 보고 모드가 공유.
+   구간(30/60/90일)은 그대로 두고 표시 명칭만 중립적으로 바꿨다. */
+var NCK_ST=[['최근 점검 완료','var(--green)'],['점검 예정','var(--amber)'],['점검 필요','#E67E22'],['우선 점검','var(--red)'],['점검 기록 없음','#6B7A99']];
 /* 오늘 기준 N-Care 정기점검 상태 집계 (기간 필터와 무관 — 두 모드가 같은 함수를 쓴다) */
 function buildNcareStatus(){
   var today=new Date(); today.setHours(0,0,0,0);
-  /* 방문 이력: 병원별 마지막 처리일 (기록의 ncare도 확보) */
+  /* 마지막 점검일: 실제 N-Care 정기점검으로 판별되는 기록만 본다(방문 이력 전체가 아니다) */
   var visit={};
   RAW.forEach(function(r){
-    var d=rowDate(r); if(!d || !r.hosp) return;
-    var k=nkey(r.hosp);
+    if(!isNcareInspection(r)) return;
+    var d=rowDate(r), k=nkey(r.hosp);
     if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:String(r.ncare||'').trim()};
+  });
+  /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다(점검 여부와 무관하게 가입만 본다) */
+  var seenNc={};
+  RAW.forEach(function(r){
+    if(!r.hosp || isDemoRecord(r)) return;
+    var nc=String(r.ncare||'').trim();
+    if(nc && !/미가입/.test(nc)) seenNc[nkey(r.hosp)]={name:r.hosp, ncare:nc};
   });
   /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반 */
   var subs={};
@@ -965,10 +1019,7 @@ function buildNcareStatus(){
     if(nc && !/미가입/.test(nc)) subs[nkey(h.n)]={name:h.n, ncare:nc};
   });
   if(!Object.keys(subs).length){
-    Object.keys(visit).forEach(function(k){
-      var nc=visit[k].ncare;
-      if(nc && !/미가입/.test(nc)) subs[k]={name:visit[k].name, ncare:nc};
-    });
+    Object.keys(seenNc).forEach(function(k){ subs[k]={name:seenNc[k].name, ncare:seenNc[k].ncare}; });
   }
   var list=Object.keys(subs).map(function(k){
     var vz=visit[k];
@@ -978,14 +1029,15 @@ function buildNcareStatus(){
     return {hosp:subs[k].name, ncare:subs[k].ncare, days:days, last:vz.last, si:si};
   });
   var cnt=[0,0,0,0,0]; list.forEach(function(x){cnt[x.si]++;});
-  /* 우선 조치 순서 — 방문 기록 없음 → 경고 → 권고 → 점검대상 → 경과일 긴 순.
-     보고 모드와 상세 분석 모드가 같은 순서를 쓴다. */
-  var ORD=[0,1,2,3,9];   /* si(정상/점검대상/권고/경고/미점검) → 우선순위(클수록 먼저) */
+  /* 우선 순서 — 점검 기록 없음 → 우선 점검 → 점검 필요 → 점검 예정 → 경과일 긴 순.
+     보고 모드와 상세 분석 모드가 같은 순서를 쓴다(정렬 기준은 종전 그대로). */
+  var ORD=[0,1,2,3,9];   /* si(최근 점검 완료/점검 예정/점검 필요/우선 점검/점검 기록 없음) → 우선순위(클수록 먼저) */
   var need=list.filter(function(x){return x.si>0;}).sort(function(a,b){
     if(ORD[a.si]!==ORD[b.si]) return ORD[b.si]-ORD[a.si];
     return (b.days||0)-(a.days||0);
   });
-  return {list:list, cnt:cnt, need:need,
+  /* 잔여 점검 = 전체 가입 병원 − 최근 점검 완료 병원 (점검 예정 + 점검 필요 + 우선 점검 + 점검 기록 없음) */
+  return {list:list, cnt:cnt, need:need, remain: list.length-cnt[0],
           rate: list.length?Math.round(cnt[0]/list.length*100):0};
 }
 function ncareCheck(){
@@ -1045,6 +1097,7 @@ function buildFilters(){
   chipGroup('fNcare','ncare', uniq('ncare'));
   chipGroup('fCat','cat', uniq('cat'));
   chipGroup('fFse','fse', uniq('fse'));
+  stateChips('fScope','scope', SCOPE_OPT);
   stateChips('fNoz','noz', NOZ_OPT);
   stateChips('fSkill','skill', SKILL_OPT);
   selChips('fTypeSel','type');
@@ -1153,7 +1206,7 @@ function toggleF(k,v){
 }
 function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
-  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],hospQ:'',from:'',to:''};
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
   EX_CUSTOM=false;
   ['cbHosp','cbType','exCbHosp','exCbType','fFrom','fTo','exFrom','exTo'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
@@ -1161,7 +1214,7 @@ function resetFilters(){
   buildFilters(); apply();
 }
 function activeCnt(){
-  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'].forEach(function(k){n+=F[k].length;});
+  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill','scope'].forEach(function(k){n+=F[k].length;});
   if(F.hospQ)n++;
   if(F.from||F.to)n++;
   return n;
@@ -1174,9 +1227,12 @@ function activeCnt(){
    연/월/분기를 빼지 않으면 8월 칩이 켜진 상태에서 7월 비교 데이터가 통째로 사라진다. */
 function filtered(opt){
   var noPeriod=!!(opt&&opt.noPeriod);
+  /* opt.scope 를 주면 F.scope 대신 그 범위를 강제한다. 보고 모드는 항상 'customer' 로 부른다. */
+  var scope=(opt&&opt.scope) ? [opt.scope] : F.scope;
   var fromD=(!noPeriod&&F.from)?new Date(F.from+'T00:00:00'):null;
   var toD  =(!noPeriod&&F.to  )?new Date(F.to  +'T23:59:59'):null;
   var base=RAW.filter(function(r){
+    if(scope.length && scope.indexOf(recScope(r))<0) return false;
     if(fromD||toD){
       var d=rowDate(r);
       if(!d) return false;
@@ -1286,22 +1342,26 @@ function monthChart(rows){
 /* 필터는 여기서 "한 번만" 돌리고, 활성 모드의 렌더러에만 넘긴다.
    숨겨진 모드는 다시 그리지 않는다(모드 전환 시 renderActiveView()가 처리). */
 function apply(){
+  /* 상세 분석은 F.scope(기본 전체)를, 보고 모드는 항상 고객 서비스만 본다.
+     두 모드가 서로 다른 모집단을 쓰므로 각각 한 번씩 거른다. */
   var rows=filtered();
   CUR_ROWS=rows;
+  EX_ROWS=filtered({scope:'customer'});
   EX_CACHE=null; EX_DRAWN={};
   /* 필터 상태 (두 모드 공통) */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
   document.getElementById('fReset').style.display=n?'block':'none';
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
-  syncExecFilterUI(rows.length, n);
-  if(VIEW==='exec'){ DETAIL_DIRTY=true; renderExecutiveDashboard(rows); }
+  /* 보고 모드는 보고 범위 선택을 따르지 않으므로 활성 필터 수에서도 뺀다(숨은 필터 오해 방지) */
+  syncExecFilterUI(EX_ROWS.length, n-F.scope.length);
+  if(VIEW==='exec'){ DETAIL_DIRTY=true; renderExecutiveDashboard(EX_ROWS); }
   else { DETAIL_DIRTY=false; renderDetailedDashboard(rows); }
 }
 /* 모드/탭 전환 — 네트워크 요청도, 재필터링도 하지 않는다 */
 function renderActiveView(){
   if(!DATA_READY) return;
-  if(VIEW==='exec'){ renderExecutiveDashboard(CUR_ROWS); }
+  if(VIEW==='exec'){ renderExecutiveDashboard(EX_ROWS); }
   else if(DETAIL_DIRTY){ renderDetailedDashboard(CUR_ROWS); DETAIL_DIRTY=false; }
 }
 
@@ -3029,6 +3089,7 @@ function syncExecFilterUI(shown, active){
   var adv=0;
   ['year','month','quarter','paid','cat','type','hosp','noz','skill'].forEach(function(k){ adv+=F[k].length; });
   document.getElementById('exMoreCnt').textContent=adv?'('+adv+')':'';
+  document.getElementById('exScopeNote').textContent=EX_BASIS;
   if(shown==null) return;
   document.getElementById('exFCount').textContent=
     '활성 필터 '+active+'개 · 표시 '+shown.toLocaleString()+'건 / 전체 '+RAW.length.toLocaleString()+'건';
@@ -3058,7 +3119,8 @@ function buildComparisonPeriod(){
 function exPrevRows(cp){
   if(!cp) return null;
   var a=new Date(cp.from+'T00:00:00'), b=new Date(cp.to+'T23:59:59');
-  return filtered({noPeriod:true}).filter(function(r){ var d=rowDate(r); return d && d>=a && d<=b; });
+  /* 이전 기간 모집단도 보고 모드와 같은 범위(고객 서비스)여야 비교가 성립한다 */
+  return filtered({noPeriod:true, scope:'customer'}).filter(function(r){ var d=rowDate(r); return d && d>=a && d<=b; });
 }
 
 /* ══════ 보고 모드 집계 ══════ */
@@ -3105,7 +3167,7 @@ function exDimCompare(rows, prev, key, onlyAS){
 function buildWeekTrend(){
   var base=F.to?new Date(F.to+'T00:00:00'):exToday();
   var endMon=monday(base), m={};
-  filtered({noPeriod:true}).forEach(function(r){
+  filtered({noPeriod:true, scope:'customer'}).forEach(function(r){
     var d=rowDate(r); if(!d) return;
     var w=d.getDay(); if(w===0||w===6) return;        /* 보고 기준과 동일하게 월~금만 집계 */
     var k=ymd(monday(d)); m[k]=(m[k]||0)+1;
@@ -3148,7 +3210,7 @@ function repeatEvents_(rows){
 function buildRepeatIssues(rows){
   var DAY=86400000, LOOK=30*DAY;
   /* 1) 판정 대상 추출 + 2) 중복 제거 — 모집단은 기간 필터만 뺀 전체(직전 30일까지 봐야 한다) */
-  var pop=repeatEvents_(filtered({noPeriod:true})), popDays={};
+  var pop=repeatEvents_(filtered({noPeriod:true, scope:'customer'})), popDays={};
   /* 3) 서로 다른 발생일 정렬 */
   Object.keys(pop).forEach(function(k){
     popDays[k]=Object.keys(pop[k].days).map(Number).sort(function(a,b){ return a-b; });
@@ -3257,7 +3319,7 @@ function exKpiCard(o){
 }
 function renderExecutiveSummary(x){
   var k=x.kpi.cur, p=x.kpi.prev, cmp=x.cmp, per=exPeriodLabel();
-  var nck=x.ncare, delay=nck.list.length?(nck.list.length-nck.cnt[0]):0;
+  var nck=x.ncare, remain=nck.list.length?nck.remain:0;
   var nozReuse=x.noz?(x.noz.joined.reuse+x.noz.nonJoined.reuse):0;
 
   /* ── KPI 6 ── */
@@ -3272,10 +3334,10 @@ function renderExecutiveSummary(x){
       foot:exDeltaHtml(k.hosp, p?p.hosp:null, '곳', 'neutral', cmp)}),
     exKpiCard({label:'교체비용 합계', value:'₩'+exNum(k.cost), small:true,
       foot:exDeltaHtml(k.cost, p?p.cost:null, '원', 'bad', cmp)}),
-    exKpiCard({label:'N-Care 정상 점검률', badge:'오늘 기준', value:nck.list.length?(nck.rate+'<u>%</u>'):'–',
+    exKpiCard({label:'N-CARE 잔여 점검', badge:'오늘 현황', value:nck.list.length?(exNum(nck.remain)+'<u>곳</u>'):'–',
       foot:'<div class="sub">'+(nck.list.length
-            ? '정상 '+nck.cnt[0]+'곳 / 가입 '+nck.list.length+'곳'
-            : 'N-Care 가입 병원 없음')+'</div>'})
+            ? '전체 가입 '+nck.list.length+'곳 · 최근 점검 완료 '+nck.cnt[0]+'곳'
+            : 'N-CARE 가입 병원 없음')+'</div>'})
   ].join('');
 
   /* ── 최근 8주 서비스 추이 ── */
@@ -3314,11 +3376,11 @@ function renderExecutiveSummary(x){
 
   /* ── 관리 지표 3 ── */
   document.getElementById('exWatchCard').innerHTML=
-    exH3('관리 지표', '선택 기간 · 점검 지연은 오늘 기준')
+    exH3('관리 지표', '선택 기간 · N-CARE 잔여 점검은 전체 가입 병원 기준 · 오늘 현황')
     +'<div class="ex-cbody"><div class="ex-tiles">'
       +'<div class="ex-tile"><span>교육 필요 병원</span><b>'+x.skill.badCount+'</b></div>'
       +'<div class="ex-tile"><span>노즐 재사용 병원</span><b>'+nozReuse+'</b></div>'
-      +'<div class="ex-tile"><span>N-Care 점검 지연</span><b>'+delay+'</b></div>'
+      +'<div class="ex-tile"><span>N-CARE 잔여 점검</span><b>'+remain+'</b></div>'
     +'</div></div>';
 
   /* ── 자동 요약 (사실 기반 문장만) ── */
@@ -3333,7 +3395,7 @@ function renderExecutiveSummary(x){
   }
   if(x.skill.badCount) s.push('교육이 필요한 병원이 <b>'+x.skill.badCount+'곳</b> 확인됐습니다.');
   if(nozReuse)        s.push('노즐을 재사용한 병원이 <b>'+nozReuse+'곳</b>입니다.');
-  if(delay)           s.push('N-Care 점검이 지연된 병원이 <b>'+delay+'곳</b>입니다. (오늘 기준)');
+  if(remain)          s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
   if(!x.rows.length)  s=['선택한 조건에 해당하는 데이터가 없습니다.'];
   document.getElementById('exSummaryCard').innerHTML=
     exH3('자동 요약', per+' · 사실 기반')
@@ -3395,7 +3457,7 @@ function renderExecutiveCause(x){
     +'</div>';
 }
 function exShowRepeat(){
-  var rep=buildRepeatIssues(CUR_ROWS);
+  var rep=buildRepeatIssues(EX_ROWS);
   openExList('반복 발생 병원 전체 명단',
     'A/S 기준 · 동일 병원·동일 유형이 서로 다른 날 30일 이내에 다시 발생한 경우 · '
       +'같은 날 중복 기록은 1회 · 횟수는 발생일 수 · '+exPeriodLabel(),
@@ -3407,22 +3469,24 @@ function exShowRepeat(){
 
 /* ══════ 탭 ③ 관리 대상 ══════ */
 function exNckDays(r){
-  return r.last ? (r.days+'일 경과 · '+(r.last.getMonth()+1)+'/'+r.last.getDate()) : '방문 기록 없음';
+  return r.last ? (r.days+'일 경과 · '+(r.last.getMonth()+1)+'/'+r.last.getDate()) : '점검 기록 없음';
 }
 function renderExecutiveActions(x){
   var per=exPeriodLabel();
 
-  /* ── N-Care 점검 관리 (오늘 기준) ── */
+  /* ── N-CARE 점검 현황 (전체 가입 병원 기준 · 오늘 현황) ── */
   var S=x.ncare, ST=NCK_ST;
   document.getElementById('exNckCard').innerHTML=
-    exH3('N-Care 점검 관리', '오늘 기준', true)
+    exH3('N-CARE 점검 현황', '전체 가입 병원 기준 · 오늘 현황', true)
     +'<div class="ex-cbody">'
     +(S.list.length
-      ? '<div class="ex-rate"><b>정상 점검률 '+S.rate+'%</b><span>30일 이내 점검 '+S.cnt[0]+' / '+S.list.length+'곳</span></div>'
+      ? '<div class="ex-rate"><b>잔여 점검 '+exNum(S.remain)+'곳</b><span>전체 가입 '+S.list.length+'곳 · 최근 점검 완료 '+S.cnt[0]+'곳</span></div>'
        +'<div class="ex-ratebar"><i style="width:'+Math.max(2,S.rate)+'%"></i></div>'
        +'<div class="ex-nckbar">'+ST.map(function(s,i){
            return '<div style="background:'+s[1]+'"><b>'+S.cnt[i]+'</b>'+s[0]+'</div>';
          }).join('')+'</div>'
+       +'<div class="ex-skhd"><span>잔여 점검 병원</span>'
+         +'<em>전체 가입 병원 중 점검이 남아있는 병원</em></div>'
        +(S.need.length
          ? '<div class="ex-rows">'+S.need.slice(0,5).map(function(r){
              return '<div class="ex-li">'
@@ -3430,9 +3494,9 @@ function renderExecutiveActions(x){
                  +esc(r.hosp)+'<em>'+esc(ST[r.si][0])+'</em></span>'
                +'<span class="rt">'+exNckDays(r)+'</span></div>';
            }).join('')+'</div>'
-         : '<div class="ex-empty">🎉 모든 가입 병원이 30일 이내 점검 완료</div>')
+         : '<div class="ex-empty">🎉 모든 가입 병원이 최근 점검 완료 상태입니다</div>')
        +(S.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowNck()">전체 명단 보기 ('+S.need.length+')</button>' : '')
-      : '<div class="ex-empty">N-Care 가입 병원 기록 없음</div>')
+      : '<div class="ex-empty">N-CARE 가입 병원 기록 없음</div>')
     +'</div>';
 
   /* ── 사용자 교육 관리 (선택 기간 내 최신 평가 기준) ──
@@ -3492,14 +3556,15 @@ function renderExecutiveActions(x){
 }
 function exShowNck(){
   var S=buildNcareStatus(), ST=NCK_ST;
-  openExList('N-Care 우선 조치 병원 전체 명단',
-    '오늘 기준 · 방문 기록 없음 → 경고 → 권고 → 점검대상 → 경과일이 긴 순',
-    exListGroup('조치 필요', S.need, function(r){
+  openExList('잔여 점검 병원 전체 명단',
+    '전체 가입 병원 중 점검이 남아있는 병원 · 전체 가입 병원 기준 · 오늘 현황 · '
+      +'점검 기록 없음 → 우선 점검 → 점검 필요 → 점검 예정 → 경과일이 긴 순',
+    exListGroup('잔여 점검 병원', S.need, function(r){
       return esc(r.hosp)+'<em>'+esc(ST[r.si][0])+' · '+esc(r.ncare)+' · '+exNckDays(r)+'</em>';
     }));
 }
 function exShowSkill(){
-  var K=buildSkillData(CUR_ROWS);
+  var K=buildSkillData(EX_ROWS);
   openExList('교육 보완 필요 병원 전체 명단',
     '병원별 최신 평가 기준 · '+exPeriodLabel()
       +' · 평가 병원 '+K.evaluated+'곳 · 교육 필요 '+K.needCount+'곳 · 미흡률 '+skRateTxt_(K)
@@ -3509,7 +3574,7 @@ function exShowSkill(){
     }));
 }
 function exShowNoz(){
-  var nz=buildNozzleData(CUR_ROWS);
+  var nz=buildNozzleData(EX_ROWS);
   if(!nz) return;
   openExList('노즐 재사용 병원 전체 명단',
     '선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 가나다순',
@@ -3520,7 +3585,7 @@ function exShowNoz(){
 /* 집계 캐시를 버리고 보고 모드만 다시 그린다 (필터 변경이 아닌 데이터 보강용) */
 function exInvalidate(){
   EX_CACHE=null; EX_DRAWN={};
-  if(VIEW==='exec' && DATA_READY) renderExecutiveDashboard(CUR_ROWS);
+  if(VIEW==='exec' && DATA_READY) renderExecutiveDashboard(EX_ROWS);
 }
 
 /* ── 보고 모드 렌더링 진입점 (활성 탭만 그린다) ── */
