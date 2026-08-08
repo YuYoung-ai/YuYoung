@@ -3183,7 +3183,70 @@ function renderExecutiveSummary(x){
     +'<ul class="ex-sumlist">'+s.map(function(t){ return '<li>· '+t+'</li>'; }).join('')+'</ul>';
 }
 
-function renderExecutiveCause(x){}
+/* ══════ 탭 ② 원인 분석 ══════ */
+function renderExecutiveCause(x){
+  var per=exPeriodLabel(), cmp=x.cmp, cmpTxt=cmp?(cmp.label+' 대비'):'비교 없음';
+
+  /* ── VOC 유형 상위 5 ── */
+  var types=exDimCompare(x.rows, x.prev, 'type', true).slice(0,5);
+  document.getElementById('exTypeCard').innerHTML=
+    exH3('VOC 유형 TOP 5', 'A/S 기준 · '+per+' · '+cmpTxt)
+    +'<div class="ex-cbody">'+exBars(types,{empty:'A/S 기록 없음'})+'</div>';
+
+  /* ── 교체품 상위 5 ── */
+  var parts=exDimCompare(x.rows, x.prev, 'part', false).slice(0,5);
+  document.getElementById('exPartCard').innerHTML=
+    exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)
+    +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음'})+'</div>';
+
+  /* ── 반복 발생 병원 ── */
+  var rep=buildRepeatIssues(x.rows);
+  function repLi(r){
+    return '<div class="ex-li">'
+      +'<span class="nm" title="'+esc(r.hosp+' · '+r.type)+'">'+esc(r.hosp)+'<em>'+esc(r.type)+'</em></span>'
+      +'<span class="rt"><b>'+r.count+'회</b> · 최근 '+(r.last.getMonth()+1)+'/'+r.last.getDate()+'</span></div>';
+  }
+  document.getElementById('exRepeatCard').innerHTML=
+    exH3('반복 발생 병원', 'A/S · 동일 병원·유형이 30일 이내 재발')
+    +'<div class="ex-cbody">'
+      +(rep.length ? '<div class="ex-rows">'+rep.slice(0,5).map(repLi).join('')+'</div>'
+                   : '<div class="ex-empty">반복 발생 병원 없음</div>')
+      +(rep.length>5 ? '<button type="button" class="ex-more" onclick="exShowRepeat()">전체 명단 보기 ('+rep.length+')</button>' : '')
+    +'</div>';
+
+  /* ── N-Care 가입 / 미가입 비교 (총건수만이 아니라 병원당 수치도 함께) ── */
+  var G=x.cmpNc, ncH=G.nc.hosp, mgH=G.mg.hosp;
+  function per1(a,b){ return b? (a/b).toFixed(1) : '0.0'; }
+  function pctv(a,b){ return b? Math.round(a/b*100) : 0; }
+  var defs=[
+    ['병원 수',        exNum(ncH)+'<small>곳</small>',                 exNum(mgH)+'<small>곳</small>'],
+    ['A/S(VOC) 건수',  exNum(G.nc.voc)+'<small>건</small>',            exNum(G.mg.voc)+'<small>건</small>'],
+    ['점검 건수',      exNum(G.nc.insp)+'<small>건</small>',           exNum(G.mg.insp)+'<small>건</small>'],
+    ['병원당 A/S(VOC)',per1(G.nc.voc,ncH)+'<small>건/곳</small>',      per1(G.mg.voc,mgH)+'<small>건/곳</small>'],
+    ['병원당 점검',    per1(G.nc.insp,ncH)+'<small>건/곳</small>',     per1(G.mg.insp,mgH)+'<small>건/곳</small>'],
+    ['무상 처리 비율', pctv(G.nc.free,G.nc.tot)+'<small>%</small>',    pctv(G.mg.free,G.mg.tot)+'<small>%</small>']
+  ];
+  document.getElementById('exNcCmpCard').innerHTML=
+    exH3('N-Care 가입 / 미가입 비교', per+' · 병원당 수치 포함')
+    +'<div class="ex-cbody">'
+      +(x.rows.length
+        ? '<table class="ex-ctable"><thead><tr><th>지표</th><th>N-Care 가입</th><th>미가입</th></tr></thead><tbody>'
+          +defs.map(function(d){
+            return '<tr><td>'+d[0]+'</td><td class="ex-nc">'+d[1]+'</td><td class="ex-mg">'+d[2]+'</td></tr>';
+          }).join('')+'</tbody></table>'
+        : '<div class="ex-empty">표시할 데이터가 없습니다</div>')
+    +'</div>';
+}
+function exShowRepeat(){
+  var rep=buildRepeatIssues(CUR_ROWS);
+  openExList('반복 발생 병원 전체 명단',
+    'A/S 기준 · 동일 병원·동일 유형이 이전 30일 이내에 다시 발생한 경우 · '+exPeriodLabel(),
+    exListGroup('반복 발생', rep, function(r){
+      return esc(r.hosp)+'<em>'+esc(r.type)+' · '+r.count+'회 · 최근 '
+        +(r.last.getMonth()+1)+'/'+r.last.getDate()+'</em>';
+    }));
+}
+
 function renderExecutiveActions(x){}
 
 /* ── 보고 모드 렌더링 진입점 (활성 탭만 그린다) ── */
