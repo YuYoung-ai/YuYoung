@@ -54,6 +54,7 @@ body.mode-mobile .wrap{max-width:560px}
 .fgroup{margin-top:10px;padding-top:10px;border-top:1px dashed #E4E9F2}
 .fgroup:first-of-type{border-top:none;padding-top:4px}
 .fgroup h5{margin:0 0 6px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
+.fnote{font-style:normal;font-weight:600;font-size:10px;color:#9AA6B8;margin-left:4px}
 .range-row{display:flex;align-items:center;gap:6px}
 .range-row input[type=date]{flex:1;min-width:0;padding:9px 8px;border:1px solid var(--gray-line);
   border-radius:8px;font-size:13px;font-family:inherit;-webkit-appearance:none;appearance:none;background:#fff}
@@ -323,6 +324,25 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   font-family:inherit;cursor:pointer}
 .ex-more:hover{background:var(--gray-bg)}
 
+/* 사용자 교육 관리 — "평가 병원 → 교육 필요 = 미흡률" 관계가 한 줄로 읽히게 한다.
+   카드 높이는 그리드가 정하고 .ex-rows 가 남는 높이를 흡수하므로 이 줄이 늘어나도 레이아웃은 그대로다. */
+.ex-skflow{display:flex;align-items:stretch;gap:6px;flex:0 0 auto;margin-bottom:7px}
+.ex-skf{flex:1 1 0;min-width:0;border:1px solid var(--gray-line);border-radius:9px;padding:6px 6px 7px;
+  text-align:center;background:#FBFCFE}
+.ex-skf span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-skf b{display:block;font-size:19px;font-weight:800;color:var(--navy);line-height:1.15;
+  font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-skf b u{font-size:.55em;font-weight:700;text-decoration:none;color:var(--text-muted);margin-left:1px}
+.ex-skf.need b{color:var(--red)}
+.ex-skf.rate{background:#F4F8FB;border-color:#CFE0EA}
+.ex-skar{flex:0 0 auto;align-self:center;font-style:normal;font-size:13px;font-weight:800;color:#B7C2D2}
+.ex-skhd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex:0 0 auto;
+  margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid var(--gray-line)}
+.ex-skhd span{font-size:11.5px;font-weight:700;color:var(--navy);white-space:nowrap}
+.ex-skhd em{font-style:normal;font-size:10.5px;color:var(--text-muted);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+
 /* 소형 지표 타일 · 요약 */
 .ex-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:0 0 auto}
 .ex-tile{border:1px solid var(--gray-line);border-radius:9px;padding:8px 6px;text-align:center;background:#FBFCFE;min-width:0}
@@ -570,6 +590,8 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
           <div class="ex-dg"><h5>분기</h5><div class="chips" id="exQuarter"></div></div>
           <div class="ex-dg"><h5>유 / 무상</h5><div class="chips" id="exPaid"></div></div>
           <div class="ex-dg span2"><h5>대분류</h5><div class="chips" id="exCat"></div></div>
+          <div class="ex-dg"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="exNoz"></div></div>
+          <div class="ex-dg span2"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="exSkill"></div></div>
           <div class="ex-dg span2"><h5>유형</h5>
             <div class="cb-wrap">
               <input class="hosp-search" id="exCbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
@@ -657,6 +679,8 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
       <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
       <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="fNoz"></div></div>
+      <div class="fgroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="fSkill"></div></div>
       <div class="fgroup"><h5>유형</h5>
         <div class="cb-wrap">
           <input class="hosp-search" id="cbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
@@ -743,7 +767,11 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
 
 var CACHE_KEY='baz_dash_cache';
 var RAW=[];              // 전체 레코드
-var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+/* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
+   두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],hospQ:'',from:'',to:''};
+var NOZ_OPT=[['reuse','재사용'],['noreuse','미재사용'],['unknown','미확인']];
+var SKILL_OPT=[['good','평가 양호'],['need','교육 필요'],['none','미평가']];
 
 /* ── 화면 모드 상태 (보고 모드 / 상세 분석 모드는 RAW·F·filtered()를 공유한다) ── */
 var VIEW_KEY='baz_dash_view';
@@ -1017,6 +1045,8 @@ function buildFilters(){
   chipGroup('fNcare','ncare', uniq('ncare'));
   chipGroup('fCat','cat', uniq('cat'));
   chipGroup('fFse','fse', uniq('fse'));
+  stateChips('fNoz','noz', NOZ_OPT);
+  stateChips('fSkill','skill', SKILL_OPT);
   selChips('fTypeSel','type');
   selChips('fHospSel','hosp');
   /* 보고 모드 "상세 필터" 팝오버 — 같은 F 상태를 그대로 재사용한다 */
@@ -1025,8 +1055,21 @@ function buildFilters(){
   chipGroup('exQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
   chipGroup('exPaid','paid', uniq('paid'));
   chipGroup('exCat','cat', uniq('cat'));
+  stateChips('exNoz','noz', NOZ_OPT);
+  stateChips('exSkill','skill', SKILL_OPT);
   selChips('exTypeSel','type');
   selChips('exHospSel','hosp');
+}
+/* 고정 옵션 칩 (노즐 재사용 · 사용자 숙련도) — 값이 데이터가 아니라 판정 상태라 목록이 고정이다.
+   "전체"는 선택 없음 상태이며, 누르면 그 필터만 해제한다. */
+function stateChips(elId, fkey, opts){
+  var el=document.getElementById(elId); if(!el) return;
+  var none=!F[fkey].length;
+  el.innerHTML='<button type="button" class="chip'+(none?' on':'')+'" data-k="'+fkey+'" data-v="__all">전체</button>'
+    +opts.map(function(o){
+      return '<button type="button" class="chip'+(F[fkey].indexOf(o[0])>=0?' on':'')+'" '
+        +'data-k="'+fkey+'" data-v="'+o[0]+'">'+esc(o[1])+'</button>';
+    }).join('');
 }
 /* 선택된 값 칩 (✕로 해제 — 전역 클릭 핸들러가 처리) */
 function selChips(elId, fkey){
@@ -1103,13 +1146,14 @@ function presetLastWeek(){
   setRangeDates(mon, addD(mon,4));
 }
 function toggleF(k,v){
+  if(v==='__all'){ if(!F[k].length) return; F[k]=[]; buildFilters(); apply(); return; }  /* "전체" = 선택 해제 */
   var i=F[k].indexOf(v);
   if(i>=0)F[k].splice(i,1); else F[k].push(v);
   buildFilters(); apply();
 }
 function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
-  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],hospQ:'',from:'',to:''};
   EX_CUSTOM=false;
   ['cbHosp','cbType','exCbHosp','exCbType','fFrom','fTo','exFrom','exTo'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
@@ -1117,7 +1161,7 @@ function resetFilters(){
   buildFilters(); apply();
 }
 function activeCnt(){
-  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp'].forEach(function(k){n+=F[k].length;});
+  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'].forEach(function(k){n+=F[k].length;});
   if(F.hospQ)n++;
   if(F.from||F.to)n++;
   return n;
@@ -1132,7 +1176,7 @@ function filtered(opt){
   var noPeriod=!!(opt&&opt.noPeriod);
   var fromD=(!noPeriod&&F.from)?new Date(F.from+'T00:00:00'):null;
   var toD  =(!noPeriod&&F.to  )?new Date(F.to  +'T23:59:59'):null;
-  return RAW.filter(function(r){
+  var base=RAW.filter(function(r){
     if(fromD||toD){
       var d=rowDate(r);
       if(!d) return false;
@@ -1153,6 +1197,25 @@ function filtered(opt){
     if(F.part.length   && F.part.indexOf(r.part)<0) return false;
     if(F.hosp.length   && F.hosp.indexOf(r.hosp)<0) return false;
     if(F.hospQ && String(r.hosp||'').replace(/\s+/g,'').toLowerCase().indexOf(F.hospQ)<0) return false;
+    return true;
+  });
+  return hospStateFilter_(base);
+}
+
+/* ── 병원 상태 필터 (노즐 재사용 · 사용자 숙련도) ──
+   행 단위가 아니라 "그 병원이 지금 보이는 범위에서 어떤 상태인가"로 판정하므로
+   나머지 필터를 모두 적용한 뒤 그 결과에서 상태를 계산하고, 해당 병원의 기록만 남긴다.
+   (GAS 재호출 없이 이미 로드된 데이터에서만 계산한다) */
+function hospStateFilter_(base){
+  var useNz=!!F.noz.length, useSk=!!F.skill.length;
+  if(!useNz && !useSk) return base;
+  var nz=useNz?buildNozzleStatusMap(base):null;
+  var sk=useSk?buildSkillData(base).status:null;
+  return base.filter(function(r){
+    var k=skNorm_(r.hosp);
+    if(!k) return false;                                        /* 병원명이 없으면 병원 기준 판정 불가 */
+    if(nz && F.noz.indexOf(nz[k]||'unknown')<0) return false;
+    if(sk && F.skill.indexOf(sk[k]||'none')<0) return false;
     return true;
   });
 }
@@ -1291,6 +1354,21 @@ function buildNozzleData(rows){
   var mapped=(rows||[]).map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
   return window.Statistics.build(mapped).nozzle;
 }
+/* 노즐 재사용 필터용 병원 상태 맵 — 정규화 병원명 → 'reuse' | 'noreuse' | 'unknown'
+   기존 통계와 같은 기준: 한 번이라도 'O' 면 재사용(O·X 혼재도 재사용),
+   'O' 없이 'X' 만 있으면 미재사용, 둘 다 없으면 미확인. */
+function buildNozzleStatusMap(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    var k=skNorm_(r.hosp); if(!k) return;
+    var s=m[k]||(m[k]={o:false,x:false});
+    var v=String(r.nozzleReuse||'').trim().toUpperCase();
+    if(v==='O') s.o=true; else if(v==='X') s.x=true;
+  });
+  var out={};
+  Object.keys(m).forEach(function(k){ out[k]= m[k].o ? 'reuse' : (m[k].x ? 'noreuse' : 'unknown'); });
+  return out;
+}
 function nozzleStats(rows){
   var box=document.getElementById('cNoz'); if(!box) return;
   var nz=buildNozzleData(rows);
@@ -1320,15 +1398,22 @@ function skGroupHtml_(title, g){
   +'</div>';
 }
 /* 숙련도 판정 집계 — 판정 기준(NS 충진 X / 충진량 부족 / 젯 분사 "교육" 포함)은 그대로 두고
-   상세 분석 모드와 보고 모드가 같은 결과를 쓰도록 계산만 분리했다. */
+   상세 분석 모드와 보고 모드가 같은 결과를 쓰도록 계산만 분리했다.
+   사용자 숙련도 필터와 보고 모드 "사용자 교육 관리" 카드는 이 함수 하나의 결과를 함께 쓴다.
+     status     : 정규화 병원명 → 'good'(평가 양호) | 'need'(교육 필요) | 'none'(미평가)
+     evaluated  : 평가 병원 수(세 항목 중 하나 이상 값이 있는 병원, 중복 제거)
+     needCount  : 교육 필요 병원 수(중복 제거 · 여러 항목 미흡이어도 1곳)
+     rate       : 미흡률(%) = needCount / evaluated * 100 · 평가 병원 0곳이면 null
+     need       : 교육 보완 필요 병원 명단(항목별 미흡 사유 포함) */
 function buildSkillData(rows){
   /* 1) 병원별 최신 방문 평가값 수집 (선택 기간 내 최신 방문만) */
-  var map={};
+  var map={}, seen={};
   (rows||[]).forEach(function(r){
-    var f=String(r.nsFill||'').trim(), a=String(r.nsAmt||'').trim(), t=String(r.jet||'').trim();
-    if(!f && !a && !t) return;                       /* 평가 없는 행은 제외 */
     var name=String(r.hosp||'').trim(); if(!name) return;
     var k=skNorm_(name);
+    seen[k]=1;                                       /* 평가 유무와 무관하게 등장한 병원 */
+    var f=String(r.nsFill||'').trim(), a=String(r.nsAmt||'').trim(), t=String(r.jet||'').trim();
+    if(!f && !a && !t) return;                       /* 평가 없는 행은 제외 */
     var key=(r._y||0)*10000+(r._m||0)*100+(r._d||0);  /* boot()에서 계산된 연/월/일 */
     if(map[k] && map[k].key>=key) return;             /* 더 최근 방문만 유지 */
     map[k]={key:key, name:name, nsFill:f, nsAmt:a, jet:t};
@@ -1358,8 +1443,17 @@ function buildSkillData(rows){
   var need=Object.keys(per).map(function(k){ return per[k]; }).sort(function(a,b){
     return b.items.length-a.items.length || skCmpKo_(a.name,b.name);
   });
-  return {recs:recs, gFill:gFill, gAmt:gAmt, gJet:gJet, need:need, badCount:need.length};
+  /* 4) 병원별 평가 상태 · 평가 병원 수 · 미흡률 — 필터와 카드가 반드시 같은 값을 쓰도록 여기서만 만든다 */
+  var status={};
+  Object.keys(seen).forEach(function(k){ status[k]= map[k] ? 'good' : 'none'; });
+  Object.keys(per).forEach(function(k){ status[k]='need'; });
+  var evaluated=recs.length, needCount=need.length;
+  return {recs:recs, gFill:gFill, gAmt:gAmt, gJet:gJet, need:need, badCount:needCount,
+          status:status, evaluated:evaluated, needCount:needCount,
+          rate: evaluated>0 ? Math.round(needCount/evaluated*1000)/10 : null};
 }
+/* 미흡률 표기 — 평가 병원이 0곳이면 "-" */
+function skRateTxt_(S){ return (S && S.rate!=null) ? S.rate.toFixed(1)+'%' : '-'; }
 function skillStats(rows){
   var box=document.getElementById('cSkill'); if(!box) return;
   var S=buildSkillData(rows);
@@ -2933,7 +3027,7 @@ function syncExecFilterUI(shown, active){
   fs.value = F.fse.length>1 ? '__multi' : (F.fse[0]||'');
   /* 상세 필터 개수 · 표시 건수 */
   var adv=0;
-  ['year','month','quarter','paid','cat','type','hosp'].forEach(function(k){ adv+=F[k].length; });
+  ['year','month','quarter','paid','cat','type','hosp','noz','skill'].forEach(function(k){ adv+=F[k].length; });
   document.getElementById('exMoreCnt').textContent=adv?'('+adv+')':'';
   if(shown==null) return;
   document.getElementById('exFCount').textContent=
@@ -3027,42 +3121,57 @@ function buildWeekTrend(){
   return out;
 }
 
-/* 반복 발생 병원
-   · gubun === 'A/S' · 병원명과 유형이 동일
-   · 선택 기간의 A/S 기록이 "이전 30일 이내" 같은 병원·같은 유형 기록과 연결되는 경우
-   · 빈 유형 / 점검 / "이상 없음" 계열 제외 */
+/* ── 반복 발생 병원 ──
+   발생 이벤트 = "정규화 병원명 + VOC 유형 + 처리일(연·월·일)" 1건.
+   같은 병원·같은 유형·같은 날이면 기록이 몇 건이든(장비 2대를 각각 점검해 2건이 남아도)
+   1회 발생으로 통합한다 → 같은 날 중복 기록만으로는 반복 발생이 되지 않는다.
+   반복 발생 = 서로 다른 발생일이 30일 이내로 이어지는 경우.
+   판정 대상은 기존과 동일: gubun === 'A/S' · 빈 유형 / 점검 / "이상 없음" 계열 제외.
+   화면에 쓰는 발생 횟수도 원본 행 수가 아니라 중복 제거된 발생일 수다. */
+function repeatOk_(r){
+  if(String(r.gubun||'').trim()!=='A/S') return false;
+  var t=String(r.type||'').trim();
+  return !!(t && !isOK(t) && String(r.hosp||'').trim() && rowDate(r));
+}
+function repeatKey_(r){ return nkey(r.hosp)+''+String(r.type||'').trim(); }
+/* 병원명·VOC 유형·처리일 기준 중복 제거 → 병원|유형 → {발생일(ms) 집합} */
+function repeatEvents_(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    if(!repeatOk_(r)) return;
+    var k=repeatKey_(r);
+    var g=m[k]||(m[k]={hosp:String(r.hosp).trim(), type:String(r.type).trim(), days:{}});
+    g.days[rowDate(r).getTime()]=1;               /* rowDate()는 연·월·일만 쓴다(작성 시각 무관) */
+  });
+  return m;
+}
 function buildRepeatIssues(rows){
   var DAY=86400000, LOOK=30*DAY;
-  function ok(r){
-    if(String(r.gubun||'').trim()!=='A/S') return false;
-    var t=String(r.type||'').trim();
-    return !!(t && !isOK(t) && String(r.hosp||'').trim() && rowDate(r));
-  }
-  var idx={};   /* 병원|유형 → 정렬된 처리일(ms) — 기간 필터만 제외한 모집단 */
-  filtered({noPeriod:true}).forEach(function(r){
-    if(!ok(r)) return;
-    var k=nkey(r.hosp)+''+String(r.type).trim();
-    (idx[k]=idx[k]||[]).push(rowDate(r).getTime());
+  /* 1) 판정 대상 추출 + 2) 중복 제거 — 모집단은 기간 필터만 뺀 전체(직전 30일까지 봐야 한다) */
+  var pop=repeatEvents_(filtered({noPeriod:true})), popDays={};
+  /* 3) 서로 다른 발생일 정렬 */
+  Object.keys(pop).forEach(function(k){
+    popDays[k]=Object.keys(pop[k].days).map(Number).sort(function(a,b){ return a-b; });
   });
-  Object.keys(idx).forEach(function(k){ idx[k].sort(function(a,b){return a-b;}); });
-  var groups={};
-  (rows||[]).forEach(function(r){
-    if(!ok(r)) return;
-    var t=String(r.type).trim(), h=String(r.hosp).trim();
-    var k=nkey(h)+''+t, all=idx[k]; if(!all) return;
-    var cur=rowDate(r).getTime(), lo=cur-LOOK, linked=0;
-    var g=groups[k];
-    for(var i=0;i<all.length;i++){
-      if(all[i]>=lo && all[i]<cur){ linked++; if(!g) g=groups[k]={hosp:h, type:t, dates:{}, last:0}; g.dates[all[i]]=1; }
-    }
-    if(!linked) return;
-    g.dates[cur]=1;
-    if(cur>g.last) g.last=cur;
+  var sel=repeatEvents_(rows), out=[];
+  Object.keys(sel).forEach(function(k){
+    var all=popDays[k]; if(!all) return;
+    var dates={}, last=0;
+    /* 4) 30일 이내 재발 판정 — 같은 날은 이미 1회로 합쳐져 있어 자기 자신과는 이어지지 않는다 */
+    Object.keys(sel[k].days).map(Number).forEach(function(cur){
+      var linked=false;
+      for(var i=0;i<all.length;i++){
+        if(all[i]>=cur-LOOK && all[i]<cur){ dates[all[i]]=1; linked=true; }
+      }
+      if(!linked) return;
+      dates[cur]=1;
+      if(cur>last) last=cur;
+    });
+    /* 5) 발생 횟수 = 중복 제거된 발생일 수 */
+    var n=Object.keys(dates).length;
+    if(n) out.push({hosp:sel[k].hosp, type:sel[k].type, count:n, last:new Date(last)});
   });
-  return Object.keys(groups).map(function(k){
-    var g=groups[k];
-    return {hosp:g.hosp, type:g.type, count:Object.keys(g.dates).length, last:new Date(g.last)};
-  }).sort(function(a,b){ return b.count-a.count || b.last-a.last || skCmpKo_(a.hosp,b.hosp); });
+  return out.sort(function(a,b){ return b.count-a.count || b.last-a.last || skCmpKo_(a.hosp,b.hosp); });
 }
 
 /* apply() 1회당 한 번만 집계한다 (탭 전환 시 재계산 없음) */
@@ -3255,7 +3364,7 @@ function renderExecutiveCause(x){
       +'<span class="rt"><b>'+r.count+'회</b> · 최근 '+(r.last.getMonth()+1)+'/'+r.last.getDate()+'</span></div>';
   }
   document.getElementById('exRepeatCard').innerHTML=
-    exH3('반복 발생 병원', 'A/S · 동일 병원·유형이 30일 이내 재발')
+    exH3('반복 발생 병원', 'A/S · 동일 병원·유형이 다른 날 30일 이내 재발 · 같은 날 중복 기록은 1회')
     +'<div class="ex-cbody">'
       +(rep.length ? '<div class="ex-rows">'+rep.slice(0,5).map(repLi).join('')+'</div>'
                    : '<div class="ex-empty">반복 발생 병원 없음</div>')
@@ -3288,7 +3397,8 @@ function renderExecutiveCause(x){
 function exShowRepeat(){
   var rep=buildRepeatIssues(CUR_ROWS);
   openExList('반복 발생 병원 전체 명단',
-    'A/S 기준 · 동일 병원·동일 유형이 이전 30일 이내에 다시 발생한 경우 · '+exPeriodLabel(),
+    'A/S 기준 · 동일 병원·동일 유형이 서로 다른 날 30일 이내에 다시 발생한 경우 · '
+      +'같은 날 중복 기록은 1회 · 횟수는 발생일 수 · '+exPeriodLabel(),
     exListGroup('반복 발생', rep, function(r){
       return esc(r.hosp)+'<em>'+esc(r.type)+' · '+r.count+'회 · 최근 '
         +(r.last.getMonth()+1)+'/'+r.last.getDate()+'</em>';
@@ -3325,26 +3435,31 @@ function renderExecutiveActions(x){
       : '<div class="ex-empty">N-Care 가입 병원 기록 없음</div>')
     +'</div>';
 
-  /* ── 교육 필요 병원 (선택 기간 내 최신 평가 기준) ── */
-  var K=x.skill;
+  /* ── 사용자 교육 관리 (선택 기간 내 최신 평가 기준) ──
+     평가 병원 수 · 교육 필요 병원 수 · 미흡률 · 교육 보완 필요 병원 명단을
+     buildSkillData() 한 곳의 결과로만 그린다(필터와도 같은 값). */
+  var K=x.skill, kRate=skRateTxt_(K);
   document.getElementById('exSkillCard').innerHTML=
-    exH3('교육 필요 병원', '선택 기간 내 최신 평가 기준 · '+per)
+    exH3('사용자 교육 관리', '병원별 최신 평가 기준 · '+per)
     +'<div class="ex-cbody">'
-    +(K.recs.length
-      ? '<div class="ex-tiles" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:9px">'
-         +'<div class="ex-tile"><span>교육 필요</span><b>'+K.badCount+'</b></div>'
-         +'<div class="ex-tile"><span>NS 충진 미흡</span><b>'+K.gFill.bad+'</b></div>'
-         +'<div class="ex-tile"><span>충진량 부족</span><b>'+K.gAmt.bad+'</b></div>'
-         +'<div class="ex-tile"><span>젯 분사 교육</span><b>'+K.gJet.bad+'</b></div>'
-       +'</div>'
-       +(K.need.length
-         ? '<div class="ex-rows">'+K.need.slice(0,5).map(function(h){
-             return '<div class="ex-li"><span class="nm" title="'+esc(h.name)+'">'+esc(h.name)+'</span>'
-               +'<span class="rt">'+esc(h.items.join(' · '))+'</span></div>';
-           }).join('')+'</div>'
-         : '<div class="ex-empty">교육이 필요한 병원 없음</div>')
-       +(K.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowSkill()">전체 명단 보기 ('+K.need.length+')</button>' : '')
-      : '<div class="ex-empty">숙련도 평가 데이터 없음</div>')
+      +'<div class="ex-skflow">'
+        +'<div class="ex-skf"><span>평가 병원</span><b>'+exNum(K.evaluated)+'<u>곳</u></b></div>'
+        +'<i class="ex-skar">›</i>'
+        +'<div class="ex-skf need"><span>교육 필요</span><b>'+exNum(K.needCount)+'<u>곳</u></b></div>'
+        +'<i class="ex-skar">=</i>'
+        +'<div class="ex-skf rate"><span>미흡률</span><b>'+kRate+'</b></div>'
+      +'</div>'
+      +'<div class="ex-skhd"><span>교육 보완 필요 병원</span>'
+        +'<em>NS 충진 '+K.gFill.bad+' · 충진량 부족 '+K.gAmt.bad+' · 젯 분사 교육 '+K.gJet.bad+'</em></div>'
+      +(!K.evaluated
+        ? '<div class="ex-empty">평가 데이터 없음</div>'
+        : (K.need.length
+           ? '<div class="ex-rows">'+K.need.slice(0,5).map(function(h){
+               return '<div class="ex-li"><span class="nm" title="'+esc(h.name)+'">'+esc(h.name)+'</span>'
+                 +'<span class="rt">'+esc(h.items.join(' · '))+'</span></div>';
+             }).join('')+'</div>'
+           : '<div class="ex-empty">교육이 필요한 병원 없음</div>'))
+      +(K.need.length>5 ? '<button type="button" class="ex-more" onclick="exShowSkill()">전체 명단 보기 ('+K.needCount+')</button>' : '')
     +'</div>';
 
   /* ── 노즐 재사용 (선택 기간 방문 병원 기준) ── */
@@ -3385,9 +3500,11 @@ function exShowNck(){
 }
 function exShowSkill(){
   var K=buildSkillData(CUR_ROWS);
-  openExList('교육 필요 병원 전체 명단',
-    '선택 기간 내 최신 평가 기준 · '+exPeriodLabel()+' · 미흡 항목이 많은 병원 우선',
-    exListGroup('교육 필요', K.need, function(h){
+  openExList('교육 보완 필요 병원 전체 명단',
+    '병원별 최신 평가 기준 · '+exPeriodLabel()
+      +' · 평가 병원 '+K.evaluated+'곳 · 교육 필요 '+K.needCount+'곳 · 미흡률 '+skRateTxt_(K)
+      +' · 미흡 항목이 많은 병원 우선',
+    exListGroup('교육 보완 필요', K.need, function(h){
       return esc(h.name)+'<em>'+esc(h.items.join(' · '))+'</em>';
     }));
 }
