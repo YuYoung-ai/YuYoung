@@ -268,7 +268,10 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-basis{flex:0 0 auto;font-size:10px;font-weight:700;color:var(--text-muted);background:var(--gray-bg);
   border:1px solid var(--gray-line);border-radius:9px;padding:1px 7px;white-space:nowrap}
 .ex-basis.today{background:#FBF3E3;border-color:#EBD9B4;color:#8A6100}
-.ex-cbody{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.ex-cbody{flex:1 1 auto;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+/* 세로 flex 안의 항목은 기본 min-width:auto 때문에 컨테이너보다 넓어질 수 있다.
+   긴 병원명이 잘리기만 하고 말줄임이 안 붙는 것을 막는다. */
+.ex-cbody>*{min-width:0}
 .ex-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0}
 
 /* KPI */
@@ -297,7 +300,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-vcol.sel .l{color:var(--navy);font-weight:700}
 
 /* 가로 막대 · 목록 */
-.ex-rows{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
+.ex-rows{flex:1 1 auto;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
+.ex-rows>*{min-width:0}
 .ex-brow{display:grid;grid-template-columns:minmax(0,1fr) 34px 74px;gap:8px;align-items:center;
   padding:4px 0;font-size:12.5px}
 .ex-brow .nm{min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -397,6 +401,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   .ex-card{overflow:visible}
   .ex-cbody,.ex-rows{overflow:visible}
   .ex-vchart{min-height:130px}
+  .ex-kpi .lb{white-space:normal}          /* "오늘 기준" 배지가 잘리지 않도록 줄바꿈 허용 */
+  .ex-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ex-card h3{flex-wrap:wrap}
 }
 </style>
 <script src="auth.js"></script>
@@ -881,13 +888,14 @@ function boot(d, fromCache){
 var HOSPDB=[];
 function loadHospDB(){
   try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
-    if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); } }catch(e){}
+    if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
   gv('hospdb',{}).then(function(d){
     if(!d.success||!d.data) return;
     HOSPDB=d.data;
     try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
     enrichNcare();
     ncareCheck();
+    exInvalidate();     /* 오늘 기준 N-Care 수치가 바뀌므로 보고 모드도 다시 그린다 */
   }).catch(function(){});
 }
 /* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
@@ -1103,6 +1111,7 @@ function toggleF(k,v){
 function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
   F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],hospQ:'',from:'',to:''};
+  EX_CUSTOM=false;
   ['cbHosp','cbType','exCbHosp','exCbType','fFrom','fTo','exFrom','exTo'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
@@ -2721,6 +2730,8 @@ function setView(v){
   VIEW=v;
   try{ localStorage.setItem(VIEW_KEY, VIEW); }catch(e){}
   applyViewVisibility();
+  /* 보고 모드를 처음 여는 경우에만 기본 기간(최근 완료 주간)을 적용한다 */
+  if(VIEW==='exec' && DATA_READY && exEnsureDefaultPeriod()){ buildFilters(); apply(); return; }
   renderActiveView();
 }
 function setExecTab(t){
@@ -2772,7 +2783,10 @@ function exPresetRange(k){
   if(k==='lastmonth') return [new Date(t.getFullYear(),t.getMonth()-1,1), new Date(t.getFullYear(),t.getMonth(),0)];
   return null;
 }
+var EX_CUSTOM=false;        /* "직접 지정"을 사용자가 고른 상태 */
+var EX_PERIOD_INIT=false;   /* 기본 기간(최근 완료 주간)을 이미 적용했는지 */
 function exCurrentPreset(){
+  if(EX_CUSTOM) return 'custom';
   if(!F.from&&!F.to) return 'all';
   for(var i=0;i<EX_PRESETS.length;i++){
     var k=EX_PRESETS[i][0]; if(k==='custom') continue;
@@ -2782,10 +2796,22 @@ function exCurrentPreset(){
   return 'custom';
 }
 function exSetPreset(k){
+  if(k==='custom'){ EX_CUSTOM=true; syncExecFilterUI(); return; }   /* 날짜 입력만 열어 준다 */
+  EX_CUSTOM=false;
   if(k==='all'){ document.getElementById('fFrom').value=''; document.getElementById('fTo').value=''; setRange(); return; }
-  if(k==='custom'){ syncExecFilterUI(); return; }   /* 날짜 입력만 열어 준다 */
   var r=exPresetRange(k); if(!r) return;
   setRangeDates(r[0], r[1]);                        /* 기존 setRangeDates → setRange → apply */
+}
+/* 기본 화면 = 최근 완료된 주간(월~금) — 보고 모드를 처음 볼 때 한 번만 적용한다 */
+function exEnsureDefaultPeriod(){
+  if(EX_PERIOD_INIT) return false;
+  EX_PERIOD_INIT=true;
+  if(F.from||F.to) return false;
+  var r=exPresetRange('lastdone');
+  F.from=ymd(r[0]); F.to=ymd(r[1]);
+  document.getElementById('fFrom').value=F.from;
+  document.getElementById('fTo').value=F.to;
+  return true;
 }
 function exSetCustomRange(){
   document.getElementById('fFrom').value=document.getElementById('exFrom').value||'';
@@ -2854,14 +2880,19 @@ function initExecFilterBar(){
   });
   document.getElementById('exFse').addEventListener('change', function(){ exSetFse(this.value); });
   var mb=document.getElementById('exMoreBtn'), dw=document.getElementById('exDrawer');
-  mb.addEventListener('click', function(e){
-    e.stopPropagation();
+  mb.addEventListener('click', function(){
     var on=!dw.classList.contains('on');
     dw.classList.toggle('on', on); mb.classList.toggle('on', on);
   });
-  dw.addEventListener('click', function(e){ e.stopPropagation(); });
-  document.addEventListener('click', function(){ dw.classList.remove('on'); mb.classList.remove('on'); });
+  /* 바깥 클릭이면 닫는다. 캡처 단계에서 판정해야 칩 클릭으로 팝오버가 다시 그려져도
+     e.target 이 아직 팝오버 안에 있어 잘못 닫히지 않는다. */
+  document.addEventListener('click', function(e){
+    if(!dw.classList.contains('on')) return;
+    if(dw.contains(e.target) || mb.contains(e.target)) return;
+    dw.classList.remove('on'); mb.classList.remove('on');
+  }, true);
   document.getElementById('exResetBtn').addEventListener('click', function(){ resetFilters(); });
+  if(VIEW==='exec') exEnsureDefaultPeriod();   /* boot()의 apply() 직전 — 재호출 없음 */
 }
 
 /* 필터 바 표시 동기화 — F가 바뀔 때마다 호출(상태는 F 하나뿐) */
@@ -2938,13 +2969,15 @@ function buildExecutiveKpis(rows, prev){
   return {cur:exKpiSet(rows), prev:prev?exKpiSet(prev):null};
 }
 
-/* 유형/교체품 현재·이전 기간 대비 */
-function exDim(rows, key, onlyAS){
+/* 유형/교체품 현재·이전 기간 대비
+   voc=true → 구분 A/S 만, "이상 없음" 계열 제외 (VOC 원인 집계) */
+function exDim(rows, key, voc){
   var m={};
   (rows||[]).forEach(function(r){
-    if(onlyAS && String(r.gubun||'').trim()!=='A/S') return;
+    if(voc && String(r.gubun||'').trim()!=='A/S') return;
     var v=String(r[key]||'').trim();
     if(!v || v==='없음') return;             /* 빈 값·"없음"은 항목으로 세지 않는다 */
+    if(voc && isOK(v)) return;
     m[v]=(m[v]||0)+1;
   });
   return m;
@@ -3143,7 +3176,7 @@ function renderExecutiveSummary(x){
         .slice(0,3);
   }
   document.getElementById('exVocUpCard').innerHTML=
-    exH3((cmp?cmp.label:'이전 기간')+' 대비 증가한 VOC 유형 TOP 3', 'A/S 기준 · '+per)
+    exH3((cmp?cmp.label:'이전 기간')+' 대비 증가한 VOC 유형 TOP 3', 'A/S 기준 · 이상 없음 제외 · '+per)
     +'<div class="ex-cbody">'
     +(!x.prev
       ? '<div class="ex-empty">비교 데이터 없음</div>'
@@ -3190,7 +3223,7 @@ function renderExecutiveCause(x){
   /* ── VOC 유형 상위 5 ── */
   var types=exDimCompare(x.rows, x.prev, 'type', true).slice(0,5);
   document.getElementById('exTypeCard').innerHTML=
-    exH3('VOC 유형 TOP 5', 'A/S 기준 · '+per+' · '+cmpTxt)
+    exH3('VOC 유형 TOP 5', 'A/S 기준 · 이상 없음 제외 · '+per+' · '+cmpTxt)
     +'<div class="ex-cbody">'+exBars(types,{empty:'A/S 기록 없음'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
@@ -3350,6 +3383,12 @@ function exShowNoz(){
     '선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 가나다순',
     exListGroup('N-Care 가입', nz.joined.hospitals)
     +exListGroup('미가입', nz.nonJoined.hospitals));
+}
+
+/* 집계 캐시를 버리고 보고 모드만 다시 그린다 (필터 변경이 아닌 데이터 보강용) */
+function exInvalidate(){
+  EX_CACHE=null; EX_DRAWN={};
+  if(VIEW==='exec' && DATA_READY) renderExecutiveDashboard(CUR_ROWS);
 }
 
 /* ── 보고 모드 렌더링 진입점 (활성 탭만 그린다) ── */
