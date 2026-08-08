@@ -1017,20 +1017,13 @@ function enrichNcare(){
 function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 
 /* ══════ 데모 운영 기록 판정 (모든 집계가 이 함수 하나만 쓴다) ══════
-   두 가지 신호 중 하나라도 걸리면 데모 운영으로 본다.
-     ① 병원명에 "데모" 포함 — 데모 장비를 두고 운영하는 곳이라 방문 자체가 데모 업무다.
-     ② 내용(detail)의 `[데모장비]` 표식 — handover.html 의 "장비 구분" select 가
-        "데모 장비" 일 때 내용 맨 앞에 붙여 저장하고, handover_gas.gs 도 같은 표식으로
-        "데모 장비 / 병원 장비" 를 되읽는다. 병원명이 평범한 곳에서 진행한 데모 업무를
-        놓치지 않으려면 ①만으로는 부족하다.
-   ①은 병원명, ②는 내용만 본다. 내용에 "데모" 라는 낱말이 스쳐 지나갔다는 이유만으로는
-   제외하지 않는다(대괄호 표식이어야 한다). 대괄호 안팎의 공백 차이는 허용한다. */
+   handover.html 의 "장비 구분" select 가 "데모 장비"일 때 detail 맨 앞에 저장하는
+   `[데모장비]` 구조화 표식만 사용한다. 병원명이나 일반 메모에 "데모"라는 글자가 있다는
+   이유만으로 고객 서비스 기록을 제외하지 않는다. 대괄호 안팎의 공백 차이는 허용한다. */
 var DEMO_MARK=/\[\s*데모\s*장비\s*\]/;
-var DEMO_HOSP=/데모/;
-function isDemoHospital(name){ return DEMO_HOSP.test(String(name||'')); }
 function isDemoRecord(r){
   if(!r) return false;
-  return isDemoHospital(r.hosp) || DEMO_MARK.test(String(r.detail||''));
+  return DEMO_MARK.test(String(r.detail||''));
 }
 /* 보고 범위 — 'customer'(고객 서비스) | 'demo'(데모 운영) */
 function recScope(r){ return isDemoRecord(r) ? 'demo' : 'customer'; }
@@ -1320,14 +1313,17 @@ function filteredRows_(opt){
    "그 계산이 실제로 보는 구간"으로만 잘라서 쓴다. 자른 뒤에 병원 상태(노즐 재사용·
    사용자 숙련도)를 판정하므로 아직 오지 않은 미래 기록이 과거 구간의 병원 상태를
    바꾸지 못한다(예: 다음 달 노즐 "O" 기록으로 지난달이 재사용 병원이 되는 문제). */
-function exWindowRows(a, b){
-  return hospStateFilter_(filteredRows_({noPeriod:true, scope:'customer'}).filter(function(r){
+function exWindowBaseRows_(a, b){
+  return filteredRows_({noPeriod:true, scope:'customer'}).filter(function(r){
     var d=rowDate(r);
     if(!d) return false;
     if(a && d<a) return false;
     if(b && d>b) return false;
     return true;
-  }));
+  });
+}
+function exWindowRows(a, b){
+  return hospStateFilter_(exWindowBaseRows_(a, b));
 }
 
 /* ── 병원 상태 필터 (노즐 재사용 · 사용자 숙련도) ──
@@ -3287,22 +3283,22 @@ function exDimCompare(rows, prev, key, onlyAS){
 /* 최근 8주 서비스 추이 — 기간 필터만 제외하고 같은 모집단을 쓴다 */
 function buildWeekTrend(){
   var base=F.to?new Date(F.to+'T00:00:00'):exToday();
-  var endMon=monday(base), m={};
-  /* 모집단은 화면에 그리는 8주(마지막 주 일요일까지)로 자른다.
-     막대 값은 종전과 같고(원래도 이 구간만 읽었다), 병원 상태만 이 구간 기록으로 판정된다. */
-  var winA=addD(endMon,-7*7), winB=addD(endMon,6); winB.setHours(23,59,59,999);
-  exWindowRows(winA, winB).forEach(function(r){
-    var d=rowDate(r); if(!d) return;
-    var w=d.getDay(); if(w===0||w===6) return;        /* 보고 기준과 동일하게 월~금만 집계 */
-    var k=ymd(monday(d)); m[k]=(m[k]||0)+1;
-  });
+  var endMon=monday(base);
   var selA=F.from?new Date(F.from+'T00:00:00'):null;
   var selB=F.to?new Date(F.to+'T00:00:00'):null;
   var out=[];
   for(var i=7;i>=0;i--){
     var mo=addD(endMon,-7*i), k=ymd(mo), sun=addD(mo,6);
+    var sunEnd=addD(sun,0); sunEnd.setHours(23,59,59,999);
+    /* 노즐·숙련도 상태는 각 주의 기록만으로 다시 판정한다.
+       뒤 주의 평가가 앞 주 막대의 병원 상태를 바꾸지 않아 주별 시점이 보존된다. */
+    var n=0;
+    exWindowRows(mo, sunEnd).forEach(function(r){
+      var d=rowDate(r); if(!d) return;
+      var w=d.getDay(); if(w!==0&&w!==6) n++;          /* 보고 기준과 동일하게 월~금만 집계 */
+    });
     var sel = !!(selA&&selB) && !(sun<selA || mo>selB);   /* 선택 기간과 겹치는 주 강조 */
-    out.push({key:k, mon:mo, n:m[k]||0, sel:sel});
+    out.push({key:k, mon:mo, n:n, sel:sel});
   }
   return out;
 }
@@ -3334,11 +3330,15 @@ function repeatEvents_(rows){
 function buildRepeatIssues(rows){
   var DAY=86400000, LOOK=30*DAY;
   /* 1) 판정 대상 추출 + 2) 중복 제거 — 모집단은 "선택 기간 시작 30일 전 ~ 선택 기간 종료"다.
-     재발 판정은 선택 기간 안의 발생일보다 앞선 30일만 참조하므로 값은 종전과 같고,
-     선택 기간 이후(미래) 기록이 병원 상태 판정에 끼어드는 경로만 막는다. */
+     노즐·숙련도 필터의 병원 상태는 이미 선택 기간 rows 에 반영되어 있다. 과거 30일 기록을
+     다시 포함해 상태를 재판정하면 과거 값이 현재 선택 병원을 바꿀 수 있으므로, 이력 조회에는
+     행 단위 필터만 적용한 뒤 현재 선택 병원에 해당하는 기록만 보탠다. */
   var lookA=F.from?addD(new Date(F.from+'T00:00:00'),-30):null;
   var lookB=F.to?new Date(F.to+'T23:59:59'):null;
-  var pop=repeatEvents_(exWindowRows(lookA, lookB)), popDays={};
+  var selectedHosp={};
+  (rows||[]).forEach(function(r){ var k=nkey(r.hosp); if(k) selectedHosp[k]=1; });
+  var history=exWindowBaseRows_(lookA, lookB).filter(function(r){ return !!selectedHosp[nkey(r.hosp)]; });
+  var pop=repeatEvents_(history), popDays={};
   /* 3) 서로 다른 발생일 정렬 */
   Object.keys(pop).forEach(function(k){
     popDays[k]=Object.keys(pop[k].days).map(Number).sort(function(a,b){ return a-b; });
