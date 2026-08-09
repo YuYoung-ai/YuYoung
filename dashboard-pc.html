@@ -329,6 +329,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-neutral{color:var(--text-muted)}
 
 /* 최근 8주 추이 */
+.ex-trend-layout{display:grid;grid-template-columns:minmax(0,1fr) 152px;gap:12px;height:100%;min-height:0}
 .ex-vchart{display:flex;align-items:flex-end;gap:6px;flex:1 1 auto;min-height:96px;padding-top:16px}
 .ex-vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
 .ex-vcol .n{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:3px;font-variant-numeric:tabular-nums}
@@ -337,6 +338,23 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-vcol.sel .b{background:var(--bar)}
 .ex-vcol.sel .n{color:var(--navy)}
 .ex-vcol.sel .l{color:var(--navy);font-weight:700}
+.ex-trend-stats{display:grid;grid-template-columns:1fr;gap:6px;align-content:center;min-width:0}
+.ex-trend-stat{border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:6px 8px;min-width:0}
+.ex-trend-stat span{display:block;font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-trend-stat b{display:block;margin-top:1px;font-size:15px;line-height:1.2;color:var(--navy);font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-trend-stat b.ex-up{color:var(--red)}
+.ex-trend-stat b.ex-down{color:var(--green)}
+
+/* VOC 유형 변화 — 증가·감소를 같은 카드에서 균형 있게 본다 */
+.ex-change-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;height:100%;min-height:0}
+.ex-change-group{min-width:0;display:flex;flex-direction:column}
+.ex-change-group+.ex-change-group{border-left:1px solid var(--gray-line);padding-left:10px}
+.ex-change-group h4{margin:0 0 4px;font-size:11.5px;color:var(--red);font-weight:700}
+.ex-change-group.down h4{color:var(--green)}
+.ex-change-group .ex-li{padding:4px 0;font-size:11.5px}
+.ex-change-new{font-size:9.5px;font-weight:700;color:#8A6100;background:#FBF3E3;border:1px solid #EBD9B4;
+  border-radius:8px;padding:0 5px;margin-left:4px}
 
 /* 가로 막대 · 목록 */
 .ex-rows{flex:1 1 auto;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
@@ -397,10 +415,14 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 /* 소형 지표 타일 · 요약 */
 .ex-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:0 0 auto}
 .ex-tiles.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ex-tiles.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .ex-tile{border:1px solid var(--gray-line);border-radius:9px;padding:8px 6px;text-align:center;background:var(--surface-2);min-width:0}
 .ex-tile span{display:block;font-size:10.5px;color:var(--text-muted);margin-bottom:3px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ex-tile b{font-size:19px;font-weight:800;color:var(--navy);line-height:1.15;font-variant-numeric:tabular-nums}
+.ex-tile-btn{width:100%;font-family:inherit;color:inherit;cursor:pointer}
+.ex-tile-btn:not(:disabled):hover{background:var(--gray-bg);border-color:#B9C7DA}
+.ex-tile-btn:disabled{cursor:default}
 .ex-sumlist{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;line-height:1.6}
 .ex-sumlist li{list-style:none}
 .ex-sumlist b{color:var(--navy)}
@@ -446,6 +468,31 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-mgrp li{font-size:12.5px;line-height:1.75}
 .ex-mgrp li em{font-style:normal;color:var(--text-muted);font-size:11.5px;margin-left:6px}
 
+/* 필요할 때만 여는 토요일 당직 운영 분석 */
+.sat-box{max-width:1180px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.sat-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.sat-field{min-width:150px}
+.sat-field label{display:block;margin-bottom:3px;font-size:10.5px;font-weight:700;color:var(--text-muted)}
+.sat-field select,.sat-field input{width:100%;padding:8px 9px;border:1px solid var(--gray-line);border-radius:8px;
+  background:#fff;color:var(--text);font:inherit;font-size:12px}
+.sat-calc{border:0;border-radius:8px;padding:8px 14px;background:var(--navy);color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+.sat-report{min-height:0;overflow:auto;border:1px solid var(--gray-line);border-radius:10px;padding:11px;background:var(--gray-bg)}
+.sat-basis{font-size:11px;color:var(--text-muted);margin-bottom:8px}
+.sat-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-bottom:9px}
+.sat-kpi{background:#fff;border:1px solid var(--gray-line);border-radius:9px;padding:8px;text-align:center;min-width:0}
+.sat-kpi span{display:block;font-size:10.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sat-kpi b{display:block;margin-top:2px;font-size:20px;line-height:1.15;color:var(--navy);font-variant-numeric:tabular-nums}
+.sat-summary{background:#fff;border:1px solid var(--gray-line);border-radius:9px;padding:9px 11px;margin-bottom:9px;
+  font-size:12px;line-height:1.65}
+.sat-summary b{color:var(--navy)}
+.sat-table-wrap{overflow:auto;background:#fff;border:1px solid var(--gray-line);border-radius:9px}
+.sat-table{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}
+.sat-table th{position:sticky;top:0;background:#F1F4F9;color:var(--text-muted);font-weight:700;padding:7px 8px;text-align:right}
+.sat-table th:first-child,.sat-table td:first-child{text-align:left}
+.sat-table td{padding:7px 8px;border-top:1px solid var(--gray-line);text-align:right;font-variant-numeric:tabular-nums}
+.sat-table td.hot{color:var(--red);font-weight:700}
+.sat-limit{margin:8px 2px 0;font-size:10.5px;color:var(--text-muted);line-height:1.5}
+
 /* 낮은 해상도(1366×768) 대응 — 세로 여백을 줄여 한 화면 유지 */
 @media (max-height:820px){
   body.view-exec header{padding:8px 14px}
@@ -484,13 +531,22 @@ body.ex-narrow .ex-cbody,body.ex-narrow .ex-rows{overflow:visible}
 /* 세로 스크롤 레이아웃에서는 카드 높이가 내용에 따라 정해져 .ex-vchart 높이가 불확정해진다.
    그러면 막대의 height:% 가 0으로 풀려 버리므로 확정 높이를 준다. */
 body.ex-narrow .ex-vchart{height:150px;min-height:0}
+body.ex-narrow .ex-trend-layout{grid-template-columns:1fr;height:auto}
+body.ex-narrow .ex-trend-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.ex-narrow .ex-change-cols{grid-template-columns:1fr;height:auto}
+body.ex-narrow .ex-change-group+.ex-change-group{border-left:0;border-top:1px solid var(--gray-line);padding:8px 0 0;margin-top:6px}
 body.ex-narrow .ex-kpi .lb{white-space:normal}   /* "오늘 기준" 배지가 잘리지 않도록 줄바꿈 허용 */
 body.ex-narrow .ex-kpi .vl{font-size:23px}
 body.ex-narrow .ex-kpi .vl.sm{font-size:18px}
 body.ex-narrow .ex-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.ex-narrow .ex-tiles.c4{grid-template-columns:repeat(2,minmax(0,1fr))}
 body.ex-narrow .ex-card h3{flex-wrap:wrap}
 body.ex-narrow .ex-dgrid{grid-template-columns:1fr}
 body.ex-narrow .ex-dg.span2{grid-column:auto}
+@media(max-width:720px){
+  .sat-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sat-box{max-height:96vh;padding:13px}
+}
 </style>
 <script src="auth.js"></script>
 </head>
@@ -508,6 +564,7 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
     <button class="hd-btn" onclick="location.href='handover.html'">✍ 기록</button>
     <button class="hd-btn" onclick="openWeekly()">📑 주간보고</button>
     <button class="hd-btn" onclick="openMonthly()">📅 월간보고</button>
+    <button class="hd-btn" onclick="openSaturdayDuty()">🗓 토요당직 분석</button>
     <button class="hd-btn" onclick="loadData(true)">🔄 새로고침</button>
     <button type="button" class="hd-btn" id="themeToggle" aria-label="다크모드 전환" title="다크모드">🌙</button>
     <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
@@ -818,6 +875,26 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
     <div class="mhint" id="exListSub" style="margin:0 0 10px"></div>
     <div class="ex-modal-body" id="exListBody"></div>
     <div class="mbtns"><button class="mbtn cancel" onclick="closeExList()">닫기</button></div>
+  </div>
+</div>
+
+<!-- 필요 시 화면에 띄우는 토요일 당직 운영 근거 보고 -->
+<div class="modal" id="satModal">
+  <div class="mbox sat-box">
+    <h2>🗓 토요일 당직 운영 분석</h2>
+    <div class="sat-controls">
+      <div class="sat-field"><label for="satMonths">분석 기간 · 완료월 기준</label>
+        <select id="satMonths" onchange="renderSaturdayDuty()">
+          <option value="6">최근 6개월</option><option value="12" selected>최근 12개월</option><option value="24">최근 24개월</option>
+        </select>
+      </div>
+      <div class="sat-field"><label for="satStaff">토요일 당직 인원</label>
+        <input id="satStaff" type="number" min="1" max="20" value="1" onchange="renderSaturdayDuty()">
+      </div>
+      <button type="button" class="sat-calc" onclick="renderSaturdayDuty()">다시 계산</button>
+    </div>
+    <div class="sat-report" id="satReport"></div>
+    <div class="mbtns"><button class="mbtn cancel" onclick="closeSaturdayDuty()">닫기</button></div>
   </div>
 </div>
 
@@ -3464,6 +3541,103 @@ function exListGroup(title, arr, fmt){
                 : '<div class="ex-empty">해당 병원 없음</div>')+'</div>';
 }
 
+/* ══════ 토요일 당직 운영 분석 ══════
+   - 현재 화면 필터와 무관한 고객 서비스 전체 기록(데모 제외)을 사용한다.
+   - 같은 병원·같은 날짜라도 장비별로 각각 작성된 기록은 모두 1건으로 집계한다.
+   - "방문 발생 토요일"만 날짜 기준으로 1일 처리해 상시 당직이 실제 사용된 날짜 비율을 본다.
+   - 구조화된 긴급 출동 필드가 없으므로 A/S 기록은 현장 대응 수요의 대리 지표로만 표시한다. */
+function buildSaturdayDutyData_(months, staff, rows, today){
+  months=Math.max(1,Math.min(24,parseInt(months,10)||12));
+  staff=Math.max(1,Math.min(20,parseInt(staff,10)||1));
+  today=today?new Date(today):exToday(); today.setHours(0,0,0,0);
+  var end=new Date(today.getFullYear(),today.getMonth(),0); end.setHours(23,59,59,999); /* 직전 완료월 말일 */
+  var start=new Date(end.getFullYear(),end.getMonth()-months+1,1); start.setHours(0,0,0,0);
+  var byMonth={}, list=[];
+  for(var i=0;i<months;i++){
+    var md=new Date(start.getFullYear(),start.getMonth()+i,1), key=md.getFullYear()+'-'+String(md.getMonth()+1).padStart(2,'0');
+    var rec={key:key,label:md.getFullYear()+'.'+String(md.getMonth()+1).padStart(2,'0'),saturdays:0,weekdays:0,
+             active:{},satRows:0,satAs:0,satOther:0,weekdayRows:0};
+    byMonth[key]=rec; list.push(rec);
+  }
+  for(var d=new Date(start);d<=end;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
+    var dk=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), dow=d.getDay();
+    if(!byMonth[dk]) continue;
+    if(dow===6) byMonth[dk].saturdays++;
+    else if(dow>=1&&dow<=5) byMonth[dk].weekdays++;
+  }
+  (rows||RAW).forEach(function(r){
+    if(recScope(r)!=='customer') return;
+    var d=rowDate(r); if(!d||d<start||d>end) return;
+    var key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'), m=byMonth[key]; if(!m) return;
+    var dow=d.getDay();
+    if(dow===6){
+      m.satRows++; m.active[ymd(d)]=1;
+      if(String(r.gubun||'').trim()==='A/S') m.satAs++; else m.satOther++;
+    }else if(dow>=1&&dow<=5) m.weekdayRows++;
+  });
+  var total={saturdays:0,weekdays:0,active:0,satRows:0,satAs:0,satOther:0,weekdayRows:0};
+  list.forEach(function(m){
+    m.activeCount=Object.keys(m.active).length;
+    m.zero=m.saturdays-m.activeCount;
+    m.zeroRate=m.saturdays?m.zero/m.saturdays*100:0;
+    m.satAvg=m.saturdays?m.satRows/m.saturdays:0;
+    m.weekdayAvg=m.weekdays?m.weekdayRows/m.weekdays:0;
+    total.saturdays+=m.saturdays; total.weekdays+=m.weekdays; total.active+=m.activeCount;
+    total.satRows+=m.satRows; total.satAs+=m.satAs; total.satOther+=m.satOther; total.weekdayRows+=m.weekdayRows;
+  });
+  total.zero=total.saturdays-total.active;
+  total.zeroRate=total.saturdays?total.zero/total.saturdays*100:0;
+  total.satAvg=total.saturdays?total.satRows/total.saturdays:0;
+  total.weekdayAvg=total.weekdays?total.weekdayRows/total.weekdays:0;
+  total.ratio=total.satAvg?total.weekdayAvg/total.satAvg:null;
+  total.leaveDays=total.saturdays*staff;
+  return {months:list,total:total,staff:staff,from:start,to:end};
+}
+function openSaturdayDuty(){
+  if(!DATA_READY){ toast('데이터 로드 후 확인할 수 있습니다'); return; }
+  document.getElementById('satModal').classList.add('show');
+  renderSaturdayDuty();
+}
+function closeSaturdayDuty(){ document.getElementById('satModal').classList.remove('show'); }
+function renderSaturdayDuty(){
+  var report=document.getElementById('satReport'); if(!report) return;
+  var months=Number(document.getElementById('satMonths').value||12);
+  var staff=Math.max(1,Math.min(20,parseInt(document.getElementById('satStaff').value,10)||1));
+  document.getElementById('satStaff').value=staff;
+  var D=buildSaturdayDutyData_(months,staff,RAW), T=D.total;
+  var ratioTxt=T.ratio==null?'비교 불가':('평일이 토요일의 '+T.ratio.toFixed(1)+'배');
+  function kpi(label,value){ return '<div class="sat-kpi"><span>'+label+'</span><b>'+value+'</b></div>'; }
+  report.innerHTML=
+    '<div class="sat-basis">고객 서비스 기준 · 데모 제외 · '+ymd(D.from)+'~'+ymd(D.to)
+      +' · 작성 기록 1행=1건(같은 병원·날짜의 장비별 복수 기록도 각각 집계)</div>'
+    +'<div class="sat-kpis">'
+      +kpi('전체 토요일',exNum(T.saturdays)+'일')
+      +kpi('방문 발생 토요일',exNum(T.active)+'일')
+      +kpi('무방문 토요일',exNum(T.zero)+'일')
+      +kpi('토요일 전체 기록',exNum(T.satRows)+'건')
+      +kpi('토요일 A/S 기록',exNum(T.satAs)+'건')
+      +kpi('예상 대체휴무',exNum(T.leaveDays)+'인일')
+    +'</div>'
+    +'<div class="sat-summary"><b>근거 요약</b><br>'
+      +'전체 토요일 '+T.saturdays+'일 중 고객 서비스 기록이 있었던 날은 <b>'+T.active+'일</b>, 기록이 없었던 날은 '
+      +'<b>'+T.zero+'일('+T.zeroRate.toFixed(1)+'%)</b>입니다. 토요일 작성 기록은 총 '+T.satRows+'건(A/S '+T.satAs
+      +'건 · 기타 '+T.satOther+'건)이며, 토요일 일평균 '+T.satAvg.toFixed(2)+'건과 평일 일평균 '
+      +T.weekdayAvg.toFixed(2)+'건을 비교하면 <b>'+ratioTxt+'</b>입니다.<br>'
+      +'토요일마다 '+staff+'명이 근무하고 평일 대체휴무 1일을 부여한다고 가정하면 분석 기간의 평일 가용근무 감소는 '
+      +'<b>'+T.leaveDays+'인일</b>입니다. 기록상 토요일 현장 업무 빈도와 평일 업무량의 차이를 기준으로 '
+      +'<b>상시 출근형 당직 대신 비상 연락 대기·필요 시 출동 방식</b>을 비교 검토할 수 있습니다.</div>'
+    +'<div class="sat-table-wrap"><table class="sat-table"><thead><tr>'
+      +'<th>월</th><th>토요일</th><th>방문 발생일</th><th>무방문률</th><th>토요일 전체</th><th>A/S</th><th>기타</th>'
+      +'<th>토요일 일평균</th><th>평일 일평균</th></tr></thead><tbody>'
+      +D.months.map(function(m){ return '<tr><td>'+m.label+'</td><td>'+m.saturdays+'일</td><td>'+m.activeCount+'일</td>'
+        +'<td class="'+(m.zeroRate>=80?'hot':'')+'">'+m.zeroRate.toFixed(1)+'%</td><td>'+m.satRows+'건</td>'
+        +'<td>'+m.satAs+'건</td><td>'+m.satOther+'건</td><td>'+m.satAvg.toFixed(2)+'</td><td>'+m.weekdayAvg.toFixed(2)+'</td></tr>'; }).join('')
+      +'</tbody></table></div>'
+    +'<div class="sat-limit">※ A/S 기록은 긴급 출동 여부가 별도로 저장되지 않아 현장 대응 수요의 대리 지표로 사용합니다. '
+      +'전화·원격 대응은 현재 데이터에 포함되지 않으며, 평일 일수는 공휴일을 별도로 차감하지 않은 월~금 달력 기준입니다. '
+      +'대체휴무는 입력한 당직 인원에게 1일씩 부여하는 가정치이며 실제 사용 내역이 아닙니다.</div>';
+}
+
 /* ══════ 탭 ① 주간 핵심보고 ══════ */
 function exKpiCard(o){
   return '<div class="ex-kpi">'
@@ -3472,10 +3646,20 @@ function exKpiCard(o){
     +(o.foot||'')
   +'</div>';
 }
+function buildTrendSummary_(tr){
+  tr=tr||[];
+  var sum=tr.reduce(function(a,t){ return a+Number(t.n||0); },0);
+  var avg=tr.length?sum/tr.length:0;
+  var latest=tr.length?tr[tr.length-1]:{n:0,mon:new Date()};
+  var peak=tr.reduce(function(best,t){ return !best||t.n>best.n?t:best; },null)||latest;
+  var delta=avg?Math.round((latest.n-avg)/avg*100):0;
+  return {latest:latest, avg:avg, delta:delta, peak:peak};
+}
 function renderExecutiveSummary(x){
   var k=x.kpi.cur, p=x.kpi.prev, cmp=x.cmp, per=exPeriodLabel();
   var nck=x.ncare, remain=nck.list.length?nck.remain:0;
   var nozReuse=x.noz?(x.noz.joined.reuse+x.noz.nonJoined.reuse):0;
+  var K=x.skill, U=x.nozUn;
 
   /* ── KPI 6 ── */
   document.getElementById('exKpis').innerHTML=[
@@ -3497,51 +3681,72 @@ function renderExecutiveSummary(x){
 
   /* ── 최근 8주 서비스 추이 ── */
   var tr=buildWeekTrend(), mx=Math.max.apply(null, tr.map(function(t){return t.n;}))||1;
+  var ts=buildTrendSummary_(tr), peakMon=ts.peak.mon;
   document.getElementById('exTrendCard').innerHTML=
     exH3('최근 8주 서비스 추이', '주 단위(월~금) · 기간·연·월·분기 외 필터 반영')
-    +'<div class="ex-cbody"><div class="ex-vchart">'
-    +tr.map(function(t){
-      return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+' 주 · '+t.n+'건">'
-        +'<div class="n">'+t.n+'</div>'
-        +'<div class="b" style="height:'+Math.max(2,Math.round(t.n/mx*100))+'%"></div>'
-        +'<div class="l">'+(t.mon.getMonth()+1)+'/'+t.mon.getDate()+'</div></div>';
-    }).join('')
-    +'</div></div>';
+    +'<div class="ex-cbody"><div class="ex-trend-layout"><div class="ex-vchart">'
+      +tr.map(function(t){
+        return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+' 주 · '+t.n+'건">'
+          +'<div class="n">'+t.n+'</div>'
+          +'<div class="b" style="height:'+Math.max(2,Math.round(t.n/mx*100))+'%"></div>'
+          +'<div class="l">'+(t.mon.getMonth()+1)+'/'+t.mon.getDate()+'</div></div>';
+      }).join('')
+      +'</div><div class="ex-trend-stats">'
+        +'<div class="ex-trend-stat"><span>최근 주</span><b>'+exNum(ts.latest.n)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>8주 주평균</span><b>'+ts.avg.toFixed(1)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>평균 대비</span><b class="'+(ts.delta>0?'ex-up':(ts.delta<0?'ex-down':''))+'">'
+          +(ts.delta>0?'+':'')+ts.delta+'%</b></div>'
+        +'<div class="ex-trend-stat"><span>8주 최고 · '+(peakMon.getMonth()+1)+'/'+peakMon.getDate()+'</span><b>'+exNum(ts.peak.n)+'건</b></div>'
+      +'</div></div></div>';
 
-  /* ── 전주 대비 증가한 VOC 유형 TOP 3 ── */
-  var up=[];
+  /* ── 이전 기간 대비 VOC 유형 변화: 증가·감소를 함께 표시 ── */
+  var up=[], down=[];
   if(x.prev){
-    up=exDimCompare(x.rows, x.prev, 'type', true)
-        .filter(function(t){ return t.d>0; })
+    var changes=exDimCompare(x.rows, x.prev, 'type', true);
+    up=changes.filter(function(t){ return t.d>0; })
         .sort(function(a,b){ return b.d-a.d || b.cur-a.cur; })
         .slice(0,3);
+    down=changes.filter(function(t){ return t.d<0; })
+        .sort(function(a,b){ return a.d-b.d || b.prev-a.prev; })
+        .slice(0,3);
+  }
+  function changeGroup(title, items, cls){
+    return '<div class="ex-change-group '+cls+'"><h4>'+title+'</h4>'
+      +(items.length?'<div class="ex-rows">'+items.map(function(t){
+          return '<div class="ex-li"><span class="nm" title="'+esc(t.k)+'">'+esc(t.k)
+            +(t.prev===0&&t.cur>0?'<em class="ex-change-new">신규</em>':'')+'</span>'
+            +'<span class="rt">'+t.prev+' → <b>'+t.cur+'</b> '+exDeltaSmall(t.d)+'</span></div>';
+        }).join('')+'</div>':'<div class="ex-empty">해당 유형 없음</div>')
+      +'</div>';
   }
   document.getElementById('exVocUpCard').innerHTML=
-    exH3((cmp?cmp.label:'이전 기간')+' 대비 증가한 VOC 유형 TOP 3', 'A/S 기준 · 이상 없음 제외 · '+per)
+    exH3('VOC 유형 변화', (cmp?cmp.label:'이전 기간')+' 대비 · A/S 기준 · 이상 없음 제외 · '+per)
     +'<div class="ex-cbody">'
     +(!x.prev
       ? '<div class="ex-empty">비교 데이터 없음</div>'
-      : (up.length
-        ? '<div class="ex-rows">'+up.map(function(t){
-            return '<div class="ex-li"><span class="nm" title="'+esc(t.k)+'">'+esc(t.k)+'</span>'
-              +'<span class="rt">'+t.prev+' → <b>'+t.cur+'</b> '+exDeltaSmall(t.d)+'</span></div>';
-          }).join('')+'</div>'
-        : '<div class="ex-empty">증가한 VOC 유형 없음</div>'))
+      : '<div class="ex-change-cols">'+changeGroup('증가 TOP 3 ↑',up,'up')+changeGroup('감소 TOP 3 ↓',down,'down')+'</div>')
     +'</div>';
 
-  /* ── 관리 지표 3 ── */
+  /* ── 금주 관리 신호 4 ── */
+  var repeatCount=buildRepeatIssues(x.rows).length;
+  function watchTile(label, value, fn){
+    var on=value>0;
+    return '<button type="button" class="ex-tile ex-tile-btn"'+(on?' onclick="'+fn+'()" title="전체 명단 보기"':' disabled')+'>'
+      +'<span>'+label+'</span><b>'+exNum(value)+'</b></button>';
+  }
   document.getElementById('exWatchCard').innerHTML=
-    exH3('관리 지표', '선택 기간 · N-CARE 점검 운영률은 전체 가입 병원 기준 · 오늘 현황')
-    +'<div class="ex-cbody"><div class="ex-tiles">'
-      +'<div class="ex-tile"><span>교육 필요 병원</span><b>'+x.skill.badCount+'</b></div>'
-      +'<div class="ex-tile"><span>노즐 재사용 병원</span><b>'+nozReuse+'</b></div>'
-      +'<div class="ex-tile"><span>N-CARE 점검 운영률</span><b>'+(nck.list.length?nck.rate+'%':'–')+'</b></div>'
+    exH3('금주 관리 신호', '선택 기간 · 숫자를 누르면 전체 명단 표시')
+    +'<div class="ex-cbody"><div class="ex-tiles c4">'
+      +watchTile('반복 발생 병원',repeatCount,'exShowRepeat')
+      +watchTile('교육 보완 필요',K.needCount,'exShowSkill')
+      +watchTile('교육 미평가',K.unratedCount,'exShowSkillUnrated')
+      +watchTile('노즐 미평가',U.unrated,'exShowNozUnrated')
     +'</div></div>';
 
   /* ── 특이사항 (사실 기반 문장만) ──
      N-CARE 처리 건수·고유 병원 차이, 사용자 교육 미평가 대상, 노즐 재사용 미평가 대상은
      각 카드가 쓰는 집계(x.cmpNc · x.skill · x.nozUn)를 그대로 재사용한다 — 여기서 다시 세지 않는다. */
-  var G=x.cmpNc, K=x.skill, U=x.nozUn;
+  var G=x.cmpNc;
   var s=[];
   if(!x.prev) s.push('이전 동일 기간 비교 데이터 없음 — 증감은 표시하지 않습니다.');
   else{
