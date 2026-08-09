@@ -478,7 +478,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .sat-calc{border:0;border-radius:8px;padding:8px 14px;background:var(--navy);color:#fff;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
 .sat-report{min-height:0;overflow:auto;border:1px solid var(--gray-line);border-radius:10px;padding:11px;background:var(--gray-bg)}
 .sat-basis{font-size:11px;color:var(--text-muted);margin-bottom:8px}
-.sat-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-bottom:9px}
+.sat-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-bottom:9px}
 .sat-kpi{background:#fff;border:1px solid var(--gray-line);border-radius:9px;padding:8px;text-align:center;min-width:0}
 .sat-kpi span{display:block;font-size:10.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sat-kpi b{display:block;margin-top:2px;font-size:20px;line-height:1.15;color:var(--navy);font-variant-numeric:tabular-nums}
@@ -3614,6 +3614,7 @@ function renderSaturdayDuty(){
       +kpi('전체 토요일',exNum(T.saturdays)+'일')
       +kpi('방문 발생 토요일',exNum(T.active)+'일')
       +kpi('무방문 토요일',exNum(T.zero)+'일')
+      +kpi('토요일 전체 기록',exNum(T.satRows)+'건')
       +kpi('토요일 A/S 기록',exNum(T.satAs)+'건')
       +kpi('예상 대체휴무',exNum(T.leaveDays)+'인일')
     +'</div>'
