@@ -338,6 +338,27 @@ const noteFor = (cur, prev) => D.exMonthTrendNote_({
     (SRC.match(/var DEMO_MARK=/g) || []).length === 1);
 }
 
+/* ══════ PR 보완: 합계 일치 + 우측 카드 재배치 ══════ */
+{
+  load([
+    { date: '2026-08-05', hosp: 'A', gubun: 'A/S' },
+    { date: '2026-08-05', hosp: 'B', gubun: '점검' },
+    { date: '2026-08-05', hosp: 'C', gubun: '기타' },
+    { date: '2026-08-05', hosp: 'D', gubun: '' }
+  ], base('2026-08-01', '2026-08-09'));
+  const aug = monthOf(D.buildMonthTrend(), 8);
+  ck('L1. 월별 총 처리는 A/S+점검 합과 일치 (기타·빈 구분 제외)',
+    aug.n === 2 && aug.n === aug.as + aug.insp, 'n=' + aug.n + ' as=' + aug.as + ' insp=' + aug.insp);
+}
+{
+  ck('L2. Window 주간 핵심보고는 KPI+본문 2행 구조', /#exPaneSummary\{grid-template-rows:auto minmax\(0,1fr\)\}/.test(SRC));
+  ck('L3. 우측 열 순서 = VOC 유형 변화 → 금주 관리 신호 → 특이사항',
+    /<div class="ex-col">\s*<div class="ex-card ex-voc-compact" id="exVocUpCard"><\/div>\s*<div class="ex-card" id="exWatchCard"><\/div>\s*<div class="ex-card ex-sumcard ex-summary-side" id="exSummaryCard"><\/div>/.test(SRC));
+  ck('L4. VOC 카드는 ex-grow를 제거해 내용 높이만 사용', !/class="ex-card ex-grow" id="exVocUpCard"/.test(SRC));
+  ck('L5. 모바일에서는 특이사항 카드가 내용 높이로 복귀',
+    /body\.ex-narrow \.ex-voc-compact,body\.ex-narrow \.ex-sumcard\.ex-summary-side\{flex:0 0 auto\}/.test(SRC));
+}
+
 console.log(`\n===== 월별 처리 추이 회귀 결과: ${pass}/${total} 통과 =====`);
 if (fails.length) { console.log('실패:'); fails.forEach(f => console.log('  -', f)); }
 process.exit(pass === total ? 0 : 1);
