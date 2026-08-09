@@ -290,12 +290,14 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-body{position:relative;flex:1 1 auto;min-height:0}
 .ex-pane{display:none;position:absolute;inset:0;gap:8px}
 .ex-pane.on{display:grid}
-#exPaneSummary{grid-template-rows:auto minmax(0,1fr) auto}
+#exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
 #exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
 .ex-r2{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:8px;min-height:0}
 .ex-col{display:flex;flex-direction:column;gap:8px;min-height:0}
 .ex-grow{flex:1 1 auto}
+/* 우측 보고 흐름: VOC 변화는 내용만큼만, 특이사항은 남은 높이를 사용한다. */
+.ex-voc-compact{flex:0 0 auto}
 /* 같은 열에 쌓인 두 추이 카드가 남은 높이를 정확히 반씩 나눠 갖는다(내용 높이에 끌리지 않도록 basis 0) */
 .ex-half{flex:1 1 0;min-height:0}
 
@@ -483,6 +485,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-sumlist .ex-up{color:var(--red)}
 .ex-sumlist .ex-down{color:var(--green)}
 .ex-sumcard{flex:0 0 auto}
+/* Window 보고에서는 금주 관리 신호 바로 아래에서 남은 공간을 채우고, 문장이 많으면 카드 안에서만 스크롤한다. */
+.ex-sumcard.ex-summary-side{flex:1 1 0;min-height:0}
+.ex-sumcard.ex-summary-side .ex-sumlist{flex:1 1 auto;min-height:0;overflow:auto;align-content:flex-start}
 .ex-sumcard ul{margin:0;padding:0}
 
 /* N-Care 상태 배지 */
@@ -592,6 +597,9 @@ body.ex-narrow .ex-trend-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 body.ex-narrow .ex-msum{grid-template-columns:repeat(2,minmax(0,1fr))}
 /* 세로 스크롤 레이아웃에서는 두 추이 카드가 높이를 나눠 가질 필요가 없다 */
 body.ex-narrow .ex-half{flex:0 0 auto}
+/* 모바일은 카드 높이를 내용에 맡겨 특이사항 전체를 자연스럽게 이어서 보여준다. */
+body.ex-narrow .ex-voc-compact,body.ex-narrow .ex-sumcard.ex-summary-side{flex:0 0 auto}
+body.ex-narrow .ex-sumcard.ex-summary-side .ex-sumlist{overflow:visible}
 body.ex-narrow .ex-change-cols{grid-template-columns:1fr;height:auto}
 body.ex-narrow .ex-change-group+.ex-change-group{border-left:0;border-top:1px solid var(--gray-line);padding:8px 0 0;margin-top:6px}
 body.ex-narrow .ex-kpi .lb{white-space:normal}   /* "오늘 기준" 배지가 잘리지 않도록 줄바꿈 허용 */
@@ -805,11 +813,11 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
             <div class="ex-card ex-half" id="exMonthTrendCard"></div>
           </div>
           <div class="ex-col">
-            <div class="ex-card ex-grow" id="exVocUpCard"></div>
+            <div class="ex-card ex-voc-compact" id="exVocUpCard"></div>
             <div class="ex-card" id="exWatchCard"></div>
+            <div class="ex-card ex-sumcard ex-summary-side" id="exSummaryCard"></div>
           </div>
         </div>
-        <div class="ex-card ex-sumcard" id="exSummaryCard"></div>
       </section>
       <!-- ② 원인 분석 -->
       <section class="ex-pane" id="exPaneCause">
@@ -3467,9 +3475,10 @@ function exCountRange_(a, b){
   var n=0, as=0, insp=0;
   exWindowRows(a, end).forEach(function(r){
     if(!rowDate(r)) return;
-    n++;
     var g=String(r.gubun||'').trim();
-    if(g==='A/S') as++; else if(g==='점검') insp++;
+    /* 카드 제목 그대로 A/S·점검만 합계에 포함해 막대 합과 총 처리가 항상 일치하게 한다. */
+    if(g==='A/S'){ as++; n++; }
+    else if(g==='점검'){ insp++; n++; }
   });
   return {n:n, as:as, insp:insp};
 }
