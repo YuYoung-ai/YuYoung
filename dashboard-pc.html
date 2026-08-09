@@ -330,13 +330,24 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 
 /* 최근 8주 추이 */
 .ex-trend-layout{display:grid;grid-template-columns:minmax(0,1fr) 152px;gap:12px;height:100%;min-height:0}
-.ex-vchart{display:flex;align-items:flex-end;gap:6px;flex:1 1 auto;min-height:96px;padding-top:16px}
+.ex-trend-chart{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ex-trend-legend{display:flex;justify-content:flex-end;gap:12px;font-size:10.5px;color:var(--text-muted);flex:0 0 auto}
+.ex-trend-legend span{display:inline-flex;align-items:center;gap:4px}
+.ex-trend-legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.ex-trend-legend .as{background:var(--red)}
+.ex-trend-legend .insp{background:var(--teal)}
+.ex-vchart{display:flex;align-items:flex-end;gap:6px;flex:1 1 auto;min-height:96px;padding-top:4px}
 .ex-vcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
-.ex-vcol .n{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:3px;font-variant-numeric:tabular-nums}
-.ex-vcol .b{width:68%;max-width:44px;background:var(--bar-dim);border-radius:4px 4px 0 0;min-height:3px}
+.ex-vbars{display:flex;align-items:flex-end;justify-content:center;gap:3px;width:100%;height:calc(100% - 18px);min-height:0}
+.ex-vbar{flex:1 1 0;max-width:24px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;opacity:.72}
+.ex-vbar .n{font-size:9.5px;font-weight:700;color:var(--text-muted);margin-bottom:2px;font-variant-numeric:tabular-nums}
+.ex-vbar .b{width:100%;border-radius:3px 3px 0 0;min-height:3px}
+.ex-vbar .b.zero{min-height:0}
+.ex-vbar.as .b{background:var(--red)}
+.ex-vbar.insp .b{background:var(--teal)}
 .ex-vcol .l{font-size:10.5px;color:var(--text-muted);margin-top:5px;white-space:nowrap}
-.ex-vcol.sel .b{background:var(--bar)}
-.ex-vcol.sel .n{color:var(--navy)}
+.ex-vcol.sel .ex-vbar{opacity:1}
+.ex-vcol.sel .n{color:var(--navy);font-weight:800}
 .ex-vcol.sel .l{color:var(--navy);font-weight:700}
 .ex-trend-stats{display:grid;grid-template-columns:1fr;gap:6px;align-content:center;min-width:0}
 .ex-trend-stat{border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:6px 8px;min-width:0}
@@ -345,6 +356,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ex-trend-stat b.ex-up{color:var(--red)}
 .ex-trend-stat b.ex-down{color:var(--green)}
+.ex-trend-stat em{display:block;margin-top:1px;font-size:9.5px;font-style:normal;color:var(--text-muted);white-space:nowrap}
 
 /* VOC 유형 변화 — 증가·감소를 같은 카드에서 균형 있게 본다 */
 .ex-change-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;height:100%;min-height:0}
@@ -3369,13 +3381,16 @@ function buildWeekTrend(){
     var sunEnd=addD(sun,0); sunEnd.setHours(23,59,59,999);
     /* 노즐·숙련도 상태는 각 주의 기록만으로 다시 판정한다.
        뒤 주의 평가가 앞 주 막대의 병원 상태를 바꾸지 않아 주별 시점이 보존된다. */
-    var n=0;
+    var n=0, as=0, insp=0;
     exWindowRows(mo, sunEnd).forEach(function(r){
       var d=rowDate(r); if(!d) return;
-      var w=d.getDay(); if(w!==0&&w!==6) n++;          /* 보고 기준과 동일하게 월~금만 집계 */
+      var w=d.getDay(); if(w===0||w===6) return;       /* 보고 기준과 동일하게 월~금만 집계 */
+      n++;
+      var g=String(r.gubun||'').trim();
+      if(g==='A/S') as++; else if(g==='점검') insp++;
     });
     var sel = !!(selA&&selB) && !(sun<selA || mo>selB);   /* 선택 기간과 겹치는 주 강조 */
-    out.push({key:k, mon:mo, n:n, sel:sel});
+    out.push({key:k, mon:mo, n:n, as:as, insp:insp, sel:sel});
   }
   return out;
 }
@@ -3649,11 +3664,17 @@ function exKpiCard(o){
 function buildTrendSummary_(tr){
   tr=tr||[];
   var sum=tr.reduce(function(a,t){ return a+Number(t.n||0); },0);
+  var sumAs=tr.reduce(function(a,t){ return a+Number(t.as||0); },0);
+  var sumInsp=tr.reduce(function(a,t){ return a+Number(t.insp||0); },0);
   var avg=tr.length?sum/tr.length:0;
-  var latest=tr.length?tr[tr.length-1]:{n:0,mon:new Date()};
+  var avgAs=tr.length?sumAs/tr.length:0, avgInsp=tr.length?sumInsp/tr.length:0;
+  var latest=tr.length?tr[tr.length-1]:{n:0,as:0,insp:0,mon:new Date()};
   var peak=tr.reduce(function(best,t){ return !best||t.n>best.n?t:best; },null)||latest;
   var delta=avg?Math.round((latest.n-avg)/avg*100):0;
-  return {latest:latest, avg:avg, delta:delta, peak:peak};
+  var deltaAs=avgAs?Math.round((latest.as-avgAs)/avgAs*100):0;
+  var deltaInsp=avgInsp?Math.round((latest.insp-avgInsp)/avgInsp*100):0;
+  return {latest:latest, avg:avg, delta:delta, peak:peak,
+          avgAs:avgAs,avgInsp:avgInsp,deltaAs:deltaAs,deltaInsp:deltaInsp};
 }
 function renderExecutiveSummary(x){
   var k=x.kpi.cur, p=x.kpi.prev, cmp=x.cmp, per=exPeriodLabel();
@@ -3680,23 +3701,28 @@ function renderExecutiveSummary(x){
   ].join('');
 
   /* ── 최근 8주 서비스 추이 ── */
-  var tr=buildWeekTrend(), mx=Math.max.apply(null, tr.map(function(t){return t.n;}))||1;
-  var ts=buildTrendSummary_(tr), peakMon=ts.peak.mon;
+  var tr=buildWeekTrend(), mx=Math.max.apply(null, tr.reduce(function(a,t){ return a.concat([t.as,t.insp]); },[]))||1;
+  var ts=buildTrendSummary_(tr);
+  function trendDelta_(d){ return '<em class="'+(d>0?'ex-up':(d<0?'ex-down':''))+'">최근 주 '+(d>0?'+':'')+d+'%</em>'; }
   document.getElementById('exTrendCard').innerHTML=
-    exH3('최근 8주 서비스 추이', '주 단위(월~금) · 기간·연·월·분기 외 필터 반영')
-    +'<div class="ex-cbody"><div class="ex-trend-layout"><div class="ex-vchart">'
+    exH3('최근 8주 서비스 추이', 'A/S · 점검 비교 · 주 단위(월~금) · 기간 외 필터 반영')
+    +'<div class="ex-cbody"><div class="ex-trend-layout"><div class="ex-trend-chart">'
+      +'<div class="ex-trend-legend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></div>'
+      +'<div class="ex-vchart">'
       +tr.map(function(t){
-        return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+' 주 · '+t.n+'건">'
-          +'<div class="n">'+t.n+'</div>'
-          +'<div class="b" style="height:'+Math.max(2,Math.round(t.n/mx*100))+'%"></div>'
-          +'<div class="l">'+(t.mon.getMonth()+1)+'/'+t.mon.getDate()+'</div></div>';
+        var ah=t.as?Math.max(3,Math.round(t.as/mx*100)):0;
+        var ih=t.insp?Math.max(3,Math.round(t.insp/mx*100)):0;
+        return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+' 주 · A/S '+t.as+'건 · 점검 '+t.insp+'건">'
+          +'<div class="ex-vbars">'
+            +'<div class="ex-vbar as"><div class="n">'+t.as+'</div><div class="b'+(t.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
+            +'<div class="ex-vbar insp"><div class="n">'+t.insp+'</div><div class="b'+(t.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
+          +'</div><div class="l">'+(t.mon.getMonth()+1)+'/'+t.mon.getDate()+'</div></div>';
       }).join('')
-      +'</div><div class="ex-trend-stats">'
-        +'<div class="ex-trend-stat"><span>최근 주</span><b>'+exNum(ts.latest.n)+'건</b></div>'
-        +'<div class="ex-trend-stat"><span>8주 주평균</span><b>'+ts.avg.toFixed(1)+'건</b></div>'
-        +'<div class="ex-trend-stat"><span>평균 대비</span><b class="'+(ts.delta>0?'ex-up':(ts.delta<0?'ex-down':''))+'">'
-          +(ts.delta>0?'+':'')+ts.delta+'%</b></div>'
-        +'<div class="ex-trend-stat"><span>8주 최고 · '+(peakMon.getMonth()+1)+'/'+peakMon.getDate()+'</span><b>'+exNum(ts.peak.n)+'건</b></div>'
+      +'</div></div><div class="ex-trend-stats">'
+        +'<div class="ex-trend-stat"><span>최근 주 A/S</span><b>'+exNum(ts.latest.as)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>최근 주 점검</span><b>'+exNum(ts.latest.insp)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>A/S 8주 주평균</span><b>'+ts.avgAs.toFixed(1)+'건</b>'+trendDelta_(ts.deltaAs)+'</div>'
+        +'<div class="ex-trend-stat"><span>점검 8주 주평균</span><b>'+ts.avgInsp.toFixed(1)+'건</b>'+trendDelta_(ts.deltaInsp)+'</div>'
       +'</div></div></div>';
 
   /* ── 이전 기간 대비 VOC 유형 변화: 증가·감소를 함께 표시 ── */
