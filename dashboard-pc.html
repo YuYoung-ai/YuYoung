@@ -296,6 +296,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-r2{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:8px;min-height:0}
 .ex-col{display:flex;flex-direction:column;gap:8px;min-height:0}
 .ex-grow{flex:1 1 auto}
+/* 같은 열에 쌓인 두 추이 카드가 남은 높이를 정확히 반씩 나눠 갖는다(내용 높이에 끌리지 않도록 basis 0) */
+.ex-half{flex:1 1 0;min-height:0}
 
 /* 카드 */
 .ex-card{background:var(--surface);border:1px solid var(--gray-line);border-radius:10px;padding:9px 12px 10px;
@@ -357,6 +359,46 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-trend-stat b.ex-up{color:var(--red)}
 .ex-trend-stat b.ex-down{color:var(--green)}
 .ex-trend-stat em{display:block;margin-top:1px;font-size:9.5px;font-style:normal;color:var(--text-muted);white-space:nowrap}
+/* 두 추이 카드가 한 열에 쌓이면 8주 카드 높이가 절반이 된다 —
+   지표 4개를 1열로 두면 아래가 잘리므로 2×2로 접어 같은 내용을 그대로 보여준다. */
+.ex-half .ex-trend-layout{grid-template-columns:minmax(0,1fr) 224px}
+.ex-half .ex-trend-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+/* 월별 A/S·점검 처리 추이 — 8주 카드와 "같은 처리 기록"을 월 단위로 본 장기 추이.
+   기간 단위가 달라 한눈에 구분되도록 A/S 는 네이비, 점검은 청록 토큰을 쓴다
+   (8주 카드는 A/S 빨강 · 점검 청록). 새 고정 색은 만들지 않고 기존 변수만 재사용한다. */
+.ex-mtrend{display:flex;flex-direction:column;height:100%;min-height:0;gap:6px}
+.ex-msum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;flex:0 0 auto}
+.ex-msum>div{border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:5px 8px;min-width:0}
+.ex-msum span{display:block;font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-msum b{display:block;margin-top:1px;font-size:15px;line-height:1.2;color:var(--navy);font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-msum b.ex-up{color:var(--red)}
+.ex-msum b.ex-down{color:var(--green)}
+.ex-msum em{display:block;margin-top:1px;font-size:9.5px;font-style:normal;color:var(--text-muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ex-mlegend{display:flex;justify-content:flex-end;gap:12px;font-size:10.5px;color:var(--text-muted);flex:0 0 auto}
+.ex-mlegend span{display:inline-flex;align-items:center;gap:4px}
+.ex-mlegend i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.ex-mlegend i.as{background:var(--navy)}
+.ex-mlegend i.insp{background:var(--teal)}
+.ex-mchart{display:flex;align-items:flex-end;gap:8px;flex:1 1 auto;min-height:84px}
+.ex-mcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
+/* 월 합계 — 묶음 막대 위에 올려 각 월의 전체 처리량을 바로 읽는다 */
+.ex-mtot{flex:0 0 auto;font-size:10px;font-weight:700;color:var(--navy);margin-bottom:2px;font-variant-numeric:tabular-nums}
+.ex-mbars{display:flex;align-items:flex-end;justify-content:center;gap:4px;width:100%;flex:1 1 auto;min-height:0}
+.ex-mbar{flex:1 1 0;max-width:26px;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+  min-width:0;opacity:.8}
+.ex-mbar .n{font-size:9.5px;font-weight:700;color:var(--text-muted);margin-bottom:2px;font-variant-numeric:tabular-nums}
+.ex-mbar .b{width:100%;border-radius:3px 3px 0 0;min-height:3px}
+.ex-mbar .b.zero{min-height:0}
+.ex-mbar.as .b{background:var(--navy)}
+.ex-mbar.insp .b{background:var(--teal)}
+.ex-mcol .l{flex:0 0 auto;font-size:10.5px;color:var(--text-muted);margin-top:5px;white-space:nowrap}
+.ex-mcol.now .ex-mbar{opacity:1}
+.ex-mcol.now .l{color:var(--navy);font-weight:700}
+/* "진행 중" 표식 — 아직 월이 끝나지 않아 다른 월과 같은 길이로 비교할 수 없음을 알린다 */
+.ex-mnow{font-style:normal;font-size:9px;font-weight:700;color:var(--amber);margin-left:3px;white-space:nowrap}
 
 /* VOC 유형 변화 — 증가·감소를 같은 카드에서 균형 있게 본다 */
 .ex-change-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;height:100%;min-height:0}
@@ -543,8 +585,13 @@ body.ex-narrow .ex-cbody,body.ex-narrow .ex-rows{overflow:visible}
 /* 세로 스크롤 레이아웃에서는 카드 높이가 내용에 따라 정해져 .ex-vchart 높이가 불확정해진다.
    그러면 막대의 height:% 가 0으로 풀려 버리므로 확정 높이를 준다. */
 body.ex-narrow .ex-vchart{height:150px;min-height:0}
+body.ex-narrow .ex-mchart{height:150px;min-height:0}
+body.ex-narrow .ex-mtrend{height:auto}
 body.ex-narrow .ex-trend-layout{grid-template-columns:1fr;height:auto}
 body.ex-narrow .ex-trend-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.ex-narrow .ex-msum{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* 세로 스크롤 레이아웃에서는 두 추이 카드가 높이를 나눠 가질 필요가 없다 */
+body.ex-narrow .ex-half{flex:0 0 auto}
 body.ex-narrow .ex-change-cols{grid-template-columns:1fr;height:auto}
 body.ex-narrow .ex-change-group+.ex-change-group{border-left:0;border-top:1px solid var(--gray-line);padding:8px 0 0;margin-top:6px}
 body.ex-narrow .ex-kpi .lb{white-space:normal}   /* "오늘 기준" 배지가 잘리지 않도록 줄바꿈 허용 */
@@ -753,7 +800,10 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <section class="ex-pane on" id="exPaneSummary">
         <div class="ex-kpis" id="exKpis"></div>
         <div class="ex-r2">
-          <div class="ex-card" id="exTrendCard"></div>
+          <div class="ex-col">
+            <div class="ex-card ex-half" id="exTrendCard"></div>
+            <div class="ex-card ex-half" id="exMonthTrendCard"></div>
+          </div>
           <div class="ex-col">
             <div class="ex-card ex-grow" id="exVocUpCard"></div>
             <div class="ex-card" id="exWatchCard"></div>
@@ -3142,6 +3192,11 @@ function initExecView(){
 var EX_PRESETS=[['lastdone','최근 완료 주간'],['thisweek','이번 주'],['lastweek','지난주'],
                 ['last4w','최근 4주'],['thismonth','이번 달'],['lastmonth','지난달'],['custom','직접 지정']];
 function exToday(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
+/* ── 보고 기준일 ──
+   기간 밖까지 보는 추이(8주 · 월별)는 브라우저의 오늘이 아니라 "보고 화면에서 고른 기간의
+   끝날"을 기준으로 구간을 잡는다. 기준일을 과거로 바꾸면 그 시점 기준으로 다시 계산된다.
+   기간을 지정하지 않은 경우에만 오늘로 떨어진다. */
+function exBaseDate(){ return F.to ? new Date(F.to+'T00:00:00') : exToday(); }
 /* 최근 "완료된" 주(월~금)의 월요일 — 금요일이 지난(토요일 이후) 주만 완료로 본다 */
 function exLastDoneMonday(){
   var t=exToday(), mon=monday(t);
@@ -3371,7 +3426,7 @@ function exDimCompare(rows, prev, key, onlyAS){
 
 /* 최근 8주 서비스 추이 — 기간 필터만 제외하고 같은 모집단을 쓴다 */
 function buildWeekTrend(){
-  var base=F.to?new Date(F.to+'T00:00:00'):exToday();
+  var base=exBaseDate();
   var endMon=monday(base);
   var selA=F.from?new Date(F.from+'T00:00:00'):null;
   var selB=F.to?new Date(F.to+'T00:00:00'):null;
@@ -3393,6 +3448,85 @@ function buildWeekTrend(){
     out.push({key:k, mon:mo, n:n, as:as, insp:insp, sel:sel});
   }
   return out;
+}
+
+/* ══════ 월별 A/S·점검 처리 추이 ══════
+   8주 서비스 추이와 "같은 처리 기록(처리일 기준)"을 기간 단위만 월로 바꿔 보는 장기 추이다.
+     · 8주 서비스 추이       = 주 단위 단기 변화
+     · 월별 A/S·점검 처리 추이 = 월 단위 장기 변화
+   집계 규칙(둘 다 같은 원칙):
+     · 원본 처리 기록 1행 = 1건. 같은 병원·같은 날짜라도 장비별로 남은 행은 각각 센다.
+     · 병원명+날짜(+담당자)로 묶지 않는다 — 원본에 고유 접수번호가 없어 dedupe 근거가 없다.
+     · 데모 운영 기록은 exWindowRows()가 쓰는 scope:'customer'(isDemoRecord) 기준으로 이미 빠진다.
+     · 기간 외 고정 필터(담당자·유형·병원 등)는 8주 추이와 똑같이 그대로 적용된다.
+   ※ 원본 데이터에 고객센터 접수일이 없어 이 카드도 8주 추이와 같은 처리일(date)을 쓴다. */
+var EX_MONTH_TREND_N=6;                 /* 표시할 개월 수 */
+/* 지정 구간의 처리 건수 — 8주 추이와 같은 판정(구분 문자열 trim 후 A/S · 점검) */
+function exCountRange_(a, b){
+  var end=new Date(b); end.setHours(23,59,59,999);
+  var n=0, as=0, insp=0;
+  exWindowRows(a, end).forEach(function(r){
+    if(!rowDate(r)) return;
+    n++;
+    var g=String(r.gubun||'').trim();
+    if(g==='A/S') as++; else if(g==='점검') insp++;
+  });
+  return {n:n, as:as, insp:insp};
+}
+/* 최근 6개월 — 지난 달들은 1일~말일, 현재 월만 1일~기준일(아직 진행 중) */
+function buildMonthTrend(){
+  var base=exBaseDate(), out=[];
+  for(var i=EX_MONTH_TREND_N-1;i>=0;i--){
+    var m0=new Date(base.getFullYear(), base.getMonth()-i, 1);
+    var cur=(i===0);
+    var to=cur ? new Date(base.getFullYear(), base.getMonth(), base.getDate())
+               : new Date(m0.getFullYear(), m0.getMonth()+1, 0);
+    var c=exCountRange_(m0, to);
+    out.push({y:m0.getFullYear(), m:m0.getMonth()+1, from:m0, to:to, cur:cur,
+              n:c.n, as:c.as, insp:c.insp});
+  }
+  return out;
+}
+/* ── 전월 동기간 비교 ──
+   현재 월은 아직 진행 중이라 전월 "전체"와 비교하면 항상 감소로 보인다.
+   기준일이 8/9 면 8/1~8/9 와 7/1~7/9 를 비교한다.
+   전월에 같은 일자가 없으면(예: 기준일 3/31 → 2월) 전월 말일까지로 자른다.
+   전월이 0건이면 증감률은 계산하지 않는다(pct=null) — 무한대로 표시하지 않기 위해서다. */
+function buildMonthTrendCompare(tr){
+  var base=exBaseDate();
+  var cur=(tr&&tr.length) ? tr[tr.length-1] : null;
+  if(!cur) return null;
+  var pm=new Date(base.getFullYear(), base.getMonth()-1, 1);
+  var pmLast=new Date(pm.getFullYear(), pm.getMonth()+1, 0).getDate();
+  var pTo=new Date(pm.getFullYear(), pm.getMonth(), Math.min(base.getDate(), pmLast));
+  var prev=exCountRange_(pm, pTo);
+  return {month:cur.m, cur:{n:cur.n, as:cur.as, insp:cur.insp}, prev:prev,
+          from:pm, to:pTo, day:base.getDate(), clipped:base.getDate()>pmLast,
+          d:{n:cur.n-prev.n, as:cur.as-prev.as, insp:cur.insp-prev.insp},
+          pct: prev.n>0 ? Math.round((cur.n-prev.n)/prev.n*100) : null};
+}
+/* 특이사항 문장 — 절대 증감률 20% 이상 이거나 절대 건수 차이 5건 이상일 때만 만든다.
+   비교할 데이터가 아예 없으면(이번 달·전월 동기간 모두 0건) 억지로 문장을 만들지 않는다. */
+function exMonthTrendNote_(mc){
+  if(!mc) return null;
+  if(!mc.cur.n && !mc.prev.n) return null;
+  var d=mc.d.n;
+  if(!((mc.pct!=null && Math.abs(mc.pct)>=20) || Math.abs(d)>=5)) return null;
+  var lb=mc.month+'월 A/S·점검 처리는 전월 동기간 대비 ';
+  var head = d>0 ? lb+'<b class="ex-up">'+d+'건 증가</b>했습니다.'
+           : d<0 ? lb+'<b class="ex-down">'+Math.abs(d)+'건 감소</b>했습니다.'
+                 : mc.month+'월 A/S·점검 처리는 전월 동기간과 <b>건수가 같습니다</b>.';
+  var dAs=mc.d.as, dIn=mc.d.insp, tail='';
+  function word_(v){ return v>0?'증가':'감소'; }
+  if(dAs && dIn && (dAs>0)===(dIn>0)){
+    tail=' A/S '+Math.abs(dAs)+'건, 점검 '+Math.abs(dIn)+'건 '+word_(dAs)+'했습니다.';
+  }else{
+    var ps=[];
+    if(dAs) ps.push('A/S '+Math.abs(dAs)+'건 '+word_(dAs));
+    if(dIn) ps.push('점검 '+Math.abs(dIn)+'건 '+word_(dIn));
+    if(ps.length) tail=' '+ps.join(', ')+'했습니다.';
+  }
+  return head+tail;
 }
 
 /* ── 반복 발생 병원 ──
@@ -3676,6 +3810,54 @@ function buildTrendSummary_(tr){
   return {latest:latest, avg:avg, delta:delta, peak:peak,
           avgAs:avgAs,avgInsp:avgInsp,deltaAs:deltaAs,deltaInsp:deltaInsp};
 }
+/* ── 월별 처리 추이 표시 헬퍼 ── */
+function exMD_(d){ return (d.getMonth()+1)+'.'+d.getDate(); }
+/* 툴팁·스크린리더가 같은 문장을 읽는다 — 월별 A/S · 점검 · 합계를 모두 담는다 */
+function exMonthTrendLabel_(t){
+  return t.y+'년 '+t.m+'월 · A/S '+t.as+'건 · 점검 '+t.insp+'건 · 합계 '+t.n+'건'
+    +' · '+exMD_(t.from)+'~'+exMD_(t.to)+(t.cur?' (진행 중)':'');
+}
+/* 전월 동기간 대비 요약 타일 — 전월이 0건이면 증감률을 만들지 않고 건수 차이만 적는다 */
+function exMonthCmpTile_(mc){
+  if(!mc) return '<div><span>전월 동기간 대비</span><b>–</b><em>비교 데이터 없음</em></div>';
+  var d=mc.d.n, cls=d>0?'ex-up':(d<0?'ex-down':'');
+  var val = d ? (d>0?'▲ ':'▼ ')+exNum(Math.abs(d))+'건' : '±0건';
+  var span='전월 동기간 대비'+(mc.pct!=null?' ('+(mc.pct>0?'+':'')+mc.pct+'%)':'');
+  var foot = mc.prev.n>0
+    ? exMD_(mc.from)+'~'+exMD_(mc.to)+' '+exNum(mc.prev.n)+'건'
+    : '전월 동기간 0건 · 증감률 없음';
+  return '<div><span>'+esc(span)+'</span><b class="'+cls+'">'+val+'</b><em>'+esc(foot)+'</em></div>';
+}
+function exMonthTrendBody_(mt, mc){
+  var sum=mt.reduce(function(a,t){ return a+t.n; },0);
+  if(!sum) return '<div class="ex-empty">최근 '+EX_MONTH_TREND_N+'개월 처리 기록 없음</div>';
+  var cur=mt[mt.length-1];
+  var mx=Math.max.apply(null, mt.reduce(function(a,t){ return a.concat([t.as,t.insp]); },[]))||1;
+  return '<div class="ex-mtrend">'
+    +'<div class="ex-msum">'
+      +'<div><span>이번 달 총 처리</span><b>'+exNum(cur.n)+'건</b>'
+        +'<em>'+esc(exMD_(cur.from)+'~'+exMD_(cur.to)+(cur.cur?' · 진행 중':''))+'</em></div>'
+      +'<div><span>A/S 처리</span><b>'+exNum(cur.as)+'건</b><em>'+cur.m+'월 누계</em></div>'
+      +'<div><span>점검 처리</span><b>'+exNum(cur.insp)+'건</b><em>'+cur.m+'월 누계</em></div>'
+      +exMonthCmpTile_(mc)
+    +'</div>'
+    +'<div class="ex-mlegend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></div>'
+    +'<div class="ex-mchart">'
+    +mt.map(function(t){
+      var ah=t.as?Math.max(3,Math.round(t.as/mx*100)):0;
+      var ih=t.insp?Math.max(3,Math.round(t.insp/mx*100)):0;
+      var lb=exMonthTrendLabel_(t);
+      return '<div class="ex-mcol'+(t.cur?' now':'')+'" role="img" title="'+esc(lb)+'" aria-label="'+esc(lb)+'">'
+        +'<div class="ex-mtot">'+exNum(t.n)+'</div>'
+        +'<div class="ex-mbars">'
+          +'<div class="ex-mbar as"><div class="n">'+t.as+'</div><div class="b'+(t.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
+          +'<div class="ex-mbar insp"><div class="n">'+t.insp+'</div><div class="b'+(t.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
+        +'</div>'
+        +'<div class="l">'+t.m+'월'+(t.cur?'<em class="ex-mnow">진행 중</em>':'')+'</div>'
+      +'</div>';
+    }).join('')
+    +'</div></div>';
+}
 function renderExecutiveSummary(x){
   var k=x.kpi.cur, p=x.kpi.prev, cmp=x.cmp, per=exPeriodLabel();
   var nck=x.ncare, remain=nck.list.length?nck.remain:0;
@@ -3724,6 +3906,15 @@ function renderExecutiveSummary(x){
         +'<div class="ex-trend-stat"><span>A/S 8주 주평균</span><b>'+ts.avgAs.toFixed(1)+'건</b>'+trendDelta_(ts.deltaAs)+'</div>'
         +'<div class="ex-trend-stat"><span>점검 8주 주평균</span><b>'+ts.avgInsp.toFixed(1)+'건</b>'+trendDelta_(ts.deltaInsp)+'</div>'
       +'</div></div></div>';
+
+  /* ── 월별 A/S·점검 처리 추이 (최근 6개월) ──
+     위의 8주 카드와 같은 처리 기록을 월 단위로 본다. 두 카드가 혼동되지 않도록
+     제목·설명에 "주 단위 단기 / 월 단위 장기"를 각각 적고 막대 색도 다르게 쓴다. */
+  var mt=buildMonthTrend(), mc=buildMonthTrendCompare(mt);
+  var mNote=exMonthTrendNote_(mc);
+  document.getElementById('exMonthTrendCard').innerHTML=
+    exH3('월별 A/S·점검 처리 추이', '처리일 기준 · 최근 6개월 · 월 단위 장기 추이 · 기간 외 필터 반영')
+    +'<div class="ex-cbody">'+exMonthTrendBody_(mt, mc)+'</div>';
 
   /* ── 이전 기간 대비 VOC 유형 변화: 증가·감소를 함께 표시 ── */
   var up=[], down=[];
@@ -3782,6 +3973,9 @@ function renderExecutiveSummary(x){
                  : lb+'와 A/S 건수가 <b>동일</b>합니다.');
     if(up.length) s.push('<b>'+esc(up[0].k)+'</b> 유형이 '+lb+' 대비 <b class="ex-up">'+up[0].d+'건 증가</b>했습니다.');
   }
+  /* 월별 처리 추이 변화 — 변동이 뚜렷할 때만(증감률 20% 이상 또는 5건 이상) 붙인다.
+     문장·판정 조건은 exMonthTrendNote_() 한 곳에서만 만든다(카드와 같은 집계를 재사용). */
+  if(mNote) s.push(mNote);
   if(K.badCount) s.push('교육이 필요한 병원이 <b>'+K.badCount+'곳</b> 확인됐습니다.');
   if(nozReuse)   s.push('노즐을 재사용한 병원이 <b>'+nozReuse+'곳</b>입니다.');
   if(remain)     s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
