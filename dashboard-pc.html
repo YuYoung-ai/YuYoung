@@ -2383,7 +2383,11 @@ async function exLoadLogo_(){
 function exWeekPeriod_(v){ var m=new Date(v+'T00:00:00'); return {from:ymd(m), to:ymd(addD(m,4))}; }
 function exMonthPeriod_(v){
   var m=new Date(v+'T00:00:00');
-  return {from:ymd(m), to:ymd(new Date(m.getFullYear(), m.getMonth()+1, 0))};
+  var end=new Date(m.getFullYear(), m.getMonth()+1, 0), today=exToday();
+  /* 진행 중인 현재 월은 오늘까지만 집계한다.
+     월말까지를 기준일로 쓰면 전월 전체와 비교되어 진행 중인 월의 증감이 왜곡된다. */
+  if(m<=today && end>today) end=today;
+  return {from:ymd(m), to:ymd(end)};
 }
 function exReportSnapFromSel_(type){
   var v=document.getElementById(type==='month'?'mnSel':'wkSel').value;
@@ -3158,7 +3162,8 @@ function exReportSnapshot_(type, from, to){
   var trend;
   if(type==='month'){
     var cur=mt[mt.length-1];
-    var ongoing=(b>exToday());                       /* 보고 월이 아직 끝나지 않음 */
+    var monthEnd=new Date(a.getFullYear(), a.getMonth()+1, 0);
+    var ongoing=(monthEnd>exToday());                /* 보고 월이 아직 끝나지 않음 */
     trend={
       kind:'month', title:'월별 A/S·점검 처리 추이',
       basis:'처리일 기준 · 최근 '+EX_MONTH_TREND_N+'개월',
@@ -3199,8 +3204,10 @@ function exReportSnapshot_(type, from, to){
 
   return {
     type:type, from:from, to:to,
-    docTitle:'생산품질_CS팀 '+(type==='month'?'월간업무보고':'주간업무보고'),
-    periodLabel: perLb+' ('+exDayLabel_(a)+' ~ '+exDayLabel_(b)+')',
+    /* 회사 기본 양식의 제목·'필드 현황' 표기를 그대로 유지한다. */
+    docTitle:'CS팀 '+(type==='month'?'월간업무보고':'주간업무보고'),
+    periodLabel:'필드 현황 ('+(type==='month'?(a.getMonth()+1)+'월':wkLabel(a))+') '
+      +exDayLabel_(a)+' ~ '+exDayLabel_(b),
     basis: EX_PPT_BASIS,
     fileName: type==='month'
       ? ('월간업무보고_'+a.getFullYear()+'년'+(a.getMonth()+1)+'월.pptx')
