@@ -325,11 +325,15 @@ const noteFor = (cur, prev) => D.exMonthTrendNote_({
     monthOf(D.buildMonthTrend(), 8).n === 3);
 }
 {
-  /* PPT 생성 코드는 이 변경에서 손대지 않았다 */
-  ck('K4. 주간 PPT 생성부(buildWeekData/genWeekly) 그대로 존재',
-    /function buildWeekData\(/.test(SRC) && /function gubunRows\(/.test(SRC));
-  ck('K5. 월간 PPT 생성부(buildMonthData) 그대로 존재 — 새 buildMonthTrend 와 별개',
-    /function buildMonthData\(m0, scope, manualDetail, trendMode\)\{/.test(SRC));
+  /* PPT 생성부는 1페이지 보고서로 개편됐다 — 이 카드의 집계(buildMonthTrend)를 그대로 재사용한다.
+     PPT 전용 월별 집계(구 buildMonthData)를 다시 만들지 않았는지 여기서 확인한다. */
+  ck('K4. 주간·월간 PPT 는 공통 스냅샷 하나만 쓴다',
+    /function buildExecutiveReportSnapshot\(/.test(SRC) && /function buildExecutivePptDeck\(/.test(SRC));
+  ck('K5. PPT 전용 주간·월간 집계를 따로 만들지 않았다',
+    !/function buildWeekData\(/.test(SRC) && !/function buildMonthData\(/.test(SRC));
+  ck('K5-b. PPT 월별 추이는 이 카드의 buildMonthTrend() 결과를 그대로 쓴다',
+    (SRC.match(/function buildMonthTrend\(/g) || []).length === 1 &&
+    /var mt=buildMonthTrend\(\), mc=buildMonthTrendCompare\(mt\), mNote=exMonthTrendNote_\(mc\);/.test(SRC));
   ck('K6. "이전 대비 증가한 유형" 카드 유지', /id="exVocUpCard"/.test(SRC) && /VOC 유형 변화/.test(SRC));
   ck('K7. 8주 카드 색(A/S 빨강·점검 청록) 그대로 — 새 카드와 구분',
     /\.ex-vbar\.as \.b\{background:var\(--red\)\}/.test(SRC) &&
