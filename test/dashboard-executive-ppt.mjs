@@ -216,6 +216,15 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
   });
   ck('5-g. 완료된 과거 월에는 "진행 중"이 없다',
     !past.trend.bars.some(b => b.ongoing) && !has(itemsOf(past), '진행 중'));
+
+  const now = D.exToday();
+  const curPeriod = D.exMonthPeriod_(D.ymd(new Date(now.getFullYear(), now.getMonth(), 1)));
+  ck('5-h. 진행 중인 월 보고 기간은 오늘까지만 집계',
+    curPeriod.to === D.ymd(now), curPeriod.from + ' ~ ' + curPeriod.to);
+  const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevPeriod = D.exMonthPeriod_(D.ymd(prevStart));
+  ck('5-i. 완료된 과거 월은 월말까지 집계',
+    prevPeriod.to === D.ymd(new Date(now.getFullYear(), now.getMonth(), 0)), prevPeriod.to);
 }
 
 /* ══════ 6. VOC 유형 변화 ══════ */
@@ -229,10 +238,10 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     wSnap.change.up.length <= 3 && wSnap.change.down.length <= 3);
   ck('6-d. 신규 유형 표시 (이전 0 → 현재 >0)',
     wSnap.change.up.some(t => t.k === '케이블 단선' && t.isNew) && has(wItems, '신규'));
-  ck('6-e. 이전 기간이 없으면 "비교 데이터 없음"', (() => {
+  ck('6-e. 이전 기간이 0건이면 현재 유형을 신규로 표시', (() => {
     load(SAMPLE.filter(r => r.date >= '2026-08-01'));
     const s = D.buildExecutiveReportSnapshot(WEEK);
-    return !s.change.hasPrev || s.change.up.length === 0 ? true : true;
+    return s.change.up.some(t => t.k === '노즐누수(약액 유입)' && t.isNew && t.prev === 0);
   })());
   load(SAMPLE);
 }
@@ -431,10 +440,11 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
 
 /* ══════ 21. 회사 제목·로고·푸터 ══════ */
 {
-  ck('21. 회사 제목 영역 유지', has(wItems, '생산품질_CS팀 주간업무보고') &&
-    has(mItems, '생산품질_CS팀 월간업무보고'));
-  ck('21-b. 보고기간 표기', /2026년 8월 1주차 \(8월 3일 ~ 8월 7일\)/.test(allText(wItems)) &&
-    /2026년 8월 \(8월 1일 ~ 8월 31일\)/.test(allText(mItems)));
+  ck('21. 회사 기본 양식 제목 문구 유지', has(wItems, 'CS팀 주간업무보고') &&
+    has(mItems, 'CS팀 월간업무보고'));
+  ck('21-b. 회사 기본 양식의 필드 현황·보고기간 표기',
+    /필드 현황 \(8월 1주차\) 8월 3일 ~ 8월 7일/.test(allText(wItems)) &&
+    /필드 현황 \(8월\) 8월 1일 ~ 8월 31일/.test(allText(mItems)));
   ck('21-c. 우측 BAZ 로고 유지',
     wItems.some(o => o.k === 'logo' && o.x > 11.5) && mItems.some(o => o.k === 'logo'));
   ck('21-d. 상단 네이비 제목 영역 · 하단 네이비 푸터',
