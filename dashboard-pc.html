@@ -2459,6 +2459,7 @@ var L=(function(){
     top:{ y:rowB.y, h:rowB.h, pad:0.12,
           headY:rowB.y+0.52, headH:0.18, ruleDY:0.19,
           rowY:rowB.y+0.72, rowPitch:0.27, rowH:0.24,
+          descDY:0.0266667, descNameH:0.14, descH:0.10,
           cntW:0.48, deltaW:0.68, colGap:0.02 },
     voc:{ x:page.left, w:vocW },
     part:{ x:page.left+vocW+gap, w:partW },
@@ -2787,8 +2788,9 @@ function buildExecutivePptDeck(snap){
     blk.rows.forEach(function(r,i){
       var y=TP.rowY+i*TP.rowPitch;
       var hasDesc=!!(blk.showDescriptions&&r.desc);
-      var nameH=hasDesc?0.14:TP.rowH;
-      text({x:hx, y:y, w:nameW, h:nameH,
+      var nameY=hasDesc?y+TP.descDY:y;
+      var nameH=hasDesc?TP.descNameH:TP.rowH;
+      text({x:hx, y:nameY, w:nameW, h:nameH,
             t:exFitTxt_(r.k, nameW, FT.rowName), size:hasDesc?8:FT.rowName, color:C.text,
             topCard:cardKey, topCol:'name', topRow:i});
       /* 설명 유무와 관계없이 숫자 셀은 교체품 표와 같은 전체 행 높이를 쓴다.
@@ -2802,7 +2804,7 @@ function buildExecutivePptDeck(snap){
             color:(d==null||d===0)?C.mut:(d>0?C.red:C.green),
             topCard:cardKey, topCol:'delta', topRow:i});
       if(hasDesc){
-        text({x:hx, y:y+0.14, w:inner, h:0.10,
+        text({x:hx, y:nameY+TP.descNameH, w:inner, h:TP.descH,
               t:exFitTxt_(r.desc, inner, FT.rowDesc), size:FT.rowDesc, color:C.mut,
               topCard:cardKey, topCol:'description', topRow:i});
       }
