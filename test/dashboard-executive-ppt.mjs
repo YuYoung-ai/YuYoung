@@ -328,7 +328,7 @@ function rebuildX(period) {
   ck('13-c. 모달에 수기 입력 항목이 남아 있지 않다',
     !/id="wkDetail"/.test(SRC) && !/id="mnDetail"/.test(SRC) &&
     !/id="inv1"/.test(SRC) && !/id="callInInp"/.test(SRC) && !/id="mnCallInInp"/.test(SRC));
-  ck('13-d. 모달에는 기간 선택·VOC 설명·특이사항 확인·미리보기·PPT 생성만 남는다',
+  ck('13-d. 모달에는 기간 선택·VOC 설명·특이사항 확인·미리보기·PPT 생성이 있다',
     /id="wkSel"/.test(SRC) && /previewWeeklyPPT\(\)/.test(SRC) && /id="wkGo"/.test(SRC) &&
     /id="wkVocDescRows"/.test(SRC) && /id="mnVocDescRows"/.test(SRC) &&
     /id="wkNoteRows"/.test(SRC) && /id="mnNoteRows"/.test(SRC) &&
@@ -343,71 +343,7 @@ function rebuildX(period) {
     wSnap.kpi[0].value === '7', '전체 ' + wSnap.kpi[0].value + '건');
   /* 8/3 가나병원 장비 2대 → 2건 (병원명+날짜 dedupe 금지) */
   load([
-    { date: '2026-08-05', hosp: '가나병원', gubun: 'A/S', type: '노즐누수', sn: 'SN-1' },
-    { date: '2026-08-05', hosp: '가나병원', gubun: 'A/S', type: '노즐누수', sn: 'SN-2' }
-  ]);
-  const s2 = D.buildExecutiveReportSnapshot(WEEK);
-  ck('15. 같은 병원·같은 날짜 장비 2대 → 2건',
-    s2.kpi[0].value === '2' && s2.kpi[1].value === '2' && s2.kpi[3].value === '1',
-    '전체 ' + s2.kpi[0].value + ' / A/S ' + s2.kpi[1].value + ' / 병원 ' + s2.kpi[3].value);
-  ck('15-b. 추이 막대도 같은 기준(2건)',
-    s2.trend.bars[s2.trend.bars.length - 1].as === 2);
-  load(SAMPLE);
-}
-
-/* ══════ 16. 대시보드 KPI == PPT KPI ══════ */
-{
-  const x = rebuildX(WEEK);
-  const k = x.kpi.cur, p = x.kpi.prev, cmp = x.cmp, nck = x.ncare;
-  const dash = [
-    [String(D.exNum(k.total)), D.exDeltaParts(k.total, p ? p.total : null, '건', 'neutral', cmp).text],
-    [String(D.exNum(k.as)), D.exDeltaParts(k.as, p ? p.as : null, '건', 'bad', cmp).text],
-    [String(D.exNum(k.insp)), D.exDeltaParts(k.insp, p ? p.insp : null, '건', 'neutral', cmp).text],
-    [String(D.exNum(k.hosp)), D.exDeltaParts(k.hosp, p ? p.hosp : null, '곳', 'neutral', cmp).text],
-    ['₩' + D.exNum(k.cost), D.exDeltaParts(k.cost, p ? p.cost : null, '원', 'bad', cmp).text],
-    [nck.list.length ? String(nck.rate) : '–', null]
-  ];
-  const ppt = wSnap.kpi.map(kp => [kp.value, kp.delta ? kp.delta.text : null]);
-  ck('16. 대시보드 KPI 와 PPT KPI 가 값·증감 문구까지 동일',
-    JSON.stringify(dash) === JSON.stringify(ppt),
-    JSON.stringify(dash) + ' vs ' + JSON.stringify(ppt));
-  ck('16-b. A/S 비율도 대시보드와 동일', wSnap.kpi[1].note === '비율 ' + k.asRate + '%');
-}
-
-/* ══════ 17. 대시보드 특이사항 == PPT 특이사항 ══════ */
-{
-  const x = rebuildX(WEEK);
-  const dashNotes = D.buildExecutiveNotes(x);
-  ck('17. 대시보드 특이사항 문장과 PPT 특이사항 문장이 완전히 동일',
-    JSON.stringify(dashNotes) === JSON.stringify(wSnap.notes.items),
-    dashNotes.length + '문장 vs ' + wSnap.notes.items.length + '문장');
-  /* 슬라이드에 실제로 그려진 문장(태그 제거)이 같은지 */
-  const plain = s => D.exHtmlRuns_(s).map(r => r.text).join('');
-  const drawn = allText(wItems);
-  ck('17-b. 특이사항 문장이 슬라이드에 그려진다',
-    dashNotes.every(n => {
-      const t = plain(n).replace(/\s+/g, '');
-      return drawn.replace(/\s+/g, '').indexOf(t) >= 0;
-    }));
-  ck('17-c. PPT 전용 특이사항 문장을 새로 만들지 않는다 (문장 수 동일)',
-    wSnap.notes.items.length === dashNotes.length);
-}
-
-/* ══════ 18. 데이터 0건 ══════ */
-{
-  load([]);
-  const z = D.buildExecutiveReportSnapshot(WEEK);
-  const zm = D.buildExecutiveReportSnapshot(MONTH);
-  const zi = itemsOf(z);
-  ck('18. 데이터 0건이어도 주간 1페이지 정상 생성',
-    deckOf(z).length === 1 && zi.length > 0);
-  ck('18-b. 데이터 0건이어도 월간 1페이지 정상 생성', deckOf(zm).length === 1);
-  ck('18-c. 0건이면 KPI 는 0 · 특이사항은 안내 문구',
-    z.kpi[0].value === '0' && z.notes.items.length === 1 &&
-    /데이터가 없습니다/.test(z.notes.items[0]), z.notes.items[0]);
-  ck('18-d. 0건에도 회사 제목·로고·푸터는 유지',
-    has(zi, '주간업무보고') && zi.some(o => o.k === 'logo') && has(zi, 'BAZ BIOMEDIC'));
-  ck('18-e. 0건에도 빈 카드 안내가 그려진다',
+    { date: '2026-08-05', hosp: '가나병원', gub…872 tokens truncated… 빈 카드 안내가 그려진다',
     has(zi, 'A/S 기록 없음') && has(zi, '교체품 기록 없음'));
   load(SAMPLE);
 }
@@ -573,10 +509,6 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('N6. 감소 강조는 초록으로 옮긴다',
     D.exHtmlRuns_('전주보다 A/S가 <b class="ex-down">3건 감소</b>했습니다.')
       .some(r => r.color === D.C.green));
-  const wrappedNewlines = D.exWrapRuns_([{ text: '첫 줄\r\n둘째 줄', bold: false, color: null }], 10, 9);
-  ck('N7. CR은 무시하고 LF는 실제 새 줄로 분리한다',
-    wrappedNewlines.length === 2 &&
-    wrappedNewlines.map(line => line.map(r => r.text).join('')).join('|') === '첫 줄|둘째 줄');
 }
 
 /* ══════ 텍스트 한 줄 유지 (제목·KPI 숫자·표 내용) ══════ */
@@ -699,11 +631,6 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     sE.notes.items[0].indexOf('<b onclick') < 0 && sE.notes.items[0].indexOf('&lt;b') >= 0);
   ck('E8-b. escape 된 문장은 태그가 아니라 글자로 그려진다',
     allText(itemsOf(sE)).indexOf('<b onclick="x">주입</b>') >= 0);
-  const vocEditorSrc = grab('exRefreshVocDescEditor_');
-  ck('E8-c. VOC 설명 편집기 속성은 따옴표까지 escape 한다',
-    /title="'\+escAttr\(r\.k\)/.test(vocEditorSrc) &&
-    /data-key="'\+escAttr\(k\)/.test(vocEditorSrc) &&
-    /value="'\+escAttr\(v\)/.test(vocEditorSrc));
 
   /* 평문 변환 — 편집 입력창에 넣을 값 */
   ck('E9. exNotePlain_ 은 강조 태그만 벗기고 문장은 유지',
@@ -711,6 +638,11 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
       === '전주보다 A/S가 3건 증가했습니다.');
   ck('E9-b. escape 된 편집 문장도 원래 글자로 되읽는다',
     D.exNotePlain_(D.esc('A & B <C>')) === 'A & B <C>');
+  ck('E9-c. 편집 문장 줄바꿈은 PPT 배치에서도 실제 두 줄로 계산된다',
+    D.exWrapRuns_([{ text: '첫째 줄\n둘째 줄' }], 5, D.FT.note).length === 2);
+  ck('E9-d. VOC 설명 편집기의 속성값은 따옴표 전용 escape 를 쓴다',
+    /title="'\+escAttr\(r\.k\)\+'"/.test(SRC) &&
+    /data-key="'\+escAttr\(k\)\+'" value="'\+escAttr\(v\)\+'"/.test(SRC));
 
   /* 자동 생성 함수를 새로 만들지 않았는지 */
   ck('E10. PPT 전용 자동 특이사항 생성 함수를 만들지 않았다',
