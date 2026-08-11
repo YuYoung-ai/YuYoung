@@ -277,6 +277,13 @@ function rebuildX(period) {
   ck('7-e. 생성 전 수동 수정 설명이 고정 설명보다 우선',
     edited.vocTop.rows.some(r => r.k === '노즐누수(약액 유입)' && r.desc === '이번 보고서용 수정 설명') &&
     has(itemsOf(edited), '이번 보고서용 수정 설명'));
+  const editedItems = itemsOf(edited);
+  const editedDesc = editedItems.find(o => o.topCard === 'voc' && o.topCol === 'description' &&
+    D.exPptRuns_(o).some(r => r.text === '이번 보고서용 수정 설명'));
+  const editedVal = editedItems.find(o => o.topCard === 'voc' && o.topCol === 'value' &&
+    o.topRow === editedDesc?.topRow);
+  ck('7-e-1. 수정된 VOC 설명은 유형 아래 보조 행에 반영되고 숫자 행 높이를 바꾸지 않는다',
+    !!editedDesc && !!editedVal && editedDesc.y > editedVal.y && editedVal.h === D.L.top.rowH);
   ck('7-f. 케이블 불량·케이블 단선 별칭은 같은 설명 사용',
     D.exVocDesc_('케이블 불량') === D.exVocDesc_('케이블 단선'));
   const descW = D.L.voc.w - D.L.top.pad * 2;
@@ -286,6 +293,24 @@ function rebuildX(period) {
   ck('8-b. 교체품도 최대 5행 · 증감 표시',
     wSnap.partTop.rows.length <= 5 && wSnap.partTop.rows.every(r => 'd' in r));
   ck('8-c. 월간도 같은 두 카드를 싣는다', has(mItems, 'VOC 유형 TOP 5') && has(mItems, '교체품 TOP 5'));
+  const topAligned = items => ['value', 'delta'].every(col => {
+    const vh = items.find(o => o.topCard === 'voc' && o.topCol === col && o.topRow === -1);
+    const ph = items.find(o => o.topCard === 'part' && o.topCol === col && o.topRow === -1);
+    if(!vh || !ph || Math.abs((vh.x-D.L.voc.x)-(ph.x-D.L.part.x)) >= 0.001 ||
+      Math.abs(vh.w-ph.w) >= 0.001 || Math.abs(vh.y-ph.y) >= 0.001 || Math.abs(vh.h-ph.h) >= 0.001) return false;
+    const vRows = items.filter(o => o.topCard === 'voc' && o.topCol === col && o.topRow >= 0).length;
+    const pRows = items.filter(o => o.topCard === 'part' && o.topCol === col && o.topRow >= 0).length;
+    const rows = Math.min(vRows, pRows);
+    for(let i=0;i<rows;i++){
+      const v=items.find(o => o.topCard === 'voc' && o.topCol === col && o.topRow === i);
+      const p=items.find(o => o.topCard === 'part' && o.topCol === col && o.topRow === i);
+      if(!v || !p || Math.abs((v.x-D.L.voc.x)-(p.x-D.L.part.x)) >= 0.001 ||
+        Math.abs(v.w-p.w) >= 0.001 || Math.abs(v.y-p.y) >= 0.001 || Math.abs(v.h-p.h) >= 0.001) return false;
+    }
+    return true;
+  });
+  ck('8-c-1. 주간 VOC TOP5 건수·증감 열이 교체품 TOP5와 행·열 기준으로 정렬된다', topAligned(wItems));
+  ck('8-c-2. 월간 VOC TOP5 건수·증감 열이 교체품 TOP5와 행·열 기준으로 정렬된다', topAligned(mItems));
 
   load([
     { date:'2026-08-04', hosp:'현재병원', gubun:'A/S', type:'출력 약함', part:'Current part' },

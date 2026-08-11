@@ -2770,15 +2770,18 @@ function buildExecutivePptDeck(snap){
   })();
 
   /* ── ⑤ VOC 유형 TOP 5 · 교체품 TOP 5 (같은 표 규칙) ── */
-  function topCard(T0, blk, headName, headVal, emptyMsg){
+  function topCard(T0, blk, headName, headVal, emptyMsg, cardKey){
     var TP=L.top, T={x:T0.x, y:TP.y, w:T0.w, h:TP.h};
     cardShell(T, blk.title, blk.basis, 0, true);
     var hx=T.x+TP.pad, inner=T.w-TP.pad*2;
     var nameW=inner-TP.cntW-TP.deltaW-TP.colGap*2;
     var cx=hx+nameW+TP.colGap, dx=cx+TP.cntW+TP.colGap;
-    text({x:hx, y:TP.headY, w:nameW, h:TP.headH, t:headName, size:FT.colHead, color:C.mut});
-    text({x:cx, y:TP.headY, w:TP.cntW, h:TP.headH, t:headVal, size:FT.colHead, color:C.mut, align:'right'});
-    text({x:dx, y:TP.headY, w:TP.deltaW, h:TP.headH, t:'증감', size:FT.colHead, color:C.mut, align:'right'});
+    text({x:hx, y:TP.headY, w:nameW, h:TP.headH, t:headName, size:FT.colHead, color:C.mut,
+          topCard:cardKey, topCol:'name', topRow:-1});
+    text({x:cx, y:TP.headY, w:TP.cntW, h:TP.headH, t:headVal, size:FT.colHead, color:C.mut, align:'right',
+          topCard:cardKey, topCol:'value', topRow:-1});
+    text({x:dx, y:TP.headY, w:TP.deltaW, h:TP.headH, t:'증감', size:FT.colHead, color:C.mut, align:'right',
+          topCard:cardKey, topCol:'delta', topRow:-1});
     line({x:hx, y:TP.headY+TP.ruleDY, w:inner, color:C.line, width:0.75});
     if(!blk.rows.length){ emptyLine(T, TP.rowY+0.2, emptyMsg); return; }
     blk.rows.forEach(function(r,i){
@@ -2786,21 +2789,27 @@ function buildExecutivePptDeck(snap){
       var hasDesc=!!(blk.showDescriptions&&r.desc);
       var nameH=hasDesc?0.14:TP.rowH;
       text({x:hx, y:y, w:nameW, h:nameH,
-            t:exFitTxt_(r.k, nameW, FT.rowName), size:hasDesc?8:FT.rowName, color:C.text});
-      text({x:cx, y:y, w:TP.cntW, h:nameH, t:exNum(r.cur),
-            size:FT.rowVal, bold:true, color:C.navy, align:'right'});
+            t:exFitTxt_(r.k, nameW, FT.rowName), size:hasDesc?8:FT.rowName, color:C.text,
+            topCard:cardKey, topCol:'name', topRow:i});
+      /* 설명 유무와 관계없이 숫자 셀은 교체품 표와 같은 전체 행 높이를 쓴다.
+         VOC 설명은 유형 아래 보조 행으로만 배치해 건수·증감 열의 중심선을 밀지 않는다. */
+      text({x:cx, y:y, w:TP.cntW, h:TP.rowH, t:exNum(r.cur),
+            size:FT.rowVal, bold:true, color:C.navy, align:'right',
+            topCard:cardKey, topCol:'value', topRow:i});
       var d=r.d, dt = d==null ? '–' : (d===0 ? '±0' : ((d>0?'▲':'▼')+Math.abs(d)));
-      text({x:dx, y:y, w:TP.deltaW, h:nameH, t:dt, size:FT.rowDelta,
+      text({x:dx, y:y, w:TP.deltaW, h:TP.rowH, t:dt, size:FT.rowDelta,
             bold:!!(d!=null&&d!==0), align:'right',
-            color:(d==null||d===0)?C.mut:(d>0?C.red:C.green)});
+            color:(d==null||d===0)?C.mut:(d>0?C.red:C.green),
+            topCard:cardKey, topCol:'delta', topRow:i});
       if(hasDesc){
         text({x:hx, y:y+0.14, w:inner, h:0.10,
-              t:exFitTxt_(r.desc, inner, FT.rowDesc), size:FT.rowDesc, color:C.mut});
+              t:exFitTxt_(r.desc, inner, FT.rowDesc), size:FT.rowDesc, color:C.mut,
+              topCard:cardKey, topCol:'description', topRow:i});
       }
     });
   }
-  topCard(L.voc,  snap.vocTop,  '유형 · 현상', '건수', 'A/S 기록 없음');
-  topCard(L.part, snap.partTop, '교체품',      '수량', '교체품 기록 없음');
+  topCard(L.voc,  snap.vocTop,  '유형 · 현상', '건수', 'A/S 기록 없음', 'voc');
+  topCard(L.part, snap.partTop, '교체품',      '수량', '교체품 기록 없음', 'part');
 
   /* ── ⑥ 특이사항 (대시보드 특이사항 카드와 같은 문장 — 새로 만들지 않는다) ── */
   (function(){
