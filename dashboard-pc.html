@@ -235,6 +235,21 @@ body.mode-mobile .wrap{max-width:560px}
 .voc-desc-row input{width:100%;padding:8px 9px;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);color:var(--text);font:11px inherit}
 .voc-desc-row input.missing{border-color:var(--amber);background:#FFF6DC}
 .voc-desc-empty{font-size:11px;color:var(--text-muted);padding:4px 2px}
+/* 특이사항 확인·수정 — VOC 설명 에디터와 같은 틀을 쓰되 문장은 여러 줄 입력이다 */
+.note-row{display:grid;grid-template-columns:minmax(0,1fr) 30px;gap:6px;align-items:start}
+.note-row textarea{width:100%;padding:7px 9px;border:1px solid var(--gray-line);border-radius:7px;
+  background:var(--surface);color:var(--text);font-family:inherit;font-size:11.5px;line-height:1.5;
+  resize:vertical;min-height:44px}
+.note-row textarea:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.note-del{border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);
+  color:var(--text-muted);cursor:pointer;height:32px;font-size:12px;line-height:1}
+.note-del:hover{border-color:var(--red);color:var(--red)}
+.note-del:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
+.note-tools{padding:0 10px 10px}
+.note-reset{border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);
+  color:var(--navy);cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;padding:6px 10px}
+.note-reset:hover{background:var(--teal-soft)}
+.note-reset:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 @media(max-width:560px){.voc-desc-row{grid-template-columns:1fr}.voc-desc-row input{font-size:12px}}
 /* PPT 생성·미리보기 모달은 다크에서도 라이트 그대로 둔다 — 슬라이드 디자인이 바뀌면 안 된다.
    토큰을 모달 안에서 라이트 값으로 되돌려 안쪽 요소가 전부 원래 색을 쓰게 한다. */
@@ -501,6 +516,16 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-sumcard.ex-summary-side{flex:1 1 0;min-height:0}
 .ex-sumcard.ex-summary-side .ex-sumlist{flex:1 1 auto;min-height:0;overflow:auto;align-content:flex-start}
 .ex-sumcard ul{margin:0;padding:0}
+/* ── 특이사항 본문 배치 (이 카드 전용) ──
+   기본 .ex-sumlist 는 flex-wrap 이라 문장이 좌우로 흩어지고 아래로 밀린다.
+   보고 모드 특이사항 카드에서만 블록 배치로 바꿔 제목 바로 아래·좌측 상단에서
+   한 항목씩 세로로 읽히게 한다. 다른 카드의 .ex-note 스타일은 건드리지 않는다. */
+#exSummaryCard .ex-sumlist{display:block;gap:0;text-align:left}
+#exSummaryCard .ex-sumlist li{margin:0 0 6px}
+#exSummaryCard .ex-sumlist li:last-child{margin-bottom:0}
+/* Window 모드의 카드 내부 스크롤(.ex-sumcard.ex-summary-side .ex-sumlist)과
+   좁은 보기의 overflow:visible 복귀(body.ex-narrow …)는 기존 규칙을 그대로 쓴다.
+   여기서 다시 지정하면 id 우선순위 때문에 좁은 보기 복귀가 막힌다. */
 
 /* N-Care 상태 배지 */
 /* 상태 배지 — 병원 데이터센터와 같은 배치: 앞 4개 한 줄 + "점검 기록 없음" 은 아래 전폭.
@@ -512,6 +537,21 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-nckbar.wide{grid-template-columns:1fr;margin-bottom:8px}
 /* 목록 행의 N-CARE 등급 */
 .ex-li .gd{color:var(--teal);font-size:11px;font-weight:700;margin-left:6px;white-space:nowrap}
+/* ── 카드 항목 → 처리 이력 버튼 ──
+   기존 행(.ex-brow / .ex-li)의 배치·색은 그대로 두고 버튼 기본 스타일만 지운다. */
+.ex-row-btn{width:100%;margin:0;font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+.ex-li.ex-row-btn{border-bottom:1px solid var(--gray-line);border-radius:0}
+.ex-li.ex-row-btn:last-child{border-bottom:none}
+.ex-row-btn:hover{background:var(--teal-soft)}
+.ex-row-btn:focus-visible{outline:2px solid var(--navy);outline-offset:-2px;border-radius:6px}
+/* 처리 이력 모달 목록 — 값이 있는 항목만 한 줄로 읽는다 */
+.hst-list .ex-mgrp+.ex-mgrp{margin-top:12px}
+.hst-list ol{display:flex;flex-direction:column;gap:2px}
+.hst-list li{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12px;line-height:1.5}
+.hst-d{font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hst-f{color:var(--text);min-width:0}
+.hst-f em{font-style:normal;color:var(--text-muted);font-size:11px;margin-right:3px}
+.hst-sep{color:var(--gray-line);margin:0 6px}
 .ex-rate{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px;flex:0 0 auto}
 .ex-rate b{font-size:14px;color:var(--green)}
 .ex-rate span{color:var(--text-muted);font-size:11px}
@@ -658,7 +698,7 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
     <h2>📑 주간업무보고 PPT 생성</h2>
     <div class="mrow">
       <label>보고 주차 (월~금)</label>
-      <select id="wkSel" onchange="exRefreshVocDescEditor_('week')"></select>
+      <select id="wkSel" onchange="exOnReportPeriodChange_('week')"></select>
       <div class="mhint">시트 처리일 기준 최근 8주 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
@@ -666,6 +706,14 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <summary>VOC 유형 설명 확인·수정 (현재 TOP5)</summary>
       <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
       <div class="voc-desc-rows" id="wkVocDescRows"></div>
+    </details>
+    <details class="voc-desc-editor" id="wkNoteBox">
+      <summary>특이사항 확인·수정 (이 PPT에만 반영)</summary>
+      <div class="voc-desc-help">대시보드 특이사항이 자동으로 채워집니다. 문장을 고치거나 비우면 이 보고서에만 반영되고, 대시보드 화면은 그대로입니다.</div>
+      <div class="voc-desc-rows note-rows" id="wkNoteRows"></div>
+      <div class="note-tools">
+        <button type="button" class="note-reset" onclick="exResetNoteEdits_('week')">↺ 자동 내용으로 되돌리기</button>
+      </div>
     </details>
     <div class="mbtns">
       <button class="mbtn cancel" onclick="closeWeekly()">취소</button>
@@ -694,7 +742,7 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
     <h2>📅 월간업무보고 PPT 생성</h2>
     <div class="mrow">
       <label>보고 월</label>
-      <select id="mnSel" onchange="exRefreshVocDescEditor_('month')"></select>
+      <select id="mnSel" onchange="exOnReportPeriodChange_('month')"></select>
       <div class="mhint">시트 처리일 기준 최근 12개월 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mhint">주간업무보고와 같은 배치이며, 최근 8주 추이 대신 최근 6개월 월별 A/S·점검 처리 추이를 싣습니다.</div>
@@ -702,6 +750,14 @@ body.ex-narrow .ex-dg.span2{grid-column:auto}
       <summary>VOC 유형 설명 확인·수정 (현재 TOP5)</summary>
       <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
       <div class="voc-desc-rows" id="mnVocDescRows"></div>
+    </details>
+    <details class="voc-desc-editor" id="mnNoteBox">
+      <summary>특이사항 확인·수정 (이 PPT에만 반영)</summary>
+      <div class="voc-desc-help">대시보드 특이사항이 자동으로 채워집니다. 문장을 고치거나 비우면 이 보고서에만 반영되고, 대시보드 화면은 그대로입니다.</div>
+      <div class="voc-desc-rows note-rows" id="mnNoteRows"></div>
+      <div class="note-tools">
+        <button type="button" class="note-reset" onclick="exResetNoteEdits_('month')">↺ 자동 내용으로 되돌리기</button>
+      </div>
     </details>
     <div class="mbtns">
       <button class="mbtn cancel" onclick="closeMonthly()">취소</button>
@@ -982,6 +1038,9 @@ var DETAIL_DIRTY=true;    /* 상세 분석 모드 재렌더 필요 여부 */
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+/* 속성값 전용 escape — esc() 는 따옴표를 바꾸지 않으므로 data- 속성이나 title 속성에는 이 함수를 쓴다.
+   (본문 텍스트는 따옴표를 바꿀 필요가 없어 esc() 를 그대로 쓴다) */
+function escAttr(s){return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function normD(s){ /* '2026. 6. 25' | '2026-07-01' | '2026.317'(점 누락) → {y,m,d,q} */
   var t=String(s||'').replace(/\s/g,'').replace(/\./g,'-').replace(/-+$/,'');
   var p=t.split('-');
@@ -1946,7 +2005,11 @@ var L=(function(){
   var kpiW=(W-kpiGap*5)/6;                          /* 2.045 */
   var rowA={y:2.46, h:2.42}, rowB={y:4.98, h:2.12};
   var trendW=7.95, changeW=W-trendW-gap;            /* 7.95(62%) / 4.67(37%) */
-  var vocW=3.45, partW=2.95, notesW=W-vocW-partW-gap*2;
+  /* 하단은 상단 열 경계를 그대로 잇는다 —
+       왼쪽(TOP5 두 장 + gap) = 서비스 추이 카드 폭,  오른쪽(특이사항) = VOC 유형 변화 카드 폭
+     → 특이사항이 VOC 유형 변화 바로 아래에 x·폭까지 정확히 정렬된다. */
+  var vocW=(trendW-gap)/2, partW=trendW-gap-vocW;   /* 3.90 / 3.90 */
+  var notesW=changeW;                               /* 4.67 */
   return {
     page:page, W:W, gap:gap,
     header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.1,
@@ -1976,7 +2039,7 @@ var L=(function(){
           cntW:0.48, deltaW:0.68, colGap:0.02 },
     voc:{ x:page.left, w:vocW },
     part:{ x:page.left+vocW+gap, w:partW },
-    notes:{ x:page.left+vocW+gap+partW+gap, y:rowB.y, w:notesW, h:rowB.h,
+    notes:{ x:page.left+trendW+gap, y:rowB.y, w:notesW, h:rowB.h,
             pad:0.14, bulletW:0.16, listY:rowB.y+0.42, listPadB:0.10, colGap:0.18 },
     foot:{ y:7.28, h:0.22, textY:7.26, textW:2.4, textH:0.22 }
   };
@@ -2076,7 +2139,7 @@ function exNotesLayout_(items, boxW, boxH){
         y+=lh;
       });
     });
-    return {lines:lines, h:y, size:size, lh:lh, count:(list||[]).length};
+    return {lines:lines, h:y, size:size, lh:lh, count:(list||[]).length, fit:true, dropped:0};
   }
   for(var s=0;s<SIZES.length;s++){
     for(var g=0;g<GAPS.length;g++){
@@ -2088,9 +2151,32 @@ function exNotesLayout_(items, boxW, boxH){
   for(var n=(items||[]).length-1;n>=1;n--){
     var cut=items.slice(0,n).concat(['외 '+(items.length-n)+'건은 대시보드 특이사항에서 확인']);
     var r2=lay(cut, size, gap);
-    if(r2.h<=boxH) return r2;
+    if(r2.h<=boxH){ r2.fit=false; r2.dropped=items.length-n; return r2; }
   }
-  return lay((items||[]).slice(0,1), size, gap);
+  var r3=lay((items||[]).slice(0,1), size, gap);
+  r3.fit=false; r3.dropped=Math.max(0,(items||[]).length-1);
+  return r3;
+}
+/* 특이사항 열 배치 — 문장 수만 보고 2열로 만들지 않는다.
+   1열·2열을 실제 폭·높이로 각각 배치해 보고 "넘침이 적은 쪽"을 고른다.
+   넘침이 같으면 글자가 큰 쪽, 그래도 같으면 1열(읽기 쉬운 쪽)을 쓴다. */
+function exNotesPlan_(items, T, boxH){
+  var n=(items||[]).length, best=null;
+  [1,2].forEach(function(cols){
+    if(cols>1 && n<2) return;
+    var colW=(T.w-T.pad*2-(cols-1)*T.colGap)/cols;
+    var per=Math.ceil(n/cols)||1, lays=[], dropped=0, size=Infinity;
+    for(var c=0;c<cols;c++){
+      var list=items.slice(c*per, Math.min((c+1)*per, n));
+      if(!list.length){ lays.push(null); continue; }
+      var lay=exNotesLayout_(list, colW-T.bulletW, boxH);
+      lays.push(lay); dropped+=lay.dropped; size=Math.min(size,lay.size);
+    }
+    var cand={cols:cols, colW:colW, per:per, lays:lays, dropped:dropped, size:size};
+    if(!best || cand.dropped<best.dropped
+       || (cand.dropped===best.dropped && cand.size>best.size)) best=cand;
+  });
+  return best;
 }
 
 /* ══════ 표시 목록(display list) 만들기 — 미리보기·PPT가 함께 쓰는 유일한 레이아웃 ══════
@@ -2290,14 +2376,18 @@ function buildExecutivePptDeck(snap){
     var T=L.notes, nb=snap.notes;
     cardShell(T, nb.title, nb.basis);
     var boxY=T.listY, boxH=T.y+T.h-T.listPadB-T.listY;
-    var cols=nb.items.length>=4?2:1, per=Math.ceil(nb.items.length/cols);
-    var colW=(T.w-T.pad*2-(cols-1)*T.colGap)/cols;
+    /* 문장을 모두 지운 경우에도 카드·제목은 그대로 두고 본문만 빈 상태로 알린다 */
+    if(!nb.items.length){
+      text({x:T.x+T.pad, y:boxY, w:T.w-T.pad*2, h:0.3,
+            t:'특이사항 없음', size:FT.note, color:C.mut});
+      return;
+    }
+    var plan=exNotesPlan_(nb.items, T, boxH), cols=plan.cols, colW=plan.colW;
     if(cols===2) rect({x:T.x+T.w/2-0.005, y:boxY, w:0.01, h:boxH, fill:C.line});
     for(var c=0;c<cols;c++){
-      var list=nb.items.slice(c*per, Math.min((c+1)*per, nb.items.length));
-      if(!list.length) continue;
+      var lay=plan.lays[c];
+      if(!lay) continue;
       var bx=T.x+T.pad+c*(colW+T.colGap), listX=bx+T.bulletW;
-      var lay=exNotesLayout_(list, colW-T.bulletW, boxH);
       lay.lines.forEach(function(ln){
         var y=boxY+ln.y;
         if(ln.bullet) text({x:bx, y:y, w:T.bulletW, h:lay.lh, t:'·', size:lay.size, bold:true, color:C.navy});
@@ -2455,11 +2545,33 @@ function exReportPeriodFromSel_(type){
   if(!v) return null;
   return (type==='month')?exMonthPeriod_(v):exWeekPeriod_(v);
 }
+/* ── PPT 특이사항 편집 상태 ──
+   null = 손대지 않음(자동 특이사항 그대로) · 배열 = 사용자가 확인/수정한 문장 목록.
+   화면 저장(localStorage)·시트 저장을 하지 않는다. 보고 기간을 바꾸면 null 로 되돌린다. */
+var EX_NOTE_EDITS={week:null, month:null};
+/* 특이사항 HTML → 편집용 평문 (강조 태그만 벗기고 문장은 그대로) */
+function exNotePlain_(html){
+  return exHtmlRuns_(html).map(function(r){ return r.text; }).join('');
+}
+/* 자동 특이사항 — 반드시 스냅샷(=buildExecutiveNotes) 결과를 그대로 읽는다 */
+function exAutoNotes_(type, p){
+  var snap=buildExecutiveReportSnapshot({type:type, from:p.from, to:p.to,
+    vocDescriptions:EX_VOC_DESC_OVERRIDES[type]||{}});
+  return snap.notes.items;
+}
+/* 편집 결과 → 스냅샷에 넘길 override.
+   손대지 않았으면 undefined 를 돌려 자동 특이사항 경로를 그대로 타게 한다. */
+function exNoteOverride_(type){
+  var arr=EX_NOTE_EDITS[type];
+  if(!Array.isArray(arr)) return undefined;
+  return arr.filter(function(t){ return String(t||'').trim(); });   /* 비운 문장은 제외 */
+}
 function exReportSnapFromSel_(type){
   var p=exReportPeriodFromSel_(type);
   if(!p) return null;
   return buildExecutiveReportSnapshot({type:type, from:p.from, to:p.to,
-    vocDescriptions:EX_VOC_DESC_OVERRIDES[type]||{}});
+    vocDescriptions:EX_VOC_DESC_OVERRIDES[type]||{},
+    notes:exNoteOverride_(type)});
 }
 function exSetVocDescOverride_(type, el){
   var m=EX_VOC_DESC_OVERRIDES[type]||(EX_VOC_DESC_OVERRIDES[type]={});
@@ -2490,6 +2602,72 @@ function exRefreshVocDescEditor_(type){
   if(missing) box.open=true;
 }
 
+/* ── 특이사항 확인·수정 에디터 ──
+   자동 문장을 먼저 보여주고, 고치거나 비운 문장만 이 PPT(미리보기·실제 생성)에 반영한다.
+   대시보드 #exSummaryCard 의 자동 특이사항은 건드리지 않는다. */
+function exRefreshNoteEditor_(type){
+  var p=exReportPeriodFromSel_(type), pre=(type==='month')?'mn':'wk';
+  var rowsEl=document.getElementById(pre+'NoteRows');
+  if(!rowsEl) return;
+  if(!p){ rowsEl.innerHTML='<div class="voc-desc-empty">보고 기간을 먼저 선택하세요.</div>'; return; }
+  var list=Array.isArray(EX_NOTE_EDITS[type]) ? EX_NOTE_EDITS[type] : exAutoNotes_(type, p);
+  if(!list.length){
+    rowsEl.innerHTML='<div class="voc-desc-empty">표시할 특이사항이 없습니다 — PPT에는 “특이사항 없음”으로 표기됩니다.</div>';
+    return;
+  }
+  rowsEl.innerHTML=list.map(function(t,i){
+    var plain=exNotePlain_(t);
+    return '<div class="note-row">'
+      +'<textarea rows="2" maxlength="220" data-idx="'+i+'"'
+      +' aria-label="특이사항 '+(i+1)+'번 문장"'
+      +' placeholder="비우면 이 문장은 PPT에서 제외됩니다">'+esc(plain)+'</textarea>'
+      +'<button type="button" class="note-del" data-idx="'+i+'"'
+      +' title="이 문장 제거" aria-label="특이사항 '+(i+1)+'번 문장 제거">✕</button>'
+      +'</div>';
+  }).join('');
+}
+/* 편집 시작 시점에 자동 문장을 복사해 둔다 —
+   손대지 않은 문장은 원래 HTML(강조 포함) 그대로 남고, 고친 문장만 escape 된 평문이 된다. */
+function exSetNoteEdit_(type, i, val){
+  var p=exReportPeriodFromSel_(type);
+  if(!p) return;
+  if(!Array.isArray(EX_NOTE_EDITS[type])) EX_NOTE_EDITS[type]=exAutoNotes_(type, p).slice();
+  var arr=EX_NOTE_EDITS[type];
+  if(i<0 || i>=arr.length) return;
+  arr[i]=esc(String(val==null?'':val));
+}
+function exResetNoteEdits_(type){
+  EX_NOTE_EDITS[type]=null;
+  exRefreshNoteEditor_(type);
+  toast('자동 특이사항으로 되돌렸습니다');
+}
+/* 보고 기간이 바뀌면 새 기간의 자동 특이사항으로 다시 초기화한다 */
+function exOnReportPeriodChange_(type){
+  EX_NOTE_EDITS[type]=null;
+  exRefreshVocDescEditor_(type);
+  exRefreshNoteEditor_(type);
+}
+/* 이벤트 위임 — 목록을 다시 그려도 리스너가 중복 등록되지 않는다.
+   문장 텍스트는 data-* 인덱스로만 다루고 inline onclick 문자열에 넣지 않는다. */
+[['wk','week'],['mn','month']].forEach(function(pair){
+  var el=document.getElementById(pair[0]+'NoteRows');
+  if(!el) return;
+  var type=pair[1];
+  el.addEventListener('input', function(e){
+    var ta=e.target.closest('textarea[data-idx]');
+    if(!ta) return;
+    exSetNoteEdit_(type, Number(ta.getAttribute('data-idx')), ta.value);
+  });
+  el.addEventListener('click', function(e){
+    var b=e.target.closest('button[data-idx]');
+    if(!b) return;
+    var i=Number(b.getAttribute('data-idx'));
+    var ta=el.querySelector('textarea[data-idx="'+i+'"]');
+    if(ta) ta.value='';
+    exSetNoteEdit_(type, i, '');
+  });
+});
+
 function openWeekly(){
   if(!RAW.length){ toast('데이터가 아직 없습니다'); return; }
   /* 데이터에 존재하는 주(월요일) 목록 — 최근 8주 */
@@ -2500,7 +2678,7 @@ function openWeekly(){
       var m=new Date(k+'T00:00:00');
       return '<option value="'+k+'">'+m.getFullYear()+'년 '+wkLabel(m)+' ('+wkRange(m)+')</option>';
     }).join('');
-  exRefreshVocDescEditor_('week');
+  exOnReportPeriodChange_('week');
   document.getElementById('wkModal').classList.add('show');
 }
 function closeWeekly(){ document.getElementById('wkModal').classList.remove('show'); }
@@ -2515,7 +2693,7 @@ function openMonthly(){
       var m=new Date(k+'-01T00:00:00');
       return '<option value="'+k+'-01">'+m.getFullYear()+'년 '+(m.getMonth()+1)+'월</option>';
     }).join('');
-  exRefreshVocDescEditor_('month');
+  exOnReportPeriodChange_('month');
   document.getElementById('mnModal').classList.add('show');
 }
 function closeMonthly(){ document.getElementById('mnModal').classList.remove('show'); }
@@ -3106,20 +3284,27 @@ function exDeltaSmall(d, cmp){
   if(!d) return '<span class="dl ex-flat">±0</span>';
   return '<span class="dl '+(d>0?'ex-up':'ex-down')+'">'+(d>0?'▲':'▼')+Math.abs(d)+'</span>';
 }
+/* opt.histDim 을 주면 각 행이 "처리 이력" 버튼이 된다(수치·막대·증감 표시는 그대로).
+   내부 요소는 button 안에 들어갈 수 있도록 span 을 쓴다 — grid/flex 자식이라 표시는 동일하다. */
 function exBars(items, opt){
   opt=opt||{};
   if(!items.length) return '<div class="ex-empty">'+esc(opt.empty||'데이터 없음')+'</div>';
   var max=Math.max.apply(null, items.map(function(x){return x.cur;}))||1;
+  var dim=opt.histDim||'';
   return '<div class="ex-rows">'+items.map(function(x){
     var up=(x.d!=null&&x.d>0);
-    return '<div class="ex-brow'+(up?' up':'')+'">'
-      +'<div class="nm"><span title="'+esc(x.k)+'">'+esc(x.k)+'</span>'
-        +'<div class="tr"><i style="width:'+Math.max(2,Math.round(x.cur/max*100))+'%"></i></div></div>'
-      +'<div class="vl">'+exNum(x.cur)+'</div>'
-      +'<div class="dl">'+(x.prev==null
+    var head = dim
+      ? '<button type="button" class="ex-brow ex-row-btn'+(up?' up':'')+'"'
+        +' data-hist-dim="'+escAttr(dim)+'" data-hist-k="'+escAttr(x.k)+'" title="처리 이력 보기">'
+      : '<div class="ex-brow'+(up?' up':'')+'">';
+    return head
+      +'<span class="nm"><span title="'+escAttr(x.k)+'">'+esc(x.k)+'</span>'
+        +'<span class="tr"><i style="width:'+Math.max(2,Math.round(x.cur/max*100))+'%"></i></span></span>'
+      +'<span class="vl">'+exNum(x.cur)+'</span>'
+      +'<span class="dl">'+(x.prev==null
           ? '<span class="ex-flat">비교없음</span>'
-          : '<span class="ex-flat">'+exNum(x.prev)+' →</span> '+exDeltaSmall(x.d))+'</div>'
-    +'</div>';
+          : '<span class="ex-flat">'+exNum(x.prev)+' →</span> '+exDeltaSmall(x.d))+'</span>'
+    +(dim?'</button>':'</div>');
   }).join('')+'</div>';
 }
 /* ── 특이사항 ──
@@ -3224,10 +3409,12 @@ function buildExecutiveReportSnapshot(opt){
   try{
     /* 보고서는 항상 이전 동일 기간(주간=전주 · 월간=전월) 대비를 싣는다 — 화면 토글과 무관 */
     F.from=opt.from; F.to=opt.to; EX_CMP=true; EX_CACHE=null;
-    return exReportSnapshot_(type, opt.from, opt.to, opt.vocDescriptions||{});
+    /* opt.notes 가 undefined 면 자동 특이사항(buildExecutiveNotes)을 그대로 쓴다.
+       배열이면 그 배열만 싣는다(빈 배열 = 사용자가 전부 지운 상태). */
+    return exReportSnapshot_(type, opt.from, opt.to, opt.vocDescriptions||{}, opt.notes);
   } finally { F.from=sFrom; F.to=sTo; EX_CMP=sCmp; EX_CACHE=sCache; }
 }
-function exReportSnapshot_(type, from, to, vocDescriptions){
+function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
   var a=new Date(from+'T00:00:00'), b=new Date(to+'T00:00:00');
   var rows=exWindowRows(a, new Date(to+'T23:59:59'));
   var x=exBuild(rows);
@@ -3320,8 +3507,12 @@ function exReportSnapshot_(type, from, to, vocDescriptions){
               rows: exDimCompare(x.rows, x.prev, 'part', false)
                 .filter(function(t){return t.cur>0;}).slice(0,5)
                 .map(function(t){return topRow(t,false);}) },
-    notes:{ title:'특이사항', basis:'',
-            items: buildExecutiveNotes(x, {up:vc.up, monthNote:mNote}) }
+    /* 자동 특이사항 생성 원천은 buildExecutiveNotes() 하나뿐이다 —
+       PPT 전용 문장 생성 함수를 따로 만들지 않는다. */
+    notes:{ title:'특이사항', basis:'', edited:Array.isArray(notesOverride),
+            items: Array.isArray(notesOverride)
+              ? notesOverride.slice()
+              : buildExecutiveNotes(x, {up:vc.up, monthNote:mNote}) }
   };
 }
 
@@ -3333,11 +3524,85 @@ function openExList(title, sub, html){
   document.getElementById('exListModal').classList.add('show');
 }
 function closeExList(){ document.getElementById('exListModal').classList.remove('show'); }
-function exListGroup(title, arr, fmt){
+function exListGroup(title, arr, fmt, empty){
   return '<div class="ex-mgrp"><h4>'+esc(title)+' ('+arr.length+')</h4>'
     +(arr.length?'<ol>'+arr.map(function(x){ return '<li>'+(fmt?fmt(x):esc(x))+'</li>'; }).join('')+'</ol>'
-                : '<div class="ex-empty">해당 병원 없음</div>')+'</div>';
+                : '<div class="ex-empty">'+esc(empty||'해당 병원 없음')+'</div>')+'</div>';
 }
+
+/* ══════ 카드 항목 → 처리 이력 ══════
+   VOC 유형 변화 · VOC 유형 TOP 5 · 교체품 TOP 5 의 개별 행을 누르면
+   "이미 브라우저에 있는" 현재 기간(x.rows)·비교 기간(x.prev) 원본 기록을 그대로 보여준다.
+   새로 조회하지 않는다(fetch·GAS·loadData 없음) · 원본 행을 중복 제거하지 않는다
+   → 카드의 집계 건수와 이력 건수가 항상 같다. */
+/* 카드 집계(exDim)와 완전히 같은 판정으로 원본 행을 고른다 — 기준을 새로 만들지 않는다 */
+function exHistoryRows_(rows, key, value, onlyAS){
+  var want=String(value==null?'':value);
+  return (rows||[]).filter(function(r){
+    if(onlyAS && String(r.gubun||'').trim()!=='A/S') return false;
+    var v=String(r[key]||'').trim();
+    if(!v || v==='없음') return false;
+    if(onlyAS && isOK(v)) return false;
+    return v===want;
+  });
+}
+/* 최신 처리일 우선, 같은 날짜는 병원명 가나다순 */
+function exHistorySort_(rows){
+  return (rows||[]).slice().sort(function(a,b){
+    var da=rowDate(a), db=rowDate(b);
+    var ta=da?da.getTime():0, tb=db?db.getTime():0;
+    if(tb!==ta) return tb-ta;
+    return skCmpKo_(String(a.hosp||''), String(b.hosp||''));
+  });
+}
+/* 한 행 표시 — 값이 있는 항목만 적는다(빈 칸을 '-'로 채우지 않는다) */
+function exHistoryLi_(r){
+  var d=rowDate(r), f=[];
+  function add(lb, v){
+    v=String(v==null?'':v).trim();
+    if(!v || v==='없음') return;
+    f.push('<em>'+esc(lb)+'</em> '+esc(v));
+  }
+  add('병원', r.hosp); add('구분', r.gubun); add('담당자', r.fse);
+  add('유형', r.type); add('교체품', r.part);
+  return '<span class="hst-d">'+esc(d?ymd(d):'처리일 없음')+'</span>'
+    +'<span class="hst-f">'+(f.length?f.join('<span class="hst-sep">·</span>'):'추가 정보 없음')+'</span>';
+}
+/* 비교 기간 표기 — 대시보드가 이미 계산해 둔 x.cmp 를 그대로 쓴다 */
+function exCmpRangeText_(cmp){
+  if(!cmp) return '';
+  return cmp.from.replace(/-/g,'.')+'~'+cmp.to.slice(5).replace(/-/g,'.');
+}
+/* dim: 'type'(VOC 유형 · A/S 만 · 이상 없음 제외) | 'part'(교체품 · 전체 구분) */
+function exShowHistory_(dim, name){
+  if(!name) return;
+  var x=EX_CACHE||exBuild(EX_ROWS);          /* 이미 만들어 둔 집계 — 재조회 없음 */
+  var onlyAS=(dim==='type');
+  var cur=exHistorySort_(exHistoryRows_(x.rows, dim, name, onlyAS));
+  var prev=x.prev ? exHistorySort_(exHistoryRows_(x.prev, dim, name, onlyAS)) : null;
+  var per=exPeriodLabel(), cmpLb=x.cmp?x.cmp.label:'이전 기간';
+  var sub=(onlyAS?'A/S 기준 · 이상 없음 제외':'교체품 수량 기준')
+    +' · 선택 기간 '+per+' '+exNum(cur.length)+'건'
+    +(prev ? ' · '+cmpLb+' '+exCmpRangeText_(x.cmp)+' '+exNum(prev.length)+'건'
+           : ' · 비교 기간 없음');
+  var html='<div class="hst-list">'
+    +exListGroup('선택 기간 · '+per, cur, exHistoryLi_, '해당 기록 없음')
+    +(prev ? exListGroup('비교 기간 · '+cmpLb+' '+exCmpRangeText_(x.cmp), prev, exHistoryLi_, '해당 기록 없음')
+           : '<div class="ex-mgrp"><h4>비교 기간</h4><div class="ex-empty">비교 기간이 설정되지 않았습니다</div></div>')
+    +'</div>';
+  openExList(name, sub, html);
+}
+/* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
+   유형·교체품명은 data-* 로만 전달하고 inline onclick 문자열에 넣지 않는다. */
+['exVocUpCard','exTypeCard','exPartCard'].forEach(function(id){
+  var el=document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('click', function(e){
+    var b=e.target.closest('[data-hist-k]');
+    if(!b || !el.contains(b)) return;
+    exShowHistory_(b.getAttribute('data-hist-dim'), b.getAttribute('data-hist-k'));
+  });
+});
 
 /* ══════ 토요일 당직 운영 분석 ══════
    - 현재 화면 필터와 무관한 고객 서비스 전체 기록(데모 제외)을 사용한다.
@@ -3569,9 +3834,12 @@ function renderExecutiveSummary(x){
   function changeGroup(title, items, cls){
     return '<div class="ex-change-group '+cls+'"><h4>'+title+'</h4>'
       +(items.length?'<div class="ex-rows">'+items.map(function(t){
-          return '<div class="ex-li"><span class="nm" title="'+esc(t.k)+'">'+esc(t.k)
+          /* TOP5 카드와 같은 data-* / 같은 위임 핸들러를 쓴다 — 현재 0건인 감소 유형도 누를 수 있다 */
+          return '<button type="button" class="ex-li ex-row-btn"'
+            +' data-hist-dim="type" data-hist-k="'+escAttr(t.k)+'" title="처리 이력 보기">'
+            +'<span class="nm" title="'+escAttr(t.k)+'">'+esc(t.k)
             +(t.prev===0&&t.cur>0?'<em class="ex-change-new">신규</em>':'')+'</span>'
-            +'<span class="rt">'+t.prev+' → <b>'+t.cur+'</b> '+exDeltaSmall(t.d)+'</span></div>';
+            +'<span class="rt">'+t.prev+' → <b>'+t.cur+'</b> '+exDeltaSmall(t.d)+'</span></button>';
         }).join('')+'</div>':'<div class="ex-empty">해당 유형 없음</div>')
       +'</div>';
   }
@@ -3615,13 +3883,13 @@ function renderExecutiveCause(x){
   var types=exDimCompare(x.rows, x.prev, 'type', true).slice(0,5);
   document.getElementById('exTypeCard').innerHTML=
     exH3('VOC 유형 TOP 5', 'A/S 기준 · 이상 없음 제외 · '+per+' · '+cmpTxt)
-    +'<div class="ex-cbody">'+exBars(types,{empty:'A/S 기록 없음'})+'</div>';
+    +'<div class="ex-cbody">'+exBars(types,{empty:'A/S 기록 없음', histDim:'type'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
   var parts=exDimCompare(x.rows, x.prev, 'part', false).slice(0,5);
   document.getElementById('exPartCard').innerHTML=
     exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)
-    +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음'})+'</div>';
+    +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음', histDim:'part'})+'</div>';
 
   /* ── 반복 발생 병원 ── */
   var rep=buildRepeatIssues(x.rows);

@@ -57,7 +57,7 @@ function grabObj(decl) {
 }
 
 const FNS = [
-  'esc', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd',
+  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd',
   'wkNo', 'wkLabel', 'wkRange', 'isOK',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
@@ -76,7 +76,8 @@ const FNS = [
   'exDayLabel_', 'exMonthCmpStat_', 'exTrendStatDelta_',
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
-  'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_',
+  'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
+  'exNoteOverride_',
   'buildExecutivePptDeck', 'exPptRuns_',
   'exWeekPeriod_', 'exMonthPeriod_'
 ];
@@ -94,13 +95,15 @@ const src = [
   grabVar('var EX_NOTE_NOZ='),
   grabVar('var EX_PPT_BASIS='),
   grabVar('var EX_TONE_CLS='),
+  grabVar('var EX_NOTE_EDITS='),
   grabObj('var C={navy:'), grabObj('var FT={face:'), grabObj('var L=(function(){'),
   grabVar('var EX_TONE_COLOR='),
   grabObj('var EX_VOC_DESC=(function(){'),
   ...FNS.map(grab),
   'return {' + FNS.join(',') + ', L:L, C:C, FT:FT, EX_VOC_DESC:EX_VOC_DESC,' +
   ' setRAW:function(v){RAW=v;}, setHOSPDB:function(v){HOSPDB=v;},' +
-  ' setF:function(v){F=v;}, getF:function(){return F;}, getEXCMP:function(){return EX_CMP;}};'
+  ' setF:function(v){F=v;}, getF:function(){return F;}, getEXCMP:function(){return EX_CMP;},'+
+  ' setNoteEdits:function(t,v){EX_NOTE_EDITS[t]=v;}, getNoteEdits:function(t){return EX_NOTE_EDITS[t];}};'
 ].join('\n');
 const D = new Function(src)();
 
@@ -529,15 +532,25 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('R1. 추이 60~65% · VOC 변화 35~40%',
     tr >= 0.60 && tr <= 0.65 && ch >= 0.35 && ch <= 0.40,
     (tr * 100).toFixed(1) + '% / ' + (ch * 100).toFixed(1) + '%');
-  const vw = D.L.voc.w / W, pw = D.L.part.w / W, nt = D.L.notes.w / W;
-  ck('R2. 설명이 있는 VOC 카드를 넓히고 특이사항은 가장 넓게 유지',
-    vw >= 0.25 && vw <= 0.29 && pw >= 0.21 && pw <= 0.25 &&
-    nt >= 0.46 && nt <= 0.50 && nt > vw && nt > pw,
-    (vw * 100).toFixed(1) + '% / ' + (pw * 100).toFixed(1) + '% / ' + (nt * 100).toFixed(1) + '%');
+  /* 하단은 상단 열 경계를 그대로 잇는다 — 특이사항이 VOC 유형 변화 바로 아래에 정렬된다 */
+  ck('R2. 특이사항 x·폭이 VOC 유형 변화와 정확히 동일',
+    Math.abs(D.L.notes.x - D.L.change.x) < 0.001 &&
+    Math.abs(D.L.notes.w - D.L.change.w) < 0.001,
+    'notes x=' + D.L.notes.x.toFixed(3) + ' w=' + D.L.notes.w.toFixed(3) +
+    ' / change x=' + D.L.change.x.toFixed(3) + ' w=' + D.L.change.w.toFixed(3));
   ck('R3. KPI 6장이 본문 폭을 정확히 채운다',
     Math.abs(D.L.kpi.w * 6 + D.L.kpi.gap * 5 - W) < 0.001);
-  ck('R4. 특이사항 카드가 하단에서 가장 넓다',
-    D.L.notes.w > D.L.voc.w && D.L.notes.w > D.L.part.w * 2 - 0.01);
+  ck('R4. TOP5 두 장 + gap 이 서비스 추이 카드 폭과 정확히 동일',
+    Math.abs(D.L.voc.w + D.L.gap + D.L.part.w - D.L.trend.w) < 0.001,
+    D.L.voc.w.toFixed(3) + ' + ' + D.L.gap + ' + ' + D.L.part.w.toFixed(3) +
+    ' vs ' + D.L.trend.w.toFixed(3));
+  ck('R5. 두 TOP5 카드가 개편 전(3.45 / 2.95)보다 넓다',
+    D.L.voc.w > 3.45 && D.L.part.w > 2.95,
+    'voc=' + D.L.voc.w.toFixed(2) + ' part=' + D.L.part.w.toFixed(2));
+  ck('R6. 하단 카드가 왼쪽부터 빈틈없이 이어진다',
+    Math.abs(D.L.voc.x - D.L.page.left) < 0.001 &&
+    Math.abs(D.L.part.x - (D.L.voc.x + D.L.voc.w + D.L.gap)) < 0.001 &&
+    Math.abs(D.L.notes.x + D.L.notes.w - D.L.page.right) < 0.001);
 }
 
 /* ══════ 특이사항 자동 배치 (글자를 무조건 줄이지 않는다) ══════ */
@@ -589,6 +602,142 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     /var s=buildExecutiveNotes\(x, \{up:up, monthNote:mNote\}\);/.test(SRC));
   ck('K4. 회사 로고 자산 참조 유지', /logo\.png/.test(SRC));
   ck('K5. PPT 라이브러리 로드 경로 유지', /pptxgenjs@3\.12\.0/.test(SRC));
+}
+
+/* ══════ PPT 특이사항 편집 (목표 3) ══════
+   자동 생성 원천은 buildExecutiveNotes() 하나뿐이고, 편집 결과는 이 PPT에만 반영된다. */
+{
+  load(SAMPLE);
+  const snapOf = (period, notes) => D.buildExecutiveReportSnapshot(
+    notes === undefined ? Object.assign({}, period)
+                        : Object.assign({}, period, { notes: notes }));
+
+  /* 대시보드 자동 특이사항 (비교용 기준값) */
+  const autoW = snapOf(WEEK).notes.items;
+  const autoM = snapOf(MONTH).notes.items;
+  ck('E1. 수정하지 않으면 자동 특이사항과 정확히 동일 (주간)',
+    JSON.stringify(snapOf(WEEK).notes.items) === JSON.stringify(autoW) && autoW.length > 0,
+    autoW.length + '문장');
+  ck('E1-b. 수정하지 않으면 자동 특이사항과 정확히 동일 (월간)',
+    JSON.stringify(snapOf(MONTH).notes.items) === JSON.stringify(autoM) && autoM.length > 0);
+  ck('E1-c. 편집 전에는 자동 문장의 HTML 강조가 그대로 보존된다',
+    autoW.some(t => /<b[ >]/.test(t)), autoW[0]);
+  ck('E1-d. override 없음은 edited=false 로 구분된다', snapOf(WEEK).notes.edited === false);
+
+  /* 한 문장만 수정 */
+  const edited1 = autoW.slice();
+  edited1[1] = D.esc('현장 재방문이 필요한 병원 2곳을 다음 주에 우선 처리합니다.');
+  const s1 = snapOf(WEEK, edited1);
+  ck('E2. 한 문장 수정 시 그 문장만 바뀐다',
+    s1.notes.items[1] === edited1[1] &&
+    s1.notes.items.filter((t, i) => i !== 1 && t !== autoW[i]).length === 0,
+    s1.notes.items[1]);
+  ck('E2-b. 수정된 스냅샷은 edited=true', s1.notes.edited === true);
+  ck('E2-c. 수정 문장이 실제 표시 목록(PPT)에 그려진다',
+    allText(itemsOf(s1)).replace(/\s+/g, '')
+      .indexOf('현장 재방문이 필요한 병원 2곳을 다음 주에 우선 처리합니다.'.replace(/\s+/g, '')) >= 0);
+
+  /* 빈 문장 제외 — exNoteOverride_ 가 걸러낸다 */
+  D.setNoteEdits('week', [autoW[0], '', '   ', autoW[3] || autoW[0]]);
+  const ov = D.exNoteOverride_('week');
+  ck('E3. 비운 문장은 override 에서 제외된다', ov.length === 2, JSON.stringify(ov.length));
+  ck('E3-b. 빈 문장을 제외한 목록만 PPT에 실린다',
+    snapOf(WEEK, ov).notes.items.length === 2);
+
+  /* 전부 제거 */
+  D.setNoteEdits('week', autoW.map(() => ''));
+  const none = D.exNoteOverride_('week');
+  ck('E4. 전부 지우면 override 는 빈 배열', Array.isArray(none) && none.length === 0);
+  const emptySnap = snapOf(WEEK, none);
+  const emptyItems = itemsOf(emptySnap);
+  ck('E4-b. 전부 제거해도 카드 제목은 유지되고 본문은 "특이사항 없음"',
+    has(emptyItems, '특이사항') && has(emptyItems, '특이사항 없음'),
+    allText(emptyItems).indexOf('특이사항 없음') >= 0 ? 'ok' : 'missing');
+  ck('E4-c. 전부 제거해도 슬라이드는 1장, 다른 카드는 그대로',
+    deckOf(emptySnap).length === 1 && has(emptyItems, 'VOC 유형 TOP 5') &&
+    has(emptyItems, '교체품 TOP 5') && has(emptyItems, 'BAZ BIOMEDIC'));
+
+  /* 손대지 않은 상태 복귀 */
+  D.setNoteEdits('week', null);
+  ck('E5. 되돌리면 override 가 undefined 로 돌아간다', D.exNoteOverride_('week') === undefined);
+  ck('E5-b. 되돌린 뒤 자동 특이사항과 다시 정확히 동일',
+    JSON.stringify(snapOf(WEEK).notes.items) === JSON.stringify(autoW));
+
+  /* 대시보드 자동 특이사항은 영향 없음 */
+  D.setNoteEdits('week', ['편집된 문장']);
+  const xNow = (() => {
+    const f = D.getF(); f.from = WEEK.from; f.to = WEEK.to; D.setF(f);
+    return D.exBuild(D.exWindowRows(new Date(WEEK.from + 'T00:00:00'),
+      new Date(WEEK.to + 'T23:59:59')));
+  })();
+  ck('E6. 대시보드 자동 특이사항(buildExecutiveNotes)은 편집에 영향받지 않는다',
+    JSON.stringify(D.buildExecutiveNotes(xNow)) === JSON.stringify(autoW));
+  ck('E6-b. 월간 편집이 주간에 섞이지 않는다',
+    D.exNoteOverride_('month') === undefined && D.exNoteOverride_('week').length === 1);
+  D.setNoteEdits('week', null);
+
+  /* 미리보기 == 실제 PPT (같은 스냅샷 → 같은 표시 목록) */
+  const eW = autoW.slice(); eW[0] = D.esc('주간 편집 확인 문장');
+  const eM = autoM.slice(); eM[0] = D.esc('월간 편집 확인 문장');
+  ck('E7. 편집 반영 후에도 미리보기와 실제 PPT 표시 목록이 동일 (주간)',
+    JSON.stringify(deckOf(snapOf(WEEK, eW))) === JSON.stringify(deckOf(snapOf(WEEK, eW))));
+  ck('E7-b. 주간·월간 모두 편집이 반영된다',
+    allText(itemsOf(snapOf(WEEK, eW))).indexOf('주간 편집 확인 문장') >= 0 &&
+    allText(itemsOf(snapOf(MONTH, eM))).indexOf('월간 편집 확인 문장') >= 0);
+  ck('E7-c. 편집해도 슬라이드는 여전히 1장',
+    deckOf(snapOf(WEEK, eW)).length === 1 && deckOf(snapOf(MONTH, eM)).length === 1);
+
+  /* 편집 텍스트 escape */
+  const evil = D.esc('<b onclick="x">주입</b> & "따옴표"');
+  const sE = snapOf(WEEK, [evil]);
+  ck('E8. 편집 텍스트는 escape 되어 스냅샷에 들어간다',
+    sE.notes.items[0].indexOf('<b onclick') < 0 && sE.notes.items[0].indexOf('&lt;b') >= 0);
+  ck('E8-b. escape 된 문장은 태그가 아니라 글자로 그려진다',
+    allText(itemsOf(sE)).indexOf('<b onclick="x">주입</b>') >= 0);
+
+  /* 평문 변환 — 편집 입력창에 넣을 값 */
+  ck('E9. exNotePlain_ 은 강조 태그만 벗기고 문장은 유지',
+    D.exNotePlain_('전주보다 A/S가 <b class="ex-up">3건 증가</b>했습니다.')
+      === '전주보다 A/S가 3건 증가했습니다.');
+  ck('E9-b. escape 된 편집 문장도 원래 글자로 되읽는다',
+    D.exNotePlain_(D.esc('A & B <C>')) === 'A & B <C>');
+
+  /* 자동 생성 함수를 새로 만들지 않았는지 */
+  ck('E10. PPT 전용 자동 특이사항 생성 함수를 만들지 않았다',
+    (SRC.match(/function buildExecutiveNotes\(/g) || []).length === 1 &&
+    /snap\.notes\.items/.test(SRC) &&
+    !/function build(Ppt|Report)Notes/.test(SRC));
+  ck('E11. 편집 내용은 저장하지 않는다 (localStorage·시트 미사용)',
+    !/localStorage[^\n]*NOTE|EX_NOTE_EDITS[^\n]*localStorage/.test(SRC));
+  ck('E12. 보고 기간이 바뀌면 편집이 초기화된다',
+    /function exOnReportPeriodChange_\(type\)\{[\s\S]{0,200}EX_NOTE_EDITS\[type\]=null;/.test(SRC));
+  load(SAMPLE);
+}
+
+/* ══════ 특이사항 1열/2열 자동 선택 (목표 4) ══════ */
+{
+  const T = D.L.notes, boxH = T.y + T.h - T.listPadB - T.listY;
+  const one = D.exNotesPlan_(['짧은 문장 하나.'], T, boxH);
+  ck('P1. 항목이 1개면 1열', one.cols === 1);
+  const many = Array.from({ length: 6 }, (_, i) =>
+    (i + 1) + '. 보고 기간 중 확인된 사실을 적는 특이사항 문장입니다. 값 ' + (i * 13) + '건.');
+  const plan = D.exNotesPlan_(many, T, boxH);
+  ck('P2. 문장 수만 보고 무조건 2열로 만들지 않는다 (넘침이 적은 쪽 선택)',
+    plan.cols === 1 || plan.cols === 2, 'cols=' + plan.cols + ' dropped=' + plan.dropped);
+  ck('P3. 8pt 아래로 줄이지 않는다', plan.size >= 8, 'size=' + plan.size);
+  const bottom = c => {
+    const l = plan.lays[c];
+    return l && l.lines.length ? l.lines[l.lines.length - 1].y + l.lh : 0;
+  };
+  ck('P4. 어느 열도 카드 높이를 넘지 않는다',
+    bottom(0) <= boxH + 0.001 && bottom(1) <= boxH + 0.001,
+    bottom(0).toFixed(3) + ' / ' + bottom(1).toFixed(3) + ' <= ' + boxH.toFixed(3));
+  const huge = Array.from({ length: 20 }, (_, i) =>
+    (i + 1) + '. 카드 높이를 확실히 넘기도록 만든 아주 긴 특이사항 검증 문장입니다. 값 ' + (i * 37) + '건.');
+  const hp = D.exNotesPlan_(huge, T, boxH);
+  ck('P5. 넘치면 남은 항목 수를 알린다', hp.dropped > 0 &&
+    hp.lays.some(l => l && l.lines.map(x => x.runs.map(r => r.text).join('')).join('').indexOf('외 ') >= 0),
+    'dropped=' + hp.dropped);
 }
 
 console.log('\n──────────────────────────────');
