@@ -52,7 +52,9 @@ const FNS = [
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare',
   'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
-  'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryLi_', 'exCmpRangeText_',
+  'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
+  'exHistoryUnique_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
+  'exHistoryDetail_', 'exHistoryTable_', 'exHistoryControls_', 'exCmpRangeText_',
   'buildExecutiveVocChange'
 ];
 const src = [
@@ -92,9 +94,9 @@ function load(rows, period) {
 const ODD_TYPE = '노즐 "누수" & <급수> \'A\'';
 const SAMPLE = [
   /* 현재 기간 2026-08-03 ~ 08-07 */
-  { date: '2026-08-05', hosp: '나병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '김프로' },
-  { date: '2026-08-05', hosp: '가병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '이기사' },
-  { date: '2026-08-07', hosp: '다병원', gubun: 'A/S', type: '노즐누수', part: '없음', fse: '김프로' },
+  { date: '2026-08-05', hosp: '나병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '김프로', detail: '내부 세척\n정상 동작 확인' },
+  { date: '2026-08-05', hosp: '가병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '이기사', detail: '핸드피스 교체' },
+  { date: '2026-08-07', hosp: '다병원', gubun: 'A/S', type: '노즐누수', part: '없음', fse: '김프로', detail: '누수 부위 확인 및 세척' },
   { date: '2026-08-04', hosp: '라병원', gubun: 'A/S', type: ODD_TYPE, part: 'Cable Set' },
   { date: '2026-08-06', hosp: '마병원', gubun: 'A/S', type: '이상 없음', part: '없음' },
   { date: '2026-08-06', hosp: '바병원', gubun: '점검', type: '정기점검', part: "Handpiece Ass'y" },
@@ -173,67 +175,98 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     D.exHistoryRows_(x.rows, 'type', '노즐누수', true)[0].hosp === '나병원');
 }
 
-/* ══════ 5. 행 표시 — 값이 있는 항목만 ══════ */
+/* ══════ 5. 표 표시 — 열 구조·처리 내용 ══════ */
 {
-  const li = D.exHistoryLi_(curOf('type', '노즐누수', true).find(r => r.hosp === '다병원'));
-  ck('15. 값이 없는 항목은 표시하지 않는다 (part "없음" 제외)',
-    li.indexOf('없음') < 0 && li.indexOf('다병원') >= 0 && li.indexOf('김프로') >= 0, li);
-  const li2 = D.exHistoryLi_(curOf('type', '노즐누수', true).find(r => r.hosp === '나병원'));
-  ck('16. 처리일·병원·구분·담당자·유형·교체품을 읽기 좋게 표시',
-    ['2026-08-05', '나병원', 'A/S', '김프로', '노즐누수', "Handpiece Ass'y"]
-      .every(t => li2.indexOf(D.esc(t)) >= 0), li2);
-  ck('17. 담당자가 비어 있으면 그 항목만 빠진다',
-    D.exHistoryLi_(curOf('type', ODD_TYPE, true)[0]).indexOf('담당자') < 0);
+  const items = D.exHistoryDataset_(curOf('type', '노즐누수', true), prevOf('type', '노즐누수', true));
+  const table = D.exHistoryTable_(items);
+  ck('15. 선택·비교 기간 원본 행을 하나의 표 데이터로 합친다',
+    items.length === 4 && items.filter(x => x.period === 'cur').length === 3 &&
+    items.filter(x => x.period === 'prev').length === 1);
+  ck('16. 표에 기간·처리일·병원·구분·담당자·VOC 유형·교체품·처리 내용 열이 있다',
+    ['기간','처리일','병원','구분','담당자','VOC 유형','교체품','처리 내용']
+      .every(t => table.indexOf(t) >= 0));
+  ck('17. 처리 내용 원본 줄바꿈을 보존해 표시',
+    table.indexOf('내부 세척<br>정상 동작 확인') >= 0 && table.indexOf('누수 부위 확인 및 세척') >= 0);
+  ck('18. 값이 없는 교체품은 대시로 표시하고 "없음" 문자열은 숨긴다',
+    table.indexOf('>없음<') < 0 && table.indexOf('class="muted">–</span>') >= 0);
+  ck('19. 처리 내용이 없으면 명확한 빈 상태를 표시',
+    D.exHistoryDetail_('').indexOf('처리 내용 없음') >= 0);
 }
 
-/* ══════ 6. 특수문자·따옴표 안전 ══════ */
+/* ══════ 6. 팝업 내부 필터 ══════ */
 {
-  ck('18. 따옴표·꺾쇠가 든 유형명도 정확히 매칭', curOf('type', ODD_TYPE, true).length === 1);
-  const li = D.exHistoryLi_(curOf('type', ODD_TYPE, true)[0]);
-  /* 본문 텍스트는 따옴표를 바꿀 필요가 없다 — 꺾쇠·앰퍼샌드만 escape 되면 안전하다 */
-  ck('19. 이력 행 본문이 escape 된다 (태그 주입 불가)',
-    li.indexOf('&lt;급수&gt;') >= 0 && li.indexOf('&amp;') >= 0 &&
-    li.indexOf('<급수>') < 0, li.slice(0, 160));
+  const items = D.exHistoryDataset_(
+    D.exHistorySort_(x.rows), D.exHistorySort_(x.prev));
+  ck('20. 선택/비교 기간 필터',
+    D.exHistoryFilter_(items,{period:'cur'}).every(v => v.period === 'cur') &&
+    D.exHistoryFilter_(items,{period:'prev'}).every(v => v.period === 'prev'));
+  ck('21. 구분 필터 — 교체품 이력에서 A/S·점검 구분 가능',
+    D.exHistoryFilter_(items,{gubun:'점검'}).length === 1 &&
+    D.exHistoryFilter_(items,{gubun:'점검'})[0].r.hosp === '바병원');
+  ck('22. 담당자 필터',
+    D.exHistoryFilter_(items,{fse:'김프로'}).length === 2 &&
+    D.exHistoryFilter_(items,{fse:'김프로'}).every(v => v.r.fse === '김프로'));
+  ck('23. 병원명 검색', D.exHistoryFilter_(items,{q:'다병원'}).length === 1);
+  ck('24. 처리 내용 검색',
+    D.exHistoryFilter_(items,{q:'정상 동작'}).length === 1 &&
+    D.exHistoryFilter_(items,{q:'정상 동작'})[0].r.hosp === '나병원');
+  ck('25. 필터 옵션은 중복 제거·가나다순',
+    D.exHistoryUnique_(items,'fse').join(',') === '김프로,이기사');
+  const controls=D.exHistoryControls_(items,true);
+  ck('26. 기간·구분·담당자·검색·초기화 컨트롤 존재',
+    ['hstPeriod','hstGubun','hstFse','hstQuery','exResetHistoryFilters_']
+      .every(t => controls.indexOf(t) >= 0));
+}
+
+/* ══════ 7. 특수문자·따옴표 안전 ══════ */
+{
+  ck('27. 따옴표·꺾쇠가 든 유형명도 정확히 매칭', curOf('type', ODD_TYPE, true).length === 1);
+  const table = D.exHistoryTable_(D.exHistoryDataset_(curOf('type', ODD_TYPE, true), []));
+  ck('28. 이력 표 본문이 escape 된다 (태그 주입 불가)',
+    table.indexOf('&lt;급수&gt;') >= 0 && table.indexOf('&amp;') >= 0 &&
+    table.indexOf('<급수>') < 0, table.slice(0, 220));
   const html = D.exBars(vocTop, { histDim: 'type' });
   const m = html.match(/data-hist-k="([^"]*)"/g) || [];
   /* esc() 는 따옴표를 바꾸지 않으므로 속성에는 escAttr() 를 써야 한다 */
-  ck('20. 카드 버튼의 data-hist-k 가 escape 되어 속성이 깨지지 않는다',
+  ck('29. 카드 버튼의 data-hist-k 가 escape 되어 속성이 깨지지 않는다',
     m.length === vocTop.length && html.indexOf('data-hist-k="노즐 "누수"') < 0 &&
     html.indexOf('&quot;누수&quot;') >= 0, m.join(' | ').slice(0, 200));
   /* 속성에서 되읽은 값이 원래 유형명과 같아야 이력 조회가 맞는다 */
   const back = m.map(a => a.slice('data-hist-k="'.length, -1))
     .map(v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
-  ck('20-b. 속성에서 되읽은 값이 원래 유형명과 일치',
+  ck('29-b. 속성에서 되읽은 값이 원래 유형명과 일치',
     back.indexOf(ODD_TYPE) >= 0 && curOf('type', back[back.indexOf(ODD_TYPE)], true).length === 1);
-  ck('21. 빈 상태 문구를 바꿀 수 있다 (기존 기본값은 그대로)',
+  ck('30. 표 필터 결과가 0건이면 전용 빈 상태를 표시',
+    D.exHistoryTable_([]).indexOf('선택한 필터에 해당하는 처리 이력이 없습니다') >= 0);
+  ck('31. 기존 명단의 빈 상태 문구 기능은 그대로',
     D.exListGroup('t', [], null, '해당 기록 없음').indexOf('해당 기록 없음') >= 0 &&
     D.exListGroup('t', [], null).indexOf('해당 병원 없음') >= 0);
 }
 
-/* ══════ 7. 카드 렌더 — 버튼·데이터 속성 ══════ */
+/* ══════ 8. 카드 렌더 — 버튼·데이터 속성 ══════ */
 {
   const withBtn = D.exBars(vocTop, { histDim: 'type' });
   const noBtn = D.exBars(vocTop, {});
-  ck('22. histDim 을 주면 각 행이 button 이 된다',
+  ck('32. histDim 을 주면 각 행이 button 이 된다',
     (withBtn.match(/<button type="button" class="ex-brow ex-row-btn/g) || []).length === vocTop.length);
-  ck('23. histDim 이 없으면 기존 div 행 그대로 (기존 화면 보존)',
+  ck('33. histDim 이 없으면 기존 div 행 그대로 (기존 화면 보존)',
     noBtn.indexOf('<button') < 0 && noBtn.indexOf('data-hist-k') < 0 &&
     (noBtn.match(/class="ex-brow/g) || []).length === vocTop.length);
-  ck('24. 수치·막대·증감 표시는 두 경우가 같다',
+  ck('34. 수치·막대·증감 표시는 두 경우가 같다',
     withBtn.replace(/<button[^>]*>/g, '<div>').replace(/<\/button>/g, '</div>')
       .replace(/<span class="nm"/g, '<div class="nm"').replace(/<span class="tr"/g, '<div class="tr"')
       .replace(/<span class="vl"/g, '<div class="vl"').replace(/<span class="dl"/g, '<div class="dl"')
       .replace(/ex-brow ex-row-btn/g, 'ex-brow')
       .indexOf('노즐누수') >= 0 && noBtn.indexOf('노즐누수') >= 0);
-  ck('25. 빈 목록은 기존 빈 상태 그대로', D.exBars([], { histDim: 'type', empty: 'A/S 기록 없음' })
+  ck('35. 빈 목록은 기존 빈 상태 그대로', D.exBars([], { histDim: 'type', empty: 'A/S 기록 없음' })
     .indexOf('A/S 기록 없음') >= 0);
 }
 
-/* ══════ 8. 네트워크 호출 없음 ══════ */
+/* ══════ 9. 네트워크 호출 없음 ══════ */
 {
-  const bodies = ['exShowHistory_', 'exHistoryRows_', 'exHistorySort_', 'exHistoryLi_',
-    'exCmpRangeText_', 'exBars', 'exListGroup']
+  const bodies = ['exShowHistory_', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_',
+    'exHistoryFilter_', 'exHistoryTable_', 'exApplyHistoryFilters_', 'exCmpRangeText_', 'exBars', 'exListGroup']
     .map(n => {
       const at = SRC.search(new RegExp('\\bfunction\\s+' + n + '\\s*\\('));
       let depth = 0;
@@ -243,17 +276,22 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
       }
       return '';
     }).join('\n');
-  ck('26. 클릭 처리 경로에 fetch/GAS/재조회가 없다',
+  ck('36. 클릭 처리 경로에 fetch/GAS/재조회가 없다',
     !/\bfetch\s*\(|\bgv\s*\(|loadData\s*\(|XMLHttpRequest|script\.google/.test(bodies));
-  ck('27. 클릭이 전역 필터(F)나 화면을 다시 그리지 않는다',
+  ck('37. 클릭이 전역 필터(F)나 화면을 다시 그리지 않는다',
     !/\bapply\s*\(\)|buildFilters\s*\(\)|F\.(from|to|type|part|hosp)\s*=/.test(bodies));
-  ck('28. 이미 만들어 둔 집계(EX_CACHE)를 재사용한다',
+  ck('38. 이미 만들어 둔 집계(EX_CACHE)를 재사용한다',
     /var x=EX_CACHE\|\|exBuild\(EX_ROWS\)/.test(SRC));
-  ck('29. 리스너는 카드 컨테이너에 한 번만 위임 등록된다',
+  ck('39. 리스너는 카드 컨테이너에 한 번만 위임 등록된다',
     /\['exVocUpCard','exTypeCard','exPartCard'\]\.forEach/.test(SRC) &&
     (SRC.match(/data-hist-k\]/g) || []).length === 1);
-  ck('30. 유형·교체품명을 inline onclick 문자열에 넣지 않는다',
+  ck('40. 유형·교체품명을 inline onclick 문자열에 넣지 않는다',
     !/onclick="exShowHistory_/.test(SRC));
+  ck('41. 팝업 내부 필터는 전역 필터 F 를 변경하지 않는다',
+    !/F\.(from|to|type|part|hosp|fse|gubun)\s*=/.test(grab('exApplyHistoryFilters_')));
+  ck('42. 처리 이력 모달은 넓은 표·모바일 카드 CSS를 모두 가진다',
+    /\.ex-list-box\.history\{max-width:1180px\}/.test(SRC) &&
+    /@media\(max-width:820px\)/.test(SRC) && /\.hst-table td:before/.test(SRC));
 }
 
 console.log('\n──────────────────────────────');
