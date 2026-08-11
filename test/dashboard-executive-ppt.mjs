@@ -282,8 +282,15 @@ function rebuildX(period) {
     D.exPptRuns_(o).some(r => r.text === '이번 보고서용 수정 설명'));
   const editedVal = editedItems.find(o => o.topCard === 'voc' && o.topCol === 'value' &&
     o.topRow === editedDesc?.topRow);
+  const editedName = editedItems.find(o => o.topCard === 'voc' && o.topCol === 'name' &&
+    o.topRow === editedDesc?.topRow);
   ck('7-e-1. 수정된 VOC 설명은 유형 아래 보조 행에 반영되고 숫자 행 높이를 바꾸지 않는다',
-    !!editedDesc && !!editedVal && editedDesc.y > editedVal.y && editedVal.h === D.L.top.rowH);
+    !!editedDesc && !!editedVal && !!editedName && editedVal.h === D.L.top.rowH &&
+    Math.abs(editedName.y-editedVal.y-D.L.top.descDY) < 0.0001 &&
+    Math.abs(editedDesc.y-editedName.y-D.L.top.descNameH) < 0.0001 &&
+    editedName.h === D.L.top.descNameH && editedDesc.h === D.L.top.descH);
+  ck('7-e-2. 첨부 PPT 기준 VOC 유형·설명 묶음은 숫자 행보다 2.56px 아래에서 시작한다',
+    Math.abs(D.L.top.descDY*96-2.56) < 0.001);
   ck('7-f. 케이블 불량·케이블 단선 별칭은 같은 설명 사용',
     D.exVocDesc_('케이블 불량') === D.exVocDesc_('케이블 단선'));
   const descW = D.L.voc.w - D.L.top.pad * 2;
