@@ -71,6 +71,7 @@ const FNS = [
   'exNum', 'exMD_', 'buildTrendSummary_',
   'exUnratedHtml', 'exUnratedNoteText_', 'exUnratedSummaryHtml_',
   'exDeltaParts', 'exDeltaHtml',
+  'exVocDescKey_', 'exVocDesc_',
   'buildExecutiveVocChange', 'buildExecutiveNotes',
   'exDayLabel_', 'exMonthCmpStat_', 'exTrendStatDelta_',
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
@@ -95,8 +96,9 @@ const src = [
   grabVar('var EX_TONE_CLS='),
   grabObj('var C={navy:'), grabObj('var FT={face:'), grabObj('var L=(function(){'),
   grabVar('var EX_TONE_COLOR='),
+  grabObj('var EX_VOC_DESC=(function(){'),
   ...FNS.map(grab),
-  'return {' + FNS.join(',') + ', L:L, C:C, FT:FT,' +
+  'return {' + FNS.join(',') + ', L:L, C:C, FT:FT, EX_VOC_DESC:EX_VOC_DESC,' +
   ' setRAW:function(v){RAW=v;}, setHOSPDB:function(v){HOSPDB=v;},' +
   ' setF:function(v){F=v;}, getF:function(){return F;}, getEXCMP:function(){return EX_CMP;}};'
 ].join('\n');
@@ -263,16 +265,49 @@ function rebuildX(period) {
     wSnap.vocTop.rows.map(r => r.k).join(','));
   ck('7-c. 최대 5행 · 이전 동일 기간 증감 표시',
     wSnap.vocTop.rows.length <= 5 && wSnap.vocTop.rows.every(r => 'd' in r));
+  ck('7-d. 고정 VOC 현상 설명 자동 적용',
+    wSnap.vocTop.rows.some(r => r.k === '노즐누수(약액 유입)' &&
+      r.desc === '약액이 핸드피스 내부로 유입되거나 외부로 누출되는 현상'));
+  const edited = D.buildExecutiveReportSnapshot(Object.assign({}, WEEK, {
+    vocDescriptions: { [D.exVocDescKey_('노즐 누수(약액 유입)')]: '이번 보고서용 수정 설명' }
+  }));
+  ck('7-e. 생성 전 수동 수정 설명이 고정 설명보다 우선',
+    edited.vocTop.rows.some(r => r.k === '노즐누수(약액 유입)' && r.desc === '이번 보고서용 수정 설명') &&
+    has(itemsOf(edited), '이번 보고서용 수정 설명'));
+  ck('7-f. 케이블 불량·케이블 단선 별칭은 같은 설명 사용',
+    D.exVocDesc_('케이블 불량') === D.exVocDesc_('케이블 단선'));
+  const descW = D.L.voc.w - D.L.top.pad * 2;
+  ck('7-g. 고정 VOC 설명은 PPT 한 줄 폭 안에 들어간다',
+    Object.values(D.EX_VOC_DESC).every(s => D.exTxtW_(s, D.FT.rowDesc) <= descW + 0.001));
   ck('8. 교체품 TOP 5 존재', has(wItems, '교체품 TOP 5') && wSnap.partTop.rows.length > 0);
   ck('8-b. 교체품도 최대 5행 · 증감 표시',
     wSnap.partTop.rows.length <= 5 && wSnap.partTop.rows.every(r => 'd' in r));
   ck('8-c. 월간도 같은 두 카드를 싣는다', has(mItems, 'VOC 유형 TOP 5') && has(mItems, '교체품 TOP 5'));
+
+  load([
+    { date:'2026-08-04', hosp:'현재병원', gubun:'A/S', type:'출력 약함', part:'Current part' },
+    { date:'2026-07-28', hosp:'이전병원', gubun:'A/S', type:'이전 기간 전용 유형', part:'Old part' }
+  ]);
+  const positiveOnly = D.buildExecutiveReportSnapshot(WEEK);
+  ck('8-d. VOC TOP5에서 현재 0건 항목 제외',
+    positiveOnly.vocTop.rows.every(r => r.cur > 0) &&
+    !positiveOnly.vocTop.rows.some(r => r.k === '이전 기간 전용 유형'));
+  ck('8-e. 교체품 TOP5에서 현재 0개 항목 제외',
+    positiveOnly.partTop.rows.every(r => r.cur > 0) &&
+    !positiveOnly.partTop.rows.some(r => r.k === 'Old part'));
+  load(SAMPLE);
 }
 
 /* ══════ 9. 특이사항 ══════ */
 {
   ck('9. 특이사항 카드 존재', has(wItems, '특이사항') && wSnap.notes.items.length > 0);
   ck('9-b. 월간에도 특이사항 존재', has(mItems, '특이사항') && mSnap.notes.items.length > 0);
+  ck('9-c. 특이사항의 기간·사실 기반 보조 문구 제거',
+    wSnap.notes.basis === '' && mSnap.notes.basis === '' &&
+    !has(wItems, '사실 기반') && !has(mItems, '사실 기반'));
+  ck('9-d. 특이사항 4건 이상은 좌우 2열 구분선으로 균형 배치',
+    wSnap.notes.items.length >= 4 && wItems.some(o => o.k === 'rect' &&
+      o.w === 0.01 && o.y === D.L.notes.listY && o.h > 1));
 }
 
 /* ══════ 10~13. 기존 PPT 항목 제외 ══════ */
@@ -290,8 +325,9 @@ function rebuildX(period) {
   ck('13-c. 모달에 수기 입력 항목이 남아 있지 않다',
     !/id="wkDetail"/.test(SRC) && !/id="mnDetail"/.test(SRC) &&
     !/id="inv1"/.test(SRC) && !/id="callInInp"/.test(SRC) && !/id="mnCallInInp"/.test(SRC));
-  ck('13-d. 모달에는 기간 선택·미리보기·PPT 생성만 남는다',
+  ck('13-d. 모달에는 기간 선택·VOC 설명 확인·미리보기·PPT 생성만 남는다',
     /id="wkSel"/.test(SRC) && /previewWeeklyPPT\(\)/.test(SRC) && /id="wkGo"/.test(SRC) &&
+    /id="wkVocDescRows"/.test(SRC) && /id="mnVocDescRows"/.test(SRC) &&
     /id="mnSel"/.test(SRC) && /previewMonthlyPPT\(\)/.test(SRC) && /id="mnGo"/.test(SRC));
 }
 
@@ -493,14 +529,15 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('R1. 추이 60~65% · VOC 변화 35~40%',
     tr >= 0.60 && tr <= 0.65 && ch >= 0.35 && ch <= 0.40,
     (tr * 100).toFixed(1) + '% / ' + (ch * 100).toFixed(1) + '%');
-  const tp = D.L.top.w / W, nt = D.L.notes.w / W;
-  ck('R2. TOP5 각 약 25% · 특이사항 약 50% (가장 넓은 공간)',
-    tp >= 0.23 && tp <= 0.27 && nt >= 0.47 && nt <= 0.52 && nt > tp * 1.8,
-    (tp * 100).toFixed(1) + '% ×2 / ' + (nt * 100).toFixed(1) + '%');
+  const vw = D.L.voc.w / W, pw = D.L.part.w / W, nt = D.L.notes.w / W;
+  ck('R2. 설명이 있는 VOC 카드를 넓히고 특이사항은 가장 넓게 유지',
+    vw >= 0.25 && vw <= 0.29 && pw >= 0.21 && pw <= 0.25 &&
+    nt >= 0.46 && nt <= 0.50 && nt > vw && nt > pw,
+    (vw * 100).toFixed(1) + '% / ' + (pw * 100).toFixed(1) + '% / ' + (nt * 100).toFixed(1) + '%');
   ck('R3. KPI 6장이 본문 폭을 정확히 채운다',
     Math.abs(D.L.kpi.w * 6 + D.L.kpi.gap * 5 - W) < 0.001);
   ck('R4. 특이사항 카드가 하단에서 가장 넓다',
-    D.L.notes.w > D.L.top.w && D.L.notes.w > D.L.top.w * 2 - 0.01);
+    D.L.notes.w > D.L.voc.w && D.L.notes.w > D.L.part.w * 2 - 0.01);
 }
 
 /* ══════ 특이사항 자동 배치 (글자를 무조건 줄이지 않는다) ══════ */
