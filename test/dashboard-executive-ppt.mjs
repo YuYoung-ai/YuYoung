@@ -328,9 +328,10 @@ function rebuildX(period) {
   ck('13-c. 모달에 수기 입력 항목이 남아 있지 않다',
     !/id="wkDetail"/.test(SRC) && !/id="mnDetail"/.test(SRC) &&
     !/id="inv1"/.test(SRC) && !/id="callInInp"/.test(SRC) && !/id="mnCallInInp"/.test(SRC));
-  ck('13-d. 모달에는 기간 선택·VOC 설명 확인·미리보기·PPT 생성만 남는다',
+  ck('13-d. 모달에는 기간 선택·VOC 설명·특이사항 확인·미리보기·PPT 생성만 남는다',
     /id="wkSel"/.test(SRC) && /previewWeeklyPPT\(\)/.test(SRC) && /id="wkGo"/.test(SRC) &&
     /id="wkVocDescRows"/.test(SRC) && /id="mnVocDescRows"/.test(SRC) &&
+    /id="wkNoteRows"/.test(SRC) && /id="mnNoteRows"/.test(SRC) &&
     /id="mnSel"/.test(SRC) && /previewMonthlyPPT\(\)/.test(SRC) && /id="mnGo"/.test(SRC));
 }
 
@@ -572,6 +573,10 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('N6. 감소 강조는 초록으로 옮긴다',
     D.exHtmlRuns_('전주보다 A/S가 <b class="ex-down">3건 감소</b>했습니다.')
       .some(r => r.color === D.C.green));
+  const wrappedNewlines = D.exWrapRuns_([{ text: '첫 줄\r\n둘째 줄', bold: false, color: null }], 10, 9);
+  ck('N7. CR은 무시하고 LF는 실제 새 줄로 분리한다',
+    wrappedNewlines.length === 2 &&
+    wrappedNewlines.map(line => line.map(r => r.text).join('')).join('|') === '첫 줄|둘째 줄');
 }
 
 /* ══════ 텍스트 한 줄 유지 (제목·KPI 숫자·표 내용) ══════ */
@@ -694,6 +699,11 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     sE.notes.items[0].indexOf('<b onclick') < 0 && sE.notes.items[0].indexOf('&lt;b') >= 0);
   ck('E8-b. escape 된 문장은 태그가 아니라 글자로 그려진다',
     allText(itemsOf(sE)).indexOf('<b onclick="x">주입</b>') >= 0);
+  const vocEditorSrc = grab('exRefreshVocDescEditor_');
+  ck('E8-c. VOC 설명 편집기 속성은 따옴표까지 escape 한다',
+    /title="'\+escAttr\(r\.k\)/.test(vocEditorSrc) &&
+    /data-key="'\+escAttr\(k\)/.test(vocEditorSrc) &&
+    /value="'\+escAttr\(v\)/.test(vocEditorSrc));
 
   /* 평문 변환 — 편집 입력창에 넣을 값 */
   ck('E9. exNotePlain_ 은 강조 태그만 벗기고 문장은 유지',

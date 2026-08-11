@@ -222,7 +222,7 @@ body.mode-mobile .wrap{max-width:560px}
 .mbtn.go{background:var(--navy);color:#fff}
 .mbtn.cancel{background:#E8EDF6;color:var(--text-muted)}
 .mhint{font-size:11px;color:var(--text-muted);margin-top:4px}
-.report-box{max-width:620px}
+.report-box{max-width:620px;max-height:calc(100vh - 32px);overflow:auto}
 .voc-desc-editor{margin-top:12px;border:1px solid var(--gray-line);border-radius:10px;background:var(--surface-2);overflow:hidden}
 .voc-desc-editor summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:700;color:var(--navy);list-style:none}
 .voc-desc-editor summary::-webkit-details-marker{display:none}
@@ -540,7 +540,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 /* ── 카드 항목 → 처리 이력 버튼 ──
    기존 행(.ex-brow / .ex-li)의 배치·색은 그대로 두고 버튼 기본 스타일만 지운다. */
 .ex-row-btn{width:100%;margin:0;font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
-.ex-li.ex-row-btn{border-bottom:1px solid var(--gray-line);border-radius:0}
+.ex-li.ex-row-btn{border-bottom:1px solid var(--li-line);border-radius:0}
 .ex-li.ex-row-btn:last-child{border-bottom:none}
 .ex-row-btn:hover{background:var(--teal-soft)}
 .ex-row-btn:focus-visible{outline:2px solid var(--navy);outline-offset:-2px;border-radius:6px}
@@ -2092,11 +2092,18 @@ function exFitPair_(val, unit, maxW, sizes){
 }
 /* 런(run) 단위 줄바꿈 — 특이사항 문장의 굵게·증감 색을 유지한 채 줄을 나눈다 */
 function exWrapRuns_(runs, maxW, size){
-  var lines=[], cur=[], w=0;
+  var lines=[], cur=[], w=0, endedWithNewline=false;
   (runs||[]).forEach(function(r){
     var t=String(r.text==null?'':r.text);
     for(var i=0;i<t.length;i++){
-      var ch=t.charAt(i), cw=exTxtW_(ch,size);
+      var ch=t.charAt(i);
+      if(ch==='\r') continue;
+      if(ch==='\n'){
+        lines.push(cur.length?cur:[{text:'', bold:!!r.bold, color:r.color}]);
+        cur=[]; w=0; endedWithNewline=true; continue;
+      }
+      endedWithNewline=false;
+      var cw=exTxtW_(ch,size);
       if(w+cw>maxW && w>0){ lines.push(cur); cur=[]; w=0; if(ch===' ') continue; }
       var last=cur[cur.length-1];
       if(last && last.bold===!!r.bold && last.color===r.color) last.text+=ch;
@@ -2105,6 +2112,7 @@ function exWrapRuns_(runs, maxW, size){
     }
   });
   if(cur.length) lines.push(cur);
+  else if(endedWithNewline) lines.push([{text:'', bold:false, color:null}]);
   return lines.length?lines:[[{text:'', bold:false, color:null}]];
 }
 function exUnesc_(s){
@@ -2594,8 +2602,8 @@ function exRefreshVocDescEditor_(type){
     var k=exVocDescKey_(r.k), v=Object.prototype.hasOwnProperty.call(overrides,k)
       ? String(overrides[k]||'') : (EX_VOC_DESC[k]||'');
     if(!v.trim()) missing=true;
-    return '<div class="voc-desc-row"><label title="'+esc(r.k)+'">'+esc(r.k)+'</label>'
-      +'<input type="text" maxlength="70" data-key="'+esc(k)+'" value="'+esc(v)+'"'
+    return '<div class="voc-desc-row"><label title="'+escAttr(r.k)+'">'+esc(r.k)+'</label>'
+      +'<input type="text" maxlength="70" data-key="'+escAttr(k)+'" value="'+escAttr(v)+'"'
       +' class="'+(v.trim()?'':'missing')+'" placeholder="임원 보고용 현상 설명 입력"'
       +' oninput="exSetVocDescOverride_(\''+type+'\',this)"></div>';
   }).join('');
