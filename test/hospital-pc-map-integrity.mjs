@@ -681,7 +681,10 @@ for (const m of modules) {
     fs.existsSync(path.join(ROOT, 'js', m + '.js')) && SRC.includes('js/' + m + '.js'));
 }
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-ck('서비스워커 캐시 버전이 갱신되었다', /baz-cs-v124/.test(sw));
+/* 정확한 번호를 박아 두면 다른 페이지를 고쳐 캐시를 올릴 때마다 이 테스트가 깨진다
+   (sw.js 자체가 "수정할 때마다 반드시 올리라"고 요구한다). 하한만 확인한다. */
+const swVer = Number((sw.match(/baz-cs-v(\d+)/) || [])[1] || 0);
+ck(`서비스워커 캐시 버전이 갱신되었다(≥124) — 현재 v${swVer}`, swVer >= 124);
 ck('새 모듈이 서비스워커 정책에 문서화되어 있다', /js\/baz-\*\.js/.test(sw));
 
 /* ── 결과 ─────────────────────────────────────────────────────────── */

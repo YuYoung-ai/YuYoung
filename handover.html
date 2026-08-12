@@ -642,9 +642,9 @@ function hlMatch(name,q){
 }
 function onHospFocus(){
   onHospInput();
-  /* [모바일] 예전에는 무조건 scrollIntoView({block:'start'}) 로 화면을 끌어올려,
-     이미 잘 보이는 상태에서도 페이지가 튀었다. 입력창이 sticky header 나
-     키보드에 실제로 가려질 때만, 그것도 'nearest' 로 최소한만 움직인다. */
+  /* [모바일] 예전에는 무조건 화면 최상단으로 끌어올려(block start) 이미 잘 보이는
+     상태에서도 페이지가 튀었다. 입력창이 sticky header 나 키보드에 실제로
+     가려질 때만, 그것도 'nearest' 로 최소한만 움직인다. */
   setTimeout(function(){
     var inp=el('hosp'); if(!inp) return;
     var r=inp.getBoundingClientRect();
@@ -719,15 +719,21 @@ function positionHospDrop(){
   var vv=window.visualViewport;
   var vTop=vv ? vv.offsetTop : 0;
   var vH  =vv ? vv.height : window.innerHeight;
+  var gap=8;
+  var top=vTop + hdrH() + gap;                 /* sticky header 아래 경계 */
+  var bottom=vTop + vH - actionsH() - gap;     /* 하단 액션바 위 경계(키보드 포함) */
   var r=inp.getBoundingClientRect();
-  var barH=actionsH();
-  var below=(vTop + vH - barH - 10) - r.bottom;   /* 입력창 아래 실제 여유 */
-  var above=r.top - (vTop + hdrH() + 10);          /* 입력창 위 실제 여유 */
+  var below=bottom - r.bottom;
+  var above=r.top - top;
   var up = below < 160 && above > below;
   d.classList.toggle('up', up);
+  /* 방향을 정한 뒤 "드롭다운 자신의 실제 시작 위치"를 기준으로 남은 공간을 잰다.
+     입력창 기준으로만 계산하면 margin·컨테이너 오프셋만큼 목록이 경계를 넘는다. */
+  d.style.maxHeight='none';
+  var dr=d.getBoundingClientRect();
+  var space = up ? (dr.bottom - top) : (bottom - dr.top);
   /* 실제 가용 공간보다 큰 최소 높이를 강제하지 않는다 */
-  var space=Math.max(72, Math.floor(up ? above : below));
-  d.style.maxHeight=space+'px';
+  d.style.maxHeight=Math.max(72, Math.floor(space))+'px';
 }
 function onHospInput(){
   var q=normH(val('hosp')), drop=el('hospDrop'), inp=el('hosp');
@@ -953,7 +959,7 @@ function rememberRecentHandover_(){
   }catch(e){}
 }
 /* ── 시트 웹앱 버전 확인 (진단 표시용) ────────────────────────────────
-   [수정] 예전에는 이 버전만 보고 "사진이 저장됐다"를 추측했다(gasSupportsPhoto).
+   [수정] 예전에는 이 버전만 보고 "사진이 저장됐다"를 추측했다.
    추측이 틀리면 사용자는 저장된 줄 알고 사진을 잃는다.
    → 사진 저장 여부는 오직 서버 응답(photo.saved)으로만 판정한다.
      버전은 배포 안내 문구에만 쓴다. */
@@ -975,10 +981,11 @@ function newReqId(){
    성공 / 실패 / 확인 중 / 결과 불명 을 명확히 구분한다.
    ★ "확인되지 않은 상태"에서는 다음을 절대 하지 않는다:
        사진 삭제 · 복사/이어쓰기 활성화 · 최근 완료 로컬 기록 · 저장 완료 메시지 */
+var FIELD_LABEL={eqKind:'장비 구분', verUI:'UI 버전', verHP:'HP 버전', nozzleDate:'노즐 제조일자',
+                 result:'A/S 결과', remark:'비고', code:'유형 코드'};
 var SAVE_STATE=BazHandover.SAVE.IDLE;
 var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
 var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
-var LAST_UNSAVED_TEXT='';     /* 시트에 못 올린 공유 문구(복사 대비) */
 
 function setSaveState(state, info){
   SAVE_STATE=state;
@@ -1048,12 +1055,19 @@ function applySaveResult(res){
     enableCopy(true);
     rememberRecentHandover_();
     BazHandover.clearDraft(localStorage);      /* 확인된 성공 → 초안 정리 */
-    LAST_REQ_ID=''; LAST_UNSAVED_TEXT='';
+    LAST_REQ_ID='';
     clearSnPhoto();                            /* 서버가 사진 저장을 확인해 준 뒤에만 지운다 */
     var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
     toast(res.message || '✅ 시트 기록 완료');
-    /* 서버가 "이 필드는 저장 못 했다"고 알려 준 경우 그대로 보여 준다 */
+    /* 서버가 "이 필드는 저장 못 했다"고 알려 준 경우 그대로 보여 준다 —
+       프런트가 임의로 '저장됨'이라고 말하지 않는다. */
     if(res.warnings && res.warnings.length) console.warn('[handover] 저장 경고:', res.warnings);
+    if(res.savedFields){
+      var notSaved=Object.keys(res.savedFields).filter(function(k){
+        return res.savedFields[k]===false && FIELD_LABEL[k] && String(readForm()[k]||'').trim();
+      }).map(function(k){ return FIELD_LABEL[k]; });
+      if(notSaved.length) toast('⚠️ 시트에 열이 없어 저장되지 않은 항목: '+notSaved.join(', '));
+    }
   }else if(res.state===S.FAILED){
     setSaveState(S.FAILED, {error:res.error});
     enableCopy(false);
@@ -1092,7 +1106,7 @@ function startNewRecord(){
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('on','warn'); b.setAttribute('aria-pressed','false'); });
   setHospSelection(null);
   clearSnPhoto();
-  SAVED_SNAPSHOT=null; LAST_REQ_ID=''; LAST_UNSAVED_TEXT='';
+  SAVED_SNAPSHOT=null; LAST_REQ_ID='';
   document.body.classList.remove('is-dirty');
   enableCopy(false);
   setSaveState(BazHandover.SAVE.IDLE);
@@ -1180,16 +1194,14 @@ async function saveToSheet(){
   var btn=el('btnSave');
   var reqId=newReqId();
   LAST_REQ_ID=reqId;
-  LAST_UNSAVED_TEXT=curText();
   var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
   var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true, reqId:reqId, token:token});
 
   setSaveState(BazHandover.SAVE.SAVING);
   btn.disabled=true; btn.textContent='기록 중…';
   try{
-    /* [수정] no-cors 폴백 제거.
-       예전에는 응답을 못 읽으면 mode:'no-cors' 로 한 번 더 보내고, 읽을 수 없는
-       opaque 응답만으로 "시트에 기록됐어요"를 띄우며 사진까지 지웠다.
+    /* [수정] 응답을 못 읽을 때 쓰던 재전송 폴백을 없앴다.
+       예전에는 읽을 수 없는 opaque 응답만으로 "시트에 기록됐어요"를 띄우며 사진까지 지웠다.
        이제 확인되지 않은 상태는 '결과 불명'으로 두고, savecheck 로 실제 결과를 묻는다. */
     var res=await postSave(payload, SAVE_TIMEOUT_MS);
     if(res.state===BazHandover.SAVE.UNKNOWN){
@@ -1234,7 +1246,11 @@ function scheduleDraftSave(){
   if(draftTimer) clearTimeout(draftTimer);
   draftTimer=setTimeout(function(){
     draftTimer=null;
-    BazHandover.saveDraft(localStorage, readForm(), {hadPhoto:!!SN_PHOTO});
+    /* 시트에 기록이 끝났고 그 뒤로 바뀐 게 없다면 초안을 다시 만들지 않는다.
+       (저장 성공 → clearSnPhoto → render 경로가 방금 지운 초안을 되살리던 문제) */
+    var form=readForm();
+    if(SAVED_SNAPSHOT && !BazHandover.isDirty(SAVED_SNAPSHOT, form)) return;
+    BazHandover.saveDraft(localStorage, form, {hadPhoto:!!SN_PHOTO});
   }, 600);
 }
 function offerDraftRestore(){
@@ -1274,7 +1290,8 @@ function restoreDraft(d){
   if(f.snCustom) setVal('snCustom', f.snCustom);
   SKILL={nsFill:f.nsFill||'', nsAmt:f.nsAmt||'', jet:f.jet||''};
   syncSkillButtons();
-  if(d.hadPhoto) snPhotoSay('이전에 첨부했던 사진은 복원되지 않습니다 — 다시 첨부해 주세요.');
+  /* 사진은 초안에 담지 않는다(용량) — 사진이 필수인 화면이므로 항상 재첨부를 알린다 */
+  snPhotoSay('사진은 복원되지 않습니다 — 장비 S/N 사진을 다시 첨부해 주세요.');
   updClear(); render();
   toast('작성 중이던 내용을 복원했습니다');
 }

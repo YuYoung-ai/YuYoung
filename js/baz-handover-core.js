@@ -114,6 +114,7 @@
       code: text(form.code),
       part: text(form.part),
       cost: c.empty ? '무상' : (c.ok ? String(c.value) : text(form.cost)),
+      result: result,
       detail: text(form.detail).slice(0, MAX_LEN.detail),
       remark: text(form.remark).slice(0, MAX_LEN.remark),
       hpIn: text(form.hpIn), uVer: text(form.uVer),
