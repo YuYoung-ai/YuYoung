@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v2.9.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.1.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -15,8 +15,33 @@
  *  3) 배포 > 배포 관리 > ✏️ > 버전: "새 버전" > 배포
  *     ※ "새 배포"가 아님 — URL이 바뀌면 앱 전체가 깨집니다
  *
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║ ★★ v3.1 적용 순서 ★★                                            ║
+ * ╚═══════════════════════════════════════════════════════════════╝
+ *  1) 편집기에 이 코드를 붙여넣고 [저장]
+ *  2) ★먼저★ 함수 목록에서 setupHandoverColumns 를 골라 [실행]
+ *     → 사진 열 + 아래 열들이 없으면 만들어 준다(있으면 건드리지 않음):
+ *        장비 S/N 사진 · UI Ver · HP Ver · 노즐 제조일자 · A/S 결과 · 비고 ·
+ *        장비 구분 · 유형 코드 · 로그인 사용자
+ *     ※ 이 열들이 없으면 저장은 되지만 해당 값은 기록되지 않고, 응답 warnings 로
+ *       "저장되지 않았다"고 알린다(프런트가 '저장됨'이라고 말하지 않는다).
+ *  3) [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]  ※ "새 배포"가 아님(URL 유지)
+ *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.1.0"}
+ *
+ * v3.1 주요 변경
+ *  · 사진 저장 실패를 성공으로 처리하지 않는다(행도 쓰지 않고 실패 응답)
+ *  · 같은 reqId 동시 요청이 두 행·두 사진을 만들지 않는다(락 안 재확인 + 영속 기록)
+ *  · 전송로그에서 token·사진 base64 제거(허용 목록 기반 재구성)
+ *  · 인증 서버 장애 시 '검증되지 않은 임의 토큰'을 통과시키지 않는다
+ *  · 화면 입력(UI/HP Ver·노즐 제조일자·A/S 결과·비고·장비 구분·유형 코드)을 실제 열에 기록
+ *  · 사용자 입력이 시트 수식으로 해석되지 않게 방어 + 서버측 길이·허용값 검증
+ *
  * 엔드포인트
  *  POST                          : 행 기록 (수기 입력 열만 기록, 수식 열 보존)
+ *                                  응답 {success, row, photo:{required,saved,fileId,error},
+ *                                        savedFields, warnings, error}
+ *  GET ?action=savecheck&reqId=… : [v3.1] 저장 결과 조회(응답 유실 시 실제 기록 여부 판정)
+ *  GET ?action=handover_bootstrap: [v3.1] handover 부트 1콜(병원DB·마스터·템플릿·자동대상)
  *  POST {action:'history_save'}  : [v3.0] 병원 처리 이력 편집 저장 (Lv.2 토큰 · rev 충돌 검사)
  *                                  {hosp, records:[…], who, baseRev, token}
  *                                  → 성공 {success:true, rev, records, updatedAt, updatedBy}
@@ -277,17 +302,210 @@ function pickCols_(hdr){
   return o;
 }
 
-/** [v2.8] 로그용 payload — base64 사진은 요약 문자열로 대체한다.
- *  (dataURL을 그대로 남기면 전송로그 셀이 5만자 한도를 넘겨 기록 자체가 실패한다) */
+/* [v3.1][보안] 전송로그에 남길 수 있는 필드 — 허용 목록.
+   ★ 예전 logSafe_ 는 payload 전체를 복사한 뒤 snPhoto 만 요약했다. 그래서
+     payload.token(로그인 토큰)이 '전송로그' 시트에 평문으로 그대로 쌓였다.
+     시트 열람 권한만 있으면 남의 세션 토큰을 그대로 주워 쓸 수 있는 상태였다.
+   ★ "복사 후 일부 삭제" 방식은 필드가 하나 늘 때마다 다시 새는 구조다.
+     → 여기 적힌 업무 필드만 새 객체에 담는다(기본 거부). */
+var LOG_FIELDS = ['action','reqId','date','hosp','fse','gubun','eqKind','cat','type','code',
+                  'part','cost','sn','hpIn','hpOut','uVer','wVer','verUI','verHP',
+                  'nozzleDate','nozzleReuse','result','nsFill','nsAmt','jet'];
+var LOG_MAX_LEN = 300;   /* 한 필드 길이 상한 — 내용/비고가 길어도 로그 셀을 넘기지 않는다 */
+
+/** 로그용 payload — 허용 목록 기반으로 "새로 구성"한다(토큰·사진 base64 원천 차단) */
 function logSafe_(payload){
-  if(!payload || typeof payload !== 'object') return payload;
-  var o = {}, keys = Object.keys(payload);
-  for(var i=0;i<keys.length;i++) o[keys[i]] = payload[keys[i]];
-  if(o.snPhoto){
-    var kb = Math.round(String(o.snPhoto).length * 3 / 4 / 1024);
-    o.snPhoto = '[photo ' + kb + 'KB]';
+  if(!payload || typeof payload !== 'object') return {};
+  var o = {};
+  for(var i=0;i<LOG_FIELDS.length;i++){
+    var k = LOG_FIELDS[i];
+    if(!Object.prototype.hasOwnProperty.call(payload, k)) continue;
+    var v = payload[k];
+    if(v === null || v === undefined || v === '') continue;
+    if(typeof v === 'object') continue;                    /* 중첩 객체는 통째로 제외 */
+    o[k] = String(v).slice(0, LOG_MAX_LEN);
   }
+  /* 사진은 "붙었는지"만 남긴다 — base64 본문은 절대 로그에 넣지 않는다 */
+  if(payload.snPhoto) o.photoKB = Math.round(String(payload.snPhoto).length * 3 / 4 / 1024);
+  /* 내용·비고는 길이만(개인 메모가 로그 시트로 새지 않게) */
+  if(payload.detail) o.detailLen = String(payload.detail).length;
+  if(payload.remark) o.remarkLen = String(payload.remark).length;
   return o;
+}
+
+/* ═══════════ [v3.1] 저장 계약 · 검증 · 멱등성 ═══════════════════════════════
+ *  왜 필요한가
+ *   ① 화면에는 있는데 시트에 저장되지 않던 필드(UI/HP Ver·노즐 제조일자·A/S 결과·
+ *      비고·장비 구분·유형 코드)를 실제 열에 기록한다. 열이 없으면 조용히 버리지 않고
+ *      응답 warnings 로 알린다(프런트가 "저장됨"이라고 말하지 않게).
+ *   ② 사용자 입력이 =IMPORTXML(...) 같은 수식으로 해석되지 않게 막는다.
+ *   ③ 같은 reqId 동시 요청이 두 행·두 사진을 만들지 않게 락 안에서 다시 확인한다.
+ */
+
+/* 프런트 payload 키 → 시트 헤더 별칭(허용 목록). 첫 번째로 찾은 열에 쓴다.
+   ※ 짧은 별칭('UI','HP')은 넣지 않는다 — HP_SN(IN/OUT) 뒤의 'Ver' 열과 헷갈린다. */
+var HANDOVER_FIELD_COLS = {
+  eqKind     : ['장비 구분','장비구분','장비종류','장비 종류'],
+  verUI      : ['UI Ver','UI버전','UI 버전','UI Version'],
+  verHP      : ['HP Ver','HP버전','HP 버전','HP Version'],
+  nozzleDate : ['노즐 제조일자','노즐제조일자','노즐 제조일','노즐제조일'],
+  result     : ['A/S 결과','AS 결과','처리 결과','처리결과'],
+  remark     : ['비고','비고/특이사항','특이사항','비고 / 특이사항'],
+  code       : ['유형 코드','유형코드','코드'],
+  authUser   : ['로그인 사용자','작성자(로그인)','기록 계정']
+};
+/* 값 길이 상한 — 서버에서도 반드시 확인한다(클라이언트만 믿지 않는다) */
+var HANDOVER_MAX_LEN = {
+  hosp:120, fse:40, gubun:20, eqKind:20, cat:60, type:120, code:20, part:120,
+  cost:40, sn:120, hpIn:60, hpOut:60, uVer:20, wVer:20, verUI:40, verHP:40,
+  nozzleDate:40, nozzleReuse:4, result:60, detail:4000, remark:2000,
+  nsFill:20, nsAmt:20, jet:20
+};
+var HANDOVER_ENUM = {
+  gubun      : ['A/S','점검'],
+  eqKind     : ['병원 장비','데모 장비'],
+  nozzleReuse: ['O','X'],
+  nsFill     : ['O','X'],
+  nsAmt      : ['정상','부족','과다'],
+  jet        : ['가능','교육 필요']
+};
+
+/** 시트 셀에 안전하게 넣을 값 — 수식 주입 방어.
+ *  '=' '+' '@' 로 시작하거나 '-' 뒤에 숫자가 아닌 문자가 오면 앞에 작은따옴표를 붙여
+ *  Sheets 가 텍스트로 확정하게 한다(표시값에는 따옴표가 보이지 않는다). */
+function safeCell_(v){
+  if(v === null || v === undefined) return '';
+  if(typeof v === 'number' || typeof v === 'boolean') return v;
+  var s = String(v);
+  if(!s) return '';
+  if(/^[=+@\t\r]/.test(s)) return "'" + s;
+  if(/^-/.test(s) && !/^-\s*[\d.,]/.test(s)) return "'" + s;
+  return s;
+}
+
+/** 교체비용 정규화 — 쉼표·원·공백 허용, 음수·NaN·문자열은 거부.
+ *  @returns {{ok:boolean, value:(number|string), error:string}} */
+function normCost_(v){
+  var s = String(v == null ? '' : v).trim();
+  if(!s) return {ok:true, value:'무상', error:''};
+  if(/^무상$/i.test(s)) return {ok:true, value:'무상', error:''};
+  var t = s.replace(/[,\s원]/g, '');
+  if(!/^\d+(\.\d+)?$/.test(t)) return {ok:false, value:'', error:'교체비용은 숫자만 입력하세요: '+s.slice(0,20)};
+  var n = Number(t);
+  if(!isFinite(n) || n < 0) return {ok:false, value:'', error:'교체비용이 올바르지 않습니다'};
+  return {ok:true, value:n, error:''};
+}
+
+/** 서버측 payload 검증 — 필수값·길이·허용값. 실패 목록과 정리된 값을 함께 돌려준다. */
+function hvValidate_(payload){
+  var errors = [], warnings = [], clean = {};
+  Object.keys(HANDOVER_MAX_LEN).forEach(function(k){
+    var v = payload[k];
+    if(v === null || v === undefined) { clean[k] = ''; return; }
+    var s = String(v);
+    if(s.length > HANDOVER_MAX_LEN[k]){
+      s = s.slice(0, HANDOVER_MAX_LEN[k]);
+      warnings.push(k + ' 값이 길어 ' + HANDOVER_MAX_LEN[k] + '자로 잘렸습니다');
+    }
+    clean[k] = s.trim();
+  });
+  clean.detail = String(payload.detail == null ? '' : payload.detail).slice(0, HANDOVER_MAX_LEN.detail);
+  clean.remark = String(payload.remark == null ? '' : payload.remark).slice(0, HANDOVER_MAX_LEN.remark);
+
+  if(!clean.hosp) errors.push('병원명은 필수입니다');
+  if(!clean.fse)  errors.push('담당 FSE는 필수입니다');
+
+  Object.keys(HANDOVER_ENUM).forEach(function(k){
+    if(!clean[k]) return;
+    if(HANDOVER_ENUM[k].indexOf(clean[k]) < 0){
+      warnings.push(k + ' 값이 허용 목록에 없어 비웠습니다: ' + clean[k].slice(0,20));
+      clean[k] = '';
+    }
+  });
+  if(!clean.nozzleReuse) clean.nozzleReuse = 'X';   /* P열 기본값 */
+
+  var c = normCost_(payload.cost);
+  if(!c.ok) errors.push(c.error); else clean.cost = c.value;
+
+  /* 처리일: 비었으면 오늘(Asia/Seoul) · 형식이 깨졌으면 오류 */
+  var d = String(payload.date || '').trim();
+  if(!d) clean.date = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
+  else if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) errors.push('처리일 형식이 올바르지 않습니다(yyyy-MM-dd)');
+  else clean.date = d;
+
+  return {ok: errors.length === 0, errors: errors, warnings: warnings, clean: clean};
+}
+
+/* ── 멱등성 저장소 ────────────────────────────────────────────────────────
+   예전에는 CacheService 만 썼다. 캐시는 ① 언제든 축출될 수 있고 ② 락 "밖"에서만
+   확인해서, 같은 reqId 요청 두 개가 동시에 들어오면 둘 다 캐시 미스로 통과해
+   행 2줄·사진 2장이 만들어졌다.
+   → ScriptProperties(영속) + 캐시(빠름) 2단으로 두고, 반드시 락 안에서 다시 확인한다. */
+var REQ_PROP_PREFIX = 'hvreq_';
+var REQ_KEEP = 300;                 /* 보관 건수 — 넘으면 오래된 것부터 정리 */
+var REQ_TTL_MS = 24 * 3600 * 1000;  /* 보관 기간 */
+
+function reqKey_(reqId){ return REQ_PROP_PREFIX + reqId; }
+
+/** 저장된 결과 조회 (캐시 → 프로퍼티). 없으면 null */
+function reqGet_(reqId){
+  if(!reqId) return null;
+  try{
+    var c = CacheService.getScriptCache().get(reqKey_(reqId));
+    if(c) return JSON.parse(c);
+  }catch(e){}
+  try{
+    var p = PropertiesService.getScriptProperties().getProperty(reqKey_(reqId));
+    if(p) return JSON.parse(p);
+  }catch(e){}
+  return null;
+}
+
+/** 결과 저장 (영속 + 캐시) */
+function reqPut_(reqId, result){
+  if(!reqId) return;
+  var body = JSON.stringify(result);
+  try{ PropertiesService.getScriptProperties().setProperty(reqKey_(reqId), body); }catch(e){}
+  try{ CacheService.getScriptCache().put(reqKey_(reqId), body, 21600); }catch(e){}
+  try{ reqPrune_(); }catch(e){}
+}
+
+/** 오래된 멱등성 기록 정리 — 프로퍼티 저장소가 무한히 자라지 않게 */
+function reqPrune_(){
+  var props = PropertiesService.getScriptProperties();
+  var keys = props.getKeys().filter(function(k){ return k.indexOf(REQ_PROP_PREFIX) === 0; });
+  if(keys.length <= REQ_KEEP) return;
+  var rows = keys.map(function(k){
+    var ts = 0;
+    try{ ts = Number((JSON.parse(props.getProperty(k)||'{}') || {}).ts) || 0; }catch(e){}
+    return {k:k, ts:ts};
+  });
+  var now = Date.now();
+  rows.sort(function(a,b){ return a.ts - b.ts; });               /* 오래된 것부터 */
+  var over = rows.length - REQ_KEEP;
+  rows.forEach(function(r, i){
+    if(i < over || (r.ts && now - r.ts > REQ_TTL_MS)){ try{ props.deleteProperty(r.k); }catch(e){} }
+  });
+}
+
+/** 업로드해 둔 사진을 되돌린다(행 기록 실패·중복 요청 판정 시 고아 파일 방지) */
+function photoDiscard_(photoFile){
+  if(!photoFile || !photoFile.id) return false;
+  try{ DriveApp.getFileById(photoFile.id).setTrashed(true); return true; }
+  catch(e){ Logger.log('[photo] 정리 실패(무시): ' + e); return false; }
+}
+
+/** 방금 쓴 행을 되돌린다 — 사진 수식 기록이 실패했을 때 "반쯤 저장된 행"을 남기지 않는다 */
+function rowRollback_(sh, row, cols){
+  try{
+    (cols||[]).forEach(function(c){ if(c) sh.getRange(row, c).clearContent(); });
+    return true;
+  }catch(e){ Logger.log('[row] 롤백 실패: ' + e); return false; }
+}
+
+/** 사진 저장 결과 블록 — 응답 형식을 한 곳에서 만든다 */
+function photoResult_(required, saved, fileId, error){
+  return {required: !!required, saved: !!saved, fileId: String(fileId||''), error: String(error||'')};
 }
 
 /* ================= POST: 행 기록 ================= */
@@ -295,6 +513,8 @@ function doPost(e){
   var lock = LockService.getScriptLock();
   var payload = {};
   var photoFile = null;      /* [v2.8] 락 잡기 전에 끝내 둔 사진 업로드 결과 */
+  var committed = false;     /* [v3.1] 행이 확정됐는가 — 확정 후에는 사진을 지우지 않는다 */
+  var writeSheet = null, writeRow = 0, written = []; /* 중간 셀 쓰기 실패도 전부 롤백 */
   try{
     payload = JSON.parse(e.postData.contents||'{}');
 
@@ -307,34 +527,69 @@ function doPost(e){
       if(denied) return json_(denied);
     }
 
+    /* action 이 비어 있는 요청만 handover 행 기록이다. 알 수 없는 action 이
+       아래 공통 기록 경로로 흘러 사진 없는 행을 만드는 것을 차단한다. */
+    var knownActions = ['progress_save','progress_restore','history_save','weeklywrite',
+                        'menu_save','weeklyauto_save','labeldone'];
+    if(actName && knownActions.indexOf(actName) < 0){
+      return json_({success:false, error:'알 수 없는 action: '+String(actName).slice(0,40)});
+    }
+    var isHandover = !actName;
+
     /* [v2.8] 같은 기록의 재전송을 걸러낸다(멱등성).
        콜드스타트 때 GAS가 JSON 대신 HTML을 돌려주면 프런트의 1차 요청은 "실패"로 보이고
        no-cors 로 같은 내용을 한 번 더 보낸다. 그런데 1차 요청이 서버에서는 이미 기록됐을
        수 있어, 그대로 두면 같은 행이 두 줄 쌓이고 사진도 Drive에 두 번 올라간다.
        프런트가 붙여 보낸 reqId 를 10분간 기억해 두 번째 요청은 첫 결과를 그대로 돌려준다. */
     var reqId = String((payload && payload.reqId) || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
-    var dkey = reqId ? 'req_' + reqId : '';
-    var dcache = null;
-    if(dkey){
-      try{
-        dcache = CacheService.getScriptCache();
-        var seen = dcache.get(dkey);
-        if(seen) return ContentService.createTextOutput(seen).setMimeType(ContentService.MimeType.JSON);
-      }catch(_){ dcache = null; }
+    if(isHandover && !reqId){
+      return json_({success:false, row:null,
+        photo:photoResult_(true, false, '', 'reqId-missing'),
+        error:'안전한 중복 방지를 위해 reqId가 필요합니다 — 화면을 새로고침한 뒤 다시 저장해 주세요.'});
+    }
+    /* 빠른 경로: 이미 처리된 요청이면 사진 업로드도 하지 않고 첫 결과를 그대로 돌려준다.
+       ★ 이것만으로는 부족하다 — 동시 요청 두 개는 둘 다 여기를 통과한다.
+         락을 잡은 뒤 아래에서 한 번 더 확인한다(double-checked). */
+    if(reqId){
+      var early = reqGet_(reqId);
+      if(early) return json_(early.result);
     }
 
     /* [v2.8] 사진 업로드는 락 "밖"에서 먼저 끝낸다.
        Drive는 콜드스타트 때 몇 초씩 걸리는데, 그걸 락 안에서 하면 동시에 기록하는
        두 번째 FSE가 20초 대기를 넘겨 통째로 실패한다. 업로드는 행 번호와 무관하므로
        미리 해 두고, 락 안에서는 수식 한 줄만 쓴다. */
-    if(payload && payload.snPhoto && !actName){
+    /* 사진 필수 여부: 사진이 실제로 왔거나, 클라이언트가 "이 요청은 사진 필수"라고 선언한 경우.
+       후자가 있어야 "사진을 붙였다고 생각했는데 payload 에 안 실린" 사고를 서버가 잡아낸다. */
+    /* handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다.
+       action 없는 행 기록은 서버가 무조건 사진을 요구한다. */
+    var photoRequired = isHandover;
+    if(photoRequired && !(payload && payload.snPhoto)){
+      var mfail = {success:false, row:null,
+        photo: photoResult_(true, false, '', 'photo-missing'),
+        error: '사진이 필수인 기록인데 사진이 전송되지 않았습니다 — 다시 첨부해 주세요.'};
+      if(reqId) reqPut_(reqId, {ts:Date.now(), result:mfail});
+      return json_(mfail);
+    }
+    var photoErr = '';
+    if(photoRequired){
       try{
         photoFile = savePhoto_(payload.snPhoto, {
           date: payload.date || '', hosp: payload.hosp || '', sn: payload.sn || ''
         });
       }catch(pe){
-        photoFile = null;    /* 업로드 실패해도 본 기록은 그대로 진행한다 */
-        log_('PHOTO_ERR:'+pe, null, {hosp:payload.hosp||'', sn:payload.sn||''});
+        /* [v3.1] 예전에는 여기서 실패해도 행 기록을 그대로 진행하고 success:true 를 돌려줬다.
+           프런트는 그 응답을 보고 "기록 완료"를 띄우며 화면의 사진까지 지웠다 —
+           현장에서 찍은 라벨 사진이 아무 데도 남지 않은 채 사라졌다.
+           → 사진이 필수인 요청은 사진까지 성공해야 전체 성공이다. 행도 쓰지 않는다. */
+        photoFile = null;
+        photoErr = String(pe && pe.message ? pe.message : pe);
+        log_('PHOTO_ERR:'+pe, null, logSafe_(payload));
+        var pfail = {success:false, row:null,
+          photo: photoResult_(true, false, '', photoErr),
+          error: '사진 저장 실패 — 기록하지 않았습니다: ' + photoErr};
+        if(reqId) reqPut_(reqId, {ts:Date.now(), result:pfail});
+        return json_(pfail);
       }
     }
 
@@ -362,77 +617,173 @@ function doPost(e){
     if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
     if(payload && payload.action==='labeldone')    return json_(labelDone_(payload));  /* [v2.9] 내려받은 병원 작성 일자 기록 */
 
+    /* ★ [v3.1] 락 안에서 멱등성 재확인 — 같은 reqId 요청 두 개가 동시에 들어와도
+       뒤에 들어온 쪽은 여기서 걸린다(첫 결과를 그대로 돌려주고, 자기가 올린 사진은 지운다).
+       예전에는 락 밖 캐시 확인 한 번뿐이라 동시 요청이 둘 다 통과해 행·사진이 두 벌 생겼다. */
+    if(reqId){
+      var dup = reqGet_(reqId);
+      if(dup){
+        photoDiscard_(photoFile);            /* 중복 업로드된 Drive 파일 정리 */
+        return json_(dup.result);
+      }
+    }
+
+    /* [v3.1] 서버측 검증 — 필수값·길이·허용값·비용 숫자 (클라이언트만 믿지 않는다) */
+    var vres = hvValidate_(payload);
+    if(!vres.ok){
+      photoDiscard_(photoFile);
+      var vfail = {success:false, row:null,
+        photo: photoResult_(photoRequired, false, '', photoRequired ? '기록이 거부되어 사진을 저장하지 않았습니다' : ''),
+        errors: vres.errors, error: vres.errors.join(' · ')};
+      if(reqId) reqPut_(reqId, {ts:Date.now(), result:vfail});
+      return json_(vfail);
+    }
+    var P = vres.clean;
+    var warnings = vres.warnings.slice();
+
     var sh = sheet_(CONFIG.SHEET_NAME);
-    if(!sh) return json_({success:false, error:'시트 없음: '+CONFIG.SHEET_NAME});
+    if(!sh){ photoDiscard_(photoFile); return json_({success:false, row:null, photo:photoResult_(photoRequired,false,'','시트 없음'), error:'시트 없음: '+CONFIG.SHEET_NAME}); }
     var hdr = findHeader_(sh);
-    if(!hdr) return json_({success:false, error:'헤더(처리일/병원명) 탐지 실패'});
+    if(!hdr){ photoDiscard_(photoFile); return json_({success:false, row:null, photo:photoResult_(photoRequired,false,'','헤더 탐지 실패'), error:'헤더(처리일/병원명) 탐지 실패'}); }
+
+    /* [v3.1] 사진 열 확인을 "행을 쓰기 전에" 한다.
+       예전에는 행을 다 쓴 뒤에야 열이 없다는 걸 알고 경고만 붙인 채 success:true 였다.
+       사진이 필수인 요청이 사진 없이 기록되는 것은 성공이 아니다. */
+    var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
+    if(photoFile && !photoCol){
+      log_('PHOTO_NOCOL', hdr, {file:photoFile.id});
+      photoDiscard_(photoFile);
+      var nofail = {success:false, row:null,
+        photo: photoResult_(true, false, '', 'no-photo-column'),
+        error: '시트에 \''+PHOTO.COL_NAME+'\' 열이 없어 사진을 기록할 수 없습니다 — '
+             + '편집기에서 setupHandoverColumns() 를 실행한 뒤 다시 저장하세요.'};
+      if(reqId) reqPut_(reqId, {ts:Date.now(), result:nofail});
+      return json_(nofail);
+    }
 
     var row = lastDataRow_(sh, hdr) + 1;
     if(row > sh.getMaxRows()) sh.insertRowAfter(sh.getMaxRows());
+    writeSheet = sh; writeRow = row;
 
-    /* 프런트 payload 키 → 시트 열 매핑 */
-    var m = {
-      '처리일'   : payload.date  || Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd'),
-      '병원명'   : payload.hosp  || '',
-      'CS 담당자': payload.fse   || '',
-      '점검/AS'  : payload.gubun || '',
-      '대분류'   : payload.cat   || '',
-      '유형'     : payload.type  || '',
-      '교체품'   : payload.part  || '',
-      '교체비용' : payload.cost  || '',
-      '내용'     : payload.detail|| '',
-      '노즐 재사용' : (String(payload.nozzle||'').trim().toUpperCase()==='O' ? 'O' : 'X')  /* P열 · 기본 X */
-    };
-    Object.keys(m).forEach(function(k){
-      var c = hdr.map[k];
-      if(c) sh.getRange(row, c).setValue(m[k]);
-    });
-    /* 장비 S/N (Q열 '장비SN' 등 · 열이 존재하고 값이 있을 때만) */
-    var snCol = colBy_(hdr, ['장비SN','장비 SN','장비 S/N','S/N(장비)']);
-    if(snCol && payload.sn) sh.getRange(row, snCol).setValue(payload.sn);
-    /* 사용자 숙련도 평가 (R·S·T열 · 열이 존재하고 값이 있을 때만) */
-    var nsFillCol = colBy_(hdr, ['NS 충진 여부','NS충진여부','NS 충진']);
-    if(nsFillCol && payload.nsFill) sh.getRange(row, nsFillCol).setValue(payload.nsFill);
-    var nsAmtCol  = colBy_(hdr, ['NS 충진량','NS충진량']);
-    if(nsAmtCol && payload.nsAmt) sh.getRange(row, nsAmtCol).setValue(payload.nsAmt);
-    var jetCol    = colBy_(hdr, ['젯 분사 판단','젯분사 판단','젯 분사']);
-    if(jetCol && payload.jet) sh.getRange(row, jetCol).setValue(payload.jet);
-    /* HP 교체 정보 (열이 존재할 때만) */
-    if(hdr.map['HP_SN(IN)']  && payload.hpIn)  sh.getRange(row, hdr.map['HP_SN(IN)']).setValue(payload.hpIn);
-    if(hdr.map['__VER_IN']   && payload.uVer)  sh.getRange(row, hdr.map['__VER_IN']).setValue(payload.uVer);
-    if(hdr.map['HP_SN(OUT)'] && payload.hpOut) sh.getRange(row, hdr.map['HP_SN(OUT)']).setValue(payload.hpOut);
-    if(hdr.map['__VER_OUT']  && payload.wVer)  sh.getRange(row, hdr.map['__VER_OUT']).setValue(payload.wVer);
-    /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다 */
-    var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
-    var photoWarn = '';
-    if(photoCol){
-      sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
-      if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
-    }else if(photoFile){
-      /* 사진은 Drive에 올라갔는데 넣을 열이 없다 → 그냥 두면 조용히 사라진다.
-         (setupSnPhotoColumn() 을 아직 실행하지 않은 시트) */
-      photoWarn = '시트에 \''+PHOTO.COL_NAME+'\' 열이 없어 사진이 기록되지 않았습니다 — '
-                + '편집기에서 setupSnPhotoColumn() 을 실행하세요.';
-      log_('PHOTO_NOCOL', hdr, {file:photoFile.id, url:photoFile.url});
+    written = [];   /* 롤백 대상 열 */
+    function put_(col, value){
+      if(!col) return false;
+      sh.getRange(row, col).setValue(safeCell_(value));
+      written.push(col);
+      return true;
     }
 
+    /* 프런트 payload 키 → 시트 열 매핑 (기존 열) */
+    var m = {
+      '처리일'   : P.date,
+      '병원명'   : P.hosp,
+      'CS 담당자': P.fse,
+      '점검/AS'  : P.gubun,
+      '대분류'   : P.cat,
+      '유형'     : P.type,
+      '교체품'   : P.part,
+      '교체비용' : P.cost,
+      '내용'     : P.detail,
+      /* 노즐 "재사용"(O/X) — 신규 키 nozzleReuse 우선, 구버전 payload.nozzle 은 하위 호환 */
+      '노즐 재사용' : (String(payload.nozzleReuse != null ? payload.nozzleReuse : (payload.nozzle||''))
+                        .trim().toUpperCase() === 'O' ? 'O' : 'X')
+    };
+    Object.keys(m).forEach(function(k){ put_(hdr.map[k], m[k]); });
+
+    /* 장비 S/N (Q열 '장비SN' 등 · 열이 존재하고 값이 있을 때만) */
+    var snCol = colBy_(hdr, ['장비SN','장비 SN','장비 S/N','S/N(장비)']);
+    if(snCol && P.sn) put_(snCol, P.sn);
+    /* 사용자 숙련도 평가 (R·S·T열 · 열이 존재하고 값이 있을 때만) */
+    var nsFillCol = colBy_(hdr, ['NS 충진 여부','NS충진여부','NS 충진']);
+    if(nsFillCol && P.nsFill) put_(nsFillCol, P.nsFill);
+    var nsAmtCol  = colBy_(hdr, ['NS 충진량','NS충진량']);
+    if(nsAmtCol && P.nsAmt) put_(nsAmtCol, P.nsAmt);
+    var jetCol    = colBy_(hdr, ['젯 분사 판단','젯분사 판단','젯 분사']);
+    if(jetCol && P.jet) put_(jetCol, P.jet);
+    /* HP 교체 정보 (열이 존재할 때만) */
+    if(hdr.map['HP_SN(IN)']  && P.hpIn)  put_(hdr.map['HP_SN(IN)'],  P.hpIn);
+    if(hdr.map['__VER_IN']   && P.uVer)  put_(hdr.map['__VER_IN'],   P.uVer);
+    if(hdr.map['HP_SN(OUT)'] && P.hpOut) put_(hdr.map['HP_SN(OUT)'], P.hpOut);
+    if(hdr.map['__VER_OUT']  && P.wVer)  put_(hdr.map['__VER_OUT'],  P.wVer);
+
+    /* [v3.1] 화면에는 있는데 시트에 저장되지 않던 필드들 —
+       열이 있으면 저장하고, 없으면 warnings 로 알린다(프런트가 '저장됨'이라 하지 않게). */
+    var authUser = authName_(payload && payload.token);
+    var extras = {
+      eqKind:P.eqKind, verUI:P.verUI, verHP:P.verHP, nozzleDate:P.nozzleDate,
+      result:P.result, remark:P.remark, code:P.code,
+      authUser:(authUser && authUser !== P.fse) ? authUser : ''
+    };
+    var savedFields = {}, missingCols = [];
+    Object.keys(HANDOVER_FIELD_COLS).forEach(function(k){
+      var v = extras[k];
+      var col = colBy_(hdr, HANDOVER_FIELD_COLS[k]);
+      if(!col){
+        savedFields[k] = false;
+        if(v) missingCols.push(HANDOVER_FIELD_COLS[k][0]);
+        return;
+      }
+      if(v) put_(col, v);
+      savedFields[k] = !!v;
+    });
+    if(missingCols.length){
+      warnings.push('시트에 다음 열이 없어 저장되지 않았습니다: ' + missingCols.join(', ')
+                  + ' — 편집기에서 setupHandoverColumns() 를 실행하세요.');
+    }
+
+    /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다.
+       수식 기록이 실패하면 "행만 남고 사진은 없는" 반쯤 저장된 상태가 되므로 행을 되돌린다. */
+    var photoSaved = false;
+    if(photoFile && photoCol){
+      try{
+        sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
+        written.push(photoCol);  /* 수식 뒤의 행 높이 조정이 실패해도 사진 열까지 롤백 */
+        if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
+        photoSaved = true;
+      }catch(fe){
+        var rolled = rowRollback_(sh, row, written);
+        /* 롤백 자체가 실패했다면 남은 행의 사진 수식이 파일을 계속 참조할 수 있으므로
+           파일을 지우지 않고 관리자 확인이 가능하게 보존한다. */
+        if(rolled) photoDiscard_(photoFile);
+        log_('PHOTO_FORMULA_ERR:'+fe, hdr, logSafe_(payload));
+        var ffail = {success:false, row:null,
+          photo: photoResult_(true, false, photoFile.id, String(fe)),
+          error: rolled ? '사진 기록 실패 — 기록을 되돌렸습니다: ' + fe
+                        : '사진 기록 실패 후 행 롤백도 실패했습니다 — 관리자에게 행 '+row+' 확인을 요청하세요: '+fe};
+        if(reqId) reqPut_(reqId, {ts:Date.now(), result:ffail});
+        return json_(ffail);
+      }
+    }
+
+    /* 여기부터는 행이 확정됐다 — 뒤에서 무슨 일이 나도 사진을 지우거나 실패로 만들지 않는다 */
+    committed = true;
     log_('OK', hdr, logSafe_(payload));
     /* 방금 쓴 기록이 조회에 바로 보이도록 관련 캐시를 전부 비운다.
        (조각 캐시라 remove 하나로는 안 되고 bazCacheDrop_ 를 써야 한다) */
-    bazDropHandoverCaches_(payload && payload.hosp);
+    try{ bazDropHandoverCaches_(P.hosp); }catch(e){}
     /* 재고 원장 사용처 자동 기입 (실패해도 본 기록에는 영향 없음) */
-    var inv = invRecordUsage_(payload);
+    var inv = {done:false, msg:''};
+    try{ inv = invRecordUsage_(payload) || inv; }catch(e){ inv = {done:false, msg:'재고 기입 오류(무시): '+e}; }
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
-    var msg = '✅ '+ (payload.hosp||'') +' 기록 완료 (행 '+row+')';
-    if(photoWarn) msg += '\n⚠️ ' + photoWarn;
+    var msg = '✅ '+ P.hosp +' 기록 완료 (행 '+row+')';
+    warnings.forEach(function(w){ msg += '\n⚠️ ' + w; });
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
-    var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME, inv:inv, msg:msg};
-    /* 재전송이 같은 결과를 받도록 결과를 10분 기억 (위 reqId 중복 차단과 한 쌍) */
-    if(dkey && dcache){ try{ dcache.put(dkey, JSON.stringify(out), 600); }catch(_){} }
+    var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME,
+               photo: photoResult_(photoRequired, photoSaved, photoFile?photoFile.id:'', ''),
+               savedFields: savedFields, warnings: warnings,
+               fseMismatch: !!(authUser && authUser !== P.fse), authUser: authUser,
+               inv:inv, msg:msg, error:''};
+    /* 재전송·동시 요청이 같은 결과를 받도록 영속 저장 (위 double-checked 확인과 한 쌍) */
+    if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row});
     return json_(out);
   }catch(err){
     log_('ERR:'+err, null, logSafe_(payload));
-    return json_({success:false, error:String(err)});
+    var rollbackOk = true;
+    if(!committed && writeSheet && writeRow) rollbackOk = rowRollback_(writeSheet, writeRow, written);
+    if(!committed && rollbackOk) photoDiscard_(photoFile);   /* 반쪽 행이 없을 때만 고아 사진 정리 */
+    return json_({success:false, row:null,
+      photo: photoResult_(!!(payload && payload.snPhoto), false, '', String(err)),
+      error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
     try{ lock.releaseLock(); }catch(_){}
   }
@@ -460,7 +811,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.0.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.1.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_());
     if(action==='hospdb') return json_(getHospDB_());
@@ -470,7 +821,12 @@ function doGet(e){
     if(action==='inventory') return json_(getInventory_());
     if(action==='ncare')  return json_(getNcare_());            /* [v2.3] N-care 가입 현황 */
     if(action==='recent') return json_(getRecent_(p.hosp||'', Number(p.limit)||5));
-    if(action==='today')  return json_(getToday_(p.fse||''));
+    if(action==='today')  return json_(getToday_(p.fse||'', p.token||''));
+    /* [v3.1] 저장 결과 조회 — 응답을 못 받은 요청이 실제로 기록됐는지 확인한다.
+       no-cors 재전송으로 "보냈으니 됐겠지" 하던 자리를 대체하는 인증된 판정 API. */
+    if(action==='savecheck') return json_(saveCheck_(p));
+    /* [v3.1] handover 부트 1콜 — 버전·병원DB·마스터·FSE·템플릿·자동대상을 한 번에 */
+    if(action==='handover_bootstrap') return json_(getHandoverBootstrap_(p));
     if(action==='master') return json_(getMaster_());
     if(action==='guide')  return json_(gateGuide_(p));          /* [v2.1] Lv.3 토큰 게이트 */
     if(action==='weekly') return json_(wkGetWeekly_(p));        /* [v2.1] 주간 처리 내역 */
@@ -667,6 +1023,47 @@ function setupSnPhotoColumn(){
   Logger.log('📁 사진 저장 폴더: %s (%s)', folder.getName(), folder.getId());
   Logger.log('   → 이 폴더 ID를 PHOTO.FOLDER_ID 에 넣어 고정할 수도 있습니다.');
   return 'OK';
+}
+
+/**
+ * [v3.1] handover 화면의 모든 입력이 실제로 저장될 열을 한 번에 만든다 — 편집기에서 1회 실행.
+ *  · 사진 열('장비 S/N 사진') 포함
+ *  · UI Ver · HP Ver · 노즐 제조일자 · A/S 결과 · 비고 · 장비 구분 · 유형 코드 · 로그인 사용자
+ *  이미 있는 열은 건드리지 않고, 없는 열만 마지막 헤더 오른쪽에 덧붙인다.
+ *  (수식·자동 열은 손대지 않는다 — 헤더 추가만 한다)
+ */
+function setupHandoverColumns(){
+  var sh = sheet_(CONFIG.SHEET_NAME);
+  if(!sh){ Logger.log('❌ 시트 없음: ' + CONFIG.SHEET_NAME); return '시트없음'; }
+  var hdr = findHeader_(sh);
+  if(!hdr){ Logger.log('❌ 헤더(처리일/병원명) 탐지 실패'); return '헤더없음'; }
+
+  /* 만들 열 목록: 사진 + 저장 계약 필드 (첫 번째 별칭을 헤더 이름으로 쓴다) */
+  var want = [{key:'photo', names:PHOTO_COLS, label:PHOTO.COL_NAME, width:100}];
+  Object.keys(HANDOVER_FIELD_COLS).forEach(function(k){
+    want.push({key:k, names:HANDOVER_FIELD_COLS[k], label:HANDOVER_FIELD_COLS[k][0], width:0});
+  });
+
+  var lastNamed = 0;
+  hdr.headers.forEach(function(h,i){ if(String(h).trim()) lastNamed = i+1; });
+
+  var made = [], kept = [];
+  want.forEach(function(w){
+    if(colBy_(hdr, w.names)){ kept.push(w.label); return; }
+    var col = ++lastNamed;
+    if(col > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), col - sh.getMaxColumns());
+    sh.getRange(hdr.row, col).setValue(w.label);
+    if(w.width) sh.setColumnWidth(col, w.width);
+    made.push(w.label + '(' + colLetter_(col) + '열)');
+    hdr = findHeader_(sh);   /* 다음 colBy_ 가 새 헤더를 보도록 갱신 */
+    hdr.headers.forEach(function(h,i){ if(String(h).trim()) lastNamed = Math.max(lastNamed, i+1); });
+  });
+
+  var folder = photoFolder_();                          /* Drive 권한 승인 유도 */
+  Logger.log('✅ 이미 있던 열: %s', kept.join(', ') || '(없음)');
+  Logger.log('✅ 새로 만든 열: %s', made.join(', ') || '(없음)');
+  Logger.log('📁 사진 저장 폴더: %s (%s)', folder.getName(), folder.getId());
+  return {made:made, kept:kept};
 }
 
 /** 1-based 열번호 → 열 문자(A, B, … AA) */
@@ -1362,7 +1759,19 @@ function getRecent_(hosp, limit){
 }
 
 /** 오늘 기록 */
-function getToday_(fse){
+/**
+ * 오늘 기록 조회.
+ * [v3.1] fse 가 비었을 때 팀 전체를 돌려주지 않는다 — '오늘 내 기록'인데 남의 기록까지
+ * 보이던 문제. 토큰의 로그인 사용자 이름으로 대체하고, 그것도 없으면 거부한다.
+ */
+function getToday_(fse, token){
+  var who = String(fse||'').trim();
+  var scope = 'param';
+  if(!who){ who = authName_(token); scope = who ? 'account' : ''; }
+  if(!who){
+    return {success:false, error:'담당 FSE 를 입력하거나 다시 로그인해 주세요 (전체 기록 조회는 제공하지 않습니다)'};
+  }
+  fse = who;
   var today = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
   /* [성능] 위와 같은 이유로 캐시. 오늘 기록은 자주 바뀌므로 짧게(60초)만 잡는다. */
   var _k = 'hv_today_' + today + '_' + norm_(fse||'');
@@ -1375,9 +1784,44 @@ function getToday_(fse){
     var okFse = !fse || norm_(o['CS 담당자'])===norm_(fse);
     return okDate && okFse;
   }).map(slim_);
-  var _r = {success:true, date:today, count:hit.length, data:hit};
+  var _r = {success:true, date:today, fse:who, scope:scope, count:hit.length, data:hit};
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_(_k, JSON.stringify(_r), 60); }catch(e){}
   return _r;
+}
+
+/**
+ * [v3.1] GET ?action=savecheck&reqId=…&token=…
+ * 저장 요청의 응답을 못 받았을 때(타임아웃·네트워크 끊김) "실제로 기록됐는지"를 판정한다.
+ *   found:true  → 서버가 그 요청을 처리했다. result 에 최초 결과가 그대로 들어 있다.
+ *   found:false → 서버에 그 요청 기록이 없다(도달하지 못했거나 아직 처리 중).
+ * 이 API 가 있어야 프런트가 "확인 중 → 성공/실패"로 갈 수 있고,
+ * opaque 응답을 성공으로 우기지 않아도 된다.
+ */
+function saveCheck_(p){
+  var reqId = String((p && p.reqId) || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
+  if(!reqId) return {success:false, error:'reqId 필요'};
+  var rec = reqGet_(reqId);
+  if(!rec) return {success:true, found:false, reqId:reqId};
+  return {success:true, found:true, reqId:reqId, savedAt:rec.ts||0, result:rec.result||null};
+}
+
+/**
+ * [v3.1] handover 부트 1콜 — 화면이 뜰 때 각각 날리던 GET 3~4개를 한 번에 묶는다.
+ * 응답이 커지지 않도록 병원DB는 목록 조회용 최소 필드(hospdb)만 담는다.
+ * (전체 필드가 필요하면 기존 ?action=hospdbrich 를 따로 부른다 — 2단 구조)
+ */
+function getHandoverBootstrap_(p){
+  var out = {success:true, ver:'3.1.0',
+             updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  function part(name, fn){
+    try{ out[name] = fn(); }
+    catch(e){ out[name] = {success:false, error:String(e)}; }
+  }
+  part('hospdb',     function(){ return getHospDBRich_(); });
+  part('master',     function(){ return getMaster_(); });
+  part('contenttpl', function(){ return contentTplGet_(); });
+  part('weeklyauto', function(){ return weeklyAutoGet_(); });
+  return out;
 }
 
 /** 유형 마스터: 유형마스터 시트가 있으면 우선, 없으면 데이터에서 추출 */
@@ -1797,7 +2241,19 @@ function getGuide_(type){
    실제로 이 상태가 되어 현장 사용이 막혔으므로 검증을 끈다.
    ※ 다시 켜려면 아래 값만 true 로 바꾸면 된다(코드 수정 불필요). */
 var AUTH_ENFORCE = true;              /* 토큰 검증 사용 (문제 시 false 로 끄면 전면 개방) */
-var AUTH_FAILOPEN_LEVEL = 1;          /* 인증 서버에 닿지 못했을 때 부여할 레벨 */
+/* [v3.1][보안] 인증 서버 장애 시 정책 — "가용성 폴백"과 "무효 토큰 허용"을 분리한다.
+   예전 값(1)은 서버가 잠깐 죽으면 "비어 있지 않은 아무 문자열"이 Lv.1 로 통과했다.
+   handover 는 Lv.1 로 쓰기가 열리므로, 인증 서버 장애 = 시트 쓰기 개방이었다.
+   지금 발급되는 토큰은 전부 서명 토큰이라 bazVerifyLocal_ 로 네트워크 없이 검증된다.
+   따라서 장애 시에도 정상 사용자는 아무 영향이 없고, 검증에 실패한 토큰만 막힌다.
+     · 서명 검증 성공        → 그 레벨 (오프라인 허용 · 서버 왕복 0회)
+     · 서명 검증 실패        → 0 (서버 장애를 이유로 허용하지 않는다)
+     · 서명 토큰이 아님(레거시) + 서버 도달 불가
+                             → 예전에 서버가 유효하다고 답한 적 있는 토큰만 그 레벨로 유예
+                               (AUTH_GOOD_TTL). 처음 보는 토큰은 0.
+   ※ 검증 자체를 끄려면 AUTH_ENFORCE=false 를 쓴다(그쪽이 의도가 분명하다). */
+var AUTH_FAILOPEN_LEVEL = 0;          /* 검증 불가 토큰에 부여할 레벨 (0 = 차단) */
+var AUTH_GOOD_TTL = 6 * 3600;         /* '예전에 유효했던 레거시 토큰' 유예 시간(초) */
 /* [v2.8] 인증 서버 차단기(circuit breaker) — "못 닿음"을 잠깐 기억하는 시간(초).
    이게 없으면 인증 GAS가 느릴 때 모든 조회가 각자 왕복을 다시 시도하며 지연이 곱해진다.
    (요청 10개 × 타임아웃 = 10배 지연) 60초만 기억해도 그 증폭이 끊긴다. */
@@ -1819,23 +2275,32 @@ function verifyLevel_(token){
   var loc = null;
   try{ loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null; }catch(e){}
   if(loc && loc.ok) return Number(loc.level)||0;
-  /* 로컬 검증 실패(bad_signature·revoked·expired)는 하드 차단하지 않고 아래 인증 서버 왕복으로
-     폴백한다 — 비밀 불일치가 락아웃이 아니라 감속으로 degrade("무조건 장애 안 남"). auth가 최종 판정. */
+  /* [v3.1] 서명이 실제로 검증됐고 그 결과가 "무효"라면 여기서 끝낸다.
+     예전에는 이 경우에도 인증 서버 왕복으로 넘어갔고, 서버가 죽어 있으면
+     failopen(1)으로 통과했다 — 위조·만료·폐기 토큰이 서버 장애를 틈타 쓰기 권한을 얻는 길.
+     (hmac_error 는 우리 쪽 계산 실패라 '검증 불가'로 보고 아래 경로로 넘긴다) */
+  if(loc && loc.ok === false && loc.why !== 'hmac_error') return 0;
 
   /* ── 2순위(레거시 불투명 토큰): 예전 방식의 인증 서버 왕복 ─────────────────
+     여기 오는 토큰은 "서명 토큰 형식이 아니거나(=레거시) 서명 비밀이 아직 없는" 경우뿐이다.
      모든 사용자가 서명 토큰으로 재로그인하면 이 경로는 자연히 사라진다. 전환기 안전망. */
   if(!MENU.AUTH_VERIFY_URL) return AUTH_FAILOPEN_LEVEL;      /* 인증 서버 미설정 */
 
-  var key = 'lv_' + Utilities.base64EncodeWebSafe(
+  var thash = Utilities.base64EncodeWebSafe(
     Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token)));
+  var key = 'lv_' + thash;
+  var goodKey = 'lvok_' + thash;      /* '예전에 유효했다'는 기록 — 장애 시 유예 판단용 */
   var cache = null;
   try{
     cache = CacheService.getScriptCache();
     var hit = cache.get(key);
     if(hit) return Number(hit)||0;
-    /* 직전에 인증 서버가 죽어 있었다면 왕복하지 않고 곧바로 통과시킨다.
-       (어차피 결과는 AUTH_FAILOPEN_LEVEL 인데, 왕복 비용만 사용자마다 반복된다) */
-    if(cache.get(AUTH_DOWN_KEY)) return AUTH_FAILOPEN_LEVEL;
+    /* 직전에 인증 서버가 죽어 있었다 → 왕복하지 않는다.
+       [v3.1] 단, 무조건 통과시키지 않는다. 예전에 유효하다고 확인된 토큰만 유예한다. */
+    if(cache.get(AUTH_DOWN_KEY)){
+      var g0 = cache.get(goodKey);
+      return g0 ? (Number(g0)||0) : AUTH_FAILOPEN_LEVEL;
+    }
   }catch(_){}
 
   /* 인증 서버 왕복 — "토큰이 틀렸다"와 "서버에 닿지 못했다"를 반드시 구분한다.
@@ -1856,9 +2321,12 @@ function verifyLevel_(token){
   }
 
   if(!reached){
-    /* 못 닿음을 짧게 기억 → 뒤따르는 요청들은 왕복 없이 즉시 통과 */
+    /* 못 닿음을 짧게 기억 → 뒤따르는 요청들은 왕복 없이 즉시 판정 */
     try{ if(cache) cache.put(AUTH_DOWN_KEY, '1', AUTH_DOWN_TTL); }catch(_){}
-    return AUTH_FAILOPEN_LEVEL;               /* 서버에 못 닿음 → 차단하지 않는다 */
+    /* [v3.1] 가용성 폴백은 "이미 유효함이 확인된 토큰"에만 준다.
+       처음 보는 임의 문자열은 서버 장애를 이유로 통과시키지 않는다. */
+    var g = null; try{ g = cache ? cache.get(goodKey) : null; }catch(_){}
+    return g ? (Number(g)||0) : AUTH_FAILOPEN_LEVEL;
   }
   try{
     if(cache){
@@ -1866,9 +2334,23 @@ function verifyLevel_(token){
       /* ★ 무효 토큰(lv===0)도 캐시한다. 옛 조건 `lv > 0`이 죽은 토큰을 캐시에서 빼
          매 요청 왕복을 유발했다 — 이번 접속 장애의 직접 원인. */
       cache.put(key, String(lv), lv > 0 ? 300 : 60);
+      /* 유효했던 사실을 길게 기억(장애 시 유예) · 무효면 그 기록을 지운다 */
+      if(lv > 0) cache.put(goodKey, String(lv), AUTH_GOOD_TTL);
+      else cache.remove(goodKey);
     }
   }catch(_){}
   return lv;
+}
+
+/** [v3.1] 토큰에 담긴 로그인 사용자 이름 (감사 필드·오늘 기록 조회 기준).
+ *  서명 토큰에서만 얻을 수 있고, 실패하면 '' — 이름을 신뢰 근거로 쓰지 않는다. */
+function authName_(token){
+  if(!token) return '';
+  try{
+    var loc = (typeof bazVerifyLocal_ === 'function') ? bazVerifyLocal_(token) : null;
+    if(loc && loc.ok) return String(loc.name||'').trim();
+  }catch(e){}
+  return '';
 }
 
 /** 권한 승인 + 인증 서버 연결 자가진단.
