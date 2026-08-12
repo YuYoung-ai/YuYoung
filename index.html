@@ -289,6 +289,9 @@
     <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:999;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(202,220,252,.4);background:transparent;color:#8EA0C8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
       ⚙️ 메뉴 관리 <span style="font-weight:500;font-size:11px;">· 표시/레벨/순서 설정 · Lv.3</span>
     </button>
+    <button type="button" id="appBtnSecurityAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:1000;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(120,220,190,.5);background:rgba(46,125,158,.1);color:#9FE0CC;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
+      🛡️ 보안 관리 <span style="font-weight:500;font-size:11px;">· 사용자/기기 · Lv.3</span>
+    </button>
   </div>
 
   <!-- 메뉴 관리 모달 (보안레벨 3) -->
@@ -302,6 +305,33 @@
         <button type="button" onclick="closeMenuAdmin()" style="flex:1;padding:12px;border:none;border-radius:9px;background:#E8EDF6;color:#6B7A99;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">취소</button>
         <button type="button" id="menuAdminSave" onclick="saveMenuAdmin()" style="flex:1;padding:12px;border:none;border-radius:9px;background:#1B2F5E;color:#fff;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">저장</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Google 사용자·기기 보안 관리 모달 (서버에서 Lv.3 재검증) -->
+  <div id="securityAdminModal" style="position:fixed;inset:0;z-index:10001;background:rgba(10,20,45,.68);display:none;align-items:center;justify-content:center;padding:16px;">
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:560px;padding:20px;max-height:88vh;overflow:auto;">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;"><h3 style="font-size:17px;font-weight:800;color:#1B2F5E;margin:0 0 4px;">🛡️ 보안 관리</h3>
+          <p style="font-size:11.5px;color:#6B7A99;margin:0;line-height:1.5;">허용된 Google 계정과 기억된 기기를 관리합니다. 모든 변경은 서버에서 Lv.3 권한을 다시 확인합니다.</p></div>
+        <button type="button" onclick="closeSecurityAdmin()" aria-label="닫기" style="border:0;background:#EEF2F8;color:#61708E;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:17px;">×</button>
+      </div>
+      <section style="border:1px solid #DDE3EE;border-radius:11px;padding:12px;margin-bottom:14px;">
+        <h4 style="margin:0 0 9px;color:#1B2F5E;font-size:13px;">사용자 추가</h4>
+        <div style="display:grid;grid-template-columns:1fr 1.45fr 70px;gap:7px;">
+          <input id="securityNewName" placeholder="이름" style="min-width:0;padding:9px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;">
+          <input id="securityNewEmail" type="email" placeholder="Google 이메일" style="min-width:0;padding:9px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;">
+          <select id="securityNewLevel" style="padding:9px 5px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;"><option value="1">Lv.1</option><option value="2">Lv.2</option><option value="3">Lv.3</option></select>
+        </div>
+        <button type="button" id="securityAddUser" style="width:100%;margin-top:8px;padding:10px;border:0;border-radius:8px;background:#1B2F5E;color:#fff;font-family:inherit;font-weight:700;cursor:pointer;">허용 사용자 추가</button>
+      </section>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;"><h4 style="margin:0;color:#1B2F5E;font-size:13px;">허용 사용자</h4><button type="button" onclick="loadSecurityAdmin()" style="border:0;background:transparent;color:#2E7D9E;font-family:inherit;font-size:11px;cursor:pointer;">새로고침</button></div>
+      <div id="securityUserList" style="display:flex;flex-direction:column;gap:7px;margin-bottom:15px;"></div>
+      <h4 style="margin:0 0 7px;color:#1B2F5E;font-size:13px;">기억된 기기</h4>
+      <div id="securityDeviceList" style="display:flex;flex-direction:column;gap:7px;margin-bottom:15px;"></div>
+      <h4 style="margin:0 0 7px;color:#1B2F5E;font-size:13px;">최근 보안 기록 <span style="font-size:10px;color:#8A96AB;font-weight:500;">최대 100건</span></h4>
+      <div id="securityAuditList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div id="securityAdminStatus" style="font-size:11.5px;color:#6B7A99;min-height:18px;margin-top:10px;text-align:center;"></div>
     </div>
   </div>
 
@@ -339,6 +369,14 @@
     <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:24px 22px;">
       <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;" id="hubPwTitle">잠금 해제</h3>
       <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">비밀번호를 입력하세요.</p>
+      <div id="hubGoogleWrap" style="display:none;margin-bottom:14px;">
+        <div id="hubGoogleButton" style="display:flex;justify-content:center;min-height:40px;"></div>
+        <div style="display:flex;align-items:center;gap:9px;margin-top:13px;color:#9AA6B8;font-size:11px;">
+          <i style="height:1px;background:#E2E7EF;flex:1;"></i>
+          <span id="hubOrText">또는 기존 비밀번호</span>
+          <i style="height:1px;background:#E2E7EF;flex:1;"></i>
+        </div>
+      </div>
       <input type="password" id="hubPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:2px;">
       <div id="hubPwErr" style="color:#C0392B;font-size:12px;min-height:16px;margin-top:6px;text-align:center;"></div>
       <label id="hubRememberWrap" style="display:none;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:#4A5A7A;cursor:pointer;justify-content:center;">
@@ -1736,21 +1774,21 @@ initCounters();
 // ===== 허브: 다국어 =====
 const HUB_I18N = {
   ko:{ subtitle:'CS Field Tools', lockHint:'로고를 눌러 잠금을 해제하세요', chooseTool:'사용할 도구를 선택하세요',
-    pwTitle:'잠금 해제', pwDesc:'비밀번호를 입력하세요.', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.', checking:'확인 중...', warming:'서버를 깨우는 중…', sec:'초', retry:'재시도', serverBusy:'서버 응답이 지연됩니다(첫 접속은 30초까지 걸릴 수 있습니다). 잠시 후 다시 눌러 주세요.', netErr:'네트워크 오류. 연결을 확인해 주세요.',
+    pwTitle:'잠금 해제', pwDesc:'Google 계정 또는 기존 비밀번호로 로그인하세요.', orPassword:'또는 기존 비밀번호', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.', rateLimited:'로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.', googleChecking:'Google 계정 확인 중...', googleDenied:'등록되지 않았거나 사용 중지된 Google 계정입니다.', googleFailed:'Google 로그인을 확인하지 못했습니다. 다시 시도해 주세요.', checking:'확인 중...', warming:'서버를 깨우는 중…', sec:'초', retry:'재시도', serverBusy:'서버 응답이 지연됩니다(첫 접속은 30초까지 걸릴 수 있습니다). 잠시 후 다시 눌러 주세요.', netErr:'네트워크 오류. 연결을 확인해 주세요.',
     'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
     'hosp-name':'병원 데이터센터','hosp-desc':'병원 검색 · 점검 현황 · 지도',
     'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
-    pwTitle:'Unlock', pwDesc:'Enter the password.', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
+    pwTitle:'Unlock', pwDesc:'Sign in with Google or your existing password.', orPassword:'or existing password', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.', rateLimited:'Too many login attempts. Please try again shortly.', googleChecking:'Checking your Google account...', googleDenied:'This Google account is not registered or has been disabled.', googleFailed:'Google sign-in could not be verified. Please try again.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
     'hosp-name':'Hospital Data Center','hosp-desc':'Search · Status · Map',
     'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
-    pwTitle:'ロック解除', pwDesc:'パスワードを入力してください。', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
+    pwTitle:'ロック解除', pwDesc:'Googleアカウントまたは既存のパスワードでログインしてください。', orPassword:'または既存のパスワード', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。', rateLimited:'ログイン試行回数が多すぎます。しばらくしてから再試行してください。', googleChecking:'Googleアカウントを確認中...', googleDenied:'登録されていないか、無効化されたGoogleアカウントです。', googleFailed:'Googleログインを確認できませんでした。もう一度お試しください。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
@@ -1767,6 +1805,7 @@ function applyHubLang(){
   document.getElementById('chooseToolText').textContent=d.chooseTool;
   document.getElementById('hubPwTitle').textContent=d.pwTitle;
   document.getElementById('hubPwDesc').textContent=d.pwDesc;
+  document.getElementById('hubOrText').textContent=d.orPassword;
   document.getElementById('hubPwCancel').textContent=d.cancel;
   document.getElementById('hubPwOk').textContent=d.ok;
   document.querySelectorAll('[data-tool]').forEach(el=>{
@@ -1797,6 +1836,38 @@ function unlockTools(level){
 }
 
 const hubPwModal=document.getElementById('hubPwModal');
+let hubGoogleReady=false, hubGoogleStarting=false;
+async function handleHubGoogleCredential(resp){
+  const errEl=document.getElementById('hubPwErr');
+  const L=HUB_I18N[HUBLANG]||HUB_I18N.ko;
+  errEl.style.color='#6B7A99';
+  errEl.textContent=L.googleChecking||'Google 계정 확인 중...';
+  const rememberEl=document.getElementById('hubRemember');
+  const r=await BazAuth.loginWithGoogle(resp&&resp.credential,!!(rememberEl&&rememberEl.checked));
+  if(r.ok){ closeHubPw(); unlockTools(r.level); return; }
+  errEl.style.color='#C0392B';
+  if(r.error==='access_denied') errEl.textContent=L.googleDenied||'등록되지 않은 Google 계정입니다.';
+  else if(r.error==='network') errEl.textContent=L.netErr||'네트워크 오류. 연결을 확인해 주세요.';
+  else errEl.textContent=L.googleFailed||'Google 로그인을 확인하지 못했습니다. 다시 시도해 주세요.';
+}
+async function initHubGoogle(){
+  if(hubGoogleReady||hubGoogleStarting||!window.BazAuth||!BazAuth.config) return;
+  hubGoogleStarting=true;
+  try{
+    const cfg=await BazAuth.config();
+    if(!cfg.googleAuth||!cfg.googleClientId) return;
+    for(let i=0;i<40&&!(window.google&&google.accounts&&google.accounts.id);i++){
+      await new Promise(r=>setTimeout(r,100));
+    }
+    if(!(window.google&&google.accounts&&google.accounts.id)) return;
+    google.accounts.id.initialize({client_id:cfg.googleClientId,callback:handleHubGoogleCredential});
+    google.accounts.id.renderButton(document.getElementById('hubGoogleButton'),{
+      type:'standard',theme:'outline',size:'large',shape:'rectangular',width:296
+    });
+    document.getElementById('hubGoogleWrap').style.display='block';
+    hubGoogleReady=true;
+  }catch(e){}finally{hubGoogleStarting=false;}
+}
 function openHubPw(){
   applyHubLang();
   document.getElementById('hubPwInput').value='';
@@ -1807,6 +1878,7 @@ function openHubPw(){
     if(rw) rw.style.display=(window.BazAuth&&BazAuth.deviceEnabled&&BazAuth.deviceEnabled())?'flex':'none';
   }catch(e){}
   hubPwModal.style.display='flex';
+  initHubGoogle();
   setTimeout(()=>document.getElementById('hubPwInput').focus(),50);
 }
 function closeHubPw(){ hubPwModal.style.display='none'; }
@@ -1854,6 +1926,9 @@ async function checkHubPw(){
     }
     else if(r.error==='network'){
       errEl.textContent=L().netErr||'네트워크 오류. 연결을 확인해 주세요.';
+    }
+    else if(r.error==='rate_limited'){
+      errEl.textContent=L().rateLimited||'로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.';
     }
     else{ errEl.textContent=L().wrongPw; }
   }catch(e){
@@ -1957,6 +2032,8 @@ function applyMenu(){
   });
   var adm=document.getElementById('appBtnMenuAdmin');
   if(adm) adm.style.display=(unlockLevel>=3)?'flex':'none';
+  var sec=document.getElementById('appBtnSecurityAdmin');
+  if(sec) sec.style.display=(unlockLevel>=3)?'flex':'none';
 }
 /* [부하] 메뉴 설정은 거의 바뀌지 않는데, 예전에는 index.html 을 열 때마다 캐시 신선도와
    무관하게 매번 GAS를 호출했다. 로그인 화면이 GAS 응답(실측 3~16초)을 그대로 기다리게 되고,
@@ -2066,6 +2143,102 @@ function saveMenuAdmin(){
 document.getElementById('appBtnMenuAdmin').addEventListener('click', openMenuAdmin);
 document.getElementById('menuAdminModal').addEventListener('click', function(e){ if(e.target.id==='menuAdminModal') closeMenuAdmin(); });
 loadMenuCfg();   // 서버(메뉴설정 탭) 설정 로드 → 성공 시 캐시 갱신·재적용
+
+// ===== 보안 관리센터 (Lv.3 · Deno KV 사용자/기기) =====
+function securityEsc_(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function securityDate_(ms){
+  if(!ms) return '기록 없음';
+  try{return new Date(Number(ms)).toLocaleString('ko-KR',{year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '기록 없음';}
+}
+function openSecurityAdmin(){
+  if(unlockLevel<3){alert('보안레벨 3 인증이 필요합니다.');return;}
+  document.getElementById('securityAdminModal').style.display='flex';
+  loadSecurityAdmin();
+}
+function closeSecurityAdmin(){document.getElementById('securityAdminModal').style.display='none';}
+function renderSecurityUsers_(users){
+  var box=document.getElementById('securityUserList');
+  if(!users||!users.length){box.innerHTML='<div style="padding:18px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:12px;">등록된 Google 사용자가 없습니다.</div>';return;}
+  box.innerHTML=users.map(function(u){
+    var active=u.status!=='disabled';
+    return '<div data-sec-user data-email="'+securityEsc_(u.email)+'" data-name="'+securityEsc_(u.name||'')+'" data-status="'+(active?'active':'disabled')+'" style="border:1px solid #DDE3EE;border-radius:9px;padding:10px;background:'+(active?'#fff':'#F6F7F9')+';">'
+      +'<div style="display:flex;gap:8px;align-items:flex-start;"><div style="flex:1;min-width:0;"><b style="font-size:13px;color:#1B2F5E;">'+securityEsc_(u.name||'이름 없음')+'</b>'
+      +'<div style="font-size:11px;color:#6B7A99;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+securityEsc_(u.email)+'</div>'
+      +'<div style="font-size:10px;color:#8A96AB;margin-top:3px;">'+(u.linked?'Google 연결됨':'첫 로그인 대기')+' · 최근 '+securityDate_(u.lastLogin)+'</div></div>'
+      +'<span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:12px;background:'+(active?'#E8F5EE':'#FBEAE8')+';color:'+(active?'#1E7E4E':'#C0392B')+';">'+(active?'사용 중':'중지')+'</span></div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px;"><select data-sec-level style="flex:1;padding:7px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;">'
+      +[1,2,3].map(function(l){return '<option value="'+l+'"'+(Number(u.level)===l?' selected':'')+'>Lv.'+l+'</option>';}).join('')+'</select>'
+      +'<button type="button" data-sec-save style="padding:7px 10px;border:0;border-radius:7px;background:#1B2F5E;color:#fff;font-family:inherit;font-weight:700;cursor:pointer;">권한 저장</button>'
+      +'<button type="button" data-sec-toggle style="padding:7px 10px;border:1px solid '+(active?'#C0392B':'#1E7E4E')+';border-radius:7px;background:#fff;color:'+(active?'#C0392B':'#1E7E4E')+';font-family:inherit;font-weight:700;cursor:pointer;">'+(active?'사용 중지':'다시 활성')+'</button></div></div>';
+  }).join('');
+}
+function renderSecurityDevices_(d, error){
+  var box=document.getElementById('securityDeviceList');
+  if(error==='device_auth_disabled'){box.innerHTML='<div style="padding:12px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:11.5px;">서버에서 기기 로그인이 비활성화되어 있습니다.</div>';return;}
+  if(!d||!d.length){box.innerHTML='<div style="padding:12px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:11.5px;">기억된 기기가 없습니다.</div>';return;}
+  box.innerHTML=d.map(function(v){return '<div style="display:flex;gap:8px;align-items:center;border:1px solid #DDE3EE;border-radius:9px;padding:9px;">'
+    +'<div style="flex:1;min-width:0;"><b style="font-size:12px;color:#1B2F5E;">'+securityEsc_(v.name||'이름 없음')+' · Lv.'+Number(v.level||0)+'</b>'
+    +(v.email?'<div style="font-size:10px;color:#6B7A99;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+securityEsc_(v.email)+'</div>':'')
+    +'<div style="font-size:10px;color:#6B7A99;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">최근 '+securityDate_(v.seen)+' · '+securityEsc_(v.ua||'기기 정보 없음')+'</div></div>'
+    +'<button type="button" data-device-revoke="'+securityEsc_(v.did)+'" style="padding:7px 9px;border:1px solid #C0392B;border-radius:7px;background:#fff;color:#C0392B;font-family:inherit;font-weight:700;cursor:pointer;">해지</button></div>';}).join('');
+}
+function renderSecurityAudits_(items,error){
+  var box=document.getElementById('securityAuditList');
+  if(error){box.innerHTML='<div style="padding:11px;text-align:center;color:#C0392B;border:1px dashed #E6C6C3;border-radius:9px;font-size:11.5px;">보안 기록을 불러오지 못했습니다.</div>';return;}
+  if(!items||!items.length){box.innerHTML='<div style="padding:11px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:11.5px;">아직 보안 기록이 없습니다.</div>';return;}
+  var labels={google_login:'Google 로그인',password_login:'비밀번호 로그인',device_login:'기기 자동 로그인',user_save:'사용자 변경',device_revoke:'기기 해지'};
+  box.innerHTML=items.map(function(a){
+    var ok=a.result==='ok', target=a.target?' → '+securityEsc_(a.target):'';
+    return '<div style="display:flex;gap:8px;align-items:flex-start;border:1px solid #E5E9F0;border-radius:8px;padding:8px;background:#FAFBFC;">'
+      +'<span style="font-size:9.5px;font-weight:800;padding:3px 6px;border-radius:10px;background:'+(ok?'#E8F5EE':'#FBEAE8')+';color:'+(ok?'#1E7E4E':'#C0392B')+';white-space:nowrap;">'+(ok?'성공':'거부')+'</span>'
+      +'<div style="flex:1;min-width:0;font-size:10.5px;color:#53627C;line-height:1.45;"><b style="color:#1B2F5E;">'+securityEsc_(labels[a.event]||a.event)+'</b> · '+securityEsc_(a.actor||'알 수 없음')+target
+      +'<div style="color:#8A96AB;">'+securityDate_(a.at)+' · 기기 '+securityEsc_(a.client||'-')+'</div></div></div>';
+  }).join('');
+}
+async function loadSecurityAdmin(){
+  var status=document.getElementById('securityAdminStatus');
+  status.style.color='#6B7A99';status.textContent='불러오는 중…';
+  var results=await Promise.all([BazAuth.adminRequest('users',{}),BazAuth.adminRequest('devices',{}),BazAuth.adminRequest('audits',{})]);
+  var u=results[0],d=results[1],a=results[2];
+  if(!u.ok){status.style.color='#C0392B';status.textContent='사용자 목록을 불러오지 못했습니다: '+(u.error||'오류');return;}
+  renderSecurityUsers_(u.users||[]);
+  renderSecurityDevices_(d.devices||[],d.ok?'':d.error);
+  renderSecurityAudits_(a.audits||[],a.ok?'':a.error);
+  status.textContent='';
+}
+async function saveSecurityUser_(data){
+  var status=document.getElementById('securityAdminStatus');
+  status.style.color='#6B7A99';status.textContent='저장 중…';
+  var r=await BazAuth.adminRequest('user_save',data);
+  if(!r.ok){status.style.color='#C0392B';status.textContent='저장 실패: '+(r.error||'오류');return false;}
+  status.style.color='#1E7E4E';status.textContent='저장되었습니다.';
+  await loadSecurityAdmin();return true;
+}
+document.getElementById('securityAddUser').addEventListener('click',async function(){
+  var name=document.getElementById('securityNewName').value.trim();
+  var email=document.getElementById('securityNewEmail').value.trim();
+  var level=Number(document.getElementById('securityNewLevel').value);
+  if(!name||!email){document.getElementById('securityAdminStatus').textContent='이름과 Google 이메일을 입력하세요.';return;}
+  if(await saveSecurityUser_({name:name,email:email,level:level,status:'active'})){
+    document.getElementById('securityNewName').value='';document.getElementById('securityNewEmail').value='';
+  }
+});
+document.getElementById('securityUserList').addEventListener('click',function(e){
+  var row=e.target.closest('[data-sec-user]');if(!row)return;
+  var save=e.target.closest('[data-sec-save]'),toggle=e.target.closest('[data-sec-toggle]');if(!save&&!toggle)return;
+  var status=row.getAttribute('data-status');
+  saveSecurityUser_({email:row.getAttribute('data-email'),name:row.getAttribute('data-name'),level:Number(row.querySelector('[data-sec-level]').value),status:toggle?(status==='active'?'disabled':'active'):status});
+});
+document.getElementById('securityDeviceList').addEventListener('click',async function(e){
+  var b=e.target.closest('[data-device-revoke]');if(!b)return;
+  if(!confirm('이 기기의 자동 로그인을 해지할까요?'))return;
+  var r=await BazAuth.adminRequest('device_revoke',{did:b.getAttribute('data-device-revoke')});
+  document.getElementById('securityAdminStatus').textContent=r.ok?'기기를 해지했습니다.':'기기 해지 실패: '+(r.error||'오류');
+  if(r.ok)loadSecurityAdmin();
+});
+document.getElementById('appBtnSecurityAdmin').addEventListener('click',openSecurityAdmin);
+document.getElementById('securityAdminModal').addEventListener('click',function(e){if(e.target.id==='securityAdminModal')closeSecurityAdmin();});
+
 var MGR_TAX=null;     // {유형:[...]} 평탄화된 유형 목록
 function mgrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function mgrNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,''); }
