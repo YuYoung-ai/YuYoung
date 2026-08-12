@@ -2,7 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- [접근성] user-scalable=no·maximum-scale 을 두지 않는다 — 확대가 막히면 현장에서
+     S/N·버전 같은 작은 글자를 읽을 수 없다(WCAG 1.4.4). -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://script.google.com">
 <link rel="preconnect" href="https://script.googleusercontent.com">
@@ -16,7 +18,13 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--gray-bg);color:var(--text);
   font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
-  font-size:15px;line-height:1.5;padding-bottom:120px}
+  font-size:15px;line-height:1.5;
+  /* 하단 고정 액션바 높이를 런타임에 측정해 --actions-h 로 넣는다(겹침 방지) */
+  padding-bottom:calc(var(--actions-h,96px) + env(safe-area-inset-bottom,0px) + 16px);
+  overflow-x:hidden}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+/* sticky header 아래로 입력창이 숨지 않게 */
+input,select,textarea,.field{scroll-margin-top:calc(var(--hdr-h,60px) + 12px)}
 header{background:var(--navy);color:#fff;padding:16px 18px;position:sticky;top:0;z-index:10}
 header h1{margin:0;font-size:17px;font-weight:700}
 header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
@@ -65,7 +73,13 @@ textarea{resize:vertical;min-height:56px}
 .tpl-tabs button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 .today-link{display:block;text-align:center;margin:4px 0 0;font-size:12.5px;color:var(--teal);font-weight:600;text-decoration:underline;background:none;border:none;font-family:inherit;cursor:pointer;width:100%;padding:8px}
 .sync-badge{font-size:10.5px;color:var(--text-muted);font-weight:400}
-@media (max-width:420px){ body{font-size:14.5px} .grid{gap:10px} }
+/* 320~420px: 2열이 지나치게 좁아지면 1열로 — 가로 스크롤이 생기지 않게 한다 */
+@media (max-width:460px){
+  body{font-size:14.5px}
+  .grid{grid-template-columns:1fr;gap:12px}
+  .hp2{grid-template-columns:1fr;gap:6px}
+  .hp-row{grid-template-columns:1fr}
+}
 .hp-arrow{text-align:center;color:var(--text-muted);font-size:18px;padding-bottom:9px}
 .hint{font-size:11px;color:var(--text-muted);margin-top:4px}
 /* 사용자 숙련도 평가 — 탭 1회 세그먼트 선택 */
@@ -108,11 +122,18 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
   border:1px solid #D6E7EF;word-break:break-word}
 .preview-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .preview-head b{font-size:12px;color:var(--navy)}
-/* 하단 고정 버튼 */
+/* 하단 고정 버튼 — safe-area 반영 · 좁은 화면에서는 저장 버튼을 한 줄 차지하게 재배치 */
 .actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--gray-line);
-  padding:12px 16px;display:flex;gap:10px;max-width:560px;margin:0 auto}
-.btn{flex:1;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;
-  font-family:inherit;cursor:pointer;transition:.15s}
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:560px;margin:0 auto;z-index:25}
+.actions .btn-save{grid-column:1/-1;order:-1}
+@media (min-width:481px){
+  .actions{grid-template-columns:1fr 1fr 1.2fr}
+  .actions .btn-save{grid-column:auto;order:0}
+}
+.btn{padding:13px 8px;border:none;border-radius:10px;font-size:14.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:.15s;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .btn-copy{background:var(--navy);color:#fff}
 .btn-copy:active{background:var(--navy-light)}
 .btn-share{background:var(--kakao);color:#3A1D1D}
@@ -124,13 +145,57 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
 .btn-cont{background:#fff;color:var(--teal);border:1.5px solid var(--teal)}
 .btn-cont:active{background:rgba(0,150,136,.08)}
 .btn-cont:disabled{opacity:.45;cursor:not-allowed}
-.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(20px);
+/* 토스트는 액션바 위로 — 액션바 실측 높이(--actions-h)를 그대로 쓴다 */
+.toast{position:fixed;bottom:calc(var(--actions-h,96px) + env(safe-area-inset-bottom,0px) + 12px);
+  left:50%;transform:translateX(-50%) translateY(20px);
   background:var(--navy);color:#fff;padding:10px 20px;border-radius:16px;font-size:13.5px;
   opacity:0;pointer-events:none;transition:.25s;z-index:20;white-space:pre-line;
   max-width:88vw;text-align:center;line-height:1.5}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+/* ═══ 저장 상태 · 검증 · 초안 (v3.1) ═══════════════════════════════════════ */
+#saveStatusCard,#errorCard{padding:12px 14px}
+.sv{display:flex;align-items:flex-start;gap:8px;font-size:13px;line-height:1.55;font-weight:600}
+.sv .ic{flex:0 0 auto;font-size:15px;line-height:1.4}
+.sv.ok{color:var(--green)} .sv.err{color:var(--red)}
+.sv.wait{color:var(--teal)} .sv.unknown{color:#8A6D1A}
+.sv small{display:block;font-weight:400;color:var(--text-muted);margin-top:3px}
+.save-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.save-acts:empty{display:none}
+.save-acts button{border:1px solid var(--teal);background:#fff;color:var(--teal);font-family:inherit;
+  font-size:12.5px;font-weight:700;padding:8px 12px;border-radius:8px;cursor:pointer}
+.save-acts button.warn{border-color:var(--red);color:var(--red)}
+.save-acts button:active{filter:brightness(.95)}
+/* 저장 후 변경됨 배지 */
+.dirty-badge{display:none;font-size:10.5px;font-weight:700;color:#8A6D1A;background:#FFF6DF;
+  border:1px solid #F0E2B8;border-radius:6px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+body.is-dirty .dirty-badge{display:inline-block}
+/* 검증 오류 */
+#errorSummary{font-size:13px;color:var(--red);font-weight:600;line-height:1.6}
+#errorSummary ul{margin:6px 0 0;padding-left:18px;font-weight:400}
+#errorSummary button{display:block;margin-top:4px;background:none;border:none;color:var(--red);
+  font-family:inherit;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0}
+.field.invalid input,.field.invalid select,.field.invalid textarea,
+.snphoto-zone.invalid{border-color:var(--red);background:#FFFBFB}
+.field-err{font-size:11.5px;color:var(--red);margin-top:4px;font-weight:600}
+/* 라이브 DB 상태 배지 */
+.db-badge{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px}
+.db-badge.live{background:#E4F3EA;color:var(--green)}
+.db-badge.embed{background:#FFF6DF;color:#8A6D1A}
+.db-badge.err{background:#FBEAE8;color:var(--red)}
+/* 초안 복원 안내 */
+#draftBar{display:none;background:#FFFBEF;border:1px solid #F0E2B8;border-radius:10px;
+  padding:11px 12px;margin-bottom:12px;font-size:12.5px;color:#8A6D1A;line-height:1.55}
+#draftBar .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+#draftBar button{border:1px solid #C9A227;background:#fff;color:#8A6D1A;font-family:inherit;
+  font-size:12px;font-weight:700;padding:6px 11px;border-radius:7px;cursor:pointer}
+/* 자동완성 항목 선택 상태(키보드) */
+.ac-item[aria-selected="true"]{background:var(--teal-soft)}
+.ac-item:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
 </style>
 <script src="auth.js"></script>
+<!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
+<script src="js/baz-dom.js"></script>
+<script src="js/baz-handover-core.js"></script>
 </head>
 <body>
 <header>
@@ -143,72 +208,78 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
   <!-- 입력 -->
   <div class="card">
     <p class="sec-title">처리 내용 입력</p>
+    <div id="draftBar"></div>
+    <p class="hint" style="margin:-6px 0 12px">병원 DB <span class="db-badge embed" id="dbBadge">내장 DB</span></p>
     <div class="grid">
       <div class="field">
-        <label>담당 FSE <span class="opt">(본인)</span></label>
-        <input id="fse" list="fseList" placeholder="예) 권오성" oninput="render();saveFse();autoFillDetail()">
+        <label for="fse">담당 FSE <span class="opt">(본인)</span></label>
+        <input id="fse" list="fseList" placeholder="예) 권오성" aria-describedby="fseNote">
         <datalist id="fseList"></datalist>
+        <div class="hint" id="fseNote"></div>
       </div>
       <div class="field">
-        <label>처리일자</label>
-        <input type="date" id="date" oninput="render()">
+        <label for="date">처리일자</label>
+        <input type="date" id="date">
       </div>
       <div class="field">
-        <label>구분</label>
-        <select id="gubun" onchange="render()"><option>A/S</option><option>점검</option></select>
+        <label for="gubun">구분</label>
+        <select id="gubun"><option>A/S</option><option>점검</option></select>
       </div>
       <div class="field">
-        <label>장비 구분 <span class="opt">· 데모장비 수리 시</span></label>
-        <select id="eqKind" onchange="render()"><option>병원 장비</option><option>데모 장비</option></select>
+        <label for="eqKind">장비 구분 <span class="opt">· 데모장비 수리 시</span></label>
+        <select id="eqKind"><option>병원 장비</option><option>데모 장비</option></select>
       </div>
       <div class="field full" style="position:relative">
-        <label>병원명 <span class="opt">· 입력 시 자동완성</span></label>
+        <label for="hosp">병원명 <span class="opt">· 입력 시 자동완성</span></label>
         <div class="in-wrap">
-          <input id="hosp" autocomplete="off" placeholder="병원명 검색" oninput="onHospInput()" onfocus="onHospFocus()">
-          <button type="button" id="hospClear" class="in-clear" onclick="clearHosp()">✕</button>
+          <input id="hosp" autocomplete="off" placeholder="병원명 검색"
+                 role="combobox" aria-expanded="false" aria-controls="hospDrop"
+                 aria-autocomplete="list" aria-haspopup="listbox" aria-describedby="hospMatch">
+          <button type="button" id="hospClear" class="in-clear" aria-label="병원명 지우기" title="병원명 지우기">✕</button>
         </div>
-        <div id="hospDrop" class="ac-drop"></div>
-        <div id="hospMatch" class="hint" style="color:var(--green)"></div>
+        <div id="hospDrop" class="ac-drop" role="listbox" aria-label="병원 검색 결과"></div>
+        <div id="hospMatch" class="hint" style="color:var(--green)" role="status" aria-live="polite"></div>
         <div id="recentCard" class="recent-card">
           <h4>🕘 최근 처리 이력 <span class="cnt" id="recentCnt"></span></h4>
           <div id="recentList"></div>
         </div>
       </div>
       <div class="field">
-        <label>S/N (장비)</label>
-        <select id="sn" onchange="toggleCustom('sn');render()"></select>
-        <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
+        <label for="sn">S/N (장비)</label>
+        <select id="sn"></select>
+        <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" aria-label="장비 S/N 직접입력">
       </div>
       <div class="field full">
-        <label>장비 S/N 사진 <span class="req">필수</span> <span class="opt">· 시트 U열에 기록</span></label>
+        <label for="snPhotoFile">장비 S/N 사진 <span class="req">필수</span> <span class="opt">· 시트 사진 열에 기록</span></label>
         <div class="snphoto-zone need" id="snPhotoZone">
           <span id="snPhotoLabel">📷 S/N 라벨 촬영 · 사진 선택</span>
-          <input type="file" accept="image/*" id="snPhotoFile" onchange="onSnPhoto(event)">
+          <input type="file" accept="image/*" id="snPhotoFile" aria-describedby="snPhotoState">
         </div>
+        <div class="hint" id="snPhotoState" role="status" aria-live="polite"></div>
         <div class="snphoto-prev" id="snPhotoPrev">
-          <img id="snPhotoImg" src="" alt="장비 S/N 사진">
-          <button type="button" class="rm" onclick="clearSnPhoto()" aria-label="사진 삭제">✕</button>
+          <img id="snPhotoImg" src="" alt="첨부한 장비 S/N 사진 미리보기">
+          <button type="button" class="rm" id="snPhotoRemove" aria-label="첨부한 사진 삭제">✕</button>
         </div>
       </div>
       <div class="field">
-        <label>UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
+        <label for="verUI">UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
         <div class="hp2">
-          <input id="verUI" placeholder="UI" oninput="render()">
-          <input id="verHP" placeholder="HP" oninput="render()">
+          <input id="verUI" placeholder="UI" aria-label="UI 버전">
+          <input id="verHP" placeholder="HP" aria-label="HP 버전">
         </div>
       </div>
       <div class="field full">
-        <label>S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
+        <label for="hpOut">S/N (핸드피스) <span class="opt">· 교체 시 OUT(탈거) → IN(장착)</span></label>
         <div class="hp2">
-          <input id="hpOut" placeholder="OUT S/N (탈거)" oninput="render()">
-          <select id="wVer" onchange="render()">
+          <input id="hpOut" placeholder="OUT S/N (탈거)" aria-label="핸드피스 OUT S/N">
+          <select id="wVer" aria-label="핸드피스 OUT 버전">
             <option value="">OUT Ver</option><option>1.0</option><option>1.0.1</option>
             <option>1.1</option><option>1.2</option><option>1.2.1</option><option>1.2.2</option>
           </select>
         </div>
         <div class="hp2" style="margin-top:6px">
-          <input id="hpIn" placeholder="IN S/N (장착)" oninput="render()">
-          <select id="uVer" onchange="render()">
+          <input id="hpIn" placeholder="IN S/N (장착)" aria-label="핸드피스 IN S/N">
+          <select id="uVer" aria-label="핸드피스 IN 버전">
             <option value="">IN Ver</option><option>1.0</option><option>1.0.1</option>
             <option>1.1</option><option>1.2</option><option>1.2.1</option><option>1.2.2</option>
           </select>
@@ -216,41 +287,42 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
         <div class="hint">교체 없으면 IN만 입력 · 없으면 비워두기</div>
       </div>
       <div class="field">
-        <label>노즐 제조일자</label>
-        <input id="nozzle" placeholder="예) 2025.04.21" oninput="render()">
+        <label for="nozzleDate">노즐 제조일자</label>
+        <input id="nozzleDate" placeholder="예) 2025.04.21">
       </div>
       <div class="field">
-        <label>A/S 항목 · 대분류</label>
-        <select id="cat" onchange="fillSub();render();autoFillDetail()"></select>
+        <label for="cat">A/S 항목 · 대분류</label>
+        <select id="cat"></select>
       </div>
       <div class="field">
-        <label>A/S 항목 · 소분류</label>
-        <select id="sub" onchange="toggleCustom('sub');render();autoFillDetail()"></select>
-        <input id="subCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
+        <label for="sub">A/S 항목 · 소분류</label>
+        <select id="sub"></select>
+        <input id="subCustom" style="display:none;margin-top:6px" placeholder="직접입력" aria-label="소분류 직접입력">
       </div>
       <div class="field">
-        <label>교체품</label>
-        <select id="part" onchange="render();autoFillDetail()"></select>
+        <label for="part">교체품</label>
+        <select id="part"></select>
       </div>
       <div class="field">
-        <label>교체비용 <span class="opt">(원)</span></label>
-        <input id="cost" inputmode="numeric" placeholder="예) 1650000" oninput="render()">
+        <label for="cost">교체비용 <span class="opt">(원)</span></label>
+        <input id="cost" inputmode="numeric" placeholder="예) 1650000" aria-describedby="costHint">
+        <div class="hint" id="costHint"></div>
       </div>
       <div class="field">
-        <label>노즐 재사용 <span class="opt">· A/S·점검 공통</span></label>
-        <select id="nozzleReuse" onchange="render()"><option>X</option><option>O</option></select>
+        <label for="nozzleReuse">노즐 재사용 <span class="opt">· A/S·점검 공통</span></label>
+        <select id="nozzleReuse"><option>X</option><option>O</option></select>
       </div>
       <div class="field">
-        <label>A/S 결과</label>
-        <select id="result" onchange="toggleCustom('result');render()">
+        <label for="result">A/S 결과</label>
+        <select id="result">
           <option>교체</option><option>수리</option><option>정상</option>
           <option>점검</option><option value="__c">직접입력…</option>
         </select>
-        <input id="resultCustom" style="display:none;margin-top:6px" placeholder="직접입력" oninput="render()">
+        <input id="resultCustom" style="display:none;margin-top:6px" placeholder="직접입력" aria-label="A/S 결과 직접입력">
       </div>
       <div class="field full">
-        <label>A/S 내용 상세 <span class="opt">· 줄마다 " - " 자동</span></label>
-        <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)" oninput="render()"></textarea>
+        <label for="detail">A/S 내용 상세 <span class="opt">· 줄마다 " - " 자동</span></label>
+        <textarea id="detail" placeholder="예) 약액 누수로 인한 HP A'ssy 교체(1.2.2→1.2.2)(유상)"></textarea>
         <div class="hint" id="autoDetailHint" style="display:none;color:#2E7D9E;font-weight:700">✨ 템플릿 초안 자동 입력 · 현장 확인 후 수정하세요</div>
       </div>
       <div class="field full">
@@ -259,59 +331,88 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
             <span class="opt" style="font-weight:400;color:var(--text-muted);font-size:10.5px">병원 담당자 기준</span></div>
           <div class="skill-row">
             <div class="skill-lab"><span>NS 충진 여부</span></div>
-            <div class="seg" id="segNsFill">
-              <button type="button" class="seg-btn" onclick="setSkill('nsFill','O',this)">O</button>
-              <button type="button" class="seg-btn" onclick="setSkill('nsFill','X',this)">X</button>
+            <div class="seg" id="segNsFill" role="group" aria-label="NS 충진 여부">
+              <button type="button" class="seg-btn" data-skill="nsFill" data-val="O" aria-pressed="false">O</button>
+              <button type="button" class="seg-btn" data-skill="nsFill" data-val="X" aria-pressed="false">X</button>
             </div>
           </div>
           <div class="skill-row">
             <div class="skill-lab"><span>NS 충진량</span><span class="std">기준치 0.9cc</span></div>
-            <div class="seg" id="segNsAmt">
-              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','정상',this)">정상</button>
-              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','부족',this)">부족</button>
-              <button type="button" class="seg-btn" onclick="setSkill('nsAmt','과다',this)">과다</button>
+            <div class="seg" id="segNsAmt" role="group" aria-label="NS 충진량">
+              <button type="button" class="seg-btn" data-skill="nsAmt" data-val="정상" aria-pressed="false">정상</button>
+              <button type="button" class="seg-btn" data-skill="nsAmt" data-val="부족" aria-pressed="false">부족</button>
+              <button type="button" class="seg-btn" data-skill="nsAmt" data-val="과다" aria-pressed="false">과다</button>
             </div>
           </div>
           <div class="skill-row">
             <div class="skill-lab"><span>정상적인 젯 분사 판단 <span class="std">[병원담당자]</span></span></div>
-            <div class="seg" id="segJet">
-              <button type="button" class="seg-btn" onclick="setSkill('jet','가능',this)">가능</button>
-              <button type="button" class="seg-btn" onclick="setSkill('jet','교육 필요',this)">교육 필요</button>
+            <div class="seg" id="segJet" role="group" aria-label="정상적인 젯 분사 판단">
+              <button type="button" class="seg-btn" data-skill="jet" data-val="가능" aria-pressed="false">가능</button>
+              <button type="button" class="seg-btn" data-skill="jet" data-val="교육 필요" aria-pressed="false">교육 필요</button>
             </div>
           </div>
           <div class="hint" id="skillHint">선택 항목 · 미선택 항목은 N/A로 기록됩니다</div>
         </div>
       </div>
-      <div class="field">
-        <label>비고 / 특이사항 <span class="opt">· 없으면 N/A</span></label>
-        <textarea id="remark" placeholder="예) 핸드피스 교체 비용 1,650,000원(부가세 포함) 결제 완료" oninput="render()"></textarea>
+      <div class="field full">
+        <label for="remark">비고 / 특이사항 <span class="opt">· 없으면 N/A</span></label>
+        <textarea id="remark" placeholder="예) 핸드피스 교체 비용 1,650,000원(부가세 포함) 결제 완료"></textarea>
       </div>
     </div>
+  </div>
+
+  <!-- 저장 상태 · 검증 요약 (성공/실패/확인 중/결과 불명을 한 곳에서 알린다) -->
+  <div class="card" id="saveStatusCard" style="display:none">
+    <div id="saveStatus" role="status" aria-live="polite"></div>
+    <div id="saveActions" class="save-acts"></div>
+  </div>
+  <div class="card" id="errorCard" style="display:none">
+    <div id="errorSummary" role="alert"></div>
   </div>
 
   <!-- 미리보기 -->
   <div class="card preview-card">
     <div class="preview-head">
-      <b>공유 미리보기 <span class="sync-badge" id="syncBadge"></span></b>
-      <div class="tpl-tabs">
-        <button id="tplA" class="on" onclick="setTpl('basic')">기본 양식</button>
-        <button id="tplB" onclick="setTpl('sheet')">시트 요약형</button>
+      <b>공유 미리보기 <span class="sync-badge" id="syncBadge"></span><span class="dirty-badge">저장 후 변경됨</span></b>
+      <div class="tpl-tabs" role="group" aria-label="양식 선택">
+        <button type="button" id="tplA" class="on" data-tpl="basic" aria-pressed="true">기본 양식</button>
+        <button type="button" id="tplB" data-tpl="sheet" aria-pressed="false">시트 요약형</button>
       </div>
     </div>
     <div class="bubble" id="preview"></div>
-    <button class="today-link" onclick="showToday()">📅 오늘 내 기록 확인</button>
+    <button type="button" class="today-link" id="btnToday">📅 오늘 내 기록 확인</button>
   </div>
 </div>
 
-<div class="actions">
-  <button class="btn btn-copy" id="btnCopy" onclick="copyText()" disabled title="시트 기록 후 복사할 수 있어요">📋 복사</button>
-  <button class="btn btn-cont" id="btnCont" onclick="contToInspection()" disabled title="시트 기록 후 점검 내역서를 이어서 작성할 수 있어요">📝 내역서 이어쓰기</button>
-  <button class="btn btn-save" onclick="saveToSheet()">📥 시트 기록</button>
+<div class="actions" id="actionBar">
+  <button class="btn btn-copy" id="btnCopy" disabled title="시트 기록 후 복사할 수 있어요">📋 복사</button>
+  <button class="btn btn-cont" id="btnCont" disabled title="시트 기록 후 점검 내역서를 이어서 작성할 수 있어요">📝 내역서 이어쓰기</button>
+  <button class="btn btn-save" id="btnSave">📥 시트 기록</button>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
-function val(id){return (document.getElementById(id).value||'').trim();}
+function el(id){ return document.getElementById(id); }
+function val(id){ var e=el(id); return (e && e.value || '').trim(); }
+function setVal(id, v){ var e=el(id); if(e) e.value = (v==null?'':v); }
+
+/* ═══ 화면 ↔ 저장 계약 (js/baz-handover-core.js) ═══════════════════════════
+   "화면에 보이는 값"과 "서버로 가는 값"이 어긋나지 않도록, 폼을 읽는 창구를
+   readForm() 하나로 모은다. 검증·페이로드·스냅샷·초안이 모두 이 결과만 본다. */
+function readForm(){
+  return {
+    date:val('date'), hosp:val('hosp'), fse:val('fse'), gubun:val('gubun'), eqKind:val('eqKind'),
+    sn:val('sn'), snCustom:val('snCustom'),
+    verUI:val('verUI'), verHP:val('verHP'),
+    hpIn:val('hpIn'), hpOut:val('hpOut'), uVer:val('uVer'), wVer:val('wVer'),
+    nozzleDate:val('nozzleDate'), nozzleReuse:val('nozzleReuse'),
+    cat:val('cat'), sub:val('sub'), subCustom:val('subCustom'), subLabel:subName(), code:itemCode(),
+    part:val('part'), cost:val('cost'),
+    result:val('result'), resultCustom:val('resultCustom'),
+    detail:val('detail'), remark:val('remark'),
+    nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet
+  };
+}
 
 /* AS 항목 분류 코드 마스터 (대분류: [코드, 소분류]) */
 var AS_TAX={
@@ -360,7 +461,7 @@ function buildText(){
   t+='병원명 : '+val('hosp')+(val('eqKind')==='데모 장비'?' (데모장비)':'')+'\n\n';
   t+='S/N(장비) : '+snVal()+'\n';
   t+='S/N(핸드피스) : '+hpText()+'\n';
-  t+='노즐 제조일자 : '+val('nozzle')+'\n';
+  t+='노즐 제조일자 : '+val('nozzleDate')+'\n';
   t+='A/S 항목 : '+itemText()+'\n';
   var d=bulletLines('detail');
   t+='A/S 내용 상세 :\n'+(d.length? d.map(function(l){return '-'+l;}).join('\n') : '-')+'\n';
@@ -387,7 +488,9 @@ function buildTextSheet(){
   t+='장비 S/N : '+snVal()+(SN_PHOTO?' · 📷 사진 첨부':'')+'\n';
   t+='UI/HP Ver : '+[val('verUI'),val('verHP')].filter(Boolean).join(' / ')+'\n';
   t+='대분류/유형 : '+itemText()+(itemCode()?' ('+itemCode()+')':'')+'\n';
-  t+='교체품 : '+val('part')+(val('cost')?' · '+Number(val('cost')).toLocaleString()+'원':'')+'\n';
+  /* [수정] Number('1,650,000') → NaN 이라 미리보기에 'NaN원'이 찍혔다 — 쉼표를 읽는 파서를 쓴다 */
+  var costTxt=BazHandover.costLabel(val('cost'));
+  t+='교체품 : '+val('part')+(costTxt?' · '+costTxt:'')+'\n';
   var hp=hpText(); if(hp) t+='HP 교체 : '+hp+'\n';
   var d=bulletLines('detail');
   t+='내용 :\n'+(d.length? d.map(function(l){return ' - '+l;}).join('\n') : ' - ')+'\n';
@@ -400,12 +503,13 @@ function buildTextSheet(){
   return t;
 }
 function curText(){ return TPL==='sheet' ? buildTextSheet() : buildText(); }
-/* 복사·이어쓰기 버튼 게이트: 시트 기록이 한 번이라도 성공하면 이후 계속 사용 가능 */
-function enableCopy(){
-  var b=document.getElementById('btnCopy'); if(b){ b.disabled=false; b.title='복사'; }
-  var c=document.getElementById('btnCont'); if(c){ c.disabled=false; c.title='점검 내역서 이어서 작성'; }
+function render(){
+  el('preview').textContent=curText();
+  var ch=el('costHint');
+  if(ch){ var c=BazHandover.parseCost(val('cost')); ch.textContent = (!c.ok) ? ('⚠️ '+c.error) : (c.empty ? '' : c.display+'원'); }
+  refreshDirty();
+  scheduleDraftSave();
 }
-function render(){ document.getElementById('preview').textContent=curText(); }
 
 /* ── 장비 S/N 사진 첨부 (시트 U열 '장비 S/N 사진'에 기록) ──────────────── */
 var SN_PHOTO=null;                       /* 압축된 dataURL · 미첨부면 null */
@@ -433,36 +537,67 @@ function snPhotoToJpeg(file){
   });
 }
 
+/* [경합] 사진 A 가 붙은 상태에서 B 로 교체하는 도중 저장하면 A 가 전송되거나,
+   B 변환이 끝난 뒤 저장 응답이 B 를 지울 수 있었다.
+   → 변환마다 세대 번호를 발급하고, 최신 세대의 결과만 SN_PHOTO 에 반영한다.
+     변환 중에는 저장 버튼을 잠근다(처리 중임을 aria-live 로도 알린다). */
+var snPhotoSeq=BazHandover.createSeq();
+var SN_PHOTO_BUSY=false;
+
+function snPhotoSay(msg){
+  var st=el('snPhotoState'); if(st) st.textContent=msg||'';
+}
+function snPhotoBusy(on){
+  SN_PHOTO_BUSY=!!on;
+  var b=el('btnSave');
+  if(b){ b.disabled=!!on; if(on) b.textContent='⏳ 사진 처리 중…'; else if(SAVE_STATE!==BazHandover.SAVE.SAVING) b.textContent='📥 시트 기록'; }
+  var z=el('snPhotoZone'); if(z) z.setAttribute('aria-busy', on?'true':'false');
+}
+
 async function onSnPhoto(evt){
   var file=evt.target.files&&evt.target.files[0];
   evt.target.value='';                   /* 같은 파일 재선택도 동작하도록 초기화 */
   if(!file) return;
-  var lab=document.getElementById('snPhotoLabel');
+  var id=snPhotoSeq.next('photo');
+  var lab=el('snPhotoLabel');
   lab.textContent='⏳ 사진 처리 중…';
+  snPhotoSay('사진을 처리하고 있습니다. 잠시만 기다려 주세요.');
+  snPhotoBusy(true);
   try{
     var jpeg=await snPhotoToJpeg(file);
+    if(!snPhotoSeq.isCurrent(id)) return;      /* 그 사이 다른 사진으로 바뀜 → 옛 결과 폐기 */
     if(jpeg.length*3/4 > SNP_MAX_BYTES){
       toast('사진 용량이 큽니다 — 조금 더 멀리서 다시 촬영해 주세요');
       lab.textContent='📷 S/N 라벨 촬영 · 사진 선택';
+      snPhotoSay('사진이 너무 큽니다 — 다시 촬영해 주세요.');
       return;
     }
     SN_PHOTO=jpeg;
-    document.getElementById('snPhotoImg').src=jpeg;
-    document.getElementById('snPhotoPrev').style.display='block';
+    el('snPhotoImg').src=jpeg;
+    el('snPhotoPrev').style.display='block';
     lab.textContent='✅ 첨부됨 · 다시 누르면 교체';
+    snPhotoSay('사진이 첨부되었습니다.');
+    clearFieldError('snPhoto');
     snPhotoZoneState();
     render();
   }catch(e){
+    if(!snPhotoSeq.isCurrent(id)) return;
     toast('사진 처리 실패 — '+e.message);
     lab.textContent='📷 S/N 라벨 촬영 · 사진 선택';
+    snPhotoSay('사진 처리에 실패했습니다: '+e.message);
+  }finally{
+    if(snPhotoSeq.isCurrent(id)) snPhotoBusy(false);
   }
 }
 
 function clearSnPhoto(){
+  snPhotoSeq.cancel();                 /* 진행 중이던 변환 결과가 되살아나지 않게 */
   SN_PHOTO=null;
-  document.getElementById('snPhotoImg').src='';
-  document.getElementById('snPhotoPrev').style.display='none';
-  document.getElementById('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
+  el('snPhotoImg').src='';
+  el('snPhotoPrev').style.display='none';
+  el('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
+  snPhotoSay('');
+  snPhotoBusy(false);
   snPhotoZoneState();
   render();
 }
@@ -507,66 +642,176 @@ function hlMatch(name,q){
 }
 function onHospFocus(){
   onHospInput();
-  /* 모바일 키보드에 가려지지 않도록 입력창을 화면 상단으로 */
+  /* [모바일] 예전에는 무조건 scrollIntoView({block:'start'}) 로 화면을 끌어올려,
+     이미 잘 보이는 상태에서도 페이지가 튀었다. 입력창이 sticky header 나
+     키보드에 실제로 가려질 때만, 그것도 'nearest' 로 최소한만 움직인다. */
   setTimeout(function(){
-    try{ document.getElementById('hosp').scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){}
-  },250);
+    var inp=el('hosp'); if(!inp) return;
+    var r=inp.getBoundingClientRect();
+    var top=hdrH()+8;
+    var bottom=(window.visualViewport ? window.visualViewport.height : window.innerHeight) - 8;
+    if(r.top < top || r.bottom > bottom){
+      try{ inp.scrollIntoView({block:'nearest', behavior:'smooth'}); }catch(e){ inp.scrollIntoView(); }
+    }
+    positionHospDrop();
+  },220);
 }
+function hdrH(){ var h=document.querySelector('header'); return h ? h.offsetHeight : 60; }
 function updClear(){
-  document.getElementById('hospClear').style.display = val('hosp') ? 'block' : 'none';
+  var b=el('hospClear'); if(b) b.style.display = val('hosp') ? 'block' : 'none';
 }
 function clearHosp(){
-  document.getElementById('hosp').value='';
-  document.getElementById('hospDrop').style.display='none';
-  document.getElementById('hospMatch').textContent='';
-  document.getElementById('recentCard').style.display='none';
-  fillSN([]); updClear(); render();
-  document.getElementById('hosp').focus();
+  setVal('hosp','');
+  closeHospDrop();
+  setHospSelection(null);          /* 선택 해제 → 종속 정보도 함께 초기화 */
+  updClear(); render();
+  el('hosp').focus();
+}
+
+/* ═══ 병원 선택 상태 ════════════════════════════════════════════════════════
+   예전에는 "선택된 병원"이라는 상태가 없었다. pickHosp() 가 S/N·UI/HP 버전·
+   최근 이력을 채워 넣고 나면, 그 뒤 병원명을 고쳐 쓰거나 지워도 그 값들이 그대로
+   남아 다른 병원 이름으로 A 병원의 S/N·버전이 저장될 수 있었다.
+   → 선택된 병원 객체를 따로 들고, 입력 문자열이 그 이름과 달라지는 즉시 초기화한다. */
+var SELECTED_HOSP = null;          /* 병원정보DB 에서 고른 항목 (없으면 자유 입력) */
+var VER_AUTOFILLED = {ui:false, hp:false};   /* UI/HP 버전이 '자동 입력값'인가 */
+
+function setHospSelection(h){
+  SELECTED_HOSP = h || null;
+  if(h){
+    var toks=(h.s||'').split(/[,/]/).map(function(t){return t.trim();}).filter(Boolean);
+    fillSN(toks);
+    /* 사용자가 직접 고친 버전은 덮어쓰지 않는다(자동 입력값일 때만 갱신) */
+    if(!val('verUI') || VER_AUTOFILLED.ui){ setVal('verUI', h.uiv||''); VER_AUTOFILLED.ui = !!(h.uiv); }
+    if(!val('verHP') || VER_AUTOFILLED.hp){ setVal('verHP', h.hpv||''); VER_AUTOFILLED.hp = !!(h.hpv); }
+    el('hospMatch').textContent='✓ '+[h.sa,h.c,h.r].filter(Boolean).join(' · ');
+    loadRecent(h.n);
+  }else{
+    fillSN([]);
+    if(VER_AUTOFILLED.ui){ setVal('verUI',''); VER_AUTOFILLED.ui=false; }
+    if(VER_AUTOFILLED.hp){ setVal('verHP',''); VER_AUTOFILLED.hp=false; }
+    setVal('snCustom','');
+    el('hospMatch').textContent = val('hosp') ? 'ℹ️ DB 미선택 병원 — 입력한 이름 그대로 기록됩니다' : '';
+    clearRecent();
+  }
+}
+/* 입력 문자열이 선택과 어긋나면 즉시 종속 정보를 버린다 */
+function syncHospSelection(){
+  if(SELECTED_HOSP && !BazHandover.selectionMatches(SELECTED_HOSP, val('hosp'))){
+    setHospSelection(null);
+  }else if(!SELECTED_HOSP){
+    el('hospMatch').textContent = val('hosp') ? 'ℹ️ DB 미선택 병원 — 입력한 이름 그대로 기록됩니다' : '';
+  }
+}
+var HOSP_ACTIVE = -1;    /* 키보드로 강조 중인 항목 인덱스 */
+function hospDropOpen(){ var d=el('hospDrop'); return !!d && d.style.display==='block'; }
+function closeHospDrop(){
+  var d=el('hospDrop'); if(!d) return;
+  d.style.display='none'; d.innerHTML=''; HOSP_ACTIVE=-1;
+  var inp=el('hosp'); if(inp){ inp.setAttribute('aria-expanded','false'); inp.removeAttribute('aria-activedescendant'); }
+}
+/* [모바일] 위·아래 가용 공간을 재서 더 넓은 쪽으로 펼친다.
+   예전에는 항상 아래로 열고 최소 150px 를 강제해, 키보드가 올라오면 목록이
+   하단 액션바 뒤로 잘렸다. visualViewport(키보드 열림 반영)와 액션바 높이를 함께 본다. */
+function positionHospDrop(){
+  var d=el('hospDrop'), inp=el('hosp');
+  if(!d || !inp || d.style.display!=='block') return;
+  var vv=window.visualViewport;
+  var vTop=vv ? vv.offsetTop : 0;
+  var vH  =vv ? vv.height : window.innerHeight;
+  var r=inp.getBoundingClientRect();
+  var barH=actionsH();
+  var below=(vTop + vH - barH - 10) - r.bottom;   /* 입력창 아래 실제 여유 */
+  var above=r.top - (vTop + hdrH() + 10);          /* 입력창 위 실제 여유 */
+  var up = below < 160 && above > below;
+  d.classList.toggle('up', up);
+  /* 실제 가용 공간보다 큰 최소 높이를 강제하지 않는다 */
+  var space=Math.max(72, Math.floor(up ? above : below));
+  d.style.maxHeight=space+'px';
 }
 function onHospInput(){
-  var q=normH(val('hosp')), drop=document.getElementById('hospDrop');
-  document.getElementById('hospMatch').textContent='';
+  var q=normH(val('hosp')), drop=el('hospDrop'), inp=el('hosp');
   updClear();
-  if(!q){ drop.style.display='none'; render(); return; }
+  syncHospSelection();
+  if(!q){ closeHospDrop(); render(); return; }
   var matches=HOSPITAL_DB.filter(function(h){ return normH(h.n).indexOf(q)>=0; }).slice(0,8);
-  if(!matches.length){ drop.style.display='none'; render(); return; }
-  drop.innerHTML=matches.map(function(h){
+  if(!matches.length){ closeHospDrop(); render(); return; }
+  drop.innerHTML=matches.map(function(h,i){
     var meta=[h.c,h.sa,h.r].filter(Boolean).join(' · ');
-    return '<div class="ac-item" data-i="'+HOSPITAL_DB.indexOf(h)+'"><b>'+hlMatch(h.n,q)+'</b><span>'+escH(meta)+'</span></div>';
+    return '<div class="ac-item" role="option" id="hospOpt'+i+'" aria-selected="false" tabindex="-1"'+
+           ' data-i="'+HOSPITAL_DB.indexOf(h)+'"><b>'+hlMatch(h.n,q)+'</b><span>'+escH(meta)+'</span></div>';
   }).join('');
-  /* 항상 아래로 펼침 — 키보드를 제외한 남은 공간만큼 높이 제한 */
-  var rect=document.getElementById('hosp').getBoundingClientRect();
-  var vh=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
-  drop.classList.remove('up');
-  drop.style.maxHeight=Math.max(150, vh-rect.bottom-12)+'px';
-  drop.style.display='block'; render();
+  drop.style.display='block';
+  inp.setAttribute('aria-expanded','true');
+  HOSP_ACTIVE=-1;
+  positionHospDrop();
+  render();
+}
+function hospMoveActive(delta){
+  var items=el('hospDrop').querySelectorAll('.ac-item');
+  if(!items.length) return;
+  HOSP_ACTIVE = (HOSP_ACTIVE + delta + items.length) % items.length;
+  Array.prototype.forEach.call(items, function(it,i){
+    var on = (i===HOSP_ACTIVE);
+    it.setAttribute('aria-selected', on?'true':'false');
+    if(on){ try{ it.scrollIntoView({block:'nearest'}); }catch(e){} }
+  });
+  el('hosp').setAttribute('aria-activedescendant', 'hospOpt'+HOSP_ACTIVE);
 }
 function pickHosp(idx){
-  var h=HOSPITAL_DB[idx];
-  document.getElementById('hosp').value=h.n;
-  document.getElementById('hospDrop').style.display='none';
-  var toks=(h.s||'').split(/[,/]/).map(function(s){return s.trim();}).filter(Boolean);
-  fillSN(toks);
-  document.getElementById('verUI').value=h.uiv||'';
-  document.getElementById('verHP').value=h.hpv||'';
-  document.getElementById('hospMatch').textContent='✓ '+[h.sa,h.c,h.r].filter(Boolean).join(' · ');
+  var h=HOSPITAL_DB[idx]; if(!h) return;
+  setVal('hosp', h.n);
+  closeHospDrop();
+  VER_AUTOFILLED={ui:true, hp:true};   /* 선택으로 채우는 값은 '자동 입력'으로 표시 */
+  setHospSelection(h);
   updClear(); render();
-  loadRecent(h.n);
 }
 document.addEventListener('click',function(e){
   var it=e.target.closest? e.target.closest('.ac-item'):null;
   if(it){ pickHosp(Number(it.getAttribute('data-i'))); return; }
-  if(!e.target.closest||!e.target.closest('#hosp,#hospDrop')){ var d=document.getElementById('hospDrop'); if(d)d.style.display='none'; }
+  if(!e.target.closest||!e.target.closest('#hosp,#hospDrop')) closeHospDrop();
 });
 
 /* 라이브 병원정보DB (hospital.html과 동일 엔드포인트) — S/N·UI/HP 버전 최신화 */
 /* [Core 통합] hospital_gas → handover(Core) hospdbrich (동일 응답 형태) */
 var HOSPITAL_DB_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec?action=hospdbrich';
+/* 임베드 DB 는 "오프라인 폴백"이다 — 언제 만든 스냅샷인지 화면에 밝힌다 */
+var EMBED_DB_VERSION='2026-08 스냅샷';
+var DB_STATE='embed';   /* 'embed' | 'live' | 'auth' | 'error' */
+
+/* 병원DB 상태 배지 — 최신인지 임베드 폴백인지 사용자가 알 수 있게 (토큰 자체는 절대 노출하지 않는다) */
+function setDbBadge(state, detail){
+  DB_STATE=state;
+  var b=el('dbBadge'); if(!b) return;
+  var map={
+    live : {cls:'live',  txt:'최신 DB'},
+    embed: {cls:'embed', txt:'내장 DB('+EMBED_DB_VERSION+')'},
+    auth : {cls:'err',   txt:'로그인 필요 · 내장 DB'},
+    error: {cls:'err',   txt:'연결 실패 · 내장 DB'}
+  };
+  var m=map[state]||map.embed;
+  b.className='db-badge '+m.cls;
+  b.textContent=m.txt;
+  b.title=detail||m.txt;
+}
+
 function loadLiveDB(){
-  fetch(HOSPITAL_DB_URL,{method:'GET'})
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(!d.success||!d.data||!d.data.length) return;
+  /* [수정] 예전에는 이 GET 에만 토큰을 붙이지 않았다. 배포된 GAS 는 이 요청을
+     unauthorized 로 거부했고, 화면은 조용히 임베드 DB 로 폴백해 "최신인 척" 했다.
+     → 다른 조회와 같은 _tk() 를 태우고, 실패 사유(인증/네트워크)를 구분해 알린다. */
+  return bazGetJson(_tk(HOSPITAL_DB_URL), 15000)
+    .then(function(res){
+      if(res.kind!=='json'){
+        setDbBadge(res.kind==='html' ? 'error' : 'error', '응답을 읽지 못했습니다');
+        return false;
+      }
+      var d=res.data;
+      if(!d || d.success!==true){
+        var msg=String((d&&d.error)||'');
+        setDbBadge(/unauthorized|토큰|로그인/i.test(msg) ? 'auth' : 'error', msg||'서버가 데이터를 주지 않았습니다');
+        return false;
+      }
+      if(!d.data || !d.data.length){ setDbBadge('error','병원 데이터가 비어 있습니다'); return false; }
       var byName={}; HOSPITAL_DB.forEach(function(h){ byName[h.n]=h; });
       d.data.forEach(function(r){
         if(!r.name) return;
@@ -575,9 +820,20 @@ function loadLiveDB(){
                if(r.sales)h.sa=r.sales; if(r.ncare)h.c=r.ncare; if(r.region)h.r=r.region; }
         else HOSPITAL_DB.push({n:r.name,s:r.sn||'',c:r.ncare||'미가입',sa:r.sales||'',r:r.region||'',hpv:r.hpVer||'',uiv:r.uiVer||''});
       });
+      setDbBadge('live', d.data.length+'건 동기화');
       console.log('[병원정보DB] 라이브 '+d.data.length+'건 병합');
+      /* 이미 고른 병원이 있으면 최신 S/N·버전으로 다시 반영 */
+      if(SELECTED_HOSP){
+        var fresh=HOSPITAL_DB.filter(function(x){ return x.n===SELECTED_HOSP.n; })[0];
+        if(fresh) setHospSelection(fresh);
+      }
+      return true;
     })
-    .catch(function(e){ console.warn('[병원정보DB] 라이브 실패 — 임베드본 사용:',e); });
+    .catch(function(e){
+      setDbBadge('error', '네트워크 오류');
+      console.warn('[병원정보DB] 라이브 실패 — 임베드본 사용:',e);
+      return false;
+    });
 }
 
 /* 교체품 마스터 (병원 점검 현황 시트 기준) */
@@ -595,14 +851,10 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
 
 /* ── 사용자 숙련도 평가 (선택 3항목 · R·S·T열 기록 · 미선택은 N/A) ── */
 var SKILL={nsFill:'',nsAmt:'',jet:''};
-function setSkill(key, val, btn){
-  SKILL[key]=val;
-  var wrap=btn.parentNode;
-  Array.prototype.forEach.call(wrap.children,function(b){ b.classList.remove('on','warn'); });
-  btn.classList.add('on');
-  /* 주의 필요한 값(X·부족·과다·교육 필요)은 붉게 강조해 현장에서 바로 인지 */
-  if(val==='X'||val==='부족'||val==='과다'||val==='교육 필요') btn.classList.add('warn');
-  var h=document.getElementById('skillHint');
+function setSkill(key, value){
+  SKILL[key] = (SKILL[key]===value) ? '' : value;   /* 같은 값 다시 누르면 해제 */
+  syncSkillButtons();
+  var h=el('skillHint');
   if(h) h.textContent = skillMissing().length ? '선택 항목 · 미선택 항목은 N/A로 기록됩니다' : '✅ 숙련도 평가 작성 완료';
   render();
 }
@@ -628,21 +880,28 @@ var CONTENT_TPL_ROWS=null;   // [{cat,type,part,content}]
 var AUTO_FSE=null;           // 대상 FSE 이름 배열
 var lastAutoDetail='';       // 직전 자동 입력한 초안(사용자 수정 감지용)
 function nkeyH(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
-function loadContentTpl(){
+/* 캐시 먼저(즉시) — 네트워크는 부트스트랩이 담당하거나 아래 폴백이 맡는다 */
+function loadContentTplCache(){
   try{ var c=JSON.parse(localStorage.getItem('baz_handover_contenttpl')||'null'); if(Array.isArray(c)) CONTENT_TPL_ROWS=c; }catch(e){}
   try{ var a=JSON.parse(localStorage.getItem('baz_handover_autofse')||'null'); if(Array.isArray(a)) AUTO_FSE=a; }catch(e){}
-  fetch(_tk(postUrl()+'?action=contenttpl')).then(function(r){return r.json();}).then(function(d){
+}
+/* 구버전 백엔드(handover_bootstrap 미지원) 폴백 — 개별 요청 */
+function loadContentTpl(){
+  loadContentTplCache();
+  bazGetJson(_tk(postUrl()+'?action=contenttpl'), 15000).then(function(res){
+    var d=(res.kind==='json')?res.data:null;
     if(d&&d.success&&Array.isArray(d.rows)){ CONTENT_TPL_ROWS=d.rows;
       try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(d.rows)); }catch(e){}
-      autoFillDetail();   /* 템플릿 늦게 도착 → 이미 선택된 항목에 초안 채움 */ }
-  }).catch(function(){});
-  fetch(_tk(postUrl()+'?action=weeklyauto')).then(function(r){return r.json();}).then(function(d){
+      autoFillDetail(); }
+  });
+  bazGetJson(_tk(postUrl()+'?action=weeklyauto'), 15000).then(function(res){
+    var d=(res.kind==='json')?res.data:null;
     if(d&&d.success&&Array.isArray(d.writers)){ AUTO_FSE=d.writers.slice();
       try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){}
-      autoFillDetail();   /* 대상 목록 늦게 도착 → 대상 FSE면 초안 채움 */ }
-  }).catch(function(){});
+      autoFillDetail(); }
+  });
 }
-loadContentTpl();
+loadContentTplCache();
 function isAutoFse(name){
   if(!AUTO_FSE||!AUTO_FSE.length) return false;
   var k=nkeyH(name);
@@ -693,83 +952,339 @@ function rememberRecentHandover_(){
     localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
   }catch(e){}
 }
-/* ── 시트 웹앱 버전 확인 ─────────────────────────────────────────────
-   프런트는 git push 로 즉시 바뀌지만 GAS는 사람이 직접 재배포해야 해서, 한동안
-   "새 화면 + 구버전 시트" 상태가 된다. 구버전(v2.7 이하)은 사진을 받아도 버리기만
-   하므로, 그대로 보내면 사용자는 첨부한 사진이 저장된 줄 알고 잃게 된다.
-   → 버전을 확인해 지원할 때만 보내고, 아니면 사진을 지우지 않고 그대로 알린다. */
+/* ── 시트 웹앱 버전 확인 (진단 표시용) ────────────────────────────────
+   [수정] 예전에는 이 버전만 보고 "사진이 저장됐다"를 추측했다(gasSupportsPhoto).
+   추측이 틀리면 사용자는 저장된 줄 알고 사진을 잃는다.
+   → 사진 저장 여부는 오직 서버 응답(photo.saved)으로만 판정한다.
+     버전은 배포 안내 문구에만 쓴다. */
 var GAS_VER='';
-function verGte(a, b){
-  var x=String(a||'').split('.'), y=String(b||'').split('.');
-  for(var i=0;i<3;i++){
-    var d=(parseInt(x[i],10)||0)-(parseInt(y[i],10)||0);
-    if(d) return d>0;
-  }
-  return true;
-}
 function gasPing(){
-  return fetch(postUrl()+'?action=ping')
-    .then(function(r){ return r.text(); })
-    .then(function(t){
-      if(/^\s*</.test(t)) return '';        /* 콜드스타트 HTML — 아직 모름 */
-      var d=JSON.parse(t); GAS_VER=d.ver||''; return GAS_VER;
-    })
-    .catch(function(){ return ''; });
+  return bazGetJson(postUrl()+'?action=ping', 8000).then(function(res){
+    if(res.kind==='json' && res.data) GAS_VER=res.data.ver||'';
+    return GAS_VER;
+  });
 }
-function gasSupportsPhoto(){ return verGte(GAS_VER, '2.8.0'); }
 
-/* 기록 1건에 붙는 고유 키 — 아래 no-cors 재전송이 같은 키를 그대로 다시 보내므로
-   서버가 "같은 요청"임을 알아보고 두 번째는 첫 결과만 돌려준다(행 중복·사진 중복 방지) */
+/* 기록 1건에 붙는 고유 키 — 재시도·응답 유실 확인(savecheck)에 같은 키를 쓴다 */
 function newReqId(){
   try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
   return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
 }
-/* 사진을 붙였는데 못 보낸 경우, 저장된 줄 알고 넘어가지 않도록 분명히 알린다.
-   (사진은 화면에 그대로 남겨 두므로 시트 재배포 후 다시 [시트 기록]만 누르면 된다) */
-function afterSaveMsg(base, sentPhoto){
-  if(!SN_PHOTO || sentPhoto) return base;
-  return base + '\n⚠️ 사진은 저장되지 않았습니다 — 시트 웹앱이 아직 이전 버전('
-       + (GAS_VER || '확인 불가') + ')입니다.\n재배포 후 다시 [시트 기록]을 눌러 주세요.';
+
+/* ═══ 저장 상태 기계 ═══════════════════════════════════════════════════════
+   성공 / 실패 / 확인 중 / 결과 불명 을 명확히 구분한다.
+   ★ "확인되지 않은 상태"에서는 다음을 절대 하지 않는다:
+       사진 삭제 · 복사/이어쓰기 활성화 · 최근 완료 로컬 기록 · 저장 완료 메시지 */
+var SAVE_STATE=BazHandover.SAVE.IDLE;
+var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
+var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
+var LAST_UNSAVED_TEXT='';     /* 시트에 못 올린 공유 문구(복사 대비) */
+
+function setSaveState(state, info){
+  SAVE_STATE=state;
+  var card=el('saveStatusCard'), box=el('saveStatus'), acts=el('saveActions');
+  if(!card||!box||!acts) return;
+  info=info||{};
+  var S=BazHandover.SAVE;
+  if(state===S.IDLE){ card.style.display='none'; box.innerHTML=''; acts.innerHTML=''; return; }
+  card.style.display='block';
+  var cls='wait', ic='⏳', title='', sub='';
+  if(state===S.SAVING){ title='시트에 기록하는 중…'; sub='응답을 기다리고 있습니다.'; }
+  else if(state===S.CHECKING){ title='기록 여부를 확인하는 중…'; sub='응답을 받지 못해 서버에 결과를 다시 물어보고 있습니다.'; }
+  else if(state===S.SUCCESS){ cls='ok'; ic='✅'; title='시트에 기록되었습니다'+(info.row?' (행 '+info.row+')':'');
+    sub=(info.warnings&&info.warnings.length) ? info.warnings.join('\n') : '사진까지 저장을 확인했습니다.'; }
+  else if(state===S.FAILED){ cls='err'; ic='❌'; title='기록되지 않았습니다';
+    sub=(info.error||'')+'\n입력한 내용과 사진은 그대로 남아 있습니다 — 원인을 확인한 뒤 다시 [시트 기록]을 눌러 주세요.'; }
+  else { cls='unknown'; ic='⚠️'; title='기록 여부를 확인하지 못했습니다';
+    sub=(info.error||'')+'\n시트에 저장됐는지 알 수 없어 성공으로 처리하지 않았습니다.'; }
+  box.className='sv '+cls;
+  box.innerHTML='<span class="ic">'+ic+'</span><span>'+escH(title)+'<small>'+escH(sub)+'</small></span>';
+
+  acts.innerHTML='';
+  function act(label, cls2, fn){
+    var b=document.createElement('button'); b.type='button'; b.textContent=label;
+    if(cls2) b.className=cls2; b.addEventListener('click', fn); acts.appendChild(b);
+  }
+  if(state===S.UNKNOWN){
+    act('🔄 기록 여부 다시 확인', '', function(){ recheckSave(); });
+    act('📋 시트 미기록 내용 복사', '', function(){ copyText(true); });
+  }else if(state===S.FAILED){
+    act('📋 시트 미기록 내용 복사', '', function(){ copyText(true); });
+  }else if(state===S.SUCCESS){
+    act('🆕 새 기록 시작', '', function(){ startNewRecord(); });
+  }
 }
+
+/* 저장 성공에서만 열리는 후속 기능 */
+function enableCopy(on){
+  var b=el('btnCopy'), c=el('btnCont');
+  if(b){ b.disabled=!on; b.title = on ? '복사' : '시트 기록 후 복사할 수 있어요'; }
+  if(c){ c.disabled=!on; c.title = on ? '점검 내역서 이어서 작성' : '시트 기록 후 이어서 작성할 수 있어요'; }
+}
+
+/* 저장 후 업무 필드가 바뀌면 "저장 후 변경됨" — 복사·이어쓰기를 다시 잠근다 */
+function refreshDirty(){
+  if(!SAVED_SNAPSHOT){ document.body.classList.remove('is-dirty'); return false; }
+  var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm());
+  document.body.classList.toggle('is-dirty', dirty);
+  if(dirty){
+    enableCopy(false);
+    if(SAVE_STATE===BazHandover.SAVE.SUCCESS){
+      setSaveState(BazHandover.SAVE.IDLE);
+      var badge=el('syncBadge');
+      if(badge) badge.textContent='· 시트에 저장되지 않은 변경 내용';
+    }
+  }
+  return dirty;
+}
+
+/* 저장 결과 반영 — 성공일 때만 사진 삭제·복사 활성화·로컬 기록 */
+function applySaveResult(res){
+  var S=BazHandover.SAVE;
+  if(res.state===S.SUCCESS){
+    setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings});
+    SAVED_SNAPSHOT=BazHandover.snapshot(readForm());
+    document.body.classList.remove('is-dirty');
+    enableCopy(true);
+    rememberRecentHandover_();
+    BazHandover.clearDraft(localStorage);      /* 확인된 성공 → 초안 정리 */
+    LAST_REQ_ID=''; LAST_UNSAVED_TEXT='';
+    clearSnPhoto();                            /* 서버가 사진 저장을 확인해 준 뒤에만 지운다 */
+    var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
+    toast(res.message || '✅ 시트 기록 완료');
+    /* 서버가 "이 필드는 저장 못 했다"고 알려 준 경우 그대로 보여 준다 */
+    if(res.warnings && res.warnings.length) console.warn('[handover] 저장 경고:', res.warnings);
+  }else if(res.state===S.FAILED){
+    setSaveState(S.FAILED, {error:res.error});
+    enableCopy(false);
+    toast('❌ '+(res.error||'기록 실패'));
+  }else{
+    setSaveState(S.UNKNOWN, {error:res.error});
+    enableCopy(false);
+    toast('⚠️ 기록 여부를 확인하지 못했습니다');
+  }
+}
+
+/* 응답을 못 받은 요청이 실제로 기록됐는지 서버에 묻는다(인증된 조회) */
+function recheckSave(){
+  if(!LAST_REQ_ID){ toast('확인할 요청이 없습니다'); return Promise.resolve(); }
+  setSaveState(BazHandover.SAVE.CHECKING);
+  return bazGetJson(_tk(postUrl()+'?action=savecheck&reqId='+encodeURIComponent(LAST_REQ_ID)), 15000)
+    .then(function(r){
+      if(r.kind!=='json'){ setSaveState(BazHandover.SAVE.UNKNOWN, {error:'확인 요청이 실패했습니다'}); return; }
+      var v=BazHandover.classifySaveCheck(r.data);
+      if(v.notFound){
+        setSaveState(BazHandover.SAVE.UNKNOWN, {error:'서버에 이 요청 기록이 없습니다 — 저장되지 않았을 가능성이 큽니다. 다시 [시트 기록]을 눌러 주세요.'});
+        return;
+      }
+      if(v.result) applySaveResult(v.result);
+      else setSaveState(BazHandover.SAVE.UNKNOWN, {error:'결과를 해석하지 못했습니다'});
+    });
+}
+
+/* 저장 성공 후 다음 기록 시작 — 무엇을 비우고 무엇을 남기는지 분명히 한다 */
+function startNewRecord(){
+  ['hosp','sn','snCustom','verUI','verHP','hpIn','hpOut','uVer','wVer',
+   'nozzleDate','cost','subCustom','resultCustom','detail','remark'].forEach(function(id){ setVal(id,''); });
+  setVal('date', todayISO());
+  setVal('nozzleReuse','X');
+  SKILL={nsFill:'',nsAmt:'',jet:''};
+  document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('on','warn'); b.setAttribute('aria-pressed','false'); });
+  setHospSelection(null);
+  clearSnPhoto();
+  SAVED_SNAPSHOT=null; LAST_REQ_ID=''; LAST_UNSAVED_TEXT='';
+  document.body.classList.remove('is-dirty');
+  enableCopy(false);
+  setSaveState(BazHandover.SAVE.IDLE);
+  BazHandover.clearDraft(localStorage);
+  var badge=el('syncBadge'); if(badge) badge.textContent='';
+  lastAutoDetail='';
+  updClear(); render();
+  toast('새 기록을 시작합니다');
+  try{ el('hosp').focus(); }catch(e){}
+}
+
+/* ── 검증 표시 ────────────────────────────────────────────────────────── */
+var FIELD_OF={ hosp:'hosp', fse:'fse', sn:'sn', cost:'cost', date:'date', snPhoto:'snPhotoZone',
+               detail:'detail', remark:'remark' };
+function clearFieldErrors(){
+  document.querySelectorAll('.field.invalid').forEach(function(f){ f.classList.remove('invalid'); });
+  document.querySelectorAll('.field-err').forEach(function(e){ e.remove(); });
+  var z=el('snPhotoZone'); if(z) z.classList.remove('invalid');
+  var c=el('errorCard'); if(c) c.style.display='none';
+}
+function clearFieldError(name){
+  var id=FIELD_OF[name]; if(!id) return;
+  var node=el(id); if(!node) return;
+  var f=node.closest ? node.closest('.field') : null;
+  if(f){ f.classList.remove('invalid'); var e=f.querySelector('.field-err'); if(e) e.remove(); }
+  if(id==='snPhotoZone') node.classList.remove('invalid');
+}
+function showErrors(errors){
+  clearFieldErrors();
+  if(!errors.length) return;
+  errors.forEach(function(er){
+    var id=FIELD_OF[er.field]; if(!id) return;
+    var node=el(id); if(!node) return;
+    if(id==='snPhotoZone') node.classList.add('invalid');
+    var f=node.closest ? node.closest('.field') : null;
+    if(!f) return;
+    f.classList.add('invalid');
+    if(!f.querySelector('.field-err')){
+      var d=document.createElement('div'); d.className='field-err'; d.textContent=er.msg; f.appendChild(d);
+    }
+  });
+  var card=el('errorCard'), box=el('errorSummary');
+  if(card&&box){
+    box.innerHTML='입력을 확인해 주세요 ('+errors.length+'건)<ul>'+
+      errors.map(function(e){ return '<li>'+escH(e.msg)+'</li>'; }).join('')+'</ul>';
+    var jump=document.createElement('button');
+    jump.type='button'; jump.textContent='→ 첫 번째 항목으로 이동';
+    jump.addEventListener('click', function(){ focusField(errors[0].field); });
+    box.appendChild(jump);
+    card.style.display='block';
+  }
+  focusField(errors[0].field);
+}
+function focusField(name){
+  var id=FIELD_OF[name]; if(!id) return;
+  var node=el(id); if(!node) return;
+  try{ node.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ node.scrollIntoView(); }
+  if(id==='snPhotoZone'){ flagMissingPhoto(); return; }
+  try{ node.focus({preventScroll:true}); }catch(e){ try{ node.focus(); }catch(_){} }
+}
+
+/* ── 저장 ─────────────────────────────────────────────────────────────── */
+var SAVE_TIMEOUT_MS=25000;
 async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
-  if(!val('hosp')||!val('fse')){ toast('병원명·담당 FSE는 필수'); return; }
-  /* 장비 S/N 사진 필수 — 라벨 사진이 없으면 주간 Label List를 만들 수 없다 */
-  if(!SN_PHOTO){ toast('장비 S/N 사진은 필수입니다\nS/N 라벨을 촬영해 주세요'); flagMissingPhoto(); return; }
-  /* 사용자 숙련도 평가는 선택 항목 — 미선택이어도 기록 진행(빈 값은 시트에서 미기록) */
-  var btn=document.querySelector('.btn-save'); btn.disabled=true; btn.textContent='기록 중…';
-  /* 사진이 붙어 있는데 아직 버전을 모르면 한 번 더 물어본다(첫 ping이 콜드스타트로 비었을 수 있음) */
-  if(SN_PHOTO && !gasSupportsPhoto()) await gasPing();
-  var sendPhoto = !!SN_PHOTO && gasSupportsPhoto();
-  var payload={ date:val('date'),hosp:val('hosp'),fse:val('fse'),gubun:val('gubun'),
-    cat:val('cat'),type:subName(),code:itemCode(),part:val('part'),
-    cost:(String(val('cost')||'').trim() || '무상'),   /* 교체비용 공란이면 시트에 '무상' 기록 */
-    detail:(val('eqKind')==='데모 장비'?'[데모장비]\n':'')+bulletLines('detail').join('\n'),hpIn:val('hpIn'),uVer:val('uVer'),
-    hpOut:val('hpOut'),wVer:val('wVer'),sn:snVal(),verUI:val('verUI'),verHP:val('verHP'),
-    nozzle:val('nozzleReuse'),   /* P열 노즐 재사용(O/X) · 기본 X · id 중복 방지 위해 nozzleReuse */
-    nsFill:SKILL.nsFill, nsAmt:SKILL.nsAmt, jet:SKILL.jet,   /* R·S·T열 사용자 숙련도 평가 */
-    snPhoto:sendPhoto?SN_PHOTO:'',   /* U열 장비 S/N 사진 — 서버가 Drive에 올리고 =IMAGE() 썸네일로 기록 */
-    reqId:newReqId(),   /* 콜드스타트 재전송이 같은 행을 두 번 쌓지 않도록 하는 멱등성 키 */
-    token:(window.BazAuth&&BazAuth.token)?BazAuth.token():'' };   /* [보안] 서버 쓰기 인증 토큰 */
+  if(SAVE_STATE===BazHandover.SAVE.SAVING) return;
+
+  var form=readForm();
+  var v=BazHandover.validate(form, {hasPhoto:!!SN_PHOTO, photoBusy:SN_PHOTO_BUSY});
+  if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
+  clearFieldErrors();
+
+  /* 같은 내용을 다시 저장해 중복 행을 만들지 않는다 */
+  if(BazHandover.isSameAsSaved(SAVED_SNAPSHOT, form)){
+    toast('이미 시트에 기록된 내용입니다.\n내용을 바꾸거나 [새 기록 시작]을 눌러 주세요');
+    return;
+  }
+
+  /* FSE 가 로그인 사용자와 다르면 한 번 확인받는다(대리 기록은 명시적으로) */
+  var me=''; try{ me=(window.BazAuth&&BazAuth.name&&BazAuth.name())||''; }catch(e){}
+  if(me && form.fse && BazHandover.hospKey(me)!==BazHandover.hospKey(form.fse)){
+    if(!window.confirm('로그인 사용자('+me+')와 담당 FSE('+form.fse+')가 다릅니다.\n다른 담당자 이름으로 기록할까요?\n(로그인 계정은 감사용으로 함께 기록됩니다)')) return;
+  }
+
+  var btn=el('btnSave');
+  var reqId=newReqId();
+  LAST_REQ_ID=reqId;
+  LAST_UNSAVED_TEXT=curText();
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+  var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true, reqId:reqId, token:token});
+
+  setSaveState(BazHandover.SAVE.SAVING);
+  btn.disabled=true; btn.textContent='기록 중…';
   try{
-    /* 1차: 응답 확인 가능한 일반 요청 → 실패 시 no-cors 폴백 */
-    var ok=false;
-    try{
-      var r=await fetch(postUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-      var d=await r.json();
-      if(d&&d.success){ toast(afterSaveMsg(d.msg||'✅ 시트 기록 완료', sendPhoto)); ok=true;
-        enableCopy(); rememberRecentHandover_(); if(sendPhoto) clearSnPhoto(); }
-      else if(d&&d.error){ toast('❌ '+d.error); ok=true; }   /* 오류는 복사 활성화 안 함 */
-    }catch(_){}
-    if(!ok){
-      await fetch(postUrl(),{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)});
-      toast(afterSaveMsg('시트에 기록됐어요', sendPhoto));
-      enableCopy();   /* 응답 확인 불가(no-cors)여도 기록 요청은 전송됨 → 복사 허용 */
-      rememberRecentHandover_();
-      if(sendPhoto) clearSnPhoto();   /* 다음 병원 입력 때 직전 사진이 다시 전송되지 않도록 비운다 */
+    /* [수정] no-cors 폴백 제거.
+       예전에는 응답을 못 읽으면 mode:'no-cors' 로 한 번 더 보내고, 읽을 수 없는
+       opaque 응답만으로 "시트에 기록됐어요"를 띄우며 사진까지 지웠다.
+       이제 확인되지 않은 상태는 '결과 불명'으로 두고, savecheck 로 실제 결과를 묻는다. */
+    var res=await postSave(payload, SAVE_TIMEOUT_MS);
+    if(res.state===BazHandover.SAVE.UNKNOWN){
+      /* 응답 유실 — 서버에 실제 기록 여부를 물어본다(자동 1회) */
+      setSaveState(BazHandover.SAVE.CHECKING);
+      await new Promise(function(r){ setTimeout(r, 1200); });   /* 서버가 마무리할 여유 */
+      await recheckSave();
+    }else{
+      applySaveResult(res);
     }
-  }catch(e){ toast('기록 실패 — 네트워크 확인'); }
-  setTimeout(function(){btn.disabled=false;btn.textContent='📥 시트 기록';},1200);
+  }catch(e){
+    setSaveState(BazHandover.SAVE.UNKNOWN, {error:String(e&&e.message||e)});
+  }finally{
+    btn.disabled=false; btn.textContent='📥 시트 기록';
+  }
+}
+
+/* POST 1회 — 타임아웃 포함. 응답을 해석해 저장 상태로 돌려준다. */
+function postSave(payload, ms){
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var t=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, ms||25000):null;
+  var opt={method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)};
+  if(ctl) opt.signal=ctl.signal;
+  return fetch(postUrl(), opt)
+    .then(function(r){ if(t) clearTimeout(t); return r.text(); })
+    .then(function(txt){
+      if(/^\s*</.test(txt)) return BazHandover.classifySaveResult('html');
+      var d; try{ d=JSON.parse(txt); }catch(e){ return BazHandover.classifySaveResult('parse'); }
+      return BazHandover.classifySaveResult('json', d);
+    })
+    .catch(function(e){
+      if(t) clearTimeout(t);
+      return BazHandover.classifySaveResult((e&&e.name==='AbortError')?'timeout':'network');
+    });
+}
+
+/* ── 초안(로컬 임시저장) ───────────────────────────────────────────────
+   공용 PC 를 고려하지 않으므로 적극적으로 남긴다. 새로고침·실수로 메뉴 이동 후
+   돌아와도 작성 중이던 내용을 잃지 않는다. 사진 원문은 담지 않는다(용량). */
+var draftTimer=null;
+function scheduleDraftSave(){
+  if(draftTimer) clearTimeout(draftTimer);
+  draftTimer=setTimeout(function(){
+    draftTimer=null;
+    BazHandover.saveDraft(localStorage, readForm(), {hadPhoto:!!SN_PHOTO});
+  }, 600);
+}
+function offerDraftRestore(){
+  var d=BazHandover.loadDraft(localStorage);
+  if(!d || !BazHandover.draftHasContent(d)) return;
+  var bar=el('draftBar'); if(!bar) return;
+  var when='';
+  try{ when=new Date(d.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){}
+  bar.innerHTML='💾 작성 중이던 내용이 있습니다'+(when?' ('+escH(when)+')':'')+
+    (d.hadPhoto?'<br>※ 사진은 저장되지 않습니다 — 복원 후 다시 첨부해 주세요.':'')+
+    '<div class="acts"><button type="button" id="draftRestore">이어서 작성</button>'+
+    '<button type="button" id="draftDiscard">새로 작성</button></div>';
+  bar.style.display='block';
+  el('draftRestore').addEventListener('click', function(){
+    restoreDraft(d); bar.style.display='none';
+  });
+  el('draftDiscard').addEventListener('click', function(){
+    BazHandover.clearDraft(localStorage); bar.style.display='none';
+  });
+}
+function restoreDraft(d){
+  var f=d.form||{};
+  ['date','hosp','fse','gubun','eqKind','verUI','verHP','hpIn','hpOut','uVer','wVer',
+   'nozzleDate','nozzleReuse','cat','part','cost','result','resultCustom','detail','remark']
+   .forEach(function(k){ if(f[k]!=null && f[k]!=='') setVal(k, f[k]); });
+  fillSub();
+  if(f.sub){ setVal('sub', f.sub); toggleCustom('sub'); }
+  if(f.subCustom) setVal('subCustom', f.subCustom);
+  toggleCustom('result');
+  /* 병원은 이름만 복원하고 DB 항목을 다시 찾는다(종속 필드 정합성 유지) */
+  if(f.hosp){
+    var hit=HOSPITAL_DB.filter(function(h){ return h.n===f.hosp; })[0];
+    if(hit){ VER_AUTOFILLED={ui:false,hp:false}; setHospSelection(hit); }
+    else setHospSelection(null);
+  }
+  if(f.sn){ setVal('sn', f.sn); toggleCustom('sn'); }
+  if(f.snCustom) setVal('snCustom', f.snCustom);
+  SKILL={nsFill:f.nsFill||'', nsAmt:f.nsAmt||'', jet:f.jet||''};
+  syncSkillButtons();
+  if(d.hadPhoto) snPhotoSay('이전에 첨부했던 사진은 복원되지 않습니다 — 다시 첨부해 주세요.');
+  updClear(); render();
+  toast('작성 중이던 내용을 복원했습니다');
+}
+function syncSkillButtons(){
+  document.querySelectorAll('.seg-btn[data-skill]').forEach(function(b){
+    var on = SKILL[b.getAttribute('data-skill')] === b.getAttribute('data-val');
+    b.classList.toggle('on', on);
+    b.classList.toggle('warn', on && ['X','부족','과다','교육 필요'].indexOf(b.getAttribute('data-val'))>=0);
+    b.setAttribute('aria-pressed', on?'true':'false');
+  });
 }
 
 /* ── 점검 내역서 이어쓰기: 현재 입력값을 inspection.html 새 작업으로 넘김 ── */
@@ -809,13 +1324,31 @@ function contToInspection(){
 }
 
 /* ── 시트 연동 확장 (HANDOVER_URL 설정 시 자동 활성화) ── */
-function gv(action,params){
+function gv(action,params,ctl){
   if(!HANDOVER_URL) return Promise.reject('HANDOVER_URL 미설정');
   var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
-  var _u=HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
-  if(window.BazAuth&&BazAuth.withToken) _u=BazAuth.withToken(_u);   /* [보안] 조회 인증 토큰 */
-  return fetch(_u,{method:'GET'})
-    .then(function(r){return r.json();});
+  var _u=_tk(HANDOVER_URL+'?action='+action+(qs?'&'+qs:''));   /* [보안] 조회 인증 토큰 (모든 보호된 GET 공통) */
+  var opt={method:'GET'};
+  if(ctl) opt.signal=ctl.signal;
+  return fetch(_u,opt).then(function(r){return r.json();});
+}
+
+/* 타임아웃이 있는 JSON GET — 무한 대기하지 않는다.
+   반환 {kind:'json'|'html'|'parse'|'timeout'|'network', data} */
+function bazGetJson(url, ms){
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var t=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, ms||15000):null;
+  return fetch(url, ctl?{method:'GET',signal:ctl.signal}:{method:'GET'})
+    .then(function(r){ if(t) clearTimeout(t); return r.text(); })
+    .then(function(txt){
+      if(/^\s*</.test(txt)) return {kind:'html', data:null};
+      try{ return {kind:'json', data:JSON.parse(txt)}; }
+      catch(e){ return {kind:'parse', data:null}; }
+    })
+    .catch(function(e){
+      if(t) clearTimeout(t);
+      return {kind:(e && e.name==='AbortError') ? 'timeout' : 'network', data:null};
+    });
 }
 
 /* 담당 FSE 기억 + 시트 담당자 목록 datalist */
@@ -830,58 +1363,139 @@ function fillFseList(list){
 }
 
 /* 유형 마스터 동기화 — 시트에 있는 유형/교체품을 추가만(기존 삭제 없음) */
+/* 유형 마스터 동기화.
+   [경합] 예전에는 동기화가 늦게 끝나면 대분류 select 를 다시 만들면서 소분류가
+   목록의 첫 항목으로 조용히 바뀌었고(사용자가 고른 값 유실), 미리보기는 갱신되지
+   않아 "화면에 보이는 값 ≠ 저장될 값"이 됐다.
+   → 동기화 전에 선택값을 캡처하고, 새 마스터에 같은 값이 있으면 복원한다.
+     사라졌으면 조용히 첫 항목으로 바꾸지 않고 사용자에게 알린다. */
 function masterSync(){
-  gv('master',{}).then(function(d){
-    if(!d.success) return;
-    /* 유형 마스터 기준으로 교체 — 코드(E/H/N/G##) 있는 항목만, 코드순 정렬.
-       (getMaster_가 실제 기록에서 뽑은 '코드 없는' 데이터 유래 항목은 제외해 대분류 꼬임 방지) */
-    var changed=0;
-    Object.keys(d.taxonomy||{}).forEach(function(cat){
-      var coded=(d.taxonomy[cat]||[])
-        .filter(function(p){ return p[0] && String(p[0]).trim(); })
-        .sort(function(a,b){ return String(a[0]).localeCompare(String(b[0])); });
-      if(coded.length){ AS_TAX[cat]=coded; changed++; }   /* 코드 있는 카테고리만 교체 */
-    });
-    (d.parts||[]).forEach(function(p){
-      if(PARTS.indexOf(p)<0){ PARTS.push(p);
-        var o=document.createElement('option');o.textContent=p;document.getElementById('part').appendChild(o);}
-    });
-    if(changed){ /* 대분류 select 재구성 (선택값 보존) */
-      var cur=val('cat'), catSel=document.getElementById('cat'); catSel.innerHTML='';
-      Object.keys(AS_TAX).forEach(function(k){var o=document.createElement('option');o.textContent=k;catSel.appendChild(o);});
-      catSel.value=cur||catSel.value; fillSub();
-    }
-    fillFseList(d.fse);
-    document.getElementById('syncBadge').textContent='· 시트 동기화됨';
-    console.log('[handover] 마스터 동기화:',d.source,'카테고리 교체 '+changed,'교체품 '+(d.parts||[]).length+'종');
-  }).catch(function(e){ console.warn('[handover] 마스터 동기화 생략:',e); });
+  return gv('master',{}).then(function(d){
+    if(!d.success) return false;
+    return applyMaster(d);
+  }).catch(function(e){ console.warn('[handover] 마스터 동기화 생략:',e); return false; });
 }
 
-/* 병원 선택 → 최근 처리 이력 자동 조회 */
-var RECENT_DATA=[];
+/**
+ * 유형 마스터 적용 (동기화·부트스트랩 공용).
+ * [경합] 예전에는 동기화가 늦게 끝나면 대분류 select 를 다시 만들면서 소분류가
+ * 목록의 첫 항목으로 조용히 바뀌었고(사용자가 고른 값 유실), 미리보기는 갱신되지
+ * 않아 "화면에 보이는 값 ≠ 저장될 값"이 됐다.
+ * → 적용 전에 선택값을 캡처하고, 새 마스터에 같은 값이 있으면 복원한다.
+ *   사라졌으면 조용히 첫 항목으로 바꾸지 않고 직접입력으로 옮긴 뒤 사용자에게 알린다.
+ */
+function applyMaster(d){
+  var before={
+    cat: val('cat'),
+    subCode: val('sub'),
+    subLabel: subName(),
+    subCustom: val('subCustom'),
+    part: val('part')
+  };
+  /* 유형 마스터 기준으로 교체 — 코드(E/H/N/G##) 있는 항목만, 코드순 정렬.
+     (getMaster_가 실제 기록에서 뽑은 '코드 없는' 데이터 유래 항목은 제외해 대분류 꼬임 방지) */
+  var changed=0;
+  Object.keys(d.taxonomy||{}).forEach(function(cat){
+    var coded=(d.taxonomy[cat]||[])
+      .filter(function(p){ return p[0] && String(p[0]).trim(); })
+      .sort(function(a,b){ return String(a[0]).localeCompare(String(b[0])); });
+    if(coded.length){ AS_TAX[cat]=coded; changed++; }
+  });
+  (d.parts||[]).forEach(function(pp){
+    if(PARTS.indexOf(pp)<0){ PARTS.push(pp);
+      var op=document.createElement('option'); op.textContent=pp; el('part').appendChild(op); }
+  });
+
+  if(changed){
+    var catSel=el('cat'); catSel.innerHTML='';
+    Object.keys(AS_TAX).forEach(function(k){ var op=document.createElement('option'); op.textContent=k; catSel.appendChild(op); });
+    /* ① 대분류 복원 */
+    var catOk = Object.keys(AS_TAX).indexOf(before.cat)>=0;
+    catSel.value = catOk ? before.cat : (Object.keys(AS_TAX)[0]||'');
+    fillSub();
+    var lost=[];
+    if(before.cat && !catOk) lost.push('대분류 "'+before.cat+'"');
+    /* ② 소분류 복원 — 코드 우선, 없으면 표시명 */
+    if(before.subCode==='__c'){
+      setVal('sub','__c'); toggleCustom('sub'); setVal('subCustom', before.subCustom);
+    }else if(before.subLabel){
+      var sub=el('sub'), found=false;
+      Array.prototype.forEach.call(sub.options,function(op){
+        if(found) return;
+        if(op.value===before.subCode || op.textContent===before.subLabel){ sub.value=op.value; found=true; }
+      });
+      toggleCustom('sub');
+      if(!found && catOk){
+        setVal('sub','__c'); toggleCustom('sub'); setVal('subCustom', before.subLabel);
+        lost.push('소분류 "'+before.subLabel+'"');
+      }
+    }
+    if(lost.length) toast('⚠️ 시트 마스터가 바뀌어 '+lost.join(', ')+' 항목을 찾지 못했습니다.\n직접입력으로 옮겨 두었으니 확인해 주세요.');
+  }
+  /* ③ 교체품 복원 */
+  if(before.part && PARTS.indexOf(before.part)>=0) setVal('part', before.part);
+  if(d.fse) fillFseList(d.fse);
+  var badge=el('syncBadge'); if(badge && !document.body.classList.contains('is-dirty')) badge.textContent='· 시트 동기화됨';
+  /* ★ 상태를 바꿨으면 반드시 미리보기를 다시 그린다(화면=저장값 유지) */
+  render();
+  console.log('[handover] 마스터 적용: 카테고리 교체 '+changed+', 교체품 '+((d.parts||[]).length)+'종');
+  return true;
+}
+
+/* 병원 선택 → 최근 처리 이력 자동 조회.
+   [경합] 병원 A 를 조회한 뒤 B 를 고르면 A 응답이 늦게 도착해 B 화면을 덮었고,
+   입력을 지운 뒤에도 이전 요청이 끝나면 카드가 되살아났다.
+   → 요청마다 세대 번호 + 병원 키를 달고, 최신 요청이 아니면 화면에 반영하지 않는다.
+   RECENT_DATA 와 화면 병원은 항상 같은 병원을 가리킨다. */
+var RECENT_DATA=[], RECENT_HOSP='';
+var recentSeq=BazHandover.createSeq();
+var recentAbort=null;
+
+function clearRecent(){
+  recentSeq.cancel();
+  if(recentAbort){ try{ recentAbort.abort(); }catch(e){} recentAbort=null; }
+  RECENT_DATA=[]; RECENT_HOSP='';
+  var card=el('recentCard'); if(card) card.style.display='none';
+  var list=el('recentList'); if(list) list.innerHTML='';
+  var cnt=el('recentCnt'); if(cnt) cnt.textContent='';
+}
 function loadRecent(hosp){
-  var card=document.getElementById('recentCard');
-  if(!HANDOVER_URL){ card.style.display='none'; return; }
-  document.getElementById('recentList').innerHTML='<div class="hint">불러오는 중…</div>';
-  document.getElementById('recentCnt').textContent=''; card.style.display='block';
-  gv('recent',{hosp:hosp,limit:3}).then(function(d){
-    if(!d.success||!d.count){ card.style.display='none'; return; }
-    RECENT_DATA=d.data;
-    document.getElementById('recentCnt').textContent=d.count+'건';
-    document.getElementById('recentList').innerHTML=d.data.map(function(c,i){
+  var card=el('recentCard');
+  if(!HANDOVER_URL || !hosp){ clearRecent(); return; }
+  clearRecent();
+  var id=recentSeq.next(hosp);
+  el('recentList').innerHTML='<div class="hint">불러오는 중…</div>';
+  el('recentCnt').textContent=''; card.style.display='block';
+  var ctl=('AbortController' in window)?new AbortController():null;
+  recentAbort=ctl;
+  gv('recent',{hosp:hosp,limit:3}, ctl).then(function(d){
+    /* 최신 요청이 아니거나 그 사이 병원이 바뀌었으면 화면에 손대지 않는다 */
+    if(!recentSeq.isCurrent(id, hosp)) return;
+    if(!BazHandover.selectionMatches({n:hosp}, val('hosp'))){ clearRecent(); return; }
+    if(!d.success||!d.count){ clearRecent(); return; }
+    RECENT_DATA=d.data; RECENT_HOSP=hosp;
+    el('recentCnt').textContent=d.count+'건';
+    el('recentList').innerHTML=d.data.map(function(c,i){
       var line=(c.detail||'').split('\n')[0];
       return '<div class="recent-item">'
         +'<div class="recent-top"><span>'+escH(c.date)+' · '+escH(c.fse)+'</span><span>'+escH(c.gubun)+'</span></div>'
         +'<div class="recent-body"><b>'+escH(c.cat)+' / '+escH(c.type)+'</b>'
         +(c.part&&c.part!=='없음'?' · 교체: '+escH(c.part):'')
         +(line?'<br>'+escH(line):'')+'</div>'
-        +'<button type="button" class="recent-fill" onclick="applyRecent('+i+')">↩ 이 내용으로 양식 채우기</button>'
+        +'<button type="button" class="recent-fill" data-recent="'+i+'">↩ 이 내용으로 양식 채우기</button>'
         +'</div>';
     }).join('');
-  }).catch(function(){ card.style.display='none'; });
+  }).catch(function(){
+    if(!recentSeq.isCurrent(id, hosp)) return;
+    clearRecent();
+  });
 }
 function applyRecent(i){
   var c=RECENT_DATA[i]; if(!c) return;
+  /* 화면 병원과 이력 병원이 어긋난 상태에서는 채우지 않는다 */
+  if(RECENT_HOSP && !BazHandover.selectionMatches({n:RECENT_HOSP}, val('hosp'))){
+    toast('병원이 바뀌어 이전 내용을 불러오지 않았습니다'); return;
+  }
   if(c.gubun) document.getElementById('gubun').value=c.gubun;
   if(c.cat && AS_TAX[c.cat]){ document.getElementById('cat').value=c.cat; fillSub(); }
   var sub=document.getElementById('sub'), found=false;
@@ -897,6 +1511,8 @@ function applyRecent(i){
 function showToday(){
   if(!HANDOVER_URL){ toast('HANDOVER_URL 배포 후 사용 가능'); return; }
   toast('조회 중…');
+  /* [수정] fse 가 비면 서버가 팀 전체를 돌려줬다 — '오늘 내 기록'인데 남의 기록까지 보였다.
+     빈 값이면 서버가 로그인 계정 기준으로 조회한다(v3.1). */
   gv('today',{fse:val('fse')}).then(function(d){
     if(!d.success){ toast('❌ '+(d.error||'조회 실패')); return; }
     if(!d.count){ toast('오늘('+d.date+') 기록이 아직 없어요'); return; }
@@ -906,25 +1522,172 @@ function showToday(){
   }).catch(function(){ toast('조회 실패 — 네트워크 확인'); });
 }
 
-initTax(); fillParts(); fillSN([]); loadLiveDB(); loadFse();
-document.getElementById('date').value=todayISO();
-if(HANDOVER_URL){ masterSync(); gasPing(); } /* 콜드스타트 예열 + 시트 웹앱 버전 확인 */
+/* ═══ 이벤트 바인딩 ════════════════════════════════════════════════════════
+   인라인 on* 속성을 모두 걷어내고 한곳에서 건다(동작 단위가 분명해지고,
+   렌더/초안 저장/dirty 판정이 빠지는 경로가 생기지 않는다). */
+function bindAll(){
+  /* 값이 바뀌면 미리보기 + dirty + 초안 저장 (render 안에서 함께 처리) */
+  ['date','gubun','eqKind','verUI','verHP','hpIn','hpOut','uVer','wVer',
+   'nozzleDate','nozzleReuse','cost','detail','remark','snCustom','resultCustom'].forEach(function(id){
+    var e=el(id); if(!e) return;
+    e.addEventListener('input', render);
+    e.addEventListener('change', render);
+  });
+  /* 사용자가 버전을 직접 고치면 '자동 입력값' 표시를 해제한다(덮어쓰기 방지) */
+  el('verUI').addEventListener('input', function(){ VER_AUTOFILLED.ui=false; });
+  el('verHP').addEventListener('input', function(){ VER_AUTOFILLED.hp=false; });
+
+  el('fse').addEventListener('input', function(){ saveFse(); autoFillDetail(); render(); });
+  el('hosp').addEventListener('input', onHospInput);
+  el('hosp').addEventListener('focus', onHospFocus);
+  el('hospClear').addEventListener('click', clearHosp);
+  el('sn').addEventListener('change', function(){ toggleCustom('sn'); render(); });
+  el('cat').addEventListener('change', function(){ fillSub(); render(); autoFillDetail(); });
+  el('sub').addEventListener('change', function(){ toggleCustom('sub'); render(); autoFillDetail(); });
+  el('part').addEventListener('change', function(){ render(); autoFillDetail(); });
+  el('result').addEventListener('change', function(){ toggleCustom('result'); render(); });
+
+  /* 병원 자동완성 키보드 조작 (↑↓ Enter Esc) */
+  el('hosp').addEventListener('keydown', function(e){
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+      if(!hospDropOpen()) { onHospInput(); return; }
+      e.preventDefault(); hospMoveActive(e.key==='ArrowDown'?1:-1); return;
+    }
+    if(e.key==='Enter'){
+      if(!hospDropOpen()) return;
+      var items=el('hospDrop').querySelectorAll('.ac-item');
+      if(HOSP_ACTIVE>=0 && items[HOSP_ACTIVE]){
+        e.preventDefault();
+        pickHosp(Number(items[HOSP_ACTIVE].getAttribute('data-i')));
+      }
+      return;
+    }
+    if(e.key==='Escape'){ if(hospDropOpen()){ e.preventDefault(); closeHospDrop(); } }
+  });
+
+  /* 사진 */
+  el('snPhotoFile').addEventListener('change', onSnPhoto);
+  el('snPhotoRemove').addEventListener('click', clearSnPhoto);
+
+  /* 숙련도 세그먼트 */
+  document.querySelectorAll('.seg-btn[data-skill]').forEach(function(b){
+    b.addEventListener('click', function(){ setSkill(b.getAttribute('data-skill'), b.getAttribute('data-val')); });
+  });
+
+  /* 양식 토글 — 표시 방식만 바꾸므로 업무 데이터 변경(dirty)으로 보지 않는다 */
+  document.querySelectorAll('.tpl-tabs button[data-tpl]').forEach(function(b){
+    b.addEventListener('click', function(){ setTpl(b.getAttribute('data-tpl')); });
+  });
+
+  /* 최근 이력 '이 내용으로 채우기' (위임 — 목록은 매번 다시 그려진다) */
+  el('recentList').addEventListener('click', function(e){
+    var b=e.target.closest('[data-recent]'); if(!b) return;
+    applyRecent(Number(b.getAttribute('data-recent')));
+  });
+
+  /* 하단 액션 */
+  el('btnCopy').addEventListener('click', function(){ copyText(false); });
+  el('btnCont').addEventListener('click', contToInspection);
+  el('btnSave').addEventListener('click', saveToSheet);
+  el('btnToday').addEventListener('click', showToday);
+
+  /* 액션바 실제 높이를 CSS 변수로 — 본문 하단 여백·토스트 위치가 따라간다 */
+  measureActions();
+  window.addEventListener('resize', measureActions);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', function(){ measureActions(); positionHospDrop(); });
+    window.visualViewport.addEventListener('scroll', positionHospDrop);
+  }
+  window.addEventListener('scroll', positionHospDrop, {passive:true});
+}
+function actionsH(){
+  var a=el('actionBar');
+  return a ? Math.round(a.getBoundingClientRect().height) : 96;
+}
+function measureActions(){
+  document.documentElement.style.setProperty('--actions-h', actionsH()+'px');
+  document.documentElement.style.setProperty('--hdr-h', hdrH()+'px');
+}
+
+/* ═══ 초기화 ══════════════════════════════════════════════════════════════ */
+initTax(); fillParts(); fillSN([]); loadFse();
+setVal('date', todayISO());
+bindAll();
+setSaveState(BazHandover.SAVE.IDLE);
+enableCopy(false);
+setDbBadge('embed');
+
+/* [부트] 예전에는 화면이 뜰 때 hospdbrich·master·contenttpl·weeklyauto·ping 을
+   각각 날렸다. v3.1 서버는 handover_bootstrap 1콜로 묶어 준다 — 지원하지 않는
+   구버전 배포에서는 기존 개별 요청으로 그대로 폴백한다. */
+function bootHandover(){
+  if(!HANDOVER_URL){ setDbBadge('embed','서버 미설정'); return; }
+  gasPing();
+  bazGetJson(_tk(postUrl()+'?action=handover_bootstrap'), 20000).then(function(res){
+    var d=(res.kind==='json') ? res.data : null;
+    var okBoot = !!(d && d.success===true && d.hospdb);
+    if(!okBoot){
+      console.warn('[handover] bootstrap 미지원 — 개별 요청으로 폴백');
+      loadLiveDB(); masterSync(); loadContentTpl();
+      return;
+    }
+    applyBootstrap(d);
+  });
+}
+function applyBootstrap(d){
+  /* 병원 DB */
+  var hd=d.hospdb;
+  if(hd && hd.success && hd.data && hd.data.length){
+    var byName={}; HOSPITAL_DB.forEach(function(h){ byName[h.n]=h; });
+    hd.data.forEach(function(r){
+      if(!r.name) return;
+      var h=byName[r.name];
+      if(h){ if(r.sn)h.s=r.sn; h.hpv=r.hpVer||h.hpv||''; h.uiv=r.uiVer||h.uiv||'';
+             if(r.sales)h.sa=r.sales; if(r.ncare)h.c=r.ncare; if(r.region)h.r=r.region; }
+      else HOSPITAL_DB.push({n:r.name,s:r.sn||'',c:r.ncare||'미가입',sa:r.sales||'',r:r.region||'',hpv:r.hpVer||'',uiv:r.uiVer||''});
+    });
+    setDbBadge('live', hd.data.length+'건 동기화');
+    if(SELECTED_HOSP){
+      var fresh=HOSPITAL_DB.filter(function(x){ return x.n===SELECTED_HOSP.n; })[0];
+      if(fresh) setHospSelection(fresh);
+    }
+  }else{
+    setDbBadge(/unauthorized/i.test(String(hd&&hd.error||'')) ? 'auth' : 'error', String(hd&&hd.error||''));
+  }
+  /* 마스터 — 선택값 보존은 masterSync 와 같은 규칙을 쓰기 위해 그 경로를 재사용 */
+  if(d.master && d.master.success) applyMaster(d.master);
+  /* 처리내용 템플릿 · 자동 대상 */
+  if(d.contenttpl && d.contenttpl.success && Array.isArray(d.contenttpl.rows)){
+    CONTENT_TPL_ROWS=d.contenttpl.rows;
+    try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(CONTENT_TPL_ROWS)); }catch(e){}
+  }
+  if(d.weeklyauto && d.weeklyauto.success && Array.isArray(d.weeklyauto.writers)){
+    AUTO_FSE=d.weeklyauto.writers.slice();
+    try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){}
+  }
+  autoFillDetail();
+}
+bootHandover();
+offerDraftRestore();
 
 function toast(msg){
   var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('on');
   clearTimeout(el._t);
   el._t=setTimeout(function(){el.classList.remove('on');}, msg.length>30?3500:1600);
 }
-function copyText(){
+/* @param {boolean} unsaved 시트에 기록되지 않은 내용임을 분명히 알린다 */
+function copyText(unsaved){
   var t=curText();
+  var done=function(){ toast(unsaved ? '📋 시트 미기록 내용을 복사했습니다' : '복사됐어요'); };
   if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(t).then(function(){toast('복사됐어요');},fallbackCopy.bind(null,t));
-  } else { fallbackCopy(t); }
+    navigator.clipboard.writeText(t).then(done, fallbackCopy.bind(null,t,unsaved));
+  } else { fallbackCopy(t, unsaved); }
 }
-function fallbackCopy(t){
+function fallbackCopy(t, unsaved){
   var ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
   document.body.appendChild(ta); ta.select();
-  try{document.execCommand('copy');toast('복사됐어요');}catch(e){toast('복사 실패 — 길게 눌러 복사하세요');}
+  try{ document.execCommand('copy'); toast(unsaved ? '📋 시트 미기록 내용을 복사했습니다' : '복사됐어요'); }
+  catch(e){ toast('복사 실패 — 길게 눌러 복사하세요'); }
   document.body.removeChild(ta);
 }
 async function shareText(){
