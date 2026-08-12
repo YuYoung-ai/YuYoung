@@ -30,7 +30,10 @@ ck('기기 목록과 개별 해지 요청이 서버 API를 사용한다', index.
 ck('최근 감사 기록을 Lv.3 관리 화면에서 조회한다', index.includes('id="securityAuditList"') && index.includes("adminRequest('audits'"));
 ck('auth.js가 config·Google 로그인·관리 요청을 공개한다', /config:\s*function/.test(auth) && /loginWithGoogle:\s*function/.test(auth) && /adminRequest:\s*function/.test(auth));
 ck('기기 서버 비활성 응답이면 로컬 기기 토큰도 지운다', auth.includes("r.error === 'device_auth_disabled'"));
-ck('서비스워커 캐시가 새 인증 UI 버전으로 올라갔다', sw.includes("baz-cs-v123"));
+/* 정확한 번호를 박아 두면 다른 페이지를 고쳐 캐시를 올릴 때마다 이 테스트가 깨진다
+   (sw.js 자체가 "수정할 때마다 반드시 올리라"고 요구한다). 하한만 확인한다. */
+const swVer = Number((sw.match(/baz-cs-v(\d+)/) || [])[1] || 0);
+ck(`서비스워커 캐시가 새 인증 UI 버전(≥123) 이상이다 — 현재 v${swVer}`, swVer >= 123);
 
 console.log(`\n통과 ${passed}/${passed}`);
 console.log('Google 로그인·보안 관리 UI 회귀 테스트 통과 ✅');
