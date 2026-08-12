@@ -17,6 +17,11 @@
  *
  * 엔드포인트
  *  POST                          : 행 기록 (수기 입력 열만 기록, 수식 열 보존)
+ *  POST {action:'history_save'}  : [v3.0] 병원 처리 이력 편집 저장 (Lv.2 토큰 · rev 충돌 검사)
+ *                                  {hosp, records:[…], who, baseRev, token}
+ *                                  → 성공 {success:true, rev, records, updatedAt, updatedBy}
+ *                                  → 충돌 {success:false, conflict:true, rev, records}
+ *                                  ※ '이슈이력편집'·'이슈이력로그' 탭은 첫 저장 때 자동 생성
  *  POST {action:'weeklywrite'}   : [v2.1] 주간업무보고 본문을 작성자 탭 최상단에 삽입
  *  POST {action:'menu_save'}     : [v2.2] 허브 메뉴 표시/레벨/순서 저장 (Lv.3 토큰 필요)
  *  GET ?action=ping              : 콜드스타트 예열
@@ -341,6 +346,12 @@ function doPost(e){
        락을 갖고 있으므로 전역 락이 필요 없다. */
     if(payload && payload.action==='progress_save') return json_(progSave_(payload));  /* [v2.4] 진행중 공유 상태 */
     if(payload && payload.action==='progress_restore') return json_(progRestore_(payload));  /* [v2.7] 스냅샷에서 일정 복구(Lv.3) */
+
+    /* [v3.0] 병원 처리 이력 편집 저장(Lv.2) — progress_save 와 같은 이유로 전역 락 "밖".
+       이력 편집은 '이슈이력편집' 시트만 건드리고 handover 행 기록과 저장소가 다르며,
+       histSave_ 가 자체 락으로 동시 수정을 막는다. 전역 20초 락에 묶으면 현장에서
+       기록을 올리는 동안 편집 저장이 통째로 실패한다. */
+    if(payload && payload.action==='history_save') return json_(histSave_(payload));
 
     lock.waitLock(20000);
 
@@ -1084,8 +1095,197 @@ function getIssueHist_(){
   Object.keys(history).forEach(function(n){
     history[n].sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
   });
-  var res = {success:true, data:history};
+  /* [v3.0] 관리자 편집본(이슈이력편집 시트)을 얹는다 — 아래 histMerge_ 참고 */
+  var edits = histReadAll_();
+  var revs = {};
+  Object.keys(edits).forEach(function(n){
+    var e = edits[n];
+    history[n] = histMerge_(e, history[n] || []);
+    revs[n] = { rev:e.rev, updatedAt:e.updatedAt, updatedBy:e.updatedBy };
+  });
+  var res = {success:true, data:history, revs:revs};
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
+  return res;
+}
+
+/* ═══════════ [v3.0] 병원 처리 이력 편집 (hospital-pc 관리자 편집) ═══════════
+ *  왜 시트인가: 편집본이 예전에는 편집한 사람의 localStorage 에만 있었다.
+ *  다른 사람에게 보이지 않았고, 그 로컬 값이 서버 이력을 매번 덮어써 최신
+ *  현장 기록이 그 PC 에서만 사라졌다. 서버에 두면 모두가 같은 이력을 본다.
+ *
+ *  이슈이력편집 : 병원명 | 이력JSON | rev | 수정자 | 수정시각 | 기준일(cutoff) | 건수
+ *  이슈이력로그 : 일시 | 병원 | op | 이전건수 | 새건수 | 이전rev | 새rev | 요청자
+ *
+ *  ── 병합 규칙(histMerge_) ──────────────────────────────────────────
+ *  편집본은 "그 시점까지의 이력"을 통째로 대체한다. 다만 편집 이후 현장에서
+ *  새로 올라온 기록(처리일 > cutoff)은 계속 이어 붙인다. 그래야 한 번 편집한
+ *  병원의 이력이 그날 이후로 영영 얼어붙지 않는다.
+ *  (편집자가 지운 옛 기록은 되살아나지 않는다 — cutoff 이하이기 때문)
+ */
+var HIST = {
+  EDIT_SHEET : '이슈이력편집',
+  LOG_SHEET  : '이슈이력로그',
+  MAX_RECORDS: 300,        // 한 병원 이력 상한
+  MAX_LEN    : 2000,       // 한 필드 길이 상한
+  MAX_JSON   : 45000       // 셀 5만자 한도 안쪽으로 — 넘으면 저장 거부(잘린 채 저장되면 이력이 깨진다)
+};
+var HIST_EDIT_HEAD = ['병원명','이력JSON','rev','수정자','수정시각','기준일','건수'];
+var HIST_LOG_HEAD  = ['일시','병원','op','이전건수','새건수','이전rev','새rev','요청자'];
+/* 클라이언트(js/baz-history-api.js ALLOWED_FIELDS)와 반드시 같아야 한다 */
+var HIST_FIELDS = ['d','t','pt','sy','f','pay','m','fx','p'];
+
+function histText_(v){
+  if(v==null) return '';
+  if(typeof v==='boolean') return '';
+  return String(v).trim().slice(0, HIST.MAX_LEN);
+}
+function histDate_(v){
+  var s = histText_(v);
+  var m = s.match(/(\d{4})\D+(\d{1,2})\D+(\d{1,2})/);
+  return m ? (m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2)) : '';
+}
+/** 허용 목록 밖 필드 제거 · 빈 행 제거 · 날짜 정규화 · 내림차순 · 상한 적용 */
+function histSanitize_(records){
+  var out = [];
+  (Array.isArray(records)?records:[]).forEach(function(r){
+    if(!r || typeof r!=='object') return;
+    var rec = {};
+    HIST_FIELDS.forEach(function(k){
+      if(!Object.prototype.hasOwnProperty.call(r,k)) return;
+      var v = (k==='d') ? histDate_(r[k]) : histText_(r[k]);
+      if(v) rec[k] = v;
+    });
+    if(rec.t && rec.t!=='점검' && rec.t!=='A/S') rec.t = (rec.t.indexOf('점검')>=0) ? '점검' : 'A/S';
+    if(!rec.d && !rec.sy && !rec.m && !rec.fx) return;
+    out.push(rec);
+  });
+  out.sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+  return out.slice(0, HIST.MAX_RECORDS);
+}
+function histSheet_(name, head){
+  var sh = sheet_(name);
+  if(!sh) sh = ss_().insertSheet(name);
+  if(sh.getLastRow() < 1){
+    sh.getRange(1,1,1,head.length).setValues([head]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    try{ sh.getRange(1,1,sh.getMaxRows(),head.length).setNumberFormat('@'); }catch(e){}
+  }
+  return sh;
+}
+/** 편집 시트 전체 읽기 → { 병원명: {records, rev, updatedAt, updatedBy, cutoff, row} } */
+function histReadAll_(){
+  var sh = sheet_(HIST.EDIT_SHEET);
+  if(!sh || sh.getLastRow() < 2) return {};
+  var v = sh.getRange(2, 1, sh.getLastRow()-1, HIST_EDIT_HEAD.length).getDisplayValues();
+  var out = {};
+  for(var i=0;i<v.length;i++){
+    var name = String(v[i][0]||'').trim();
+    if(!name) continue;
+    var recs = [];
+    try{ recs = JSON.parse(v[i][1]||'[]') || []; }catch(e){ recs = []; }
+    out[name] = {
+      records  : Array.isArray(recs) ? recs : [],
+      rev      : Number(v[i][2]) || 0,
+      updatedBy: String(v[i][3]||''),
+      updatedAt: String(v[i][4]||''),
+      cutoff   : String(v[i][5]||''),
+      row      : i+2
+    };
+  }
+  return out;
+}
+/** 편집본 + (편집 이후 새로 올라온 현장 기록) */
+function histMerge_(edit, derived){
+  var out = (edit && Array.isArray(edit.records)) ? edit.records.slice() : [];
+  var cutoff = (edit && edit.cutoff) || '';
+  if(cutoff){
+    (derived||[]).forEach(function(r){ if(String(r.d||'') > cutoff) out.push(r); });
+  }
+  out.sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+  return out;
+}
+/** 현장 기록에서 산출한 그 병원의 최신 처리일 — 편집 기준일(cutoff) */
+function histDerivedCutoff_(name){
+  var base = null;
+  try{
+    var c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
+    if(c){ var o = JSON.parse(c); base = (o && o.data) ? o.data : null; }
+  }catch(e){}
+  if(!base){ try{ base = getIssueHist_().data; }catch(e){ base = null; } }
+  var recs = (base && base[name]) || [];
+  var mx = '';
+  recs.forEach(function(r){ var d = String(r.d||''); if(d > mx) mx = d; });
+  return mx;
+}
+
+/**
+ * POST {action:'history_save', hosp, records:[…], who, baseRev, token}
+ *  · 레벨 2(관리자) 이상만
+ *  · LockService 로 동시 수정 보호
+ *  · baseRev 가 서버 rev 와 다르면 저장하지 않고 {conflict:true} + 서버 최신본 반환
+ *    (조용히 덮어쓰면 다른 관리자의 편집이 흔적 없이 사라진다)
+ *  · 허용 목록 밖 필드는 서버에서도 한 번 더 제거
+ */
+function histSave_(p){
+  var lv = verifyLevel_((p && p.token) || '');
+  if(lv < 2){
+    return {success:false, error: MENU.AUTH_VERIFY_URL
+      ? 'unauthorized — 이력 편집은 관리자(Lv.2) 인증이 필요합니다.'
+      : 'AUTH_VERIFY_URL 미설정 — 이력 편집 거부'};
+  }
+  var hosp = histText_(p && p.hosp);
+  if(!hosp) return {success:false, error:'hosp(병원명) 필요'};
+  if(!Array.isArray(p.records)) return {success:false, error:'records(배열) 필요'};
+  if(p.records.length > HIST.MAX_RECORDS){
+    return {success:false, error:'이력이 너무 많습니다(최대 '+HIST.MAX_RECORDS+'건)'};
+  }
+  var records = histSanitize_(p.records);
+  var payload = JSON.stringify(records);
+  if(payload.length > HIST.MAX_JSON){
+    return {success:false, error:'이력 용량 초과 — 오래된 기록을 정리한 뒤 다시 저장하세요'};
+  }
+
+  var lock = LockService.getScriptLock(), held = false;
+  var res = null, logRow = null;
+  try{
+    try{ held = lock.waitLock(15000); }catch(e){ held = false; }
+    var all = histReadAll_();
+    var cur = all[hosp] || null;
+    var curRev = cur ? cur.rev : 0;
+    var baseRev = Number(p.baseRev) || 0;
+    if(baseRev !== curRev){
+      /* 충돌 — 저장하지 않고 서버 최신본을 그대로 돌려준다. 재조회 안내는 클라이언트 몫 */
+      var derivedC = [];
+      try{ derivedC = (getIssueHist_().data || {})[hosp] || []; }catch(e){}
+      return {
+        success:false, conflict:true, error:'conflict — 다른 사용자가 먼저 저장했습니다',
+        hosp:hosp, rev:curRev,
+        records: cur ? histMerge_(cur, derivedC) : derivedC,
+        updatedAt: cur ? cur.updatedAt : '', updatedBy: cur ? cur.updatedBy : ''
+      };
+    }
+    var sh = histSheet_(HIST.EDIT_SHEET, HIST_EDIT_HEAD);
+    var newRev = curRev + 1;
+    var whoName = histText_(p.who) || ('lv'+lv);
+    var nowS = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
+    var cutoff = cur ? cur.cutoff : '';
+    if(!cutoff) cutoff = histDerivedCutoff_(hosp);   /* 최초 편집 시점의 현장 기록 최신일 */
+    var row = [hosp, payload, newRev, whoName, nowS, cutoff, records.length];
+    if(cur) sh.getRange(cur.row, 1, 1, HIST_EDIT_HEAD.length).setValues([row]);
+    else    sh.getRange(sh.getLastRow()+1, 1, 1, HIST_EDIT_HEAD.length).setValues([row]);
+
+    logRow = [nowS, hosp, 'history_save',
+              cur ? cur.records.length : '', records.length, curRev, newRev, whoName];
+    res = {success:true, hosp:hosp, rev:newRev, records:records,
+           updatedAt:nowS, updatedBy:whoName, count:records.length};
+  }catch(err){
+    return {success:false, error:String(err)};
+  }finally{
+    if(held){ try{ lock.releaseLock(); }catch(_){} }
+  }
+  /* 락 밖에서: 감사 로그 + 이슈이력 캐시 무효화(다음 조회부터 편집본이 보이게) */
+  try{ if(logRow) histSheet_(HIST.LOG_SHEET, HIST_LOG_HEAD).appendRow(logRow); }catch(e){}
+  try{ if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('handover_issuehist'); }catch(e){}
   return res;
 }
 
