@@ -39,8 +39,9 @@
   var LOGIN_KEY = 'baz_auth_login_time';
   var VERIFY_KEY = 'baz_auth_verified_ts';   // 마지막 서버 검증 성공 시각(ms) — 재검증 스로틀용
 
-  // ── [기기 자동 로그인] 기능 스위치 ────────────────────────────────
-  // false = 완전 비활성(현행과 동일: 매 세션 로그인). 운영 적용 시 true 로 바꾼다.
+  // ── [기기 자동 로그인] 프런트 노출 스위치 ─────────────────────────
+  // false = 체크박스·자동 시도를 끈다. 서버 엔드포인트까지 차단하는 보안 스위치는
+  // Deno 환경변수 DEVICE_AUTH_ENABLED 이며, 프런트 플래그만으로 서버를 차단할 수 없다.
   //   켜기 전 준비: (1) Deno 에 KV 사용 설정  (2) main.ts 재배포(ver deno-1.1.0)
   //   확인: AUTH_URL/?action=ping 응답에 "kv":true 가 보이면 준비 완료.
   // 켜면: '이 기기 기억하기' 체크 시 기기 토큰을 localStorage 에 저장하고,
@@ -138,12 +139,23 @@
   // 누를 때는 콜드스타트가 이미 끝나 있다(첫 로그인·첫 시트가 빨라진다).
   // 서버측 keepWarm(1분 트리거)이 놓친 공백을 클라이언트가 접속 순간에 메운다.
   var _lastPrewarm = 0;
+  var _configPromise = null;
 
   var BazAuth = {
 
     // 설정 여부 확인 (URL이 비어 있으면 false)
     isConfigured: function () {
       return !!AUTH_URL;
+    },
+
+    // 공개 인증 설정. Google Client ID는 공개 식별자이며 비밀이 아니다.
+    config: function () {
+      if (!_configPromise) {
+        _configPromise = postJSON({ action: 'config' }, { tries: 2, timeoutMs: 10000 })
+          .then(function (r) { return r && r.ok ? r : { ok: false, googleAuth: false }; })
+          .catch(function () { return { ok: false, googleAuth: false }; });
+      }
+      return _configPromise;
     },
 
     // 선제 예열: AUTH_URL(항상) + 넘겨준 데이터 백엔드(handover 등)를 ping&warm=1 로 깨운다.
@@ -199,6 +211,31 @@
         });
     },
 
+    // Google Identity Services가 발급한 ID 토큰을 Deno에서 검증한 뒤 기존 HMAC 세션으로 바꾼다.
+    loginWithGoogle: function (idToken, remember) {
+      if (!AUTH_URL || !idToken) return Promise.resolve({ ok: false, error: 'google_auth_failed' });
+      var wantRemember = DEVICE_REMEMBER && !!remember;
+      return postJSON({ action: 'google_login', idToken: idToken, remember: wantRemember }, { tries: 2, timeoutMs: 15000 })
+        .then(function (r) {
+          if (r && r.ok) {
+            saveSession(r.token, r.level, r.expires, r.name);
+            if (wantRemember && r.device) saveDevice(r.device);
+          }
+          return r || { ok: false, error: 'no_response' };
+        })
+        .catch(function () { return { ok: false, error: 'network' }; });
+    },
+
+    // Lv.3 보안 관리센터용 요청. 서버가 토큰 레벨을 다시 검증하므로 UI 숨김에 의존하지 않는다.
+    adminRequest: function (action, payload) {
+      var body = payload || {};
+      body.action = action;
+      body.token = this.token();
+      return postJSON(body, { tries: 2, timeoutMs: 15000 })
+        .then(function (r) { return r || { ok: false, error: 'no_response' }; })
+        .catch(function () { return { ok: false, error: 'network' }; });
+    },
+
     // 기능 활성 여부(화면에서 '이 기기 기억하기' 노출 판단용)
     deviceEnabled: function () { return !!DEVICE_REMEMBER; },
     hasDevice: function () { return DEVICE_REMEMBER && !!deviceToken(); },
@@ -217,7 +254,8 @@
             return r.level || 0;
           }
           // 기기가 해지/만료됨 → 저장된 토큰 폐기(다음엔 정상 로그인 유도)
-          if (r && (r.error === 'device_not_found' || r.error === 'revoked')) clearDevice();
+          if (r && (r.error === 'device_not_found' || r.error === 'revoked' ||
+                    r.error === 'device_auth_disabled')) clearDevice();
           return 0;
         })
         .catch(function () { return 0; });   // 네트워크 오류 등은 조용히(정상 로그인으로 폴백)
