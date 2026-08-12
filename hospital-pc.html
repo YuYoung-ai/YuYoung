@@ -813,12 +813,15 @@
       </div>
     </div>
 
+    </div>
+
     <!-- 내 주변 5km N-CARE — 브라우저 위치 기준 모드.
-         (지도에 뜨는 '검색 결과 주변 5km 참고 마커'와는 별개 기능) -->
+         (지도에 뜨는 '검색 결과 주변 5km 참고 마커'와는 별개 기능)
+         #filterSticky 밖에 둔다 — 모바일에서 sticky 헤더가 더 두꺼워지면
+         화면에 남는 카드 영역이 그만큼 줄어든다. -->
     <div class="filter-section" id="nearbyBox">
       <button type="button" id="nearbyBtn" aria-pressed="false">📍 <span id="nearbyBtnLabel">내 주변 5km N-CARE 병원 조회</span></button>
       <div id="nearbyState" role="status" aria-live="polite"></div>
-    </div>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -2207,8 +2210,18 @@ function openHist(name){
   document.getElementById('histLock').classList.remove('on');
   document.getElementById('histLock').textContent='🔒';
   renderHistBody();
+  /* onClose 는 ✕·배경 클릭뿐 아니라 Esc(BazModal 이 직접 닫는 경로)에도 불린다 —
+     편집 상태·안내 배너 정리를 여기 한 곳에 둬야 어느 경로로 닫아도 같게 끝난다. */
   BazModal.open(document.getElementById('histModal'), {
-    name:'hist', sheet:'.hist-sheet', initialFocus:'#histClose'
+    name:'hist', sheet:'.hist-sheet', initialFocus:'#histClose',
+    onClose:function(){
+      histEditing=false;
+      histNoteState=null;
+      histPendingDraftApply=false;
+      var bar=document.getElementById('histEditBar'); if(bar) bar.style.display='none';
+      var lock=document.getElementById('histLock');
+      if(lock){ lock.classList.remove('on'); lock.textContent='🔒'; }
+    }
   });
 }
 
@@ -2481,6 +2494,7 @@ document.getElementById('histBody').addEventListener('click', function(e){
   BazModal.bind(document);
   document.addEventListener('keydown', function(e){
     if(e.key!=='Escape') return;
+    if(e.__bazModalHandled) return;      // 이 Esc 는 모달이 이미 소비했다
     if(BazModal.openCount()>0) return;
     if(typeof pcMapIsFull==='function' && pcMapIsFull()){ pcExitFullscreen(); }
   });
@@ -4010,7 +4024,8 @@ function pcEnsureDOM(){
      passive:true — preventDefault 를 하지 않으므로 스크롤을 막지 않는다. */
   var mp=document.getElementById('pcMapPane');
   if(mp) mp.addEventListener('wheel', function(){
-    if(!pcMapZoomableWanted()) pcMapShowWheelHint();
+    if(pcMapZoomableWanted()) pcMapCtl.markUserView();   // 휠 확대는 사용자 조작
+    else pcMapShowWheelHint();
   }, {passive:true});
   // 딤 배경 클릭 → 전체화면 해제
   var bd=document.getElementById('pcMapBackdrop');
@@ -4437,6 +4452,7 @@ function pcHighlight(){
   document.querySelectorAll('#pcLeft .pc-cardwrap').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
   document.querySelectorAll('#pcLeft tr[data-hname]').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
   try{ pcMapSelRing(pcSelName); }catch(e){}   // 지도에서도 선택 병원 강조(목록↔지도 일치)
+  try{ pcMapCtlSync(); }catch(e){}            // 선택이 있으면 '선택 해제' 버튼 노출
 }
 
 // ── 카드 클릭 = 지도를 그 병원으로 ──────────────────────────────────────────
@@ -4750,12 +4766,12 @@ function pcShowMap(list){
       pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false});   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
       try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',pcMapCtlSync); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화
       try{ kakao.maps.event.addListener(pcMapObj,'idle',pcMapViewSaveDebounced); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장
-      /* 사용자가 직접 옮기거나 확대하면 기록 → 폴링·데이터 갱신이 그 위치를 자동
-         맞춤으로 되돌리지 않는다(예전에는 40초 폴링마다 원위치했다). */
-      try{
-        kakao.maps.event.addListener(pcMapObj,'dragend',function(){ pcMapCtl.markUserView(); });
-        kakao.maps.event.addListener(pcMapObj,'zoom_start',function(){ pcMapCtl.markUserView(); });
-      }catch(e){}
+      /* 사용자가 직접 지도를 옮기면 기록 → 폴링·데이터 갱신이 그 위치를 자동 맞춤으로
+         되돌리지 않는다(예전에는 40초 폴링마다 원위치했다).
+         ※ 확대는 zoom_changed 로 잡지 않는다 — setBounds·복원 같은 프로그램 호출도
+           같은 이벤트를 쏘기 때문에 그러면 모든 자동 맞춤이 스스로를 막아 버린다.
+           사용자 확대는 발생 지점에서 직접 표시한다(+/− 버튼 pcMapZoom · 휠 리스너). */
+      try{ kakao.maps.event.addListener(pcMapObj,'dragend',function(){ pcMapCtl.markUserView(); }); }catch(e){}
       pcMapApplyZoomable();   // 기본은 휠 확대 꺼짐 → 지도 위에서도 페이지가 스크롤된다
     }
     else { pcScheduleRelayout(); }   // 크기 재계산은 컨트롤러가 프레임당 1회로 병합

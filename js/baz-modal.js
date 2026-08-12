@@ -127,6 +127,10 @@
     if (!top) return '';
     if (e.key === 'Escape') {
       if (e.preventDefault) e.preventDefault();
+      /* 처리했다는 표시 — 이 리스너는 capture 단계에 걸려 있어서, 표시가 없으면
+         bubble 단계의 다른 Esc 처리(예: 지도 전체화면 해제)가 같은 키 한 번에
+         함께 실행된다(모달만 닫으려 했는데 전체화면까지 풀리는 문제). */
+      e.__bazModalHandled = true;
       close(top.el);
       return 'close';
     }
