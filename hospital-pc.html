@@ -2,7 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- [접근성] user-scalable=no·maximum-scale 을 두지 않는다 — 확대가 막히면 저시력 사용자가
+     현장에서 장비번호·경과일을 읽을 수 없다(WCAG 1.4.4). 확대해도 레이아웃은 유지된다. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>BAZ BIOMEDIC — 병원 데이터 센터 (PC)</title>
 <link rel="manifest" href="manifest.json">
@@ -118,7 +120,7 @@
   .rrc-head{font-size:12.5px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:6px;margin-bottom:9px;}
   .rrc-head .rrc-cnt{font-size:11px;font-weight:700;color:var(--ok);background:var(--ok-soft);border-radius:7px;padding:1px 7px;}
   .rrc-empty{font-size:11.5px;color:var(--text-muted);padding:4px 2px;}
-  .rrc-list{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;}
+  .rrc-list{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow:auto;overscroll-behavior:contain;}
   .rrc-item{border:1px solid var(--gray-line);border-radius:9px;padding:8px 9px;cursor:pointer;transition:border-color .12s,box-shadow .12s;}
   .rrc-item:hover{border-color:var(--teal);box-shadow:0 2px 8px rgba(20,34,66,.08);}
   .rrc-item.sel{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset;}
@@ -135,7 +137,9 @@
   #pcRightBody{flex:1 1 auto;position:relative;min-height:0;}
   #pcMapPane{position:absolute;inset:0;background:var(--surface-2);}
   /* 지도 위 컨트롤(확대·축소·전체 보기) — 우하단 세로 스택 */
-  #pcMapCtl{position:absolute;right:10px;bottom:12px;z-index:8;display:flex;flex-direction:column;gap:5px;}
+  /* bottom:38px — 카카오 저작권 표기(우하단)·로고와 겹치지 않는 높이.
+     예전 12px 에서는 '전체 보기' 버튼이 저작권 글자 위에 올라앉아 둘 다 못 눌렀다. */
+  #pcMapCtl{position:absolute;right:10px;bottom:38px;z-index:8;display:flex;flex-direction:column;gap:5px;}
   .pc-mctl{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--gray-line);background:var(--surface);color:var(--navy);font-size:16px;font-weight:800;line-height:1;border-radius:9px;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(20,34,66,.16);transition:background .12s,border-color .12s,opacity .12s;}
   .pc-mctl:hover{background:var(--navy);color:#fff;border-color:var(--navy);}
   .pc-mctl:disabled{opacity:.35;cursor:default;background:var(--surface);color:var(--navy);}
@@ -168,9 +172,17 @@
   /* 선택 병원 강조 링 — 클러스터에 묶여도 보이도록 마커 위에 얹는 단일 오버레이 */
   .pc-selring{width:30px;height:30px;border-radius:50%;border:3px solid var(--navy);background:rgba(27,47,94,.12);box-shadow:0 0 0 2px #fff, 0 2px 8px rgba(20,34,66,.35);pointer-events:none;animation:pcSelPop .18s ease-out;}
   @keyframes pcSelPop{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
-  #pcDetail{position:absolute;inset:0;overflow:auto;padding:15px 16px;display:none;background:var(--surface);}
-  #pcRight.detail #pcMapPane{visibility:hidden;}
+  /* 상세 패널 — 예전에는 inset:0 로 지도를 통째로 가리고(#pcMapPane visibility:hidden)
+     지도 문맥이 사라졌다. 넓은 화면에서는 오른쪽 drawer 로 얹어 지도를 계속 보여준다.
+     좁은 화면(≤980px)에서만 전면을 덮는다. */
+  #pcDetail{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;padding:15px 16px;display:none;background:var(--surface);}
   #pcRight.detail #pcDetail{display:block;}
+  @media(min-width:981px){
+    #pcRight.detail #pcDetail{left:auto;width:min(430px,58%);border-left:1px solid var(--gray-line);box-shadow:-6px 0 20px rgba(20,34,66,.12);}
+    #pcRight.detail #pcMapPane{visibility:visible;}
+    #pcRight.detail #pcMapCtl{display:flex;right:calc(min(430px,58%) + 10px);}   /* 지도가 보이므로 컨트롤도 남긴다 */
+    #pcRight.detail .pc-headctl{display:flex;}
+  }
   .pc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
   .pc-cardwrap{cursor:pointer;position:relative;}
   .pc-cardwrap .h-card{margin-bottom:0;height:100%;transition:box-shadow .12s,border-color .12s;}
@@ -185,7 +197,8 @@
   .pc-progchip.on{opacity:1;background:var(--teal);color:#fff;}
   .pc-progchip.tbl{position:static;opacity:1;box-shadow:none;padding:1px 5px;margin-right:5px;border-radius:6px;font-size:10.5px;vertical-align:1px;}
   .pc-progchip.tbl:not(.on){border-color:var(--gray-line);color:var(--text-muted);}
-  .pc-table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--gray-line);border-radius:12px;}
+  .pc-table-wrap{overflow-x:auto;overscroll-behavior-x:contain;background:var(--surface);border:1px solid var(--gray-line);border-radius:12px;}
+  .pc-table th:focus-visible{outline:2px solid var(--on-navy);outline-offset:-3px;}
   table.pc-table{width:100%;border-collapse:collapse;font-size:12.5px;}
   .pc-table th{position:sticky;top:0;background:var(--navy);color:#fff;font-weight:700;padding:9px 11px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none;z-index:1;}
   .pc-table th .ar{opacity:.55;font-size:10px;margin-left:3px;}
@@ -220,6 +233,60 @@
   .pc-backmap{background:var(--surface);border:1px solid var(--gray-line);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:700;color:var(--navy);cursor:pointer;font-family:inherit;white-space:nowrap;}
   .pc-backmap:hover{background:var(--surface);border-color:var(--navy);}
   @media(max-width:980px){ body.mode-window #pcRight{height:340px;position:static;} }
+
+  /* ═══ 지도 조작 · 범례 · 내 주변 5km · 이력 초안 (v3) ═══════════════════ */
+  /* 지도 위에서 굴린 휠이 페이지 스크롤 대신 지도 확대를 먹던 문제.
+     해결은 오버레이가 아니라 SDK 설정이다 — setZoomable(false) 면 카카오가 휠 이벤트를
+     가로채지 않아 페이지가 자연스럽게 스크롤되고, 드래그(이동)는 그대로 살아 있다.
+     확대는 +/− 버튼, 또는 헤더의 '지도 조작' 토글을 켠 뒤 휠로.
+     아래 힌트는 그 사실을 한 번 알려 주는 안내일 뿐이라 클릭을 가로채지 않는다. */
+  #pcMapHint{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:9;pointer-events:none;
+    background:rgba(27,47,94,.88);color:#fff;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:var(--r-pill);
+    white-space:nowrap;opacity:0;transition:opacity .18s;}
+  #pcMapHint.show{opacity:1;}
+  #pcRight.detail #pcMapHint{display:none;}
+  .pc-hctl[data-headctl="interact"].on{background:var(--teal);color:#fff;border-color:var(--teal);}
+
+  /* 지도 범례 — 마커 색이 무엇을 뜻하는지(색만으로 전달하지 않도록 텍스트 병기) */
+  #pcMapLegend{position:absolute;left:10px;bottom:10px;z-index:8;display:flex;flex-wrap:wrap;gap:4px 10px;
+    background:rgba(255,255,255,.92);border:1px solid var(--gray-line);border-radius:9px;padding:5px 9px;
+    font-size:10.5px;color:var(--text-muted);max-width:calc(100% - 120px);box-shadow:0 2px 8px rgba(20,34,66,.12);}
+  body.dark #pcMapLegend{background:rgba(20,30,54,.92);}
+  #pcMapLegend .lg{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+  #pcMapLegend .sw{width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18);flex:0 0 auto;}
+  #pcMapLegend .sw.base{background:var(--navy);}
+  #pcMapLegend .sw.near{background:rgba(46,125,158,.85);}
+  #pcMapLegend .sw.done{background:var(--ok);}
+  #pcMapLegend .sw.prog{background:var(--teal);}
+  #pcRight.detail #pcMapLegend{display:none;}
+  @media(max-width:980px){ #pcMapLegend{display:none;} }
+
+  /* 내 주변 5km (브라우저 위치 기준) — '검색 결과 주변 5km 참고 마커'와 다른 기능 */
+  #nearbyBox{display:flex;flex-direction:column;gap:6px;}
+  #nearbyBtn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:9px 10px;border-radius:9px;
+    border:1.5px solid var(--teal);background:var(--surface);color:var(--teal);font-weight:800;font-size:12.5px;
+    cursor:pointer;font-family:inherit;line-height:1.25;}
+  #nearbyBtn:hover{background:var(--teal-soft);}
+  #nearbyBtn.on{background:var(--teal);color:#fff;}
+  #nearbyBtn[disabled]{opacity:.5;cursor:not-allowed;}
+  #nearbyState{font-size:11px;line-height:1.45;color:var(--text-muted);padding:0 2px;}
+  #nearbyState.err{color:var(--danger);}
+  #nearbyState.ok{color:var(--ok);}
+  #nearbyState.busy{color:var(--info);}
+
+  /* 이력 편집: 서버 저장 상태 · 이 기기 초안 안내 */
+  .hist-note{margin:0 0 10px;padding:8px 11px;border-radius:9px;font-size:11.5px;line-height:1.5;
+    background:var(--warn-soft);color:var(--warn);border:1px solid rgba(184,134,11,.25);}
+  .hist-note.err{background:var(--danger-soft);color:var(--danger);border-color:rgba(192,57,43,.25);}
+  .hist-note.ok{background:var(--ok-soft);color:var(--ok);border-color:rgba(30,126,78,.25);}
+  .hist-note .acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;}
+  .hist-note button{border:1px solid currentColor;background:transparent;color:inherit;font-family:inherit;
+    font-size:11px;font-weight:800;padding:4px 10px;border-radius:7px;cursor:pointer;}
+  .hist-note button:hover{background:rgba(0,0,0,.06);}
+
+  /* 스크린리더 전용 */
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0 0 0 0);white-space:nowrap;border:0;}
 
   header{background:var(--navy);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:50;}
   header .logo-area{display:flex;align-items:center;gap:10px;min-width:0;flex:0 1 auto;}
@@ -256,7 +323,9 @@
   /* 필터 폭 3단계: 숨김 / 기본(250) / 확장(440) */
   body.mode-window.filt-wide #viewList{grid-template-columns:440px minmax(0,1fr);}
   body.mode-window.filt-hide #viewList{grid-template-columns:44px minmax(0,1fr);}
-  body.mode-window #filterRail{grid-column:1;position:sticky;top:calc(var(--hdr-h,56px) + 10px);align-self:start;max-height:calc(100vh - var(--hdr-h,56px) - 24px);overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px;}
+  /* overscroll-behavior:contain — 필터 레일 끝까지 굴렸을 때 본문이 갑자기 따라 움직이는
+     scroll chaining 을 막는다(스크롤 소유권을 명확히). */
+  body.mode-window #filterRail{grid-column:1;position:sticky;top:calc(var(--hdr-h,56px) + 10px);align-self:start;max-height:calc(100vh - var(--hdr-h,56px) - 24px);overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding-right:2px;}
   /* 필터 폭 토글 버튼 (필터 상단, 스크롤해도 고정) */
   #filtToggle{display:none;}
   body.mode-window #filtToggle{display:flex;position:sticky;top:0;z-index:6;justify-content:flex-end;padding:2px 0 4px;background:var(--gray-bg);}
@@ -346,6 +415,19 @@
   .st-badge.진행중{background:var(--teal-soft);color:var(--teal);}
   .st-badge.진행중::before{background:var(--teal);}
   .st-badge.비대상{background:var(--neutral-soft);color:var(--text-muted);font-weight:600;}
+  /* [보안] 상태 문자열을 class 에 그대로 넣지 않는다 — BazDom.statusClass 허용목록이
+     아래 ASCII 클래스로 매핑한다. 목록에 없는 값은 st-unknown(중립)으로 떨어진다.
+     (위 한글 클래스는 예전 마크업 호환용으로 남겨 둔다) */
+  .st-badge.st-normal{background:var(--ok-soft);color:var(--st-normal);}
+  .st-badge.st-target{background:var(--teal-soft);color:var(--st-target);}
+  .st-badge.st-rec{background:var(--warn-soft);color:var(--st-warn);}
+  .st-badge.st-warn{background:var(--danger-soft);color:var(--st-danger);}
+  .st-badge.st-none{background:var(--neutral-soft);color:var(--st-none);}
+  .st-badge.st-prog{background:var(--teal-soft);color:var(--teal);}
+  .st-badge.st-prog::before{background:var(--teal);}
+  .st-badge.st-out{background:var(--neutral-soft);color:var(--text-muted);font-weight:600;}
+  .st-badge.st-out::before{opacity:.5;}
+  .st-badge.st-unknown{background:var(--neutral-soft);color:var(--text-muted);font-weight:600;}
 
   .warn-tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-top:6px;}
   .warn-tag.over{background:var(--danger-soft);color:var(--red);}
@@ -658,6 +740,16 @@
   body.dark header{background:#141E36;}
 </style>
 <script src="auth.js"></script>
+<!-- 공용 모듈 (빌드 없음 · 정적 호스팅 그대로 동작 · sw.js 는 런타임 캐시)
+     각 파일은 window.Baz* 로 노출되고 node require() 로도 로드된다(테스트 공유). -->
+<script src="js/baz-dom.js"></script>
+<script src="js/baz-date.js"></script>
+<script src="js/baz-scroll-lock.js"></script>
+<script src="js/baz-modal.js"></script>
+<script src="js/baz-map-controller.js"></script>
+<script src="js/baz-hospital-data.js"></script>
+<script src="js/baz-nearby.js"></script>
+<script src="js/baz-history-api.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -720,6 +812,13 @@
         <select class="flt" id="regionFilter"><option value="">전체 지역</option></select>
       </div>
     </div>
+
+    <!-- 내 주변 5km N-CARE — 브라우저 위치 기준 모드.
+         (지도에 뜨는 '검색 결과 주변 5km 참고 마커'와는 별개 기능) -->
+    <div class="filter-section" id="nearbyBox">
+      <button type="button" id="nearbyBtn" aria-pressed="false">📍 <span id="nearbyBtnLabel">내 주변 5km N-CARE 병원 조회</span></button>
+      <div id="nearbyState" role="status" aria-live="polite"></div>
+    </div>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -740,30 +839,30 @@
 </div>
 </div>
 
-<!-- 점검 이력 모달 -->
+<!-- 점검 이력 모달 (role/aria-modal·포커스 트랩은 js/baz-modal.js) -->
 <div id="histModal">
-  <div class="hist-sheet">
+  <div class="hist-sheet" role="dialog" aria-modal="true" aria-labelledby="histName" tabindex="-1">
     <div class="hist-head">
       <div style="min-width:0;">
         <div class="hn" id="histName"></div>
         <div class="hsub" id="histSub"></div>
       </div>
-      <button class="hist-lock" id="histAiBtn" title="이 장비 AI 문의" style="background:none;border:none;font-size:18px;cursor:pointer;padding:4px;">🤖</button>
-      <button class="hist-lock" id="histLock" title="편집">🔒</button>
-      <button class="hist-close" id="histClose">✕</button>
+      <button class="hist-lock" id="histAiBtn" type="button" title="이 장비 AI 문의" aria-label="이 장비 AI 문의" style="background:none;border:none;font-size:18px;cursor:pointer;padding:4px;">🤖</button>
+      <button class="hist-lock" id="histLock" type="button" title="편집" aria-label="이력 편집">🔒</button>
+      <button class="hist-close" id="histClose" type="button" aria-label="닫기">✕</button>
     </div>
     <div class="hist-body" id="histBody"></div>
     <div class="hist-editbar" id="histEditBar" style="display:none;">
-      <button class="add" id="histAdd">＋ 기록 추가</button>
-      <button class="cancel" id="histCancel">취소</button>
-      <button class="save" id="histSave">저장</button>
+      <button class="add" id="histAdd" type="button">＋ 기록 추가</button>
+      <button class="cancel" id="histCancel" type="button">취소</button>
+      <button class="save" id="histSave" type="button">저장</button>
     </div>
   </div>
 </div>
 
 <!-- 병원 상세 모달 (표 전체화면 뷰 행 클릭) -->
 <div id="pcDetailModal">
-  <div class="pc-dm-sheet">
+  <div class="pc-dm-sheet" role="dialog" aria-modal="true" aria-label="병원 상세" tabindex="-1">
     <button class="pc-dm-close" id="pcDetailModalClose" type="button" aria-label="닫기">✕</button>
     <div class="pc-dm-body" id="pcDetailModalBody"></div>
   </div>
@@ -771,23 +870,29 @@
 
 <!-- 이력 편집 비밀번호 모달 -->
 <div id="histPwModal">
-  <div class="pw-box">
+  <div class="pw-box" role="dialog" aria-modal="true" aria-labelledby="histPwTitle" aria-describedby="histPwDesc" tabindex="-1">
     <h3 id="histPwTitle">이력 편집</h3>
     <p id="histPwDesc">이력을 편집하려면 비밀번호를 입력하세요.</p>
-    <input type="password" id="histPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호">
-    <div class="pw-err" id="histPwErr"></div>
+    <input type="password" id="histPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" aria-label="비밀번호">
+    <div class="pw-err" id="histPwErr" role="alert"></div>
     <div class="pw-btns">
-      <button id="histPwCancel">취소</button>
-      <button class="primary" id="histPwOk">확인</button>
+      <button id="histPwCancel" type="button">취소</button>
+      <button class="primary" id="histPwOk" type="button">확인</button>
     </div>
   </div>
 </div>
+
+<!-- 화면 상태 안내(스크린리더) — 지도 모드·주변 조회 등 시각 변화만으로 전달되던 것 보완 -->
+<div id="bazLive" class="sr-only" role="status" aria-live="polite"></div>
 
 <script>
 /* [보안] 병원 데이터는 정적 파일에 두지 않는다 — 인증된 병원정보DB API에서 런타임 로드(applyDB) */
 const HOSPITALS = [];
 const KAKAO_JS_KEY = '44dadb8113fce5e8188f03bbdcd27fc6';
-const TODAY = new Date();
+/* [날짜] 예전엔 `const TODAY = new Date()` 로 로드 시각을 고정했다. 공용 PC 는 탭을
+   하루 종일 열어 두므로 자정을 넘겨도 점검 경과일·상태가 어제 값에 머물렀다
+   (현장 일정은 Asia/Seoul 로 초기화되는데 화면만 어제였다).
+   → 필요한 시점마다 Asia/Seoul 날짜를 계산하고(BazDate), 날짜가 바뀌면 다시 그린다. */
 /* handover_gas.gs 배포 URL (handover.html·dashboard.html의 HANDOVER_URL과 동일) */
 const HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
 /* [보안] 조회 API 인증 토큰 부착 헬퍼 (auth.js의 BazAuth.withToken 사용) */
@@ -902,7 +1007,28 @@ const I18N = {
     vocMonth:'월', vocNote:'2025.6 이후 VOC RAW 기준', vocCases:'건',
     vocByMonth:'월별', vocByWeek:'주차별', vocAll:'전체', vocNoData:'해당 기간 데이터 없음', vocPickPeriod:'기간을 선택하세요', vocFieldCheck:'현장 확인 내용', vocReported:'접수 현상(고객)', vocNoIssue:'이상없음',
     vocYear:'년', vocMonthLabel:'월', vocWeekLabel:'주차', vocYearSuffix:'년', vocMonSuffix:'월', vocWeekSuffix:'주차',
-    bNormal:'정상(~30일)', bTarget:'점검대상', bRec:'권고', bWarn:'경고', bNone:'미점검' },
+    bNormal:'정상(~30일)', bTarget:'점검대상', bRec:'권고', bWarn:'경고', bNone:'미점검',
+    /* ── v3: 내 주변 5km · 지도 범례/조작 · 이력 서버 저장 ── */
+    nearbyOn:'📍 내 위치 기준 · N-CARE {n}곳', locDenied:'위치 권한이 거부되었습니다. 브라우저 주소창의 위치 아이콘에서 허용해 주세요.',
+    locUnsupported:'이 브라우저에서는 위치 조회를 쓸 수 없습니다.', locOff:'내 주변 조회를 껐습니다 — 이전 검색·필터로 돌아갑니다.',
+    mapFitResult:'결과 맞춤', mapFitResultTip:'현재 검색·필터 결과만 한 화면에', mapFitEvery:'전체(완료·진행중 포함)',
+    mapFitEveryTip:'오늘 완료·진행중 마커까지 포함해 맞춤', mapClearSel:'선택 해제', mapNoResult:'맞출 결과가 없습니다',
+    mapLegend:'지도 표시', lgResult:'검색 결과', lgNear:'결과 주변 5km', lgDone:'오늘 완료', lgProg:'진행중',
+    mapInteract:'지도 조작(휠 확대)', mapInteractOn:'지도 조작 켬 — 휠로 확대됩니다', mapInteractOff:'페이지 스크롤 — 확대는 +/− 또는 지도 조작',
+    mapWheelHint:'휠은 페이지 스크롤 · 확대는 +/− 버튼',
+    rcTodayDone:'🏁 오늘 완료', rcLoading:'불러오는 중…', rcLoadFail:'불러오기 실패 (네트워크 확인)', rcNoneToday:'오늘 완료 내역이 없습니다',
+    prcTitle:'🚗 주변 이동 소요시간', prcToday:'오늘 기준', prcNear:'가까운 순', prcDue:'점검필요 우선',
+    prcNoneNear:'반경 10km 내 점검대상 병원 없음', prcNoneDue:'반경 15km 내 점검대상 병원 없음', prcNoCoord:'📍 좌표 미등록 병원 — 주변 이동 계산 불가',
+    prcCur:'현재', schGo:'현장 일정 →', mapHistBtn:'🕑 이력 보기', pcHint:'카드·행을 클릭하면 위 지도/상세에서 확인됩니다',
+    viewCards:'⊞ 카드', viewTable:'▤ 표',
+    histSaving:'저장 중…', histServerSaved:'서버에 저장되었습니다', histSaveFail:'저장 실패 — 잠시 후 다시 시도해 주세요',
+    histConflict:'다른 사용자가 먼저 저장했습니다. 서버의 최신 이력을 불러왔으니 다시 확인 후 저장하세요.',
+    histNeedAuth:'이력 편집은 관리자(레벨2) 인증이 필요합니다.',
+    histDraft:'이 기기에만 저장된 편집본이 있습니다 (서버 미반영).', histDraftApply:'서버에 반영', histDraftDrop:'초안 삭제',
+    histDraftKept:'서버 저장 전까지 이 기기에 초안으로 보관합니다.',
+    colName:'병원명', colRegion:'지역', colSales:'영업담당', colStatus:'상태', colDays:'점검경과',
+    colNcare:'N-CARE', colClient:'거래처', dtAddr:'주소', dtSn:'장비번호', dtEdit:'✎ 편집',
+    minUnit:'분', dayUnit:'일', notFound:'정보를 찾을 수 없습니다.' },
   en:{ title:'Hospital Data Center', sub:'Search · Inspection · Nearby N-CARE', menu:'Menu',
     tabList:'Hospitals', tabSched:'Schedule', tabDash:'Status', tabRecent:'Recent',
     schTitle:'Field schedule', schAddFse:'Add staff schedule', schPickFse:'Select staff', schAddHosp:'Add hospital (search)',
@@ -936,7 +1062,27 @@ const I18N = {
     vocMonth:'Month', vocNote:'Based on VOC RAW since 2025.6', vocCases:'',
     vocByMonth:'Monthly', vocByWeek:'Weekly', vocAll:'All', vocNoData:'No data for this period', vocPickPeriod:'Select a period', vocFieldCheck:'Field findings', vocReported:'Reported (customer)', vocNoIssue:'No issue',
     vocYear:'Year', vocMonthLabel:'Month', vocWeekLabel:'Week', vocYearSuffix:'', vocMonSuffix:'M', vocWeekSuffix:'W',
-    bNormal:'Normal(~30d)', bTarget:'Target', bRec:'Advised', bWarn:'Warning', bNone:'None' },
+    bNormal:'Normal(~30d)', bTarget:'Target', bRec:'Advised', bWarn:'Warning', bNone:'None',
+    nearbyOn:'📍 Near me · {n} N-CARE', locDenied:'Location permission denied. Allow it from the location icon in the address bar.',
+    locUnsupported:'Location lookup is not available in this browser.', locOff:'Nearby search off — back to your previous search and filters.',
+    mapFitResult:'Fit results', mapFitResultTip:'Fit only the current search/filter results', mapFitEvery:'All (incl. done/in-progress)',
+    mapFitEveryTip:'Fit including today\'s done and in-progress markers', mapClearSel:'Clear selection', mapNoResult:'No results to fit',
+    mapLegend:'Map legend', lgResult:'Results', lgNear:'Within 5km of results', lgDone:'Done today', lgProg:'In progress',
+    mapInteract:'Map control (wheel zoom)', mapInteractOn:'Map control on — wheel zooms the map', mapInteractOff:'Page scroll — zoom with +/− or map control',
+    mapWheelHint:'Wheel scrolls the page · zoom with +/−',
+    rcTodayDone:'🏁 Done today', rcLoading:'Loading…', rcLoadFail:'Failed to load (check network)', rcNoneToday:'Nothing completed today',
+    prcTitle:'🚗 Travel time nearby', prcToday:'Today', prcNear:'Nearest', prcDue:'Due first',
+    prcNoneNear:'No due hospitals within 10km', prcNoneDue:'No due hospitals within 15km', prcNoCoord:'📍 No coordinates — cannot compute travel',
+    prcCur:'Now', schGo:'Schedule →', mapHistBtn:'🕑 History', pcHint:'Click a card or row to see it on the map/detail above',
+    viewCards:'⊞ Cards', viewTable:'▤ Table',
+    histSaving:'Saving…', histServerSaved:'Saved to the server', histSaveFail:'Save failed — please try again',
+    histConflict:'Someone else saved first. The latest server history was loaded — review and save again.',
+    histNeedAuth:'Editing history requires admin (level 2) sign-in.',
+    histDraft:'A draft exists on this device only (not sent to the server).', histDraftApply:'Send to server', histDraftDrop:'Discard draft',
+    histDraftKept:'Kept as a local draft until it is saved to the server.',
+    colName:'Hospital', colRegion:'Region', colSales:'Sales', colStatus:'Status', colDays:'Since insp.',
+    colNcare:'N-CARE', colClient:'Client', dtAddr:'Address', dtSn:'Unit no.', dtEdit:'✎ Edit',
+    minUnit:'min', dayUnit:'d', notFound:'Not found.' },
   ja:{ title:'病院データセンター', sub:'検索 · 点検状況 · 近隣N-CARE', menu:'メニュー',
     tabList:'病院照会', tabSched:'現場日程', tabDash:'点検状況', tabRecent:'最近の対応',
     schTitle:'現場日程', schAddFse:'担当者の日程追加', schPickFse:'担当者選択', schAddHosp:'病院追加(検索)',
@@ -970,13 +1116,36 @@ const I18N = {
     vocMonth:'月', vocNote:'2025.6以降VOC RAW基準', vocCases:'件',
     vocByMonth:'月別', vocByWeek:'週別', vocAll:'全体', vocNoData:'該当期間のデータなし', vocPickPeriod:'期間を選択してください', vocFieldCheck:'現場確認内容', vocReported:'受付現象(顧客)', vocNoIssue:'異常なし',
     vocYear:'年', vocMonthLabel:'月', vocWeekLabel:'週', vocYearSuffix:'年', vocMonSuffix:'月', vocWeekSuffix:'週',
-    bNormal:'正常(~30日)', bTarget:'点検対象', bRec:'勧告', bWarn:'警告', bNone:'未点検' },
+    bNormal:'正常(~30日)', bTarget:'点検対象', bRec:'勧告', bWarn:'警告', bNone:'未点検',
+    nearbyOn:'📍 現在地基準 · N-CARE {n}件', locDenied:'位置情報の権限が拒否されました。アドレスバーの位置アイコンから許可してください。',
+    locUnsupported:'このブラウザでは位置情報を利用できません。', locOff:'近隣検索をオフにしました — 以前の検索・フィルターに戻ります。',
+    mapFitResult:'結果に合わせる', mapFitResultTip:'現在の検索・フィルター結果だけを表示', mapFitEvery:'全体(完了・進行中含む)',
+    mapFitEveryTip:'本日完了・進行中マーカーまで含めて表示', mapClearSel:'選択解除', mapNoResult:'表示する結果がありません',
+    mapLegend:'地図の凡例', lgResult:'検索結果', lgNear:'結果の周辺5km', lgDone:'本日完了', lgProg:'進行中',
+    mapInteract:'地図操作(ホイール拡大)', mapInteractOn:'地図操作オン — ホイールで拡大します', mapInteractOff:'ページスクロール — 拡大は +/− または地図操作',
+    mapWheelHint:'ホイールはページスクロール · 拡大は +/− ボタン',
+    rcTodayDone:'🏁 本日完了', rcLoading:'読み込み中…', rcLoadFail:'読み込み失敗(ネットワーク確認)', rcNoneToday:'本日の完了履歴はありません',
+    prcTitle:'🚗 周辺の移動所要時間', prcToday:'本日基準', prcNear:'近い順', prcDue:'要点検優先',
+    prcNoneNear:'半径10km以内に点検対象の病院なし', prcNoneDue:'半径15km以内に点検対象の病院なし', prcNoCoord:'📍 座標未登録 — 移動計算不可',
+    prcCur:'現在', schGo:'現場日程 →', mapHistBtn:'🕑 履歴を見る', pcHint:'カード・行をクリックすると上の地図/詳細で確認できます',
+    viewCards:'⊞ カード', viewTable:'▤ 表',
+    histSaving:'保存中…', histServerSaved:'サーバーに保存しました', histSaveFail:'保存失敗 — しばらくしてから再試行してください',
+    histConflict:'他のユーザーが先に保存しました。サーバーの最新履歴を読み込みましたので、確認して再度保存してください。',
+    histNeedAuth:'履歴編集には管理者(レベル2)認証が必要です。',
+    histDraft:'この端末にのみ保存された編集内容があります(サーバー未反映)。', histDraftApply:'サーバーに反映', histDraftDrop:'下書き削除',
+    histDraftKept:'サーバー保存までこの端末に下書きとして保管します。',
+    colName:'病院名', colRegion:'地域', colSales:'営業担当', colStatus:'状態', colDays:'点検経過',
+    colNcare:'N-CARE', colClient:'取引先', dtAddr:'住所', dtSn:'機器番号', dtEdit:'✎ 編集',
+    minUnit:'分', dayUnit:'日', notFound:'情報が見つかりません。' },
 };
 let LANG = localStorage.getItem('baz_lang') || 'ko';
 if(!I18N[LANG]) LANG='ko';
 function t(k){ return I18N[LANG][k] || k; }
 
 // ===== 상태 =====
+/* Window(2열·sticky 지도) 레이아웃의 하한. 화면 모드 자동 선택과 CSS @media 경계를
+   같은 값으로 묶는다 — 예전에는 자동 선택만 900px 이라 900~980px 구간이 어긋났다. */
+var PC_WIDE_MIN=980;
 let curFilter='all', curTab='list';
 let nearbyMode=false, myPos=null, searchQ='', showCount=20;
 let salesFilter='', regionFilter='';
@@ -989,12 +1158,9 @@ try{ PC_SKILL=JSON.parse(localStorage.getItem('baz_pc_skill_cache')||'{}')||{}; 
 function normalize(s){ return (s||'').toLowerCase().replace(/\s+/g,''); }
 function isNcare(h){ return h.nc && h.nc!=='미가입'; }
 function isDue(h){ return isNcare(h) && ['점검대상','권고','경고','미점검'].includes(h.st); }
-function daysSince(dateStr){
-  if(!dateStr) return null;
-  const d=new Date(dateStr.replace(/\./g,'-').replace(/\s/g,''));
-  if(isNaN(d)) return null;
-  return Math.floor((TODAY-d.getTime())/86400000);
-}
+/* 경과일 — 기준은 "지금의 Asia/Seoul 오늘". 날짜 문자열끼리 비교하므로
+   기기 표준시간대가 어긋나 있어도 서버·시트와 같은 값이 나온다. */
+function daysSince(dateStr){ return BazDate.daysSince(dateStr); }
 
 function distKm(lat1,lng1,lat2,lng2){
   const R=6371, toR=x=>x*Math.PI/180;
@@ -1002,7 +1168,19 @@ function distKm(lat1,lng1,lat2,lng2){
   const a=Math.sin(dLat/2)**2+Math.cos(toR(lat1))*Math.cos(toR(lat2))*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
-function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* [XSS] 이스케이프는 js/baz-dom.js 한 곳에만 둔다(테스트도 그 모듈을 본다).
+   escapeHtml = 텍스트 문맥, escAttr = 속성 문맥(백틱·= 까지 차단).
+   ★ 원격 데이터를 JavaScript 문맥(onclick="…")에 넣는 코드는 더 이상 만들지 않는다 —
+     클릭은 전부 data-* 속성 + 이벤트 위임으로 처리한다. */
+function escapeHtml(s){ return BazDom.escapeHtml(s); }
+function escAttr(s){ return BazDom.escapeAttr(s); }
+/* 상태 문자열 → CSS 클래스(허용 목록). 목록에 없으면 중립 클래스 */
+function stCls(s){ return BazDom.statusClass(s); }
+/* 스크린리더 안내 — 색·아이콘만으로 전달되던 상태 변화를 문장으로도 알린다 */
+function bazAnnounce(msg){
+  var el=document.getElementById('bazLive');
+  if(el) el.textContent=String(msg==null?'':msg);
+}
 
 // N-CARE 점검 경과 위험도: over(90일초과/미점검), near(60~90), null
 function dueLevel(h){
@@ -1037,6 +1215,10 @@ function applyLang(){
   // 셀렉트 기본 옵션
   document.querySelector('#salesFilter option[value=""]').textContent=d.allSales;
   document.querySelector('#regionFilter option[value=""]').textContent=d.allRegion;
+  // 내 주변 5km 버튼·상태 문구도 현재 언어로 (KO/EN/JA)
+  try{ if(typeof nearbySyncUI==='function' && typeof pcNearby!=='undefined') nearbySyncUI(pcNearby.state(), {pos:pcNearby.pos()}); }catch(e){}
+  // 지도 패널 라벨·범례·툴바도 다시 입힌다(pcEnsureDOM은 1회만 실행되므로)
+  try{ if(typeof pcApplyPaneI18n==='function') pcApplyPaneI18n(); }catch(e){}
   render();
   if(curTab==='dash') renderDash();
   if(curTab==='recent') renderRecent();
@@ -1055,8 +1237,8 @@ document.getElementById('langSwitch').addEventListener('click',e=>{
     if(btn) btn.textContent = dark ? '☀️' : '🌙';
     const mt=document.querySelector('meta[name="theme-color"]');
     if(mt) mt.setAttribute('content', dark ? '#141E36' : '#1B2F5E');
-    // 지도가 떠 있으면 레이아웃 재계산
-    try{ if(typeof pcMapObj!=='undefined' && pcMapObj && pcMapObj.relayout) setTimeout(function(){ pcMapObj.relayout(); }, 60); }catch(e){}
+    // 지도가 떠 있으면 레이아웃 재계산 (중심·배율은 그대로 — 컨트롤러가 저장·복원)
+    try{ if(typeof pcMapTransition==='function') pcMapTransition(function(){}); }catch(e){}
   }
   let dark = localStorage.getItem(KEY)==='dark';
   apply(dark);
@@ -1097,8 +1279,11 @@ function bazToast(msg){
     var b=document.getElementById('filtToggleBtn');
     if(b){ b.textContent=LABEL[stage]; b.title=TIP[stage]; }
     try{ localStorage.setItem(KEY, stage); }catch(e){}
-    // 지도 폭 변경 반영
-    try{ if(typeof pcMapObj!=='undefined' && pcMapObj && pcMapObj.relayout) setTimeout(function(){ pcMapObj.relayout(); }, 220); }catch(e){}
+    /* 필터 폭 변경 → 지도 폭도 바뀐다. CSS transition(.18s) 도중에는 크기가 계속
+       변하므로 ResizeObserver 가 매 프레임 relayout 을 예약하지만, 컨트롤러가
+       프레임당 1회로 병합하고 전환 시작 시점의 중심·배율을 복원한다.
+       (예전에는 220ms 뒤 relayout 1회뿐이라 그 사이 타일이 늘어나거나 회색으로 남았다) */
+    try{ if(typeof pcMapTransition==='function') pcMapTransition(function(){}); }catch(e){}
   }
   apply(cur);
   var btn=document.getElementById('filtToggleBtn');
@@ -1187,10 +1372,8 @@ function updateFilterCounts(){ populateFilters(); updateStats(); }
 function getFiltered(){
   let list=HOSPITALS.slice();
   if(nearbyMode && myPos){
-    list=list.filter(h=>isNcare(h)&&h.lat!=null)
-      .map(h=>({...h,_dist:distKm(myPos.lat,myPos.lng,h.lat,h.lng)}))
-      .filter(h=>h._dist<=5).sort((a,b)=>a._dist-b._dist);
-    return list;
+    /* 내 위치 기준 5km · N-CARE · 좌표 있는 병원만, 가까운 순 (js/baz-nearby.js) */
+    return BazNearby.filterNearby(HOSPITALS, myPos, {km:BazNearby.DEFAULT_KM, isNcare:isNcare});
   }
   if(curFilter==='ncare') list=list.filter(isNcare);
   else if(curFilter==='due') list=list.filter(isDue);
@@ -1293,6 +1476,46 @@ function getLastUiVerRaw(name){
   return '';
 }
 
+/* ── 카드/표/상세 공용 액션 버튼 ────────────────────────────────────────────
+   예전에는 버튼마다 onclick="window.open('…')" / onclick="openHist('○○병원')" 를
+   문자열로 만들었다. 병원명에 따옴표·역슬래시가 있으면 그 자리에서 코드가 끊겨
+   버튼이 죽거나(따옴표) 임의 코드가 실행됐다(escapeHtml 은 JS 문맥을 막지 못한다).
+   → 병원명은 data-hn 속성(HTML 속성 문맥)에만 넣고, URL 은 클릭 시점에
+     이벤트 위임 핸들러가 그 이름으로 병원을 찾아 직접 만든다. */
+function pcActionButtons(h, opts){
+  opts = opts || {};
+  var hn = escAttr(h.n);
+  function btn(act, cls, label){
+    return '<button type="button"'+(opts.plain?'':' class="'+cls+'"')+' data-hact="'+act+'" data-hn="'+hn+'">'+label+'</button>';
+  }
+  return btn('nmap','nmap','🗺️ '+escapeHtml(t('nmap')))+
+         btn('insp','insp','📋 '+escapeHtml(t('insp')))+
+         btn('surv','surv','⭐ '+escapeHtml(t('surv')));
+}
+/* 액션별 목적지 — 문자열 조합은 여기 한 곳에서만, 값은 encodeURIComponent 로 */
+function pcActionUrl(act, h){
+  var q=encodeURIComponent;
+  if(act==='nmap') return 'https://m.map.naver.com/search2/search.naver?query='+q(h.n);
+  if(act==='insp') return 'inspection.html?h='+q(h.n)+'&sn='+q(h.s||'')+'&nc='+q(h.nc||'')+'&e='+q(h.sa||'');
+  if(act==='surv') return 'survey.html?h='+q(h.n)+'&e='+q(h.sa||'');
+  return '';
+}
+function pcRunAction(act, name){
+  var h=pcHospByName(name)||{n:name};
+  if(act==='hist'){ openHist(h.n||name); return; }
+  var url=pcActionUrl(act, h);
+  if(!url) return;
+  /* 외부 지도는 새 창 — noopener/noreferrer 로 원본 창 조작(window.opener) 차단 */
+  if(act==='nmap'){ BazDom.openExternal(url, 'bazNaverMap'); return; }
+  location.href=url;
+}
+/* 카드·표·상세·최근처리 어디서 눌러도 같은 경로로 처리 */
+document.addEventListener('click', function(e){
+  var b=e.target.closest('[data-hact]'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  pcRunAction(b.getAttribute('data-hact'), b.getAttribute('data-hn')||'');
+});
+
 function cardHTML(h){
   const ncareTag=isNcare(h)?'<span class="h-tag ncare">N-CARE '+escapeHtml(h.nc)+'</span>':'<span class="h-tag ncare none">미가입</span>';
   const asTag=h.as?'<span class="h-tag as">'+escapeHtml(h.as)+'</span>':'';
@@ -1305,11 +1528,10 @@ function cardHTML(h){
   let vendorTag='';
   if(vendorRaw==='납품 1년 이내'){ vendorTag='<span class="h-tag warranty">🛡 워런티 유효</span>'; }
   else if(vendorRaw){ vendorTag='<span class="h-tag vendor">'+escapeHtml(vendorRaw)+'</span>'; }
-  const distHtml=(h._dist!=null)?'<div class="h-dist show">📍 '+h._dist.toFixed(1)+'km</div>':'';
-  const naverUrl='https://m.map.naver.com/search2/search.naver?query='+encodeURIComponent(h.n);
-  const inspUrl='inspection.html?h='+encodeURIComponent(h.n)+'&sn='+encodeURIComponent(h.s||'')+'&nc='+encodeURIComponent(h.nc||'')+'&e='+encodeURIComponent(h.sa||'');
-  const survUrl='survey.html?h='+encodeURIComponent(h.n)+'&e='+encodeURIComponent(h.sa||'');
-  const badge=(typeof pcStatusBadge==='function')?pcStatusBadge(h):(isNcare(h)?'<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>':'<span class="st-badge 비대상">'+t('notTarget')+'</span>');
+  const distHtml=(h._dist!=null)?'<div class="h-dist show">📍 '+escapeHtml(h._dist.toFixed(1))+'km</div>':'';
+  const badge=(typeof pcStatusBadge==='function')?pcStatusBadge(h)
+    :(isNcare(h)?'<span class="st-badge '+stCls(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
+                :'<span class="st-badge '+stCls('비대상')+'">'+escapeHtml(t('notTarget'))+'</span>');
 
   const lvl=dueLevel(h);
   let cardCls='h-card', warnTag='';
@@ -1319,22 +1541,18 @@ function cardHTML(h){
   /* 최신 사용자 숙련도 평가 배지(이력 옆) — 배지 오류가 카드 목록 전체를 막지 않도록 격리 */
   let skillBadge=''; try{ skillBadge=pcSkillBadge(h.n); }catch(e){ skillBadge=''; }
   const histBtn = (HISTORY[h.n] && HISTORY[h.n].length)
-    ? '<button class="hist" onclick="openHist(\''+escapeHtml(h.n).replace(/'/g,"\\'")+'\')">🕑 '+t('histBtn')+'</button>'
+    ? '<button type="button" class="hist" data-hact="hist" data-hn="'+escAttr(h.n)+'">🕑 '+escapeHtml(t('histBtn'))+'</button>'
     : '';
 
   return '<div class="'+cardCls+'">'+
     '<div class="h-card-head"><div style="min-width:0;"><div class="h-name">'+escapeHtml(h.n)+'</div>'+distHtml+'</div>'+badge+'</div>'+
     '<div class="h-meta">'+
       (h.a?'<div class="line"><span class="ico">📍</span><span>'+escapeHtml(h.a)+'</span></div>':'')+
-      '<div class="line"><span class="ico">🔧</span><span>'+escapeHtml(h.s||'-')+' · '+t('sales')+' '+escapeHtml(h.sa||'-')+'</span></div>'+
-      '<div class="line"><span class="ico">📅</span><span>'+statusDays(h)+'</span></div>'+
+      '<div class="line"><span class="ico">🔧</span><span>'+escapeHtml(h.s||'-')+' · '+escapeHtml(t('sales'))+' '+escapeHtml(h.sa||'-')+'</span></div>'+
+      '<div class="line"><span class="ico">📅</span><span>'+escapeHtml(statusDays(h))+'</span></div>'+
     '</div>'+ (warnTag?'<div>'+warnTag+'</div>':'') +
     '<div class="h-tags">'+ncareTag+asTag+salesTag+hpTag+uiTag+vendorTag+'</div>'+
-    '<div class="h-actions">'+
-      '<button class="nmap" onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
-      '<button class="insp" onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
-      '<button class="surv" onclick="location.href=\''+survUrl+'\'">⭐ '+t('surv')+'</button>'+
-    '</div>'+
+    '<div class="h-actions">'+pcActionButtons(h)+'</div>'+
     ((histBtn||skillBadge)?'<div class="h-actions" style="margin-top:6px;align-items:center;">'+histBtn+skillBadge+'</div>':'')+
     '</div>';
 }
@@ -1477,6 +1695,70 @@ document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilte
 document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('loadMore').addEventListener('click',()=>{ showCount+=20; render(); });
 
+/* ===== 내 주변 5km N-CARE (브라우저 위치 기준) =====
+   nearbyMode·myPos 필터 코드는 남아 있었는데 위치를 설정하는 UI 도
+   navigator.geolocation 호출도 사라져 있어 기능 전체에 도달할 수 없었다(죽은 코드).
+   상태기계는 js/baz-nearby.js 가 담당한다: off → locating → ready/denied/failed/unsupported.
+   ※ 여기서 말하는 '내 주변 5km' 는 브라우저 위치 기준 모드다.
+     지도에 뜨는 '검색 결과 주변 5km 참고 마커'(pcDrawNearby)와는 다른 기능이며,
+     UI 문구·코드 이름·지도 제목에서 모두 구분해 부른다. */
+var pcNearby = BazNearby.create({
+  onChange: function(state, detail){
+    nearbyMode = (state==='ready');
+    myPos = (state==='ready') ? detail.pos : null;
+    nearbySyncUI(state, detail);
+    showCount=20;
+    try{ updateFilterCounts(); }catch(e){}
+    try{ render(); }catch(e){}
+  }
+});
+function nearbySyncUI(state, detail){
+  var btn=document.getElementById('nearbyBtn');
+  var lbl=document.getElementById('nearbyBtnLabel');
+  var box=document.getElementById('nearbyState');
+  if(!btn||!box) return;
+  var on=(state==='ready');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', on?'true':'false');
+  btn.disabled=(state==='locating');
+  if(lbl) lbl.textContent = on ? t('nearbyOff') : t('nearby');
+  var cls='', msg='';
+  if(state==='locating'){ cls='busy'; msg=t('locating'); }
+  else if(state==='ready'){
+    cls='ok';
+    var n=0; try{ n=getFiltered().length; }catch(e){ n=0; }
+    msg=t('nearbyOn').replace('{n}', n);
+  }
+  else if(state==='denied'){ cls='err'; msg=t('locDenied'); }
+  else if(state==='failed'){ cls='err'; msg=t('locFail'); }
+  else if(state==='unsupported'){ cls='err'; msg=t('locUnsupported'); }
+  else { cls=''; msg=''; }
+  box.className=cls;
+  box.textContent=msg;
+  if(msg) bazAnnounce(msg);
+}
+(function bindNearby(){
+  var btn=document.getElementById('nearbyBtn'); if(!btn) return;
+  /* 위치 API 가 없는 환경(비보안 컨텍스트·구형 브라우저)에서도 버튼만 비활성 안내로
+     끝나고 화면 전체는 그대로 동작해야 한다 — 예외를 여기서 가둔다. */
+  btn.addEventListener('click', function(){
+    try{
+      if(pcNearby.state()==='ready'){
+        pcNearby.off();
+        var box=document.getElementById('nearbyState');
+        if(box){ box.className=''; box.textContent=t('locOff'); }
+        bazAnnounce(t('locOff'));
+        return;
+      }
+      pcNearby.request();
+    }catch(e){
+      console.warn('[내 주변] 위치 요청 실패(무시):', e);
+      var b2=document.getElementById('nearbyState');
+      if(b2){ b2.className='err'; b2.textContent=t('locFail'); }
+    }
+  });
+})();
+
 // ===== 탭 전환 =====
 document.querySelector('.tabs').addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]'); if(!tb) return;
@@ -1493,10 +1775,10 @@ document.querySelector('.tabs').addEventListener('click',e=>{
     if(!pcRecentRequested){ pcRecentRequested=true; pcLoadRecent(function(){ renderSched(); }); }
     renderSched(); pcProgPull();
   }
-  // 병원조회 탭 복귀 시 카카오 지도 relayout — display:none 이었다가 복귀하면
-  // 타일이 회색으로 깨지므로 재계산(테마·필터·모드 토글과 동일 패턴)
+  // 병원조회 탭 복귀 시 relayout — display:none 이었다가 돌아오면 타일이 회색으로 깨진다.
+  // 탭을 떠나기 전 보고 있던 중심·배율은 컨트롤러가 저장해 두었다가 복원한다.
   if(curTab==='list'){
-    try{ if(typeof pcMapObj!=='undefined' && pcMapObj && pcMapObj.relayout){ setTimeout(function(){ pcMapObj.relayout(); }, 60); } }catch(e){}
+    try{ if(typeof pcMapTransition==='function') pcMapTransition(function(){}); }catch(e){}
   }
 });
 
@@ -1651,7 +1933,7 @@ function renderNcareService(ncare){
     const mx=Math.max.apply(null,keys.map(function(k){return counts[k];}).concat([1]));
     return keys.map(function(k){
       const v=counts[k], w=Math.round(v/mx*100);
-      return '<div class="bar-row"><div class="bar-label" style="width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escapeHtml(k)+'">'+escapeHtml(k)+'</div>'+
+      return '<div class="bar-row"><div class="bar-label" style="width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escAttr(k)+'">'+escapeHtml(k)+'</div>'+
         '<div class="bar-track"><div class="bar-fill" style="width:'+Math.max(w,8)+'%;background:'+color+'">'+v+'</div></div></div>';
     }).join('');
   }
@@ -1791,7 +2073,7 @@ function renderRecent(){
 
   // 처리자 필터
   let fseHtml = '<div class="rc-fsefilter"><select id="rcFseSelect"><option value="">'+t('rcAllFse')+'</option>';
-  fseList.forEach(f=>{ fseHtml += '<option value="'+escapeHtml(f)+'"'+(rcFse===f?' selected':'')+'>'+escapeHtml(f)+' ('+fseSet[f]+')</option>'; });
+  fseList.forEach(f=>{ fseHtml += '<option value="'+escAttr(f)+'"'+(rcFse===f?' selected':'')+'>'+escapeHtml(f)+' ('+fseSet[f]+')</option>'; });
   fseHtml += '</select></div>';
 
   // 요약
@@ -1826,7 +2108,7 @@ function renderRecent(){
         let metaLine = meta.length ? '<span>'+meta.join('</span><span>')+'</span>' : '';
         if(r.p && r.p!=='없음') metaLine += '<span class="rc-part">🔧 '+escapeHtml(r.p)+'</span>';
 
-        body += '<div class="rc-item" data-rchosp="'+escapeHtml(it.name)+'">'+
+        body += '<div class="rc-item" data-rchosp="'+escAttr(it.name)+'">'+
           '<div class="rc-item-top"><span class="rc-hname">'+escapeHtml(it.name)+'</span>'+
             '<span class="rc-type '+typeCls+'">'+typeLabel+'</span></div>'+
           (sym ? '<div class="rc-sym">'+escapeHtml(sym)+'</div>' : '')+
@@ -1895,26 +2177,53 @@ function bindRecent(){
 let histEditing = false;
 let histCurName = null;
 
-// localStorage에 저장된 이력 편집본 로드 (있으면 덮어쓰기)
-(function loadHistEdits(){
+/* ── 이력 편집 저장 위치 전환 (localStorage → 서버) ────────────────────────
+   예전에는 관리자(레벨2) 인증까지 받은 편집을 baz_hosp_history 에만 저장했다.
+   ① 편집한 사람의 브라우저에서만 보였고
+   ② 그 로컬 값이 서버 이력(applyIssueHist)을 매번 덮어써, 다른 사람이 고친
+      최신 이력이 그 PC 에서는 영영 안 보였다.
+   → 이제 서버(handover_gas.gs history_save)가 진실이다. localStorage 는
+     "서버에 아직 못 보낸 초안" 보관용으로만 쓴다(js/baz-history-api.js).
+   기존 로컬 편집본은 지우지 않고 초안으로 옮겨, 사용자가 확인 후 서버에
+   반영하거나 버릴 수 있게 한다. */
+var histServerRev = {};        // 병원명 → 서버 rev (충돌 판정 기준)
+var histLegacyNames = {};      // 마이그레이션된 구버전 편집본 병원 목록
+(function migrateHistEdits(){
   try{
-    const saved = localStorage.getItem('baz_hosp_history');
-    if(saved){
-      const edits = JSON.parse(saved);
-      Object.keys(edits).forEach(name=>{ HISTORY[name] = edits[name]; });
-    }
-  }catch(e){}
+    var r = BazHistoryApi.migrateLegacyDrafts(localStorage);
+    (r.names||[]).forEach(function(n){ histLegacyNames[n]=1; });
+    if(r.migrated) console.log('[이력] 이 기기의 옛 편집본 '+r.migrated+'건을 초안으로 옮겼습니다 — 서버 반영은 이력 창에서');
+  }catch(e){ console.warn('[이력] 편집본 마이그레이션 실패(무시):', e); }
 })();
 
+var histNoteState = null;      // {kind:'info'|'ok'|'err', msg, draft:boolean}
 function openHist(name){
   histCurName = name;
   histEditing = false;
+  histNoteState = null;
+  var d=null; try{ d=BazHistoryApi.readDraft(localStorage, name); }catch(e){}
+  if(d) histNoteState={kind:'info', msg:t('histDraft'), draft:true};
   document.getElementById('histEditBar').style.display='none';
   document.getElementById('histLock').classList.remove('on');
   document.getElementById('histLock').textContent='🔒';
   renderHistBody();
-  document.getElementById('histModal').classList.add('show');
-  document.body.style.overflow='hidden';
+  BazModal.open(document.getElementById('histModal'), {
+    name:'hist', sheet:'.hist-sheet', initialFocus:'#histClose'
+  });
+}
+
+/* 안내 배너(초안 있음 · 저장 실패 · 충돌 등). 문자열은 전부 i18n·이스케이프 */
+function histNoteHTML(){
+  if(!histNoteState) return '';
+  var acts='';
+  if(histNoteState.draft){
+    acts='<div class="acts">'+
+      '<button type="button" data-histdraft="apply">'+escapeHtml(t('histDraftApply'))+'</button>'+
+      '<button type="button" data-histdraft="drop">'+escapeHtml(t('histDraftDrop'))+'</button>'+
+    '</div>';
+  }
+  return '<div class="hist-note'+(histNoteState.kind==='err'?' err':histNoteState.kind==='ok'?' ok':'')+'" role="status">'+
+    escapeHtml(histNoteState.msg)+acts+'</div>';
 }
 
 function renderHistBody(){
@@ -1923,17 +2232,18 @@ function renderHistBody(){
   document.getElementById('histName').textContent = name;
   document.getElementById('histSub').textContent = t('histCount').replace('{n}', recs.length) + (histEditing?' · '+t('histEditMode'):'');
   const body = document.getElementById('histBody');
+  const note = histNoteHTML();
 
   if(histEditing){
     // 편집 모드: 각 기록을 폼으로
-    body.innerHTML = recs.map((r,i)=>histEditRow(r,i)).join('') || '<div class="tl-empty">'+t('histEmpty')+'</div>';
+    body.innerHTML = note + (recs.map((r,i)=>histEditRow(r,i)).join('') || '<div class="tl-empty">'+t('histEmpty')+'</div>');
     return;
   }
   // 보기 모드
   if(!recs.length){
-    body.innerHTML = '<div class="tl-empty">'+t('histEmpty')+'</div>';
+    body.innerHTML = note + '<div class="tl-empty">'+t('histEmpty')+'</div>';
   }else{
-    body.innerHTML = recs.map(r=>{
+    body.innerHTML = note + recs.map(r=>{
       const isInsp = (r.t==='점검');
       const typeLabel = isInsp ? '점검' : 'A/S';
       const typeCls = isInsp ? '점검' : 'AS';
@@ -1972,7 +2282,7 @@ function histEditRow(r,i){
     '<textarea data-f="m" rows="2" placeholder="상세 내용">'+v(r.m)+'</textarea>'+
     '<textarea data-f="fx" rows="2" placeholder="처리 내용">'+v(r.fx)+'</textarea>'+
     '<input type="text" data-f="p" placeholder="교환품" value="'+v(r.p)+'">'+
-    '<div style="text-align:right;"><button class="tl-edit-del" onclick="histDelRow('+i+')">🗑 삭제</button></div>'+
+    '<div style="text-align:right;"><button type="button" class="tl-edit-del" data-histdel="'+i+'">🗑 삭제</button></div>'+
   '</div>';
 }
 
@@ -2003,29 +2313,110 @@ function histDelRow(i){
 
 function histAddRow(){
   histCollectEdits();
-  const today=new Date();
-  const ds=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  const ds=BazDate.todayStr();   // Asia/Seoul — 자정 넘겨 열어 둔 탭도 오늘로 찍힌다
   if(!HISTORY[histCurName]) HISTORY[histCurName]=[];
   HISTORY[histCurName].unshift({d:ds, t:'A/S'});
   renderHistBody();
 }
 
+/* ── 서버 저장 ────────────────────────────────────────────────────────────
+   성공했을 때만 화면을 "저장됨"으로 바꾼다. 실패·권한부족·충돌은 편집 모드를
+   유지하고 초안을 남긴다(입력을 잃지 않게). */
+var histSaving=false;
+function histSetNote(kind, msg, draft){
+  histNoteState = msg ? {kind:kind, msg:msg, draft:!!draft} : null;
+  renderHistBody();
+}
+function histPostSave(payload){
+  /* 이력 저장은 쓰기 경로다 — 조회용 bazGet 이 아니라 진행상태 저장과 같은 POST 규약
+     (text/plain + 토큰 동봉)을 쓴다. GAS 콜드스타트가 JSON 대신 HTML 을 주면 실패로 본다. */
+  return fetch(HANDOVER_URL, {
+    method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)
+  }).then(function(r){ return r.text(); })
+    .then(function(txt){
+      if(/^\s*</.test(txt)) throw {kind:'html'};
+      return JSON.parse(txt);
+    });
+}
 function histSaveEdits(){
+  if(histSaving) return;
   histCollectEdits();
-  // localStorage에 편집된 병원만 저장 (전체 누적)
+  var name=histCurName;
+  var records=BazHistoryApi.sanitizeRecords(HISTORY[name]||[]);
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){}
+  if(!token){ histSetNote('err', t('histNeedAuth')); return; }
+  // 서버 왕복 중 브라우저가 닫혀도 입력이 남도록 먼저 초안으로 보관
+  try{ BazHistoryApi.saveDraft(localStorage, name, records); }catch(e){}
+  var payload=BazHistoryApi.buildPayload({
+    hosp:name, records:records, who:pcWho(), baseRev:(histServerRev[name]||0), token:token
+  });
+  histSaving=true;
+  histSetNote('info', t('histSaving'));
+  var save=document.getElementById('histSave'); if(save) save.disabled=true;
+  histPostSave(payload)
+    .then(function(d){
+      var r=BazHistoryApi.classifyResponse(d);
+      if(r.ok){
+        histServerRev[name]=r.rev;
+        HISTORY[name]=Array.isArray(r.records)?r.records:records;
+        try{ BazHistoryApi.clearDraft(localStorage, name); }catch(e){}
+        delete histLegacyNames[name];
+        histInvalidateIssueCache();          // 다음 동기화가 서버 최신본을 다시 받게
+        bazAuthOk();
+        histNoteState=null;
+        histExitEdit();
+        try{ bazClearVerMemo(); }catch(e){}  // 이력 변경 → HP/UI 버전 메모 무효화
+        try{ render(); }catch(e){}
+        showHistToast(t('histServerSaved'));
+        bazAnnounce(t('histServerSaved'));
+        return;
+      }
+      if(r.conflict){
+        /* 조용히 덮어쓰지 않는다 — 서버 최신본을 화면에 반영하고 다시 확인받는다 */
+        if(Array.isArray(r.records)) HISTORY[name]=r.records;
+        histServerRev[name]=r.rev;
+        histInvalidateIssueCache();
+        renderHistBody();
+        histSetNote('err', t('histConflict')+(r.updatedBy?' ('+r.updatedBy+(r.updatedAt?' · '+r.updatedAt:'')+')':''), true);
+        bazAnnounce(t('histConflict'));
+        return;
+      }
+      if(r.unauthorized){ bazAuthFail(); histSetNote('err', t('histNeedAuth'), true); return; }
+      histSetNote('err', t('histSaveFail')+(r.error?' ('+r.error+')':''), true);
+    })
+    .catch(function(e){
+      console.warn('[이력] 서버 저장 실패:', (e&&e.kind)||e);
+      histSetNote('err', t('histSaveFail')+' · '+t('histDraftKept'), true);
+    })
+    .then(function(){
+      histSaving=false;
+      var s=document.getElementById('histSave'); if(s) s.disabled=false;
+    });
+}
+/* 저장·충돌 뒤에는 이슈이력 캐시를 버려야 다음 동기화가 서버 최신본을 받는다 */
+function histInvalidateIssueCache(){
   try{
-    let store={};
-    const prev=localStorage.getItem('baz_hosp_history');
-    if(prev) store=JSON.parse(prev);
-    store[histCurName]=HISTORY[histCurName];
-    localStorage.setItem('baz_hosp_history', JSON.stringify(store));
-    histExitEdit();
-    if(typeof bazClearVerMemo==='function') bazClearVerMemo();   // 이력 편집 → 버전 캐시 무효화
-    render(); // 카드 목록도 갱신 (이력 버튼 등)
-    showHistToast(t('histSaved'));
-  }catch(e){
-    alert('저장 실패: '+e.message);
-  }
+    localStorage.removeItem('bazIssueHistCache');
+    localStorage.removeItem('bazIssueHistCacheTs');
+  }catch(e){}
+  try{ if(typeof window.bazRefreshIssueHist==='function') window.bazRefreshIssueHist(); }catch(e){}
+}
+/* 이 기기 초안 → 서버 반영 / 버리기.
+   서버 반영은 편집과 같은 권한(레벨2)이 필요하므로, 잠금 상태면 먼저 인증을 받는다. */
+var histPendingDraftApply=false;
+function histApplyDraft(){
+  var d=null; try{ d=BazHistoryApi.readDraft(localStorage, histCurName); }catch(e){}
+  if(!d){ histSetNote(null,''); return; }
+  if(!histEditing){ histPendingDraftApply=true; histOpenPwModal(); return; }
+  HISTORY[histCurName]=d.records.slice();
+  histNoteState=null;
+  renderHistBody();
+  histSaveEdits();
+}
+function histDropDraft(){
+  try{ BazHistoryApi.clearDraft(localStorage, histCurName); }catch(e){}
+  delete histLegacyNames[histCurName];
+  histSetNote(null,'');
 }
 
 function histEnterEdit(){
@@ -2056,15 +2447,27 @@ function showHistToast(msg){
   setTimeout(()=>{ toast.style.transition='opacity .4s'; toast.style.opacity='0'; },1800);
 }
 
+/* [스크롤] 닫기는 body.style.overflow 를 직접 되돌리지 않는다.
+   예전에는 이력 모달이 무조건 overflow='' 로 리셋해, 지도 전체화면이 배경을
+   잠글 수 없었다(그래서 전체화면은 paddingTop 으로 자리만 예약했다).
+   이제 BazScrollLock 이 소유자별 카운트로 관리하므로 중첩도 안전하다. */
 function closeHist(){
-  document.getElementById('histModal').classList.remove('show');
-  document.body.style.overflow='';
+  BazModal.close(document.getElementById('histModal'));
   histEditing=false;
+  histNoteState=null;
+  histPendingDraftApply=false;
   document.getElementById('histEditBar').style.display='none';
 }
 document.getElementById('histClose').addEventListener('click', closeHist);
 document.getElementById('histModal').addEventListener('click', e=>{
   if(e.target.id==='histModal') closeHist();
+});
+// 이력 본문 안의 위임 클릭(삭제·초안 반영/삭제)
+document.getElementById('histBody').addEventListener('click', function(e){
+  var del=e.target.closest('[data-histdel]');
+  if(del){ histDelRow(parseInt(del.getAttribute('data-histdel'),10)||0); return; }
+  var dr=e.target.closest('[data-histdraft]');
+  if(dr){ if(dr.getAttribute('data-histdraft')==='apply') histApplyDraft(); else histDropDraft(); }
 });
 // 병원 상세 모달 닫기 (✕·배경 클릭·Esc) — 표 전체화면 뷰 전용
 (function(){
@@ -2072,10 +2475,13 @@ document.getElementById('histModal').addEventListener('click', e=>{
   var cl=document.getElementById('pcDetailModalClose');
   if(cl) cl.addEventListener('click', function(){ if(typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
   if(dm) dm.addEventListener('click', function(e){ if(e.target.id==='pcDetailModal' && typeof pcCloseDetailModal==='function') pcCloseDetailModal(); });
+  /* Esc — 모달은 BazModal 이 스택 최상단만 닫는다(중첩 안전). 열린 모달이 없을 때만
+     지도 전체화면을 해제한다. capture 단계의 BazModal.bind 가 먼저 처리하므로
+     여기서는 "남은 경우"만 본다. */
+  BazModal.bind(document);
   document.addEventListener('keydown', function(e){
     if(e.key!=='Escape') return;
-    // 상세 모달이 먼저, 그 다음 지도 전체화면
-    if(dm && dm.classList.contains('show') && typeof pcCloseDetailModal==='function'){ pcCloseDetailModal(); return; }
+    if(BazModal.openCount()>0) return;
     if(typeof pcMapIsFull==='function' && pcMapIsFull()){ pcExitFullscreen(); }
   });
 })();
@@ -2113,12 +2519,20 @@ document.getElementById('histAiBtn').addEventListener('click', ()=>{
 });
 
 // 잠금 버튼 → 비밀번호 모달
-document.getElementById('histLock').addEventListener('click', ()=>{
-  if(histEditing){ histExitEdit(); return; }
+function histOpenPwModal(){
   document.getElementById('histPwInput').value='';
   document.getElementById('histPwErr').textContent='';
-  document.getElementById('histPwModal').classList.add('show');
-  setTimeout(()=>document.getElementById('histPwInput').focus(),50);
+  BazModal.open(document.getElementById('histPwModal'), {
+    name:'histPw', sheet:'.pw-box', initialFocus:'#histPwInput'
+  });
+}
+function histClosePwModal(){
+  histPendingDraftApply=false;
+  BazModal.close(document.getElementById('histPwModal'));
+}
+document.getElementById('histLock').addEventListener('click', ()=>{
+  if(histEditing){ histExitEdit(); return; }
+  histOpenPwModal();
 });
 async function histCheckPw(){
   const v=document.getElementById('histPwInput').value;
@@ -2129,8 +2543,10 @@ async function histCheckPw(){
   try{
     const r=await BazAuth.login(v);
     if(r.ok && r.level>=2){
-      document.getElementById('histPwModal').classList.remove('show');
+      var pending=histPendingDraftApply; histPendingDraftApply=false;
+      BazModal.close(document.getElementById('histPwModal'));
       histEnterEdit();
+      if(pending) histApplyDraft();
     }else if(r.ok && r.level<2){
       // 일반 비번으로는 편집 불가 (관리자 전용)
       document.getElementById('histPwErr').textContent=t('histWrongPw');
@@ -2146,19 +2562,18 @@ async function histCheckPw(){
   }
 }
 document.getElementById('histPwOk').addEventListener('click', histCheckPw);
-document.getElementById('histPwCancel').addEventListener('click', ()=>document.getElementById('histPwModal').classList.remove('show'));
+document.getElementById('histPwCancel').addEventListener('click', histClosePwModal);
 document.getElementById('histPwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') histCheckPw(); });
 document.getElementById('histPwModal').addEventListener('click', e=>{
-  if(e.target.id==='histPwModal') document.getElementById('histPwModal').classList.remove('show');
+  if(e.target.id==='histPwModal') histClosePwModal();
 });
 document.getElementById('histAdd').addEventListener('click', histAddRow);
 document.getElementById('histSave').addEventListener('click', histSaveEdits);
 document.getElementById('histCancel').addEventListener('click', ()=>{
-  // 취소 시 localStorage에서 원본 복원
-  try{
-    const saved=localStorage.getItem('baz_hosp_history');
-    if(saved){ const e=JSON.parse(saved); if(e[histCurName]) HISTORY[histCurName]=e[histCurName]; }
-  }catch(err){}
+  /* 취소 = 서버 값으로 되돌리기. 예전에는 localStorage 편집본을 되살렸는데,
+     그 값이 곧 "덮어쓰던 로컬본"이라 취소해도 서버와 어긋난 상태가 남았다.
+     이제 서버가 진실이므로 이슈이력 캐시를 버리고 다시 받아온다. */
+  histInvalidateIssueCache();
   histExitEdit();
 });
 
@@ -2194,8 +2609,8 @@ applyLang();
     return out;
   }
 
-  // 시트 2026 이슈이력을 HISTORY에 병합 (2025 이력은 HTML 원본 유지)
-  function applyIssueHist(data){
+  // 시트 이슈이력을 HISTORY에 반영 (서버가 진실)
+  function applyIssueHist(data, revs){
     if(!data || typeof data!=='object') return false;
     var names=Object.keys(data);
     if(!names.length) return false;
@@ -2209,14 +2624,15 @@ applyLang();
       combined.sort(function(a,b){ return (b.d||'').localeCompare(a.d||''); });
       HISTORY[name]=combined;
     });
-    // 현장 편집본 재적용
-    try{
-      var saved=localStorage.getItem('baz_hosp_history');
-      if(saved){
-        var edits=JSON.parse(saved);
-        Object.keys(edits).forEach(function(n){ HISTORY[n]=edits[n]; });
-      }
-    }catch(e){}
+    /* [수정] 로컬 편집본 재적용을 없앤다.
+       예전에는 여기서 baz_hosp_history 를 매번 다시 덮어써, 서버(=다른 관리자)가
+       고친 최신 이력이 이 PC 에서만 영영 보이지 않았다. 편집은 이제 서버에 저장되고,
+       아직 못 보낸 편집은 '초안'으로만 남아 이력 창에서 사용자 확인 후 반영된다. */
+    if(revs && typeof revs==='object'){
+      Object.keys(revs).forEach(function(n){
+        var r=revs[n]; histServerRev[n]=(r && typeof r.rev==='number')?r.rev:(Number(r)||0);
+      });
+    }
     return true;
   }
 
@@ -2232,41 +2648,49 @@ applyLang();
     }catch(e){}
   }
 
-  function syncIssueHist(){
-    if(ISSUE_HIST_URL.indexOf('여기에_')===0) return;
-
-    // 1) 캐시 먼저 적용
+  function cacheFresh(tsKey, ttl){
+    try{ var ts=parseInt(localStorage.getItem(tsKey)||'0',10); return !!ts && (Date.now()-ts)<ttl; }
+    catch(e){ return false; }
+  }
+  /* 서버 응답 채택 — 캐시 기록 + 화면 반영을 한곳에서 (bootstrap·개별 요청 공용) */
+  function acceptIssueHist(data, revs){
     try{
-      var cached=localStorage.getItem(ISSUE_CACHE_KEY);
-      var ts=parseInt(localStorage.getItem(ISSUE_CACHE_TS)||'0',10);
-      if(cached){
-        if(applyIssueHist(JSON.parse(cached))){
-          refreshHistViews();
-          console.log('[이슈이력] 캐시 적용');
-        }
-      }
-      if(cached && (Date.now()-ts)<ISSUE_CACHE_TTL){
-        console.log('[이슈이력] 캐시 신선 — 동기화 생략');
-        return;
-      }
+      localStorage.setItem(ISSUE_CACHE_KEY, JSON.stringify({data:data, revs:revs||null}));
+      localStorage.setItem(ISSUE_CACHE_TS, String(Date.now()));
+    }catch(e){}
+    if(applyIssueHist(data, revs)){
+      refreshHistViews();
+      console.log('[이슈이력] '+Object.keys(data).length+'개 병원 동기화');
+      return true;
+    }
+    return false;
+  }
+  function applyIssueCache(){
+    try{
+      var raw=localStorage.getItem(ISSUE_CACHE_KEY);
+      if(!raw) return false;
+      var o=JSON.parse(raw);
+      /* 구버전 캐시는 data 자체가 최상위였다 — 형태를 보고 갈라 읽는다 */
+      var data=(o && o.data && typeof o.data==='object') ? o.data : o;
+      var revs=(o && o.revs) ? o.revs : null;
+      if(applyIssueHist(data, revs)){ refreshHistViews(); console.log('[이슈이력] 캐시 적용'); return true; }
     }catch(e){ console.warn('[이슈이력] 캐시 읽기 오류(무시):',e); }
-
-    // 2) 시트에서 최신 fetch
+    return false;
+  }
+  function syncIssueHist(force){
+    if(ISSUE_HIST_URL.indexOf('여기에_')===0) return;
+    if(!force && cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL)){
+      console.log('[이슈이력] 캐시 신선 — 동기화 생략'); return;
+    }
     bazGet(ISSUE_HIST_URL)
       .then(function(d){
         if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return; }
-        try{
-          localStorage.setItem(ISSUE_CACHE_KEY, JSON.stringify(d.data));
-          localStorage.setItem(ISSUE_CACHE_TS, String(Date.now()));
-        }catch(e){}
-        if(applyIssueHist(d.data)){
-          refreshHistViews();
-          console.log('[이슈이력] '+Object.keys(d.data).length+'개 병원 동기화');
-        }
+        acceptIssueHist(d.data, d.revs);
       })
       .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
   }
-  syncIssueHist();
+  /* 이력 편집 저장 직후 최신본을 다시 받기 위한 진입점 */
+  window.bazRefreshIssueHist=function(){ syncIssueHist(true); };
 
   // 날짜를 yyyy-MM-dd로 정규화 (깨진 형식 방어)
   function cleanDate(v){
@@ -2279,40 +2703,20 @@ applyLang();
     return '';
   }
 
+  /* [정합성] 예전 applyDB 는 `if(r.sales) h.sa=r.sales;` 식 truthy 검사라
+     시트에서 담당자·주소·N-CARE·상태를 지워도 브라우저 메모리에는 옛 값이 남았다.
+     이제 js/baz-hospital-data.js 가 "필드 존재" 와 "값이 비었는가" 를 나눠 처리한다:
+       · 응답에 필드가 있으면 빈 문자열도 권위 있는 값 → 지운 값은 화면에서도 지워진다
+       · 응답에 없는 필드(구버전 백엔드)는 손대지 않는다
+       · 좌표는 유효범위 밖이면 null · 병원명 중복은 접는다
+       · 스냅샷에서 사라진 병원은 메모리에서도 제거(prune) */
   function applyDB(rows){
-    if(!rows||!rows.length) return false;
-    var updated=false;
-    rows.forEach(function(r){
-      if(!r.name) return;
-      var h=HOSPITALS.find(function(x){return x.n===r.name;});
-      if(h){
-        if(r.sn)        h.s=r.sn;
-        if(r.region)    h.rg=r.region;
-        if(r.address)   h.a=r.address;
-        /* 최근점검일·점검상태 모두 병원정보DB 시트 값을 그대로 쓴다(시트가 단일 진실 소스) */
-        if(r.lastVisit) h.li=cleanDate(r.lastVisit);
-        if(r.status)    h.st=r.status;
-        if(r.sales)     h.sa=r.sales;
-        if(r.asType)    h.as=r.asType;
-        if(r.ncare)     h.nc=r.ncare;
-        if(r.hpVer)     h.hpv=r.hpVer;
-        if(r.uiVer)     h.uiv=r.uiVer;
-        if(r.client)    h.d=r.client;                 /* 거래처(워런티 판정) */
-        if(r.lat!=null) h.lat=r.lat;                  /* 지도 좌표 — 시트 N·O열 */
-        if(r.lng!=null) h.lng=r.lng;
-        updated=true;
-      }else{
-        HOSPITALS.push({
-          n:r.name, s:r.sn||'', rg:r.region||'', a:r.address||'',
-          li:cleanDate(r.lastVisit), st:r.status||'미점검', sa:r.sales||'',
-          as:r.asType||'', nc:r.ncare||'미가입', d:r.client||'',
-          hpv:r.hpVer||'', uiv:r.uiVer||'',
-          lat:(r.lat!=null?r.lat:null), lng:(r.lng!=null?r.lng:null)
-        });
-        updated=true;
-      }
-    });
-    return updated;
+    var st=BazHospitalData.mergeRows(HOSPITALS, rows, {prune:true});
+    if(st.duplicates) console.warn('[병원정보DB] 중복 병원명 '+st.duplicates+'건 정리');
+    if(st.invalidCoords) console.warn('[병원정보DB] 좌표 이상값 '+st.invalidCoords+'건 무시');
+    if(st.removed) console.log('[병원정보DB] 시트에서 사라진 병원 '+st.removed+'곳 제거');
+    if(st.cleared) console.log('[병원정보DB] 빈 값으로 갱신된 병원 '+st.cleared+'곳');
+    return st.changed;
   }
 
   // ── 병원정보DB 동기화 (5분 캐시) ──
@@ -2331,43 +2735,76 @@ applyLang();
     }
     return false;
   }
-
-  function syncHospDB(){
-    // 1) 캐시 먼저 적용 (즉시 반영)
+  function acceptHospDB(rows){
+    if(!rows || !rows.length) return false;
+    try{
+      localStorage.setItem(HDB_CACHE_KEY, JSON.stringify(rows));
+      localStorage.setItem(HDB_CACHE_TS, String(Date.now()));
+    }catch(e){}
+    try{
+      if(applyHospDB(rows)){ console.log('[병원정보DB] '+rows.length+'건 동기화'); return true; }
+    }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
+    return false;
+  }
+  function applyHospDBCache(){
     try{
       var cached=localStorage.getItem(HDB_CACHE_KEY);
-      var ts=parseInt(localStorage.getItem(HDB_CACHE_TS)||'0',10);
-      if(cached){
-        var arr=JSON.parse(cached);
-        if(arr && arr.length && applyHospDB(arr)){
-          console.log('[병원정보DB] 캐시 적용 '+arr.length+'건');
-        }
-      }
-      if(cached && (Date.now()-ts)<HDB_CACHE_TTL){
-        console.log('[병원정보DB] 캐시 신선 — 동기화 생략');
-        return;
+      if(!cached) return false;
+      var arr=JSON.parse(cached);
+      if(arr && arr.length && applyHospDB(arr)){
+        console.log('[병원정보DB] 캐시 적용 '+arr.length+'건');
+        return true;
       }
     }catch(e){ console.warn('[병원정보DB] 캐시 읽기 오류(무시):',e); }
+    return false;
+  }
 
-    // 2) 시트에서 최신 fetch
+  function syncHospDB(force){
+    if(!force && cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL)){
+      console.log('[병원정보DB] 캐시 신선 — 동기화 생략'); return;
+    }
     bazGet(HOSPITAL_DB_URL)
       .then(function(d){
         if(!d.success||!d.data||!d.data.length) return;
-        try{
-          localStorage.setItem(HDB_CACHE_KEY, JSON.stringify(d.data));
-          localStorage.setItem(HDB_CACHE_TS, String(Date.now()));
-        }catch(e){}
-        try{
-          if(applyHospDB(d.data)){
-            console.log('[병원정보DB] '+d.data.length+'건 동기화');
-          }
-        }catch(e){ console.warn('[병원정보DB] 적용 오류(무시):',e); }
+        acceptHospDB(d.data);
       })
       .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
   }
   // 칩 필터(전체/N-CARE/점검필요) 활성화 시 재동기화 트리거용으로 노출 (5분 캐시 준수)
-  window.refreshHospDB=syncHospDB;
-  syncHospDB();
+  window.refreshHospDB=function(){ syncHospDB(false); };
+
+  /* ── 부팅: bootstrap 1콜 (hospdbrich + issuehist) ────────────────────────
+     예전에는 페이지가 뜨자마자 병원정보DB·이슈이력을 각각 GET 했다. GAS 콜드스타트에서
+     두 요청이 각자 인스턴스를 깨우느라 첫 화면이 늦었다. handover_gas 에 이미 있는
+     action=bootstrap 으로 한 번에 받는다.
+     ★ 구버전 백엔드(미재배포)는 bootstrap 을 모르거나 빈 응답을 준다 →
+       hospdb/issuehist 중 못 받은 쪽만 기존 개별 요청으로 안전하게 폴백한다. */
+  function bazBootSync(force){
+    applyHospDBCache();
+    applyIssueCache();
+    var needH=force || !cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL);
+    var needI=force || !cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL);
+    if(!needH && !needI) return;
+    if(!needH){ syncIssueHist(force); return; }   // 한쪽만 필요하면 1콜이 이득이 없다
+    if(!needI){ syncHospDB(force); return; }
+    bazGet(HANDOVER_CORE+'?action=bootstrap')
+      .then(function(d){
+        var hd=d && d.hospdb, ih=d && d.issuehist;
+        var okH=!!(hd && hd.success && Array.isArray(hd.data) && hd.data.length);
+        var okI=!!(ih && ih.success && ih.data);
+        if(!okH && !okI) throw {kind:'bootstrap-unsupported'};
+        if(okH) acceptHospDB(hd.data);
+        if(okI) acceptIssueHist(ih.data, ih.revs);
+        if(!okH) syncHospDB(true);
+        if(!okI) syncIssueHist(true);
+        console.log('[부트스트랩] 1콜 동기화'+(okH?' · 병원정보DB':'')+(okI?' · 이슈이력':''));
+      })
+      .catch(function(e){
+        console.warn('[부트스트랩] 1콜 불가 — 개별 요청으로 폴백:', (e&&e.kind)||e);
+        syncHospDB(true); syncIssueHist(true);
+      });
+  }
+  bazBootSync(false);
 
   // ── 방문로그 동기화 (5분 캐시) ──
   var VLOG_CACHE_KEY='bazVisitLogCache';
@@ -2420,8 +2857,7 @@ applyLang();
       localStorage.removeItem('baz_pc_recent_ts');
     }catch(e){}
     try{ pcRecentTs=0; }catch(e){}   // 신선도 판정은 메모리가 진실 — 강제 새로고침에 함께 초기화
-    try{ syncHospDB(); }catch(e){}
-    try{ syncIssueHist(); }catch(e){}
+    try{ bazBootSync(true); }catch(e){ try{ syncHospDB(true); syncIssueHist(true); }catch(_){} }
     try{ syncVisitLog(); }catch(e){}
     try{ if(typeof bazGeocodeRefresh==='function') bazGeocodeRefresh(); }catch(e){}
     // 최근 완료(handover) → 오늘 완료·이동시간 카드 갱신
@@ -2870,7 +3306,7 @@ function renderSched(){
       '<div class="dash-title">🗺 '+t('schTitle')+'</div>'+
       '<div class="sch-addfse">'+
         '<select id="schFseSel" class="pc-assign" aria-label="'+t('schPickFse')+'">'+
-          (assignees.length?assignees:[]).map(function(a){return '<option value="'+escapeHtml(a)+'">'+escapeHtml(a)+'</option>';}).join('')+
+          (assignees.length?assignees:[]).map(function(a){return '<option value="'+escAttr(a)+'">'+escapeHtml(a)+'</option>';}).join('')+
         '</select>'+
         '<button class="sch-addfse-btn" id="schAddFseBtn" type="button">＋ '+t('schAddFse')+'</button>'+
       '</div>'+
@@ -2884,9 +3320,9 @@ function renderSched(){
 function renderSchedFse(fse){
   var q=pcQueues[fse]||[];
   var doneN=q.filter(function(x){return x.s==='done';}).length;
-  var fa=escapeHtml(fse);
+  var fa=escAttr(fse);
   var cards=q.map(function(it,i){
-    var ha=escapeHtml(it.h);
+    var ha=escAttr(it.h);
     var sLabel=it.s==='prog'?('🔵 '+t('schProg')):it.s==='done'?('✅ '+t('schDone')):t('schWait');
     var hh=pcHospByName(it.h);
     var sub=hh?[hh.rg||'', isNcare(hh)?('N-CARE '+hh.nc):''].filter(Boolean).join(' · '):(hh&&hh.s||'');
@@ -2929,7 +3365,7 @@ function schSearch(inp){
     if(normalize(h.n).indexOf(qn)>=0) hits.push(h);
   }
   box.innerHTML = hits.length
-    ? hits.map(function(h){ return '<button class="sch-res" type="button" data-fse="'+escapeHtml(fse)+'" data-h="'+escapeHtml(h.n)+'"><b>'+escapeHtml(h.n)+'</b><span>'+escapeHtml(h.rg||'')+(isNcare(h)?' · N-CARE '+escapeHtml(h.nc):'')+'</span></button>'; }).join('')
+    ? hits.map(function(h){ return '<button class="sch-res" type="button" data-fse="'+escAttr(fse)+'" data-h="'+escAttr(h.n)+'"><b>'+escapeHtml(h.n)+'</b><span>'+escapeHtml(h.rg||'')+(isNcare(h)?' · N-CARE '+escapeHtml(h.nc):'')+'</span></button>'; }).join('')
     : '<div class="sch-nores">'+t('empty')+'</div>';
 }
 // 이벤트 위임 + 포인터 기반 드래그 (한 번만 바인딩)
@@ -2997,8 +3433,8 @@ function pcUpdateSchedNotice(){
   if(!pcNoticeBound){ pcNoticeBound=true; el.addEventListener('click', function(){ var ts=document.getElementById('tabSched'); if(ts) ts.click(); }); }
   var anyQueue=false; Object.keys(pcQueues||{}).forEach(function(f){ if((pcQueues[f]||[]).length) anyQueue=true; });
   var anyProg=!!(pcInProgress && Object.keys(pcInProgress).length);
-  if(!anyQueue){ el.className='show none'; el.innerHTML='<span>'+t('schNoticeNone')+'</span><span class="go">현장 일정 →</span>'; }
-  else if(!anyProg){ el.className='show idle'; el.innerHTML='<span>'+t('schNoticeIdle')+'</span><span class="go">현장 일정 →</span>'; }
+  if(!anyQueue){ el.className='show none'; el.innerHTML='<span>'+escapeHtml(t('schNoticeNone'))+'</span><span class="go">'+escapeHtml(t('schGo'))+'</span>'; }
+  else if(!anyProg){ el.className='show idle'; el.innerHTML='<span>'+escapeHtml(t('schNoticeIdle'))+'</span><span class="go">'+escapeHtml(t('schGo'))+'</span>'; }
   else { el.className=''; el.innerHTML=''; }
 }
 var pcRightMode = 'map';   // 'map' | 'detail'
@@ -3012,7 +3448,33 @@ var pcMapState=null, pcRestoreView=false;  // 상세→지도 복귀 시 당시 
 // 기본 마커 수백 개를 전부 새로 만들었다(폴링이 잦아지며 더 두드러짐). 레이어를 분리해
 // 실제로 바뀐 것만 다시 그린다.
 var pcBaseKey='', pcOverlayKey='', pcNearKey='';
-var pcMapBounds=null, pcMapBoundsAny=false;   // 마지막으로 계산한 전체 범위 — '전체 보기'가 재계산 없이 사용
+/* 범위 두 벌: focus = 현재 검색·필터 결과만 / all = 결과 + 주변 5km + 오늘완료·진행중.
+   '결과 맞춤'과 '전체(완료·진행중 포함)' 버튼이 각각 쓴다. */
+var pcMapBounds=null, pcMapBoundsAny=false;
+var pcMapFocusBounds=null, pcMapFocusAny=false;
+
+/* ── 지도 컨트롤러 ─────────────────────────────────────────────────────────
+   중심·배율 저장/복원 · relayout 병합 · 렌더 세대 · 사용자 조작 보호를 한곳으로.
+   (js/baz-map-controller.js — 지도 SDK를 모르는 순수 로직이라 테스트에서 그대로 검증) */
+var pcMapCtl = BazMapController.create({
+  getMap: function(){ return pcMapObj; },
+  makeLatLng: function(lat,lng){ return new kakao.maps.LatLng(lat,lng); },
+  raf: function(fn){ return (window.requestAnimationFrame ? window.requestAnimationFrame(fn) : setTimeout(fn,16)); },
+  caf: function(id){ if(window.cancelAnimationFrame) window.cancelAnimationFrame(id); else clearTimeout(id); },
+  userHoldMs: 120000   // 사용자가 지도를 만진 뒤 2분간은 폴링·데이터 갱신이 자동 맞춤을 하지 않는다
+});
+/* 화면 상태 전환 공통 진입점 —
+   접기/펼치기 · 전체화면 · 카드/표 · 필터 폭 · 탭 복귀 · 창 크기 · 테마 · 모드 전환.
+   "직전 중심·배율 저장 → DOM/CSS 변경 → relayout 1회 → 복원" 순서를 여기서만 보장한다.
+   (예전에는 전환마다 setTimeout(relayout, 60~220) 이 흩어져 있었고, 저장 없이
+    pcRestoreView=true 만 세우는 경로가 있어 복원할 값이 없었다) */
+function pcMapTransition(fn){
+  if(typeof pcMapCtl==='undefined'){ if(typeof fn==='function') fn(); return; }
+  pcMapCtl.withTransition(fn);
+}
+function pcScheduleRelayout(){ if(typeof pcMapCtl!=='undefined') pcMapCtl.scheduleRelayout(); }
+window.pcMapTransition=pcMapTransition;
+window.pcScheduleRelayout=pcScheduleRelayout;
 // 목록 동일성 판정용 해시. 예전 키는 첫·마지막 이름만 봐서, 길이와 양끝이 같은 필터 변경을
 // 놓치고 지도를 갱신하지 않았다. 전체 이름을 훑되 문자열 연결 없이 32bit로 접는다.
 // [수정] 좌표는 "있음/없음"이 아니라 실제 값을 섞는다. 병원정보DB 동기화(applyDB)가 기존 병원의
@@ -3092,19 +3554,39 @@ function pcMapZoom(delta){
   if(!pcMapObj) return;
   var lv=Math.max(PC_MAP_LMIN, Math.min(PC_MAP_LMAX, pcMapObj.getLevel()+delta));
   try{ pcMapObj.setLevel(lv, {animate:{duration:180}}); }catch(e){ try{ pcMapObj.setLevel(lv); }catch(_){} }
+  pcMapCtl.markUserView();   // 사용자가 직접 맞춘 배율 — 폴링·데이터 갱신이 되돌리지 않게
   pcMapCtlSync();
 }
-// 현재 목록 전체가 한 화면에 들어오도록 — 마지막으로 계산한 범위를 재사용(재계산 없음)
+/* [범위 분리] '결과 맞춤' = 지금 보고 있는 검색·필터 결과만.
+   예전에는 버튼이 하나뿐이고 그 범위에 주변 5km·오늘 완료·진행중 마커까지 들어 있어,
+   부산 병원 하나를 검색해도 서울에 오늘 완료 건이 있으면 전국 축척으로 축소됐다
+   (그 레벨에선 클러스터러 minLevel:7 이 켜져 찾던 병원이 숫자 버블에 삼켜졌다). */
+function pcMapFitResults(){
+  if(!pcMapObj) return false;
+  if(!pcMapFocusBounds || !pcMapFocusAny){ bazToast(t('mapNoResult')); return false; }
+  pcFocusName=null;                       // 명시적 요청 — 병원 하나에 묶어 두던 포커스 해제
+  pcMapCtl.clearUserView();               // 사용자가 스스로 맞춘 요청이므로 보호 해제
+  try{ pcMapObj.setBounds(pcMapFocusBounds); }catch(e){}
+  pcMapCtlSync();
+  bazAnnounce(t('mapFitResult'));
+  return true;
+}
+/* '전체(완료·진행중 포함)' — 오늘 동선을 한눈에 보고 싶을 때만 쓰는 별도 버튼 */
 function pcMapFitAll(){
-  if(!pcMapObj || !pcMapBounds || !pcMapBoundsAny) return;
-  pcFocusName=null;   // '전체 보기'는 명시적 요청 — 병원 하나에 묶어 두던 포커스를 푼다
+  if(!pcMapObj || !pcMapBounds || !pcMapBoundsAny) return false;
+  pcFocusName=null;
+  pcMapCtl.clearUserView();
   try{ pcMapObj.setBounds(pcMapBounds); }catch(e){}
   pcMapCtlSync();
+  bazAnnounce(t('mapFitEvery'));
+  return true;
 }
-// 줌 한계에서 +/- 버튼 비활성화
+// 줌 한계에서 +/- 버튼 비활성화 + 선택 해제 버튼 노출
 function pcMapCtlSync(){
-  if(!pcMapObj) return;
   var box=document.getElementById('pcMapCtl'); if(!box) return;
+  var clr=box.querySelector('[data-mapctl="clearsel"]');
+  if(clr) clr.style.display=(pcSelName||pcFocusName)?'':'none';
+  if(!pcMapObj) return;
   var lv; try{ lv=pcMapObj.getLevel(); }catch(e){ return; }
   var zin=box.querySelector('[data-mapctl="zin"]'), zout=box.querySelector('[data-mapctl="zout"]');
   if(zin) zin.disabled=(lv<=PC_MAP_LMIN);
@@ -3140,42 +3622,110 @@ function pcMapFoldInit(){
   var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]');
   if(pb){ pb.classList.toggle('on', !p); pb.setAttribute('title', p?t('mapPin'):t('mapUnpin')); }
 }
+/* 접기/펼치기 — 접기 직전의 중심·배율을 저장했다가 펼칠 때 그대로 되돌린다.
+   예전에는 펼칠 때 pcRestoreView=true 만 세웠는데, 접을 때 아무것도 저장하지 않아
+   복원할 값이 없거나(첫 접기) 훨씬 옛날 값(마지막 상세 진입 시점)이 되살아났다. */
 function pcMapFoldToggle(){
   var on=!document.body.classList.contains('pc-mapcol');
-  document.body.classList.toggle('pc-mapcol', on);
-  try{ localStorage.setItem('baz_pc_mapcol', on?'1':'0'); }catch(e){}
-  var fb=document.querySelector('#pcHeadCtl [data-headctl="fold"]');
-  if(fb) fb.setAttribute('title', on?t('mapExpand'):t('mapCollapse'));
-  // 펼칠 때: 접혀 있던 동안 목록이 바뀌었을 수 있으니 보던 위치를 유지하며 다시 그린다
-  if(!on && pcMapVisible()){ pcRestoreView=true; try{ pcShowMap(pcList||[]); }catch(e){} }
+  var view=pcMapCtl.captureView();
+  if(on) pcMapFoldView=view;                       // 접기 직전 상태 보관
+  pcMapTransition(function(){
+    document.body.classList.toggle('pc-mapcol', on);
+    try{ localStorage.setItem('baz_pc_mapcol', on?'1':'0'); }catch(e){}
+    var fb=document.querySelector('#pcHeadCtl [data-headctl="fold"]');
+    if(fb){ var k=on?'mapExpand':'mapCollapse'; fb.setAttribute('title', t(k)); fb.setAttribute('aria-label', t(k)); }
+  });
+  if(!on && pcMapVisible()){
+    // 펼치기: 접혀 있던 동안 목록이 바뀌었을 수 있으니 다시 그리되 보던 위치를 지킨다
+    pcMapState=pcMapFoldView||pcMapState; pcRestoreView=true;
+    try{ pcShowMap(pcList||[]); }catch(e){}
+  }
+  bazAnnounce(on?t('mapCollapse'):t('mapExpand'));
 }
+var pcMapFoldView=null;
 function pcMapPinToggle(){
   var unpin=!document.body.classList.contains('pc-mapunpin');
-  document.body.classList.toggle('pc-mapunpin', unpin);
-  try{ localStorage.setItem('baz_pc_mapunpin', unpin?'1':'0'); }catch(e){}
-  var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]');
-  if(pb){ pb.classList.toggle('on', !unpin); pb.setAttribute('title', unpin?t('mapPin'):t('mapUnpin')); }
+  pcMapTransition(function(){
+    document.body.classList.toggle('pc-mapunpin', unpin);
+    try{ localStorage.setItem('baz_pc_mapunpin', unpin?'1':'0'); }catch(e){}
+    var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]');
+    if(pb){ pb.classList.toggle('on', !unpin); var k=unpin?'mapPin':'mapUnpin'; pb.setAttribute('title', t(k)); pb.setAttribute('aria-label', t(k)); }
+  });
 }
-// 전체화면 — position:fixed로 흐름에서 빠지므로 문서가 짧아져 스크롤이 튄다.
-// 진입 직전 패널 높이만큼 #pcPane에 인라인 padding으로 공간을 예약하고, 해제 시 되돌린다.
-// (body 스크롤은 잠그지 않는다 — closeHist가 overflow를 무조건 리셋해 충돌하기 때문.)
+/* ── 지도 조작(휠 확대) 토글 ────────────────────────────────────────────────
+   기본은 꺼짐 = setZoomable(false). 카카오가 휠을 가로채지 않으므로 지도 위에
+   커서를 둔 채로도 페이지(결과 목록)가 자연스럽게 스크롤된다. 드래그 이동은 그대로.
+   확대는 +/− 버튼, 또는 이 토글을 켠 뒤 휠로. 전체화면·모바일에서는 지도가 주인공이라 항상 켠다. */
+var pcMapInteract=(function(){ try{ return localStorage.getItem('baz_pc_mapinteract')==='1'; }catch(e){ return false; } })();
+function pcMapZoomableWanted(){
+  if(pcMapIsFull()) return true;
+  if(!document.body.classList.contains('mode-window')) return true;   // 모바일 카드 뷰
+  if(window.innerWidth<=PC_WIDE_MIN) return true;
+  return !!pcMapInteract;
+}
+function pcMapApplyZoomable(){
+  if(!pcMapObj) return;
+  try{ pcMapObj.setZoomable(pcMapZoomableWanted()); }catch(e){}
+}
+function pcMapInteractSync(){
+  var b=document.querySelector('#pcHeadCtl [data-headctl="interact"]');
+  if(b){
+    b.classList.toggle('on', pcMapInteract);
+    b.setAttribute('aria-pressed', pcMapInteract?'true':'false');
+    var k=pcMapInteract?'mapInteractOn':'mapInteractOff';
+    b.setAttribute('title', t(k)); b.setAttribute('aria-label', t('mapInteract'));
+  }
+  pcMapApplyZoomable();
+}
+function pcMapInteractToggle(){
+  pcMapInteract=!pcMapInteract;
+  try{ localStorage.setItem('baz_pc_mapinteract', pcMapInteract?'1':'0'); }catch(e){}
+  pcMapInteractSync();
+  bazAnnounce(t(pcMapInteract?'mapInteractOn':'mapInteractOff'));
+}
+// 휠이 지도 확대가 아니라 페이지 스크롤로 흐를 때, 이유를 한 번 알려 준다
+var pcMapHintT=0;
+function pcMapShowWheelHint(){
+  var el=document.getElementById('pcMapHint'); if(!el) return;
+  el.textContent=t('mapWheelHint');
+  el.classList.add('show');
+  if(pcMapHintT) clearTimeout(pcMapHintT);
+  pcMapHintT=setTimeout(function(){ pcMapHintT=0; el.classList.remove('show'); }, 1600);
+}
+
+/* ── 전체화면 ──────────────────────────────────────────────────────────────
+   position:fixed 로 흐름에서 빠지므로 배경 문서가 짧아져 스크롤이 튄다.
+   예전에는 #pcPane 에 paddingTop 을 넣어 자리만 예약했다 — 배경은 여전히 스크롤됐고,
+   닫으면 카드 목록 위치가 어긋났다(이력 모달이 body.overflow 를 무조건 리셋해
+   전체화면이 스스로 잠글 수 없었던 것이 원인).
+   → 이제 BazScrollLock 이 소유자 카운트로 잠그고, 해제 시 scrollY 를 정확히 되돌린다. */
 function pcMapIsFull(){ return document.body.classList.contains('pc-mapfs'); }
 function pcEnterFullscreen(){
   if(pcMapIsFull()) return;
   if(!pcMapVisible()) return;   // 표 뷰·접힘 등 지도 없는 상태에선 무시
-  var rt=document.getElementById('pcRight'), pane=document.getElementById('pcPane');
-  if(pane && rt){ pane.style.paddingTop=Math.round(rt.getBoundingClientRect().height)+'px'; }
-  document.body.classList.add('pc-mapfs');
-  pcFsBtnSync();
-  // 크기가 확 커지므로 relayout + 현재 목록 전체 맞춤(보던 위치 유지 우선)
-  if(pcMapObj){ pcRestoreView=true; try{ pcShowMap(pcList||[]); }catch(e){} setTimeout(function(){ try{ pcMapObj.relayout(); }catch(_){} }, 60); }
+  var view=pcMapCtl.captureView();
+  BazScrollLock.lock('mapfs');                    // 진입 직전 scrollY 저장 + 배경 잠금
+  pcMapTransition(function(){
+    document.body.classList.add('pc-mapfs');
+    var pane=document.getElementById('pcPane'); if(pane) pane.style.paddingTop='';   // 구버전 보정 잔재 제거
+    pcFsBtnSync();
+    pcMapInteractSync();                          // 전체화면에선 휠 확대 허용
+  });
+  if(view) pcMapState=view;
+  bazAnnounce(t('mapFullscreen'));
 }
 function pcExitFullscreen(){
   if(!pcMapIsFull()) return;
-  document.body.classList.remove('pc-mapfs');
-  var pane=document.getElementById('pcPane'); if(pane) pane.style.paddingTop='';
-  pcFsBtnSync();
-  if(pcMapObj){ pcRestoreView=true; try{ pcShowMap(pcList||[]); }catch(e){} setTimeout(function(){ try{ pcMapObj.relayout(); }catch(_){} }, 60); }
+  var view=pcMapCtl.captureView();
+  pcMapTransition(function(){
+    document.body.classList.remove('pc-mapfs');
+    var pane=document.getElementById('pcPane'); if(pane) pane.style.paddingTop='';
+    pcFsBtnSync();
+    pcMapInteractSync();
+  });
+  BazScrollLock.unlock('mapfs');                  // 저장해 둔 scrollY 로 정확히 복원
+  if(view) pcMapState=view;
+  bazAnnounce(t('mapExitFull'));
 }
 function pcToggleFullscreen(){ if(pcMapIsFull()) pcExitFullscreen(); else pcEnterFullscreen(); }
 function pcFsBtnSync(){
@@ -3197,12 +3747,17 @@ function pcMapGripBind(){
     var rt=document.getElementById('pcRight'); if(!rt) return;
     dragging=true; startY=e.clientY; startH=rt.getBoundingClientRect().height;
     document.body.classList.add('pc-mapresizing');   // transition 끔 → 즉시 따라옴
+    pcMapCtl.dragStart();
     try{ grip.setPointerCapture(e.pointerId); }catch(_){}
     e.preventDefault();
   });
   grip.addEventListener('pointermove', function(e){
     if(!dragging) return;
-    pcMapHApply(startH + (e.clientY-startY), false);   // #pcRightBody 크기변화 → ResizeObserver가 relayout
+    pcMapHApply(startH + (e.clientY-startY), false);
+    /* [성능] pointermove 마다 relayout 하면 큰 지도에서 눈에 띄게 버벅인다.
+       컨트롤러가 드래그 중에는 최대 90ms 간격으로만 통과시키고,
+       드래그가 끝나면 아래 end() 에서 최종 relayout 1회를 반드시 보장한다. */
+    pcMapCtl.dragMove();
   });
   function end(e){
     if(!dragging) return; dragging=false;
@@ -3210,13 +3765,16 @@ function pcMapGripBind(){
     try{ grip.releasePointerCapture(e.pointerId); }catch(_){}
     var rt=document.getElementById('pcRight');
     if(rt) pcMapHApply(rt.getBoundingClientRect().height, true);   // 최종값만 저장
+    pcMapCtl.dragEnd();                                            // 최종 relayout 1회
   }
   grip.addEventListener('pointerup', end);
   grip.addEventListener('pointercancel', end);
   grip.addEventListener('dblclick', function(){ pcMapHApply(PC_MAPH_DEF, true); });   // 더블클릭 → 기본 높이
 }
-// 컨테이너 크기 변화 → relayout(카카오 타일 회색화 방지). 예전의 산발적 setTimeout 대체.
-var pcRO=null, pcROraf=0, pcROw=0, pcROh=0;
+/* 컨테이너 크기 변화 → relayout. 이제 직접 relayout 하지 않고 컨트롤러에 "요청"만 한다 —
+   드래그·필터 폭 transition·창 크기 변경이 동시에 요청해도 프레임당 1회로 병합된다.
+   (예전에는 여기서 rAF relayout, 다른 곳에서 setTimeout relayout 이 각각 돌아 중복됐다) */
+var pcRO=null, pcROw=0, pcROh=0;
 function pcMapROBind(){
   if(pcRO || typeof ResizeObserver==='undefined') return;
   var body=document.getElementById('pcRightBody'); if(!body) return;
@@ -3227,8 +3785,7 @@ function pcMapROBind(){
       if(w===0||h===0) return;                 // 접힘·표뷰·display:none → 그리지 않음
       if(w===pcROw && h===pcROh) return;       // 동일 크기 재발화 무시(피드백 루프 방지)
       pcROw=w; pcROh=h;
-      if(pcROraf) cancelAnimationFrame(pcROraf);
-      pcROraf=requestAnimationFrame(function(){ pcROraf=0; if(pcMapObj){ try{ pcMapObj.relayout(); }catch(e){} } });
+      pcScheduleRelayout();
     });
     pcRO.observe(body);
   }catch(e){ pcRO=null; }
@@ -3303,12 +3860,14 @@ function pcVendorText(h){
   if(v==='납품 1년 이내') return '워런티 유효';
   return v||'-';
 }
+/* [XSS] 상태 문자열을 class 에 직접 넣지 않는다 — 허용 목록(stCls)으로만 매핑.
+   시트에 공백·따옴표가 섞인 상태값이 들어와도 클래스가 깨지거나 속성이 새지 않는다. */
 function pcStatusBadge(h){
-  if(pcIsProg(h.n)) return '<span class="st-badge 진행중">🔵 현재 처리중</span>';
-  if(pcIsDone(h.n)) return '<span class="st-badge 정상">정상</span>';
+  if(pcIsProg(h.n)) return '<span class="st-badge '+stCls('진행중')+'">🔵 '+escapeHtml(t('schProg'))+'</span>';
+  if(pcIsDone(h.n)) return '<span class="st-badge '+stCls('정상')+'">'+escapeHtml('정상')+'</span>';
   return isNcare(h)
-    ? '<span class="st-badge '+(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
-    : '<span class="st-badge 비대상">'+t('notTarget')+'</span>';
+    ? '<span class="st-badge '+stCls(h.st||'미점검')+'">'+escapeHtml(h.st||'미점검')+'</span>'
+    : '<span class="st-badge '+stCls('비대상')+'">'+escapeHtml(t('notTarget'))+'</span>';
 }
 
 function pcEnsureDOM(){
@@ -3322,31 +3881,44 @@ function pcEnsureDOM(){
         '<span class="ttl" id="pcRightTtl">🗺 '+t('mapTitle')+'</span>'+
         /* 항상 보이는 헤더 컨트롤 — 접기·고정은 접힌 상태에서도 눌러야 하므로 지도 위가 아니라 헤더에 둔다 */
         '<div class="pc-headctl" id="pcHeadCtl">'+
-          '<button type="button" class="pc-hctl" data-headctl="pin" title="'+t('mapPin')+'" aria-label="'+t('mapPin')+'">📌</button>'+
-          '<button type="button" class="pc-hctl" data-headctl="fs" title="'+t('mapFullscreen')+'" aria-label="'+t('mapFullscreen')+'">⛶</button>'+
-          '<button type="button" class="pc-hctl" data-headctl="fold" title="'+t('mapCollapse')+'" aria-label="'+t('mapCollapse')+'">▾</button>'+
+          '<button type="button" class="pc-hctl" data-headctl="interact" title="'+escAttr(t('mapInteract'))+'" aria-label="'+escAttr(t('mapInteract'))+'" aria-pressed="false">🖱</button>'+
+          '<button type="button" class="pc-hctl" data-headctl="pin" title="'+escAttr(t('mapPin'))+'" aria-label="'+escAttr(t('mapPin'))+'">📌</button>'+
+          '<button type="button" class="pc-hctl" data-headctl="fs" title="'+escAttr(t('mapFullscreen'))+'" aria-label="'+escAttr(t('mapFullscreen'))+'">⛶</button>'+
+          '<button type="button" class="pc-hctl" data-headctl="fold" title="'+escAttr(t('mapCollapse'))+'" aria-label="'+escAttr(t('mapCollapse'))+'">▾</button>'+
         '</div>'+
-        '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">🗺 '+t('mapTitle')+'로</button>'+
+        '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">← 🗺 '+escapeHtml(t('mapTitle'))+'</button>'+
       '</div>'+
       '<div id="pcRightBody">'+
         '<div id="pcMapPane"></div>'+
-        /* 지도 위 컨트롤(확대·축소·전체 보기). #pcRightBody의 형제라 카카오가 타일을 다시 그려도
-           지워지지 않는다. 상세 모드에선 지도가 안 보이므로 CSS로 함께 숨긴다. */
-        '<div id="pcMapCtl" aria-label="'+t('mapControls')+'">'+
-          '<button type="button" class="pc-mctl" data-mapctl="zin" title="'+t('mapZoomIn')+'" aria-label="'+t('mapZoomIn')+'">＋</button>'+
-          '<button type="button" class="pc-mctl" data-mapctl="zout" title="'+t('mapZoomOut')+'" aria-label="'+t('mapZoomOut')+'">－</button>'+
-          '<button type="button" class="pc-mctl" data-mapctl="fit" title="'+t('mapFitAll')+'" aria-label="'+t('mapFitAll')+'">⤢</button>'+
+        /* 지도 위 컨트롤. #pcRightBody의 형제라 카카오가 타일을 다시 그려도 지워지지 않는다.
+           [범위 분리] '결과 맞춤'(⤢)은 지금 보고 있는 검색·필터 결과만 맞춘다.
+           오늘 완료·진행중까지 포함하는 넓은 보기는 별도 버튼(⤡)으로 나눴다 —
+           예전에는 하나뿐이라 서울의 오늘 완료 마커 하나 때문에 부산 검색이 전국 축척으로 풀렸다. */
+        '<div id="pcMapCtl" role="group" aria-label="'+escAttr(t('mapControls'))+'">'+
+          '<button type="button" class="pc-mctl" data-mapctl="zin" title="'+escAttr(t('mapZoomIn'))+'" aria-label="'+escAttr(t('mapZoomIn'))+'">＋</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="zout" title="'+escAttr(t('mapZoomOut'))+'" aria-label="'+escAttr(t('mapZoomOut'))+'">－</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="fitres" title="'+escAttr(t('mapFitResultTip'))+'" aria-label="'+escAttr(t('mapFitResult'))+'">⤢</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="fitall" title="'+escAttr(t('mapFitEveryTip'))+'" aria-label="'+escAttr(t('mapFitEvery'))+'">⤡</button>'+
+          '<button type="button" class="pc-mctl" data-mapctl="clearsel" title="'+escAttr(t('mapClearSel'))+'" aria-label="'+escAttr(t('mapClearSel'))+'" style="display:none;">✕</button>'+
         '</div>'+
+        /* 범례 — 마커 색이 무엇인지 텍스트로도 알린다(색만으로 상태를 전달하지 않기) */
+        '<div id="pcMapLegend" aria-label="'+escAttr(t('mapLegend'))+'">'+
+          '<span class="lg"><span class="sw base"></span>'+escapeHtml(t('lgResult'))+'</span>'+
+          '<span class="lg"><span class="sw near"></span>'+escapeHtml(t('lgNear'))+'</span>'+
+          '<span class="lg"><span class="sw done"></span>'+escapeHtml(t('lgDone'))+'</span>'+
+          '<span class="lg"><span class="sw prog"></span>'+escapeHtml(t('lgProg'))+'</span>'+
+        '</div>'+
+        '<div id="pcMapHint" role="status">'+escapeHtml(t('mapWheelHint'))+'</div>'+
         '<div id="pcDetail"></div>'+
       '</div>'+
       '<div id="pcMapGrip" title="'+t('mapResize')+'" aria-label="'+t('mapResize')+'"><span></span></div>'+
     '</div>'+
     '<div id="pcToolbar">'+
-      '<div class="pc-viewtoggle" id="pcViewToggle">'+
-        '<button type="button" data-view="cards">⊞ 카드</button>'+
-        '<button type="button" data-view="table">▤ 표</button>'+
+      '<div class="pc-viewtoggle" id="pcViewToggle" role="group" aria-label="'+escAttr(t('mapControls'))+'">'+
+        '<button type="button" data-view="cards">'+escapeHtml(t('viewCards'))+'</button>'+
+        '<button type="button" data-view="table">'+escapeHtml(t('viewTable'))+'</button>'+
       '</div>'+
-      '<span class="pc-hint" id="pcHint">카드·행을 클릭하면 위 지도/상세에서 확인됩니다</span>'+
+      '<span class="pc-hint" id="pcHint">'+escapeHtml(t('pcHint'))+'</span>'+
     '</div>'+
     '<div id="pcLeft"></div>'+
     '<div id="pcMapBackdrop"></div>';
@@ -3385,20 +3957,26 @@ function pcEnsureDOM(){
     });
   }
 
-  // 뷰 토글(카드/표)
+  // 뷰 토글(카드/표) — 표 뷰는 지도를 숨기므로 화면 전환으로 감싼다(중심·배율 보존)
   document.getElementById('pcViewToggle').addEventListener('click', function(e){
     var b=e.target.closest('button[data-view]'); if(!b) return;
-    pcListView=b.dataset.view; localStorage.setItem('baz_pc_listview', pcListView);
-    pcRender(pcList);
+    pcMapTransition(function(){
+      pcListView=b.dataset.view;
+      try{ localStorage.setItem('baz_pc_listview', pcListView); }catch(_){}
+      pcRender(pcList);
+    });
+  });
+  // 정렬 헤더 키보드 조작 — th 는 기본 포커스 대상이 아니라 마우스 없이는 정렬이 불가능했다
+  document.getElementById('pcLeft').addEventListener('keydown', function(e){
+    if(e.key!=='Enter' && e.key!==' ' && e.key!=='Spacebar') return;
+    var th=e.target.closest('th[data-sortkey]'); if(!th) return;
+    e.preventDefault();
+    pcSortBy(th.getAttribute('data-sortkey'));
   });
   // 왼쪽(카드/표) 클릭 → 정렬 or 선택
   document.getElementById('pcLeft').addEventListener('click', function(e){
     var th=e.target.closest('th[data-sortkey]');
-    if(th){
-      var k=th.getAttribute('data-sortkey');
-      if(pcSort.key===k) pcSort.dir*=-1; else { pcSort.key=k; pcSort.dir=1; }
-      pcRenderLeft(pcList); pcHighlight(); return;
-    }
+    if(th){ pcSortBy(th.getAttribute('data-sortkey')); return; }
     var pcg=e.target.closest('.pc-progchip');
     if(pcg){ pcToggleProgHosp(pcg.getAttribute('data-prog-hn')); return; }
     if(e.target.closest('#pcMoreBtn')){ pcShowCount+=60; pcRenderLeft(pcList); pcHighlight(); return; }
@@ -3414,9 +3992,11 @@ function pcEnsureDOM(){
     var act=b.getAttribute('data-mapctl');
     if(act==='zin') pcMapZoom(-1);
     else if(act==='zout') pcMapZoom(1);
-    else if(act==='fit') pcMapFitAll();
+    else if(act==='fitres') pcMapFitResults();
+    else if(act==='fitall') pcMapFitAll();
+    else if(act==='clearsel') pcClearHospFocus();
   });
-  // 헤더 컨트롤(고정·접기)
+  // 헤더 컨트롤(지도 조작·고정·접기·전체화면)
   var hctl=document.getElementById('pcHeadCtl');
   if(hctl) hctl.addEventListener('click', function(e){
     var b=e.target.closest('[data-headctl]'); if(!b) return;
@@ -3424,32 +4004,39 @@ function pcEnsureDOM(){
     if(act==='pin') pcMapPinToggle();
     else if(act==='fold') pcMapFoldToggle();
     else if(act==='fs') pcToggleFullscreen();
+    else if(act==='interact') pcMapInteractToggle();
   });
+  /* 휠이 확대가 아니라 페이지 스크롤로 흐르는 이유를 한 번 알려 준다.
+     passive:true — preventDefault 를 하지 않으므로 스크롤을 막지 않는다. */
+  var mp=document.getElementById('pcMapPane');
+  if(mp) mp.addEventListener('wheel', function(){
+    if(!pcMapZoomableWanted()) pcMapShowWheelHint();
+  }, {passive:true});
   // 딤 배경 클릭 → 전체화면 해제
   var bd=document.getElementById('pcMapBackdrop');
   if(bd) bd.addEventListener('click', pcExitFullscreen);
-  // 높이 초기화 + 접기/고정 복원 + 드래그·리사이즈 감시
-  pcMapHInit(); pcMapFoldInit(); pcMapGripBind(); pcMapROBind();
+  // 높이 초기화 + 접기/고정 복원 + 드래그·리사이즈 감시 + 지도 조작 토글 상태
+  pcMapHInit(); pcMapFoldInit(); pcMapGripBind(); pcMapROBind(); pcMapInteractSync();
   pcDomReady=true;
 }
 
 function pcCardsHTML(list){
   return '<div class="pc-cards">'+ list.map(function(h){
     var on=pcIsProg(h.n);
-    var chip='<button class="pc-progchip'+(on?' on':'')+'" data-prog-hn="'+escapeHtml(h.n)+'" title="진행중 설정/해제">'+(on?'🔵 진행중':'진행중')+'</button>';
-    return '<div class="pc-cardwrap'+(h.n===pcSelName?' sel':'')+(on?' prog':'')+'" data-hname="'+escapeHtml(h.n)+'">'+chip+cardHTML(h)+'</div>';
+    var chip='<button type="button" class="pc-progchip'+(on?' on':'')+'" data-prog-hn="'+escAttr(h.n)+'" title="'+escAttr(t('schProg'))+'" aria-pressed="'+(on?'true':'false')+'">'+escapeHtml(on?('🔵 '+t('schProg')):t('schProg'))+'</button>';
+    return '<div class="pc-cardwrap'+(h.n===pcSelName?' sel':'')+(on?' prog':'')+'" data-hname="'+escAttr(h.n)+'">'+chip+cardHTML(h)+'</div>';
   }).join('') +'</div>';
 }
 
 function pcTableHTML(list, limit){
   var cols=[
-    {k:'n',  label:'병원명',   sv:function(h){return normalize(h.n);},        cell:function(h){return (pcIsProg(h.n)?'<span class="pc-progchip tbl on" data-prog-hn="'+escapeHtml(h.n)+'" title="진행중 해제">🔵</span>':'<span class="pc-progchip tbl" data-prog-hn="'+escapeHtml(h.n)+'" title="진행중 설정">○</span>')+'<b>'+escapeHtml(h.n)+'</b>';}},
-    {k:'rg', label:'지역',     sv:function(h){return h.rg||'';},              cell:function(h){return escapeHtml(h.rg||'-');}},
-    {k:'sa', label:'영업담당', sv:function(h){return h.sa||'';},              cell:function(h){return escapeHtml(h.sa||'-');}},
-    {k:'st', label:'상태',     sv:function(h){return isNcare(h)?(PC_ST_ORDER[h.st]!=null?PC_ST_ORDER[h.st]:9):99;}, cell:function(h){return pcStatusBadge(h);}},
-    {k:'days',label:'점검경과',sv:function(h){var d=daysSince(h.li);return d==null?-1:d;}, cell:function(h){var d=daysSince(h.li);return d==null?'<span style="color:var(--text-muted)">-</span>':(d+'일');}},
-    {k:'nc', label:'N-CARE',   sv:function(h){return isNcare(h)?(h.nc||''):'zzz';}, cell:function(h){return isNcare(h)?escapeHtml(h.nc):'<span style="color:var(--text-muted)">미가입</span>';}},
-    {k:'d',  label:'거래처',   sv:function(h){return pcVendorText(h);},        cell:function(h){var v=(h.d||'').trim(); if(v==='납품 1년 이내') return '<span class="pc-badge" style="background:var(--ok-soft);color:var(--ok);">워런티 유효</span>'; return v?escapeHtml(v):'<span style="color:var(--text-muted)">-</span>';}},
+    {k:'n',  label:t('colName'),   sv:function(h){return normalize(h.n);},        cell:function(h){return (pcIsProg(h.n)?'<span class="pc-progchip tbl on" data-prog-hn="'+escAttr(h.n)+'" title="'+escAttr(t('schProg'))+'">🔵</span>':'<span class="pc-progchip tbl" data-prog-hn="'+escAttr(h.n)+'" title="'+escAttr(t('schProg'))+'">○</span>')+'<b>'+escapeHtml(h.n)+'</b>';}},
+    {k:'rg', label:t('colRegion'),     sv:function(h){return h.rg||'';},              cell:function(h){return escapeHtml(h.rg||'-');}},
+    {k:'sa', label:t('colSales'), sv:function(h){return h.sa||'';},              cell:function(h){return escapeHtml(h.sa||'-');}},
+    {k:'st', label:t('colStatus'),     sv:function(h){return isNcare(h)?(PC_ST_ORDER[h.st]!=null?PC_ST_ORDER[h.st]:9):99;}, cell:function(h){return pcStatusBadge(h);}},
+    {k:'days',label:t('colDays'),sv:function(h){var d=daysSince(h.li);return d==null?-1:d;}, cell:function(h){var d=daysSince(h.li);return d==null?'<span style="color:var(--text-muted)">-</span>':escapeHtml(d+t('dayUnit'));}},
+    {k:'nc', label:t('colNcare'),   sv:function(h){return isNcare(h)?(h.nc||''):'zzz';}, cell:function(h){return isNcare(h)?escapeHtml(h.nc):'<span style="color:var(--text-muted)">미가입</span>';}},
+    {k:'d',  label:t('colClient'),   sv:function(h){return pcVendorText(h);},        cell:function(h){var v=(h.d||'').trim(); if(v==='납품 1년 이내') return '<span class="pc-badge" style="background:var(--ok-soft);color:var(--ok);">워런티 유효</span>'; return v?escapeHtml(v):'<span style="color:var(--text-muted)">-</span>';}},
     {k:'hp', label:'HP',       sv:function(h){return (h.hpv||'').trim()||getLastHpVer(h.n)||'';}, cell:function(h){var x=(h.hpv||'').trim()||getLastHpVer(h.n);return x?escapeHtml(x):'-';}},
     {k:'ui', label:'UI',       sv:function(h){return (h.uiv||'').trim()||getLastUiVer(h.n)||'';}, cell:function(h){var x=(h.uiv||'').trim()||getLastUiVer(h.n);return x?escapeHtml(x):'-';}}
   ];
@@ -3459,17 +4046,31 @@ function pcTableHTML(list, limit){
     var va=col.sv(a), vb=col.sv(b);
     if(va<vb) return -1*pcSort.dir; if(va>vb) return 1*pcSort.dir; return normalize(a.n)<normalize(b.n)?-1:1;
   });
+  /* 정렬 헤더: 키보드 접근(tabindex+role=button) + 현재 정렬 방향을 aria-sort 로도 알린다.
+     예전에는 cursor:pointer 인 th 뿐이라 마우스 없이는 정렬할 수 없었다. */
   var head='<tr>'+cols.map(function(c){
-    var ar = (c.k===pcSort.key) ? '<span class="ar">'+(pcSort.dir>0?'▲':'▼')+'</span>' : '<span class="ar">↕</span>';
-    return '<th data-sortkey="'+c.k+'">'+c.label+ar+'</th>';
+    var on=(c.k===pcSort.key);
+    var ar = on ? '<span class="ar" aria-hidden="true">'+(pcSort.dir>0?'▲':'▼')+'</span>' : '<span class="ar" aria-hidden="true">↕</span>';
+    return '<th data-sortkey="'+escAttr(c.k)+'" scope="col" tabindex="0" role="button"'+
+      ' aria-sort="'+(on?(pcSort.dir>0?'ascending':'descending'):'none')+'">'+escapeHtml(c.label)+ar+'</th>';
   }).join('')+'</tr>';
   if(limit) sorted=sorted.slice(0,limit);   // [성능] 정렬 후 표시 개수만 렌더
   var rows=sorted.map(function(h){
     var cls=[]; if(h.n===pcSelName) cls.push('sel'); if(pcIsProg(h.n)) cls.push('prog');
-    return '<tr data-hname="'+escapeHtml(h.n)+'"'+(cls.length?' class="'+cls.join(' ')+'"':'')+'>'+
+    return '<tr data-hname="'+escAttr(h.n)+'"'+(cls.length?' class="'+cls.join(' ')+'"':'')+'>'+
       cols.map(function(c){return '<td>'+c.cell(h)+'</td>';}).join('')+'</tr>';
   }).join('');
   return '<div class="pc-table-wrap"><table class="pc-table"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+// 정렬 토글 (클릭·키보드 공용)
+function pcSortBy(k){
+  if(!k) return;
+  if(pcSort.key===k) pcSort.dir*=-1; else { pcSort.key=k; pcSort.dir=1; }
+  pcRenderLeft(pcList); pcHighlight();
+  // 포커스가 재렌더로 날아가므로 같은 헤더에 되돌려 준다(키보드 연속 조작)
+  var th=document.querySelector('#pcLeft th[data-sortkey="'+k.replace(/"/g,'')+'"]');
+  if(th && th.focus) try{ th.focus(); }catch(e){}
 }
 
 // [성능] Window 목록 페이지네이션: 수백 장 카드를 한 번에 렌더하지 않는다.
@@ -3545,7 +4146,7 @@ function pcSkillBadge(name){
   if(!s) return '';
   var label=pcSkillLabel(name), need=(label==='교육 필요');
   var detail=['NS충진 '+(s.nsFill||'-'), '충진량 '+(s.nsAmt||'-'), '젯 '+(s.jet||'-')].join(' · ');
-  return '<span class="h-skill'+(need?' warn':' ok')+'" title="사용자 숙련도 평가 · '+escapeHtml(detail)+(s.dk?' · '+s.dk:'')+'">'+(need?'🎓':'✅')+' '+label+'</span>';
+  return '<span class="h-skill'+(need?' warn':' ok')+'" title="'+escAttr('사용자 숙련도 평가 · '+detail+(s.dk?' · '+s.dk:''))+'">'+(need?'🎓':'✅')+' '+label+'</span>';
 }
 /* [부하] action=all은 handover 시트 전체를 받는 무거운 요청이라 5분 캐시가 필수다.
    그런데 예전에는 신선도 판정을 localStorage의 baz_pc_recent_ts에만 의존해서,
@@ -3600,18 +4201,9 @@ function pcLoadRecent(cb){
 // 캐시는 함수 객체에 둔다(pcTodayStr._c). 이 함수는 선언보다 앞선 파싱 시점 코드
 // (pcDailyResetCheck)에서 호출되므로, 모듈 스코프 var에 캐시를 두면 그 시점엔 아직
 // undefined라 접근 자체가 예외가 되고 이후 스크립트 전체가 죽는다.
-function pcTodayStr(){
-  var now=Date.now(), c=pcTodayStr._c;
-  if(c && c.v && now-c.t<30000) return c.v;   // 폴링·필터에서 자주 호출 → 30초 캐시
-  var v='';
-  try{
-    var s=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) v=s;
-  }catch(e){}
-  if(!v){ var d=new Date(), z=function(n){return (n<10?'0':'')+n;}; v=d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
-  pcTodayStr._c={t:now, v:v};
-  return v;
-}
+/* 구현은 js/baz-date.js 로 옮겼다 — 경과일(daysSince)·현장 일정·이력 추가가
+   모두 같은 Asia/Seoul 날짜를 보게 하려면 계산이 한 곳에만 있어야 한다. */
+function pcTodayStr(){ return BazDate.todayStr(); }
 // 시트 표시형식(getDisplayValues)이 'yyyy. M. d' 등 로케일 형태로 오므로
 // 구분자·공백에 상관없이 yyyy-MM-dd 키로 정규화 (handover 날짜 매칭 안정화)
 function pcDateKey(s){
@@ -3629,7 +4221,7 @@ function pcRenderRecentCard(){
   var box=document.getElementById('pcRecentCard'); if(!box) return;
   var list=pcTodayList();
   // 총 건수는 오늘 전체 완료 건수 유지
-  var head='<div class="rrc-head">🏁 오늘 완료 <span class="rrc-cnt">'+list.length+'건</span></div>';
+  var head='<div class="rrc-head">'+escapeHtml(t('rcTodayDone'))+' <span class="rrc-cnt">'+list.length+escapeHtml(rcUnit())+'</span></div>';
   // 인원(FSE)별 가장 최신 완료 1건 + 건수 (pcTodayList는 오래된→최신 순 → 마지막이 최신)
   var latestByFse={}, cntByFse={}, order=[];
   list.forEach(function(r){
@@ -3641,7 +4233,7 @@ function pcRenderRecentCard(){
   var progByFse={};
   Object.keys(pcInProgress||{}).forEach(function(hn){ var f=pcInProgress[hn]; if(f){ progByFse[f]=hn; if(order.indexOf(f)<0) order.push(f); } });
   if(!order.length){
-    var msg=(pcRecentState==='loading')?'불러오는 중…':(pcRecentState==='error')?'불러오기 실패 (네트워크 확인)':'오늘 완료 내역이 없습니다';
+    var msg=(pcRecentState==='loading')?t('rcLoading'):(pcRecentState==='error')?t('rcLoadFail'):t('rcNoneToday');
     box.innerHTML=head+'<div class="rrc-empty">'+msg+'</div>'; return;
   }
   box.innerHTML=head+'<div class="rrc-list">'+order.map(function(fse){
@@ -3651,11 +4243,11 @@ function pcRenderRecentCard(){
     var cntTag=(cnt>1)?'<span class="rrc-cnt2">오늘 '+cnt+'건</span>':'';
     var prog=progByFse[fse]||pcProgHospOf(fse);   // 이 담당자의 현재 진행중 병원(일정 기준)
     var progLine=prog
-      ? '<div class="rrc-prog" data-hn="'+escapeHtml(prog)+'">🔵 '+t('schProg')+' · '+escapeHtml(prog)+
-          '<button class="rrc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">'+t('schDone')+'</button></div>'
+      ? '<div class="rrc-prog" data-hn="'+escAttr(prog)+'">🔵 '+escapeHtml(t('schProg'))+' · '+escapeHtml(prog)+
+          '<button class="rrc-done" type="button" data-done-hn="'+escAttr(prog)+'" title="'+escAttr(t('schDone'))+'">'+escapeHtml(t('schDone'))+'</button></div>'
       : '';
     var nm = r ? escapeHtml(r.hosp) : ('🗺 '+escapeHtml(fse)+' · '+t('schActive'));
-    var dataHn = r ? (function(){ var h=pcHospByName(r.hosp); return escapeHtml(h?h.n:r.hosp); })() : escapeHtml(prog||'');
+    var dataHn = r ? (function(){ var h=pcHospByName(r.hosp); return escAttr(h?h.n:r.hosp); })() : escAttr(prog||'');
     var meta = r
       ? '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span>'+g+cntTag+'</div>'
       : '<div class="rrc-meta"><span class="fse">🧑‍🔧 '+escapeHtml(fse)+'</span><span class="rrc-g">'+t('schActive')+'</span></div>';
@@ -3719,10 +4311,10 @@ function pcOptimalRoute(from, cands, n){
 }
 function pcRenderRouteCard(){
   var box=document.getElementById('pcRouteCard'); if(!box) return;
-  var head='<div class="prc-head">🚗 주변 이동 소요시간 <span class="prc-sub">오늘 기준</span></div>'+
-    '<div class="prc-sort" role="group" aria-label="정렬">'+
-      '<button type="button" data-rsort="near"'+(pcRouteSort==='near'?' class="on"':'')+'>가까운 순</button>'+
-      '<button type="button" data-rsort="due"'+(pcRouteSort==='due'?' class="on"':'')+'>점검필요 우선</button>'+
+  var head='<div class="prc-head">'+escapeHtml(t('prcTitle'))+' <span class="prc-sub">'+escapeHtml(t('prcToday'))+'</span></div>'+
+    '<div class="prc-sort" role="group" aria-label="'+escAttr(t('prcNear'))+'">'+
+      '<button type="button" data-rsort="near"'+(pcRouteSort==='near'?' class="on"':'')+'>'+escapeHtml(t('prcNear'))+'</button>'+
+      '<button type="button" data-rsort="due"'+(pcRouteSort==='due'?' class="on"':'')+'>'+escapeHtml(t('prcDue'))+'</button>'+
     '</div>';
   var today=pcTodayList();
   // FSE 담당자별 '가장 최근' 오늘 완료 병원.
@@ -3746,13 +4338,13 @@ function pcRenderRouteCard(){
     curByFse[fse]={ name:hn, from:(h&&h.lat!=null&&h.lng!=null)?h:null };
   });
   if(!order.length){
-    var msg=(pcRecentState==='loading')?'불러오는 중…':'오늘 완료 내역이 없습니다';
+    var msg=(pcRecentState==='loading')?t('rcLoading'):t('rcNoneToday');
     box.innerHTML=head+'<div class="prc-empty">'+msg+'</div>'; return;
   }
   box.innerHTML=head+order.map(function(fse){
     var cur=curByFse[fse];
     var prog=pcProgHospOf(fse);   // 이 담당자의 진행중 병원
-    var fseAttr=escapeHtml(fse);
+    var fseAttr=escAttr(fse);
     var body;
     if(cur.from){
       var cands=pcRouteCandidates(cur.from, pcRouteSort);
@@ -3763,23 +4355,23 @@ function pcRenderRouteCard(){
           route.map(function(x,i){
             var on=(prog===x.h.n);
             var dueCls=isDue(x.h)?' due':'';
-            return '<div class="prc-item'+(on?' prog':'')+dueCls+'" data-hn="'+escapeHtml(x.h.n)+'">'+
+            return '<div class="prc-item'+(on?' prog':'')+dueCls+'" data-hn="'+escAttr(x.h.n)+'">'+
               '<span class="prc-rank">'+(i+1)+'</span>'+
-              '<span class="prc-sev" style="background:'+pcSevColor(x.h)+'" title="'+escapeHtml(x.h.st||'')+'"></span>'+
+              '<span class="prc-sev" style="background:'+pcSevColor(x.h)+'" title="'+escAttr(x.h.st||'')+'"></span>'+
               '<span class="prc-nm">'+escapeHtml(x.h.n)+'</span>'+
-              '<span class="prc-dt">'+x.leg.toFixed(1)+'km · '+t('schCum')+' '+x.cum+'분</span>'+
-              '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(x.h.n)+'" title="진행중으로 표시">'+(on?'진행중':'진행')+'</button>'+
+              '<span class="prc-dt">'+escapeHtml(x.leg.toFixed(1))+'km · '+escapeHtml(t('schCum'))+' '+x.cum+escapeHtml(t('minUnit'))+'</span>'+
+              '<button class="prc-prog" data-fse="'+fseAttr+'" data-hn="'+escAttr(x.h.n)+'" title="'+escAttr(t('schProgress'))+'">'+escapeHtml(on?t('schProg'):t('schProgress'))+'</button>'+
             '</div>';
           }).join('');
       } else {
-        body = '<div class="prc-empty" style="padding:2px 6px;">'+(pcRouteSort==='near'?'반경 10km 내 점검대상 병원 없음':'반경 15km 내 점검대상 병원 없음')+'</div>';
+        body = '<div class="prc-empty" style="padding:2px 6px;">'+escapeHtml(pcRouteSort==='near'?t('prcNoneNear'):t('prcNoneDue'))+'</div>';
       }
     } else {
-      body = '<div class="prc-empty" style="padding:2px 6px;">📍 좌표 미등록 병원 — 주변 이동 계산 불가</div>';
+      body = '<div class="prc-empty" style="padding:2px 6px;">'+escapeHtml(t('prcNoCoord'))+'</div>';
     }
-    var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escapeHtml(prog)+'">🔵 진행중 · '+escapeHtml(prog)+'<button class="prc-done" type="button" data-done-hn="'+escapeHtml(prog)+'" title="완료 처리">완료</button></div>' : '';
+    var progLine = prog ? '<div class="prc-prog-cur" data-fse="'+fseAttr+'" data-hn="'+escAttr(prog)+'">🔵 '+escapeHtml(t('schProg'))+' · '+escapeHtml(prog)+'<button class="prc-done" type="button" data-done-hn="'+escAttr(prog)+'" title="'+escAttr(t('schDone'))+'">'+escapeHtml(t('schDone'))+'</button></div>' : '';
     return '<div class="prc-fse">'+
-      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">'+((prog&&prog===cur.name)?'🔵 진행중 ':'현재 ')+escapeHtml(cur.name)+'</span></div>'+
+      '<div class="prc-fse-h">🧑‍🔧 '+escapeHtml(fse)+'<span class="prc-cur">'+((prog&&prog===cur.name)?('🔵 '+escapeHtml(t('schProg'))+' '):(escapeHtml(t('prcCur'))+' '))+escapeHtml(cur.name)+'</span></div>'+
       progLine+
       body+
     '</div>';
@@ -3817,13 +4409,22 @@ function pcFocusHospOnMap(name, itemEl){
     if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
     // 오늘 완료 정보(담당자·구분)가 있으면 함께 표기
     var info='', tl=pcTodayList(), nk=normalize(name);
-    for(var i=0;i<tl.length;i++){ if(normalize(tl[i].hosp)===nk){ info='🧑‍🔧 '+escapeHtml(tl[i].fse||'-')+(tl[i].gubun?' · '+escapeHtml(tl[i].gubun):''); break; } }
-    var nameJs=String(h.n).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    var content='<div style="padding:8px 11px;min-width:132px;font-family:\'Noto Sans KR\',sans-serif;">'+
-      '<div style="font-size:12.5px;font-weight:800;color:#1B2F5E;white-space:nowrap;">'+escapeHtml(h.n)+'</div>'+
-      (info?'<div style="font-size:11px;color:#6B7A99;margin-top:3px;white-space:nowrap;">'+info+'</div>':'')+
-      '<button onclick="pcSelect(\''+nameJs+'\')" style="margin-top:8px;width:100%;border:0;background:#2E7D9E;color:#fff;font-size:11.5px;font-weight:700;padding:6px 8px;border-radius:7px;cursor:pointer;font-family:inherit;">🕑 이력 보기</button>'+
-    '</div>';
+    for(var i=0;i<tl.length;i++){ if(normalize(tl[i].hosp)===nk){ info='🧑‍🔧 '+(tl[i].fse||'-')+(tl[i].gubun?' · '+tl[i].gubun:''); break; } }
+    /* [XSS] 말풍선은 문자열 조합 대신 DOM 으로 만든다. 예전에는 병원명을
+       onclick="pcSelect('…')" 안에 넣고 역슬래시·따옴표만 손으로 이스케이프했다 —
+       JavaScript 문맥 이스케이프는 안전하지 않다(유니코드 줄바꿈·중첩 인용 등).
+       이제 이름은 클로저로만 전달되고 마크업에는 들어가지 않는다. */
+    var content=BazDom.el('div', {style:{padding:'8px 11px', minWidth:'132px', fontFamily:"'Noto Sans KR',sans-serif"}}, [
+      BazDom.el('div', {style:{fontSize:'12.5px', fontWeight:'800', color:'#1B2F5E', whiteSpace:'nowrap'}, text:h.n}),
+      info ? BazDom.el('div', {style:{fontSize:'11px', color:'#6B7A99', marginTop:'3px', whiteSpace:'nowrap'}, text:info}) : null,
+      (function(){
+        var b=BazDom.el('button', {type:'button', text:t('mapHistBtn'), style:{marginTop:'8px', width:'100%', border:'0',
+          background:'#2E7D9E', color:'#fff', fontSize:'11.5px', fontWeight:'700', padding:'6px 8px',
+          borderRadius:'7px', cursor:'pointer', fontFamily:'inherit'}});
+        b.addEventListener('click', function(){ pcSelect(h.n); });
+        return b;
+      })()
+    ]);
     var mk=pcMarkerByName[h.n];
     // zIndex는 선택 링(12)·진행중(9)보다 위 — 클러스터 숫자 버블이 말풍선을 덮어
     // '이력 보기' 버튼이 가려지던 문제 방지
@@ -3852,7 +4453,11 @@ function pcClearHospFocus(){
   if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
   document.querySelectorAll('#pcRecentCard .rrc-item.sel').forEach(function(el){ el.classList.remove('sel'); });
   pcHighlight();
+  pcMapCtl.resetAutoFit();     // 해제는 명시적 요청 — 다음 렌더에서 결과 전체로 다시 맞춘다
+  pcMapCtl.clearUserView();
   if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }
+  pcMapCtlSync();
+  bazAnnounce(t('mapClearSel'));
 }
 window.pcClearHospFocus=pcClearHospFocus;
 
@@ -3937,13 +4542,9 @@ function pcRenderDetail(name, box){
   var h=null;
   for(var i=0;i<HOSPITALS.length;i++){ if(HOSPITALS[i].n===name){ h=HOSPITALS[i]; break; } }
   if(!h){ for(var j=0;j<pcList.length;j++){ if(pcList[j].n===name){ h=pcList[j]; break; } } }
-  if(!h){ box.innerHTML='<div class="tl-empty">정보를 찾을 수 없습니다.</div>'; return; }
+  if(!h){ box.innerHTML='<div class="tl-empty">'+escapeHtml(t('notFound'))+'</div>'; return; }
   var hp=(h.hpv||'').trim()||getLastHpVer(h.n);
   var ui=(h.uiv||'').trim()||getLastUiVer(h.n);
-  var esc=encodeURIComponent;
-  var naverUrl='https://m.map.naver.com/search2/search.naver?query='+esc(h.n);
-  var inspUrl='inspection.html?h='+esc(h.n)+'&sn='+esc(h.s||'')+'&nc='+esc(h.nc||'')+'&e='+esc(h.sa||'');
-  var survUrl='survey.html?h='+esc(h.n)+'&e='+esc(h.sa||'');
   var tags='';
   tags+= isNcare(h)?'<span class="h-tag ncare">N-CARE '+escapeHtml(h.nc)+'</span>':'<span class="h-tag ncare none">미가입</span>';
   if(h.as) tags+='<span class="h-tag as">'+escapeHtml(h.as)+'</span>';
@@ -3953,42 +4554,52 @@ function pcRenderDetail(name, box){
   tags+= pcVendorTag(h);
   var rows='';
   function row(k,v){ rows+='<dt>'+k+'</dt><dd>'+v+'</dd>'; }
-  row('상태', pcStatusBadge(h));
-  if(h.a) row('주소', escapeHtml(h.a));
-  row('장비번호', escapeHtml(h.s||'-'));
-  row(t('sales'), escapeHtml(h.sa||'-'));
-  row('지역', escapeHtml(h.rg||'-'));
-  row('거래처', escapeHtml(pcVendorText(h)));
-  row(isNcare(h)?t('lastInsp'):t('lastVisit'), statusDays(h));
-  var nameJs=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  row(escapeHtml(t('colStatus')), pcStatusBadge(h));
+  if(h.a) row(escapeHtml(t('dtAddr')), escapeHtml(h.a));
+  row(escapeHtml(t('dtSn')), escapeHtml(h.s||'-'));
+  row(escapeHtml(t('sales')), escapeHtml(h.sa||'-'));
+  row(escapeHtml(t('colRegion')), escapeHtml(h.rg||'-'));
+  row(escapeHtml(t('colClient')), escapeHtml(pcVendorText(h)));
+  row(isNcare(h)?t('lastInsp'):t('lastVisit'), escapeHtml(statusDays(h)));
+  /* [XSS] 병원명은 data-hn 속성에만 넣는다 — 예전처럼 onclick="pcSetProgUI('…')" 로
+     JavaScript 문맥에 끼워 넣지 않는다. 클릭은 아래 [data-dtact] 위임이 받는다. */
+  var hn=escAttr(h.n);
   var progOn=pcIsProg(h.n);
   var progFse=progOn?(pcInProgress[h.n]||''):'';
   box.innerHTML=
-    '<div class="pc-dt-name">'+escapeHtml(h.n)+(progOn?' <span class="pc-dt-progflag">🔵 진행중'+(progFse?' · '+escapeHtml(progFse):'')+'</span>':'')+'</div>'+
+    '<div class="pc-dt-name">'+escapeHtml(h.n)+(progOn?' <span class="pc-dt-progflag">🔵 '+escapeHtml(t('schProg'))+(progFse?' · '+escapeHtml(progFse):'')+'</span>':'')+'</div>'+
     '<div class="pc-dt-sub">'+escapeHtml(h.s||'')+(h.rg?' · '+escapeHtml(h.rg):'')+'</div>'+
     '<div class="pc-dt-tags">'+tags+'</div>'+
     '<dl class="pc-dt-rows">'+rows+'</dl>'+
     (progOn
       ? '<div class="pc-dt-progrow">'+
-          '<button class="pc-dt-prog on" onclick="pcToggleProgHosp(\''+nameJs+'\')">🔵 진행중 해제</button>'+
-          '<button class="pc-dt-done" onclick="pcMarkDone(\''+nameJs+'\')">✅ 완료</button>'+
+          '<button type="button" class="pc-dt-prog on" data-dtact="progoff" data-hn="'+hn+'">🔵 진행중 해제</button>'+
+          '<button type="button" class="pc-dt-done" data-dtact="done" data-hn="'+hn+'">✅ '+escapeHtml(t('schDone'))+'</button>'+
         '</div>'
       : '<div class="pc-dt-progrow">'+
-          '<select id="pcAssignSel" class="pc-assign" aria-label="담당자 선택">'+
-            pcSchedFseList().map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(a===(h.sa||'').trim()?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+
+          '<select id="pcAssignSel" class="pc-assign" aria-label="'+escAttr(t('schPickFse'))+'">'+
+            pcSchedFseList().map(function(a){ return '<option value="'+escAttr(a)+'"'+(a===(h.sa||'').trim()?' selected':'')+'>'+escapeHtml(a)+'</option>'; }).join('')+
           '</select>'+
-          '<button class="pc-dt-prog" onclick="pcSetProgUI(\''+nameJs+'\')">🔵 진행중으로 설정</button>'+
+          '<button type="button" class="pc-dt-prog" data-dtact="progon" data-hn="'+hn+'">🔵 진행중으로 설정</button>'+
         '</div>'+
-        '<button class="pc-dt-sched" onclick="pcAddToSchedUI(\''+nameJs+'\')">📋 '+t('schToSchedule')+'</button>')+
-    '<div class="pc-dt-acts">'+
-      '<button onclick="window.open(\''+naverUrl+'\',\'bazNaverMap\')">🗺️ '+t('nmap')+'</button>'+
-      '<button onclick="location.href=\''+inspUrl+'\'">📋 '+t('insp')+'</button>'+
-      '<button onclick="location.href=\''+survUrl+'\'">⭐ '+t('surv')+'</button>'+
-    '</div>'+
-    '<div class="pc-dt-h3">🕑 '+t('histTitle')+' <span style="font-weight:400;color:var(--text-muted);">'+t('histCount').replace('{n}', (HISTORY[name]||[]).length)+'</span> '+
-      '<button class="pc-backmap" style="float:right;font-size:11px;padding:3px 8px;" onclick="openHist(\''+nameJs+'\')">✎ 편집</button></div>'+
+        '<button type="button" class="pc-dt-sched" data-dtact="sched" data-hn="'+hn+'">📋 '+escapeHtml(t('schToSchedule'))+'</button>')+
+    '<div class="pc-dt-acts">'+pcActionButtons(h,{plain:true})+'</div>'+
+    '<div class="pc-dt-h3">🕑 '+escapeHtml(t('histTitle'))+' <span style="font-weight:400;color:var(--text-muted);">'+escapeHtml(t('histCount').replace('{n}', (HISTORY[name]||[]).length))+'</span> '+
+      '<button type="button" class="pc-backmap" style="float:right;font-size:11px;padding:3px 8px;" data-hact="hist" data-hn="'+hn+'">'+escapeHtml(t('dtEdit'))+'</button></div>'+
     pcHistTimeline(name);
 }
+/* 상세 패널 액션 위임 — 상세는 #pcDetail(패널)과 #pcDetailModalBody(표 뷰 모달)
+   두 곳에 같은 마크업이 들어가므로 document 한 곳에서 받는다. */
+document.addEventListener('click', function(e){
+  var b=e.target.closest('[data-dtact]'); if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  var act=b.getAttribute('data-dtact'), hn=b.getAttribute('data-hn')||'';
+  if(!hn) return;
+  if(act==='progoff') pcToggleProgHosp(hn);
+  else if(act==='done') pcMarkDone(hn);
+  else if(act==='progon') pcSetProgUI(hn);
+  else if(act==='sched') pcAddToSchedUI(hn);
+});
 
 
 // ── 지도 그리기: 레이어별로 분리 ──────────────────────────────────────────────
@@ -4114,7 +4725,15 @@ function pcMapReset(){
 }
 function pcShowMap(list){
   var pane=document.getElementById('pcMapPane'); if(!pane) return;
+  /* [세대] pcShowMap 은 loadKakao 콜백 안에서 그린다(비동기). 초기 로딩 중에는
+     캐시 적용·bootstrap 응답·폴링·검색이 겹쳐 콜백이 여러 개 떠 있고, 늦게 도착한
+     옛 콜백이 최신 데이터와 사용자가 방금 맞춘 화면을 덮었다.
+     여기서 세대 번호를 올리고, 콜백 진입 시 최신 세대가 아니면 그리지 않는다. */
+  var gen=pcMapCtl.beginRender();
+  var snapshot=(list||[]).slice();     // 콜백까지 사이에 배열이 바뀌어도 이 렌더는 이 목록만 본다
   loadKakao(function(ok){
+    if(pcMapCtl.isStale(gen)) return;  // ★ 오래된 렌더 폐기 — 최신 렌더가 이미 그렸다
+    list=snapshot;
     if(ok===false){
       // 이미 살아 있는 지도가 있으면 건드리지 않는다 — 동시 요청 중 하나만 실패한 경우
       // 멀쩡한 지도의 DOM을 날려 영구 빈 화면이 되던 문제 방지.
@@ -4124,15 +4743,22 @@ function pcShowMap(list){
       return;
     }
     if(pane.querySelector('.pc-mapfail')){ pane.innerHTML=''; pcMapReset(); }   // 실패 화면 → 지도 새로 생성
-    if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }  // 이전 setBounds 예약 취소(복귀 위치 보호)
+    if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }
     var center=new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
     var firstCreate=!pcMapObj;
     if(firstCreate){
       pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false});   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
       try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',pcMapCtlSync); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화
       try{ kakao.maps.event.addListener(pcMapObj,'idle',pcMapViewSaveDebounced); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장
+      /* 사용자가 직접 옮기거나 확대하면 기록 → 폴링·데이터 갱신이 그 위치를 자동
+         맞춤으로 되돌리지 않는다(예전에는 40초 폴링마다 원위치했다). */
+      try{
+        kakao.maps.event.addListener(pcMapObj,'dragend',function(){ pcMapCtl.markUserView(); });
+        kakao.maps.event.addListener(pcMapObj,'zoom_start',function(){ pcMapCtl.markUserView(); });
+      }catch(e){}
+      pcMapApplyZoomable();   // 기본은 휠 확대 꺼짐 → 지도 위에서도 페이지가 스크롤된다
     }
-    else { pcMapObj.relayout(); }
+    else { pcScheduleRelayout(); }   // 크기 재계산은 컨트롤러가 프레임당 1회로 병합
     // 명시적 포커스(pcFocusName)가 있으면 '보던 위치 복귀'보다 우선한다.
     // pcBackToMap이 pcRestoreView를 켜므로, 상세에서 카드를 눌러 다른 병원으로 갈 때
     // pcApplyMapState가 상세 진입 전(전국) 화면을 되살려 방금 맞춘 확대를 지웠다.
@@ -4156,11 +4782,16 @@ function pcShowMap(list){
     // '전체 보기'는 focus + 오버레이 전부. focus 쪽 마커 위치를 all에도 합친다.
     pcMapMarkers.forEach(function(m){ var p=m.getPosition(); if(p) all.extend(p); });
     pcNearbyMarkers.forEach(function(m){ var p=m.getPosition(); if(p) all.extend(p); });
-    pcMapBounds=all; pcMapBoundsAny=any;      // '전체 보기' 버튼이 재계산 없이 사용
+    pcMapBounds=all; pcMapBoundsAny=any;                  // '전체(완료·진행중 포함)' 버튼용
+    pcMapFocusBounds=focus; pcMapFocusAny=focusAny;       // '결과 맞춤' 버튼용
 
     if(pcRightMode==='map'){
       var rtl=document.getElementById('pcRightTtl');
-      if(rtl) rtl.textContent = nearCnt ? ('🗺 지도 · 주변 5km '+nearCnt+'곳') : '🗺 지도';
+      /* '주변 5km'는 검색 결과 주변의 참고 마커다 — 내 위치 기준 모드(nearbyMode)와 다르다.
+         제목에서도 두 가지를 구분해 부른다. */
+      if(rtl) rtl.textContent = nearbyMode
+        ? ('🗺 '+t('mapTitle')+' · '+t('nearbyOn').replace('{n}', list.length))
+        : (nearCnt ? ('🗺 '+t('mapTitle')+' · '+t('mapNearby').replace('{n}', nearCnt)) : ('🗺 '+t('mapTitle')));
     }
     // 결과가 1곳이면 setBounds가 의미 없는 점 범위라 줌이 튄다 → 중심 이동 + 충분한 확대로 확실히 보이게
     var single=(function(){
@@ -4185,14 +4816,25 @@ function pcShowMap(list){
         try{ pcMapObj.setLevel(Math.min(pcMapObj.getLevel(), 4)); }catch(e){}
       } else if(focusAny){ pcMapObj.setBounds(focus); }
     }
-    var viewRestored=false;
     if(restore){ pcApplyMapState(); }
-    else if(pcMapViewRestore(list)){ viewRestored=true; /* 저장된 뷰포트 복원 성공 → 전체 맞춤 생략 (데이터 있는 첫 렌더 1회) */ }
-    else { applyFocus(); }
+    else if(pcMapViewRestore(list)){ /* 저장된 뷰포트 복원 성공 → 맞춤 생략 (데이터 있는 첫 렌더 1회) */ }
+    else if(pcFocusName){ applyFocus(); }   // 명시적으로 띄운 병원은 항상 중심 유지
+    else {
+      /* [자동 맞춤 조건] 검색어·필터 결과가 실제로 바뀐 경우에만 화면을 다시 맞춘다.
+         예전에는 재렌더마다 setBounds 를 걸어, 40초 폴링이나 진행중 토글 한 번에
+         사용자가 확대해 둔 지도가 원위치했다. 컨트롤러가
+           · 목록 시그니처가 그대로면 → 맞추지 않음
+           · 사용자가 최근(2분 내) 지도를 만졌으면 → 맞추지 않음
+         으로 걸러 준다. */
+      var sig=pcListHash(list)+'|'+(searchQ||'')+'|'+curFilter+'|'+salesFilter+'|'+regionFilter+'|'+(nearbyMode?'near':'');
+      if(pcMapCtl.shouldAutoFit(sig)) applyFocus();
+    }
     pcMapCtlSync();
-    // 컨테이너가 자리잡은 뒤 한 번 더 보정 — sticky·리사이즈로 크기가 늦게 확정될 때의 회색화 방지.
-    // 상시 relayout은 ResizeObserver가 담당하고, 여기서는 뷰포트(setBounds/복원)만 재적용한다.
-    pcMapTimer=setTimeout(function(){ pcMapTimer=null; if(pcMapObj){ pcMapObj.relayout(); if(restore) pcApplyMapState(); else if(!viewRestored) applyFocus(); pcMapCtlSync(); } },120);
+    /* [제거] 예전에는 120ms 뒤 relayout + applyFocus 를 한 번 더 실행했다.
+       그 두 번째 applyFocus 가 그 사이 사용자가 맞춘 중심·배율을 덮어써,
+       "확대했는데 잠시 뒤 전국으로 풀린다"는 증상의 직접 원인이었다.
+       크기 재계산은 ResizeObserver → 컨트롤러가 맡고, 뷰포트는 다시 건드리지 않는다. */
+    pcScheduleRelayout();
   });
 }
 
@@ -4201,16 +4843,23 @@ function pcSelect(name){
   if(pcListView==='table'){
     pcSelName=name;
     pcRenderDetail(name, document.getElementById('pcDetailModalBody'));
-    var dm=document.getElementById('pcDetailModal'); if(dm) dm.classList.add('show');
+    BazModal.open(document.getElementById('pcDetailModal'), {
+      name:'pcDetail', sheet:'.pc-dm-sheet', initialFocus:'#pcDetailModalClose'
+    });
     var dmb=document.getElementById('pcDetailModalBody'); if(dmb) dmb.scrollTop=0;
     pcHighlight();
     return;
   }
-  if(pcRightMode==='map') pcSaveMapState();   // 지도→상세: 당시 위치 저장(복귀용)
+  /* 지도 → 상세: 지금 보고 있는 중심·배율을 저장해 둔다(복귀용).
+     넓은 화면(≥981px)에서는 상세가 오른쪽 drawer 로 얹혀 지도가 계속 보이므로
+     지도 문맥이 끊기지 않는다 — 폭이 줄어드는 만큼 relayout 만 한 번. */
+  if(pcRightMode==='map') pcSaveMapState();
   pcSelName=name; pcRightMode='detail';
-  var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
-  var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
-  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=name;
+  pcMapTransition(function(){
+    var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
+    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
+    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=name;
+  });
   pcRenderDetail(name);
   pcHighlight();
   var body=document.getElementById('pcDetail'); if(body) body.scrollTop=0;
@@ -4219,16 +4868,17 @@ window.pcSelect=pcSelect;
 
 // 상세 모달 닫기 (배경 클릭·✕·Esc·카드 뷰 전환)
 function pcCloseDetailModal(){
-  var dm=document.getElementById('pcDetailModal');
-  if(dm && dm.classList.contains('show')){ dm.classList.remove('show'); }
+  BazModal.close(document.getElementById('pcDetailModal'));
 }
 window.pcCloseDetailModal=pcCloseDetailModal;
 
 function pcBackToMap(){
   pcRightMode='map';
-  var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
-  var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
-  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 '+t('mapTitle');
+  pcMapTransition(function(){
+    var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
+    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
+    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 '+t('mapTitle');
+  });
   pcRestoreView=true;   // 초기화면(전체 fit)이 아니라 이력 확인 당시 위치/줌으로 복귀
   if(pcMapVisible()) pcShowMap(pcList||[]);   // 표 뷰·접힘(지도 숨김)에서는 지도 렌더 생략
 }
@@ -4268,11 +4918,37 @@ function pcRender(list){
 window.pcRender=pcRender;
 // 한 번만 만든 지도 패널의 라벨·툴팁을 현재 언어로 다시 입힌다(언어 전환 대응)
 function pcApplyPaneI18n(){
+  if(!pcDomReady) return;
   var m={
     '#pcMapCtl [data-mapctl="zin"]':'mapZoomIn', '#pcMapCtl [data-mapctl="zout"]':'mapZoomOut',
-    '#pcMapCtl [data-mapctl="fit"]':'mapFitAll', '#pcMapGrip':'mapResize'
+    '#pcMapCtl [data-mapctl="clearsel"]':'mapClearSel', '#pcMapGrip':'mapResize'
   };
   Object.keys(m).forEach(function(sel){ var el=document.querySelector(sel); if(el){ el.setAttribute('title',t(m[sel])); el.setAttribute('aria-label',t(m[sel])); } });
+  // 맞춤 버튼은 title(설명)과 aria-label(이름)이 다르다
+  var fr=document.querySelector('#pcMapCtl [data-mapctl="fitres"]');
+  if(fr){ fr.setAttribute('title',t('mapFitResultTip')); fr.setAttribute('aria-label',t('mapFitResult')); }
+  var fa=document.querySelector('#pcMapCtl [data-mapctl="fitall"]');
+  if(fa){ fa.setAttribute('title',t('mapFitEveryTip')); fa.setAttribute('aria-label',t('mapFitEvery')); }
+  // 범례·힌트·툴바
+  var lg=document.getElementById('pcMapLegend');
+  if(lg){
+    lg.setAttribute('aria-label', t('mapLegend'));
+    var lgs=lg.querySelectorAll('.lg'), keys=['lgResult','lgNear','lgDone','lgProg'];
+    for(var i=0;i<lgs.length && i<keys.length;i++){
+      var sw=lgs[i].querySelector('.sw');
+      lgs[i].textContent=t(keys[i]);
+      if(sw) lgs[i].insertBefore(sw, lgs[i].firstChild);
+    }
+  }
+  var hint=document.getElementById('pcMapHint'); if(hint) hint.textContent=t('mapWheelHint');
+  var ph=document.getElementById('pcHint'); if(ph) ph.textContent=t('pcHint');
+  var vt=document.getElementById('pcViewToggle');
+  if(vt){
+    var bc=vt.querySelector('[data-view="cards"]'); if(bc) bc.textContent=t('viewCards');
+    var bt=vt.querySelector('[data-view="table"]'); if(bt) bt.textContent=t('viewTable');
+  }
+  var bm=document.getElementById('pcBackMap'); if(bm) bm.textContent='← 🗺 '+t('mapTitle');
+  try{ pcMapInteractSync(); }catch(e){}
   // 접기/고정 버튼은 상태에 따라 라벨이 달라진다
   var col=document.body.classList.contains('pc-mapcol'), unpin=document.body.classList.contains('pc-mapunpin');
   var fb=document.querySelector('#pcHeadCtl [data-headctl="fold"]'); if(fb){ var fk=col?'mapExpand':'mapCollapse'; fb.setAttribute('title',t(fk)); fb.setAttribute('aria-label',t(fk)); }
@@ -4282,11 +4958,41 @@ function pcApplyPaneI18n(){
   if(pcRightMode==='map'){ var rtl=document.getElementById('pcRightTtl'); if(rtl && rtl.textContent.indexOf('🗺')===0 && rtl.textContent.indexOf('5km')<0) rtl.textContent='🗺 '+t('mapTitle'); }
 }
 
+/* ── 자정 넘김 감시 ───────────────────────────────────────────────────────
+   공용 PC 는 탭을 하루 종일 열어 둔다. 예전에는 TODAY 가 로드 시각에 고정돼
+   자정을 넘겨도 점검 경과일·상태 배지·'오늘 완료'가 어제 값에 머물렀다.
+   Asia/Seoul 날짜가 바뀌면 캐시를 버리고 화면을 다시 그린다
+   (현장 일정 일일 초기화는 기존 pcDailyResetCheck 가 그대로 담당). */
+BazDate.onDayChange(function(day){
+  console.log('[날짜] Asia/Seoul 날짜 전환 →', day);
+  try{ pcDailyResetCheck(); }catch(e){}
+  try{ bazClearVerMemo(); }catch(e){}
+  try{ render(); }catch(e){}
+  try{ if(curTab==='dash') renderDash(); }catch(e){}
+  try{ if(curTab==='recent') renderRecent(); }catch(e){}
+  try{ pcRenderRecentCard(); pcRenderRouteCard(); }catch(e){}
+});
+BazDate.startWatch(30000);
+
 // ===== 헤더 높이 → 필터 sticky 오프셋(--hdr-h) =====
 function pcSetHdrH(){ var h=document.querySelector('header'); if(h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight+'px'); }
 pcSetHdrH();
 // 창 크기가 바뀌면 지도 높이 최대치도 달라진다 → 저장값을 현재 화면에 맞게 재클램프(sticky 보호)
-function pcOnResize(){ pcSetHdrH(); try{ if(typeof pcMapHClamp==='function'){ var cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pc-map-h'))||PC_MAPH_DEF; pcMapHApply(cur, false); } }catch(e){} }
+// 보고 있던 중심·배율은 컨트롤러가 저장·복원한다(창 크기 변경으로 지도가 튀지 않게).
+var pcResizeT=0;
+function pcOnResize(){
+  if(pcResizeT) clearTimeout(pcResizeT);
+  pcResizeT=setTimeout(function(){
+    pcResizeT=0;
+    pcMapTransition(function(){
+      pcSetHdrH();
+      try{
+        var cur=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pc-map-h'))||PC_MAPH_DEF;
+        pcMapHApply(cur, false);
+      }catch(e){}
+    });
+  }, 120);
+}
 window.addEventListener('resize', pcOnResize);
 window.addEventListener('load', pcSetHdrH);
 
@@ -4300,15 +5006,17 @@ window.addEventListener('load', pcSetHdrH);
     try{ pcSetHdrH(); }catch(e){}
     var tg=document.getElementById('modeToggle');
     if(tg) tg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.mode===mode); });
-    // 레이아웃 전환 → 목록 재렌더 (mobile ↔ window)
-    try{ if(typeof render==='function' && curTab==='list') render(); }catch(e){}
-    // 카카오맵이 떠 있으면 넓이 변경 반영
-    try{ if(pcMapObj && pcMapObj.relayout){ setTimeout(function(){ pcMapObj.relayout(); }, 220); } }catch(e){}
+    // 레이아웃 전환 → 목록 재렌더 (mobile ↔ window). 지도 폭 변경은 컨트롤러가 반영.
+    try{ if(typeof pcMapTransition==='function'){ pcMapTransition(function(){ if(typeof render==='function' && curTab==='list') render(); }); }
+         else if(typeof render==='function' && curTab==='list') render(); }catch(e){}
   }
   function get(){
     var saved=localStorage.getItem(KEY);
     if(saved==='window'||saved==='mobile') return saved;
-    return (window.matchMedia && window.matchMedia('(min-width:900px)').matches) ? 'window' : 'mobile';
+    /* [브레이크포인트 일치] 예전엔 여기만 900px 이고 지도 sticky 해제·2열 해제는 980px 이었다.
+       900~980px 구간에서는 Window 모드로 들어가면서 sticky 지도가 풀린 어중간한 화면이 됐다.
+       PC_WIDE_MIN(980) 한 값으로 맞춘다 — CSS @media(max-width:980px) 와 같은 경계. */
+    return (window.matchMedia && window.matchMedia('(min-width:'+PC_WIDE_MIN+'px)').matches) ? 'window' : 'mobile';
   }
   var cur=get(); apply(cur);
   var tg=document.getElementById('modeToggle');
