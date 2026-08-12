@@ -103,6 +103,9 @@ ck('사진까지 저장된 성공 응답만 SUCCESS', okRes.state === S.SUCCESS 
 
 const failRes = H.classifySaveResult('json', { success: false, error: '시트 없음' });
 ck('success:false 는 FAILED', failRes.state === S.FAILED && failRes.error === '시트 없음');
+const legacySuccess = H.classifySaveResult('json', { success: true, row: 9 });
+ck('구버전 GAS의 photo 확인 없는 success:true 는 실패',
+  legacySuccess.state === S.FAILED && /사진 저장 결과/.test(legacySuccess.error));
 
 ck('no-cors 폴백 코드가 제거되었다', !/mode:\s*['"]no-cors['"]/.test(JS));
 ck('POST/GET 에 타임아웃이 있다',
@@ -117,14 +120,14 @@ ck('GAS 버전으로 사진 저장을 추측하던 코드가 사라졌다',
 /* 성공이 아닌 상태에서 해서는 안 되는 동작 */
 const applySaveResult = grab(JS, 'applySaveResult');
 const successBranch = applySaveResult.slice(0, applySaveResult.indexOf('}else if'));
-['clearSnPhoto()', 'enableCopy(true)', 'rememberRecentHandover_()', 'clearDraft'].forEach(function (frag) {
+['clearSnPhoto()', 'enableCopy(!hasUnsaved)', 'rememberRecentHandover_(sent)', 'clearDraft'].forEach(function (frag) {
   ck('성공 분기에서만 실행: ' + frag, successBranch.includes(frag));
 });
 const restBranches = applySaveResult.slice(applySaveResult.indexOf('}else if'));
 ck('실패·불명 분기에서는 사진을 지우지 않는다', !restBranches.includes('clearSnPhoto()'));
 ck('실패·불명 분기에서는 복사·이어쓰기를 열지 않는다',
   !restBranches.includes('enableCopy(true)') && /enableCopy\(false\)/.test(restBranches));
-ck('실패·불명 분기에서는 최근 완료를 로컬에 남기지 않는다', !restBranches.includes('rememberRecentHandover_()'));
+ck('실패·불명 분기에서는 최근 완료를 로컬에 남기지 않는다', !restBranches.includes('rememberRecentHandover_('));
 
 /* ════════════════════════════════════════════════════════════════════
    3. 사진 저장 실패 처리 (서버)
@@ -142,9 +145,20 @@ ck('사진 열이 없으면 행 기록 전에 실패로 판정',
   /if\(photoFile && !photoCol\)/.test(doPost) && /no-photo-column/.test(doPost));
 ck('수식 기록 실패 시 행을 되돌린다',
   /rowRollback_\(sh, row, written\)/.test(doPost) && /function rowRollback_/.test(GAS));
+ck('사진 수식 뒤 후속 작업이 실패해도 사진 열까지 롤백한다',
+  /setFormula\([\s\S]{0,120}written\.push\(photoCol\)/.test(doPost));
+ck('일반 셀 쓰기 중간 실패도 이미 쓴 행을 롤백한다',
+  /writeSheet && writeRow\) rollbackOk = rowRollback_\(writeSheet, writeRow, written\)/.test(doPost));
+ck('행 롤백 실패 시 참조 중일 수 있는 사진 파일을 삭제하지 않는다',
+  /if\(!committed && rollbackOk\) photoDiscard_\(photoFile\)/.test(doPost));
 ck('행 기록이 실패하면 업로드된 사진을 정리한다',
-  /function photoDiscard_/.test(GAS) && /if\(!committed\) photoDiscard_\(photoFile\)/.test(doPost));
+  /function photoDiscard_/.test(GAS) && /if\(!committed && rollbackOk\) photoDiscard_\(photoFile\)/.test(doPost));
 ck('사진이 필수인데 안 실린 요청도 서버가 잡아낸다', /photo-missing/.test(doPost));
+ck('handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다',
+  /var photoRequired = isHandover;/.test(doPost));
+ck('handover 요청은 멱등성 reqId를 반드시 요구한다', /isHandover && !reqId/.test(doPost));
+ck('알 수 없는 action이 사진 없는 handover 행으로 흘러가지 않는다',
+  /knownActions/.test(doPost) && /알 수 없는 action/.test(doPost));
 ck('구버전처럼 경고만 붙이고 success:true 로 넘기지 않는다', !/photoWarn/.test(doPost));
 
 /* 클라이언트: 성공이라도 사진이 필수인데 저장 안 됐으면 실패로 본다 */
@@ -333,7 +347,18 @@ ck('dirty 가 되면 복사·이어쓰기를 다시 잠근다', /enableCopy\(fal
 ck('dirty 상태를 화면에 표시한다', /is-dirty/.test(refreshDirty) && /dirty-badge/.test(HTML));
 ck('새 기록 흐름을 제공한다', /function startNewRecord/.test(JS) && /새 기록 시작/.test(JS));
 const saveFn = grab(JS, 'saveToSheet');
-ck('동일 내용 재저장 시 중복 행을 만들지 않는다', /isSameAsSaved\(SAVED_SNAPSHOT, form\)/.test(saveFn));
+ck('동일 내용 재저장 시 중복 행을 만들지 않는다',
+  /isSameAsSaved\(SAVED_SNAPSHOT, form\) && !UNSAVED_PHOTO/.test(saveFn));
+ck('결과 불명 재시도는 최초 payload와 reqId를 재사용한다',
+  /SAVE_STATE===BazHandover\.SAVE\.UNKNOWN && LAST_SAVE_PAYLOAD/.test(saveFn) &&
+  /submitSavePayload\(LAST_SAVE_PAYLOAD\)/.test(saveFn) && /LAST_SAVE_PAYLOAD=payload/.test(saveFn));
+ck('응답 대기 중 편집은 전송 시점 스냅샷과 분리한다',
+  /LAST_SENT_SNAPSHOT=BazHandover\.snapshot\(form\)/.test(saveFn) &&
+  /var sent=LAST_SENT_SNAPSHOT\|\|BazHandover\.snapshot\(current\)/.test(applySaveResult) &&
+  /textChanged=BazHandover\.isDirty\(sent, current\)/.test(applySaveResult));
+ck('응답 대기 중 변경이 있으면 초안을 보존하고 후속 기능을 잠근다',
+  /if\(hasUnsaved\) BazHandover\.saveDraft/.test(applySaveResult) &&
+  /enableCopy\(!hasUnsaved\)/.test(applySaveResult));
 
 /* ════════════════════════════════════════════════════════════════════
    10. 사진 A→B 교체 경합
@@ -353,6 +378,13 @@ ck('처리 중임을 접근 가능한 상태 메시지로 알린다',
   /snPhotoSay\(/.test(onSnPhoto) && /id="snPhotoState"[^>]*aria-live="polite"/.test(HTML));
 ck('사진 삭제가 진행 중 변환을 취소한다', /snPhotoSeq\.cancel\(\)/.test(grab(JS, 'clearSnPhoto')));
 ck('변환 중에는 저장이 막힌다', /photoBusy:SN_PHOTO_BUSY/.test(saveFn));
+ck('저장·결과 확인 중에는 사진 교체·삭제 컨트롤을 잠근다',
+  /function syncPhotoControls/.test(JS) && /f\.disabled=locked/.test(JS) && /rm\.disabled=locked/.test(JS));
+ck('늦은 저장 확인이 새로 교체한 사진을 지우지 않는다',
+  /SN_PHOTO!==LAST_SENT_PHOTO/.test(applySaveResult) && /현재 변경은 미기록/.test(applySaveResult));
+ck('저장 뒤 새 사진은 dirty가 되고 동일 텍스트여도 다시 저장할 수 있다',
+  /UNSAVED_PHOTO=true/.test(onSnPhoto) && /\|\| UNSAVED_PHOTO/.test(refreshDirty) &&
+  /&& !UNSAVED_PHOTO/.test(saveFn));
 const vBusy = H.validate(form(), { hasPhoto: true, photoBusy: true });
 ck('검증도 사진 처리 중 저장을 막는다', !vBusy.ok && vBusy.errors.some(e => e.field === 'snPhoto'));
 

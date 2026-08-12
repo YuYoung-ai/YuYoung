@@ -156,7 +156,10 @@
     }
 
     var photo = (data.photo && typeof data.photo === 'object') ? data.photo : null;
-    out.photoRequired = !!(photo && photo.required);
+    /* handover 저장은 사진이 항상 필수다. 구버전 GAS는 photo 블록 없이
+       {success:true}만 돌려줄 수 있는데, 이를 성공으로 받아들이면 실제 사진
+       저장 여부를 확인하지 못한 채 화면 사진을 지우게 된다. */
+    out.photoRequired = true;
     out.photoSaved = !!(photo && photo.saved);
     out.warnings = Array.isArray(data.warnings) ? data.warnings.slice() : [];
     out.savedFields = (data.savedFields && typeof data.savedFields === 'object') ? data.savedFields : null;
@@ -167,11 +170,13 @@
       out.error = text(data.error) || (photo && text(photo.error)) || '저장 실패';
       return out;
     }
-    /* 성공이라고 해도 사진이 필수인데 저장되지 않았으면 성공이 아니다.
-       (구버전 서버가 success:true + 사진 누락을 돌려주는 경우까지 여기서 막는다) */
-    if (out.photoRequired && !out.photoSaved) {
+    /* 성공이라고 해도 구조화된 사진 확인이 없거나 저장되지 않았으면 성공이 아니다.
+       (구버전 서버의 success:true 단독 응답까지 여기서 막는다) */
+    if (!photo || photo.required !== true || !out.photoSaved) {
       out.state = SAVE.FAILED;
-      out.error = (photo && text(photo.error)) || '사진이 저장되지 않았습니다';
+      out.error = (photo && text(photo.error)) ||
+        (!photo ? '서버에서 사진 저장 결과를 확인할 수 없습니다 — GAS를 최신 버전으로 재배포해 주세요' :
+          '사진이 저장되지 않았습니다');
       return out;
     }
     out.state = SAVE.SUCCESS;

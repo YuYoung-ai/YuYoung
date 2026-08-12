@@ -514,6 +514,7 @@ function doPost(e){
   var payload = {};
   var photoFile = null;      /* [v2.8] 락 잡기 전에 끝내 둔 사진 업로드 결과 */
   var committed = false;     /* [v3.1] 행이 확정됐는가 — 확정 후에는 사진을 지우지 않는다 */
+  var writeSheet = null, writeRow = 0, written = []; /* 중간 셀 쓰기 실패도 전부 롤백 */
   try{
     payload = JSON.parse(e.postData.contents||'{}');
 
@@ -526,12 +527,26 @@ function doPost(e){
       if(denied) return json_(denied);
     }
 
+    /* action 이 비어 있는 요청만 handover 행 기록이다. 알 수 없는 action 이
+       아래 공통 기록 경로로 흘러 사진 없는 행을 만드는 것을 차단한다. */
+    var knownActions = ['progress_save','progress_restore','history_save','weeklywrite',
+                        'menu_save','weeklyauto_save','labeldone'];
+    if(actName && knownActions.indexOf(actName) < 0){
+      return json_({success:false, error:'알 수 없는 action: '+String(actName).slice(0,40)});
+    }
+    var isHandover = !actName;
+
     /* [v2.8] 같은 기록의 재전송을 걸러낸다(멱등성).
        콜드스타트 때 GAS가 JSON 대신 HTML을 돌려주면 프런트의 1차 요청은 "실패"로 보이고
        no-cors 로 같은 내용을 한 번 더 보낸다. 그런데 1차 요청이 서버에서는 이미 기록됐을
        수 있어, 그대로 두면 같은 행이 두 줄 쌓이고 사진도 Drive에 두 번 올라간다.
        프런트가 붙여 보낸 reqId 를 10분간 기억해 두 번째 요청은 첫 결과를 그대로 돌려준다. */
     var reqId = String((payload && payload.reqId) || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,64);
+    if(isHandover && !reqId){
+      return json_({success:false, row:null,
+        photo:photoResult_(true, false, '', 'reqId-missing'),
+        error:'안전한 중복 방지를 위해 reqId가 필요합니다 — 화면을 새로고침한 뒤 다시 저장해 주세요.'});
+    }
     /* 빠른 경로: 이미 처리된 요청이면 사진 업로드도 하지 않고 첫 결과를 그대로 돌려준다.
        ★ 이것만으로는 부족하다 — 동시 요청 두 개는 둘 다 여기를 통과한다.
          락을 잡은 뒤 아래에서 한 번 더 확인한다(double-checked). */
@@ -546,7 +561,9 @@ function doPost(e){
        미리 해 두고, 락 안에서는 수식 한 줄만 쓴다. */
     /* 사진 필수 여부: 사진이 실제로 왔거나, 클라이언트가 "이 요청은 사진 필수"라고 선언한 경우.
        후자가 있어야 "사진을 붙였다고 생각했는데 payload 에 안 실린" 사고를 서버가 잡아낸다. */
-    var photoRequired = !actName && !!(payload && (payload.snPhoto || payload.photoRequired === true));
+    /* handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다.
+       action 없는 행 기록은 서버가 무조건 사진을 요구한다. */
+    var photoRequired = isHandover;
     if(photoRequired && !(payload && payload.snPhoto)){
       var mfail = {success:false, row:null,
         photo: photoResult_(true, false, '', 'photo-missing'),
@@ -646,8 +663,9 @@ function doPost(e){
 
     var row = lastDataRow_(sh, hdr) + 1;
     if(row > sh.getMaxRows()) sh.insertRowAfter(sh.getMaxRows());
+    writeSheet = sh; writeRow = row;
 
-    var written = [];   /* 롤백 대상 열 */
+    written = [];   /* 롤백 대상 열 */
     function put_(col, value){
       if(!col) return false;
       sh.getRange(row, col).setValue(safeCell_(value));
@@ -719,15 +737,19 @@ function doPost(e){
     if(photoFile && photoCol){
       try{
         sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
+        written.push(photoCol);  /* 수식 뒤의 행 높이 조정이 실패해도 사진 열까지 롤백 */
         if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
         photoSaved = true;
       }catch(fe){
-        rowRollback_(sh, row, written);
-        photoDiscard_(photoFile);
+        var rolled = rowRollback_(sh, row, written);
+        /* 롤백 자체가 실패했다면 남은 행의 사진 수식이 파일을 계속 참조할 수 있으므로
+           파일을 지우지 않고 관리자 확인이 가능하게 보존한다. */
+        if(rolled) photoDiscard_(photoFile);
         log_('PHOTO_FORMULA_ERR:'+fe, hdr, logSafe_(payload));
         var ffail = {success:false, row:null,
           photo: photoResult_(true, false, photoFile.id, String(fe)),
-          error: '사진 기록 실패 — 기록을 되돌렸습니다: ' + fe};
+          error: rolled ? '사진 기록 실패 — 기록을 되돌렸습니다: ' + fe
+                        : '사진 기록 실패 후 행 롤백도 실패했습니다 — 관리자에게 행 '+row+' 확인을 요청하세요: '+fe};
         if(reqId) reqPut_(reqId, {ts:Date.now(), result:ffail});
         return json_(ffail);
       }
@@ -756,10 +778,12 @@ function doPost(e){
     return json_(out);
   }catch(err){
     log_('ERR:'+err, null, logSafe_(payload));
-    if(!committed) photoDiscard_(photoFile);   /* 행이 안 남았는데 사진만 Drive에 뜨는 것을 막는다 */
+    var rollbackOk = true;
+    if(!committed && writeSheet && writeRow) rollbackOk = rowRollback_(writeSheet, writeRow, written);
+    if(!committed && rollbackOk) photoDiscard_(photoFile);   /* 반쪽 행이 없을 때만 고아 사진 정리 */
     return json_({success:false, row:null,
       photo: photoResult_(!!(payload && payload.snPhoto), false, '', String(err)),
-      error:String(err)});
+      error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
     try{ lock.releaseLock(); }catch(_){}
   }

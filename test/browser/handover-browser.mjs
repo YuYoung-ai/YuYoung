@@ -17,8 +17,14 @@ import { execSync } from 'child_process';
 let pw;
 try { pw = (await import('playwright')).default; }
 catch {
-  const root = execSync('npm root -g').toString().trim();
-  pw = createRequire(import.meta.url)(root + '/playwright');
+  const roots = [process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES];
+  try { roots.push(execSync('npm root -g').toString().trim()); } catch {}
+  let last;
+  for (const root of roots.filter(Boolean)) {
+    try { pw = createRequire(import.meta.url)(root + '/playwright'); break; }
+    catch (e) { last = e; }
+  }
+  if (!pw) throw last || new Error('playwright 모듈을 찾을 수 없습니다');
 }
 const { chromium } = pw;
 
@@ -75,6 +81,8 @@ await page.route('**://script.google.com/**', async r => {
     if (scenario === 'photolie') {
       return j({ success: true, row: 9, photo: { required: true, saved: false, fileId: '', error: '열 없음' } });
     }
+    if (scenario === 'legacyphoto') return j({ success: true, row: 10 });
+    if (scenario === 'slowok') await new Promise(resolve => setTimeout(resolve, 900));
     saved.set(p.reqId, { success: true, row: 100 + saved.size,
       photo: { required: true, saved: true, fileId: 'F1', error: '' },
       savedFields: { verUI: true, verHP: true, nozzleDate: true, result: true, remark: true, code: true, eqKind: true },
@@ -204,6 +212,36 @@ const lie = await page.evaluate(() => ({
 }));
 ck('success:true 라도 사진 미저장이면 성공으로 표시하지 않는다',
   lie.state.includes('err') && lie.photoShown === 'block' && lie.copyDisabled, JSON.stringify(lie));
+
+/* 6-b. 구버전 GAS가 photo 블록 없이 success:true → 실패 */
+scenario = 'legacyphoto';
+await page.click('#btnSave');
+await page.waitForTimeout(1200);
+const legacy = await page.evaluate(() => ({
+  state: document.getElementById('saveStatus').className,
+  photoShown: document.getElementById('snPhotoPrev').style.display,
+  copyDisabled: document.getElementById('btnCopy').disabled
+}));
+ck('photo 확인 블록 없는 구버전 성공 응답을 거부한다',
+  legacy.state.includes('err') && legacy.photoShown === 'block' && legacy.copyDisabled,
+  JSON.stringify(legacy));
+
+/* 6-c. 저장 진행 중 사진 교체·삭제 잠금 */
+scenario = 'slowok';
+const slowSave = page.click('#btnSave');
+await page.waitForTimeout(150);
+const lockedPhoto = await page.evaluate(() => ({
+  file: document.getElementById('snPhotoFile').disabled,
+  remove: document.getElementById('snPhotoRemove').disabled,
+  save: document.getElementById('btnSave').disabled
+}));
+ck('저장 진행 중 사진 입력·삭제·저장 버튼이 잠긴다',
+  lockedPhoto.file && lockedPhoto.remove && lockedPhoto.save, JSON.stringify(lockedPhoto));
+await slowSave;
+await page.waitForTimeout(1000);
+await page.evaluate(() => startNewRecord());
+await fillForm();
+await attachPhoto();
 
 /* 7. 응답 유실 → 결과 불명 (성공으로 처리하지 않음) */
 scenario = 'lostresponse';

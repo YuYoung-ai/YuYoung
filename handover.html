@@ -543,6 +543,7 @@ function snPhotoToJpeg(file){
      변환 중에는 저장 버튼을 잠근다(처리 중임을 aria-live 로도 알린다). */
 var snPhotoSeq=BazHandover.createSeq();
 var SN_PHOTO_BUSY=false;
+var LAST_SENT_PHOTO=null;       /* 응답 유실 뒤 재확인할 때도 어떤 사진을 보냈는지 유지 */
 
 function snPhotoSay(msg){
   var st=el('snPhotoState'); if(st) st.textContent=msg||'';
@@ -550,11 +551,28 @@ function snPhotoSay(msg){
 function snPhotoBusy(on){
   SN_PHOTO_BUSY=!!on;
   var b=el('btnSave');
-  if(b){ b.disabled=!!on; if(on) b.textContent='⏳ 사진 처리 중…'; else if(SAVE_STATE!==BazHandover.SAVE.SAVING) b.textContent='📥 시트 기록'; }
+  var stateLocked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
+  if(b){ b.disabled=!!on || stateLocked; if(on) b.textContent='⏳ 사진 처리 중…'; else if(!stateLocked) b.textContent='📥 시트 기록'; }
   var z=el('snPhotoZone'); if(z) z.setAttribute('aria-busy', on?'true':'false');
 }
 
+/* 저장·결과 확인 중에는 서버로 보낸 사진을 교체하거나 지울 수 없게 한다.
+   결과 불명 상태에서 잠금이 풀린 뒤 새 사진을 붙인 경우에는 applySaveResult가
+   LAST_SENT_PHOTO와 비교해 새 사진을 삭제하지 않는다. */
+function syncPhotoControls(){
+  var locked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
+  var f=el('snPhotoFile'), rm=el('snPhotoRemove');
+  if(f) f.disabled=locked;
+  if(rm) rm.disabled=locked;
+  snPhotoBusy(SN_PHOTO_BUSY);
+}
+
 async function onSnPhoto(evt){
+  if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING){
+    evt.target.value='';
+    toast('기록 확인이 끝난 뒤 사진을 교체해 주세요');
+    return;
+  }
   var file=evt.target.files&&evt.target.files[0];
   evt.target.value='';                   /* 같은 파일 재선택도 동작하도록 초기화 */
   if(!file) return;
@@ -573,6 +591,7 @@ async function onSnPhoto(evt){
       return;
     }
     SN_PHOTO=jpeg;
+    if(SAVED_SNAPSHOT) UNSAVED_PHOTO=true;
     el('snPhotoImg').src=jpeg;
     el('snPhotoPrev').style.display='block';
     lab.textContent='✅ 첨부됨 · 다시 누르면 교체';
@@ -593,6 +612,7 @@ async function onSnPhoto(evt){
 function clearSnPhoto(){
   snPhotoSeq.cancel();                 /* 진행 중이던 변환 결과가 되살아나지 않게 */
   SN_PHOTO=null;
+  UNSAVED_PHOTO=false;
   el('snPhotoImg').src='';
   el('snPhotoPrev').style.display='none';
   el('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
@@ -949,10 +969,16 @@ function autoFillDetail(){
 }
 
 /* 완료 기록을 로컬에도 남겨 hospital-pc '최근완료'에서 즉시(같은 기기) 확인 가능하게 함 */
-function rememberRecentHandover_(){
+function rememberRecentHandover_(saved){
   try{
+    saved=saved||{};
     var arr=JSON.parse(localStorage.getItem('baz_recent_handover')||'[]')||[];
-    arr.unshift({ date:val('date'), hosp:val('hosp'), fse:val('fse'), gubun:val('gubun') });
+    arr.unshift({
+      date:saved.date!=null?saved.date:val('date'),
+      hosp:saved.hosp!=null?saved.hosp:val('hosp'),
+      fse:saved.fse!=null?saved.fse:val('fse'),
+      gubun:saved.gubun!=null?saved.gubun:val('gubun')
+    });
     var seen={}, out=[];
     arr.forEach(function(r){ var k=(r.hosp||'')+'|'+(r.date||'')+'|'+(r.fse||''); if(seen[k])return; seen[k]=1; out.push(r); });
     localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
@@ -985,10 +1011,14 @@ var FIELD_LABEL={eqKind:'장비 구분', verUI:'UI 버전', verHP:'HP 버전', n
                  result:'A/S 결과', remark:'비고', code:'유형 코드'};
 var SAVE_STATE=BazHandover.SAVE.IDLE;
 var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
+var UNSAVED_PHOTO=false;      /* 저장 뒤 새로 붙인 사진도 미저장 변경으로 취급 */
 var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
+var LAST_SAVE_PAYLOAD=null;   /* 결과 불명 재전송은 반드시 같은 reqId·사진을 재사용 */
+var LAST_SENT_SNAPSHOT=null;  /* 서버가 실제로 받은 업무 필드 — 응답 대기 중 편집과 분리 */
 
 function setSaveState(state, info){
   SAVE_STATE=state;
+  syncPhotoControls();
   var card=el('saveStatusCard'), box=el('saveStatus'), acts=el('saveActions');
   if(!card||!box||!acts) return;
   info=info||{};
@@ -1032,7 +1062,7 @@ function enableCopy(on){
 /* 저장 후 업무 필드가 바뀌면 "저장 후 변경됨" — 복사·이어쓰기를 다시 잠근다 */
 function refreshDirty(){
   if(!SAVED_SNAPSHOT){ document.body.classList.remove('is-dirty'); return false; }
-  var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm());
+  var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm()) || UNSAVED_PHOTO;
   document.body.classList.toggle('is-dirty', dirty);
   if(dirty){
     enableCopy(false);
@@ -1050,25 +1080,47 @@ function applySaveResult(res){
   var S=BazHandover.SAVE;
   if(res.state===S.SUCCESS){
     setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings});
-    SAVED_SNAPSHOT=BazHandover.snapshot(readForm());
-    document.body.classList.remove('is-dirty');
-    enableCopy(true);
-    rememberRecentHandover_();
-    BazHandover.clearDraft(localStorage);      /* 확인된 성공 → 초안 정리 */
+    var current=readForm();
+    var sent=LAST_SENT_SNAPSHOT||BazHandover.snapshot(current);
+    SAVED_SNAPSHOT=sent;
     LAST_REQ_ID='';
-    clearSnPhoto();                            /* 서버가 사진 저장을 확인해 준 뒤에만 지운다 */
+    /* 결과 불명 상태에서 사용자가 새 사진을 붙인 뒤 수동 재확인할 수 있다.
+       서버가 저장한 옛 사진과 현재 사진이 다르면 현재 사진은 지우지 않고
+       '미저장 변경'으로 남긴다. */
+    var replacement=!!SN_PHOTO && !!LAST_SENT_PHOTO && SN_PHOTO!==LAST_SENT_PHOTO;
+    var textChanged=BazHandover.isDirty(sent, current);
+    if(!replacement){
+      if(SN_PHOTO===LAST_SENT_PHOTO) clearSnPhoto();
+    }else{
+      UNSAVED_PHOTO=true;
+    }
+    var hasUnsaved=textChanged||replacement;
+    document.body.classList.toggle('is-dirty', hasUnsaved);
+    enableCopy(!hasUnsaved);
+    rememberRecentHandover_(sent);
+    if(hasUnsaved) BazHandover.saveDraft(localStorage, current, {hadPhoto:!!SN_PHOTO});
+    else BazHandover.clearDraft(localStorage); /* 전송 뒤 바뀐 내용이 없을 때만 초안 정리 */
+    LAST_SENT_PHOTO=null;
+    LAST_SAVE_PAYLOAD=null;
+    LAST_SENT_SNAPSHOT=null;
     var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
-    toast(res.message || '✅ 시트 기록 완료');
+    if(hasUnsaved){
+      if(badge) badge.textContent='· 전송한 내용은 기록됨 · 현재 변경은 미기록';
+      toast('✅ 전송한 내용은 시트에 기록되었습니다\n응답 대기 중 바꾼 내용은 저장되지 않았으므로 다시 기록해 주세요');
+    }else toast(res.message || '✅ 시트 기록 완료');
     /* 서버가 "이 필드는 저장 못 했다"고 알려 준 경우 그대로 보여 준다 —
        프런트가 임의로 '저장됨'이라고 말하지 않는다. */
     if(res.warnings && res.warnings.length) console.warn('[handover] 저장 경고:', res.warnings);
     if(res.savedFields){
       var notSaved=Object.keys(res.savedFields).filter(function(k){
-        return res.savedFields[k]===false && FIELD_LABEL[k] && String(readForm()[k]||'').trim();
+        return res.savedFields[k]===false && FIELD_LABEL[k] && String(sent[k]||'').trim();
       }).map(function(k){ return FIELD_LABEL[k]; });
       if(notSaved.length) toast('⚠️ 시트에 열이 없어 저장되지 않은 항목: '+notSaved.join(', '));
     }
   }else if(res.state===S.FAILED){
+    LAST_SENT_PHOTO=null;
+    LAST_SAVE_PAYLOAD=null;
+    LAST_SENT_SNAPSHOT=null;
     setSaveState(S.FAILED, {error:res.error});
     enableCopy(false);
     toast('❌ '+(res.error||'기록 실패'));
@@ -1107,6 +1159,7 @@ function startNewRecord(){
   setHospSelection(null);
   clearSnPhoto();
   SAVED_SNAPSHOT=null; LAST_REQ_ID='';
+  UNSAVED_PHOTO=false; LAST_SENT_PHOTO=null; LAST_SAVE_PAYLOAD=null; LAST_SENT_SNAPSHOT=null;
   document.body.classList.remove('is-dirty');
   enableCopy(false);
   setSaveState(BazHandover.SAVE.IDLE);
@@ -1174,13 +1227,21 @@ async function saveToSheet(){
   if(!postUrl()){ toast('시트 URL 미설정 (HANDOVER_URL)'); return; }
   if(SAVE_STATE===BazHandover.SAVE.SAVING) return;
 
+  /* 응답 불명 뒤 새 reqId로 다시 보내면 첫 요청이 늦게 완료될 때 두 행이 생긴다.
+     이 상태의 [시트 기록]은 최초 payload·reqId를 그대로 재전송한다. 서버의
+     멱등성 저장소가 이미 끝난 요청이면 최초 결과만 돌려준다. */
+  if(SAVE_STATE===BazHandover.SAVE.UNKNOWN && LAST_SAVE_PAYLOAD){
+    toast('확인되지 않은 동일 요청을 다시 전송합니다');
+    return submitSavePayload(LAST_SAVE_PAYLOAD);
+  }
+
   var form=readForm();
   var v=BazHandover.validate(form, {hasPhoto:!!SN_PHOTO, photoBusy:SN_PHOTO_BUSY});
   if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
   clearFieldErrors();
 
   /* 같은 내용을 다시 저장해 중복 행을 만들지 않는다 */
-  if(BazHandover.isSameAsSaved(SAVED_SNAPSHOT, form)){
+  if(BazHandover.isSameAsSaved(SAVED_SNAPSHOT, form) && !UNSAVED_PHOTO){
     toast('이미 시트에 기록된 내용입니다.\n내용을 바꾸거나 [새 기록 시작]을 눌러 주세요');
     return;
   }
@@ -1191,12 +1252,20 @@ async function saveToSheet(){
     if(!window.confirm('로그인 사용자('+me+')와 담당 FSE('+form.fse+')가 다릅니다.\n다른 담당자 이름으로 기록할까요?\n(로그인 계정은 감사용으로 함께 기록됩니다)')) return;
   }
 
-  var btn=el('btnSave');
   var reqId=newReqId();
   LAST_REQ_ID=reqId;
   var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
   var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true, reqId:reqId, token:token});
+  LAST_SENT_PHOTO=SN_PHOTO;
+  LAST_SENT_SNAPSHOT=BazHandover.snapshot(form);
+  LAST_SAVE_PAYLOAD=payload;
 
+  return submitSavePayload(payload);
+}
+
+/* 신규 저장과 결과 불명 재전송이 같은 상태 전이를 사용한다. */
+async function submitSavePayload(payload){
+  var btn=el('btnSave');
   setSaveState(BazHandover.SAVE.SAVING);
   btn.disabled=true; btn.textContent='기록 중…';
   try{
@@ -1216,6 +1285,7 @@ async function saveToSheet(){
     setSaveState(BazHandover.SAVE.UNKNOWN, {error:String(e&&e.message||e)});
   }finally{
     btn.disabled=false; btn.textContent='📥 시트 기록';
+    syncPhotoControls();
   }
 }
 
