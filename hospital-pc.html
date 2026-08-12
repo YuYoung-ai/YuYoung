@@ -346,6 +346,49 @@
   body.mode-window #viewList>#pcPane{grid-column:2;min-width:0;}
   @media(max-width:980px){ body.mode-window #viewList{grid-template-columns:1fr;} body.mode-window #filterRail{position:static;max-height:none;overflow:visible;} }
 
+  /* ═══ 1200px 이상: 필터 · 결과 목록 · 지도 3열 작업공간 ═══════════════════
+     예전 구조는 "상단 sticky 지도 + 아래로 끝없이 이어지는 카드 목록" 이었다.
+     목록을 보려면 본문을 굴려야 하는데 그 스크롤이 지도(sticky)·필터 레일·
+     상세 패널과 뒤엉켜, 어디를 굴리는지 예측할 수 없었다.
+     → 넓은 화면에서는 스크롤 주인을 하나로 정한다: "결과 목록만 스크롤한다."
+        필터 레일과 지도는 뷰포트 높이 안에 고정되고, 본문은 거의 움직이지 않는다.
+     980~1199px 는 기존 2열(지도 위 · 결과 아래) 구조를 그대로 둔다. */
+  @media(min-width:1200px){
+    body.mode-window #viewList{grid-template-columns:250px minmax(380px,440px) minmax(420px,1fr);}
+    body.mode-window.filt-wide #viewList{grid-template-columns:440px minmax(380px,440px) minmax(380px,1fr);}
+    body.mode-window.filt-hide #viewList{grid-template-columns:44px minmax(380px,480px) minmax(420px,1fr);}
+    /* #pcPane 을 투명하게 만들어 자식(툴바·결과·지도)이 그대로 그리드 아이템이 된다.
+       마크업을 옮기지 않으므로 JS 쪽 DOM 참조는 하나도 바뀌지 않는다. */
+    body.mode-window #pcPane{display:contents;}
+    body.mode-window #filterRail{grid-column:1;grid-row:1 / span 2;}
+    body.mode-window #pcToolbar{grid-column:2;grid-row:1;margin:0 0 10px;}
+    body.mode-window #pcLeft{
+      grid-column:2;grid-row:2;
+      max-height:calc(100vh - var(--hdr-h,56px) - 132px);
+      overflow:auto;overscroll-behavior:contain;padding-right:4px;
+    }
+    body.mode-window #pcRight{
+      grid-column:3;grid-row:1 / span 2;
+      position:sticky;top:calc(var(--hdr-h,56px) + 12px);
+      height:calc(100vh - var(--hdr-h,56px) - 28px);
+      margin-bottom:0;
+    }
+    /* 지도가 뷰포트 높이를 채우므로 높이 드래그는 의미가 없다(접기·고정은 그대로 둔다) */
+    body.mode-window #pcMapGrip{display:none;}
+    /* 표 뷰: 지도를 숨기므로 결과가 남은 폭을 전부 쓴다 */
+    body.mode-window.pc-table #viewList{grid-template-columns:250px minmax(0,1fr);}
+    body.mode-window.pc-table.filt-wide #viewList{grid-template-columns:440px minmax(0,1fr);}
+    body.mode-window.pc-table.filt-hide #viewList{grid-template-columns:44px minmax(0,1fr);}
+    body.mode-window.pc-table #pcLeft{max-height:none;overflow:visible;padding-right:0;}
+    /* 전체화면은 position:fixed 로 그리드 밖에 나간다 */
+    body.mode-window.pc-mapfs #pcRight{grid-column:auto;grid-row:auto;}
+    /* 창 높이가 작을 때(노트북 768px 등) 지도 하단 컨트롤이 잘리지 않도록 최소 높이 보장 */
+    @media(max-height:720px){
+      body.mode-window #pcRight{height:calc(100vh - var(--hdr-h,56px) - 20px);min-height:320px;}
+      body.mode-window #pcLeft{max-height:calc(100vh - var(--hdr-h,56px) - 120px);}
+    }
+  }
+
   /* 탭 */
   .tabs{display:flex;gap:6px;margin-bottom:14px;background:var(--surface);border:1px solid var(--gray-line);border-radius:12px;padding:4px;}
   .tab{flex:1;text-align:center;padding:9px 6px;border-radius:9px;font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;border:none;background:transparent;font-family:inherit;}

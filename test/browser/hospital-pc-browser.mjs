@@ -182,8 +182,40 @@ const mobile = await page.evaluate(() => ({ cls: document.body.className, cards:
 await page.click('#modeToggle [data-mode="window"]'); await page.waitForTimeout(400);
 ck('모바일 ↔ Window 전환에서 화면이 깨지지 않는다', mobile.cls.includes('mode-mobile') && mobile.cards === 3, JSON.stringify(mobile));
 
+// 9-b. 1200px 이상 3열 작업공간 — 결과 목록만 독립 스크롤
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.waitForTimeout(450);
+// 앞 단계에서 필터 폭을 바꿔 놨으므로 기본(filt-base)으로 되돌린 뒤 측정한다
+for (let i = 0; i < 3 && !(await page.evaluate(() => document.body.classList.contains('filt-base'))); i++) {
+  await page.click('#filtToggleBtn'); await page.waitForTimeout(300);
+}
+const cols = await page.evaluate(() => {
+  const r = s => { const e = document.querySelector(s); const b = e && e.getBoundingClientRect(); return b ? { w: Math.round(b.width), x: Math.round(b.x) } : null; };
+  const left = document.getElementById('pcLeft');
+  return {
+    rail: r('#filterRail'), left: r('#pcLeft'), right: r('#pcRight'),
+    leftOverflow: getComputedStyle(left).overflowY,
+    rightH: Math.round(document.getElementById('pcRight').getBoundingClientRect().height),
+    vh: innerHeight,
+    hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+  };
+});
+ck('1200px 이상에서 필터·결과·지도 3열이 만들어진다',
+  cols.rail.w >= 220 && cols.rail.w <= 260 &&
+  cols.left.w >= 380 && cols.left.w <= 480 &&
+  cols.right.x > cols.left.x + cols.left.w - 1 &&
+  cols.hOverflow === 0, JSON.stringify(cols));
+ck('결과 목록만 독립 스크롤하고 지도는 뷰포트 높이에 머문다',
+  cols.leftOverflow === 'auto' && cols.rightH <= cols.vh && cols.rightH > cols.vh * 0.6, JSON.stringify(cols));
+const innerScroll = await page.evaluate(() => {
+  const l = document.getElementById('pcLeft');
+  const y0 = window.scrollY; l.scrollTop = 250;
+  return { top: l.scrollTop, bodyMoved: window.scrollY !== y0 };
+});
+ck('결과 목록을 굴려도 본문은 따라 움직이지 않는다', innerScroll.top > 0 && !innerScroll.bodyMoved, JSON.stringify(innerScroll));
+
 // 10. 좁은 화면(1024/768) 렌더
-for (const [w, h] of [[1366, 768], [1024, 768], [390, 844]]) {
+for (const [w, h] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844]]) {
   await page.setViewportSize({ width: w, height: h });
   await page.waitForTimeout(350);
 }
