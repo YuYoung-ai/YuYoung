@@ -190,10 +190,10 @@ for (let i = 0; i < 3 && !(await page.evaluate(() => document.body.classList.con
   await page.click('#filtToggleBtn'); await page.waitForTimeout(300);
 }
 const cols = await page.evaluate(() => {
-  const r = s => { const e = document.querySelector(s); const b = e && e.getBoundingClientRect(); return b ? { w: Math.round(b.width), x: Math.round(b.x) } : null; };
+  const r = s => { const e = document.querySelector(s); const b = e && e.getBoundingClientRect(); return b ? { w: Math.round(b.width), x: Math.round(b.x), y: Math.round(b.y), bottom: Math.round(b.bottom) } : null; };
   const left = document.getElementById('pcLeft');
   return {
-    rail: r('#filterRail'), left: r('#pcLeft'), right: r('#pcRight'),
+    notice: r('#schedNotice.show'), rail: r('#filterRail'), left: r('#pcLeft'), right: r('#pcRight'),
     leftOverflow: getComputedStyle(left).overflowY,
     rightH: Math.round(document.getElementById('pcRight').getBoundingClientRect().height),
     vh: innerHeight,
@@ -207,12 +207,27 @@ ck('1200px 이상에서 필터·결과·지도 3열이 만들어진다',
   cols.hOverflow === 0, JSON.stringify(cols));
 ck('결과 목록만 독립 스크롤하고 지도는 뷰포트 높이에 머문다',
   cols.leftOverflow === 'auto' && cols.rightH <= cols.vh && cols.rightH > cols.vh * 0.6, JSON.stringify(cols));
+ck('일정 안내가 3열 필터·목록·지도와 겹치지 않는다',
+  !cols.notice || (cols.notice.bottom <= cols.rail.y && cols.notice.x + cols.notice.w <= cols.right.x), JSON.stringify(cols));
 const innerScroll = await page.evaluate(() => {
   const l = document.getElementById('pcLeft');
   const y0 = window.scrollY; l.scrollTop = 250;
   return { top: l.scrollTop, bodyMoved: window.scrollY !== y0 };
 });
 ck('결과 목록을 굴려도 본문은 따라 움직이지 않는다', innerScroll.top > 0 && !innerScroll.bodyMoved, JSON.stringify(innerScroll));
+const mapWheelScroll = await page.evaluate(() => {
+  const l = document.getElementById('pcLeft');
+  const spacer = document.createElement('div'); spacer.style.height = '2400px'; l.appendChild(spacer);
+  l.scrollTop = 0;
+  const ev = new WheelEvent('wheel', { deltaY: 220, bubbles: true, cancelable: true });
+  document.getElementById('pcMapPane').dispatchEvent(ev);
+  const top = l.scrollTop;
+  spacer.remove();
+  if (typeof pcRenderLeft === 'function') pcRenderLeft(pcList || []);
+  return { top, prevented: ev.defaultPrevented };
+});
+ck('지도 휠 확대가 꺼진 3열 화면에서는 휠이 결과 목록을 움직인다',
+  mapWheelScroll.top > 0 && mapWheelScroll.prevented, JSON.stringify(mapWheelScroll));
 
 // 10. 좁은 화면(1024/768) 렌더
 for (const [w, h] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844]]) {

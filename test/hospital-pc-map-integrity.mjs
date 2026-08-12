@@ -247,13 +247,13 @@ ck('허용되지 않은 구분값은 A/S 로 보정된다', clean[1].t === 'A/S'
 ck('건수 상한이 적용된다',
   BazHistoryApi.sanitizeRecords(Array.from({ length: 400 }, (_, i) => ({ d: '2026-01-01', sy: 's' + i }))).length === BazHistoryApi.MAX_RECORDS);
 
-const payload = BazHistoryApi.buildPayload({ hosp: 'A병원', records: dirty, who: '홍길동', baseRev: 3, token: 'tk' });
-ck('페이로드에 병원명·이력·요청자·기준 revision·토큰이 담긴다',
+const payload = BazHistoryApi.buildPayload({ hosp: 'A병원', records: dirty, who: '홍길동', baseRev: 3, baseSourceRev: 27, token: 'tk' });
+ck('페이로드에 병원명·이력·요청자·편집/원본 revision·토큰이 담긴다',
   payload.action === 'history_save' && payload.hosp === 'A병원' && payload.who === '홍길동' &&
-  payload.baseRev === 3 && payload.token === 'tk' && payload.records.length === 2);
+  payload.baseRev === 3 && payload.baseSourceRev === 27 && payload.token === 'tk' && payload.records.length === 2);
 
-const okRes = BazHistoryApi.classifyResponse({ success: true, rev: 4, records: clean, updatedAt: '2026-08-12 10:00', updatedBy: '홍길동' });
-ck('저장 성공 응답 분류', okRes.ok && okRes.rev === 4 && okRes.records.length === 2 && !okRes.conflict);
+const okRes = BazHistoryApi.classifyResponse({ success: true, rev: 4, sourceRev: 29, records: clean, updatedAt: '2026-08-12 10:00', updatedBy: '홍길동' });
+ck('저장 성공 응답 분류', okRes.ok && okRes.rev === 4 && okRes.sourceRev === 29 && okRes.records.length === 2 && !okRes.conflict);
 
 const conflictRes = BazHistoryApi.classifyResponse({ success: false, conflict: true, rev: 9, records: clean, error: 'conflict — 다른 사용자가 먼저 저장했습니다' });
 ck('revision 충돌 응답은 성공으로 취급하지 않는다', !conflictRes.ok && conflictRes.conflict && conflictRes.rev === 9);
@@ -298,8 +298,11 @@ const gasFns = new Function('HIST', 'HIST_FIELDS', `
   ${grab(GAS, 'histText_')}
   ${grab(GAS, 'histDate_')}
   ${histSanitizeSrc}
+  ${grab(GAS, 'histPublicRecord_')}
+  ${grab(GAS, 'histPublicList_')}
+  ${grab(GAS, 'histDerivedState_')}
   ${histMergeSrc}
-  return { histSanitize_, histMerge_ };
+  return { histSanitize_, histMerge_, histDerivedState_ };
 `)({ MAX_LEN: 2000, MAX_RECORDS: 300 }, ['d', 't', 'pt', 'sy', 'f', 'pay', 'm', 'fx', 'p']);
 
 const gasClean = gasFns.histSanitize_([{ d: '2026.8.3', sy: 'x', hack: '<script>', t: '점검' }]);
@@ -307,17 +310,32 @@ ck('서버도 허용 목록 밖 필드를 제거한다',
   gasClean.length === 1 && !('hack' in gasClean[0]) && gasClean[0].d === '2026-08-03');
 
 const merged = gasFns.histMerge_(
-  { records: [{ d: '2026-06-01', sy: '편집본' }], cutoff: '2026-06-30' },
-  [{ d: '2026-06-01', sy: '삭제된 원본' }, { d: '2026-07-15', sy: '편집 이후 새 기록' }]
+  { records: [{ d: '2026-06-01', sy: '편집본' }], cutoff: '2026-06-30', cutoffRow: 20 },
+  [{ d: '2026-06-01', sy: '삭제된 원본', _srcRow: 20 }, { d: '2026-07-15', sy: '편집 이후 새 기록', _srcRow: 21 }]
 );
 ck('편집본은 기준일 이하를 대체하고, 이후 새 기록만 이어 붙인다',
-  merged.length === 2 && merged[0].sy === '편집 이후 새 기록' && merged[1].sy === '편집본');
+  merged.length === 2 && merged[0].sy === '편집 이후 새 기록' && merged[1].sy === '편집본' &&
+  merged.every(r => !Object.prototype.hasOwnProperty.call(r, '_srcRow')));
+const sameDayMerged = gasFns.histMerge_(
+  { records: [{ d: '2026-08-12', sy: '오전 편집본' }], cutoff: '2026-08-12', cutoffRow: 30 },
+  [{ d: '2026-08-12', sy: '오전 원본', _srcRow: 30 }, { d: '2026-08-12', sy: '오후 새 기록', _srcRow: 31 }]
+);
+ck('같은 날짜에 나중에 추가된 현장 기록도 기준행으로 구분해 이어 붙인다',
+  sameDayMerged.length === 2 && sameDayMerged.some(r => r.sy === '오후 새 기록'));
+const absorbed = gasFns.histMerge_(
+  { records: sameDayMerged, cutoff: '2026-08-12', cutoffRow: 31 },
+  [{ d: '2026-08-12', sy: '오전 원본', _srcRow: 30 }, { d: '2026-08-12', sy: '오후 새 기록', _srcRow: 31 }]
+);
+ck('새 원본을 포함해 다시 저장한 뒤에는 같은 기록이 중복되지 않는다', absorbed.length === 2);
 
 const histSaveSrc = grab(GAS, 'histSave_');
 ck('서버 저장은 레벨 2 이상만 허용한다', /verifyLevel_\([\s\S]{0,40}\)\s*;[\s\S]{0,80}lv\s*<\s*2/.test(histSaveSrc));
-ck('서버 저장은 LockService 로 동시 수정을 막는다', /LockService\.getScriptLock\(\)/.test(histSaveSrc) && /waitLock/.test(histSaveSrc));
-ck('baseRev 불일치는 저장하지 않고 conflict 로 응답한다',
-  /baseRev\s*!==\s*curRev/.test(histSaveSrc) && /conflict:true/.test(histSaveSrc));
+ck('서버 저장은 잠금 획득 뒤에만 진행하고 반드시 해제한다',
+  /waitLock\(15000\);\s*held\s*=\s*true/.test(histSaveSrc) && /if\(held\)[\s\S]*releaseLock/.test(histSaveSrc));
+ck('편집 revision 또는 현장 원본 revision 불일치는 저장하지 않고 conflict 로 응답한다',
+  /baseRev\s*!==\s*curRev/.test(histSaveSrc) && /baseSourceRev\s*!==\s*src\.maxRow/.test(histSaveSrc) && /conflict:true/.test(histSaveSrc));
+ck('잠금 획득 실패 뒤에는 읽기·쓰기를 계속하지 않는다',
+  histSaveSrc.indexOf("catch(lockErr){ return") < histSaveSrc.indexOf('histReadAll_()'));
 ck('수정자·수정시각 감사 로그를 남긴다',
   /HIST\.LOG_SHEET/.test(histSaveSrc) && /whoName/.test(histSaveSrc));
 ck('저장 후 이슈이력 캐시를 무효화한다', /bazCacheDrop_\('handover_issuehist'\)/.test(histSaveSrc));
@@ -474,11 +492,44 @@ ck("'결과 맞춤' 버튼은 사용자 보호를 무시하고 강제로 맞춘�
 // 지도 휠 기본 비활성화
 ck('PC/Window 모드에서 지도 휠 확대가 기본 비활성화된다',
   /setZoomable\(pcMapZoomableWanted\(\)\)/.test(inlineJs) && /baz_pc_mapinteract/.test(inlineJs));
+const wheelState = {
+  left: { scrollTop: 0, scrollHeight: 1200, clientHeight: 300 }, prevented: false, hint: 0
+};
+const mapWheel = new Function('state', `
+  var window={innerWidth:1600};
+  var document={getElementById:function(id){return id==='pcLeft'?state.left:null;}};
+  var pcMapCtl={markUserView:function(){state.marked=true;}};
+  function pcMapZoomableWanted(){return false;}
+  function pcMapShowWheelHint(){state.hint++;}
+  ${grab(SRC, 'pcMapHandleWheel')}
+  return pcMapHandleWheel;
+`)(wheelState);
+mapWheel({ deltaY: 180, deltaMode: 0, cancelable: true, preventDefault(){ wheelState.prevented = true; } });
+ck('3열 지도 위 휠은 확대가 꺼졌을 때 결과 목록을 스크롤한다',
+  wheelState.left.scrollTop === 180 && wheelState.prevented && wheelState.hint === 1);
 ck('+/− 버튼 확대·축소는 유지된다', /data-mapctl="zin"/.test(SRC) && /data-mapctl="zout"/.test(SRC) && /function pcMapZoom/.test(inlineJs));
 ck('내부 스크롤 영역에 overscroll-behavior 가 적용된다',
   /#filterRail\{[^}]*overscroll-behavior:contain/.test(SRC) && /#pcDetail\{[^}]*overscroll-behavior:contain/.test(SRC));
 ck('120ms 뒤 중심·배율을 다시 덮던 코드가 제거되었다',
   !/setTimeout\(function\(\)\{\s*pcMapTimer=null;[\s\S]{0,120}applyFocus\(\)/.test(inlineJs));
+const resetState = new Function(`
+  var pcMapTimer=null, pcMapObj={}, pcMapClusterer={}, pcSelOv={}, pcFocusIW={};
+  var pcMapMarkers=[1], pcMarkerByName={x:1}, pcRecentOverlays=[1], pcProgOverlays=[1], pcNearbyMarkers=[1];
+  var pcBaseKey='x', pcOverlayKey='y', pcNearKey='z';
+  var pcMapBounds={}, pcMapBoundsAny=true, pcMapFocusBounds={}, pcMapFocusAny=true;
+  var calls={cancel:0, reset:0};
+  var pcMapCtl={cancelRelayout:function(){calls.cancel++;},resetAutoFit:function(){calls.reset++;}};
+  ${grab(SRC, 'pcMapReset')}
+  pcMapReset();
+  return {calls:calls, all:pcMapBounds, allAny:pcMapBoundsAny, focus:pcMapFocusBounds, focusAny:pcMapFocusAny};
+`)();
+ck('지도 재생성 시 예약 relayout과 전체/결과 범위를 모두 초기화한다',
+  resetState.calls.cancel === 1 && resetState.calls.reset === 1 &&
+  resetState.all === null && !resetState.allAny && resetState.focus === null && !resetState.focusAny);
+ck('일정 안내가 보일 때 3열 콘텐츠를 다음 행으로 내리는 규칙이 있다',
+  /pc-schednotice #schedNotice\{grid-column:1 \/ 3;grid-row:1/.test(SRC) &&
+  /pc-schednotice #filterRail\{grid-row:2 \/ span 2/.test(SRC) &&
+  /classList\.toggle\('pc-schednotice'/.test(inlineJs));
 ck('mode-window 자동 선택과 지도 sticky 해제 breakpoint 가 일치한다',
   /var PC_WIDE_MIN=980/.test(inlineJs) &&
   /min-width:'\+PC_WIDE_MIN\+'px/.test(inlineJs) &&

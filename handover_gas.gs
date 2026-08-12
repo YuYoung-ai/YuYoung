@@ -1078,6 +1078,36 @@ function _issueDateNorm_(v){
 function getIssueHist_(){
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
+  var raw = histDerivedRaw_();
+  var history = {};
+  Object.keys(raw).forEach(function(name){ history[name] = histPublicList_(raw[name]); });
+  /* [v3.0] 관리자 편집본(이슈이력편집 시트)을 얹는다 — 아래 histMerge_ 참고 */
+  var edits = histReadAll_();
+  var revs = {};
+  var names = {};
+  Object.keys(raw).forEach(function(n){ names[n]=1; });
+  Object.keys(edits).forEach(function(n){ names[n]=1; });
+  Object.keys(names).forEach(function(n){
+    var e = edits[n] || null;
+    var src = histDerivedState_(n, raw);
+    if(e) history[n] = histMerge_(e, raw[n] || []);
+    else if(!history[n]) history[n] = [];
+    /* sourceRev 는 이 병원의 마지막 원본 행 번호다. 편집 창을 연 뒤 새 현장 기록이
+       들어왔는데도 오래된 화면이 통째로 덮어쓰는 일을 막는 두 번째 revision 이다. */
+    revs[n] = {
+      rev:e ? e.rev : 0, sourceRev:src.maxRow,
+      updatedAt:e ? e.updatedAt : '', updatedBy:e ? e.updatedBy : ''
+    };
+  });
+  var res = {success:true, data:history, revs:revs};
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
+  return res;
+}
+
+/** 현장 처리 원본을 병원별 이력으로 산출한다.
+ *  _srcRow 는 서버 병합/충돌 판정에만 쓰고 histPublicList_ 에서 제거한다. 날짜만으로
+ *  cutoff 를 잡으면 같은 날 뒤늦게 들어온 기록을 구분할 수 없어 원본 행 번호를 쓴다. */
+function histDerivedRaw_(){
   var all = readAll_();
   var history = {};
   all.rows.forEach(function(o){
@@ -1088,24 +1118,15 @@ function getIssueHist_(){
     if(!d) return;
     var g = String(s.gubun||'');
     var t = /점검/.test(g) ? '점검' : (/AS/i.test(g) ? 'AS' : g.trim());
-    var rec = { d:d, f:s.fse, t:t, pt:s.cat, sy:s.type, fx:s.detail, pay:(s.paid || s.cost || '') };
+    var rec = { d:d, f:s.fse, t:t, pt:s.cat, sy:s.type, fx:s.detail,
+                pay:(s.paid || s.cost || ''), _srcRow:Number(o._row)||0 };
     var part = String(s.part||'').trim(); if(part) rec.p = part;
     (history[name] = history[name] || []).push(rec);
   });
   Object.keys(history).forEach(function(n){
     history[n].sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
   });
-  /* [v3.0] 관리자 편집본(이슈이력편집 시트)을 얹는다 — 아래 histMerge_ 참고 */
-  var edits = histReadAll_();
-  var revs = {};
-  Object.keys(edits).forEach(function(n){
-    var e = edits[n];
-    history[n] = histMerge_(e, history[n] || []);
-    revs[n] = { rev:e.rev, updatedAt:e.updatedAt, updatedBy:e.updatedBy };
-  });
-  var res = {success:true, data:history, revs:revs};
-  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
-  return res;
+  return history;
 }
 
 /* ═══════════ [v3.0] 병원 처리 이력 편집 (hospital-pc 관리자 편집) ═══════════
@@ -1113,7 +1134,7 @@ function getIssueHist_(){
  *  다른 사람에게 보이지 않았고, 그 로컬 값이 서버 이력을 매번 덮어써 최신
  *  현장 기록이 그 PC 에서만 사라졌다. 서버에 두면 모두가 같은 이력을 본다.
  *
- *  이슈이력편집 : 병원명 | 이력JSON | rev | 수정자 | 수정시각 | 기준일(cutoff) | 건수
+ *  이슈이력편집 : 병원명 | 이력JSON | rev | 수정자 | 수정시각 | 기준일 | 건수 | 기준행
  *  이슈이력로그 : 일시 | 병원 | op | 이전건수 | 새건수 | 이전rev | 새rev | 요청자
  *
  *  ── 병합 규칙(histMerge_) ──────────────────────────────────────────
@@ -1129,7 +1150,9 @@ var HIST = {
   MAX_LEN    : 2000,       // 한 필드 길이 상한
   MAX_JSON   : 45000       // 셀 5만자 한도 안쪽으로 — 넘으면 저장 거부(잘린 채 저장되면 이력이 깨진다)
 };
-var HIST_EDIT_HEAD = ['병원명','이력JSON','rev','수정자','수정시각','기준일','건수'];
+/* 기준행은 끝에 둔다. v3.0 초안의 7열 시트가 이미 생겼어도 기존 7열 '건수'를
+   기준행으로 잘못 읽지 않고, 마지막 열만 안전하게 확장할 수 있다. */
+var HIST_EDIT_HEAD = ['병원명','이력JSON','rev','수정자','수정시각','기준일','건수','기준행'];
 var HIST_LOG_HEAD  = ['일시','병원','op','이전건수','새건수','이전rev','새rev','요청자'];
 /* 클라이언트(js/baz-history-api.js ALLOWED_FIELDS)와 반드시 같아야 한다 */
 var HIST_FIELDS = ['d','t','pt','sy','f','pay','m','fx','p'];
@@ -1165,14 +1188,21 @@ function histSanitize_(records){
 function histSheet_(name, head){
   var sh = sheet_(name);
   if(!sh) sh = ss_().insertSheet(name);
+  if(sh.getMaxColumns() < head.length) sh.insertColumnsAfter(sh.getMaxColumns(), head.length-sh.getMaxColumns());
   if(sh.getLastRow() < 1){
     sh.getRange(1,1,1,head.length).setValues([head]).setFontWeight('bold');
     sh.setFrozenRows(1);
     try{ sh.getRange(1,1,sh.getMaxRows(),head.length).setNumberFormat('@'); }catch(e){}
+  }else{
+    /* 내부 전용 시트의 헤더 스키마를 맞춘다. 새 열 추가 배포 때도 수동 작업 불필요. */
+    var curHead = sh.getRange(1,1,1,head.length).getDisplayValues()[0];
+    var changed = false;
+    for(var i=0;i<head.length;i++){ if(String(curHead[i]||'')!==head[i]){ changed=true; break; } }
+    if(changed) sh.getRange(1,1,1,head.length).setValues([head]).setFontWeight('bold');
   }
   return sh;
 }
-/** 편집 시트 전체 읽기 → { 병원명: {records, rev, updatedAt, updatedBy, cutoff, row} } */
+/** 편집 시트 전체 읽기 → { 병원명: {records, rev, updatedAt, updatedBy, cutoff, cutoffRow, row} } */
 function histReadAll_(){
   var sh = sheet_(HIST.EDIT_SHEET);
   if(!sh || sh.getLastRow() < 2) return {};
@@ -1189,37 +1219,49 @@ function histReadAll_(){
       updatedBy: String(v[i][3]||''),
       updatedAt: String(v[i][4]||''),
       cutoff   : String(v[i][5]||''),
+      cutoffRow: Number(v[i][7]) || 0,
       row      : i+2
     };
   }
   return out;
 }
-/** 편집본 + (편집 이후 새로 올라온 현장 기록) */
-function histMerge_(edit, derived){
-  var out = (edit && Array.isArray(edit.records)) ? edit.records.slice() : [];
-  var cutoff = (edit && edit.cutoff) || '';
-  if(cutoff){
-    (derived||[]).forEach(function(r){ if(String(r.d||'') > cutoff) out.push(r); });
-  }
-  out.sort(function(a,b){ return String(b.d||'').localeCompare(String(a.d||'')); });
+/** 내부 원본 식별자를 버리고 API 허용 필드만 남긴다. */
+function histPublicRecord_(r){
+  var out = {};
+  HIST_FIELDS.forEach(function(k){ if(r && Object.prototype.hasOwnProperty.call(r,k) && r[k]!=='' && r[k]!=null) out[k]=r[k]; });
   return out;
 }
-/** 현장 기록에서 산출한 그 병원의 최신 처리일 — 편집 기준일(cutoff) */
-function histDerivedCutoff_(name){
-  var base = null;
-  try{
-    var c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
-    if(c){ var o = JSON.parse(c); base = (o && o.data) ? o.data : null; }
-  }catch(e){}
-  if(!base){ try{ base = getIssueHist_().data; }catch(e){ base = null; } }
-  var recs = (base && base[name]) || [];
-  var mx = '';
-  recs.forEach(function(r){ var d = String(r.d||''); if(d > mx) mx = d; });
-  return mx;
+function histPublicList_(records){
+  return histSanitize_((records||[]).map(histPublicRecord_));
+}
+/** 병원별 원본 최신 행/날짜. raw 를 넘기면 같은 요청 안에서 시트를 다시 읽지 않는다. */
+function histDerivedState_(name, raw){
+  var recs = (raw && raw[name]) || [];
+  var maxRow = 0, maxDate = '';
+  recs.forEach(function(r){
+    var row=Number(r && r._srcRow)||0, d=String((r&&r.d)||'');
+    if(row>maxRow) maxRow=row;
+    if(d>maxDate) maxDate=d;
+  });
+  return {maxRow:maxRow, maxDate:maxDate};
+}
+/** 편집본 + (편집 이후 새로 올라온 현장 기록) */
+function histMerge_(edit, derived){
+  var out = (edit && Array.isArray(edit.records)) ? histPublicList_(edit.records) : [];
+  var cutoffRow = Number(edit && edit.cutoffRow) || 0;
+  var cutoff = (edit && edit.cutoff) || '';
+  (derived||[]).forEach(function(r){
+    /* 신규 데이터는 원본 행으로 정확히 판별한다. 기준행이 없는 구버전 편집본은
+       날짜 cutoff 로 호환하고, 원본이 0건이었던 편집은 이후 첫 기록부터 붙인다. */
+    var after = cutoffRow ? ((Number(r&&r._srcRow)||0) > cutoffRow)
+                          : (cutoff ? String((r&&r.d)||'') > cutoff : true);
+    if(after) out.push(histPublicRecord_(r));
+  });
+  return histSanitize_(out);
 }
 
 /**
- * POST {action:'history_save', hosp, records:[…], who, baseRev, token}
+ * POST {action:'history_save', hosp, records:[…], who, baseRev, baseSourceRev, token}
  *  · 레벨 2(관리자) 이상만
  *  · LockService 로 동시 수정 보호
  *  · baseRev 가 서버 rev 와 다르면 저장하지 않고 {conflict:true} + 서버 최신본 반환
@@ -1248,19 +1290,25 @@ function histSave_(p){
   var lock = LockService.getScriptLock(), held = false;
   var res = null, logRow = null;
   try{
-    try{ held = lock.waitLock(15000); }catch(e){ held = false; }
+    try{ lock.waitLock(15000); held = true; }
+    catch(lockErr){ return {success:false, error:'busy — 다른 이력 저장이 진행 중입니다. 잠시 후 다시 시도하세요.'}; }
     var all = histReadAll_();
     var cur = all[hosp] || null;
     var curRev = cur ? cur.rev : 0;
     var baseRev = Number(p.baseRev) || 0;
-    if(baseRev !== curRev){
+    var derivedAll = histDerivedRaw_();
+    var derived = derivedAll[hosp] || [];
+    var src = histDerivedState_(hosp, derivedAll);
+    var baseSourceRev = Number(p.baseSourceRev) || 0;
+    if(baseRev !== curRev || baseSourceRev !== src.maxRow){
       /* 충돌 — 저장하지 않고 서버 최신본을 그대로 돌려준다. 재조회 안내는 클라이언트 몫 */
-      var derivedC = [];
-      try{ derivedC = (getIssueHist_().data || {})[hosp] || []; }catch(e){}
       return {
-        success:false, conflict:true, error:'conflict — 다른 사용자가 먼저 저장했습니다',
-        hosp:hosp, rev:curRev,
-        records: cur ? histMerge_(cur, derivedC) : derivedC,
+        success:false, conflict:true,
+        error:(baseRev !== curRev)
+          ? 'conflict — 다른 사용자가 먼저 저장했습니다'
+          : 'conflict — 편집 중 새 현장 기록이 추가되었습니다',
+        hosp:hosp, rev:curRev, sourceRev:src.maxRow,
+        records: cur ? histMerge_(cur, derived) : histPublicList_(derived),
         updatedAt: cur ? cur.updatedAt : '', updatedBy: cur ? cur.updatedBy : ''
       };
     }
@@ -1268,15 +1316,16 @@ function histSave_(p){
     var newRev = curRev + 1;
     var whoName = histText_(p.who) || ('lv'+lv);
     var nowS = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
-    var cutoff = cur ? cur.cutoff : '';
-    if(!cutoff) cutoff = histDerivedCutoff_(hosp);   /* 최초 편집 시점의 현장 기록 최신일 */
-    var row = [hosp, payload, newRev, whoName, nowS, cutoff, records.length];
+    /* 이번 저장 화면에 포함된 원본 범위까지 편집본이 흡수한다. 예전 cutoff 를 계속
+       유지하면 한번 이어 붙은 새 원본을 다음 저장 때 편집본과 원본에서 이중으로 붙였다. */
+    var cutoff = src.maxDate, cutoffRow = src.maxRow;
+    var row = [hosp, payload, newRev, whoName, nowS, cutoff, records.length, cutoffRow];
     if(cur) sh.getRange(cur.row, 1, 1, HIST_EDIT_HEAD.length).setValues([row]);
     else    sh.getRange(sh.getLastRow()+1, 1, 1, HIST_EDIT_HEAD.length).setValues([row]);
 
     logRow = [nowS, hosp, 'history_save',
               cur ? cur.records.length : '', records.length, curRev, newRev, whoName];
-    res = {success:true, hosp:hosp, rev:newRev, records:records,
+    res = {success:true, hosp:hosp, rev:newRev, sourceRev:src.maxRow, records:records,
            updatedAt:nowS, updatedBy:whoName, count:records.length};
   }catch(err){
     return {success:false, error:String(err)};

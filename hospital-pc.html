@@ -373,6 +373,13 @@
       height:calc(100vh - var(--hdr-h,56px) - 28px);
       margin-bottom:0;
     }
+    /* 일정 안내가 보일 때는 필터+목록 위 1행을 따로 확보한다. 지도는 3열의 첫 행부터
+       유지해 안내 높이만큼 아래로 밀려 뷰포트 밖으로 잘리지 않게 한다. */
+    body.mode-window.pc-schednotice #schedNotice{grid-column:1 / 3;grid-row:1;}
+    body.mode-window.pc-schednotice #filterRail{grid-row:2 / span 2;}
+    body.mode-window.pc-schednotice #pcToolbar{grid-row:2;}
+    body.mode-window.pc-schednotice #pcLeft{grid-row:3;}
+    body.mode-window.pc-schednotice #pcRight{grid-row:1 / span 3;}
     /* 지도가 뷰포트 높이를 채우므로 높이 드래그는 의미가 없다(접기·고정은 그대로 둔다) */
     body.mode-window #pcMapGrip{display:none;}
     /* 표 뷰: 지도를 숨기므로 결과가 남은 폭을 전부 쓴다 */
@@ -2233,6 +2240,7 @@ let histCurName = null;
    기존 로컬 편집본은 지우지 않고 초안으로 옮겨, 사용자가 확인 후 서버에
    반영하거나 버릴 수 있게 한다. */
 var histServerRev = {};        // 병원명 → 서버 rev (충돌 판정 기준)
+var histServerSourceRev = {};  // 병원명 → 마지막 현장 원본 행(편집 중 새 기록 충돌 판정)
 var histLegacyNames = {};      // 마이그레이션된 구버전 편집본 병원 목록
 (function migrateHistEdits(){
   try{
@@ -2404,7 +2412,8 @@ function histSaveEdits(){
   // 서버 왕복 중 브라우저가 닫혀도 입력이 남도록 먼저 초안으로 보관
   try{ BazHistoryApi.saveDraft(localStorage, name, records); }catch(e){}
   var payload=BazHistoryApi.buildPayload({
-    hosp:name, records:records, who:pcWho(), baseRev:(histServerRev[name]||0), token:token
+    hosp:name, records:records, who:pcWho(), baseRev:(histServerRev[name]||0),
+    baseSourceRev:(histServerSourceRev[name]||0), token:token
   });
   histSaving=true;
   histSetNote('info', t('histSaving'));
@@ -2414,6 +2423,7 @@ function histSaveEdits(){
       var r=BazHistoryApi.classifyResponse(d);
       if(r.ok){
         histServerRev[name]=r.rev;
+        histServerSourceRev[name]=r.sourceRev;
         HISTORY[name]=Array.isArray(r.records)?r.records:records;
         try{ BazHistoryApi.clearDraft(localStorage, name); }catch(e){}
         delete histLegacyNames[name];
@@ -2431,6 +2441,7 @@ function histSaveEdits(){
         /* 조용히 덮어쓰지 않는다 — 서버 최신본을 화면에 반영하고 다시 확인받는다 */
         if(Array.isArray(r.records)) HISTORY[name]=r.records;
         histServerRev[name]=r.rev;
+        histServerSourceRev[name]=r.sourceRev;
         histInvalidateIssueCache();
         renderHistBody();
         histSetNote('err', t('histConflict')+(r.updatedBy?' ('+r.updatedBy+(r.updatedAt?' · '+r.updatedAt:'')+')':''), true);
@@ -2687,7 +2698,9 @@ applyLang();
        아직 못 보낸 편집은 '초안'으로만 남아 이력 창에서 사용자 확인 후 반영된다. */
     if(revs && typeof revs==='object'){
       Object.keys(revs).forEach(function(n){
-        var r=revs[n]; histServerRev[n]=(r && typeof r.rev==='number')?r.rev:(Number(r)||0);
+        var r=revs[n];
+        histServerRev[n]=(r && typeof r.rev==='number')?r.rev:(Number(r)||0);
+        histServerSourceRev[n]=(r && typeof r.sourceRev==='number')?r.sourceRev:0;
       });
     }
     return true;
@@ -3493,6 +3506,7 @@ function pcUpdateSchedNotice(){
   if(!anyQueue){ el.className='show none'; el.innerHTML='<span>'+escapeHtml(t('schNoticeNone'))+'</span><span class="go">'+escapeHtml(t('schGo'))+'</span>'; }
   else if(!anyProg){ el.className='show idle'; el.innerHTML='<span>'+escapeHtml(t('schNoticeIdle'))+'</span><span class="go">'+escapeHtml(t('schGo'))+'</span>'; }
   else { el.className=''; el.innerHTML=''; }
+  document.body.classList.toggle('pc-schednotice', el.classList.contains('show'));
 }
 var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
@@ -3748,6 +3762,23 @@ function pcMapShowWheelHint(){
   el.classList.add('show');
   if(pcMapHintT) clearTimeout(pcMapHintT);
   pcMapHintT=setTimeout(function(){ pcMapHintT=0; el.classList.remove('show'); }, 1600);
+}
+/* 넓은 3열 화면에서는 본문이 아니라 #pcLeft 만 스크롤된다. 지도 확대가 꺼진 상태에서
+   휠을 그냥 버블시키면 스크롤할 본문이 없어 아무것도 움직이지 않았다. 이때만 휠을
+   결과 목록으로 전달하고, 목록의 위/아래 끝에서는 기본 스크롤을 막지 않는다. */
+function pcMapHandleWheel(e){
+  if(pcMapZoomableWanted()){
+    pcMapCtl.markUserView();
+    return;
+  }
+  var left=document.getElementById('pcLeft');
+  if(window.innerWidth>=1200 && left && left.scrollHeight>left.clientHeight){
+    var unit=(e.deltaMode===1)?16:((e.deltaMode===2)?left.clientHeight:1);
+    var before=left.scrollTop;
+    left.scrollTop += e.deltaY*unit;
+    if(left.scrollTop!==before && e.cancelable) e.preventDefault();
+  }
+  pcMapShowWheelHint();
 }
 
 /* ── 전체화면 ──────────────────────────────────────────────────────────────
@@ -4063,13 +4094,11 @@ function pcEnsureDOM(){
     else if(act==='fs') pcToggleFullscreen();
     else if(act==='interact') pcMapInteractToggle();
   });
-  /* 휠이 확대가 아니라 페이지 스크롤로 흐르는 이유를 한 번 알려 준다.
-     passive:true — preventDefault 를 하지 않으므로 스크롤을 막지 않는다. */
+  /* 휠 확대가 꺼진 넓은 화면에서는 결과 목록으로 전달한다. 2열/모바일과 목록 끝에서는
+     기본 문서 스크롤을 그대로 허용한다. */
   var mp=document.getElementById('pcMapPane');
-  if(mp) mp.addEventListener('wheel', function(){
-    if(pcMapZoomableWanted()) pcMapCtl.markUserView();   // 휠 확대는 사용자 조작
-    else pcMapShowWheelHint();
-  }, {passive:true});
+  /* capture 단계에서 먼저 받는다. 지도 SDK 내부가 wheel 버블을 중단해도 목록 전달이 살아야 한다. */
+  if(mp) mp.addEventListener('wheel', pcMapHandleWheel, {passive:false, capture:true});
   // 딤 배경 클릭 → 전체화면 해제
   var bd=document.getElementById('pcMapBackdrop');
   if(bd) bd.addEventListener('click', pcExitFullscreen);
@@ -4777,10 +4806,13 @@ function pcDrawNearby(list, bounds){
 // 새로고침 전까지 영구 빈 화면이 됐다. 컨테이너를 지울 땐 항상 이 함수로 함께 초기화한다.
 function pcMapReset(){
   if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }
+  /* 파기 전 지도에 예약된 relayout/뷰 복원을 새 지도에 적용하지 않는다. */
+  try{ pcMapCtl.cancelRelayout(); pcMapCtl.resetAutoFit(); }catch(e){}
   pcMapObj=null; pcMapClusterer=null; pcSelOv=null; pcFocusIW=null;
   pcMapMarkers=[]; pcMarkerByName={}; pcRecentOverlays=[]; pcProgOverlays=[]; pcNearbyMarkers=[];
   pcBaseKey=''; pcOverlayKey=''; pcNearKey='';    // 레이어 키도 비워야 다음 렌더가 실제로 그린다
   pcMapBounds=null; pcMapBoundsAny=false;
+  pcMapFocusBounds=null; pcMapFocusAny=false;
 }
 function pcShowMap(list){
   var pane=document.getElementById('pcMapPane'); if(!pane) return;

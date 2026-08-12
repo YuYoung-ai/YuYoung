@@ -78,6 +78,7 @@
       records: sanitizeRecords(o.records),
       who: text(o.who),
       baseRev: Number(o.baseRev) || 0,
+      baseSourceRev: Number(o.baseSourceRev) || 0,
       token: o.token || ''
     };
   }
@@ -90,10 +91,11 @@
   function classifyResponse(d) {
     var res = {
       ok: false, conflict: false, unauthorized: false, error: '',
-      records: null, rev: 0, updatedAt: '', updatedBy: ''
+      records: null, rev: 0, sourceRev: 0, updatedAt: '', updatedBy: ''
     };
     if (!d || typeof d !== 'object') { res.error = 'bad-response'; return res; }
     res.rev = Number(d.rev) || 0;
+    res.sourceRev = Number(d.sourceRev) || 0;
     res.updatedAt = text(d.updatedAt);
     res.updatedBy = text(d.updatedBy);
     if (Array.isArray(d.records)) res.records = d.records;
