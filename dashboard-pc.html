@@ -1115,6 +1115,7 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
 var CACHE_KEY='baz_dash_cache';
+var DASH_LOAD_IN_FLIGHT=null;  /* 전체 데이터 새로고침 중복 호출 방지 */
 var RAW=[];              // 전체 레코드
 /* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
    두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
@@ -1163,16 +1164,19 @@ function costNum(s){ var n=Number(String(s||'').replace(/[^\d]/g,'')); return is
 function loadData(force){
   if(!HANDOVER_URL){
     document.getElementById('loading').innerHTML='⚠️ HANDOVER_URL이 설정되지 않았습니다.<br>handover_gas.gs 배포 후 URL을 입력하세요.';
-    return;
+    return Promise.resolve(false);
   }
-  /* 캐시 즉시 표시 → 백그라운드 갱신 */
+  /* 같은 탭에서 연속 클릭·초기 로드가 겹치면 진행 중인 요청을 공유한다. */
+  if(DASH_LOAD_IN_FLIGHT) return DASH_LOAD_IN_FLIGHT;
+  /* 캐시 즉시 표시 → 백그라운드 갱신. 병원 DB 동기화는 boot() 밖에서 1회만 실행한다. */
   if(!force){
     try{
       var c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
       if(c&&c.data&&c.data.length){ boot(c, true); }
     }catch(e){}
   }
-  fetchAllRetry(2)
+  var hospP=loadHospDB(!!force);
+  var allP=fetchAllRetry(2)
     .then(function(d){
       if(!d.success){
         toast('❌ '+(d.error||'로드 실패'));
@@ -1183,16 +1187,26 @@ function loadData(force){
             +'Apps Script → 배포 → 배포 관리 → ✏️ → <b>버전: 새 버전</b> → 배포 후<br>'
             +'이 페이지를 새로고침하세요.';
         }
-        return;
+        return false;
       }
       try{ localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }catch(e){}
       boot(d, false);
-      if(force) toast('🔄 최신 데이터로 갱신됨');
+      return true;
     })
     .catch(function(err){
-      if(RAW.length){ toast('오프라인 — 캐시 데이터 표시 중'); return; }
-      diagnoseFail(err);
+      if(RAW.length){ toast('오프라인 — 캐시 데이터 표시 중'); return false; }
+      diagnoseFail(err); return false;
     });
+  DASH_LOAD_IN_FLIGHT=Promise.all([allP,hospP]).then(function(v){
+    DASH_LOAD_IN_FLIGHT=null;
+    if(force) toast(v[0]&&v[1]!==false?'🔄 최신 데이터로 갱신됨':'⚠️ 일부 데이터 갱신 실패');
+    return v[0]&&v[1]!==false;
+  },function(e){
+    DASH_LOAD_IN_FLIGHT=null;
+    if(force) toast('⚠️ 데이터 갱신 실패');
+    return false;
+  });
+  return DASH_LOAD_IN_FLIGHT;
 }
 
 /* GAS GET 헬퍼 — 병원정보DB(hospdb)·재고(inventory) 조회에 사용
@@ -1201,8 +1215,7 @@ function gv(action, params){
   var qs=Object.keys(params||{}).map(function(k){return k+'='+encodeURIComponent(params[k]);}).join('&');
   var _u=HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
   if(window.BazAuth&&BazAuth.withToken) _u=BazAuth.withToken(_u);   /* [보안] 조회 인증 토큰 */
-  return fetch(_u,{method:'GET'})
-    .then(function(r){return r.json();});
+  return fetchTimeout(_u, 20000);
 }
 
 /* 타임아웃(20초)이 있는 fetch → 응답이 JSON인지 검사 → 실패 시 재시도 */
@@ -1272,22 +1285,31 @@ function boot(d, fromCache){
   applyViewVisibility();
   document.getElementById('metaLine').textContent=
     '총 '+RAW.length+'건 · '+(fromCache?'캐시':'시트')+' 기준 갱신 '+(d.updated||'-');
-  buildFilters(); initCombos(); initExecFilterBar(); apply(); ncareCheck(); loadHospDB();
+  buildFilters(); initCombos(); initExecFilterBar(); apply(); ncareCheck();
 }
 
 /* ── N-CARE 점검 현황 (구간 유지: ~30일 최근 점검 완료 / ~60 점검 예정 / ~90 점검 필요 / 91일~ 우선 점검 / 기록 없음) ── */
 var HOSPDB=[];
-function loadHospDB(){
-  try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
-    if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
-  gv('hospdb',{}).then(function(d){
-    if(!d.success||!d.data) return;
+var HOSPDB_IN_FLIGHT=null, HOSPDB_CACHE_APPLIED=false;
+function loadHospDB(force){
+  if(!HOSPDB_CACHE_APPLIED){
+    HOSPDB_CACHE_APPLIED=true;
+    try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
+      if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
+  }
+  if(HOSPDB_IN_FLIGHT) return HOSPDB_IN_FLIGHT;
+  HOSPDB_IN_FLIGHT=gv('hospdb',{}).then(function(d){
+    if(!d.success||!d.data) return false;
     HOSPDB=d.data;
     try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
     enrichNcare();
     ncareCheck();
     exInvalidate();     /* 오늘 기준 N-Care 수치가 바뀌므로 보고 모드도 다시 그린다 */
-  }).catch(function(){});
+    return true;
+  }).catch(function(){ return false; });
+  HOSPDB_IN_FLIGHT=HOSPDB_IN_FLIGHT.then(function(v){ HOSPDB_IN_FLIGHT=null; return v; },
+    function(){ HOSPDB_IN_FLIGHT=null; return false; });
+  return HOSPDB_IN_FLIGHT;
 }
 /* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
    병원정보DB 탭(action=hospdb) 값을 병원명 매칭으로 채워 넣는다 */
