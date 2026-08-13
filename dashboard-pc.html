@@ -1181,7 +1181,11 @@ function loadData(force){
     }catch(e){}
   }
   var hospP=loadHospDB(!!force);
-  var allP=fetchAllRetry(2, !!force, force?'':DASH_DATA_REV)
+  /* GAS 콜드스타트 때 hospdb와 무거운 all을 동시에 강제 호출하면 둘 다 지연될 수 있다.
+     작은 hospdb가 서버를 깨운 뒤 all을 조회해 수동 새로고침의 순간 부하를 낮춘다. */
+  var allP=Promise.resolve(hospP).then(function(){
+    return fetchAllRetry(2, !!force, force?'':DASH_DATA_REV);
+  })
     .then(function(d){
       if(d&&d.nochange&&!RAW.length) return fetchAllRetry(2, false, '');
       return d;
@@ -1236,6 +1240,7 @@ function fetchTimeout(url, ms){
   return fetch(url, ctl?{signal:ctl.signal}:{})
     .then(function(r){
       if(t) clearTimeout(t);
+      if(!r.ok) throw {kind:'http',status:r.status};
       return r.text().then(function(txt){
         if(/^\s*</.test(txt)) throw {kind:'html'};      /* HTML 응답 = 로그인/권한 페이지 */
         try{ return JSON.parse(txt); }
@@ -1249,16 +1254,31 @@ function fetchTimeout(url, ms){
       throw {kind:'network'};
     });
 }
+function gasTransient_(e){
+  return !!(e && (e.kind==='html' ||
+    (e.kind==='http' && (e.status===404 || e.status===408 || e.status===429 || e.status>=500))));
+}
+function gasRetryWait_(){
+  return new Promise(function(resolve){ setTimeout(resolve,700); });
+}
 function fetchAllRetry(tries, force, rev){
   var q=force?'&force=1':(rev?'&rev='+encodeURIComponent(rev):'');
   return fetchTimeout(_tk(HANDOVER_URL+'?action=all'+q), 20000)
     .catch(function(e){
-      if(tries>1 && (e.kind==='network'||e.kind==='timeout')){
+      if(tries>1 && (e.kind==='network'||e.kind==='timeout'||gasTransient_(e))){
         toast('연결 재시도 중…');
-        return fetchAllRetry(tries-1, force, rev);
+        return gasRetryWait_().then(function(){ return fetchAllRetry(tries-1, force, rev); });
       }
       throw e;
     });
+}
+function gvRetry(action, params, tries){
+  return gv(action,params).catch(function(e){
+    if(tries>1 && gasTransient_(e)){
+      return gasRetryWait_().then(function(){ return gvRetry(action,params,tries-1); });
+    }
+    throw e;
+  });
 }
 /* 실패 원인 자가진단: ping(소형 요청)으로 GAS 연결 자체를 확인 */
 function diagnoseFail(err){
@@ -1313,7 +1333,7 @@ function loadHospDB(force){
   }
   if(HOSPDB_IN_FLIGHT) return HOSPDB_IN_FLIGHT;
   var params=force?{force:1}:(HOSPDB_REV?{rev:HOSPDB_REV}:{});
-  HOSPDB_IN_FLIGHT=gv('hospdb',params).then(function(d){
+  HOSPDB_IN_FLIGHT=gvRetry('hospdb',params,2).then(function(d){
     if(d&&d.nochange){ if(d.rev) HOSPDB_REV=d.rev; return HOSPDB.length>0; }
     if(!d.success||!d.data) return false;
     HOSPDB=d.data;
