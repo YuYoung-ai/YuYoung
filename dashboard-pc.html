@@ -4037,8 +4037,8 @@ function exHistoryFilter_(items, opt){
       .some(function(v){return String(v||'').toLowerCase().indexOf(q)>=0;});
   });
 }
-function exHistoryOption_(value, label){
-  return '<option value="'+escAttr(value)+'">'+esc(label)+'</option>';
+function exHistoryOption_(value, label, selected){
+  return '<option value="'+escAttr(value)+'"'+(selected?' selected':'')+'>'+esc(label)+'</option>';
 }
 function exHistoryCell_(v){
   v=exHistoryVal_(v);
@@ -4080,8 +4080,9 @@ function exHistoryControls_(items, hasPrev){
   var gubuns=exHistoryUnique_(items,'gubun'), fses=exHistoryUnique_(items,'fse');
   return '<div class="hst-controls">'
     +'<div class="hst-field"><label for="hstPeriod">기간</label><select id="hstPeriod" onchange="exApplyHistoryFilters_()">'
-      +exHistoryOption_('all','전체 기간')+exHistoryOption_('cur','선택 기간')
-      +(hasPrev?exHistoryOption_('prev','비교 기간'):'')+'</select></div>'
+      +exHistoryOption_('cur','선택 기간',true)
+      +(hasPrev?exHistoryOption_('prev','비교 기간'):'')
+      +exHistoryOption_('all','전체 기간')+'</select></div>'
     +'<div class="hst-field"><label for="hstGubun">구분</label><select id="hstGubun" onchange="exApplyHistoryFilters_()">'
       +exHistoryOption_('all','전체 구분')+gubuns.map(function(v){return exHistoryOption_(v,v);}).join('')+'</select></div>'
     +'<div class="hst-field"><label for="hstFse">담당자</label><select id="hstFse" onchange="exApplyHistoryFilters_()">'
@@ -4095,14 +4096,15 @@ function exApplyHistoryFilters_(){
   if(!EX_HISTORY_STATE) return;
   function val(id, fallback){ var el=document.getElementById(id); return el?el.value:fallback; }
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,{
-    period:val('hstPeriod','all'), gubun:val('hstGubun','all'), fse:val('hstFse','all'), q:val('hstQuery','')
+    period:val('hstPeriod','cur'), gubun:val('hstGubun','all'), fse:val('hstFse','all'), q:val('hstQuery','')
   });
   var count=document.getElementById('hstCount'), host=document.getElementById('hstTableHost');
   if(count) count.innerHTML='<b>'+exNum(filtered.length)+'건</b> 표시 · 전체 '+exNum(EX_HISTORY_STATE.items.length)+'건';
   if(host) host.innerHTML=exHistoryTable_(filtered);
 }
 function exResetHistoryFilters_(){
-  ['hstPeriod','hstGubun','hstFse'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='all';});
+  var period=document.getElementById('hstPeriod'); if(period) period.value='cur';
+  ['hstGubun','hstFse'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='all';});
   var q=document.getElementById('hstQuery'); if(q)q.value='';
   exApplyHistoryFilters_();
 }
@@ -4129,6 +4131,7 @@ function exShowHistory_(dim, name){
       +'<span>처리일 최신순 · 원본 기록 기준</span></div>'
     +'<div class="hst-table-wrap" id="hstTableHost">'+exHistoryTable_(items)+'</div></div>';
   openExList(name, sub, html, true);
+  exApplyHistoryFilters_();
 }
 /* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
    유형·교체품명은 data-* 로만 전달하고 inline onclick 문자열에 넣지 않는다. */
