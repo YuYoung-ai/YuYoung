@@ -597,9 +597,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-row-btn:focus-visible{outline:2px solid var(--navy);outline-offset:-2px;border-radius:6px}
 /* 처리 이력 모달 — 문장형 목록 대신 필터 가능한 열 구조로 읽는다. */
 .ex-list-box{max-width:760px;max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden}
-.ex-list-box.history{max-width:1180px}
+.ex-list-box.history{max-width:1180px;height:min(900px,calc(100vh - 32px))}
 .ex-list-box.history .ex-modal-body{max-height:none;min-height:0;flex:1;padding:0;overflow:hidden}
-.hst-view{height:100%;min-height:0;display:flex;flex-direction:column}
+.hst-view{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .hst-summary{display:flex;gap:7px;padding:10px 11px 0;flex-wrap:wrap}
 .hst-chip{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:5px 10px;
   color:var(--text-muted);font-size:10.5px;line-height:1.2}
@@ -616,7 +616,13 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .hst-result{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 11px;
   border-top:1px solid var(--gray-line);background:var(--gray-bg);font-size:10.5px;color:var(--text-muted)}
 .hst-result b{color:var(--navy);font-size:11.5px}
-.hst-table-wrap{min-height:0;flex:1;overflow:auto;border-top:1px solid var(--gray-line);-webkit-overflow-scrolling:touch}
+.hst-table-wrap{min-height:0;flex:1;overflow-x:auto;overflow-y:scroll;border-top:1px solid var(--gray-line);
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-x pan-y;scrollbar-gutter:stable}
+.hst-table-wrap{scrollbar-width:auto;scrollbar-color:#94A3B8 #EEF2F7}
+.hst-table-wrap::-webkit-scrollbar{width:12px;height:12px}
+.hst-table-wrap::-webkit-scrollbar-track{background:#EEF2F7}
+.hst-table-wrap::-webkit-scrollbar-thumb{background:#94A3B8;border:3px solid #EEF2F7;border-radius:999px}
+.hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#64748B}
 .hst-table{width:100%;min-width:1040px;border-collapse:separate;border-spacing:0;font-size:11.5px;table-layout:fixed}
 .hst-table th{position:sticky;top:0;z-index:1;padding:8px 7px;background:#F1F4F9;color:var(--text-muted);
   border-bottom:1px solid var(--gray-line);font-size:10.5px;font-weight:700;text-align:left;white-space:nowrap}
@@ -632,7 +638,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .hst-detail{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);line-height:1.5}
 .hst-empty{padding:35px 16px;text-align:center;color:var(--text-muted);font-size:12px}
 @media(max-width:820px){
-  .ex-list-box.history{max-height:calc(100vh - 20px);padding:14px}
+  .ex-list-box.history{height:calc(100vh - 20px);max-height:none;padding:14px}
   .hst-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-field.search{grid-column:1/-1}.hst-reset{grid-column:1/-1}
   .hst-table{min-width:0;display:block;padding:0 9px 9px}
@@ -644,6 +650,10 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   .hst-table td.period{grid-column:1;grid-row:1}.hst-table td.date{grid-column:2;grid-row:1}
   .hst-table td.hosp{grid-column:3;grid-row:1}
   .hst-table td.detail{grid-column:1/-1;padding-top:6px;border-top:1px solid #EEF1F6}
+}
+@supports(height:100dvh){
+  .ex-list-box.history{height:min(900px,calc(100dvh - 32px))}
+  @media(max-width:820px){.ex-list-box.history{height:calc(100dvh - 20px)}}
 }
 .ex-rate{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px;flex:0 0 auto}
 .ex-rate b{font-size:14px;color:var(--green)}
@@ -1312,6 +1322,9 @@ function boot(d, fromCache){
     r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
     r.ncare=r.ncare||'미가입'; r.paid=r.paid||''; return r;
   });
+  /* 콜드스타트 완화를 위해 hospdb를 먼저 받은 경우에는 당시 RAW가 비어 있어 결합할 수 없다.
+     전체 이력이 준비된 직후 다시 결합해야 가입/미가입 필터가 실제 병원 DB와 일치한다. */
+  enrichNcare(true);
   document.getElementById('loading').style.display='none';
   DATA_READY=true;
   applyViewVisibility();
@@ -1350,7 +1363,7 @@ function loadHospDB(force){
 }
 /* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
    병원정보DB 탭(action=hospdb) 값을 병원명 매칭으로 채워 넣는다 */
-function enrichNcare(){
+function enrichNcare(silent){
   if(!HOSPDB.length || !RAW.length) return;
   var map={};
   HOSPDB.forEach(function(h){ var nc=String(h.ncare||'').trim(); if(h.n&&nc) map[nkey(h.n)]=nc; });
@@ -1360,7 +1373,8 @@ function enrichNcare(){
     var nc=map[nkey(r.hosp)];
     if(nc && nc!==r.ncare){ r.ncare=nc; changed=true; }
   });
-  if(changed){ buildFilters(); apply(); }
+  if(changed && !silent){ buildFilters(); apply(); }
+  return changed;
 }
 function nkey(s){ return String(s||'').replace(/\s+/g,'').toLowerCase(); }
 
@@ -4480,13 +4494,15 @@ function renderExecutiveCause(x){
   var per=exPeriodLabel(), cmp=x.cmp, cmpTxt=cmp?(cmp.label+' 대비'):'비교 없음';
 
   /* ── VOC 유형 상위 5 ── */
-  var types=exDimCompare(x.rows, x.prev, 'type', true).slice(0,5);
+  var types=exDimCompare(x.rows, x.prev, 'type', true)
+    .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exTypeCard').innerHTML=
     exH3('VOC 유형 TOP 5', 'A/S 기준 · 이상 없음 제외 · '+per+' · '+cmpTxt)
     +'<div class="ex-cbody">'+exBars(types,{empty:'A/S 기록 없음', histDim:'type'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
-  var parts=exDimCompare(x.rows, x.prev, 'part', false).slice(0,5);
+  var parts=exDimCompare(x.rows, x.prev, 'part', false)
+    .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exPartCard').innerHTML=
     exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)
     +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음', histDim:'part'})+'</div>';
