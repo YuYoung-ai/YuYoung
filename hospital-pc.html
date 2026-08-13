@@ -966,6 +966,7 @@ function bazGet(url, ms){
   return fetch(_tk(url), ctl?{method:'GET', signal:ctl.signal}:{method:'GET'})
     .then(function(r){
       if(t){ clearTimeout(t); t=null; }
+      if(!r.ok) throw {kind:'http',status:r.status};
       return r.text().then(function(txt){
         if(/^\s*</.test(txt)) throw {kind:'html'};        /* 데이터 대신 로그인/권한 페이지 */
         var d; try{ d=JSON.parse(txt); }catch(e){ throw {kind:'parse'}; }
@@ -987,6 +988,19 @@ function bazGet(url, ms){
       if(e && e.name==='AbortError') throw {kind:'timeout'};
       throw {kind:'network'};
     });
+}
+function bazTransient_(e){
+  return !!(e && (e.kind==='html' ||
+    (e.kind==='http' && (e.status===404 || e.status===408 || e.status===429 || e.status>=500))));
+}
+function bazGetRetry(url, tries, ms){
+  return bazGet(url,ms).catch(function(e){
+    if(tries>1 && bazTransient_(e)){
+      return new Promise(function(resolve){ setTimeout(resolve,700); })
+        .then(function(){ return bazGetRetry(url,tries-1,ms); });
+    }
+    throw e;
+  });
 }
 
 /* ===== 인증 만료 배너 =====
@@ -2891,7 +2905,7 @@ applyLang();
     var bq=force?'&force=1':'';
     if(!force && HDB_DATA_REV) bq+='&hrev='+encodeURIComponent(HDB_DATA_REV);
     if(!force && ISSUE_DATA_REV) bq+='&irev='+encodeURIComponent(ISSUE_DATA_REV);
-    BAZ_BOOT_IN_FLIGHT=bazGet(HANDOVER_CORE+'?action=bootstrap'+bq)
+    BAZ_BOOT_IN_FLIGHT=bazGetRetry(HANDOVER_CORE+'?action=bootstrap'+bq,2)
       .then(function(d){
         if(d && d.success===false){
           throw {kind:/unauthorized|토큰|로그인/i.test(String(d.error||''))?'auth':'server'};
@@ -2924,7 +2938,7 @@ applyLang();
       function(){ BAZ_BOOT_IN_FLIGHT=null; BAZ_BOOT_FORCE=false; return false; });
     return BAZ_BOOT_IN_FLIGHT;
   }
-  bazBootSync(false);
+  window.bazBootReady=bazBootSync(false);
 
   // ── 방문로그 동기화 (5분 캐시) ──
   var VLOG_CACHE_KEY='bazVisitLogCache';
@@ -2984,7 +2998,11 @@ applyLang();
     var bootP, visitP, recentP;
     try{ bootP=bazBootSync(true); }catch(e){ bootP=Promise.resolve(false); }
     try{ visitP=syncVisitLog(); }catch(e){ visitP=Promise.resolve(false); }
-    try{ recentP=(typeof pcLoadRecent==='function')?pcLoadRecent(null,true):Promise.resolve(true); }
+    try{
+      recentP=Promise.resolve(bootP).then(function(){
+        return (typeof pcLoadRecent==='function')?pcLoadRecent(null,true):true;
+      });
+    }
     catch(e){ recentP=Promise.resolve(false); }
     return Promise.all([bootP,visitP,recentP]).then(function(v){
       try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
@@ -4324,7 +4342,10 @@ function pcLoadRecent(cb, force){
   pcRecentForce=!!force;
   if(pcRecentState!=='done') pcRecentState='loading';
   var rq=force?'&force=1':(PC_RECENT_REV?'&rev='+encodeURIComponent(PC_RECENT_REV):'');
-  pcRecentPromise=bazGet(HANDOVER_URL+'?action=all'+rq)
+  var bootReady=(!force && window.bazBootReady)?window.bazBootReady:Promise.resolve(true);
+  pcRecentPromise=Promise.resolve(bootReady).then(function(){
+    return bazGetRetry(HANDOVER_URL+'?action=all'+rq,2);
+  })
     .then(function(d){
       if(d&&d.nochange){
         PC_RECENT_REV=d.rev||PC_RECENT_REV;

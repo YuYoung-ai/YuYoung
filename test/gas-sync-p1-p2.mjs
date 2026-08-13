@@ -58,7 +58,18 @@ ck('P2 인계 화면: 부트스트랩 본문 캐시가 있을 때만 rev 전송'
   /baz_handover_bootstrap/.test(O)&&/bootCache\?'&rev='/.test(O)&&/d\.nochange && bootCache/.test(O));
 ck('P2 서버: 인계 부트스트랩 묶음도 rev·nochange 캐시',
   /syncNochange_\('handover_bootstrap'/.test(G)&&/syncMetaPut_\('handover_bootstrap'/.test(G));
-ck('배포: 서비스워커 캐시 버전 갱신',/baz-cs-v126/.test(SW));
+ck('배포: 서비스워커 캐시 버전 갱신',/baz-cs-v127/.test(SW));
+
+/* 콜드스타트 회귀: 무거운 강제 호출을 직렬화하고 일시 404/HTML만 1회 재시도한다. */
+const dLoad=grab(D,'loadData'), dTimeout=grab(D,'fetchTimeout'), dGvRetry=grab(D,'gvRetry'),
+      hGet=grab(H,'bazGet'), hGetRetry=grab(H,'bazGetRetry'), hRefresh=H.slice(H.indexOf('window.bazRefreshAll=function'),H.indexOf('window.bazRefreshAll=function')+1800);
+ck('콜드스타트: 대시보드 hospdb 완료 후 all 조회',/Promise\.resolve\(hospP\)\.then/.test(dLoad));
+ck('콜드스타트: 대시보드 HTTP 오류 분류',/!r\.ok[\s\S]*kind:'http'/.test(dTimeout));
+ck('콜드스타트: 대시보드 일시 오류 제한 재시도',/gasTransient_\(e\)/.test(dFetch)&&/tries>1/.test(dGvRetry));
+ck('콜드스타트: 병원 화면 HTTP 오류 분류',/!r\.ok[\s\S]*kind:'http'/.test(hGet));
+ck('콜드스타트: 병원 화면 일시 오류 제한 재시도',/tries>1/.test(hGetRetry)&&/bazTransient_\(e\)/.test(hGetRetry));
+ck('콜드스타트: 병원 화면 bootstrap 후 all 조회',/Promise\.resolve\(bootP\)\.then/.test(hRefresh));
+ck('콜드스타트: 최초 병원 화면도 bootstrap 준비를 기다림',/window\.bazBootReady=bazBootSync\(false\)/.test(H)&&/Promise\.resolve\(bootReady\)\.then/.test(hRecent));
 
 /* 메타 경로는 GAS 전역을 작은 mock으로 대체해 실제 반환 계약도 실행한다. */
 const helperNames=['syncForce_','syncRevParam_','syncMetaGet_','syncMetaPut_','syncNochange_','syncNochangeFrom_','syncCacheDrop_'];
