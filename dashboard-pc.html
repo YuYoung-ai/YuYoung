@@ -1115,7 +1115,7 @@ var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0g
 function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withToken(u):u; }catch(e){ return u; } }
 
 var CACHE_KEY='baz_dash_cache';
-var DASH_LOAD_IN_FLIGHT=null;  /* 전체 데이터 새로고침 중복 호출 방지 */
+var DASH_LOAD_IN_FLIGHT=null, DASH_LOAD_FORCE=false, DASH_DATA_REV='';  /* 전체 데이터 새로고침 중복 호출 방지 */
 var RAW=[];              // 전체 레코드
 /* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
    두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
@@ -1167,17 +1167,27 @@ function loadData(force){
     return Promise.resolve(false);
   }
   /* 같은 탭에서 연속 클릭·초기 로드가 겹치면 진행 중인 요청을 공유한다. */
-  if(DASH_LOAD_IN_FLIGHT) return DASH_LOAD_IN_FLIGHT;
+  if(DASH_LOAD_IN_FLIGHT){
+    /* 일반 갱신 중 수동 새로고침이 들어오면 일반 응답 뒤 force=1 요청을 1회 이어서 실행한다. */
+    if(force && !DASH_LOAD_FORCE) return DASH_LOAD_IN_FLIGHT.then(function(){ return loadData(true); });
+    return DASH_LOAD_IN_FLIGHT;
+  }
+  DASH_LOAD_FORCE=!!force;
   /* 캐시 즉시 표시 → 백그라운드 갱신. 병원 DB 동기화는 boot() 밖에서 1회만 실행한다. */
   if(!force){
     try{
       var c=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
-      if(c&&c.data&&c.data.length){ boot(c, true); }
+      if(c&&c.data&&c.data.length){ DASH_DATA_REV=c.rev||''; boot(c, true); }
     }catch(e){}
   }
   var hospP=loadHospDB(!!force);
-  var allP=fetchAllRetry(2)
+  var allP=fetchAllRetry(2, !!force, force?'':DASH_DATA_REV)
     .then(function(d){
+      if(d&&d.nochange&&!RAW.length) return fetchAllRetry(2, false, '');
+      return d;
+    })
+    .then(function(d){
+      if(d&&d.nochange){ if(d.rev) DASH_DATA_REV=d.rev; return true; }
       if(!d.success){
         toast('❌ '+(d.error||'로드 실패'));
         if(!RAW.length){
@@ -1189,6 +1199,7 @@ function loadData(force){
         }
         return false;
       }
+      DASH_DATA_REV=d.rev||DASH_DATA_REV;
       try{ localStorage.setItem(CACHE_KEY, JSON.stringify(d)); }catch(e){}
       boot(d, false);
       return true;
@@ -1198,11 +1209,11 @@ function loadData(force){
       diagnoseFail(err); return false;
     });
   DASH_LOAD_IN_FLIGHT=Promise.all([allP,hospP]).then(function(v){
-    DASH_LOAD_IN_FLIGHT=null;
+    DASH_LOAD_IN_FLIGHT=null; DASH_LOAD_FORCE=false;
     if(force) toast(v[0]&&v[1]!==false?'🔄 최신 데이터로 갱신됨':'⚠️ 일부 데이터 갱신 실패');
     return v[0]&&v[1]!==false;
   },function(e){
-    DASH_LOAD_IN_FLIGHT=null;
+    DASH_LOAD_IN_FLIGHT=null; DASH_LOAD_FORCE=false;
     if(force) toast('⚠️ 데이터 갱신 실패');
     return false;
   });
@@ -1238,12 +1249,13 @@ function fetchTimeout(url, ms){
       throw {kind:'network'};
     });
 }
-function fetchAllRetry(tries){
-  return fetchTimeout(_tk(HANDOVER_URL+'?action=all'), 20000)
+function fetchAllRetry(tries, force, rev){
+  var q=force?'&force=1':(rev?'&rev='+encodeURIComponent(rev):'');
+  return fetchTimeout(_tk(HANDOVER_URL+'?action=all'+q), 20000)
     .catch(function(e){
       if(tries>1 && (e.kind==='network'||e.kind==='timeout')){
         toast('연결 재시도 중…');
-        return fetchAllRetry(tries-1);
+        return fetchAllRetry(tries-1, force, rev);
       }
       throw e;
     });
@@ -1290,18 +1302,23 @@ function boot(d, fromCache){
 
 /* ── N-CARE 점검 현황 (구간 유지: ~30일 최근 점검 완료 / ~60 점검 예정 / ~90 점검 필요 / 91일~ 우선 점검 / 기록 없음) ── */
 var HOSPDB=[];
-var HOSPDB_IN_FLIGHT=null, HOSPDB_CACHE_APPLIED=false;
+var HOSPDB_IN_FLIGHT=null, HOSPDB_CACHE_APPLIED=false, HOSPDB_REV='';
 function loadHospDB(force){
   if(!HOSPDB_CACHE_APPLIED){
     HOSPDB_CACHE_APPLIED=true;
     try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
-      if(c&&c.data){ HOSPDB=c.data; enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
+      if(Array.isArray(c)) HOSPDB=c;
+      else if(c&&c.data){ HOSPDB=c.data; HOSPDB_REV=c.rev||''; }
+      if(HOSPDB.length){ enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
   }
   if(HOSPDB_IN_FLIGHT) return HOSPDB_IN_FLIGHT;
-  HOSPDB_IN_FLIGHT=gv('hospdb',{}).then(function(d){
+  var params=force?{force:1}:(HOSPDB_REV?{rev:HOSPDB_REV}:{});
+  HOSPDB_IN_FLIGHT=gv('hospdb',params).then(function(d){
+    if(d&&d.nochange){ if(d.rev) HOSPDB_REV=d.rev; return HOSPDB.length>0; }
     if(!d.success||!d.data) return false;
     HOSPDB=d.data;
-    try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify(d)); }catch(e){}
+    HOSPDB_REV=d.rev||HOSPDB_REV;
+    try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify({data:HOSPDB,rev:HOSPDB_REV})); }catch(e){}
     enrichNcare();
     ncareCheck();
     exInvalidate();     /* 오늘 기준 N-Care 수치가 바뀌므로 보고 모드도 다시 그린다 */

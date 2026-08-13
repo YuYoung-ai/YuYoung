@@ -338,7 +338,7 @@ ck('잠금 획득 실패 뒤에는 읽기·쓰기를 계속하지 않는다',
   histSaveSrc.indexOf("catch(lockErr){ return") < histSaveSrc.indexOf('histReadAll_()'));
 ck('수정자·수정시각 감사 로그를 남긴다',
   /HIST\.LOG_SHEET/.test(histSaveSrc) && /whoName/.test(histSaveSrc));
-ck('저장 후 이슈이력 캐시를 무효화한다', /bazCacheDrop_\('handover_issuehist'\)/.test(histSaveSrc));
+ck('저장 후 이슈이력 데이터·rev 캐시를 무효화한다', /syncCacheDrop_\('handover_issuehist'\)/.test(histSaveSrc));
 ck('doPost 에 history_save 라우팅이 있다', /action==='history_save'/.test(GAS));
 
 /* ════════════════════════════════════════════════════════════════════

@@ -1712,16 +1712,28 @@ setDbBadge('embed');
    구버전 배포에서는 기존 개별 요청으로 그대로 폴백한다. */
 function bootHandover(){
   if(!HANDOVER_URL){ setDbBadge('embed','서버 미설정'); return Promise.resolve(false); }
+  var bootCache=null;
+  try{
+    bootCache=JSON.parse(localStorage.getItem('baz_handover_bootstrap')||'null');
+    if(!bootCache || !bootCache.rev || !bootCache.hospdb) bootCache=null;
+  }catch(e){ bootCache=null; }
   /* bootstrap 자체가 GAS와 시트를 깨우고 버전도 돌려주므로 별도 ping은 호출하지 않는다. */
-  return bazGetJson(_tk(postUrl()+'?action=handover_bootstrap'), 20000).then(function(res){
+  var bootUrl=postUrl()+'?action=handover_bootstrap'+(bootCache?'&rev='+encodeURIComponent(bootCache.rev):'');
+  return bazGetJson(_tk(bootUrl), 20000).then(function(res){
     if(res.kind!=='json'){
       setDbBadge('error', res.kind==='timeout'?'서버 응답 지연':'서버 연결 실패 · 임베드 DB 사용');
       console.warn('[handover] bootstrap 연결 실패 — 추가 호출 없이 임베드 DB 유지:',res.kind);
       return false;
     }
     var d=res.data;
+    if(d && d.success===true && d.nochange && bootCache){
+      GAS_VER=bootCache.ver||GAS_VER;
+      applyBootstrap(bootCache);
+      return true;
+    }
     if(d && d.success===true && d.hospdb){
       GAS_VER=d.ver||GAS_VER;
+      try{ if(d.rev) localStorage.setItem('baz_handover_bootstrap',JSON.stringify(d)); }catch(e){}
       applyBootstrap(d);
       return true;
     }

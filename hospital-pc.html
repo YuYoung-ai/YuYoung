@@ -2469,6 +2469,7 @@ function histInvalidateIssueCache(){
   try{
     localStorage.removeItem('bazIssueHistCache');
     localStorage.removeItem('bazIssueHistCacheTs');
+    localStorage.removeItem('bazIssueHistCacheRev');
   }catch(e){}
   try{ if(typeof window.bazRefreshIssueHist==='function') window.bazRefreshIssueHist(); }catch(e){}
 }
@@ -2665,6 +2666,7 @@ applyLang();
 
   var ISSUE_CACHE_KEY='bazIssueHistCache';
   var ISSUE_CACHE_TS='bazIssueHistCacheTs';
+  var ISSUE_CACHE_REV='bazIssueHistCacheRev', ISSUE_DATA_REV='';
   var ISSUE_CACHE_TTL=5*60*1000; // 5분
 
   // 시트 배열 변경으로 체크박스 값(true/false)이 유형·현상 자리에 섞여 오는 것 방어:
@@ -2727,10 +2729,12 @@ applyLang();
     catch(e){ return false; }
   }
   /* 서버 응답 채택 — 캐시 기록 + 화면 반영을 한곳에서 (bootstrap·개별 요청 공용) */
-  function acceptIssueHist(data, revs){
+  function acceptIssueHist(data, revs, dataRev){
+    ISSUE_DATA_REV=dataRev||ISSUE_DATA_REV;
     try{
       localStorage.setItem(ISSUE_CACHE_KEY, JSON.stringify({data:data, revs:revs||null}));
       localStorage.setItem(ISSUE_CACHE_TS, String(Date.now()));
+      if(ISSUE_DATA_REV) localStorage.setItem(ISSUE_CACHE_REV, ISSUE_DATA_REV);
     }catch(e){}
     if(applyIssueHist(data, revs)){
       refreshHistViews();
@@ -2743,6 +2747,7 @@ applyLang();
     try{
       var raw=localStorage.getItem(ISSUE_CACHE_KEY);
       if(!raw) return false;
+      ISSUE_DATA_REV=localStorage.getItem(ISSUE_CACHE_REV)||'';
       var o=JSON.parse(raw);
       /* 구버전 캐시는 data 자체가 최상위였다 — 형태를 보고 갈라 읽는다 */
       var data=(o && o.data && typeof o.data==='object') ? o.data : o;
@@ -2756,10 +2761,16 @@ applyLang();
     if(!force && cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL)){
       console.log('[이슈이력] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
-    return bazGet(ISSUE_HIST_URL)
+    var q=force?'&force=1':(ISSUE_DATA_REV?'&rev='+encodeURIComponent(ISSUE_DATA_REV):'');
+    return bazGet(ISSUE_HIST_URL+q)
       .then(function(d){
+        if(d&&d.nochange){
+          ISSUE_DATA_REV=d.rev||ISSUE_DATA_REV;
+          try{ localStorage.setItem(ISSUE_CACHE_TS,String(Date.now())); }catch(e){}
+          return true;
+        }
         if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return false; }
-        acceptIssueHist(d.data, d.revs); return true;
+        acceptIssueHist(d.data, d.revs, d.rev); return true;
       })
       .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); return false; });
   }
@@ -2796,6 +2807,7 @@ applyLang();
   // ── 병원정보DB 동기화 (5분 캐시) ──
   var HDB_CACHE_KEY='bazHospDBCache';
   var HDB_CACHE_TS='bazHospDBCacheTs';
+  var HDB_CACHE_REV='bazHospDBCacheRev', HDB_DATA_REV='';
   var HDB_CACHE_TTL=5*60*1000; // 5분
 
   function applyHospDB(rows){
@@ -2809,11 +2821,13 @@ applyLang();
     }
     return false;
   }
-  function acceptHospDB(rows){
+  function acceptHospDB(rows, dataRev){
     if(!rows || !rows.length) return false;
+    HDB_DATA_REV=dataRev||HDB_DATA_REV;
     try{
       localStorage.setItem(HDB_CACHE_KEY, JSON.stringify(rows));
       localStorage.setItem(HDB_CACHE_TS, String(Date.now()));
+      if(HDB_DATA_REV) localStorage.setItem(HDB_CACHE_REV, HDB_DATA_REV);
     }catch(e){}
     try{
       if(applyHospDB(rows)){ console.log('[병원정보DB] '+rows.length+'건 동기화'); return true; }
@@ -2824,6 +2838,7 @@ applyLang();
     try{
       var cached=localStorage.getItem(HDB_CACHE_KEY);
       if(!cached) return false;
+      HDB_DATA_REV=localStorage.getItem(HDB_CACHE_REV)||'';
       var arr=JSON.parse(cached);
       if(arr && arr.length && applyHospDB(arr)){
         console.log('[병원정보DB] 캐시 적용 '+arr.length+'건');
@@ -2837,10 +2852,16 @@ applyLang();
     if(!force && cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL)){
       console.log('[병원정보DB] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
-    return bazGet(HOSPITAL_DB_URL)
+    var q=force?'&force=1':(HDB_DATA_REV?'&rev='+encodeURIComponent(HDB_DATA_REV):'');
+    return bazGet(HOSPITAL_DB_URL+q)
       .then(function(d){
+        if(d&&d.nochange){
+          HDB_DATA_REV=d.rev||HDB_DATA_REV;
+          try{ localStorage.setItem(HDB_CACHE_TS,String(Date.now())); }catch(e){}
+          return true;
+        }
         if(!d.success||!d.data||!d.data.length) return false;
-        acceptHospDB(d.data); return true;
+        acceptHospDB(d.data,d.rev); return true;
       })
       .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e); return false;});
   }
@@ -2853,27 +2874,36 @@ applyLang();
      action=bootstrap 으로 한 번에 받는다.
      ★ 구버전 백엔드(미재배포)는 bootstrap 을 모르거나 빈 응답을 준다 →
        hospdb/issuehist 중 못 받은 쪽만 기존 개별 요청으로 안전하게 폴백한다. */
-  var BAZ_BOOT_IN_FLIGHT=null;
+  var BAZ_BOOT_IN_FLIGHT=null, BAZ_BOOT_FORCE=false;
   function bazBootSync(force){
     applyHospDBCache();
     applyIssueCache();
-    if(BAZ_BOOT_IN_FLIGHT) return BAZ_BOOT_IN_FLIGHT;
+    if(BAZ_BOOT_IN_FLIGHT){
+      if(force && !BAZ_BOOT_FORCE) return BAZ_BOOT_IN_FLIGHT.then(function(){ return bazBootSync(true); });
+      return BAZ_BOOT_IN_FLIGHT;
+    }
     var needH=force || !cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL);
     var needI=force || !cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL);
     if(!needH && !needI) return Promise.resolve(true);
     if(!needH) return syncIssueHist(force);   // 한쪽만 필요하면 1콜이 이득이 없다
     if(!needI) return syncHospDB(force);
-    BAZ_BOOT_IN_FLIGHT=bazGet(HANDOVER_CORE+'?action=bootstrap')
+    BAZ_BOOT_FORCE=!!force;
+    var bq=force?'&force=1':'';
+    if(!force && HDB_DATA_REV) bq+='&hrev='+encodeURIComponent(HDB_DATA_REV);
+    if(!force && ISSUE_DATA_REV) bq+='&irev='+encodeURIComponent(ISSUE_DATA_REV);
+    BAZ_BOOT_IN_FLIGHT=bazGet(HANDOVER_CORE+'?action=bootstrap'+bq)
       .then(function(d){
         if(d && d.success===false){
           throw {kind:/unauthorized|토큰|로그인/i.test(String(d.error||''))?'auth':'server'};
         }
         var hd=d && d.hospdb, ih=d && d.issuehist;
-        var okH=!!(hd && hd.success && Array.isArray(hd.data) && hd.data.length);
-        var okI=!!(ih && ih.success && ih.data);
+        var okH=!!(hd && hd.success && (hd.nochange || (Array.isArray(hd.data) && hd.data.length)));
+        var okI=!!(ih && ih.success && (ih.nochange || ih.data));
         if(!okH && !okI) throw {kind:'bootstrap-unsupported'};
-        if(okH) acceptHospDB(hd.data);
-        if(okI) acceptIssueHist(ih.data, ih.revs);
+        if(okH && hd.nochange){ HDB_DATA_REV=hd.rev||HDB_DATA_REV; try{ localStorage.setItem(HDB_CACHE_TS,String(Date.now())); }catch(e){} }
+        else if(okH) acceptHospDB(hd.data,hd.rev);
+        if(okI && ih.nochange){ ISSUE_DATA_REV=ih.rev||ISSUE_DATA_REV; try{ localStorage.setItem(ISSUE_CACHE_TS,String(Date.now())); }catch(e){} }
+        else if(okI) acceptIssueHist(ih.data, ih.revs, ih.rev);
         var missing=[];
         if(!okH) missing.push(syncHospDB(true));
         if(!okI) missing.push(syncIssueHist(true));
@@ -2890,8 +2920,8 @@ applyLang();
         console.warn('[부트스트랩] 동기화 실패 — 캐시 유지:', (e&&e.kind)||e);
         return false;
       });
-    BAZ_BOOT_IN_FLIGHT=BAZ_BOOT_IN_FLIGHT.then(function(v){ BAZ_BOOT_IN_FLIGHT=null; return v; },
-      function(){ BAZ_BOOT_IN_FLIGHT=null; return false; });
+    BAZ_BOOT_IN_FLIGHT=BAZ_BOOT_IN_FLIGHT.then(function(v){ BAZ_BOOT_IN_FLIGHT=null; BAZ_BOOT_FORCE=false; return v; },
+      function(){ BAZ_BOOT_IN_FLIGHT=null; BAZ_BOOT_FORCE=false; return false; });
     return BAZ_BOOT_IN_FLIGHT;
   }
   bazBootSync(false);
@@ -2943,7 +2973,9 @@ applyLang();
   window.bazRefreshAll=function(done){
     try{
       localStorage.removeItem(ISSUE_CACHE_TS);
+      localStorage.removeItem(ISSUE_CACHE_REV);
       localStorage.removeItem(HDB_CACHE_TS);
+      localStorage.removeItem(HDB_CACHE_REV);
       localStorage.removeItem(VLOG_CACHE_TS);
       localStorage.removeItem('baz_pc_recent_ts');
     }catch(e){}
@@ -2952,7 +2984,7 @@ applyLang();
     var bootP, visitP, recentP;
     try{ bootP=bazBootSync(true); }catch(e){ bootP=Promise.resolve(false); }
     try{ visitP=syncVisitLog(); }catch(e){ visitP=Promise.resolve(false); }
-    try{ recentP=(typeof pcLoadRecent==='function')?pcLoadRecent():Promise.resolve(true); }
+    try{ recentP=(typeof pcLoadRecent==='function')?pcLoadRecent(null,true):Promise.resolve(true); }
     catch(e){ recentP=Promise.resolve(false); }
     return Promise.all([bootP,visitP,recentP]).then(function(v){
       try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
@@ -4264,34 +4296,50 @@ function pcSkillBadge(name){
    시트 전체를 다시 받았다. → 메모리 변수를 진실로 삼고 localStorage는 부가 캐시로만 쓴다. */
 var PC_RECENT_TTL=5*60*1000;
 var pcRecentTs=(function(){ try{ return parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10)||0; }catch(e){ return 0; } })();
-var pcRecentInFlight=false, pcRecentBooted=false, pcRecentPromise=null;
-function pcLoadRecent(cb){
+var PC_RECENT_REV_KEY='baz_pc_recent_rev';
+var PC_RECENT_REV=(function(){ try{return localStorage.getItem(PC_RECENT_REV_KEY)||'';}catch(e){return '';} })();
+var pcRecentInFlight=false, pcRecentBooted=false, pcRecentPromise=null, pcRecentForce=false;
+function pcLoadRecent(cb, force){
   var local=pcLocalRecent();
   var cached=null;
   try{ cached=JSON.parse(localStorage.getItem('baz_pc_recent_cache')||'null'); }catch(e){}
   if(!pcRecentBooted){
     pcRecentBooted=true;
-    if(!(cached && cached.length)) pcRecentTs=0;
+    if(!(cached && cached.length)){
+      /* rev만 남고 본문 캐시가 사라졌다면 nochange를 보내면 빈 화면이 굳는다. */
+      pcRecentTs=0; PC_RECENT_REV='';
+      try{ localStorage.removeItem(PC_RECENT_REV_KEY); }catch(e){}
+    }
   }
   if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
   else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
-  if(pcRecentTs && (Date.now()-pcRecentTs)<PC_RECENT_TTL) return Promise.resolve(true);
+  if(!force && pcRecentTs && (Date.now()-pcRecentTs)<PC_RECENT_TTL) return Promise.resolve(true);
   if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return Promise.resolve(!!pcRecent.length); }
   if(pcRecentInFlight){
+    if(force && !pcRecentForce) return pcRecentPromise.then(function(){ return pcLoadRecent(cb,true); });
     if(cb && pcRecentPromise) pcRecentPromise.then(cb,cb);
     return pcRecentPromise||Promise.resolve(false);
   }
   pcRecentInFlight=true;
+  pcRecentForce=!!force;
   if(pcRecentState!=='done') pcRecentState='loading';
-  pcRecentPromise=bazGet(HANDOVER_URL+'?action=all')
+  var rq=force?'&force=1':(PC_RECENT_REV?'&rev='+encodeURIComponent(PC_RECENT_REV):'');
+  pcRecentPromise=bazGet(HANDOVER_URL+'?action=all'+rq)
     .then(function(d){
+      if(d&&d.nochange){
+        PC_RECENT_REV=d.rev||PC_RECENT_REV;
+        pcRecentTs=Date.now();
+        try{ localStorage.setItem('baz_pc_recent_ts',String(pcRecentTs)); if(PC_RECENT_REV)localStorage.setItem(PC_RECENT_REV_KEY,PC_RECENT_REV); }catch(e){}
+        return true;
+      }
       var data=(d&&d.data)||[];
       pcRecent=pcMergeRecent(pcLocalRecent().concat(data));
       pcCollectFse(data, true);
       pcBuildSkill(data);
       pcRecentState='done';
       pcRecentTs=Date.now();
-      try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(pcRecentTs)); }catch(e){}
+      PC_RECENT_REV=(d&&d.rev)||PC_RECENT_REV;
+      try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(pcRecentTs)); if(PC_RECENT_REV)localStorage.setItem(PC_RECENT_REV_KEY,PC_RECENT_REV); }catch(e){}
       try{ pcAutoAdvanceFromHandover(); }catch(e){}
       if(cb) cb();
       return true;
@@ -4303,8 +4351,8 @@ function pcLoadRecent(cb){
       if(cb) cb();
       return false;
     });
-  pcRecentPromise=pcRecentPromise.then(function(v){ pcRecentInFlight=false; pcRecentPromise=null; return v; },
-    function(){ pcRecentInFlight=false; pcRecentPromise=null; return false; });
+  pcRecentPromise=pcRecentPromise.then(function(v){ pcRecentInFlight=false; pcRecentPromise=null; pcRecentForce=false; return v; },
+    function(){ pcRecentInFlight=false; pcRecentPromise=null; pcRecentForce=false; return false; });
   return pcRecentPromise;
 }
 // 오늘 날짜(yyyy-MM-dd) — 서버(handover_gas.gs)·handover 시트와 동일하게 Asia/Seoul 고정.

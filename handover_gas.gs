@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.1.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.2.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -16,7 +16,7 @@
  *     ※ "새 배포"가 아님 — URL이 바뀌면 앱 전체가 깨집니다
  *
  * ╔═══════════════════════════════════════════════════════════════╗
- * ║ ★★ v3.1 적용 순서 ★★                                            ║
+ * ║ ★★ v3.2 적용 순서 ★★                                            ║
  * ╚═══════════════════════════════════════════════════════════════╝
  *  1) 편집기에 이 코드를 붙여넣고 [저장]
  *  2) ★먼저★ 함수 목록에서 setupHandoverColumns 를 골라 [실행]
@@ -26,7 +26,7 @@
  *     ※ 이 열들이 없으면 저장은 되지만 해당 값은 기록되지 않고, 응답 warnings 로
  *       "저장되지 않았다"고 알린다(프런트가 '저장됨'이라고 말하지 않는다).
  *  3) [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]  ※ "새 배포"가 아님(URL 유지)
- *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.1.0"}
+ *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.2.0"}
  *
  * v3.1 주요 변경
  *  · 사진 저장 실패를 성공으로 처리하지 않는다(행도 쓰지 않고 실패 응답)
@@ -35,6 +35,11 @@
  *  · 인증 서버 장애 시 '검증되지 않은 임의 토큰'을 통과시키지 않는다
  *  · 화면 입력(UI/HP Ver·노즐 제조일자·A/S 결과·비고·장비 구분·유형 코드)을 실제 열에 기록
  *  · 사용자 입력이 시트 수식으로 해석되지 않게 방어 + 서버측 길이·허용값 검증
+ *
+ * v3.2 주요 변경
+ *  · force=1 조회는 서버 캐시를 우회해 수동 새로고침의 최신성을 보장
+ *  · all·병원DB·이슈이력·부트스트랩에 rev/nochange 조건부 응답 적용
+ *  · 데이터 캐시와 리비전 메타를 함께 무효화해 오래된 nochange 방지
  *
  * 엔드포인트
  *  POST                          : 행 기록 (수기 입력 열만 기록, 수식 열 보존)
@@ -50,8 +55,8 @@
  *  POST {action:'weeklywrite'}   : [v2.1] 주간업무보고 본문을 작성자 탭 최상단에 삽입
  *  POST {action:'menu_save'}     : [v2.2] 허브 메뉴 표시/레벨/순서 저장 (Lv.3 토큰 필요)
  *  GET ?action=ping              : 콜드스타트 예열
- *  GET ?action=all               : 대시보드/주간보고용 전체 데이터
- *  GET ?action=hospdb            : 병원정보DB 목록
+ *  GET ?action=all&force=1|rev=  : 대시보드/주간보고용 전체 데이터(강제/조건부)
+ *  GET ?action=hospdb&force=1|rev= : 병원정보DB 목록(강제/조건부)
  *  GET ?action=inventory         : 재고 요약 4종
  *  GET ?action=recent&hosp=병원명&limit=5 : 해당 병원 최근 처리 이력
  *  GET ?action=today&fse=이름    : 오늘 기록 확인 (fse 생략 시 전체)
@@ -811,13 +816,13 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.1.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.2.0', warmed:warmed, pong:new Date().toISOString()});
     }
-    if(action==='all')    return json_(getAll_());
-    if(action==='hospdb') return json_(getHospDB_());
-    if(action==='hospdbrich') return json_(getHospDBRich_());   /* [Core] 병원정보DB 전체필드(hospital_gas 대체) */
-    if(action==='issuehist')  return json_(getIssueHist_());    /* [Core] 병원별 이슈이력(hospital_issue_gas 대체) */
-    if(action==='bootstrap')  return json_(getBootstrap_());    /* [Core] hospital-pc 부트 1콜(hospdbrich+issuehist) */
+    if(action==='all')    return json_(getAll_(p));
+    if(action==='hospdb') return json_(getHospDB_(p));
+    if(action==='hospdbrich') return json_(getHospDBRich_(p));  /* [Core] 병원정보DB 전체필드(hospital_gas 대체) */
+    if(action==='issuehist')  return json_(getIssueHist_(p));   /* [Core] 병원별 이슈이력(hospital_issue_gas 대체) */
+    if(action==='bootstrap')  return json_(getBootstrap_(p));   /* [Core] hospital-pc 부트 1콜(hospdbrich+issuehist) */
     if(action==='inventory') return json_(getInventory_());
     if(action==='ncare')  return json_(getNcare_());            /* [v2.3] N-care 가입 현황 */
     if(action==='recent') return json_(getRecent_(p.hosp||'', Number(p.limit)||5));
@@ -916,6 +921,7 @@ function weeklyAutoSave_(p){
   sh.clear();
   sh.getRange(1,1).setValue('작성자');
   if(uniq.length) sh.getRange(2,1,uniq.length,1).setValues(uniq.map(function(w){return [w];}));
+  try{ syncCacheDrop_('handover_bootstrap'); }catch(e){}
   return {success:true, count:uniq.length, writers:uniq};
 }
 
@@ -1350,11 +1356,12 @@ function slim_(o){
 function bazDropHandoverCaches_(hosp){
   if(typeof bazCacheDrop_ !== 'function') return;
   try{
-    bazCacheDrop_('handover_all');
-    bazCacheDrop_('hv_master');
-    bazCacheDrop_('handover_issuehist');    /* [Core] 이슈이력 */
-    bazCacheDrop_('handover_hospdb_rich');  /* [Core] 병원정보DB(rich) */
-    bazCacheDrop_('handover_hospdb');       /* thin(N-Care 산출용) */
+    syncCacheDrop_('handover_all');
+    syncCacheDrop_('hv_master');
+    syncCacheDrop_('handover_issuehist');    /* [Core] 이슈이력 */
+    syncCacheDrop_('handover_hospdb_rich');  /* [Core] 병원정보DB(rich) */
+    syncCacheDrop_('handover_hospdb');       /* thin(N-Care 산출용) */
+    syncCacheDrop_('handover_bootstrap');    /* handover 부트 묶음 */
     if(hosp){
       var n = norm_(hosp);
       /* getRecent_ 는 limit 별로 키가 갈린다 — 클라이언트가 쓰는 범위만 지운다 */
@@ -1372,22 +1379,68 @@ function runDropCaches(){ bazDropHandoverCaches_(); Logger.log('✅ handover 캐
     [수정] 예전에는 `if(s.length < 95000)` 이라, 시트가 자라 그 선을 넘는 순간 캐시가
     조용히 무력화되고 모든 요청이 시트를 통째로 다시 읽었다("데이터가 늘수록 느려짐"의
     핵심 원인). 조각 캐시로 바꿔 크기 제한을 없앤다(baz_token_lib.gs). */
-function getAll_(){
-  var hit = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
-  if(hit){ try{ return JSON.parse(hit); }catch(e){} }
+function syncForce_(p){ return !!(p && /^(1|true|yes)$/i.test(String(p.force||''))); }
+
+/* [v3.2] 조건부 동기화 메타데이터.
+   대용량 조각 캐시를 매번 복원하기 전에 작은 rev 메타만 확인해 변경이 없으면 즉시 끝낸다. */
+function syncRevOf_(value){
+  var bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,
+    JSON.stringify(value==null?null:value), Utilities.Charset.UTF_8);
+  return bytes.slice(0,12).map(function(b){ return ('0'+((b+256)%256).toString(16)).slice(-2); }).join('');
+}
+function syncRevParam_(p, name){ return String((p && p[name||'rev']) || '').trim().slice(0,64); }
+function syncMetaGet_(key){
+  if(typeof bazCacheGet_ !== 'function') return null;
+  var raw=bazCacheGet_(key+'__meta');
+  if(!raw) return null;
+  try{ return JSON.parse(raw); }catch(e){ return null; }
+}
+function syncMetaPut_(key, out, ttl){
+  if(typeof bazCachePut_ !== 'function' || !out || !out.rev) return;
+  var meta={rev:out.rev, updated:out.updated||'', count:Number(out.count)||0};
+  try{ bazCachePut_(key+'__meta', JSON.stringify(meta), ttl); }catch(e){}
+}
+function syncNochange_(key, p, paramName){
+  if(syncForce_(p)) return null;
+  var asked=syncRevParam_(p,paramName);
+  if(!asked) return null;
+  var meta=syncMetaGet_(key);
+  if(!meta || meta.rev!==asked) return null;
+  return {success:true, nochange:true, rev:meta.rev, updated:meta.updated||'', count:Number(meta.count)||0};
+}
+function syncNochangeFrom_(out, p, paramName){
+  if(syncForce_(p)) return null;
+  var asked=syncRevParam_(p,paramName);
+  if(!asked || !out || !out.rev || asked!==out.rev) return null;
+  return {success:true, nochange:true, rev:out.rev, updated:out.updated||'', count:Number(out.count)||0};
+}
+function syncCacheDrop_(key){
+  if(typeof bazCacheDrop_ !== 'function') return;
+  bazCacheDrop_(key); bazCacheDrop_(key+'__meta');
+}
+
+function getAll_(p){
+  var same=syncNochange_('handover_all',p,'rev');
+  if(same) return same;
+  var hit = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
+  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
   var all = readAll_();
   var out = {success:true, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
              data:all.rows.map(slim_)};
+  out.rev=syncRevOf_(out.data);
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', JSON.stringify(out), 300); }catch(e){}
+  syncMetaPut_('handover_all',out,300);
+  var builtSame=syncNochangeFrom_(out,p,'rev'); if(builtSame) return builtSame;
   return out;
 }
 
 /** 병원정보DB 탭 → 병원명·N-Care·지역 목록 (N-Care 미점검 산출용, 10분 캐시) */
-function getHospDB_(){
-  var cache = CacheService.getScriptCache();
-  var _h = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb') : null;
-  if(_h){ try{ return JSON.parse(_h); }catch(e){} }
+function getHospDB_(p){
+  var same=syncNochange_('handover_hospdb',p,'rev');
+  if(same) return same;
+  var _h = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb') : null;
+  if(_h){ try{ var old=JSON.parse(_h), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
   var sh = sheet_('병원정보DB');
   if(!sh) return {success:false, error:'병원정보DB 탭 없음'};
   var v = sh.getDataRange().getDisplayValues();
@@ -1422,17 +1475,22 @@ function getHospDB_(){
   }
   var res={success:true, count:out.length, data:out,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  res.rev=syncRevOf_(res.data);
   /* [수정] 95KB 절벽 제거 — 조각 캐시로 크기 제한 없이 저장 */
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb', JSON.stringify(res), 600); }catch(e){}
+  syncMetaPut_('handover_hospdb',res,600);
+  var builtSame=syncNochangeFrom_(res,p,'rev'); if(builtSame) return builtSame;
   return res;
 }
 
 /** [Core] 병원정보DB(rich) — hospital_gas 를 대체. openById 로 rich 스프레드시트를 읽어
     hospital-pc 가 기대하는 전체 필드({name,sn,region,address,lastVisit,status,sales,asType,
     ncare,client,hpVer,uiVer,lat,lng})로 반환한다. (기존 hospital_gas 응답과 동일 형태) */
-function getHospDBRich_(){
-  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
-  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
+function getHospDBRich_(p, revParam){
+  var rp=revParam||'rev', same=syncNochange_('handover_hospdb_rich',p,rp);
+  if(same) return same;
+  var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return nc||old; }catch(e){} }
   var ss = richHospSS_();
   if(!ss) return {success:false, error:'스프레드시트 접근 불가'};
   var sheet = ss.getSheetByName(HOSPDB_RICH.SHEET);
@@ -1454,8 +1512,12 @@ function getHospDBRich_(){
         lat:num_(r[12], 33, 39), lng:num_(r[13], 124, 132)
       };
     });
-  var res = {success:true, data:hospitals};
+  var res = {success:true, count:hospitals.length, data:hospitals,
+    updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  res.rev=syncRevOf_(res.data);
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb_rich', JSON.stringify(res), 600); }catch(e){}
+  syncMetaPut_('handover_hospdb_rich',res,600);
+  var builtSame=syncNochangeFrom_(res,p,rp); if(builtSame) return builtSame;
   return res;
 }
 
@@ -1472,9 +1534,11 @@ function _issueDateNorm_(v){
 /** [Core] 병원별 이슈이력 — hospital_issue_gas 를 대체. 현장 처리 기록에서 직접 산출한다.
     필드 매핑(현장기록 → 이슈이력): 처리일→d · CS담당자→f · 점검/AS→t · 대분류→pt · 유형→sy ·
     교체품→p · 내용→fx · 유무상→pay. (기존 hospital_issue_gas 응답과 동일 형태) */
-function getIssueHist_(){
-  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
-  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
+function getIssueHist_(p, revParam){
+  var rp=revParam||'rev', same=syncNochange_('handover_issuehist',p,rp);
+  if(same) return same;
+  var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return nc||old; }catch(e){} }
   var raw = histDerivedRaw_();
   var history = {};
   Object.keys(raw).forEach(function(name){ history[name] = histPublicList_(raw[name]); });
@@ -1496,8 +1560,12 @@ function getIssueHist_(){
       updatedAt:e ? e.updatedAt : '', updatedBy:e ? e.updatedBy : ''
     };
   });
-  var res = {success:true, data:history, revs:revs};
+  var res = {success:true, count:Object.keys(history).length, data:history, revs:revs,
+    updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+  res.rev=syncRevOf_({data:res.data,revs:res.revs});
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
+  syncMetaPut_('handover_issuehist',res,600);
+  var builtSame=syncNochangeFrom_(res,p,rp); if(builtSame) return builtSame;
   return res;
 }
 
@@ -1731,14 +1799,14 @@ function histSave_(p){
   }
   /* 락 밖에서: 감사 로그 + 이슈이력 캐시 무효화(다음 조회부터 편집본이 보이게) */
   try{ if(logRow) histSheet_(HIST.LOG_SHEET, HIST_LOG_HEAD).appendRow(logRow); }catch(e){}
-  try{ if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('handover_issuehist'); }catch(e){}
+  try{ syncCacheDrop_('handover_issuehist'); }catch(e){}
   return res;
 }
 
 /** [Core] hospital-pc 부트 1콜 — rich 병원정보DB + 이슈이력을 한 응답에 합친다.
     각각 조각캐시라 대개 캐시 히트. 클라이언트는 d.hospdb.data / d.issuehist.data 로 사용. */
-function getBootstrap_(){
-  return { success:true, ver:'3.0.0', hospdb:getHospDBRich_(), issuehist:getIssueHist_() };
+function getBootstrap_(p){
+  return { success:true, ver:'3.2.0', hospdb:getHospDBRich_(p,'hrev'), issuehist:getIssueHist_(p,'irev') };
 }
 
 /** 특정 병원 최근 이력 */
@@ -1811,23 +1879,31 @@ function saveCheck_(p){
  * (전체 필드가 필요하면 기존 ?action=hospdbrich 를 따로 부른다 — 2단 구조)
  */
 function getHandoverBootstrap_(p){
-  var out = {success:true, ver:'3.1.0',
+  var same=syncNochange_('handover_bootstrap',p,'rev');
+  if(same) return same;
+  var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
+  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
+  var out = {success:true, ver:'3.2.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }
     catch(e){ out[name] = {success:false, error:String(e)}; }
   }
-  part('hospdb',     function(){ return getHospDBRich_(); });
-  part('master',     function(){ return getMaster_(); });
+  part('hospdb',     function(){ return getHospDBRich_(p); });
+  part('master',     function(){ return getMaster_(p); });
   part('contenttpl', function(){ return contentTplGet_(); });
   part('weeklyauto', function(){ return weeklyAutoGet_(); });
+  out.rev=syncRevOf_({hospdb:out.hospdb,master:out.master,contenttpl:out.contenttpl,weeklyauto:out.weeklyauto});
+  try{ if(typeof bazCachePut_==='function') bazCachePut_('handover_bootstrap',JSON.stringify(out),120); }catch(e){}
+  syncMetaPut_('handover_bootstrap',out,120);
+  var builtSame=syncNochangeFrom_(out,p,'rev'); if(builtSame) return builtSame;
   return out;
 }
 
 /** 유형 마스터: 유형마스터 시트가 있으면 우선, 없으면 데이터에서 추출 */
-function getMaster_(){
+function getMaster_(p){
   /* [성능] 유형마스터는 거의 안 바뀌는데 readAll_ 전체 스캔까지 하고 있었다 → 10분 캐시 */
-  var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_('hv_master') : null;
+  var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('hv_master') : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
   var out = {success:true, source:'', taxonomy:{}, parts:[], fse:[], guides:{}};
   var msh = sheet_(CONFIG.MASTER_SHEET);

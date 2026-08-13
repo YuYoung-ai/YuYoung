@@ -23,7 +23,8 @@ const require = createRequire(import.meta.url);
 
 const HTML = fs.readFileSync(path.join(ROOT, 'handover.html'), 'utf8');
 const GAS = fs.readFileSync(path.join(ROOT, 'handover_gas.gs'), 'utf8');
-const JS = HTML.slice(HTML.indexOf('<script>\nfunction el(id)'), HTML.lastIndexOf('</script>'));
+const SCRIPT_AT = HTML.search(/<script>\r?\nfunction el\(id\)/);
+const JS = HTML.slice(SCRIPT_AT, HTML.lastIndexOf('</script>'));
 
 const H = require(path.join(ROOT, 'js', 'baz-handover-core.js'));
 
@@ -75,7 +76,7 @@ ck('토큰 없이 fetch 하던 옛 경로가 남아 있지 않다',
 const gv = grab(JS, 'gv');
 ck('공통 조회 헬퍼 gv() 도 토큰을 붙인다', /_tk\(HANDOVER_URL/.test(gv));
 ck('부트스트랩·savecheck·템플릿 요청에도 토큰이 붙는다',
-  /_tk\(postUrl\(\)\+'\?action=handover_bootstrap'\)/.test(JS) &&
+  /bootUrl=postUrl\(\)\+'\?action=handover_bootstrap'/.test(JS) && /bazGetJson\(_tk\(bootUrl\)/.test(JS) &&
   /_tk\(postUrl\(\)\+'\?action=savecheck/.test(JS) &&
   /_tk\(postUrl\(\)\+'\?action=contenttpl'\)/.test(JS));
 ck('임베드 폴백/인증 실패/네트워크 실패를 구분해 표시한다',

@@ -37,7 +37,8 @@ inlineSyntax('hospital-pc',H);
 inlineSyntax('handover',O);
 
 const dLoad=grab(D,'loadData'),dBoot=grab(D,'boot'),dHosp=grab(D,'loadHospDB'),dGv=grab(D,'gv');
-ck('대시보드: 연속 새로고침은 진행 중 Promise 공유',/if\(DASH_LOAD_IN_FLIGHT\) return DASH_LOAD_IN_FLIGHT/.test(dLoad));
+ck('대시보드: 연속 새로고침은 진행 중 Promise 공유',
+  /if\(DASH_LOAD_IN_FLIGHT\)[\s\S]{0,260}return DASH_LOAD_IN_FLIGHT/.test(dLoad));
 ck('대시보드: 전체 로드당 병원 DB 호출 지점 1개',(dLoad.match(/loadHospDB\(/g)||[]).length===1);
 ck('대시보드: 캐시·시트 boot에서 병원 DB 재호출 없음',!/\bloadHospDB\(/.test(dBoot));
 ck('대시보드: 병원 DB 요청도 진행 중 Promise 공유',/if\(HOSPDB_IN_FLIGHT\) return HOSPDB_IN_FLIGHT/.test(dHosp));
@@ -54,7 +55,7 @@ ck('병원 화면: 새로고침은 주요 GAS 결과를 한 번에 판정',
 ck('병원 화면: bootstrap 폴백은 구버전일 때만 실행',
   /if\(e && e\.kind==='bootstrap-unsupported'\)/.test(hBoot)&&/동기화 실패 — 캐시 유지/.test(hBoot));
 ck('병원 화면: bootstrap 중복 요청 방지',
-  /if\(BAZ_BOOT_IN_FLIGHT\) return BAZ_BOOT_IN_FLIGHT/.test(hBoot));
+  /if\(BAZ_BOOT_IN_FLIGHT\)[\s\S]{0,260}return BAZ_BOOT_IN_FLIGHT/.test(hBoot));
 ck('병원 화면: progress 폴링 중복 요청 방지',
   /if\(pcProgInFlight\) return pcProgInFlight/.test(hPull));
 ck('병원 화면: 다음 폴링은 현재 요청 종료 후 예약',
