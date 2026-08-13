@@ -172,6 +172,29 @@
   /* 선택 병원 강조 링 — 클러스터에 묶여도 보이도록 마커 위에 얹는 단일 오버레이 */
   .pc-selring{width:30px;height:30px;border-radius:50%;border:3px solid var(--navy);background:rgba(27,47,94,.12);box-shadow:0 0 0 2px #fff, 0 2px 8px rgba(20,34,66,.35);pointer-events:none;animation:pcSelPop .18s ease-out;}
   @keyframes pcSelPop{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  /* 지도 말풍선(InfoWindow) — 병원 정보 + 최근 이력 요약 + 전체 이력 버튼.
+     카카오 InfoWindow 의 바탕은 항상 흰색이라 다크 모드 변수를 쓰면 글자가 사라진다.
+     여기서만 고정 색을 쓴다(페이지 테마와 무관하게 항상 읽히도록). */
+  .pc-iw{font-family:'Noto Sans KR',sans-serif;padding:10px 12px 11px;min-width:206px;max-width:290px;color:#2B3A55;}
+  .pc-iw .iw-nm{font-size:13.5px;font-weight:800;color:#1B2F5E;line-height:1.35;word-break:break-all;margin-bottom:6px;padding-right:16px;}
+  .pc-iw .iw-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px;}
+  .pc-iw .iw-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:#EEF1F7;color:#5A6B8C;white-space:nowrap;}
+  .pc-iw .iw-tag.prog{background:#2E7D9E;color:#fff;}
+  .pc-iw .iw-rows{display:grid;grid-template-columns:auto 1fr;gap:3px 9px;font-size:11px;margin-bottom:8px;}
+  .pc-iw .iw-rows .k{color:#7C8AA5;white-space:nowrap;}
+  .pc-iw .iw-rows .v{color:#2B3A55;word-break:break-all;}
+  .pc-iw .iw-h{font-size:11px;font-weight:800;color:#1B2F5E;border-top:1px solid #E2E7F0;padding-top:7px;margin-bottom:5px;}
+  .pc-iw .iw-hist{display:flex;flex-direction:column;gap:6px;max-height:136px;overflow:auto;overscroll-behavior:contain;margin-bottom:9px;}
+  .pc-iw .iw-hi{font-size:11px;line-height:1.45;border-left:2px solid #2E7D9E;padding-left:7px;color:#5A6B8C;}
+  .pc-iw .iw-hi .d{font-weight:800;color:#1B2F5E;}
+  .pc-iw .iw-hi .tp{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:5px;background:#DFF0F6;color:#1F6F94;margin-left:4px;}
+  .pc-iw .iw-hi .tp.as{background:#EFE4F7;color:#7B4BA8;}
+  .pc-iw .iw-hi .m{display:block;color:#2B3A55;}
+  .pc-iw .iw-empty{font-size:11px;color:#7C8AA5;margin-bottom:9px;}
+  .pc-iw .iw-btn{display:block;width:100%;border:0;background:#2E7D9E;color:#fff;font-size:11.5px;font-weight:800;
+    padding:7px 8px;border-radius:7px;cursor:pointer;font-family:inherit;line-height:1.2;}
+  .pc-iw .iw-btn:hover{filter:brightness(1.08);}
+
   /* 상세 패널 — 예전에는 inset:0 로 지도를 통째로 가리고(#pcMapPane visibility:hidden)
      지도 문맥이 사라졌다. 넓은 화면에서는 오른쪽 drawer 로 얹어 지도를 계속 보여준다.
      좁은 화면(≤980px)에서만 전면을 덮는다. */
@@ -261,18 +284,8 @@
   #pcRight.detail #pcMapLegend{display:none;}
   @media(max-width:980px){ #pcMapLegend{display:none;} }
 
-  /* 내 주변 5km (브라우저 위치 기준) — '검색 결과 주변 5km 참고 마커'와 다른 기능 */
-  #nearbyBox{display:flex;flex-direction:column;gap:6px;}
-  #nearbyBtn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:9px 10px;border-radius:9px;
-    border:1.5px solid var(--teal);background:var(--surface);color:var(--teal);font-weight:800;font-size:12.5px;
-    cursor:pointer;font-family:inherit;line-height:1.25;}
-  #nearbyBtn:hover{background:var(--teal-soft);}
-  #nearbyBtn.on{background:var(--teal);color:#fff;}
-  #nearbyBtn[disabled]{opacity:.5;cursor:not-allowed;}
-  #nearbyState{font-size:11px;line-height:1.45;color:var(--text-muted);padding:0 2px;}
-  #nearbyState.err{color:var(--danger);}
-  #nearbyState.ok{color:var(--ok);}
-  #nearbyState.busy{color:var(--info);}
+  /* ※ '내 주변 5km N-CARE 병원 조회'(브라우저 위치 기준 필터)는 제거했다.
+       지도에 뜨는 '검색 결과 주변 5km 참고 마커'(pcDrawNearby)는 다른 기능이라 그대로 둔다. */
 
   /* 이력 편집: 서버 저장 상태 · 이 기기 초안 안내 */
   .hist-note{margin:0 0 10px;padding:8px 11px;border-radius:9px;font-size:11.5px;line-height:1.5;
@@ -346,55 +359,17 @@
   body.mode-window #viewList>#pcPane{grid-column:2;min-width:0;}
   @media(max-width:980px){ body.mode-window #viewList{grid-template-columns:1fr;} body.mode-window #filterRail{position:static;max-height:none;overflow:visible;} }
 
-  /* ═══ 1200px 이상: 필터 · 결과 목록 · 지도 3열 작업공간 ═══════════════════
-     예전 구조는 "상단 sticky 지도 + 아래로 끝없이 이어지는 카드 목록" 이었다.
-     목록을 보려면 본문을 굴려야 하는데 그 스크롤이 지도(sticky)·필터 레일·
-     상세 패널과 뒤엉켜, 어디를 굴리는지 예측할 수 없었다.
-     → 넓은 화면에서는 스크롤 주인을 하나로 정한다: "결과 목록만 스크롤한다."
-        필터 레일과 지도는 뷰포트 높이 안에 고정되고, 본문은 거의 움직이지 않는다.
-     980~1199px 는 기존 2열(지도 위 · 결과 아래) 구조를 그대로 둔다. */
-  @media(min-width:1200px){
-    body.mode-window #viewList{grid-template-columns:250px minmax(380px,440px) minmax(420px,1fr);}
-    body.mode-window.filt-wide #viewList{grid-template-columns:440px minmax(380px,440px) minmax(380px,1fr);}
-    body.mode-window.filt-hide #viewList{grid-template-columns:44px minmax(380px,480px) minmax(420px,1fr);}
-    /* #pcPane 을 투명하게 만들어 자식(툴바·결과·지도)이 그대로 그리드 아이템이 된다.
-       마크업을 옮기지 않으므로 JS 쪽 DOM 참조는 하나도 바뀌지 않는다. */
-    body.mode-window #pcPane{display:contents;}
-    body.mode-window #filterRail{grid-column:1;grid-row:1 / span 2;}
-    body.mode-window #pcToolbar{grid-column:2;grid-row:1;margin:0 0 10px;}
-    body.mode-window #pcLeft{
-      grid-column:2;grid-row:2;
-      max-height:calc(100vh - var(--hdr-h,56px) - 132px);
-      overflow:auto;overscroll-behavior:contain;padding-right:4px;
-    }
-    body.mode-window #pcRight{
-      grid-column:3;grid-row:1 / span 2;
-      position:sticky;top:calc(var(--hdr-h,56px) + 12px);
-      height:calc(100vh - var(--hdr-h,56px) - 28px);
-      margin-bottom:0;
-    }
-    /* 일정 안내가 보일 때는 필터+목록 위 1행을 따로 확보한다. 지도는 3열의 첫 행부터
-       유지해 안내 높이만큼 아래로 밀려 뷰포트 밖으로 잘리지 않게 한다. */
-    body.mode-window.pc-schednotice #schedNotice{grid-column:1 / 3;grid-row:1;}
-    body.mode-window.pc-schednotice #filterRail{grid-row:2 / span 2;}
-    body.mode-window.pc-schednotice #pcToolbar{grid-row:2;}
-    body.mode-window.pc-schednotice #pcLeft{grid-row:3;}
-    body.mode-window.pc-schednotice #pcRight{grid-row:1 / span 3;}
-    /* 지도가 뷰포트 높이를 채우므로 높이 드래그는 의미가 없다(접기·고정은 그대로 둔다) */
-    body.mode-window #pcMapGrip{display:none;}
-    /* 표 뷰: 지도를 숨기므로 결과가 남은 폭을 전부 쓴다 */
-    body.mode-window.pc-table #viewList{grid-template-columns:250px minmax(0,1fr);}
-    body.mode-window.pc-table.filt-wide #viewList{grid-template-columns:440px minmax(0,1fr);}
-    body.mode-window.pc-table.filt-hide #viewList{grid-template-columns:44px minmax(0,1fr);}
-    body.mode-window.pc-table #pcLeft{max-height:none;overflow:visible;padding-right:0;}
-    /* 전체화면은 position:fixed 로 그리드 밖에 나간다 */
-    body.mode-window.pc-mapfs #pcRight{grid-column:auto;grid-row:auto;}
-    /* 창 높이가 작을 때(노트북 768px 등) 지도 하단 컨트롤이 잘리지 않도록 최소 높이 보장 */
-    @media(max-height:720px){
-      body.mode-window #pcRight{height:calc(100vh - var(--hdr-h,56px) - 20px);min-height:320px;}
-      body.mode-window #pcLeft{max-height:calc(100vh - var(--hdr-h,56px) - 120px);}
-    }
-  }
+  /* ═══ 지도는 항상 '상단 전폭 고정' ══════════════════════════════════════
+     한동안 1200px 이상에서 "필터 · 결과 목록 · 지도" 3열을 썼다(지도가 오른쪽 칸).
+     실사용에서 문제가 컸다:
+       · 지도 칸이 좁고 세로로 길어 전국·수도권 형태를 한눈에 보기 어려웠다
+       · 결과 목록(#pcLeft)이 자체 스크롤 컨테이너가 되어 본문 스크롤과 이중이 됐고,
+         지도 위 휠을 목록으로 대신 흘려보내는 우회 코드까지 필요했다
+       · #pcRight 가 sticky + 뷰포트 기준 높이 + 그리드 행 스팬을 동시에 갖는 바람에
+         확대/축소 중 컨테이너 크기 재계산이 엇갈려 타일이 회색으로 남는 경우가 있었다
+     → 넓은 화면에서도 지도는 위에 전폭으로 고정하고, 표·카드는 그 아래를 쓴다.
+       (표 뷰는 기존대로 지도를 숨기고 전체 폭을 쓴다 — 아래 .pc-table 규칙)
+     레이아웃 규칙은 L87 의 sticky 지도 하나로 일원화된다. */
 
   /* 탭 */
   .tabs{display:flex;gap:6px;margin-bottom:14px;background:var(--surface);border:1px solid var(--gray-line);border-radius:12px;padding:4px;}
@@ -409,14 +384,6 @@
   #searchInput:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
   .search-clear{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--gray-line);
     border:none;border-radius:50%;width:22px;height:22px;font-size:13px;color:#fff;cursor:pointer;display:none;line-height:1;}
-
-  /* 근처 조회 */
-  .nearby-btn{width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(135deg,var(--teal),var(--navy));
-    color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px;}
-  .nearby-btn:active{opacity:.9;}
-  .nearby-btn.active{background:linear-gradient(135deg,var(--purple),var(--purple));}
-  .nearby-status{font-size:11px;color:var(--text-muted);text-align:center;margin:-6px 0 12px;line-height:1.5;display:none;}
-
 
   /* 필터 */
   .filter-section{margin-bottom:12px;}
@@ -798,7 +765,6 @@
 <script src="js/baz-modal.js"></script>
 <script src="js/baz-map-controller.js"></script>
 <script src="js/baz-hospital-data.js"></script>
-<script src="js/baz-nearby.js"></script>
 <script src="js/baz-history-api.js"></script>
 </head>
 <body>
@@ -808,7 +774,7 @@
     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="18" fill="#16264D"/><text x="50" y="58" font-family="Georgia,serif" font-size="42" font-weight="700" fill="#9EB4E0" text-anchor="middle">baz</text></svg>
     <div>
       <h1 id="hdrTitle">병원 데이터 센터</h1>
-      <div class="subtitle" id="hdrSub">검색 · 점검현황 · 근처 N-CARE</div>
+      <div class="subtitle" id="hdrSub">검색 · 점검현황 · 지도</div>
     </div>
   </div>
   <div class="hdr-ctrls">
@@ -863,15 +829,6 @@
       </div>
     </div>
 
-    </div>
-
-    <!-- 내 주변 5km N-CARE — 브라우저 위치 기준 모드.
-         (지도에 뜨는 '검색 결과 주변 5km 참고 마커'와는 별개 기능)
-         #filterSticky 밖에 둔다 — 모바일에서 sticky 헤더가 더 두꺼워지면
-         화면에 남는 카드 영역이 그만큼 줄어든다. -->
-    <div class="filter-section" id="nearbyBox">
-      <button type="button" id="nearbyBtn" aria-pressed="false">📍 <span id="nearbyBtnLabel">내 주변 5km N-CARE 병원 조회</span></button>
-      <div id="nearbyState" role="status" aria-live="polite"></div>
     </div>
 
     <div class="stats" id="stats"></div>
@@ -1041,7 +998,7 @@ const HISTORY = {};
 
 // ===== i18n =====
 const I18N = {
-  ko:{ title:'병원 데이터 센터', sub:'검색 · 점검현황 · 근처 N-CARE', menu:'메뉴',
+  ko:{ title:'병원 데이터 센터', sub:'검색 · 점검현황 · 지도', menu:'메뉴',
     tabList:'병원 조회', tabSched:'현장 일정', tabDash:'점검 현황', tabRecent:'최근 처리',
     schTitle:'현장 일정', schAddFse:'담당자 일정 추가', schPickFse:'담당자 선택', schAddHosp:'병원 추가 (검색)',
     schWait:'대기', schProg:'진행중', schDone:'완료', schReset:'초기화', schEmpty:'등록된 일정이 없습니다',
@@ -1051,15 +1008,13 @@ const I18N = {
     rcCount:'{n}건 · 병원 {h}곳', rcEmpty:'해당 기간에 처리 내역이 없습니다',
     rcInsp:'점검', rcAS:'A/S', rcFse:'처리자', rcPart:'교체품', rcMore:'이력 전체보기',
     rcRangeLabel:'기간', rcAllFse:'전체 처리자',
-    searchPh:'병원명 검색...', nearby:'내 주변 5km N-CARE 병원 조회', nearbyOff:'근처 조회 끄기',
+    searchPh:'병원명 검색...',
     all:'전체', ncare:'N-CARE', due:'점검필요', allSales:'전체 영업담당', allRegion:'전체 지역',
-    locating:'현재 위치 확인 중...', locFail:'위치를 가져올 수 없습니다. 권한을 확인하세요.',
-    nearbyResult:'주변 5km 내 N-CARE 병원 {n}곳',
     resultN:'{n}곳', nmap:'네이버지도', insp:'점검접수', surv:'만족도',
     mapTitle:'지도', mapControls:'지도 컨트롤', mapZoomIn:'확대', mapZoomOut:'축소', mapFitAll:'전체 보기', mapFullscreen:'전체화면', mapExitFull:'전체화면 해제', mapCollapse:'지도 접기', mapExpand:'지도 펼치기', mapResize:'드래그로 높이 조절', mapPin:'스크롤 고정', mapUnpin:'고정 해제', mapNearby:'주변 5km {n}곳', mapReset:'높이 초기화',
     lastInsp:'최근 점검', lastVisit:'최근 방문', noInsp:'점검 이력 없음', noVisit:'방문 이력 없음',
     sales:'영업', sn:'장비', notTarget:'점검 비대상',
-    empty:'검색 결과가 없습니다', emptyNear:'주변 5km 내 N-CARE 가입 병원이 없습니다',
+    empty:'검색 결과가 없습니다',
     stTotal:'전체', stNcare:'N-CARE', stDue:'점검필요', more:'더 보기',
     dayAgo:'{d}일 경과', overDue:'⚠ 점검기한 초과', nearDue:'점검기한 임박',
     histBtn:'이력', histTitle:'처리 이력', histCount:'총 {n}건', histEmpty:'처리 이력이 없습니다',
@@ -1075,9 +1030,7 @@ const I18N = {
     vocByMonth:'월별', vocByWeek:'주차별', vocAll:'전체', vocNoData:'해당 기간 데이터 없음', vocPickPeriod:'기간을 선택하세요', vocFieldCheck:'현장 확인 내용', vocReported:'접수 현상(고객)', vocNoIssue:'이상없음',
     vocYear:'년', vocMonthLabel:'월', vocWeekLabel:'주차', vocYearSuffix:'년', vocMonSuffix:'월', vocWeekSuffix:'주차',
     bNormal:'정상(~30일)', bTarget:'점검대상', bRec:'권고', bWarn:'경고', bNone:'미점검',
-    /* ── v3: 내 주변 5km · 지도 범례/조작 · 이력 서버 저장 ── */
-    nearbyOn:'📍 내 위치 기준 · N-CARE {n}곳', locDenied:'위치 권한이 거부되었습니다. 브라우저 주소창의 위치 아이콘에서 허용해 주세요.',
-    locUnsupported:'이 브라우저에서는 위치 조회를 쓸 수 없습니다.', locOff:'내 주변 조회를 껐습니다 — 이전 검색·필터로 돌아갑니다.',
+    /* ── v3: 지도 범례/조작 · 이력 서버 저장 ── */
     mapFitResult:'결과 맞춤', mapFitResultTip:'현재 검색·필터 결과만 한 화면에', mapFitEvery:'전체(완료·진행중 포함)',
     mapFitEveryTip:'오늘 완료·진행중 마커까지 포함해 맞춤', mapClearSel:'선택 해제', mapNoResult:'맞출 결과가 없습니다',
     mapLegend:'지도 표시', lgResult:'검색 결과', lgNear:'결과 주변 5km', lgDone:'오늘 완료', lgProg:'진행중',
@@ -1096,7 +1049,7 @@ const I18N = {
     colName:'병원명', colRegion:'지역', colSales:'영업담당', colStatus:'상태', colDays:'점검경과',
     colNcare:'N-CARE', colClient:'거래처', dtAddr:'주소', dtSn:'장비번호', dtEdit:'✎ 편집',
     minUnit:'분', dayUnit:'일', notFound:'정보를 찾을 수 없습니다.' },
-  en:{ title:'Hospital Data Center', sub:'Search · Inspection · Nearby N-CARE', menu:'Menu',
+  en:{ title:'Hospital Data Center', sub:'Search · Inspection · Map', menu:'Menu',
     tabList:'Hospitals', tabSched:'Schedule', tabDash:'Status', tabRecent:'Recent',
     schTitle:'Field schedule', schAddFse:'Add staff schedule', schPickFse:'Select staff', schAddHosp:'Add hospital (search)',
     schWait:'Waiting', schProg:'In progress', schDone:'Done', schReset:'Reset', schEmpty:'No schedule yet',
@@ -1106,15 +1059,13 @@ const I18N = {
     rcCount:'{n} records · {h} hospitals', rcEmpty:'No service records in this period',
     rcInsp:'Inspect', rcAS:'A/S', rcFse:'By', rcPart:'Part', rcMore:'View full history',
     rcRangeLabel:'Period', rcAllFse:'All handlers',
-    searchPh:'Search hospital...', nearby:'Find N-CARE within 5km', nearbyOff:'Turn off nearby',
+    searchPh:'Search hospital...',
     all:'All', ncare:'N-CARE', due:'Due', allSales:'All sales', allRegion:'All regions',
-    locating:'Getting location...', locFail:'Cannot get location. Check permission.',
-    nearbyResult:'{n} N-CARE within 5km',
     resultN:'{n} found', nmap:'Naver Map', insp:'Inspect', surv:'Survey',
     mapTitle:'Map', mapControls:'Map controls', mapZoomIn:'Zoom in', mapZoomOut:'Zoom out', mapFitAll:'Fit all', mapFullscreen:'Fullscreen', mapExitFull:'Exit fullscreen', mapCollapse:'Collapse map', mapExpand:'Expand map', mapResize:'Drag to resize', mapPin:'Pin on scroll', mapUnpin:'Unpin', mapNearby:'{n} within 5km', mapReset:'Reset height',
     lastInsp:'Last insp.', lastVisit:'Last visit', noInsp:'No record', noVisit:'No visit',
     sales:'Sales', sn:'Unit', notTarget:'Not inspected',
-    empty:'No results', emptyNear:'No N-CARE hospitals within 5km',
+    empty:'No results',
     stTotal:'Total', stNcare:'N-CARE', stDue:'Due', more:'Load more',
     dayAgo:'{d}d ago', overDue:'⚠ Overdue', nearDue:'Due soon',
     histBtn:'History', histTitle:'Service history', histCount:'{n} records', histEmpty:'No service history',
@@ -1130,8 +1081,6 @@ const I18N = {
     vocByMonth:'Monthly', vocByWeek:'Weekly', vocAll:'All', vocNoData:'No data for this period', vocPickPeriod:'Select a period', vocFieldCheck:'Field findings', vocReported:'Reported (customer)', vocNoIssue:'No issue',
     vocYear:'Year', vocMonthLabel:'Month', vocWeekLabel:'Week', vocYearSuffix:'', vocMonSuffix:'M', vocWeekSuffix:'W',
     bNormal:'Normal(~30d)', bTarget:'Target', bRec:'Advised', bWarn:'Warning', bNone:'None',
-    nearbyOn:'📍 Near me · {n} N-CARE', locDenied:'Location permission denied. Allow it from the location icon in the address bar.',
-    locUnsupported:'Location lookup is not available in this browser.', locOff:'Nearby search off — back to your previous search and filters.',
     mapFitResult:'Fit results', mapFitResultTip:'Fit only the current search/filter results', mapFitEvery:'All (incl. done/in-progress)',
     mapFitEveryTip:'Fit including today\'s done and in-progress markers', mapClearSel:'Clear selection', mapNoResult:'No results to fit',
     mapLegend:'Map legend', lgResult:'Results', lgNear:'Within 5km of results', lgDone:'Done today', lgProg:'In progress',
@@ -1150,7 +1099,7 @@ const I18N = {
     colName:'Hospital', colRegion:'Region', colSales:'Sales', colStatus:'Status', colDays:'Since insp.',
     colNcare:'N-CARE', colClient:'Client', dtAddr:'Address', dtSn:'Unit no.', dtEdit:'✎ Edit',
     minUnit:'min', dayUnit:'d', notFound:'Not found.' },
-  ja:{ title:'病院データセンター', sub:'検索 · 点検状況 · 近隣N-CARE', menu:'メニュー',
+  ja:{ title:'病院データセンター', sub:'検索 · 点検状況 · 地図', menu:'メニュー',
     tabList:'病院照会', tabSched:'現場日程', tabDash:'点検状況', tabRecent:'最近の対応',
     schTitle:'現場日程', schAddFse:'担当者の日程追加', schPickFse:'担当者選択', schAddHosp:'病院追加(検索)',
     schWait:'待機', schProg:'進行中', schDone:'完了', schReset:'初期化', schEmpty:'登録された日程がありません',
@@ -1160,15 +1109,13 @@ const I18N = {
     rcCount:'{n}件 · 病院{h}件', rcEmpty:'この期間の対応履歴はありません',
     rcInsp:'点検', rcAS:'A/S', rcFse:'担当', rcPart:'交換品', rcMore:'履歴を全て表示',
     rcRangeLabel:'期間', rcAllFse:'全担当者',
-    searchPh:'病院名検索...', nearby:'近隣5kmのN-CARE病院', nearbyOff:'近隣検索オフ',
+    searchPh:'病院名検索...',
     all:'全体', ncare:'N-CARE', due:'要点検', allSales:'全営業担当', allRegion:'全地域',
-    locating:'現在地確認中...', locFail:'位置情報を取得できません。権限を確認してください。',
-    nearbyResult:'周辺5km以内のN-CARE病院 {n}件',
     resultN:'{n}件', nmap:'NAVER地図', insp:'点検受付', surv:'満足度',
     mapTitle:'地図', mapControls:'地図コントロール', mapZoomIn:'拡大', mapZoomOut:'縮小', mapFitAll:'全体表示', mapFullscreen:'全画面', mapExitFull:'全画面解除', mapCollapse:'地図をたたむ', mapExpand:'地図を開く', mapResize:'ドラッグで高さ調整', mapPin:'スクロール固定', mapUnpin:'固定解除', mapNearby:'周辺5km {n}件', mapReset:'高さリセット',
     lastInsp:'最終点検', lastVisit:'最終訪問', noInsp:'点検履歴なし', noVisit:'訪問履歴なし',
     sales:'営業', sn:'機器', notTarget:'点検対象外',
-    empty:'検索結果がありません', emptyNear:'周辺5km以内のN-CARE加入病院がありません',
+    empty:'検索結果がありません',
     stTotal:'全体', stNcare:'N-CARE', stDue:'要点検', more:'もっと見る',
     dayAgo:'{d}日経過', overDue:'⚠ 点検期限超過', nearDue:'点検期限間近',
     histBtn:'履歴', histTitle:'対応履歴', histCount:'計{n}件', histEmpty:'対応履歴がありません',
@@ -1184,8 +1131,6 @@ const I18N = {
     vocByMonth:'月別', vocByWeek:'週別', vocAll:'全体', vocNoData:'該当期間のデータなし', vocPickPeriod:'期間を選択してください', vocFieldCheck:'現場確認内容', vocReported:'受付現象(顧客)', vocNoIssue:'異常なし',
     vocYear:'年', vocMonthLabel:'月', vocWeekLabel:'週', vocYearSuffix:'年', vocMonSuffix:'月', vocWeekSuffix:'週',
     bNormal:'正常(~30日)', bTarget:'点検対象', bRec:'勧告', bWarn:'警告', bNone:'未点検',
-    nearbyOn:'📍 現在地基準 · N-CARE {n}件', locDenied:'位置情報の権限が拒否されました。アドレスバーの位置アイコンから許可してください。',
-    locUnsupported:'このブラウザでは位置情報を利用できません。', locOff:'近隣検索をオフにしました — 以前の検索・フィルターに戻ります。',
     mapFitResult:'結果に合わせる', mapFitResultTip:'現在の検索・フィルター結果だけを表示', mapFitEvery:'全体(完了・進行中含む)',
     mapFitEveryTip:'本日完了・進行中マーカーまで含めて表示', mapClearSel:'選択解除', mapNoResult:'表示する結果がありません',
     mapLegend:'地図の凡例', lgResult:'検索結果', lgNear:'結果の周辺5km', lgDone:'本日完了', lgProg:'進行中',
@@ -1214,7 +1159,7 @@ function t(k){ return I18N[LANG][k] || k; }
    같은 값으로 묶는다 — 예전에는 자동 선택만 900px 이라 900~980px 구간이 어긋났다. */
 var PC_WIDE_MIN=980;
 let curFilter='all', curTab='list';
-let nearbyMode=false, myPos=null, searchQ='', showCount=20;
+let searchQ='', showCount=20;
 let salesFilter='', regionFilter='';
 let kakaoLoaded=false;
 
@@ -1282,8 +1227,6 @@ function applyLang(){
   // 셀렉트 기본 옵션
   document.querySelector('#salesFilter option[value=""]').textContent=d.allSales;
   document.querySelector('#regionFilter option[value=""]').textContent=d.allRegion;
-  // 내 주변 5km 버튼·상태 문구도 현재 언어로 (KO/EN/JA)
-  try{ if(typeof nearbySyncUI==='function' && typeof pcNearby!=='undefined') nearbySyncUI(pcNearby.state(), {pos:pcNearby.pos()}); }catch(e){}
   // 지도 패널 라벨·범례·툴바도 다시 입힌다(pcEnsureDOM은 1회만 실행되므로)
   try{ if(typeof pcApplyPaneI18n==='function') pcApplyPaneI18n(); }catch(e){}
   render();
@@ -1442,10 +1385,6 @@ function updateFilterCounts(){ populateFilters(); updateStats(); }
 // ===== 필터링 =====
 function getFiltered(){
   let list=HOSPITALS.slice();
-  if(nearbyMode && myPos){
-    /* 내 위치 기준 5km · N-CARE · 좌표 있는 병원만, 가까운 순 (js/baz-nearby.js) */
-    return BazNearby.filterNearby(HOSPITALS, myPos, {km:BazNearby.DEFAULT_KM, isNcare:isNcare});
-  }
   if(curFilter==='ncare') list=list.filter(isNcare);
   else if(curFilter==='due') list=list.filter(isDue);
   if(salesFilter) list=list.filter(h=>h.sa===salesFilter);
@@ -1635,7 +1574,6 @@ function render(){
   try{ pcUpdateSchedNotice(); }catch(e){}
   // 결과 수 라벨(공통)
   if(list.length===0){ rc.textContent=''; }
-  else if(nearbyMode){ rc.innerHTML='<b>'+t('nearbyResult').replace('{n}',list.length)+'</b>'; }
   else { rc.innerHTML=t('resultN').replace('{n}','<b>'+list.length+'</b>'); }
 
   // Window(PC) 모드: 2-pane 렌더러로 위임
@@ -1645,7 +1583,7 @@ function render(){
 
   // ── Mobile 모드: 기존 단일 컬럼 카드 ──
   if(list.length===0){
-    cl.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>';
+    cl.innerHTML='<div class="empty"><div class="ico">🔍</div>'+t('empty')+'</div>';
     document.getElementById('loadMore').style.display='none'; return;
   }
   const shown=list.slice(0,showCount);
@@ -1757,7 +1695,7 @@ searchInput.addEventListener('input',()=>{
 searchClear.addEventListener('click',()=>{ searchInput.value=''; searchQ=''; searchClear.style.display='none'; showCount=20; updateFilterCounts(); render(); });
 
 document.getElementById('filterRow').addEventListener('click',e=>{
-  const c=e.target.closest('[data-filter]'); if(!c||nearbyMode) return;
+  const c=e.target.closest('[data-filter]'); if(!c) return;
   document.querySelectorAll('.chip[data-filter]').forEach(x=>x.classList.remove('on'));
   c.classList.add('on'); curFilter=c.getAttribute('data-filter'); showCount=20; updateFilterCounts(); render();
   if(window.refreshHospDB) window.refreshHospDB();
@@ -1765,70 +1703,6 @@ document.getElementById('filterRow').addEventListener('click',e=>{
 document.getElementById('salesFilter').addEventListener('change',e=>{ salesFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('regionFilter').addEventListener('change',e=>{ regionFilter=e.target.value; showCount=20; updateFilterCounts(); render(); });
 document.getElementById('loadMore').addEventListener('click',()=>{ showCount+=20; render(); });
-
-/* ===== 내 주변 5km N-CARE (브라우저 위치 기준) =====
-   nearbyMode·myPos 필터 코드는 남아 있었는데 위치를 설정하는 UI 도
-   navigator.geolocation 호출도 사라져 있어 기능 전체에 도달할 수 없었다(죽은 코드).
-   상태기계는 js/baz-nearby.js 가 담당한다: off → locating → ready/denied/failed/unsupported.
-   ※ 여기서 말하는 '내 주변 5km' 는 브라우저 위치 기준 모드다.
-     지도에 뜨는 '검색 결과 주변 5km 참고 마커'(pcDrawNearby)와는 다른 기능이며,
-     UI 문구·코드 이름·지도 제목에서 모두 구분해 부른다. */
-var pcNearby = BazNearby.create({
-  onChange: function(state, detail){
-    nearbyMode = (state==='ready');
-    myPos = (state==='ready') ? detail.pos : null;
-    nearbySyncUI(state, detail);
-    showCount=20;
-    try{ updateFilterCounts(); }catch(e){}
-    try{ render(); }catch(e){}
-  }
-});
-function nearbySyncUI(state, detail){
-  var btn=document.getElementById('nearbyBtn');
-  var lbl=document.getElementById('nearbyBtnLabel');
-  var box=document.getElementById('nearbyState');
-  if(!btn||!box) return;
-  var on=(state==='ready');
-  btn.classList.toggle('on', on);
-  btn.setAttribute('aria-pressed', on?'true':'false');
-  btn.disabled=(state==='locating');
-  if(lbl) lbl.textContent = on ? t('nearbyOff') : t('nearby');
-  var cls='', msg='';
-  if(state==='locating'){ cls='busy'; msg=t('locating'); }
-  else if(state==='ready'){
-    cls='ok';
-    var n=0; try{ n=getFiltered().length; }catch(e){ n=0; }
-    msg=t('nearbyOn').replace('{n}', n);
-  }
-  else if(state==='denied'){ cls='err'; msg=t('locDenied'); }
-  else if(state==='failed'){ cls='err'; msg=t('locFail'); }
-  else if(state==='unsupported'){ cls='err'; msg=t('locUnsupported'); }
-  else { cls=''; msg=''; }
-  box.className=cls;
-  box.textContent=msg;
-  if(msg) bazAnnounce(msg);
-}
-(function bindNearby(){
-  var btn=document.getElementById('nearbyBtn'); if(!btn) return;
-  /* 위치 API 가 없는 환경(비보안 컨텍스트·구형 브라우저)에서도 버튼만 비활성 안내로
-     끝나고 화면 전체는 그대로 동작해야 한다 — 예외를 여기서 가둔다. */
-  btn.addEventListener('click', function(){
-    try{
-      if(pcNearby.state()==='ready'){
-        pcNearby.off();
-        var box=document.getElementById('nearbyState');
-        if(box){ box.className=''; box.textContent=t('locOff'); }
-        bazAnnounce(t('locOff'));
-        return;
-      }
-      pcNearby.request();
-    }catch(e){
-      console.warn('[내 주변] 위치 요청 실패(무시):', e);
-      var b2=document.getElementById('nearbyState');
-      if(b2){ b2.className='err'; b2.textContent=t('locFail'); }
-    }
-  });
-})();
 
 // ===== 탭 전환 =====
 document.querySelector('.tabs').addEventListener('click',e=>{
@@ -3694,12 +3568,40 @@ function pcMapSelRing(name){
 }
 // 지도 컨트롤: 확대·축소·전체 보기 — 카카오 레벨은 값이 작을수록 확대(1=최대, 14=최소)
 var PC_MAP_LMIN=1, PC_MAP_LMAX=14;
+var pcLastZoomAt=0;
 function pcMapZoom(delta){
   if(!pcMapObj) return;
   var lv=Math.max(PC_MAP_LMIN, Math.min(PC_MAP_LMAX, pcMapObj.getLevel()+delta));
-  try{ pcMapObj.setLevel(lv, {animate:{duration:180}}); }catch(e){ try{ pcMapObj.setLevel(lv); }catch(_){} }
+  /* 연타(<300ms)에는 애니메이션을 끈다. 이전 확대 애니메이션이 끝나기 전에 새 setLevel 이
+     겹치면 카카오가 타일 레이어를 계산하는 도중 목표 배율이 바뀌어, 중간 배율 타일이
+     회색으로 남는 원인이 된다. 마지막 한 번만 부드럽게. */
+  var fast=(Date.now()-pcLastZoomAt)<300; pcLastZoomAt=Date.now();
+  try{
+    if(fast) pcMapObj.setLevel(lv);
+    else pcMapObj.setLevel(lv, {animate:{duration:180}});
+  }catch(e){ try{ pcMapObj.setLevel(lv); }catch(_){} }
   pcMapCtl.markUserView();   // 사용자가 직접 맞춘 배율 — 폴링·데이터 갱신이 되돌리지 않게
   pcMapCtlSync();
+}
+
+/* ── 확대/축소 뒤 타일 자가 복구 ────────────────────────────────────────────
+   휠로 확대·축소를 빠르게 반복하면 지도가 "회색 배경 + kakaomap 워터마크"만 남고
+   타일이 돌아오지 않는 상태로 굳는 경우가 있었다(창 크기를 바꾸기 전까지 복구 불가).
+   relayout() 은 중심·배율을 건드리지 않고 컨테이너 크기만 다시 재서 타일을 새로
+   요청하므로, 이 상태를 되돌리는 정확한 수단이다.
+   단 idle 마다 무조건 부르지는 않는다 — 배율이 실제로 바뀐 뒤 지도가 멈췄을 때만 1회.
+   (드래그 이동만 한 경우에는 타일이 이미 정상이라 부를 이유가 없다) */
+var pcZoomDirty=false, pcZoomFixT=0;
+function pcMapNoteZoom(){ pcZoomDirty=true; }
+function pcMapIdleFix(){
+  if(!pcZoomDirty) return;
+  if(pcZoomFixT) clearTimeout(pcZoomFixT);
+  pcZoomFixT=setTimeout(function(){
+    pcZoomFixT=0;
+    if(!pcZoomDirty || !pcMapObj || !pcMapVisible()) return;
+    pcZoomDirty=false;
+    pcMapCtl.scheduleRelayout();
+  }, 260);
 }
 /* [범위 분리] '결과 맞춤' = 지금 보고 있는 검색·필터 결과만.
    예전에는 버튼이 하나뿐이고 그 범위에 주변 5km·오늘 완료·진행중 마커까지 들어 있어,
@@ -3836,20 +3738,16 @@ function pcMapShowWheelHint(){
   if(pcMapHintT) clearTimeout(pcMapHintT);
   pcMapHintT=setTimeout(function(){ pcMapHintT=0; el.classList.remove('show'); }, 1600);
 }
-/* 넓은 3열 화면에서는 본문이 아니라 #pcLeft 만 스크롤된다. 지도 확대가 꺼진 상태에서
-   휠을 그냥 버블시키면 스크롤할 본문이 없어 아무것도 움직이지 않았다. 이때만 휠을
-   결과 목록으로 전달하고, 목록의 위/아래 끝에서는 기본 스크롤을 막지 않는다. */
-function pcMapHandleWheel(e){
+/* 지도가 상단 전폭으로 돌아오면서 결과 목록은 다시 '본문 스크롤'을 쓴다.
+   그래서 휠 확대가 꺼진 상태에서는 아무것도 가로채지 않고 그대로 흘려보내면 된다
+   (setZoomable(false) 라 카카오도 휠을 먹지 않는다) — 페이지가 자연스럽게 스크롤된다.
+   ※ 예전에는 3열 레이아웃 때문에 휠을 #pcLeft 로 옮겨 담고 preventDefault 까지 했다.
+     그 우회가 사라졌으므로 리스너도 passive 로 되돌린다(스크롤 성능). */
+function pcMapHandleWheel(){
   if(pcMapZoomableWanted()){
     pcMapCtl.markUserView();
+    pcMapNoteZoom();      // 휠 확대 → 멈춘 뒤 타일 재계산 1회 예약(회색 타일 자가 복구)
     return;
-  }
-  var left=document.getElementById('pcLeft');
-  if(window.innerWidth>=1200 && left && left.scrollHeight>left.clientHeight){
-    var unit=(e.deltaMode===1)?16:((e.deltaMode===2)?left.clientHeight:1);
-    var before=left.scrollTop;
-    left.scrollTop += e.deltaY*unit;
-    if(left.scrollTop!==before && e.cancelable) e.preventDefault();
   }
   pcMapShowWheelHint();
 }
@@ -4167,11 +4065,12 @@ function pcEnsureDOM(){
     else if(act==='fs') pcToggleFullscreen();
     else if(act==='interact') pcMapInteractToggle();
   });
-  /* 휠 확대가 꺼진 넓은 화면에서는 결과 목록으로 전달한다. 2열/모바일과 목록 끝에서는
-     기본 문서 스크롤을 그대로 허용한다. */
+  /* 지도 위 휠: 확대가 켜져 있으면 카카오가 처리하고(우리는 사용자 조작만 기록),
+     꺼져 있으면 가로채지 않고 문서 스크롤로 흘려보낸다. */
   var mp=document.getElementById('pcMapPane');
-  /* capture 단계에서 먼저 받는다. 지도 SDK 내부가 wheel 버블을 중단해도 목록 전달이 살아야 한다. */
-  if(mp) mp.addEventListener('wheel', pcMapHandleWheel, {passive:false, capture:true});
+  /* capture 단계에서 먼저 받는다. 지도 SDK 내부가 wheel 버블을 중단해도 안내·재계산 예약은 살아야 한다.
+     preventDefault 를 하지 않으므로 passive 로 등록한다(브라우저 스크롤 최적화 유지). */
+  if(mp) mp.addEventListener('wheel', pcMapHandleWheel, {passive:true, capture:true});
   // 딤 배경 클릭 → 전체화면 해제
   var bd=document.getElementById('pcMapBackdrop');
   if(bd) bd.addEventListener('click', pcExitFullscreen);
@@ -4237,7 +4136,7 @@ function pcSortBy(k){
 var pcShowCount=60, pcListSig='';
 function pcRenderLeft(list){
   var left=document.getElementById('pcLeft'); if(!left) return;
-  if(!list.length){ left.innerHTML='<div class="empty"><div class="ico">🔍</div>'+(nearbyMode?t('emptyNear'):t('empty'))+'</div>'; return; }
+  if(!list.length){ left.innerHTML='<div class="empty"><div class="ico">🔍</div>'+t('empty')+'</div>'; return; }
   // 목록이 바뀌면(검색/필터 변경) 표시 개수 리셋
   var sig=list.length+'|'+list[0].n+'|'+list[list.length-1].n+'|'+pcListView;
   if(sig!==pcListSig){ pcListSig=sig; pcShowCount=60; }
@@ -4566,6 +4465,61 @@ function pcToggleInProgress(fse, hosp){
   pcRefreshProgViews(hosp);
   if(pcIsProg(hosp)){ try{ pcFocusHospOnMap(hosp, null); }catch(e){} }
 }
+/* ── 지도 말풍선 내용 ──────────────────────────────────────────────────────
+   카드를 눌러도, 지도 마커를 눌러도 같은 말풍선을 띄운다.
+   예전에는 병원 이름과 '이력 보기' 버튼만 들어 있어, 정작 알고 싶은
+   상태·장비번호·담당·최근 이력을 보려면 상세 패널까지 한 번 더 들어가야 했다.
+   이제 말풍선 자체에 요약 정보와 최근 이력 3건을 넣고,
+   더 볼 게 있으면 '이력 전체 보기'로 상세 패널을 연다. */
+var PC_IW_HIST=3;
+function pcMapInfoNode(h){
+  var E=BazDom.el, kids=[];
+  kids.push(E('div',{class:'iw-nm',text:h.n}));
+
+  var tags=[];
+  if(pcIsProg(h.n)) tags.push(E('span',{class:'iw-tag prog',text:'🔵 '+t('schProg')}));
+  if(h.st) tags.push(E('span',{class:'iw-tag',text:h.st}));
+  if(isNcare(h) && h.nc) tags.push(E('span',{class:'iw-tag',text:'N-CARE '+h.nc}));
+  if(h.rg) tags.push(E('span',{class:'iw-tag',text:h.rg}));
+  if(tags.length) kids.push(E('div',{class:'iw-tags'},tags));
+
+  var rows=[];
+  function row(k,v){ if(v==null||v==='') return; rows.push(E('span',{class:'k',text:k})); rows.push(E('span',{class:'v',text:v})); }
+  row(t('dtSn'), h.s);
+  row(t('sales'), h.sa);
+  // statusDays() 는 '최근 점검 2026-08-04 · 9일 경과' 처럼 라벨을 이미 포함한다 → 값만 넣는다
+  rows.push(E('span',{class:'k',text:isNcare(h)?t('lastInsp'):t('lastVisit')}));
+  rows.push(E('span',{class:'v',text:statusDays(h).replace(new RegExp('^'+(isNcare(h)?t('lastInsp'):t('lastVisit'))+'\\s*'),'')}));
+  // 오늘 현장에서 처리한 건이면 담당자·구분을 함께 보여 준다
+  var tl=pcTodayList(), nk=normalize(h.n);
+  for(var i=0;i<tl.length;i++){
+    if(normalize(tl[i].hosp)===nk){ row(t('lgDone'), (tl[i].fse||'-')+(tl[i].gubun?' · '+tl[i].gubun:'')); break; }
+  }
+  if(rows.length) kids.push(E('div',{class:'iw-rows'},rows));
+
+  var recs=HISTORY[h.n]||[];
+  kids.push(E('div',{class:'iw-h',text:'🕑 '+t('histTitle')+' '+t('histCount').replace('{n}', recs.length)}));
+  if(recs.length){
+    kids.push(E('div',{class:'iw-hist'}, recs.slice(0,PC_IW_HIST).map(function(r){
+      var isInsp=(r.t==='점검');
+      var memo=r.fx||r.m||[r.pt,r.sy].filter(Boolean).join(' · ')||'';
+      return E('div',{class:'iw-hi'},[
+        E('span',{class:'d',text:r.d||'-'}),
+        E('span',{class:'tp'+(isInsp?'':' as'),text:isInsp?'점검':'A/S'}),
+        r.f ? E('span',{text:' · '+r.f}) : null,
+        memo ? E('span',{class:'m',text:memo}) : null
+      ]);
+    })));
+  } else {
+    kids.push(E('div',{class:'iw-empty',text:t('histEmpty')}));
+  }
+
+  var b=E('button',{type:'button',class:'iw-btn',text:t('mapHistBtn')});   /* mapHistBtn 에 이미 🕑 가 들어 있다 */
+  b.addEventListener('click', function(){ pcSelect(h.n); });
+  kids.push(b);
+  return E('div',{class:'pc-iw'}, kids);
+}
+
 // 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
 function pcFocusHospOnMap(name, itemEl){
   document.querySelectorAll('#pcRecentCard .rrc-item').forEach(function(el){ el.classList.toggle('sel', el===itemEl); });
@@ -4588,29 +4542,21 @@ function pcFocusHospOnMap(name, itemEl){
     try{ pcMapObj.setLevel(tgt,{animate:{duration:200}}); }catch(e){ try{ pcMapObj.setLevel(tgt); }catch(_){} }
     pcMapObj.panTo(pos);
     if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
-    // 오늘 완료 정보(담당자·구분)가 있으면 함께 표기
-    var info='', tl=pcTodayList(), nk=normalize(name);
-    for(var i=0;i<tl.length;i++){ if(normalize(tl[i].hosp)===nk){ info='🧑‍🔧 '+(tl[i].fse||'-')+(tl[i].gubun?' · '+tl[i].gubun:''); break; } }
     /* [XSS] 말풍선은 문자열 조합 대신 DOM 으로 만든다. 예전에는 병원명을
        onclick="pcSelect('…')" 안에 넣고 역슬래시·따옴표만 손으로 이스케이프했다 —
        JavaScript 문맥 이스케이프는 안전하지 않다(유니코드 줄바꿈·중첩 인용 등).
        이제 이름은 클로저로만 전달되고 마크업에는 들어가지 않는다. */
-    var content=BazDom.el('div', {style:{padding:'8px 11px', minWidth:'132px', fontFamily:"'Noto Sans KR',sans-serif"}}, [
-      BazDom.el('div', {style:{fontSize:'12.5px', fontWeight:'800', color:'#1B2F5E', whiteSpace:'nowrap'}, text:h.n}),
-      info ? BazDom.el('div', {style:{fontSize:'11px', color:'#6B7A99', marginTop:'3px', whiteSpace:'nowrap'}, text:info}) : null,
-      (function(){
-        var b=BazDom.el('button', {type:'button', text:t('mapHistBtn'), style:{marginTop:'8px', width:'100%', border:'0',
-          background:'#2E7D9E', color:'#fff', fontSize:'11.5px', fontWeight:'700', padding:'6px 8px',
-          borderRadius:'7px', cursor:'pointer', fontFamily:'inherit'}});
-        b.addEventListener('click', function(){ pcSelect(h.n); });
-        return b;
-      })()
-    ]);
-    var mk=pcMarkerByName[h.n];
-    // zIndex는 선택 링(12)·진행중(9)보다 위 — 클러스터 숫자 버블이 말풍선을 덮어
-    // '이력 보기' 버튼이 가려지던 문제 방지
+    var content=pcMapInfoNode(h);
+    /* [수정] 말풍선을 마커에 붙이지 않고 좌표에 직접 연다.
+       마커는 클러스터러(minLevel:7)에 속해 있어 넓은 배율에서는 지도에서 내려가 있다.
+       지도에 없는 마커에 InfoWindow 를 붙이면 아무것도 그려지지 않는다 —
+       "카드를 눌렀는데 지도에 정보가 안 뜬다"는 증상의 직접 원인이었다.
+       (위에서 배율을 5 이하로 낮추지만 setLevel 애니메이션이 끝나기 전이라
+        그 시점의 마커는 여전히 클러스터에 묶여 있다.)
+       좌표로 열면 클러스터 여부와 무관하게 항상 보인다.
+       zIndex 는 선택 링(12)·진행중(9)보다 위 — 클러스터 숫자 버블에 가리지 않게. */
     pcFocusIW=new kakao.maps.InfoWindow({content:content, position:pos, removable:true, zIndex:20});
-    if(mk) pcFocusIW.open(pcMapObj, mk); else pcFocusIW.open(pcMapObj);
+    pcFocusIW.open(pcMapObj);
   }
 }
 
@@ -4805,7 +4751,10 @@ function pcDrawBase(list, bounds){
     var pos=new kakao.maps.LatLng(h.lat,h.lng);
     var mk=new kakao.maps.Marker({position:pos, title:h.n});
     pcMapMarkers.push(mk); pcMarkerByName[h.n]=mk;
-    kakao.maps.event.addListener(mk,'click',function(){ pcSelect(h.n); });
+    /* [수정] 마커 클릭 → 상세 패널 직행(pcSelect)이 아니라 카드 클릭과 같은 처리(pcPickHosp).
+       지도에서 병원을 눌렀을 때 그 자리에서 이름·상태·최근 이력을 먼저 보여 주고,
+       더 볼 게 있으면 말풍선의 '이력 전체 보기'로 상세를 연다. */
+    kakao.maps.event.addListener(mk,'click',function(){ pcPickHosp(h.n); });
     clustered.push(mk); bounds.extend(pos); any=true;
   });
   // [B2] 마커 클러스터링: 400+ 마커를 줌 레벨별로 묶어 가독성·성능 개선.
@@ -4847,7 +4796,7 @@ function pcDrawOverlays(bounds){
     var pos=new kakao.maps.LatLng(h.lat,h.lng);
     var el=document.createElement('div'); el.className='pc-cmk';
     el.innerHTML='<span class="dot"></span><span class="lb">'+escapeHtml(r.fse||r.hosp)+'</span>';
-    (function(hn){ el.addEventListener('click',function(){ pcFocusHospOnMap(hn,null); }); })(h.n);
+    (function(hn){ el.addEventListener('click',function(){ pcPickHosp(hn); }); })(h.n);
     var ov=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:6});
     ov.setMap(pcMapObj); pcRecentOverlays.push(ov);
     bounds.extend(pos); any=true;
@@ -4860,7 +4809,7 @@ function pcDrawOverlays(bounds){
     var who=pcInProgress[hn]||'';
     var el=document.createElement('div'); el.className='pc-pmk';
     el.innerHTML='<span class="dot"></span><span class="lb">🔵 처리중'+(who?' · '+escapeHtml(who):'')+'</span>';
-    (function(nm){ el.addEventListener('click',function(){ pcSelect(nm); }); })(h.n);
+    (function(nm){ el.addEventListener('click',function(){ pcPickHosp(nm); }); })(h.n);
     var ov2=new kakao.maps.CustomOverlay({position:pos, content:el, yAnchor:1, zIndex:9});
     ov2.setMap(pcMapObj); pcProgOverlays.push(ov2);
     bounds.extend(pos); any=true;
@@ -4887,7 +4836,7 @@ function pcDrawNearby(list, bounds){
   pcNearbyOf(list, 5).forEach(function(o){
     var npos=new kakao.maps.LatLng(o.lat,o.lng);
     var nmk=new kakao.maps.Marker({position:npos, image:pcNearbyImg, title:o.n, zIndex:3});
-    (function(nm){ kakao.maps.event.addListener(nmk,'click',function(){ pcSelect(nm); }); })(o.n);
+    (function(nm){ kakao.maps.event.addListener(nmk,'click',function(){ pcPickHosp(nm); }); })(o.n);
     nmk.setMap(pcMapObj); pcNearbyMarkers.push(nmk);
     bounds.extend(npos);
   });
@@ -4932,9 +4881,18 @@ function pcShowMap(list){
     var center=new kakao.maps.LatLng(PC_DEFAULT_CENTER.lat,PC_DEFAULT_CENTER.lng);
     var firstCreate=!pcMapObj;
     if(firstCreate){
+      /* [크기 0 방어] 크기가 아직 잡히지 않은 컨테이너에 지도를 만들면 카카오가 타일 격자를
+         0×0 기준으로 계산해, 이후 relayout 을 부를 때까지 회색 화면으로 남는다.
+         (탭 복귀·접기 해제·모드 전환 직후처럼 CSS 가 적용되기 전 프레임에서 실제로 발생했다)
+         충분한 크기가 될 때까지 짧게 미룬다 — 세대 검사가 있으므로 중복 생성은 없다. */
+      var box=pane.getBoundingClientRect();
+      if(box.width<40 || box.height<40){
+        pcMapTimer=setTimeout(function(){ pcMapTimer=null; pcShowMap(list); }, 120);
+        return;
+      }
       pcMapObj=new kakao.maps.Map(pane,{center:center,level:9,tileAnimation:false});   /* 타일 페이드 끄기 → 확대/축소 반응성↑ */
-      try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',pcMapCtlSync); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화
-      try{ kakao.maps.event.addListener(pcMapObj,'idle',pcMapViewSaveDebounced); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장
+      try{ kakao.maps.event.addListener(pcMapObj,'zoom_changed',function(){ pcMapCtlSync(); pcMapNoteZoom(); }); }catch(e){}   // 휠·제스처 줌에도 +/- 상태 동기화 + 타일 복구 예약
+      try{ kakao.maps.event.addListener(pcMapObj,'idle',function(){ pcMapViewSaveDebounced(); pcMapIdleFix(); }); }catch(e){}  // 이동·줌 멈추면 뷰포트 저장 + 필요 시 타일 재계산
       /* 사용자가 직접 지도를 옮기면 기록 → 폴링·데이터 갱신이 그 위치를 자동 맞춤으로
          되돌리지 않는다(예전에는 40초 폴링마다 원위치했다).
          ※ 확대는 zoom_changed 로 잡지 않는다 — setBounds·복원 같은 프로그램 호출도
@@ -4972,11 +4930,10 @@ function pcShowMap(list){
 
     if(pcRightMode==='map'){
       var rtl=document.getElementById('pcRightTtl');
-      /* '주변 5km'는 검색 결과 주변의 참고 마커다 — 내 위치 기준 모드(nearbyMode)와 다르다.
-         제목에서도 두 가지를 구분해 부른다. */
-      if(rtl) rtl.textContent = nearbyMode
-        ? ('🗺 '+t('mapTitle')+' · '+t('nearbyOn').replace('{n}', list.length))
-        : (nearCnt ? ('🗺 '+t('mapTitle')+' · '+t('mapNearby').replace('{n}', nearCnt)) : ('🗺 '+t('mapTitle')));
+      /* '주변 5km'는 검색 결과 주변의 참고 마커다(내 위치 기준 조회 기능은 제거됨). */
+      if(rtl) rtl.textContent = nearCnt
+        ? ('🗺 '+t('mapTitle')+' · '+t('mapNearby').replace('{n}', nearCnt))
+        : ('🗺 '+t('mapTitle'));
     }
     // 결과가 1곳이면 setBounds가 의미 없는 점 범위라 줌이 튄다 → 중심 이동 + 충분한 확대로 확실히 보이게
     var single=(function(){
@@ -5011,7 +4968,7 @@ function pcShowMap(list){
            · 목록 시그니처가 그대로면 → 맞추지 않음
            · 사용자가 최근(2분 내) 지도를 만졌으면 → 맞추지 않음
          으로 걸러 준다. */
-      var sig=pcListHash(list)+'|'+(searchQ||'')+'|'+curFilter+'|'+salesFilter+'|'+regionFilter+'|'+(nearbyMode?'near':'');
+      var sig=pcListHash(list)+'|'+(searchQ||'')+'|'+curFilter+'|'+salesFilter+'|'+regionFilter;
       if(pcMapCtl.shouldAutoFit(sig)) applyFocus();
     }
     pcMapCtlSync();
