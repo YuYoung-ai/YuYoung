@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.2.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.3.0
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -26,7 +26,7 @@
  *     ※ 이 열들이 없으면 저장은 되지만 해당 값은 기록되지 않고, 응답 warnings 로
  *       "저장되지 않았다"고 알린다(프런트가 '저장됨'이라고 말하지 않는다).
  *  3) [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]  ※ "새 배포"가 아님(URL 유지)
- *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.2.0"}
+ *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.3.0"}
  *
  * v3.1 주요 변경
  *  · 사진 저장 실패를 성공으로 처리하지 않는다(행도 쓰지 않고 실패 응답)
@@ -472,24 +472,25 @@ function reqPut_(reqId, result){
   var body = JSON.stringify(result);
   try{ PropertiesService.getScriptProperties().setProperty(reqKey_(reqId), body); }catch(e){}
   try{ CacheService.getScriptCache().put(reqKey_(reqId), body, 21600); }catch(e){}
-  try{ reqPrune_(); }catch(e){}
 }
 
 /** 오래된 멱등성 기록 정리 — 프로퍼티 저장소가 무한히 자라지 않게 */
 function reqPrune_(){
+  if(Math.random() > 0.05) return;   /* 쓰기 20회당 평균 1회 — 매 요청의 락 구간을 늘리지 않는다 */
   var props = PropertiesService.getScriptProperties();
-  var keys = props.getKeys().filter(function(k){ return k.indexOf(REQ_PROP_PREFIX) === 0; });
-  if(keys.length <= REQ_KEEP) return;
-  var rows = keys.map(function(k){
+  var all = props.getProperties();
+  var now = Date.now(), rows = [];
+  Object.keys(all).forEach(function(k){
+    if(k.indexOf(REQ_PROP_PREFIX) !== 0) return;
     var ts = 0;
-    try{ ts = Number((JSON.parse(props.getProperty(k)||'{}') || {}).ts) || 0; }catch(e){}
-    return {k:k, ts:ts};
+    try{ ts = Number((JSON.parse(all[k]||'{}') || {}).ts) || 0; }catch(e){}
+    if(ts && now - ts > REQ_TTL_MS){ try{ props.deleteProperty(k); }catch(e){} return; }
+    rows.push({k:k, ts:ts});
   });
-  var now = Date.now();
+  if(rows.length <= REQ_KEEP) return;
   rows.sort(function(a,b){ return a.ts - b.ts; });               /* 오래된 것부터 */
-  var over = rows.length - REQ_KEEP;
-  rows.forEach(function(r, i){
-    if(i < over || (r.ts && now - r.ts > REQ_TTL_MS)){ try{ props.deleteProperty(r.k); }catch(e){} }
+  rows.slice(0, rows.length - REQ_KEEP).forEach(function(r){
+    try{ props.deleteProperty(r.k); }catch(e){}
   });
 }
 
@@ -515,6 +516,7 @@ function photoResult_(required, saved, fileId, error){
 
 /* ================= POST: 행 기록 ================= */
 function doPost(e){
+  _readAllMemo = null;          /* GAS 실행 컨테이너 재사용에 대비한 요청 스코프 초기화 */
   var lock = LockService.getScriptLock();
   var payload = {};
   var photoFile = null;      /* [v2.8] 락 잡기 전에 끝내 둔 사진 업로드 결과 */
@@ -791,11 +793,14 @@ function doPost(e){
       error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
     try{ lock.releaseLock(); }catch(_){}
+    /* 멱등성 정리는 응답 작성·전역 락 해제 뒤에만 확률 실행한다. */
+    try{ reqPrune_(); }catch(_){}
   }
 }
 
 /* ================= GET: 조회 ================= */
 function doGet(e){
+  _readAllMemo = null;          /* 전역 변수는 실행 컨테이너 사이에 남을 수 있으므로 매 요청 초기화 */
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
@@ -816,7 +821,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.2.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.3.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -874,6 +879,15 @@ function readAll_(withPhoto){
     return o;
   }).filter(function(o){ return String(o['처리일']||'').trim()!==''; });
   return {hdr:hdr, rows:rows};
+}
+
+/* 사진 없는 전체 읽기는 한 GAS 실행 안에서 한 번만 수행한다.
+   bootstrap의 issuehist + all 재생성이 같은 시트 스냅샷을 공유하도록 한다. */
+var _readAllMemo = null;
+function readAllMemo_(){
+  if(_readAllMemo) return _readAllMemo;
+  _readAllMemo = readAll_();
+  return _readAllMemo;
 }
 
 /** 헤더 표기 차이 흡수: 정규화 완전일치 → 부분일치 순 */
@@ -1397,22 +1411,34 @@ function syncMetaGet_(key){
 }
 function syncMetaPut_(key, out, ttl){
   if(typeof bazCachePut_ !== 'function' || !out || !out.rev) return;
-  var meta={rev:out.rev, updated:out.updated||'', count:Number(out.count)||0};
+  var meta={rev:out.rev, updated:out.updated||'', count:Number(out.count)||0,
+            rows:Number(out._rows)||0};
   try{ bazCachePut_(key+'__meta', JSON.stringify(meta), ttl); }catch(e){}
 }
 function syncNochange_(key, p, paramName){
+  /* force는 메타 캐시만 믿지 않는다. 실제 원본을 다시 읽고 새 rev를 만든 뒤
+     syncNochangeFrom_에서만 비교해야 수동 시트 수정도 놓치지 않는다. */
   if(syncForce_(p)) return null;
   var asked=syncRevParam_(p,paramName);
   if(!asked) return null;
   var meta=syncMetaGet_(key);
   if(!meta || meta.rev!==asked) return null;
-  return {success:true, nochange:true, rev:meta.rev, updated:meta.updated||'', count:Number(meta.count)||0};
+  return {success:true, nochange:true, rev:meta.rev, updated:meta.updated||'',
+          count:Number(meta.count)||0, _rows:Number(meta.rows)||0};
 }
 function syncNochangeFrom_(out, p, paramName){
-  if(syncForce_(p)) return null;
   var asked=syncRevParam_(p,paramName);
   if(!asked || !out || !out.rev || asked!==out.rev) return null;
   return {success:true, nochange:true, rev:out.rev, updated:out.updated||'', count:Number(out.count)||0};
+}
+function syncObserved_(out, started, rows, cacheState){
+  if(!out || typeof out!=='object') return out;
+  out._ms=Math.max(0, Date.now()-started);
+  out._rows=Math.max(0, Number(rows)||Number(out._rows)||0);
+  out._cache=cacheState||'miss';
+  try{ out._bytes=Utilities.newBlob(JSON.stringify(out)).getBytes().length; }
+  catch(e){ try{ out._bytes=JSON.stringify(out).length; }catch(_){ out._bytes=0; } }
+  return out;
 }
 function syncCacheDrop_(key){
   if(typeof bazCacheDrop_ !== 'function') return;
@@ -1420,27 +1446,30 @@ function syncCacheDrop_(key){
 }
 
 function getAll_(p){
+  var started=Date.now();
   var same=syncNochange_('handover_all',p,'rev');
-  if(same) return same;
+  if(same) return syncObserved_(same,started,same._rows,'hit');
   var hit = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
-  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var all = readAll_();
+  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  var all = readAllMemo_();
   var out = {success:true, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
-             data:all.rows.map(slim_)};
+             data:all.rows.map(slim_), _rows:all.rows.length};
   out.rev=syncRevOf_(out.data);
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', JSON.stringify(out), 300); }catch(e){}
   syncMetaPut_('handover_all',out,300);
-  var builtSame=syncNochangeFrom_(out,p,'rev'); if(builtSame) return builtSame;
-  return out;
+  var state=syncForce_(p)?'force':'miss';
+  var builtSame=syncNochangeFrom_(out,p,'rev');
+  return syncObserved_(builtSame||out,started,all.rows.length,state);
 }
 
 /** 병원정보DB 탭 → 병원명·N-Care·지역 목록 (N-Care 미점검 산출용, 10분 캐시) */
 function getHospDB_(p){
+  var started=Date.now();
   var same=syncNochange_('handover_hospdb',p,'rev');
-  if(same) return same;
+  if(same) return syncObserved_(same,started,same._rows,'hit');
   var _h = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb') : null;
-  if(_h){ try{ var old=JSON.parse(_h), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
+  if(_h){ try{ var old=JSON.parse(_h), nc=syncNochangeFrom_(old,p,'rev'); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var sh = sheet_('병원정보DB');
   if(!sh) return {success:false, error:'병원정보DB 탭 없음'};
   var v = sh.getDataRange().getDisplayValues();
@@ -1473,24 +1502,26 @@ function getHospDB_(p){
       sale:  cFse>=0?String(v[i][cFse]).trim():'' });
     if(out.length>=800) break;
   }
-  var res={success:true, count:out.length, data:out,
+  var res={success:true, count:out.length, data:out, _rows:Math.max(0,v.length-hr-1),
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_(res.data);
   /* [수정] 95KB 절벽 제거 — 조각 캐시로 크기 제한 없이 저장 */
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb', JSON.stringify(res), 600); }catch(e){}
   syncMetaPut_('handover_hospdb',res,600);
-  var builtSame=syncNochangeFrom_(res,p,'rev'); if(builtSame) return builtSame;
-  return res;
+  var state=syncForce_(p)?'force':'miss';
+  var builtSame=syncNochangeFrom_(res,p,'rev');
+  return syncObserved_(builtSame||res,started,res._rows,state);
 }
 
 /** [Core] 병원정보DB(rich) — hospital_gas 를 대체. openById 로 rich 스프레드시트를 읽어
     hospital-pc 가 기대하는 전체 필드({name,sn,region,address,lastVisit,status,sales,asType,
     ncare,client,hpVer,uiVer,lat,lng})로 반환한다. (기존 hospital_gas 응답과 동일 형태) */
 function getHospDBRich_(p, revParam){
+  var started=Date.now();
   var rp=revParam||'rev', same=syncNochange_('handover_hospdb_rich',p,rp);
-  if(same) return same;
+  if(same) return syncObserved_(same,started,same._rows,'hit');
   var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
-  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return nc||old; }catch(e){} }
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var ss = richHospSS_();
   if(!ss) return {success:false, error:'스프레드시트 접근 불가'};
   var sheet = ss.getSheetByName(HOSPDB_RICH.SHEET);
@@ -1512,13 +1543,14 @@ function getHospDBRich_(p, revParam){
         lat:num_(r[12], 33, 39), lng:num_(r[13], 124, 132)
       };
     });
-  var res = {success:true, count:hospitals.length, data:hospitals,
+  var res = {success:true, count:hospitals.length, data:hospitals, _rows:values.length,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_(res.data);
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb_rich', JSON.stringify(res), 600); }catch(e){}
   syncMetaPut_('handover_hospdb_rich',res,600);
-  var builtSame=syncNochangeFrom_(res,p,rp); if(builtSame) return builtSame;
-  return res;
+  var state=syncForce_(p)?'force':'miss';
+  var builtSame=syncNochangeFrom_(res,p,rp);
+  return syncObserved_(builtSame||res,started,res._rows,state);
 }
 
 /** 날짜 표시값('2026. 8. 3' 등)을 'yyyy-MM-dd'로 정규화 — 클라이언트 parseDateYMD 호환.
@@ -1535,10 +1567,11 @@ function _issueDateNorm_(v){
     필드 매핑(현장기록 → 이슈이력): 처리일→d · CS담당자→f · 점검/AS→t · 대분류→pt · 유형→sy ·
     교체품→p · 내용→fx · 유무상→pay. (기존 hospital_issue_gas 응답과 동일 형태) */
 function getIssueHist_(p, revParam){
+  var started=Date.now();
   var rp=revParam||'rev', same=syncNochange_('handover_issuehist',p,rp);
-  if(same) return same;
+  if(same) return syncObserved_(same,started,same._rows,'hit');
   var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
-  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return nc||old; }catch(e){} }
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var raw = histDerivedRaw_();
   var history = {};
   Object.keys(raw).forEach(function(name){ history[name] = histPublicList_(raw[name]); });
@@ -1560,20 +1593,22 @@ function getIssueHist_(p, revParam){
       updatedAt:e ? e.updatedAt : '', updatedBy:e ? e.updatedBy : ''
     };
   });
-  var res = {success:true, count:Object.keys(history).length, data:history, revs:revs,
+  var sourceRows=(_readAllMemo&&_readAllMemo.rows)?_readAllMemo.rows.length:0;
+  var res = {success:true, count:Object.keys(history).length, data:history, revs:revs, _rows:sourceRows,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_({data:res.data,revs:res.revs});
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
   syncMetaPut_('handover_issuehist',res,600);
-  var builtSame=syncNochangeFrom_(res,p,rp); if(builtSame) return builtSame;
-  return res;
+  var state=syncForce_(p)?'force':'miss';
+  var builtSame=syncNochangeFrom_(res,p,rp);
+  return syncObserved_(builtSame||res,started,sourceRows,state);
 }
 
 /** 현장 처리 원본을 병원별 이력으로 산출한다.
  *  _srcRow 는 서버 병합/충돌 판정에만 쓰고 histPublicList_ 에서 제거한다. 날짜만으로
  *  cutoff 를 잡으면 같은 날 뒤늦게 들어온 기록을 구분할 수 없어 원본 행 번호를 쓴다. */
 function histDerivedRaw_(){
-  var all = readAll_();
+  var all = readAllMemo_();
   var history = {};
   all.rows.forEach(function(o){
     var name = String(o['병원명']||'').trim();
@@ -1806,7 +1841,22 @@ function histSave_(p){
 /** [Core] hospital-pc 부트 1콜 — rich 병원정보DB + 이슈이력을 한 응답에 합친다.
     각각 조각캐시라 대개 캐시 히트. 클라이언트는 d.hospdb.data / d.issuehist.data 로 사용. */
 function getBootstrap_(p){
-  return { success:true, ver:'3.2.0', hospdb:getHospDBRich_(p,'hrev'), issuehist:getIssueHist_(p,'irev') };
+  var started=Date.now();
+  var hospdb=getHospDBRich_(p,'hrev');
+  var issuehist=getIssueHist_(p,'irev');
+  var allReady=false, allRev='';
+  /* 수동 새로고침은 issuehist가 읽은 같은 원본 스냅샷으로 all 캐시도 갱신한다.
+     이어지는 hospital-pc 최근처리 조회는 이 캐시를 사용하므로 시트를 두 번 읽지 않는다. */
+  if(syncForce_(p) && /^(1|true|yes)$/i.test(String(p.refreshall||''))){
+    var all=getAll_({force:'1', rev:syncRevParam_(p,'arev')});
+    allReady=!!(all && all.success);
+    allRev=(all && all.rev)||'';
+  }
+  var out={success:true, ver:'3.3.0', hospdb:hospdb, issuehist:issuehist,
+           allready:allReady, allrev:allRev};
+  var state=syncForce_(p)?'force':
+    ((hospdb&&hospdb._cache==='hit'&&issuehist&&issuehist._cache==='hit')?'hit':'miss');
+  return syncObserved_(out,started,issuehist&&issuehist._rows,state);
 }
 
 /** 특정 병원 최근 이력 */
@@ -1817,7 +1867,7 @@ function getRecent_(hosp, limit){
   var _k = 'hv_recent_' + norm_(hosp) + '_' + (Number(limit)||0);
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
-  var all = readAll_();
+  var all = readAllMemo_();
   var q = norm_(hosp);
   var hit = all.rows.filter(function(o){ return norm_(o['병원명'])===q || norm_(o['병원명']).indexOf(q)>=0; });
   hit = hit.slice(-Math.min(limit, CONFIG.RECENT_MAX)).reverse().map(slim_);
@@ -1845,7 +1895,7 @@ function getToday_(fse, token){
   var _k = 'hv_today_' + today + '_' + norm_(fse||'');
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
-  var all = readAll_();
+  var all = readAllMemo_();
   var hit = all.rows.filter(function(o){
     var d = String(o['처리일']||'').replace(/\./g,'-').replace(/\s/g,'');
     var okDate = d.indexOf(today)===0;
@@ -1883,7 +1933,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.2.0',
+  var out = {success:true, ver:'3.3.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }
@@ -1924,7 +1974,7 @@ function getMaster_(p){
     out.source='유형마스터 시트';
   }
   /* 데이터 기반 보강: 실제 기록에서 대분류/유형·교체품·담당자 유니크 추출 */
-  var all = readAll_();
+  var all = readAllMemo_();
   all.rows.forEach(function(o){
     var cat=String(o['대분류']||'').trim(), typ=String(o['유형']||'').trim();
     if(cat&&typ){
@@ -2292,7 +2342,7 @@ function getGuide_(type){
   if(!type) return {success:false, error:'type 파라미터 필요'};
   var m = getMaster_();
   var g = m.guides[type];
-  var all = readAll_();
+  var all = readAllMemo_();
   var q = norm_(type);
   var cases = all.rows.filter(function(o){ return norm_(o['유형'])===q; }).slice(-3).reverse().map(slim_);
   var text =
@@ -2510,7 +2560,7 @@ function wkGetWeekly_(p){
   var sat = new Date(mon); sat.setDate(sat.getDate()-2);            /* 전주 토요일부터 */
   var fri = new Date(mon); fri.setDate(fri.getDate()+4); fri.setHours(23,59,59,0);
   var qf = norm_(fse);
-  var rows = readAll_().rows.map(slim_).filter(function(r){
+  var rows = readAllMemo_().rows.map(slim_).filter(function(r){
     var d = parseD_(r.date);
     if(!d || d<sat || d>fri) return false;
     if(!qf) return true;
@@ -2677,25 +2727,70 @@ function deriveProg_(o){
 }
 /** 저장 전 내부 전용 필드 제거 — ScriptProperties 에 새어 나가지 않게 한다 */
 function progStrip_(o){ var s=o._snap; delete o._snap; delete o._reset; return s; }
+function progBytes_(o){
+  try{ return Utilities.newBlob(JSON.stringify(o)).getBytes().length; }
+  catch(e){ return JSON.stringify(o).length; }
+}
+/** cs_progress의 유일한 영속화 경로 — 내부 필드 제거와 크기 가드를 저장 직전에 강제한다. */
+function progWrite_(o){
+  progStrip_(o);
+  var s=JSON.stringify(o), n=progBytes_(o);
+  if(n>8000) Logger.log('[progress] 크기 경고 '+n+'B / 담당자 '+Object.keys(o.queues||{}).length+'명');
+  if(n>9000) throw new Error('progress-too-large:'+n);
+  PropertiesService.getScriptProperties().setProperty('cs_progress',s);
+  return n;
+}
 function progGet_(p){
   var o = progRead_();
-  deriveProg_(o);
-  var snap = null, wasReset = !!o._reset;
-  if(wasReset){
-    snap = progStrip_(o);
-    o.rev = (o.rev||0)+1;
-    try{ PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o)); }catch(e){}   // 일일 초기화 영속화
+  var snap=null, bytes=0, rolloverError='';
+  if(o._reset){
+    var lock=LockService.getScriptLock(), held=false;
+    try{ lock.waitLock(10000); held=true; }
+    catch(lockErr){
+      Logger.log('[progress] rollover lock 실패: '+lockErr);
+      return {success:false, busy:true, error:'busy — 다른 일정 저장 또는 자정 초기화가 진행 중입니다.'};
+    }
+    try{
+      o=progRead_();                         /* 락 안에서 날짜 상태를 다시 확인한다 */
+      if(o._reset){
+        snap=progStrip_(o);
+        deriveProg_(o);
+        o.rev=(o.rev||0)+1;
+        o.updated=schedNow_();
+        try{ bytes=progWrite_(o); }
+        catch(writeErr){
+          Logger.log('[progress] rollover 저장 실패: '+writeErr);
+          return {success:false, _rolloverError:'write-failed', error:String(writeErr)};
+        }
+      }else{
+        progStrip_(o); deriveProg_(o); bytes=progBytes_(o);
+      }
+    }finally{
+      if(held){ try{ lock.releaseLock(); }catch(_){} }
+    }
+  }else{
+    progStrip_(o); deriveProg_(o); bytes=progBytes_(o);
   }
   var rev = o.rev||0;
   /* 일일 초기화 부산물(스냅샷 보존·로그 정리)은 상태 저장 뒤에 — 시트 I/O 실패가 초기화를 되돌리지 않게 */
-  if(wasReset){
-    try{ if(snap) schedSnapshotWrite_(snap.day, snap.queues); }catch(e){}
-    try{ schedLog_([[schedNow_(), '', '', 'day_reset', snap?snap.day:'', '', 'system']]); }catch(e){}
-    try{ schedLogPrune_(); }catch(e){}
+  if(snap){
+    try{ schedSnapshotWrite_(snap.day, snap.queues); }
+    catch(e){ rolloverError='snapshot-failed'; Logger.log('[progress] rollover snapshot 실패: '+e); }
+    try{ schedLog_([[schedNow_(), '', '', 'day_reset', snap.day||'', '', 'system']]); }
+    catch(e){ rolloverError=rolloverError||'log-failed'; Logger.log('[progress] rollover log 실패: '+e); }
+    try{ schedLogPrune_(); }
+    catch(e){ rolloverError=rolloverError||'prune-failed'; Logger.log('[progress] rollover prune 실패: '+e); }
   }
   /* [v2.7] 변경 없으면 큐 전체 대신 rev 만 반환 — 25초 폴링의 응답·파싱 비용 제거 */
-  if(p && String(p.rev||'')!=='' && Number(p.rev)===rev) return {success:true, nochange:true, rev:rev};
-  return {success:true, queues:o.queues, prog:o.prog, done:o.done, rev:rev, updated:o.updated||''};
+  if(p && String(p.rev||'')!=='' && Number(p.rev)===rev){
+    var same={success:true, nochange:true, rev:rev, _bytes:bytes};
+    if(rolloverError) same._rolloverError=rolloverError;
+    return same;
+  }
+  var out={success:true, queues:o.queues, prog:o.prog, done:o.done, rev:rev,
+           updated:o.updated||'', _bytes:bytes};
+  if(rolloverError) out._rolloverError=rolloverError;
+  return out;
 }
 /** 큐에서 병원의 현재 상태 문자열(없으면 '') — 로그의 '이전 상태' 기록용 */
 function qStateOf_(o, hosp){
@@ -2778,13 +2873,13 @@ function qOwnerOf_(o, hosp){
  * [v2.7] 배치: 자동 완료 연쇄처럼 여러 op가 한 번에 나는 경우 POST 왕복을 1회로 줄인다.
  */
 function progSave_(p){
-  /* doPost가 이미 같은 스크립트 락을 보유한 채 호출하므로 재획득 실패는 정상 —
-     여기서 예외로 죽으면 일정 저장이 통째로 실패하고, 다음 폴링이 옛 상태로 되돌린다.
-     tryLock으로 시도만 하고 실패해도 진행한다(직렬화는 doPost의 락이 이미 보장). */
+  /* doPost는 progress_save를 전역 락 앞에서 라우팅한다. 따라서 이 함수가 락을
+     얻지 못하면 공유 상태를 읽거나 쓰지 않고 busy로 중단해야 한다. */
   var lock = LockService.getScriptLock(), held = false;
   var res = null, logs = [], snap = null;
+  try{ lock.waitLock(15000); held=true; }
+  catch(lockErr){ return {success:false, busy:true, error:'busy — 다른 일정 저장이 진행 중입니다. 잠시 후 다시 시도하세요.'}; }
   try{
-    try{ held = lock.tryLock(15000); }catch(e){ held = false; }
     var o = progRead_();
     snap = progStrip_(o);            // 저장 중 날짜가 넘어갔으면 어제 큐를 넘겨받아 뒤에서 보존
     var who = String(p.who||'').trim();
@@ -2799,8 +2894,9 @@ function progSave_(p){
     deriveProg_(o);
     o.rev = (o.rev||0)+1;
     o.updated = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss');
-    PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
-    res = {success:true, queues:o.queues, prog:o.prog, done:o.done, rev:o.rev, updated:o.updated};
+    var bytes=progWrite_(o);
+    res = {success:true, queues:o.queues, prog:o.prog, done:o.done, rev:o.rev,
+           updated:o.updated, _bytes:bytes};
   }catch(err){
     return {success:false, error:String(err)};
   }finally{
@@ -2923,16 +3019,18 @@ function progRestore_(p){
   });
 
   var lock = LockService.getScriptLock(), held = false, res = null;
+  try{ lock.waitLock(15000); held=true; }
+  catch(lockErr){ return {success:false, busy:true, error:'busy — 다른 일정 복구가 진행 중입니다. 잠시 후 다시 시도하세요.'}; }
   try{
-    try{ held = lock.tryLock(15000); }catch(e){ held = false; }
     var o = progRead_(); progStrip_(o);
     var before = o.queues;
     o.queues = queues; o.done = {};
     deriveProg_(o);
     o.rev = (o.rev||0)+1;
     o.updated = schedNow_();
-    PropertiesService.getScriptProperties().setProperty('cs_progress', JSON.stringify(o));
-    res = {success:true, restored:day, queues:o.queues, prog:o.prog, done:o.done, rev:o.rev, updated:o.updated};
+    var bytes=progWrite_(o);
+    res = {success:true, restored:day, queues:o.queues, prog:o.prog, done:o.done,
+           rev:o.rev, updated:o.updated, _bytes:bytes};
     /* 복구 직전 상태를 되돌릴 수 있게 남긴다 */
     try{ PropertiesService.getScriptProperties().deleteProperty('cs_sched_snap_day'); }catch(e){}
     try{ schedSnapshotWrite_('복구전-'+schedNow_().slice(0,10), before); }catch(e){}

@@ -42,7 +42,8 @@ ck('대시보드: 연속 새로고침은 진행 중 Promise 공유',
 ck('대시보드: 전체 로드당 병원 DB 호출 지점 1개',(dLoad.match(/loadHospDB\(/g)||[]).length===1);
 ck('대시보드: 캐시·시트 boot에서 병원 DB 재호출 없음',!/\bloadHospDB\(/.test(dBoot));
 ck('대시보드: 병원 DB 요청도 진행 중 Promise 공유',/if\(HOSPDB_IN_FLIGHT\) return HOSPDB_IN_FLIGHT/.test(dHosp));
-ck('대시보드: 보조 GAS 조회에도 20초 타임아웃',/fetchTimeout\(_u, 20000\)/.test(dGv));
+ck('대시보드: 보조 GAS 조회는 기본 20초·용도별 타임아웃을 지원',
+  /fetchTimeout\(_u, ms\|\|20000\)/.test(dGv));
 ck('대시보드: 수동 갱신 성공은 전체+병원 DB 완료 후 표시',
   /Promise\.all\(\[allP,hospP\]\)/.test(dLoad)&&/if\(force\) toast\(v\[0\]&&v\[1\]!==false/.test(dLoad));
 

@@ -37,8 +37,10 @@ ck('P1 서버: hospdbrich force 요청은 캐시 조회를 건너뜀',/!syncForc
 ck('P1 서버: issuehist force 요청은 캐시 조회를 건너뜀',/!syncForce_\(p\)/.test(gIssue));
 ck('P1 서버: bootstrap이 force 파라미터를 하위 조회에 전달',/getHospDBRich_\(p,'hrev'\)/.test(gBoot)&&/getIssueHist_\(p,'irev'\)/.test(gBoot));
 ck('P1 대시보드: 수동 새로고침이 all force=1 사용',/force\?'&force=1'/.test(dFetch));
-ck('P1 대시보드: 수동 새로고침이 hospdb force=1 사용',/force\?\{force:1\}/.test(dHosp));
-ck('P1 병원 화면: bootstrap 강제 조회',/force\?'&force=1'/.test(hBoot));
+ck('P1 대시보드: 수동 새로고침이 hospdb force=1 + rev 사용',
+  /force\?\{force:1,rev:HOSPDB_REV\}/.test(dHosp));
+ck('P1 병원 화면: bootstrap 강제 조회가 all 캐시도 같은 요청에서 갱신',
+  /force\?'&force=1&refreshall=1'/.test(hBoot));
 ck('P1 병원 화면: 최근 처리 all 강제 조회',/force\?'&force=1'/.test(hRecent));
 ck('P1 경합: 일반 요청 중 강제 새로고침을 후속 실행',
   /force && !DASH_LOAD_FORCE/.test(D)&&/force && !BAZ_BOOT_FORCE/.test(H)&&/force && !pcRecentForce/.test(H));
@@ -88,6 +90,8 @@ const same=helpers.syncNochange_('sample',{rev:'abc'},'rev');
 ck('P2 실행: 같은 rev면 데이터 없이 nochange',same&&same.nochange===true&&same.rev==='abc'&&same.count===7);
 ck('P2 실행: 다른 rev면 전체 조회 진행',helpers.syncNochange_('sample',{rev:'def'},'rev')===null);
 ck('P1 실행: force=1이면 rev가 같아도 전체 조회 진행',helpers.syncNochange_('sample',{force:'1',rev:'abc'},'rev')===null);
+ck('P1 실행: force 원본 재구성 뒤 rev가 같으면 본문 전송 생략',
+  helpers.syncNochangeFrom_({success:true,rev:'abc'},{force:'1',rev:'abc'},'rev').nochange===true);
 mem.sample='payload'; helpers.syncCacheDrop_('sample');
 ck('P2 실행: 데이터 캐시와 rev 메타를 함께 무효화',!mem.sample&&!mem.sample__meta);
 

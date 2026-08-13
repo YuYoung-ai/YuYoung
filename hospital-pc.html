@@ -881,7 +881,7 @@ function _tk(u){ try{ return (window.BazAuth&&BazAuth.withToken)?BazAuth.withTok
    → 화면은 캐시된 옛 데이터로 멀쩡해 보이는데 연동만 조용히 죽어, 재접속해야 풀렸다.
    dashboard-pc.html의 fetchTimeout/diagnoseFail과 같은 계층을 여기에도 둔다.
    실패는 {kind:'timeout'|'html'|'parse'|'network'|'auth'|'server'} 로 분류해 던진다. */
-var BAZ_GET_TIMEOUT=20000;
+var BAZ_GET_TIMEOUT=20000, BAZ_TIMEOUT_FULL=45000, BAZ_TIMEOUT_POLL=12000;
 function bazGet(url, ms){
   var ctl=('AbortController' in window)?new AbortController():null;
   var t=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(_){} }, ms||BAZ_GET_TIMEOUT):null;
@@ -912,14 +912,20 @@ function bazGet(url, ms){
     });
 }
 function bazTransient_(e){
-  return !!(e && (e.kind==='html' ||
+  return !!(e && (e.kind==='network' || e.kind==='timeout' || e.kind==='html' ||
     (e.kind==='http' && (e.status===404 || e.status===408 || e.status===429 || e.status>=500))));
 }
-function bazGetRetry(url, tries, ms){
+function bazRetryWait_(attempt){
+  var wait=(attempt||0)>0?2100:700;
+  return new Promise(function(resolve){ setTimeout(resolve,wait); });
+}
+function bazGetRetry(url, tries, ms, attempt, timeoutRetries){
+  attempt=Number(attempt)||0; timeoutRetries=Number(timeoutRetries)||0;
   return bazGet(url,ms).catch(function(e){
-    if(tries>1 && bazTransient_(e)){
-      return new Promise(function(resolve){ setTimeout(resolve,700); })
-        .then(function(){ return bazGetRetry(url,tries-1,ms); });
+    var canRetry=tries>1 && bazTransient_(e) && (e.kind!=='timeout' || timeoutRetries<1);
+    if(canRetry){
+      return bazRetryWait_(attempt)
+        .then(function(){ return bazGetRetry(url,tries-1,ms,attempt+1,timeoutRetries+(e.kind==='timeout'?1:0)); });
     }
     throw e;
   });
@@ -2618,7 +2624,7 @@ applyLang();
       console.log('[이슈이력] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
     var q=force?'&force=1':(ISSUE_DATA_REV?'&rev='+encodeURIComponent(ISSUE_DATA_REV):'');
-    return bazGet(ISSUE_HIST_URL+q)
+    return bazGet(ISSUE_HIST_URL+q,BAZ_TIMEOUT_FULL)
       .then(function(d){
         if(d&&d.nochange){
           ISSUE_DATA_REV=d.rev||ISSUE_DATA_REV;
@@ -2709,7 +2715,7 @@ applyLang();
       console.log('[병원정보DB] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
     var q=force?'&force=1':(HDB_DATA_REV?'&rev='+encodeURIComponent(HDB_DATA_REV):'');
-    return bazGet(HOSPITAL_DB_URL+q)
+    return bazGet(HOSPITAL_DB_URL+q,BAZ_TIMEOUT_FULL)
       .then(function(d){
         if(d&&d.nochange){
           HDB_DATA_REV=d.rev||HDB_DATA_REV;
@@ -2744,15 +2750,19 @@ applyLang();
     if(!needH) return syncIssueHist(force);   // 한쪽만 필요하면 1콜이 이득이 없다
     if(!needI) return syncHospDB(force);
     BAZ_BOOT_FORCE=!!force;
-    var bq=force?'&force=1':'';
-    if(!force && HDB_DATA_REV) bq+='&hrev='+encodeURIComponent(HDB_DATA_REV);
-    if(!force && ISSUE_DATA_REV) bq+='&irev='+encodeURIComponent(ISSUE_DATA_REV);
-    BAZ_BOOT_IN_FLIGHT=bazGetRetry(HANDOVER_CORE+'?action=bootstrap'+bq,2)
+    var bq=force?'&force=1&refreshall=1':'';
+    if(HDB_DATA_REV) bq+='&hrev='+encodeURIComponent(HDB_DATA_REV);
+    if(ISSUE_DATA_REV) bq+='&irev='+encodeURIComponent(ISSUE_DATA_REV);
+    if(force && PC_RECENT_REV) bq+='&arev='+encodeURIComponent(PC_RECENT_REV);
+    BAZ_BOOT_IN_FLIGHT=bazGetRetry(HANDOVER_CORE+'?action=bootstrap'+bq,2,BAZ_TIMEOUT_FULL)
       .then(function(d){
         if(d && d.success===false){
           throw {kind:/unauthorized|토큰|로그인/i.test(String(d.error||''))?'auth':'server'};
         }
         var hd=d && d.hospdb, ih=d && d.issuehist;
+        if(d) console.info('[동기화] bootstrap', {ms:d._ms,rows:d._rows,bytes:d._bytes,cache:d._cache,
+          hospdb:hd&&{ms:hd._ms,rows:hd._rows,bytes:hd._bytes,cache:hd._cache},
+          issuehist:ih&&{ms:ih._ms,rows:ih._rows,bytes:ih._bytes,cache:ih._cache}});
         var okH=!!(hd && hd.success && (hd.nochange || (Array.isArray(hd.data) && hd.data.length)));
         var okI=!!(ih && ih.success && (ih.nochange || ih.data));
         if(!okH && !okI) throw {kind:'bootstrap-unsupported'};
@@ -2842,7 +2852,9 @@ applyLang();
     try{ visitP=syncVisitLog(); }catch(e){ visitP=Promise.resolve(false); }
     try{
       recentP=Promise.resolve(bootP).then(function(){
-        return (typeof pcLoadRecent==='function')?pcLoadRecent(null,true):true;
+        /* force bootstrap가 같은 원본으로 all 캐시까지 갱신했다. 여기서는 캐시를
+           조건부 조회해 두 번째 시트 전량 읽기를 피한다. */
+        return (typeof pcLoadRecent==='function')?pcLoadRecent(null,false):true;
       });
     }
     catch(e){ recentP=Promise.resolve(false); }
@@ -3128,18 +3140,19 @@ function pcProgSend(payload){
   /* [보안] 서버 쓰기 인증 토큰 동봉 */
   try{ if(window.BazAuth&&BazAuth.token) payload=Object.assign({},payload,{token:BazAuth.token()}); }catch(e){}
   var body=JSON.stringify(payload);
-  /* POST 응답에 서버가 확정한 큐가 들어 있다 — 이를 바로 반영하면 다음 폴링(최대 25초)을
-     기다리지 않고 왕복 1회로 서버 상태가 확정된다. 응답을 못 읽으면(no-cors 폴백·네트워크
-     오류) 로컬이 서버와 어긋났을 수 있으므로 rev를 지워 다음 폴링이 전체를 다시 받게 한다. */
-  function fallback(){ pcProgRev=0; try{ fetch(HANDOVER_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body}); }catch(e){} }
-  /* [중요] 재전송(fallback)은 "요청이 서버에 닿지 못했을 때"만 해야 한다.
-     예전에는 .then(...).then(...).catch(fallback) 구조라, 서버 쓰기가 이미 성공했는데
-     응답 처리(pcProgAccept) 안에서 예외가 나도 catch에 걸려 같은 op를 한 번 더 POST했다.
-     q_done 같은 op가 두 번 적용되면 큐가 한 칸 더 진행돼 "유령 진행중/건너뜀"이 생긴다.
-     → 전송 실패는 fetch/파싱 단계에서만 판정하고, 응답 처리 예외는 여기서 삼킨다. */
+  /* 응답을 읽지 못하면 같은 op를 재전송하지 않는다. dedup opId가 없는 상태에서
+     blind retry는 q_done 등을 두 번 적용할 수 있다. hold를 풀고 즉시 서버 상태를 조회한다. */
+  function fallback(msg){
+    pcProgRev=0; pcProgHold=0; pcProgHoldAt=0;
+    if(msg) toast('⚠️ '+msg);
+    try{ pcProgWake(); }catch(e){}
+  }
   try{
-    fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body})
-      .then(function(r){ return r.text(); })
+    var ctl=('AbortController' in window)?new AbortController():null;
+    var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} },15000):null;
+    fetch(HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,
+      signal:ctl?ctl.signal:undefined})
+      .then(function(r){ if(timer){clearTimeout(timer);timer=null;} if(!r.ok) throw {kind:'http',status:r.status}; return r.text(); })
       .then(function(txt){
         if(/^\s*</.test(txt)) throw {kind:'html'};     // 데이터 대신 로그인/권한 HTML
         return JSON.parse(txt);
@@ -3150,6 +3163,8 @@ function pcProgSend(payload){
           if(!d || d.success!==true){
             pcProgRev=0;
             if(d && /unauthorized|토큰|로그인/i.test(String(d.error||''))) bazAuthFail();
+            if(d && d.busy) fallback('다른 일정 저장이 진행 중입니다. 서버 상태를 다시 확인합니다.');
+            else fallback('일정 저장이 확인되지 않았습니다. 서버 상태를 다시 확인합니다.');
             return;
           }
           bazAuthOk();
@@ -3161,10 +3176,10 @@ function pcProgSend(payload){
         }catch(e){ pcProgRev=0; console.warn('[동기화] 쓰기 응답 처리 오류(재전송 안 함):',e); }
       })
       .catch(function(e){
-        if(e && e.kind==='html'){ pcProgRev=0; fallback(); return; }   // GAS 콜드스타트·리다이렉트(일시적) — 쓰기가 서버에 닿지 못했으니 재전송, 만료 배너는 띄우지 않는다
-        fallback();
+        if(timer){clearTimeout(timer);timer=null;}
+        fallback('일정 저장 응답을 확인하지 못했습니다. 서버 상태를 다시 확인합니다.');
       });
-  }catch(e){ fallback(); }
+  }catch(e){ fallback('일정 저장 요청을 보내지 못했습니다. 서버 상태를 다시 확인합니다.'); }
 }
 function pcProgPull(){
   if(!HANDOVER_URL) return Promise.resolve(true);
@@ -3174,7 +3189,7 @@ function pcProgPull(){
   if(pcProgInFlight) return pcProgInFlight;
   /* rev 동봉 → 변경이 없으면 서버가 {nochange:true}만 반환(큐 직렬화·전송·파싱 생략) */
   var url=HANDOVER_URL+'?action=progress'+(pcProgRev?('&rev='+pcProgRev):'');
-  pcProgInFlight=bazGet(url)
+  pcProgInFlight=bazGet(url,BAZ_TIMEOUT_POLL)
     .then(function(d){
       pcPollFailN=0;                                    // 성공 → 백오프 해제
       if(!d || d.success!==true) return false;
@@ -4201,12 +4216,13 @@ function pcLoadRecent(cb, force){
   pcRecentInFlight=true;
   pcRecentForce=!!force;
   if(pcRecentState!=='done') pcRecentState='loading';
-  var rq=force?'&force=1':(PC_RECENT_REV?'&rev='+encodeURIComponent(PC_RECENT_REV):'');
+  var rq=(force?'&force=1':'')+(PC_RECENT_REV?'&rev='+encodeURIComponent(PC_RECENT_REV):'');
   var bootReady=(!force && window.bazBootReady)?window.bazBootReady:Promise.resolve(true);
   pcRecentPromise=Promise.resolve(bootReady).then(function(){
-    return bazGetRetry(HANDOVER_URL+'?action=all'+rq,2);
+    return bazGetRetry(HANDOVER_URL+'?action=all'+rq,2,BAZ_TIMEOUT_FULL);
   })
     .then(function(d){
+      if(d) console.info('[동기화] recent', {ms:d._ms,rows:d._rows,bytes:d._bytes,cache:d._cache});
       if(d&&d.nochange){
         PC_RECENT_REV=d.rev||PC_RECENT_REV;
         pcRecentTs=Date.now();
