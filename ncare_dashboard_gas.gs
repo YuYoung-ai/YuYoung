@@ -4,6 +4,9 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('📁 대시보드 조회')
     .addItem('선택 항목 조회', 'filterHospitalDB')
+    .addSeparator()
+    .addItem('빈 위·경도 자동 채우기', 'fillMissingHospitalCoordinates')
+    .addItem('주소 변경 자동 갱신 설정 (1회)', 'installHospitalAddressEditTrigger')
     .addToUi();
 }
 const LAYOUT = {
@@ -16,6 +19,230 @@ const LAYOUT = {
   TOTAL_HOSP_ROW:   4,   // 전체 병원 (B4)
   TOTAL_NCARE_ROW:  9    // 전체 가입자 (B9)
 };
+
+/* 병원정보DB 지오코딩
+   - E열 주소가 있고 N·O 중 하나라도 빈 행만 채운다.
+   - 기존 좌표가 완성된 행은 다시 조회하거나 덮어쓰지 않는다.
+   - 설치형 수정 트리거를 1회 설정하면 E열 주소 변경 행만 새 좌표로 갱신한다. */
+const HOSPITAL_GEO = {
+  SHEET: '병원정보DB',
+  START_ROW: 3,
+  ADDRESS_COL: 5,     // E
+  LAT_COL: 14,        // N
+  LNG_COL: 15,        // O
+  BATCH_SIZE: 40,
+  EDIT_IMMEDIATE_MAX: 20,
+  NEXT_ROW_KEY: 'hospital_geo_next_row',
+  WORKER: 'continueHospitalGeocode_'
+};
+
+function hospitalGeoText_(v){
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+}
+function hospitalGeoNeedsFill_(address, lat, lng){
+  return !!hospitalGeoText_(address) &&
+    (hospitalGeoText_(lat) === '' || hospitalGeoText_(lng) === '');
+}
+
+/* 메뉴 실행: 현재 좌표가 비어 있는 주소만 처리한다.
+   데이터가 많으면 40건씩 나누고 다음 묶음은 1분 뒤 자동으로 계속한다. */
+function fillMissingHospitalCoordinates(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(HOSPITAL_GEO.SHEET);
+  if(!sh){
+    SpreadsheetApp.getUi().alert('안내: 병원정보DB 시트를 찾을 수 없습니다.');
+    return;
+  }
+  PropertiesService.getDocumentProperties().setProperty(
+    HOSPITAL_GEO.NEXT_ROW_KEY, String(HOSPITAL_GEO.START_ROW));
+  var result = processHospitalGeocodeBatch_();
+  ss.toast(hospitalGeoResultText_(result), '위·경도 입력', 5);
+}
+
+function hospitalGeoResultText_(r){
+  if(!r) return '처리 결과를 확인할 수 없습니다.';
+  var s = '성공 '+r.success+'건';
+  if(r.failed) s += ' · 주소 확인 필요 '+r.failed+'건';
+  if(r.scheduled) s += ' · 남은 행은 자동으로 계속 처리합니다.';
+  else s += ' · 처리 완료';
+  return s;
+}
+
+/* 위·경도 두 값이 모두 있는 행은 그대로 보존한다. */
+function processHospitalGeocodeBatch_(){
+  var lock = LockService.getDocumentLock();
+  if(!lock.tryLock(5000)){
+    scheduleHospitalGeocodeContinuation_();
+    return {success:0, failed:0, scheduled:true};
+  }
+  try{
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(HOSPITAL_GEO.SHEET);
+    if(!sh) return {success:0, failed:0, scheduled:false};
+
+    var props = PropertiesService.getDocumentProperties();
+    var start = Math.max(HOSPITAL_GEO.START_ROW,
+      Number(props.getProperty(HOSPITAL_GEO.NEXT_ROW_KEY)) || HOSPITAL_GEO.START_ROW);
+    var last = sh.getLastRow();
+    if(last < start){
+      props.deleteProperty(HOSPITAL_GEO.NEXT_ROW_KEY);
+      return {success:0, failed:0, scheduled:false};
+    }
+
+    var count = last - start + 1;
+    var addresses = sh.getRange(start, HOSPITAL_GEO.ADDRESS_COL, count, 1).getDisplayValues();
+    var coordRange = sh.getRange(start, HOSPITAL_GEO.LAT_COL, count, 2);
+    var coords = coordRange.getValues();
+    var formulas = coordRange.getFormulas();
+    var success = 0, failed = 0, requests = 0, stopIndex = count - 1;
+    var memo = {};
+
+    for(var i=0; i<count; i++){
+      if(!hospitalGeoNeedsFill_(addresses[i][0], coords[i][0], coords[i][1])) continue;
+      if(requests >= HOSPITAL_GEO.BATCH_SIZE){ stopIndex = i - 1; break; }
+      requests++;
+      var point = geocodeHospitalAddress_(addresses[i][0], memo);
+      if(point){
+        coords[i][0] = point.lat;
+        coords[i][1] = point.lng;
+        formulas[i][0] = formulas[i][1] = '';
+        success++;
+      }else{
+        failed++;
+      }
+    }
+
+    if(stopIndex >= 0){
+      var output = [];
+      for(var j=0; j<=stopIndex; j++){
+        output.push([
+          formulas[j][0] || coords[j][0],
+          formulas[j][1] || coords[j][1]
+        ]);
+      }
+      sh.getRange(start, HOSPITAL_GEO.LAT_COL, output.length, 2).setValues(output);
+      if(success) dropHospitalGeoResponseCache_();
+    }
+
+    var next = start + stopIndex + 1;
+    var scheduled = next <= last;
+    if(scheduled){
+      props.setProperty(HOSPITAL_GEO.NEXT_ROW_KEY, String(next));
+      scheduleHospitalGeocodeContinuation_();
+    }else{
+      props.deleteProperty(HOSPITAL_GEO.NEXT_ROW_KEY);
+    }
+    return {success:success, failed:failed, scheduled:scheduled};
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function geocodeHospitalAddress_(address, memo){
+  var normalized = hospitalGeoText_(address);
+  if(!normalized) return null;
+  memo = memo || {};
+  if(Object.prototype.hasOwnProperty.call(memo, normalized)) return memo[normalized];
+  try{
+    var response = Maps.newGeocoder()
+      .setLanguage('ko')
+      .setRegion('kr')
+      .geocode(normalized);
+    var result = response && response.results && response.results[0];
+    var loc = result && result.geometry && result.geometry.location;
+    var lat = loc && Number(loc.lat), lng = loc && Number(loc.lng);
+    memo[normalized] = (isFinite(lat) && isFinite(lng)) ? {lat:lat, lng:lng} : null;
+  }catch(err){
+    console.warn('[geocode] '+normalized+' 변환 실패: '+err);
+    memo[normalized] = null;
+  }
+  Utilities.sleep(100);
+  return memo[normalized];
+}
+
+/* 1회성 시간 트리거: 대량 입력을 다음 실행으로 안전하게 넘긴다. */
+function scheduleHospitalGeocodeContinuation_(){
+  var exists = ScriptApp.getProjectTriggers().some(function(t){
+    return t.getHandlerFunction() === HOSPITAL_GEO.WORKER;
+  });
+  if(!exists){
+    ScriptApp.newTrigger(HOSPITAL_GEO.WORKER).timeBased().after(60 * 1000).create();
+  }
+}
+function continueHospitalGeocode_(){
+  /* 실행 중인 1회성 트리거를 먼저 제거해야 남은 데이터용 다음 트리거를 만들 수 있다. */
+  ScriptApp.getProjectTriggers().forEach(function(t){
+    if(t.getHandlerFunction() === HOSPITAL_GEO.WORKER) ScriptApp.deleteTrigger(t);
+  });
+  processHospitalGeocodeBatch_();
+}
+
+/* 메뉴에서 한 번 실행·승인하면 이후 E열 주소 수정에 반응한다. */
+function installHospitalAddressEditTrigger(){
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var handler = 'handleHospitalAddressEdit_';
+  ScriptApp.getProjectTriggers().forEach(function(t){
+    if(t.getHandlerFunction() === handler) ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger(handler).forSpreadsheet(ss).onEdit().create();
+  ss.toast('주소 변경 자동 갱신이 설정되었습니다.', '설정 완료', 5);
+}
+
+/* hospital_gas.gs가 사용하는 병원정보DB 응답 캐시가 같은 프로젝트에 있으면 즉시 비운다.
+   함수가 없는 구형 구성에서도 지오코딩 자체는 정상 동작한다. */
+function dropHospitalGeoResponseCache_(){
+  try{
+    if(typeof bazCacheDrop_ === 'function') bazCacheDrop_('hospdb_all');
+  }catch(err){
+    console.warn('[geocode] 병원 DB 캐시 삭제 실패: '+err);
+  }
+}
+
+/* E열과 겹치는 실제 사용자 수정만 처리한다. 주소 삭제 시 좌표도 삭제한다. */
+function handleHospitalAddressEdit_(e){
+  if(!e || !e.range) return;
+  var sh = e.range.getSheet();
+  if(sh.getName() !== HOSPITAL_GEO.SHEET) return;
+  var firstCol = e.range.getColumn();
+  var lastCol = firstCol + e.range.getNumColumns() - 1;
+  if(HOSPITAL_GEO.ADDRESS_COL < firstCol || HOSPITAL_GEO.ADDRESS_COL > lastCol) return;
+
+  var firstRow = Math.max(HOSPITAL_GEO.START_ROW, e.range.getRow());
+  var lastRow = e.range.getLastRow();
+  if(lastRow < firstRow) return;
+
+  var rows = lastRow - firstRow + 1;
+  /* 잠금 대기 중이어도 바뀐 주소에 예전 좌표가 남아 노출되지 않게 먼저 비운다. */
+  sh.getRange(firstRow, HOSPITAL_GEO.LAT_COL, rows, 2).clearContent();
+  dropHospitalGeoResponseCache_();
+
+  var lock = LockService.getDocumentLock();
+  if(!lock.tryLock(5000)){
+    scheduleHospitalGeocodeFromRow_(firstRow);
+    return;
+  }
+  try{
+    var immediate = Math.min(rows, HOSPITAL_GEO.EDIT_IMMEDIATE_MAX);
+    var addresses = sh.getRange(firstRow, HOSPITAL_GEO.ADDRESS_COL, immediate, 1).getDisplayValues();
+    var out = [], memo = {};
+    for(var i=0; i<immediate; i++){
+      var point = geocodeHospitalAddress_(addresses[i][0], memo);
+      out.push(point ? [point.lat, point.lng] : ['', '']);
+    }
+    if(out.length) sh.getRange(firstRow, HOSPITAL_GEO.LAT_COL, out.length, 2).setValues(out);
+    if(out.some(function(v){ return v[0] !== '' && v[1] !== ''; })) dropHospitalGeoResponseCache_();
+    if(rows > immediate) scheduleHospitalGeocodeFromRow_(firstRow + immediate);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function scheduleHospitalGeocodeFromRow_(row){
+  var props = PropertiesService.getDocumentProperties();
+  var old = Number(props.getProperty(HOSPITAL_GEO.NEXT_ROW_KEY)) || row;
+  props.setProperty(HOSPITAL_GEO.NEXT_ROW_KEY, String(Math.min(old, row)));
+  scheduleHospitalGeocodeContinuation_();
+}
 
 function filterHospitalDB() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
