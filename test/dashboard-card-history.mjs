@@ -216,6 +216,13 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('26. 기간·구분·담당자·검색·초기화 컨트롤 존재',
     ['hstPeriod','hstGubun','hstFse','hstQuery','exResetHistoryFilters_']
       .every(t => controls.indexOf(t) >= 0));
+  ck('26-b. 처리 이력 기간 기본값은 선택 기간',
+    controls.indexOf('value="cur" selected') >= 0 &&
+    controls.indexOf('value="cur" selected') < controls.indexOf('value="all"'));
+  ck('26-c. 비교 기간이 없어도 선택 기간 기본값과 전체 기간 선택지는 유지',
+    D.exHistoryControls_(items,false).indexOf('value="cur" selected') >= 0 &&
+    D.exHistoryControls_(items,false).indexOf('value="prev"') < 0 &&
+    D.exHistoryControls_(items,false).indexOf('value="all"') >= 0);
 }
 
 /* ══════ 7. 특수문자·따옴표 안전 ══════ */
@@ -292,6 +299,10 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('42. 처리 이력 모달은 넓은 표·모바일 카드 CSS를 모두 가진다',
     /\.ex-list-box\.history\{max-width:1180px\}/.test(SRC) &&
     /@media\(max-width:820px\)/.test(SRC) && /\.hst-table td:before/.test(SRC));
+  ck('43. 초기 표시와 필터 초기화 모두 선택 기간으로 돌아간다',
+    /openExList\(name, sub, html, true\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
+    /period\.value='cur'/.test(grab('exResetHistoryFilters_')) &&
+    /period:val\('hstPeriod','cur'\)/.test(grab('exApplyHistoryFilters_')));
 }
 
 console.log('\n──────────────────────────────');
