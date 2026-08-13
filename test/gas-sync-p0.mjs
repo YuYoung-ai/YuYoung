@@ -26,7 +26,7 @@ function grab(src,name){
   throw new Error('함수 끝을 찾지 못했습니다: '+name);
 }
 function inlineSyntax(name,src){
-  const scripts=[...src.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)]
+  const scripts=[...src.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
     .map(m=>m[1]).filter(s=>s.trim());
   scripts.forEach(s=>new Function(s));
   ck(name+' 인라인 JavaScript 문법',scripts.length>0);
