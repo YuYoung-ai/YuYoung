@@ -62,7 +62,19 @@ ck('진행상태 busy: 자동 재전송 없이 사용자에게 알림',/d && d\.
 ck('병원 조회: timeout·network를 일시 오류로 분류',
   /e\.kind==='network'/.test(hTransient)&&/e\.kind==='timeout'/.test(hTransient));
 ck('병원 조회: 700ms → 2100ms 백오프',/2100:700/.test(grab(H,'bazRetryWait_')));
-ck('병원 조회: timeout 자동 재시도는 최대 1회',/timeoutRetries<1/.test(hRetry));
+ck('병원 조회: timeout 재시도 여부를 예산 판정에 위임',
+  /bazTimeoutRetryable_\(ms,timeoutRetries\)/.test(hRetry)&&/timeoutRetries<1/.test(grab(H,'bazTimeoutRetryable_')));
+/* 45초 전량 조회의 타임아웃은 재시도하지 않는다 — force 요청은 캐시를 건너뛰므로 재시도가
+   첫 시도의 재구성을 재사용하지 못하고, 서버 부하와 사용자 대기만 두 배가 된다. */
+const hBudget=new Function(grab(H,'bazTimeoutRetryable_')+
+  '; var BAZ_GET_TIMEOUT=20000, BAZ_LONG_BUDGET=30000; return bazTimeoutRetryable_;')();
+const dBudget=new Function(grab(D,'dashTimeoutRetryable_')+
+  '; var DASH_LONG_BUDGET=30000; return dashTimeoutRetryable_;')();
+ck('재시도 예산 실행: 45초 전량 조회 타임아웃은 재시도하지 않음',
+  hBudget(45000,0)===false&&dBudget(45000,0)===false);
+ck('재시도 예산 실행: 12초 폴링·10초 ping 타임아웃은 1회만 재시도',
+  hBudget(12000,0)===true&&hBudget(12000,1)===false&&
+  dBudget(10000,0)===true&&dBudget(10000,1)===false);
 ck('전량 조회: 45초·폴링 12초 타임아웃 분리',
   /BAZ_TIMEOUT_FULL=45000/.test(H)&&/BAZ_TIMEOUT_POLL=12000/.test(H)&&
   /DASH_TIMEOUT_FULL=45000/.test(D)&&/DASH_TIMEOUT_PING=10000/.test(D));
@@ -79,7 +91,15 @@ ck('요청 스코프: readAllMemo_ 도입·GET/POST 진입 시 초기화',
 const plainReads=(G.match(/readAll_\(\)/g)||[]).length;
 ck('사진 없는 readAll_ 직접 호출은 메모 함수 내부 한 곳뿐',plainReads===1);
 ck('강제 bootstrap: issuehist와 all 캐시가 같은 원본 읽기를 공유',
-  /getAll_\(\{force:'1', rev:syncRevParam_\(p,'arev'\)\}\)/.test(boot)&&/pcLoadRecent\(null,false\)/.test(H));
+  /getAll_\(\{force:'1', rev:syncRevParam_\(p,'arev'\)\}\)/.test(boot));
+ck('강제 bootstrap: all 캐시 갱신 실패가 hospdb·issuehist 응답을 무효화하지 않음',
+  /catch\(allErr\)/.test(boot)&&/allready:allReady/.test(boot));
+/* 서버가 all 캐시를 실제로 갱신했다고 확인(allready)해 준 경우에만 조건부 조회로 낮춘다.
+   확인 없이 낮추면 bootstrap 실패 시 만료 전 rev 메타가 옛 데이터를 '최신'으로 응답한다. */
+ck('강제 새로고침: allready 확인 시에만 최근처리를 조건부 조회로 낮춤',
+  /BAZ_BOOT_ALLREADY=!!\(d && d\.allready\)/.test(H)&&
+  /pcLoadRecent\(null, !BAZ_BOOT_ALLREADY\)/.test(H)&&
+  /BAZ_BOOT_ALLREADY=false/.test(H));
 
 ck('reqPrune_: 일괄 getProperties + 확률 실행',
   /Math\.random\(\) > 0\.05/.test(prune)&&/getProperties\(\)/.test(prune)&&!/getProperty\(/.test(prune));
@@ -147,6 +167,57 @@ ck('롤오버 실행: 어제 스냅샷은 상태 저장 뒤 한 번 기록',roll
 const blocked=makeRollover(true), blockedOut=blocked.fn({rev:4}), blockedStats=blocked.stats();
 ck('롤오버 실행: 락 실패 시 쓰기·스냅샷 없이 busy',
   blockedOut.success===false&&blockedOut.busy===true&&blockedStats.writes===0&&blockedStats.snaps===0);
+
+/* 계측이 큰 응답을 다시 직렬화하지 않는지 실제 실행으로 확인한다.
+   all·bootstrap 은 이 시스템에서 가장 큰 응답이라, 계측용 재직렬화는 새로고침 경로에
+   그대로 비용으로 얹힌다(캐시 저장 1회 + 계측 1회 + 응답 작성 1회). */
+const obsSrc=[grab(G,'syncByteLen_'),grab(G,'syncBytesFrom_'),grab(G,'syncObserved_')].join('\n');
+let strCalls=0;
+const obs=new Function('Utilities','JSON',obsSrc+
+  '; return {observed:syncObserved_, from:syncBytesFrom_};')(
+  {newBlob:s=>({getBytes:()=>({length:Buffer.byteLength(s)})})},
+  {stringify:v=>{strCalls++; return globalThis.JSON.stringify(v);}}
+);
+const bigOut={success:true,data:[{a:'가나다'},{b:'라마바'}]};
+const bigBody=globalThis.JSON.stringify(bigOut);
+obs.from(bigOut,bigBody);
+strCalls=0;
+obs.observed(bigOut,Date.now()-5,2,'miss');
+ck('계측 실행: 이미 직렬화한 본문이 있으면 재직렬화하지 않음',
+  strCalls===0&&bigOut._bytes===Buffer.byteLength(bigBody)&&bigOut._cache==='miss');
+const smallOut={success:true,nochange:true,rev:'abc'};
+strCalls=0;
+obs.observed(smallOut,Date.now()-1,0,'hit');
+ck('계측 실행: 본문 길이를 모를 때만 직렬화한다',strCalls===1&&smallOut._bytes>0);
+ck('계측 실행: 캐시 히트는 캐시 문자열 길이를 그대로 사용',
+  /syncBytesFrom_\(old,hit\)/.test(G)&&/syncBytesFrom_\(old,_h\)/.test(G)&&/syncBytesFrom_\(old,_c\)/.test(G));
+ck('계측: bootstrap은 하위 응답 바이트를 합산해 재직렬화를 피한다',
+  /_bytes=\(Number\(hospdb&&hospdb\._bytes\)\|\|0\)/.test(boot));
+
+/* getBootstrap_ 을 실제 실행해 allready 계약을 검증한다. 클라이언트는 이 값만 보고
+   최근처리 조회를 조건부로 낮추므로, 실패했는데 true 가 나오면 옛 데이터가 최신으로 굳는다. */
+const bootSrc=[grab(G,'syncForce_'),grab(G,'syncRevParam_'),grab(G,'syncByteLen_'),
+               grab(G,'syncBytesFrom_'),grab(G,'syncObserved_'),boot].join('\n');
+function runBoot(allImpl){
+  return new Function('Utilities','Logger','getHospDBRich_','getIssueHist_','getAll_',
+    bootSrc+'; return getBootstrap_;')(
+    {newBlob:s=>({getBytes:()=>({length:Buffer.byteLength(s)})})},{log:()=>{}},
+    ()=>({success:true,rev:'h1',_bytes:120,data:[1]}),
+    ()=>({success:true,rev:'i1',_bytes:340,data:{}}),
+    allImpl);
+}
+const bOk=runBoot(()=>({success:true,rev:'a1'}))({force:'1',refreshall:'1',arev:'old'});
+ck('bootstrap 실행: all 갱신 성공이면 allready·allrev 를 알린다',
+  bOk.allready===true&&bOk.allrev==='a1'&&bOk.success===true);
+const bThrow=runBoot(()=>{throw new Error('sheet down');})({force:'1',refreshall:'1'});
+ck('bootstrap 실행: all 갱신 예외가 hospdb·issuehist 응답을 버리지 않는다',
+  bThrow.success===true&&bThrow.allready===false&&!!bThrow.hospdb&&!!bThrow.issuehist);
+const bFail=runBoot(()=>({success:false,error:'x'}))({force:'1',refreshall:'1'});
+ck('bootstrap 실행: all 실패 응답이면 allready=false',bFail.allready===false&&bFail.success===true);
+let allCalls=0;
+const bPlain=runBoot(()=>{allCalls++;return {success:true};})({});
+ck('bootstrap 실행: 비강제 요청은 all 을 재구성하지 않는다',allCalls===0&&bPlain.allready===false);
+ck('bootstrap 실행: _bytes 는 하위 응답 합산(재직렬화 없음)',bOk._bytes===460);
 
 ck('배포: 서비스워커 캐시 버전 132 이상',Number((SW.match(/baz-cs-v(\d+)/)||[])[1]||0)>=132);
 

@@ -919,10 +919,20 @@ function bazRetryWait_(attempt){
   var wait=(attempt||0)>0?2100:700;
   return new Promise(function(resolve){ setTimeout(resolve,wait); });
 }
+/* [부하] 전량 조회(45초)가 시간 안에 못 끝났다면 같은 요청을 한 번 더 보내도 서버가 하는
+   일은 똑같다 — force 요청은 캐시를 건너뛰므로, 첫 시도가 채우고 있는 캐시의 덕을 재시도가
+   볼 수 없다. 사용자는 91초를 기다리고 서버 부하만 두 배가 된다.
+   → 긴 예산(≥30초)의 타임아웃은 재시도하지 않는다. 짧은 폴링·ping 은 콜드스타트일 가능성이
+     커서 1회 재시도가 값싸고 효과적이므로 그대로 둔다. */
+var BAZ_LONG_BUDGET=30000;
+function bazTimeoutRetryable_(ms, timeoutRetries){
+  return (Number(ms)||BAZ_GET_TIMEOUT)<BAZ_LONG_BUDGET && timeoutRetries<1;
+}
 function bazGetRetry(url, tries, ms, attempt, timeoutRetries){
   attempt=Number(attempt)||0; timeoutRetries=Number(timeoutRetries)||0;
   return bazGet(url,ms).catch(function(e){
-    var canRetry=tries>1 && bazTransient_(e) && (e.kind!=='timeout' || timeoutRetries<1);
+    var canRetry=tries>1 && bazTransient_(e) &&
+      (e.kind!=='timeout' || bazTimeoutRetryable_(ms,timeoutRetries));
     if(canRetry){
       return bazRetryWait_(attempt)
         .then(function(){ return bazGetRetry(url,tries-1,ms,attempt+1,timeoutRetries+(e.kind==='timeout'?1:0)); });
@@ -2736,7 +2746,11 @@ applyLang();
      action=bootstrap 으로 한 번에 받는다.
      ★ 구버전 백엔드(미재배포)는 bootstrap 을 모르거나 빈 응답을 준다 →
        hospdb/issuehist 중 못 받은 쪽만 기존 개별 요청으로 안전하게 폴백한다. */
-  var BAZ_BOOT_IN_FLIGHT=null, BAZ_BOOT_FORCE=false;
+  /* BAZ_BOOT_ALLREADY: 직전 강제 bootstrap이 서버에서 all 캐시까지 실제로 갱신했는가.
+     서버는 refreshall 처리 결과를 allready 로 알려준다. 이 확인 없이 최근처리 조회를
+     조건부(rev)로 낮추면, bootstrap이 실패했을 때 서버가 만료 전 rev 메타만 보고
+     nochange 를 돌려줄 수 있다 — 화면은 옛 데이터를 '갱신됨'으로 표시하게 된다. */
+  var BAZ_BOOT_IN_FLIGHT=null, BAZ_BOOT_FORCE=false, BAZ_BOOT_ALLREADY=false;
   function bazBootSync(force){
     applyHospDBCache();
     applyIssueCache();
@@ -2750,6 +2764,7 @@ applyLang();
     if(!needH) return syncIssueHist(force);   // 한쪽만 필요하면 1콜이 이득이 없다
     if(!needI) return syncHospDB(force);
     BAZ_BOOT_FORCE=!!force;
+    BAZ_BOOT_ALLREADY=false;        /* 서버가 allready 로 확인해 줄 때만 true 로 올린다 */
     var bq=force?'&force=1&refreshall=1':'';
     if(HDB_DATA_REV) bq+='&hrev='+encodeURIComponent(HDB_DATA_REV);
     if(ISSUE_DATA_REV) bq+='&irev='+encodeURIComponent(ISSUE_DATA_REV);
@@ -2760,6 +2775,8 @@ applyLang();
           throw {kind:/unauthorized|토큰|로그인/i.test(String(d.error||''))?'auth':'server'};
         }
         var hd=d && d.hospdb, ih=d && d.issuehist;
+        /* 서버가 같은 요청에서 all 캐시를 갱신했다고 확인해 준 경우에만 기록한다. */
+        BAZ_BOOT_ALLREADY=!!(d && d.allready);
         if(d) console.info('[동기화] bootstrap', {ms:d._ms,rows:d._rows,bytes:d._bytes,cache:d._cache,
           hospdb:hd&&{ms:hd._ms,rows:hd._rows,bytes:hd._bytes,cache:hd._cache},
           issuehist:ih&&{ms:ih._ms,rows:ih._rows,bytes:ih._bytes,cache:ih._cache}});
@@ -2852,9 +2869,12 @@ applyLang();
     try{ visitP=syncVisitLog(); }catch(e){ visitP=Promise.resolve(false); }
     try{
       recentP=Promise.resolve(bootP).then(function(){
-        /* force bootstrap가 같은 원본으로 all 캐시까지 갱신했다. 여기서는 캐시를
-           조건부 조회해 두 번째 시트 전량 읽기를 피한다. */
-        return (typeof pcLoadRecent==='function')?pcLoadRecent(null,false):true;
+        if(typeof pcLoadRecent!=='function') return true;
+        /* 서버가 allready 로 "같은 원본으로 all 캐시까지 갱신했다"고 확인한 경우에만
+           조건부(rev) 조회로 낮춰 두 번째 시트 전량 읽기를 피한다.
+           bootstrap이 실패·폴백했다면 서버 캐시는 그대로이므로 반드시 force 로 조회한다 —
+           그러지 않으면 만료 전 rev 메타 때문에 옛 데이터가 '갱신됨'으로 표시된다. */
+        return pcLoadRecent(null, !BAZ_BOOT_ALLREADY);
       });
     }
     catch(e){ recentP=Promise.resolve(false); }

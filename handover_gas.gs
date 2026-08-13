@@ -1431,13 +1431,26 @@ function syncNochangeFrom_(out, p, paramName){
   if(!asked || !out || !out.rev || asked!==out.rev) return null;
   return {success:true, nochange:true, rev:out.rev, updated:out.updated||'', count:Number(out.count)||0};
 }
+function syncByteLen_(s){
+  try{ return Utilities.newBlob(s).getBytes().length; }
+  catch(e){ return String(s==null?'':s).length; }
+}
+/* [성능] _bytes 는 이미 직렬화한 본문이 있으면 그 길이를 그대로 쓴다.
+   여기서 매번 JSON.stringify 를 다시 돌리면 전량 응답(all·bootstrap)이 캐시 저장용 1회,
+   계측용 1회, 응답 작성용 1회로 세 번 직렬화된다 — 이 PR이 줄이려는 새로고침 경로에
+   그 비용이 그대로 얹힌다. 호출부가 syncBytesFrom_ 로 미리 채워 두면 재직렬화하지 않는다. */
+function syncBytesFrom_(out, body){
+  if(out && typeof out==='object' && typeof out._bytes!=='number') out._bytes=syncByteLen_(body);
+  return out;
+}
 function syncObserved_(out, started, rows, cacheState){
   if(!out || typeof out!=='object') return out;
   out._ms=Math.max(0, Date.now()-started);
   out._rows=Math.max(0, Number(rows)||Number(out._rows)||0);
   out._cache=cacheState||'miss';
-  try{ out._bytes=Utilities.newBlob(JSON.stringify(out)).getBytes().length; }
-  catch(e){ try{ out._bytes=JSON.stringify(out).length; }catch(_){ out._bytes=0; } }
+  if(typeof out._bytes!=='number'){
+    try{ out._bytes=syncByteLen_(JSON.stringify(out)); }catch(e){ out._bytes=0; }
+  }
   return out;
 }
 function syncCacheDrop_(key){
@@ -1450,13 +1463,14 @@ function getAll_(p){
   var same=syncNochange_('handover_all',p,'rev');
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var hit = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
-  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); syncBytesFrom_(old,hit); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var all = readAllMemo_();
   var out = {success:true, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
              data:all.rows.map(slim_), _rows:all.rows.length};
   out.rev=syncRevOf_(out.data);
-  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', JSON.stringify(out), 300); }catch(e){}
+  var allBody=JSON.stringify(out); syncBytesFrom_(out,allBody);
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', allBody, 300); }catch(e){}
   syncMetaPut_('handover_all',out,300);
   var state=syncForce_(p)?'force':'miss';
   var builtSame=syncNochangeFrom_(out,p,'rev');
@@ -1469,7 +1483,7 @@ function getHospDB_(p){
   var same=syncNochange_('handover_hospdb',p,'rev');
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var _h = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb') : null;
-  if(_h){ try{ var old=JSON.parse(_h), nc=syncNochangeFrom_(old,p,'rev'); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  if(_h){ try{ var old=JSON.parse(_h), nc=syncNochangeFrom_(old,p,'rev'); syncBytesFrom_(old,_h); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var sh = sheet_('병원정보DB');
   if(!sh) return {success:false, error:'병원정보DB 탭 없음'};
   var v = sh.getDataRange().getDisplayValues();
@@ -1506,7 +1520,8 @@ function getHospDB_(p){
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_(res.data);
   /* [수정] 95KB 절벽 제거 — 조각 캐시로 크기 제한 없이 저장 */
-  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb', JSON.stringify(res), 600); }catch(e){}
+  var hdbBody=JSON.stringify(res); syncBytesFrom_(res,hdbBody);
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb', hdbBody, 600); }catch(e){}
   syncMetaPut_('handover_hospdb',res,600);
   var state=syncForce_(p)?'force':'miss';
   var builtSame=syncNochangeFrom_(res,p,'rev');
@@ -1521,7 +1536,7 @@ function getHospDBRich_(p, revParam){
   var rp=revParam||'rev', same=syncNochange_('handover_hospdb_rich',p,rp);
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_hospdb_rich') : null;
-  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); syncBytesFrom_(old,_c); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var ss = richHospSS_();
   if(!ss) return {success:false, error:'스프레드시트 접근 불가'};
   var sheet = ss.getSheetByName(HOSPDB_RICH.SHEET);
@@ -1546,7 +1561,8 @@ function getHospDBRich_(p, revParam){
   var res = {success:true, count:hospitals.length, data:hospitals, _rows:values.length,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_(res.data);
-  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb_rich', JSON.stringify(res), 600); }catch(e){}
+  var richBody=JSON.stringify(res); syncBytesFrom_(res,richBody);
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_hospdb_rich', richBody, 600); }catch(e){}
   syncMetaPut_('handover_hospdb_rich',res,600);
   var state=syncForce_(p)?'force':'miss';
   var builtSame=syncNochangeFrom_(res,p,rp);
@@ -1571,7 +1587,7 @@ function getIssueHist_(p, revParam){
   var rp=revParam||'rev', same=syncNochange_('handover_issuehist',p,rp);
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_issuehist') : null;
-  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  if(_c){ try{ var old=JSON.parse(_c), nc=syncNochangeFrom_(old,p,rp); syncBytesFrom_(old,_c); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
   var raw = histDerivedRaw_();
   var history = {};
   Object.keys(raw).forEach(function(name){ history[name] = histPublicList_(raw[name]); });
@@ -1597,7 +1613,8 @@ function getIssueHist_(p, revParam){
   var res = {success:true, count:Object.keys(history).length, data:history, revs:revs, _rows:sourceRows,
     updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   res.rev=syncRevOf_({data:res.data,revs:res.revs});
-  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', JSON.stringify(res), 600); }catch(e){}
+  var issueBody=JSON.stringify(res); syncBytesFrom_(res,issueBody);
+  try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_issuehist', issueBody, 600); }catch(e){}
   syncMetaPut_('handover_issuehist',res,600);
   var state=syncForce_(p)?'force':'miss';
   var builtSame=syncNochangeFrom_(res,p,rp);
@@ -1847,13 +1864,22 @@ function getBootstrap_(p){
   var allReady=false, allRev='';
   /* 수동 새로고침은 issuehist가 읽은 같은 원본 스냅샷으로 all 캐시도 갱신한다.
      이어지는 hospital-pc 최근처리 조회는 이 캐시를 사용하므로 시트를 두 번 읽지 않는다. */
+  /* all 캐시 갱신은 부가 작업이다 — 여기서 실패해도 이미 만들어 둔 hospdb·issuehist 응답까지
+     버리면 안 된다. 실패하면 allready:false 로 알리고, 클라이언트가 all 을 force 로 다시 받는다. */
   if(syncForce_(p) && /^(1|true|yes)$/i.test(String(p.refreshall||''))){
-    var all=getAll_({force:'1', rev:syncRevParam_(p,'arev')});
-    allReady=!!(all && all.success);
-    allRev=(all && all.rev)||'';
+    try{
+      var all=getAll_({force:'1', rev:syncRevParam_(p,'arev')});
+      allReady=!!(all && all.success);
+      allRev=(all && all.rev)||'';
+    }catch(allErr){
+      Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
+    }
   }
   var out={success:true, ver:'3.3.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
+  /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
+     계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
+  out._bytes=(Number(hospdb&&hospdb._bytes)||0)+(Number(issuehist&&issuehist._bytes)||0);
   var state=syncForce_(p)?'force':
     ((hospdb&&hospdb._cache==='hit'&&issuehist&&issuehist._cache==='hit')?'hit':'miss');
   return syncObserved_(out,started,issuehist&&issuehist._rows,state);

@@ -1274,13 +1274,20 @@ function gasRetryWait_(attempt){
   var wait=(attempt||0)>0?2100:700;
   return new Promise(function(resolve){ setTimeout(resolve,wait); });
 }
+/* [부하] 전량 조회(45초) 타임아웃은 재시도하지 않는다 — force 요청은 캐시를 건너뛰므로
+   재시도가 첫 시도의 재구성 결과를 재사용하지 못하고, 같은 무게의 작업을 서버에 한 번 더
+   시키면서 사용자 대기만 두 배로 늘린다. 짧은 예산(ping 등)에서는 1회 재시도를 유지한다. */
+var DASH_LONG_BUDGET=30000;
+function dashTimeoutRetryable_(ms, timeoutRetries){
+  return (Number(ms)||20000)<DASH_LONG_BUDGET && timeoutRetries<1;
+}
 function fetchAllRetry(tries, force, rev, attempt, timeoutRetries){
   attempt=Number(attempt)||0; timeoutRetries=Number(timeoutRetries)||0;
   var q=(force?'&force=1':'')+(rev?'&rev='+encodeURIComponent(rev):'');
   return fetchTimeout(_tk(HANDOVER_URL+'?action=all'+q), DASH_TIMEOUT_FULL)
     .catch(function(e){
       var canRetry=tries>1 && (e.kind==='network'||e.kind==='timeout'||gasTransient_(e)) &&
-        (e.kind!=='timeout'||timeoutRetries<1);
+        (e.kind!=='timeout'||dashTimeoutRetryable_(DASH_TIMEOUT_FULL,timeoutRetries));
       if(canRetry){
         toast('연결 재시도 중…');
         return gasRetryWait_(attempt).then(function(){
@@ -1294,7 +1301,7 @@ function gvRetry(action, params, tries, ms, attempt, timeoutRetries){
   attempt=Number(attempt)||0; timeoutRetries=Number(timeoutRetries)||0;
   return gv(action,params,ms).catch(function(e){
     var transient=e.kind==='network'||e.kind==='timeout'||gasTransient_(e);
-    if(tries>1 && transient && (e.kind!=='timeout'||timeoutRetries<1)){
+    if(tries>1 && transient && (e.kind!=='timeout'||dashTimeoutRetryable_(ms,timeoutRetries))){
       return gasRetryWait_(attempt).then(function(){
         return gvRetry(action,params,tries-1,ms,attempt+1,timeoutRetries+(e.kind==='timeout'?1:0));
       });
