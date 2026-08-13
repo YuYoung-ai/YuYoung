@@ -13,7 +13,8 @@
  *   · 악성 병원명이 노드/인라인 핸들러를 만들지 않고 텍스트로만 표시
  *   · 이력 모달 role/aria-modal·포커스 진입·Esc 닫기·스크롤 잠금 해제
  *   · 전체화면 진입/종료 후 scrollY 복원(paddingTop 보정 없음)
- *   · 내 주변 5km 켜기/끄기와 거리 표시
+ *   · 카드/마커 클릭 → 지도 말풍선에 병원 정보 + 최근 이력
+ *   · 지도가 목록 위에 전폭으로 고정(3열 아님)
  *   · 카드/표 전환·정렬 헤더 키보드 조작
  *   · KO/EN/JA 전환 후 새 UI 문자열
  *   · 필터 폭 3단계·모바일↔Window·여러 뷰포트에서 예외 없음
@@ -31,6 +32,82 @@ catch {
 }
 const { chromium } = pw;
 const BASE = process.env.BASE || 'http://127.0.0.1:8099';
+
+/* ── 가짜 카카오 지도 SDK ────────────────────────────────────────────────
+   실제 타일·키 없이 페이지의 지도 경로(생성 → 마커 → 말풍선 → relayout)를
+   그대로 지나가게 하는 최소 구현. 검증에 필요한 흔적만 window 에 남긴다.
+     window.__fakeMap      지도 인스턴스(relayouts / level / __fire)
+     window.__fakeMarkers  만들어진 마커(__fire('click') 로 클릭 발생)
+     window.__lastIW       마지막 InfoWindow(openedWithoutMarker) */
+const FAKE_KAKAO_SDK = `(function(){
+  var W = window;
+  function listeners(o){ o.__ls = o.__ls || {}; o.__fire = function(t, a){ (o.__ls[t]||[]).forEach(function(f){ f(a); }); }; return o; }
+  function LatLng(lat,lng){ this.lat=lat; this.lng=lng; }
+  LatLng.prototype.getLat=function(){ return this.lat; };
+  LatLng.prototype.getLng=function(){ return this.lng; };
+  function LatLngBounds(){ this.pts=[]; }
+  LatLngBounds.prototype.extend=function(p){ if(p) this.pts.push(p); return this; };
+  LatLngBounds.prototype.contain=function(){ return true; };
+  LatLngBounds.prototype.isEmpty=function(){ return this.pts.length===0; };
+  function Map(container, opts){
+    listeners(this);
+    this.container=container; this.level=(opts&&opts.level)||9;
+    this.center=(opts&&opts.center)||new LatLng(37.5,127);
+    this.relayouts=0; this.zoomable=true;
+    W.__fakeMap=this;
+  }
+  Map.prototype.getCenter=function(){ return this.center; };
+  Map.prototype.setCenter=function(c){ this.center=c; this.__fire('center_changed'); };
+  Map.prototype.getLevel=function(){ return this.level; };
+  Map.prototype.setLevel=function(l){ if(l===this.level) return; this.level=l; this.__fire('zoom_changed'); };
+  Map.prototype.setBounds=function(){ this.__fire('bounds_changed'); };
+  Map.prototype.panTo=function(c){ this.center=c; };
+  Map.prototype.getBounds=function(){ return new LatLngBounds(); };
+  Map.prototype.relayout=function(){ this.relayouts++; };
+  Map.prototype.setZoomable=function(v){ this.zoomable=!!v; };
+  function Marker(o){ listeners(this); this.position=o.position; this.title=o.title; this.map=null;
+    (W.__fakeMarkers=W.__fakeMarkers||[]).push(this); }
+  Marker.prototype.setMap=function(m){ this.map=m; };
+  Marker.prototype.getPosition=function(){ return this.position; };
+  Marker.prototype.setImage=function(){};
+  function MarkerImage(){} function Size(){} function Point(){}
+  function CustomOverlay(o){ this.position=o.position; this.content=o.content; this.map=null; }
+  CustomOverlay.prototype.setMap=function(m){
+    this.map=m;
+    if(!this.content || !this.content.nodeType) return;
+    if(m && m.container) m.container.appendChild(this.content);
+    else if(this.content.parentNode) this.content.parentNode.removeChild(this.content);
+  };
+  CustomOverlay.prototype.setPosition=function(p){ this.position=p; };
+  CustomOverlay.prototype.getPosition=function(){ return this.position; };
+  function InfoWindow(o){ this.content=o.content; this.position=o.position; this.node=null; W.__lastIW=this; }
+  InfoWindow.prototype.open=function(map, marker){
+    this.openedWithoutMarker=(marker==null);
+    var host=map&&map.container; if(!host) return;
+    var box=document.createElement('div');
+    box.className='fake-iw';
+    box.style.cssText='position:absolute;left:8px;top:8px;background:#fff;z-index:30;';
+    if(this.content && this.content.nodeType) box.appendChild(this.content);
+    else box.innerHTML=String(this.content||'');
+    host.appendChild(box); this.node=box;
+  };
+  InfoWindow.prototype.close=function(){ if(this.node&&this.node.parentNode) this.node.parentNode.removeChild(this.node); this.node=null; };
+  function MarkerClusterer(o){ this.map=o&&o.map; this.markers=[]; }
+  MarkerClusterer.prototype.addMarkers=function(ms){ var self=this; (ms||[]).forEach(function(m){ self.markers.push(m); m.setMap(self.map); }); };
+  MarkerClusterer.prototype.clear=function(){ this.markers.forEach(function(m){ m.setMap(null); }); this.markers=[]; };
+  function Geocoder(){}
+  Geocoder.prototype.addressSearch=function(_a, cb){ cb([], 'ZERO_RESULT'); };
+  W.kakao = { maps: {
+    load: function(cb){ setTimeout(cb, 0); },
+    LatLng: LatLng, LatLngBounds: LatLngBounds, Map: Map, Marker: Marker,
+    MarkerImage: MarkerImage, Size: Size, Point: Point,
+    CustomOverlay: CustomOverlay, InfoWindow: InfoWindow, MarkerClusterer: MarkerClusterer,
+    services: { Geocoder: Geocoder, Status: { OK: 'OK', ZERO_RESULT: 'ZERO_RESULT' } },
+    event: { addListener: function(t, type, fn){ if(!t) return; t.__ls = t.__ls || {}; (t.__ls[type] = t.__ls[type] || []).push(fn);
+      if(!t.__fire) t.__fire = function(k, a){ (t.__ls[k]||[]).forEach(function(f){ f(a); }); }; } }
+  } };
+})();`;
+
 const errs = [];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({
@@ -50,7 +127,12 @@ await ctx.addInitScript(() => {
 const page = await ctx.newPage();
 page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
 page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|ERR_CONNECTION/.test(m.text())) errs.push('CONSOLE: ' + m.text()); });
-await page.route('**://dapi.kakao.com/**', r => r.abort());
+/* 카카오 SDK 를 가짜 구현으로 대체한다. 실제 키·타일 서버를 쓰지 않으면서도
+   지도 객체·마커·말풍선이 실제로 만들어지는 경로를 그대로 지나간다.
+   (예전에는 abort 해서 '지도를 불러올 수 없습니다' 화면만 검증할 수 있었다) */
+await page.route('**://dapi.kakao.com/**', r => r.fulfill({
+  status: 200, contentType: 'application/javascript', body: FAKE_KAKAO_SDK
+}));
 await page.route('**yuyoung-ai.deno.net/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, valid: true, level: 3, name: '스모크' }) }));
 await page.route('**://script.google.com/**', r => {
   const u = r.request().url();
@@ -129,21 +211,24 @@ const afterY = await page.evaluate(() => window.scrollY);
 ck('전체화면이 배경을 잠그고 paddingTop 보정을 쓰지 않는다', inFs.full && inFs.locked && !inFs.pad, JSON.stringify(inFs));
 ck('전체화면 종료 후 스크롤 위치가 복원된다', Math.abs(afterY - beforeY) <= 2, `${beforeY} → ${afterY}`);
 
-// 6. 내 주변 5km
-await page.click('#nearbyBtn');
-await page.waitForTimeout(500);
-const nearby = await page.evaluate(() => ({
-  pressed: document.getElementById('nearbyBtn').getAttribute('aria-pressed'),
-  state: document.getElementById('nearbyState').textContent,
-  cards: [...document.querySelectorAll('#pcLeft .h-name')].map(e => e.textContent),
-  dist: [...document.querySelectorAll('#pcLeft .h-dist')].length
+// 6. 내 주변 5km 기능이 완전히 사라졌다
+const gone = await page.evaluate(() => ({
+  btn: !!document.getElementById('nearbyBtn'),
+  box: !!document.getElementById('nearbyState'),
+  mod: typeof window.BazNearby,
+  chips: document.querySelectorAll('.chip[data-filter]').length
 }));
-ck('내 주변 5km 를 켜면 반경 내 N-CARE 만 거리와 함께 보인다',
-  nearby.pressed === 'true' && nearby.cards.length === 2 && nearby.dist === 2, JSON.stringify(nearby));
-await page.click('#nearbyBtn');
-await page.waitForTimeout(400);
-const off = await page.evaluate(() => ({ pressed: document.getElementById('nearbyBtn').getAttribute('aria-pressed'), cards: document.querySelectorAll('#pcLeft .h-name').length }));
-ck('모드 해제 시 이전 검색·필터 결과로 돌아온다', off.pressed === 'false' && off.cards === 3, JSON.stringify(off));
+ck('내 주변 5km 버튼·상태·모듈이 남아 있지 않다',
+  !gone.btn && !gone.box && gone.mod === 'undefined', JSON.stringify(gone));
+await page.click('.chip[data-filter="ncare"]');
+await page.waitForTimeout(300);
+const chipOn = await page.evaluate(() => ({
+  on: document.querySelector('.chip[data-filter="ncare"]').classList.contains('on'),
+  cards: document.querySelectorAll('#pcLeft .h-name').length
+}));
+ck('기존 필터 칩은 그대로 동작한다', chipOn.on && chipOn.cards > 0, JSON.stringify(chipOn));
+await page.click('.chip[data-filter="all"]');
+await page.waitForTimeout(300);
 
 // 7. 카드/표 전환 + 정렬 헤더 키보드
 await page.click('#pcViewToggle [data-view="table"]');
@@ -167,12 +252,13 @@ for (const lang of ['en', 'ja', 'ko']) {
   await page.waitForTimeout(250);
 }
 const i18n = await page.evaluate(() => ({
-  nearby: document.getElementById('nearbyBtnLabel').textContent,
+  sub: document.getElementById('hdrSub').textContent,
   legend: [...document.querySelectorAll('#pcMapLegend .lg')].map(e => e.textContent.trim()),
   hint: document.getElementById('pcHint').textContent
 }));
 ck('KO/EN/JA 전환 후에도 새 UI 문자열이 채워진다',
-  !!i18n.nearby && i18n.legend.length === 4 && i18n.legend.every(Boolean) && !!i18n.hint, JSON.stringify(i18n));
+  !!i18n.sub && !/N-CARE 병원 조회|Nearby N-CARE/.test(i18n.sub) &&
+  i18n.legend.length === 4 && i18n.legend.every(Boolean) && !!i18n.hint, JSON.stringify(i18n));
 
 // 9. 필터 폭 3단계 · 모바일 모드 전환에서 오류 없음
 await page.click('#filtToggleBtn'); await page.waitForTimeout(250);
@@ -182,52 +268,117 @@ const mobile = await page.evaluate(() => ({ cls: document.body.className, cards:
 await page.click('#modeToggle [data-mode="window"]'); await page.waitForTimeout(400);
 ck('모바일 ↔ Window 전환에서 화면이 깨지지 않는다', mobile.cls.includes('mode-mobile') && mobile.cards === 3, JSON.stringify(mobile));
 
-// 9-b. 1200px 이상 3열 작업공간 — 결과 목록만 독립 스크롤
+// 9-b. 넓은 화면에서도 지도는 목록 위에 전폭으로 고정된다(3열 아님)
 await page.setViewportSize({ width: 1600, height: 900 });
 await page.waitForTimeout(450);
 // 앞 단계에서 필터 폭을 바꿔 놨으므로 기본(filt-base)으로 되돌린 뒤 측정한다
 for (let i = 0; i < 3 && !(await page.evaluate(() => document.body.classList.contains('filt-base'))); i++) {
   await page.click('#filtToggleBtn'); await page.waitForTimeout(300);
 }
-const cols = await page.evaluate(() => {
+const lay = await page.evaluate(() => {
   const r = s => { const e = document.querySelector(s); const b = e && e.getBoundingClientRect(); return b ? { w: Math.round(b.width), x: Math.round(b.x), y: Math.round(b.y), bottom: Math.round(b.bottom) } : null; };
   const left = document.getElementById('pcLeft');
   return {
-    notice: r('#schedNotice.show'), rail: r('#filterRail'), left: r('#pcLeft'), right: r('#pcRight'),
+    rail: r('#filterRail'), left: r('#pcLeft'), right: r('#pcRight'), bar: r('#pcToolbar'),
     leftOverflow: getComputedStyle(left).overflowY,
-    rightH: Math.round(document.getElementById('pcRight').getBoundingClientRect().height),
-    vh: innerHeight,
+    rightPos: getComputedStyle(document.getElementById('pcRight')).position,
     hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
   };
 });
-ck('1200px 이상에서 필터·결과·지도 3열이 만들어진다',
-  cols.rail.w >= 220 && cols.rail.w <= 260 &&
-  cols.left.w >= 380 && cols.left.w <= 480 &&
-  cols.right.x > cols.left.x + cols.left.w - 1 &&
-  cols.hOverflow === 0, JSON.stringify(cols));
-ck('결과 목록만 독립 스크롤하고 지도는 뷰포트 높이에 머문다',
-  cols.leftOverflow === 'auto' && cols.rightH <= cols.vh && cols.rightH > cols.vh * 0.6, JSON.stringify(cols));
-ck('일정 안내가 3열 필터·목록·지도와 겹치지 않는다',
-  !cols.notice || (cols.notice.bottom <= cols.rail.y && cols.notice.x + cols.notice.w <= cols.right.x), JSON.stringify(cols));
-const innerScroll = await page.evaluate(() => {
-  const l = document.getElementById('pcLeft');
-  const y0 = window.scrollY; l.scrollTop = 250;
-  return { top: l.scrollTop, bodyMoved: window.scrollY !== y0 };
-});
-ck('결과 목록을 굴려도 본문은 따라 움직이지 않는다', innerScroll.top > 0 && !innerScroll.bodyMoved, JSON.stringify(innerScroll));
-const mapWheelScroll = await page.evaluate(() => {
-  const l = document.getElementById('pcLeft');
-  const spacer = document.createElement('div'); spacer.style.height = '2400px'; l.appendChild(spacer);
-  l.scrollTop = 0;
-  const ev = new WheelEvent('wheel', { deltaY: 220, bubbles: true, cancelable: true });
+ck('지도가 결과 목록 위에 있고 같은 폭을 쓴다',
+  lay.right.y < lay.bar.y && lay.bar.y < lay.left.y &&
+  Math.abs(lay.right.w - lay.left.w) <= 2 && Math.abs(lay.right.x - lay.left.x) <= 2,
+  JSON.stringify(lay));
+ck('지도가 오른쪽 칸으로 밀려나지 않는다(3열 제거)',
+  lay.right.x < lay.rail.x + lay.rail.w + 40 && lay.right.w > 700 && lay.hOverflow === 0, JSON.stringify(lay));
+ck('지도는 스크롤에 붙어 있고 결과 목록은 본문 스크롤을 쓴다',
+  lay.rightPos === 'sticky' && lay.leftOverflow !== 'auto' && lay.leftOverflow !== 'scroll', JSON.stringify(lay));
+const pageScroll = await page.evaluate(async () => {
+  window.scrollTo(0, 0);
+  const y0 = window.scrollY;
+  const ev = new WheelEvent('wheel', { deltaY: 260, bubbles: true, cancelable: true });
   document.getElementById('pcMapPane').dispatchEvent(ev);
-  const top = l.scrollTop;
-  spacer.remove();
-  if (typeof pcRenderLeft === 'function') pcRenderLeft(pcList || []);
-  return { top, prevented: ev.defaultPrevented };
+  return { prevented: ev.defaultPrevented, y0 };
 });
-ck('지도 휠 확대가 꺼진 3열 화면에서는 휠이 결과 목록을 움직인다',
-  mapWheelScroll.top > 0 && mapWheelScroll.prevented, JSON.stringify(mapWheelScroll));
+ck('지도 위 휠은 확대가 꺼져 있으면 가로채지 않는다(본문이 그대로 스크롤)',
+  !pageScroll.prevented, JSON.stringify(pageScroll));
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(200);
+
+// 9-c. 지도가 실제로 만들어졌는지 (가짜 SDK 경로)
+const mapUp = await page.evaluate(() => ({
+  created: !!window.__fakeMap,
+  fail: !!document.querySelector('.pc-mapfail'),
+  markers: (window.__fakeMarkers || []).length
+}));
+ck('지도 인스턴스와 병원 마커가 만들어진다',
+  mapUp.created && !mapUp.fail && mapUp.markers >= 3, JSON.stringify(mapUp));
+
+// 9-d. 카드 클릭 → 지도 말풍선에 병원 정보 + 최근 이력
+// 앞 단계에서 다른 병원이 이미 선택돼 있으면 pcPickHosp 가 '해제'로 동작한다 → 먼저 푼다
+await page.evaluate(() => window.pcClearHospFocus());
+await page.waitForTimeout(200);
+await page.evaluate(() => window.pcPickHosp('부산A병원'));
+await page.waitForTimeout(300);
+const iw = await page.evaluate(() => {
+  const n = document.querySelector('.pc-iw');
+  return n ? {
+    open: true,
+    name: (n.querySelector('.iw-nm') || {}).textContent,
+    tags: [...n.querySelectorAll('.iw-tag')].map(e => e.textContent),
+    rows: n.querySelector('.iw-rows') ? n.querySelector('.iw-rows').textContent : '',
+    hist: [...n.querySelectorAll('.iw-hi')].map(e => e.textContent),
+    btn: (n.querySelector('.iw-btn') || {}).textContent,
+    byPosition: !!(window.__lastIW && window.__lastIW.openedWithoutMarker)
+  } : { open: false, tags: [], hist: [], rows: '', name: '', btn: '' };
+});
+ck('카드 클릭이 지도에 말풍선을 띄운다', iw.open, JSON.stringify(iw).slice(0, 300));
+ck('말풍선에 병원 이름·상태·등급이 보인다',
+  iw.name === '부산A병원' && iw.tags.some(x => /권고/.test(x)) && iw.tags.some(x => /N-CARE Silver/.test(x)),
+  JSON.stringify(iw.tags));
+ck('말풍선에 장비번호·영업담당이 보인다', /SN-2/.test(iw.rows) && /김철수/.test(iw.rows), iw.rows);
+ck('말풍선에 최근 이력이 보인다',
+  iw.hist.length >= 1 && /2026-06-01/.test(iw.hist[0]) && /세척/.test(iw.hist[0]), JSON.stringify(iw.hist));
+ck('말풍선을 마커가 아니라 좌표에 연다(클러스터 상태에서도 표시)', iw.byPosition);
+
+// 9-e. 지도 마커 클릭도 같은 말풍선을 연다
+await page.evaluate(() => {
+  const iwOld = document.querySelector('.pc-iw'); if (iwOld) iwOld.remove();
+  const mk = (window.__fakeMarkers || []).find(m => m.title === '가까운N병원');
+  mk && mk.__fire('click');
+});
+await page.waitForTimeout(300);
+const mkIw = await page.evaluate(() => {
+  const n = document.querySelector('.pc-iw');
+  return n ? { name: (n.querySelector('.iw-nm') || {}).textContent, hasBtn: !!n.querySelector('.iw-btn') } : null;
+});
+ck('지도 마커를 눌러도 병원 이름·이력 말풍선이 뜬다',
+  mkIw && mkIw.name === '가까운N병원' && mkIw.hasBtn, JSON.stringify(mkIw));
+
+// 9-f. 말풍선의 '이력 전체 보기' → 상세 패널
+await page.evaluate(() => document.querySelector('.pc-iw .iw-btn').click());
+await page.waitForTimeout(300);
+const detail = await page.evaluate(() => ({
+  mode: document.getElementById('pcRight').classList.contains('detail'),
+  ttl: document.getElementById('pcRightTtl').textContent,
+  name: (document.querySelector('#pcDetail .pc-dt-name') || {}).textContent,
+  histRows: document.querySelectorAll('#pcDetail .tl-item, #pcDetail .tl-empty').length
+}));
+ck("말풍선의 '이력 전체 보기'가 그 병원 상세·이력을 연다",
+  detail.mode && detail.name === '가까운N병원' && detail.histRows >= 1, JSON.stringify(detail));
+await page.evaluate(() => pcBackToMap());
+await page.waitForTimeout(250);
+
+// 9-g. 확대/축소 반복 후에도 지도가 살아 있다(타일 재계산 1회)
+const zoomLoop = await page.evaluate(async () => {
+  window.__fakeMap.relayouts = 0;
+  for (let i = 0; i < 8; i++) { pcMapZoom(i % 2 ? 1 : -1); await new Promise(r => setTimeout(r, 30)); }
+  window.__fakeMap.__fire('idle');
+  await new Promise(r => setTimeout(r, 700));
+  return { relayouts: window.__fakeMap.relayouts, level: window.__fakeMap.level, alive: !document.querySelector('.pc-mapfail') };
+});
+ck('휠·버튼 확대/축소를 반복해도 지도가 유지되고 타일 재계산은 최소로 걸린다',
+  zoomLoop.alive && zoomLoop.relayouts >= 1 && zoomLoop.relayouts <= 3, JSON.stringify(zoomLoop));
 
 // 10. 좁은 화면(1024/768) 렌더
 for (const [w, h] of [[1920, 1080], [1366, 768], [1024, 768], [390, 844]]) {
