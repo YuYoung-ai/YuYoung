@@ -297,12 +297,27 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('41. 팝업 내부 필터는 전역 필터 F 를 변경하지 않는다',
     !/F\.(from|to|type|part|hosp|fse|gubun)\s*=/.test(grab('exApplyHistoryFilters_')));
   ck('42. 처리 이력 모달은 넓은 표·모바일 카드 CSS를 모두 가진다',
-    /\.ex-list-box\.history\{max-width:1180px\}/.test(SRC) &&
+    /\.ex-list-box\.history\{[^}]*max-width:1180px/.test(SRC) &&
     /@media\(max-width:820px\)/.test(SRC) && /\.hst-table td:before/.test(SRC));
   ck('43. 초기 표시와 필터 초기화 모두 선택 기간으로 돌아간다',
     /openExList\(name, sub, html, true\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
     /period\.value='cur'/.test(grab('exResetHistoryFilters_')) &&
     /period:val\('hstPeriod','cur'\)/.test(grab('exApplyHistoryFilters_')));
+  ck('44. 처리 이력 모달은 PC에서 계산 가능한 고정 높이를 가진다',
+    /\.ex-list-box\.history\{[^}]*height:min\(900px,calc\(100vh - 32px\)\)/.test(SRC));
+  ck('45. 처리 이력 목록은 항상 세로 스크롤이 가능하다',
+    /\.hst-table-wrap\{[^}]*overflow-y:scroll/.test(SRC) &&
+    /overscroll-behavior:contain/.test(SRC) && /touch-action:pan-x pan-y/.test(SRC));
+  ck('46. 윈도우에서 스크롤바 위치가 눈에 보인다',
+    /\.hst-table-wrap::-webkit-scrollbar\{width:12px/.test(SRC) &&
+    /scrollbar-color:#94A3B8 #EEF2F7/.test(SRC));
+  ck('47. 모바일은 동적 화면 높이를 사용해 목록 영역을 확보한다',
+    /@supports\(height:100dvh\)/.test(SRC) &&
+    /@media\(max-width:820px\)\{\.ex-list-box\.history\{height:calc\(100dvh - 20px\)\}/.test(SRC));
+  const causeSrc=grab('renderExecutiveCause');
+  ck('48. VOC 유형·교체품 TOP5는 선택 기간 0건 항목을 제외한다',
+    /exDimCompare\(x\.rows, x\.prev, 'type', true\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc) &&
+    /exDimCompare\(x\.rows, x\.prev, 'part', false\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc));
 }
 
 console.log('\n──────────────────────────────');

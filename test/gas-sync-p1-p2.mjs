@@ -63,9 +63,12 @@ ck('P2 서버: 인계 부트스트랩 묶음도 rev·nochange 캐시',
 ck('배포: 서비스워커 캐시 버전 갱신(≥127)', Number((SW.match(/baz-cs-v(\d+)/)||[])[1]||0) >= 127);
 
 /* 콜드스타트 회귀: 무거운 강제 호출을 직렬화하고 일시 404/HTML만 1회 재시도한다. */
-const dLoad=grab(D,'loadData'), dTimeout=grab(D,'fetchTimeout'), dGvRetry=grab(D,'gvRetry'),
+const dLoad=grab(D,'loadData'), dTimeout=grab(D,'fetchTimeout'), dGvRetry=grab(D,'gvRetry'), dBoot=grab(D,'boot'),
       hGet=grab(H,'bazGet'), hGetRetry=grab(H,'bazGetRetry'), hRefresh=H.slice(H.indexOf('window.bazRefreshAll=function'),H.indexOf('window.bazRefreshAll=function')+1800);
 ck('콜드스타트: 대시보드 hospdb 완료 후 all 조회',/Promise\.resolve\(hospP\)\.then/.test(dLoad));
+ck('콜드스타트: all 도착 후 병원 DB의 N-Care 정보를 다시 결합',
+  dBoot.indexOf('RAW=d.data.map')>=0 && dBoot.indexOf('enrichNcare(true)')>dBoot.indexOf('RAW=d.data.map') &&
+  dBoot.indexOf('enrichNcare(true)')<dBoot.indexOf('buildFilters()'));
 ck('콜드스타트: 대시보드 HTTP 오류 분류',/!r\.ok[\s\S]*kind:'http'/.test(dTimeout));
 ck('콜드스타트: 대시보드 일시 오류 제한 재시도',/gasTransient_\(e\)/.test(dFetch)&&/tries>1/.test(dGvRetry));
 ck('콜드스타트: 병원 화면 HTTP 오류 분류',/!r\.ok[\s\S]*kind:'http'/.test(hGet));
@@ -87,6 +90,19 @@ ck('P2 실행: 다른 rev면 전체 조회 진행',helpers.syncNochange_('sample
 ck('P1 실행: force=1이면 rev가 같아도 전체 조회 진행',helpers.syncNochange_('sample',{force:'1',rev:'abc'},'rev')===null);
 mem.sample='payload'; helpers.syncCacheDrop_('sample');
 ck('P2 실행: 데이터 캐시와 rev 메타를 함께 무효화',!mem.sample&&!mem.sample__meta);
+
+/* 병원 DB가 먼저 도착한 뒤 all 원본이 생기는 실제 순서에서도 N-Care를 결합한다. */
+const dEnrich=grab(D,'enrichNcare');
+let filterCalls=0,applyCalls=0;
+const enrichRows=[{hosp:'가입병원',ncare:'미가입'}], enrichDb=[{n:'가입병원',ncare:'Basic'}];
+const enrichFn=new Function('RAW','HOSPDB','nkey','buildFilters','apply',
+  dEnrich+'; return enrichNcare;')(
+  enrichRows,enrichDb,s=>String(s||'').replace(/\s+/g,'').toLowerCase(),
+  ()=>{filterCalls++;},()=>{applyCalls++;});
+ck('N-Care 실행: all 원본의 미가입 기본값을 병원 DB 가입 등급으로 보강',
+  enrichFn(true)===true && enrichRows[0].ncare==='Basic');
+ck('N-Care 실행: boot 내부 결합은 중간 필터 렌더를 중복 실행하지 않음',
+  filterCalls===0 && applyCalls===0);
 
 console.log('\n──────────────────────────────');
 console.log('통과 '+pass+'/'+total);
