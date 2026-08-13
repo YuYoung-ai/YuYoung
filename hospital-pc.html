@@ -99,12 +99,10 @@
   .pc-hctl:hover{border-color:var(--navy);color:var(--navy);}
   .pc-hctl.on{background:var(--navy);color:#fff;border-color:var(--navy);}
   body.pc-mapcol .pc-hctl[data-headctl="fold"]{transform:rotate(180deg);}   /* 접힘: ▾ → ▴ */
-  #pcRight.detail .pc-headctl{display:none;}   /* 상세 모드: 지도 조작 무의미 */
   /* 높이 조절 핸들 — 하단 모서리 */
   #pcMapGrip{flex:0 0 auto;height:11px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;background:var(--surface-2);border-top:1px solid var(--gray-line);touch-action:none;}
   #pcMapGrip span{width:34px;height:3px;border-radius:2px;background:var(--gray-line);transition:background .12s;}
   #pcMapGrip:hover span{background:var(--navy);}
-  #pcRight.detail #pcMapGrip{display:none;}
   @media(max-width:980px){ #pcMapGrip{display:none;} }   /* 좁은 화면: 고정 높이 유지 */
   /* 전체화면 — z-index 160: 페이지 크롬(헤더50) 위, 모든 모달(상세190·이력200) 아래.
      2클래스 선택자로 L86·L185(모두 1,1,0)를 명시도(1,2,0)로 이긴다(소스 순서 무관). */
@@ -143,7 +141,6 @@
   .pc-mctl{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--gray-line);background:var(--surface);color:var(--navy);font-size:16px;font-weight:800;line-height:1;border-radius:9px;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(20,34,66,.16);transition:background .12s,border-color .12s,opacity .12s;}
   .pc-mctl:hover{background:var(--navy);color:#fff;border-color:var(--navy);}
   .pc-mctl:disabled{opacity:.35;cursor:default;background:var(--surface);color:var(--navy);}
-  #pcRight.detail #pcMapCtl{display:none;}   /* 상세 모드: 지도가 안 보이므로 컨트롤도 숨김 */
   .pc-mapfail{display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;color:var(--text-muted);font-size:12.5px;line-height:1.6;}
   /* 최근 완료(현장) 리스트 */
   .pc-recent-list{display:flex;flex-direction:column;gap:9px;}
@@ -172,40 +169,10 @@
   /* 선택 병원 강조 링 — 클러스터에 묶여도 보이도록 마커 위에 얹는 단일 오버레이 */
   .pc-selring{width:30px;height:30px;border-radius:50%;border:3px solid var(--navy);background:rgba(27,47,94,.12);box-shadow:0 0 0 2px #fff, 0 2px 8px rgba(20,34,66,.35);pointer-events:none;animation:pcSelPop .18s ease-out;}
   @keyframes pcSelPop{0%{transform:scale(.4);opacity:0;}100%{transform:scale(1);opacity:1;}}
-  /* 지도 말풍선(InfoWindow) — 병원 정보 + 최근 이력 요약 + 전체 이력 버튼.
-     카카오 InfoWindow 의 바탕은 항상 흰색이라 다크 모드 변수를 쓰면 글자가 사라진다.
-     여기서만 고정 색을 쓴다(페이지 테마와 무관하게 항상 읽히도록). */
-  .pc-iw{font-family:'Noto Sans KR',sans-serif;padding:10px 12px 11px;min-width:206px;max-width:290px;color:#2B3A55;}
-  .pc-iw .iw-nm{font-size:13.5px;font-weight:800;color:#1B2F5E;line-height:1.35;word-break:break-all;margin-bottom:6px;padding-right:16px;}
-  .pc-iw .iw-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px;}
-  .pc-iw .iw-tag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px;background:#EEF1F7;color:#5A6B8C;white-space:nowrap;}
-  .pc-iw .iw-tag.prog{background:#2E7D9E;color:#fff;}
-  .pc-iw .iw-rows{display:grid;grid-template-columns:auto 1fr;gap:3px 9px;font-size:11px;margin-bottom:8px;}
-  .pc-iw .iw-rows .k{color:#7C8AA5;white-space:nowrap;}
-  .pc-iw .iw-rows .v{color:#2B3A55;word-break:break-all;}
-  .pc-iw .iw-h{font-size:11px;font-weight:800;color:#1B2F5E;border-top:1px solid #E2E7F0;padding-top:7px;margin-bottom:5px;}
-  .pc-iw .iw-hist{display:flex;flex-direction:column;gap:6px;max-height:136px;overflow:auto;overscroll-behavior:contain;margin-bottom:9px;}
-  .pc-iw .iw-hi{font-size:11px;line-height:1.45;border-left:2px solid #2E7D9E;padding-left:7px;color:#5A6B8C;}
-  .pc-iw .iw-hi .d{font-weight:800;color:#1B2F5E;}
-  .pc-iw .iw-hi .tp{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:5px;background:#DFF0F6;color:#1F6F94;margin-left:4px;}
-  .pc-iw .iw-hi .tp.as{background:#EFE4F7;color:#7B4BA8;}
-  .pc-iw .iw-hi .m{display:block;color:#2B3A55;}
-  .pc-iw .iw-empty{font-size:11px;color:#7C8AA5;margin-bottom:9px;}
-  .pc-iw .iw-btn{display:block;width:100%;border:0;background:#2E7D9E;color:#fff;font-size:11.5px;font-weight:800;
-    padding:7px 8px;border-radius:7px;cursor:pointer;font-family:inherit;line-height:1.2;}
-  .pc-iw .iw-btn:hover{filter:brightness(1.08);}
+  /* [변경] 상세는 화면 폭과 무관하게 '별도 창'(#pcDetailModal) 하나로만 연다.
+     예전에는 넓은 화면이면 지도 위에 오른쪽 drawer(#pcDetail), 표 뷰면 가운데 모달로
+     갈렸고, 지도 말풍선까지 더해 같은 정보를 보여 주는 자리가 셋이었다. */
 
-  /* 상세 패널 — 예전에는 inset:0 로 지도를 통째로 가리고(#pcMapPane visibility:hidden)
-     지도 문맥이 사라졌다. 넓은 화면에서는 오른쪽 drawer 로 얹어 지도를 계속 보여준다.
-     좁은 화면(≤980px)에서만 전면을 덮는다. */
-  #pcDetail{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;padding:15px 16px;display:none;background:var(--surface);}
-  #pcRight.detail #pcDetail{display:block;}
-  @media(min-width:981px){
-    #pcRight.detail #pcDetail{left:auto;width:min(430px,58%);border-left:1px solid var(--gray-line);box-shadow:-6px 0 20px rgba(20,34,66,.12);}
-    #pcRight.detail #pcMapPane{visibility:visible;}
-    #pcRight.detail #pcMapCtl{display:flex;right:calc(min(430px,58%) + 10px);}   /* 지도가 보이므로 컨트롤도 남긴다 */
-    #pcRight.detail .pc-headctl{display:flex;}
-  }
   .pc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;}
   .pc-cardwrap{cursor:pointer;position:relative;}
   .pc-cardwrap .h-card{margin-bottom:0;height:100%;transition:box-shadow .12s,border-color .12s;}
@@ -267,7 +234,6 @@
     background:rgba(27,47,94,.88);color:#fff;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:var(--r-pill);
     white-space:nowrap;opacity:0;transition:opacity .18s;}
   #pcMapHint.show{opacity:1;}
-  #pcRight.detail #pcMapHint{display:none;}
   .pc-hctl[data-headctl="interact"].on{background:var(--teal);color:#fff;border-color:var(--teal);}
 
   /* 지도 범례 — 마커 색이 무엇을 뜻하는지(색만으로 전달하지 않도록 텍스트 병기) */
@@ -281,7 +247,6 @@
   #pcMapLegend .sw.near{background:rgba(46,125,158,.85);}
   #pcMapLegend .sw.done{background:var(--ok);}
   #pcMapLegend .sw.prog{background:var(--teal);}
-  #pcRight.detail #pcMapLegend{display:none;}
   @media(max-width:980px){ #pcMapLegend{display:none;} }
 
   /* ※ '내 주변 5km N-CARE 병원 조회'(브라우저 위치 기준 필터)는 제거했다.
@@ -537,7 +502,7 @@
   /* 병원 상세 모달 (표 전체화면 뷰에서 행 클릭 시) */
   #pcDetailModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:190;display:none;align-items:center;justify-content:center;padding:20px;}   /* 이력 편집(histModal 200)·비번(300) 모달이 위에 스택되도록 190 */
   #pcDetailModal.show{display:flex;}
-  .pc-dm-sheet{position:relative;background:var(--surface);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:16px;padding:18px;box-shadow:var(--sh-2);animation:slideUp .2s ease;}
+  .pc-dm-sheet{position:relative;background:var(--surface);width:100%;max-width:560px;max-height:88vh;overflow:auto;overscroll-behavior:contain;border-radius:16px;padding:18px;box-shadow:var(--sh-2);animation:slideUp .2s ease;}
   .pc-dm-close{position:absolute;top:10px;right:12px;border:0;background:transparent;font-size:18px;line-height:1;color:var(--text-muted);cursor:pointer;padding:4px;z-index:1;}
   .pc-dm-close:hover{color:var(--text);}
   /* 이력 모달 */
@@ -1031,6 +996,7 @@ const I18N = {
     vocYear:'년', vocMonthLabel:'월', vocWeekLabel:'주차', vocYearSuffix:'년', vocMonSuffix:'월', vocWeekSuffix:'주차',
     bNormal:'정상(~30일)', bTarget:'점검대상', bRec:'권고', bWarn:'경고', bNone:'미점검',
     /* ── v3: 지도 범례/조작 · 이력 서버 저장 ── */
+    mapNoCoord:'이 병원은 지도에 표시할 위치 정보가 없습니다 — 정보와 이력만 표시합니다',
     mapFitResult:'결과 맞춤', mapFitResultTip:'현재 검색·필터 결과만 한 화면에', mapFitEvery:'전체(완료·진행중 포함)',
     mapFitEveryTip:'오늘 완료·진행중 마커까지 포함해 맞춤', mapClearSel:'선택 해제', mapNoResult:'맞출 결과가 없습니다',
     mapLegend:'지도 표시', lgResult:'검색 결과', lgNear:'결과 주변 5km', lgDone:'오늘 완료', lgProg:'진행중',
@@ -1039,7 +1005,7 @@ const I18N = {
     rcTodayDone:'🏁 오늘 완료', rcLoading:'불러오는 중…', rcLoadFail:'불러오기 실패 (네트워크 확인)', rcNoneToday:'오늘 완료 내역이 없습니다',
     prcTitle:'🚗 주변 이동 소요시간', prcToday:'오늘 기준', prcNear:'가까운 순', prcDue:'점검필요 우선',
     prcNoneNear:'반경 10km 내 점검대상 병원 없음', prcNoneDue:'반경 15km 내 점검대상 병원 없음', prcNoCoord:'📍 좌표 미등록 병원 — 주변 이동 계산 불가',
-    prcCur:'현재', schGo:'현장 일정 →', mapHistBtn:'🕑 이력 보기', pcHint:'카드·행을 클릭하면 위 지도/상세에서 확인됩니다',
+    prcCur:'현재', schGo:'현장 일정 →', pcHint:'병원을 클릭하면 지도가 그 위치로 이동하고 별도 창에 정보·이력이 열립니다',
     viewCards:'⊞ 카드', viewTable:'▤ 표',
     histSaving:'저장 중…', histServerSaved:'서버에 저장되었습니다', histSaveFail:'저장 실패 — 잠시 후 다시 시도해 주세요',
     histConflict:'다른 사용자가 먼저 저장했습니다. 서버의 최신 이력을 불러왔으니 다시 확인 후 저장하세요.',
@@ -1081,6 +1047,7 @@ const I18N = {
     vocByMonth:'Monthly', vocByWeek:'Weekly', vocAll:'All', vocNoData:'No data for this period', vocPickPeriod:'Select a period', vocFieldCheck:'Field findings', vocReported:'Reported (customer)', vocNoIssue:'No issue',
     vocYear:'Year', vocMonthLabel:'Month', vocWeekLabel:'Week', vocYearSuffix:'', vocMonSuffix:'M', vocWeekSuffix:'W',
     bNormal:'Normal(~30d)', bTarget:'Target', bRec:'Advised', bWarn:'Warning', bNone:'None',
+    mapNoCoord:'No map location for this hospital — showing details and history only',
     mapFitResult:'Fit results', mapFitResultTip:'Fit only the current search/filter results', mapFitEvery:'All (incl. done/in-progress)',
     mapFitEveryTip:'Fit including today\'s done and in-progress markers', mapClearSel:'Clear selection', mapNoResult:'No results to fit',
     mapLegend:'Map legend', lgResult:'Results', lgNear:'Within 5km of results', lgDone:'Done today', lgProg:'In progress',
@@ -1089,7 +1056,7 @@ const I18N = {
     rcTodayDone:'🏁 Done today', rcLoading:'Loading…', rcLoadFail:'Failed to load (check network)', rcNoneToday:'Nothing completed today',
     prcTitle:'🚗 Travel time nearby', prcToday:'Today', prcNear:'Nearest', prcDue:'Due first',
     prcNoneNear:'No due hospitals within 10km', prcNoneDue:'No due hospitals within 15km', prcNoCoord:'📍 No coordinates — cannot compute travel',
-    prcCur:'Now', schGo:'Schedule →', mapHistBtn:'🕑 History', pcHint:'Click a card or row to see it on the map/detail above',
+    prcCur:'Now', schGo:'Schedule →', pcHint:'Click a hospital to center the map on it and open its details and history',
     viewCards:'⊞ Cards', viewTable:'▤ Table',
     histSaving:'Saving…', histServerSaved:'Saved to the server', histSaveFail:'Save failed — please try again',
     histConflict:'Someone else saved first. The latest server history was loaded — review and save again.',
@@ -1131,6 +1098,7 @@ const I18N = {
     vocByMonth:'月別', vocByWeek:'週別', vocAll:'全体', vocNoData:'該当期間のデータなし', vocPickPeriod:'期間を選択してください', vocFieldCheck:'現場確認内容', vocReported:'受付現象(顧客)', vocNoIssue:'異常なし',
     vocYear:'年', vocMonthLabel:'月', vocWeekLabel:'週', vocYearSuffix:'年', vocMonSuffix:'月', vocWeekSuffix:'週',
     bNormal:'正常(~30日)', bTarget:'点検対象', bRec:'勧告', bWarn:'警告', bNone:'未点検',
+    mapNoCoord:'この病院は地図に表示する位置情報がありません — 情報と履歴のみ表示します',
     mapFitResult:'結果に合わせる', mapFitResultTip:'現在の検索・フィルター結果だけを表示', mapFitEvery:'全体(完了・進行中含む)',
     mapFitEveryTip:'本日完了・進行中マーカーまで含めて表示', mapClearSel:'選択解除', mapNoResult:'表示する結果がありません',
     mapLegend:'地図の凡例', lgResult:'検索結果', lgNear:'結果の周辺5km', lgDone:'本日完了', lgProg:'進行中',
@@ -1139,7 +1107,7 @@ const I18N = {
     rcTodayDone:'🏁 本日完了', rcLoading:'読み込み中…', rcLoadFail:'読み込み失敗(ネットワーク確認)', rcNoneToday:'本日の完了履歴はありません',
     prcTitle:'🚗 周辺の移動所要時間', prcToday:'本日基準', prcNear:'近い順', prcDue:'要点検優先',
     prcNoneNear:'半径10km以内に点検対象の病院なし', prcNoneDue:'半径15km以内に点検対象の病院なし', prcNoCoord:'📍 座標未登録 — 移動計算不可',
-    prcCur:'現在', schGo:'現場日程 →', mapHistBtn:'🕑 履歴を見る', pcHint:'カード・行をクリックすると上の地図/詳細で確認できます',
+    prcCur:'現在', schGo:'現場日程 →', pcHint:'病院をクリックすると地図がその位置へ移動し、別ウィンドウに情報・履歴が開きます',
     viewCards:'⊞ カード', viewTable:'▤ 表',
     histSaving:'保存中…', histServerSaved:'サーバーに保存しました', histSaveFail:'保存失敗 — しばらくしてから再試行してください',
     histConflict:'他のユーザーが先に保存しました。サーバーの最新履歴を読み込みましたので、確認して再度保存してください。',
@@ -2881,7 +2849,7 @@ applyLang();
     return Promise.all([bootP,visitP,recentP]).then(function(v){
       try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
       try{ if(typeof pcRenderRouteCard==='function') pcRenderRouteCard(); }catch(e){}
-      try{ if(typeof pcShowMap==='function' && typeof pcRightMode!=='undefined' && pcRightMode!=='detail') pcShowMap(pcList); }catch(e){}
+      try{ if(typeof pcShowMap==='function') pcShowMap(pcList); }catch(e){}
       var ok=v.every(function(x){return x!==false;});
       if(typeof done==='function') done(ok);
       return ok;
@@ -3283,11 +3251,10 @@ function pcRefreshProgViewsNow(hosp, silent){
   try{ pcRenderRecentCard(); }catch(e){}
   try{ if(typeof curTab!=='undefined' && curTab==='sched' && typeof renderSched==='function') renderSched(); }catch(e){}
   try{ if(typeof pcList!=='undefined'){ pcRenderLeft(pcList||[]); pcHighlight(); } }catch(e){}
-  try{ if(pcRightMode==='detail' && pcSelName) pcRenderDetail(pcSelName); }catch(e){}
   // 상세 모달(표 뷰)이 열려 있으면 모달 본문도 갱신
   try{ var dm=document.getElementById('pcDetailModal'); if(dm&&dm.classList.contains('show')&&pcSelName) pcRenderDetail(pcSelName, document.getElementById('pcDetailModalBody')); }catch(e){}
   // 지도 모드(카드 뷰)면 처리중 마커를 즉시 반영(현재 위치·줌 유지). 표 뷰는 지도 숨김이라 생략
-  try{ if(pcRightMode==='map' && pcMapVisible() && pcMapObj && typeof pcShowMap==='function'){ pcSaveMapState(); pcRestoreView=true; pcShowMap(pcList||[]); } }catch(e){}
+  try{ if(pcMapVisible() && pcMapObj && typeof pcShowMap==='function'){ pcSaveMapState(); pcRestoreView=true; pcShowMap(pcList||[]); } }catch(e){}
   try{ pcUpdateSchedNotice(); }catch(e){}
   if(!silent && hosp && pcIsProg(hosp)){
     try{ if(typeof bazToast==='function') bazToast('진행중: '+hosp+(pcInProgress[hosp]?' ('+pcInProgress[hosp]+')':'')); }catch(e){}
@@ -3455,12 +3422,11 @@ function pcUpdateSchedNotice(){
   else { el.className=''; el.innerHTML=''; }
   document.body.classList.toggle('pc-schednotice', el.classList.contains('show'));
 }
-var pcRightMode = 'map';   // 'map' | 'detail'
 var pcSelName = null;
 var pcSort = { key:'st', dir:1 };
 var pcList = [];
 var pcMapObj=null, pcMapMarkers=[], pcMarkerByName={}, pcDomReady=false, pcMapClusterer=null;
-var pcFocusIW=null, pcMapTimer=null;  // 지도 위 포커스 InfoWindow(이력 보기 버튼 포함)
+var pcMapTimer=null;
 var pcMapState=null, pcRestoreView=false;  // 상세→지도 복귀 시 당시 위치/줌 유지용
 // [성능] 레이어별 재그리기 키. 예전에는 키 하나로 4개 레이어를 묶어, 진행중 점 하나가 바뀌어도
 // 기본 마커 수백 개를 전부 새로 만들었다(폴링이 잦아지며 더 두드러짐). 레이어를 분리해
@@ -3516,7 +3482,6 @@ function pcSaveMapState(){
   if(pcMapObj && typeof kakao!=='undefined'){
     try{ var c=pcMapObj.getCenter(); pcMapState={lat:c.getLat(), lng:c.getLng(), level:pcMapObj.getLevel()}; }catch(e){}
   }
-  if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
 }
 // 저장한 지도 상태로 복원
 function pcApplyMapState(){
@@ -3527,7 +3492,6 @@ function pcApplyMapState(){
 var pcViewSaveT=0, pcViewRestoredOnce=false;
 function pcMapViewSave(){
   if(!pcMapObj || typeof kakao==='undefined') return;
-  if(pcRightMode==='detail') return;                 // 상세 진입 중엔 지도 중심이 의미 없음
   try{
     var c=pcMapObj.getCenter();
     localStorage.setItem('baz_pc_mapview', JSON.stringify({lat:c.getLat(), lng:c.getLng(), level:pcMapObj.getLevel(), ts:Date.now()}));
@@ -3945,7 +3909,6 @@ function pcEnsureDOM(){
           '<button type="button" class="pc-hctl" data-headctl="fs" title="'+escAttr(t('mapFullscreen'))+'" aria-label="'+escAttr(t('mapFullscreen'))+'">⛶</button>'+
           '<button type="button" class="pc-hctl" data-headctl="fold" title="'+escAttr(t('mapCollapse'))+'" aria-label="'+escAttr(t('mapCollapse'))+'">▾</button>'+
         '</div>'+
-        '<button class="pc-backmap" id="pcBackMap" type="button" style="display:none;">← 🗺 '+escapeHtml(t('mapTitle'))+'</button>'+
       '</div>'+
       '<div id="pcRightBody">'+
         '<div id="pcMapPane"></div>'+
@@ -3968,7 +3931,6 @@ function pcEnsureDOM(){
           '<span class="lg"><span class="sw prog"></span>'+escapeHtml(t('lgProg'))+'</span>'+
         '</div>'+
         '<div id="pcMapHint" role="status">'+escapeHtml(t('mapWheelHint'))+'</div>'+
-        '<div id="pcDetail"></div>'+
       '</div>'+
       '<div id="pcMapGrip" title="'+t('mapResize')+'" aria-label="'+t('mapResize')+'"><span></span></div>'+
     '</div>'+
@@ -4043,7 +4005,6 @@ function pcEnsureDOM(){
     var el=e.target.closest('[data-hname]'); if(!el) return;
     pcPickHosp(el.getAttribute('data-hname'));   // 카드 클릭 = 지도를 그 병원으로 (상세는 이력 버튼·말풍선으로)
   });
-  document.getElementById('pcBackMap').addEventListener('click', pcBackToMap);
   // 지도 컨트롤(확대·축소·전체 보기)
   var mctl=document.getElementById('pcMapCtl');
   if(mctl) mctl.addEventListener('click', function(e){
@@ -4465,68 +4426,51 @@ function pcToggleInProgress(fse, hosp){
   pcRefreshProgViews(hosp);
   if(pcIsProg(hosp)){ try{ pcFocusHospOnMap(hosp, null); }catch(e){} }
 }
-/* ── 지도 말풍선 내용 ──────────────────────────────────────────────────────
-   카드를 눌러도, 지도 마커를 눌러도 같은 말풍선을 띄운다.
-   예전에는 병원 이름과 '이력 보기' 버튼만 들어 있어, 정작 알고 싶은
-   상태·장비번호·담당·최근 이력을 보려면 상세 패널까지 한 번 더 들어가야 했다.
-   이제 말풍선 자체에 요약 정보와 최근 이력 3건을 넣고,
-   더 볼 게 있으면 '이력 전체 보기'로 상세 패널을 연다. */
-var PC_IW_HIST=3;
-function pcMapInfoNode(h){
-  var E=BazDom.el, kids=[];
-  kids.push(E('div',{class:'iw-nm',text:h.n}));
+/* ── 지도 포커스 ───────────────────────────────────────────────────────────
+   [변경] 지도 위 말풍선(InfoWindow)을 없앴다.
+   카카오 InfoWindow 는 open() 시점에 content 노드의 크기를 재서 흰 버블을 그리는데,
+   그 노드는 아직 문서에 붙기 전이라 CSS(grid/flex/max-height)가 적용되지 않는다.
+   그래서 버블은 첫 줄 높이로만 잡히고, 나머지 내용(등급·장비번호·이력)은
+   흰 배경 밖으로 흘러나와 지도 타일 위에 그대로 겹쳐 찍혔다 — 읽을 수 없는 상태.
+   내용을 줄이거나 크기를 강제해도 측정 시점 문제라 근본 해결이 안 된다.
+   → 지도는 '위치로 이동 + 선택 강조'만 담당하고,
+     병원 정보와 처리 이력은 별도 창(#pcDetailModal)에서 보여 준다. */
 
-  var tags=[];
-  if(pcIsProg(h.n)) tags.push(E('span',{class:'iw-tag prog',text:'🔵 '+t('schProg')}));
-  if(h.st) tags.push(E('span',{class:'iw-tag',text:h.st}));
-  if(isNcare(h) && h.nc) tags.push(E('span',{class:'iw-tag',text:'N-CARE '+h.nc}));
-  if(h.rg) tags.push(E('span',{class:'iw-tag',text:h.rg}));
-  if(tags.length) kids.push(E('div',{class:'iw-tags'},tags));
-
-  var rows=[];
-  function row(k,v){ if(v==null||v==='') return; rows.push(E('span',{class:'k',text:k})); rows.push(E('span',{class:'v',text:v})); }
-  row(t('dtSn'), h.s);
-  row(t('sales'), h.sa);
-  // statusDays() 는 '최근 점검 2026-08-04 · 9일 경과' 처럼 라벨을 이미 포함한다 → 값만 넣는다
-  rows.push(E('span',{class:'k',text:isNcare(h)?t('lastInsp'):t('lastVisit')}));
-  rows.push(E('span',{class:'v',text:statusDays(h).replace(new RegExp('^'+(isNcare(h)?t('lastInsp'):t('lastVisit'))+'\\s*'),'')}));
-  // 오늘 현장에서 처리한 건이면 담당자·구분을 함께 보여 준다
-  var tl=pcTodayList(), nk=normalize(h.n);
-  for(var i=0;i<tl.length;i++){
-    if(normalize(tl[i].hosp)===nk){ row(t('lgDone'), (tl[i].fse||'-')+(tl[i].gubun?' · '+tl[i].gubun:'')); break; }
-  }
-  if(rows.length) kids.push(E('div',{class:'iw-rows'},rows));
-
-  var recs=HISTORY[h.n]||[];
-  kids.push(E('div',{class:'iw-h',text:'🕑 '+t('histTitle')+' '+t('histCount').replace('{n}', recs.length)}));
-  if(recs.length){
-    kids.push(E('div',{class:'iw-hist'}, recs.slice(0,PC_IW_HIST).map(function(r){
-      var isInsp=(r.t==='점검');
-      var memo=r.fx||r.m||[r.pt,r.sy].filter(Boolean).join(' · ')||'';
-      return E('div',{class:'iw-hi'},[
-        E('span',{class:'d',text:r.d||'-'}),
-        E('span',{class:'tp'+(isInsp?'':' as'),text:isInsp?'점검':'A/S'}),
-        r.f ? E('span',{text:' · '+r.f}) : null,
-        memo ? E('span',{class:'m',text:memo}) : null
-      ]);
-    })));
-  } else {
-    kids.push(E('div',{class:'iw-empty',text:t('histEmpty')}));
-  }
-
-  var b=E('button',{type:'button',class:'iw-btn',text:t('mapHistBtn')});   /* mapHistBtn 에 이미 🕑 가 들어 있다 */
-  b.addEventListener('click', function(){ pcSelect(h.n); });
-  kids.push(b);
-  return E('div',{class:'pc-iw'}, kids);
+/* 지오코딩 실패는 localStorage 에 영구 캐시된다(쿼터 보호). 그래서 주소가 애매해
+   한 번 실패한 병원은 영영 좌표가 없고, 카드를 눌러도 지도가 움직이지 않았다.
+   사용자가 그 병원을 직접 누른 경우에는 실패 캐시를 무시하고 딱 1회 다시 시도한다.
+   (자동 일괄 지오코딩 geocodeMissing 의 캐시 정책은 그대로 둔다) */
+var pcGeoRetried={};
+function pcGeocodeOne(h, cb){
+  var addr=String(h && h.a || '').trim();
+  if(!addr || pcGeoRetried[addr]){ cb(false); return; }
+  pcGeoRetried[addr]=1;
+  loadKakao(function(ok){
+    if(ok===false || typeof kakao==='undefined' || !kakao.maps || !kakao.maps.services){ cb(false); return; }
+    var gc;
+    try{ gc=new kakao.maps.services.Geocoder(); }catch(e){ cb(false); return; }
+    gc.addressSearch(addr, function(result, status){
+      if(status===kakao.maps.services.Status.OK && result && result[0]){
+        var la=parseFloat(result[0].y), ln=parseFloat(result[0].x);
+        if(!isNaN(la) && !isNaN(ln)){
+          h.lat=la; h.lng=ln;
+          geoCache[addr]={lat:la,lng:ln}; geoSaveCache();
+          cb(true); return;
+        }
+      }
+      cb(false);
+    });
+  });
 }
 
-// 오늘 완료 병원을 상단 지도에서 위치로 이동 + 하이라이트
+var PC_FOCUS_LEVEL=4;   // 병원 하나를 볼 때의 배율(작을수록 확대)
+/* 지도를 이 병원 위치로 이동 + 확대. 성공하면 true. */
 function pcFocusHospOnMap(name, itemEl){
   document.querySelectorAll('#pcRecentCard .rrc-item').forEach(function(el){ el.classList.toggle('sel', el===itemEl); });
-  var h=pcHospByName(name); if(!h||h.lat==null||h.lng==null) return;
+  var h=pcHospByName(name); if(!h) return false;
+  if(h.lat==null || h.lng==null) return false;
   // ★ 지도를 다시 그리는 어떤 호출보다 먼저 '이 병원을 보고 있다'를 기록한다.
-  //   아래 pcRender·pcBackToMap이 부르는 pcShowMap의 applyFocus가 전체 맞춤(setBounds)으로
-  //   되돌려, 방금 맞춘 확대가 120ms 뒤에 전국 축척으로 풀리던 문제를 막는다.
+  //   pcShowMap 의 applyFocus 가 전체 맞춤(setBounds)으로 되돌리는 것을 막는다.
   pcFocusName=h.n;
   // 표 뷰·접힘 상태에선 지도가 없어 조용히 무시되던 버그 — 사용자 의도가 명확하므로 지도를 되살린다
   if(!pcMapVisible()){
@@ -4534,31 +4478,51 @@ function pcFocusHospOnMap(name, itemEl){
     if(document.body.classList.contains('pc-mapcol')){ document.body.classList.remove('pc-mapcol'); try{ localStorage.setItem('baz_pc_mapcol','0'); }catch(e){} }
     try{ pcRender(pcList||[]); }catch(e){}
   }
-  if(pcRightMode==='detail'){ pcBackToMap(); }
-  if(pcMapObj && typeof kakao!=='undefined'){
-    var pos=new kakao.maps.LatLng(h.lat,h.lng);
-    // 이미 가까이 본 사용자를 강제로 축소하지 않는다 — 현재보다 확대만(레벨 최소화)
-    var tgt; try{ tgt=Math.min(pcMapObj.getLevel(),5); }catch(e){ tgt=5; }
-    try{ pcMapObj.setLevel(tgt,{animate:{duration:200}}); }catch(e){ try{ pcMapObj.setLevel(tgt); }catch(_){} }
-    pcMapObj.panTo(pos);
-    if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
-    /* [XSS] 말풍선은 문자열 조합 대신 DOM 으로 만든다. 예전에는 병원명을
-       onclick="pcSelect('…')" 안에 넣고 역슬래시·따옴표만 손으로 이스케이프했다 —
-       JavaScript 문맥 이스케이프는 안전하지 않다(유니코드 줄바꿈·중첩 인용 등).
-       이제 이름은 클로저로만 전달되고 마크업에는 들어가지 않는다. */
-    var content=pcMapInfoNode(h);
-    /* [수정] 말풍선을 마커에 붙이지 않고 좌표에 직접 연다.
-       마커는 클러스터러(minLevel:7)에 속해 있어 넓은 배율에서는 지도에서 내려가 있다.
-       지도에 없는 마커에 InfoWindow 를 붙이면 아무것도 그려지지 않는다 —
-       "카드를 눌렀는데 지도에 정보가 안 뜬다"는 증상의 직접 원인이었다.
-       (위에서 배율을 5 이하로 낮추지만 setLevel 애니메이션이 끝나기 전이라
-        그 시점의 마커는 여전히 클러스터에 묶여 있다.)
-       좌표로 열면 클러스터 여부와 무관하게 항상 보인다.
-       zIndex 는 선택 링(12)·진행중(9)보다 위 — 클러스터 숫자 버블에 가리지 않게. */
-    pcFocusIW=new kakao.maps.InfoWindow({content:content, position:pos, removable:true, zIndex:20});
-    pcFocusIW.open(pcMapObj);
-  }
+  if(!pcMapObj || typeof kakao==='undefined') return false;
+  var pos=new kakao.maps.LatLng(h.lat,h.lng);
+  var cur; try{ cur=pcMapObj.getLevel(); }catch(e){ cur=PC_FOCUS_LEVEL; }
+  var tgt=Math.min(cur, PC_FOCUS_LEVEL);   // 이미 가까이 본 사용자를 강제로 축소하지 않는다
+  /* [수정] 예전에는 배율을 애니메이션 옵션과 함께 바꾼 직후 부드러운 중심 이동을 호출했다.
+     카카오는 확대 애니메이션이 도는 동안 들어온 중심 이동 요청을 흘려버린다. 그래서
+       · 첫 클릭: 배율 9 → 4 애니메이션이 도는 사이 이동 요청이 사라져 "확대만 되고 이동 안 함"
+       · 두 번째부터: 이미 목표 배율이라 배율 변경이 no-op → 애니메이션 없음 → 이동 성공
+     "처음엔 안 되다가 몇 번 누르면 그때부터 계속 된다"는 증상의 정확한 원인이다.
+     이제 애니메이션 없이 배율·중심을 동기적으로 확정한다(언제 눌러도 같은 결과). */
+  try{ if(cur!==tgt) pcMapObj.setLevel(tgt); }catch(e){}
+  try{ pcMapObj.setCenter(pos); }catch(e){}
+  pcMapCtl.markUserView();     // 사용자가 고른 위치 — 폴링·데이터 갱신이 되돌리지 않게
+  try{ pcMapSelRing(h.n); }catch(e){}
+  pcMapCtlSync();
+  return true;
 }
+/* 카드·표 행·지도 마커 — 병원을 누르면 어디서 눌렀든 같은 처리.
+   ① 지도를 그 병원 위치로 이동·확대 ② 별도 창에 정보와 처리 이력 전체를 띄운다.
+   좌표가 없으면 그 병원만 즉시 지오코딩을 시도하고, 그래도 없으면 창만 띄우고 알린다. */
+function pcOpenHosp(name){
+  var h=pcHospByName(name);
+  pcSelName=name;
+  /* 지도가 없는 화면(표 뷰·접힘)에서는 지도를 억지로 되살리지 않는다 —
+     표를 보던 사용자가 행 하나를 눌렀다고 카드 뷰로 끌려가면 안 된다. 창만 띄운다. */
+  if(pcMapVisible()){
+    if(h && (h.lat==null || h.lng==null) && String(h.a||'').trim()){
+      // 좌표가 없는 병원: 그 병원만 즉시 지오코딩 시도 후 이동
+      pcGeocodeOne(h, function(okGeo){
+        if(okGeo){
+          pcBaseKey='';                                    // 좌표가 생겼으니 마커를 다시 그린다
+          if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }
+          pcFocusHospOnMap(name, null);
+        } else {
+          bazToast(t('mapNoCoord')); bazAnnounce(t('mapNoCoord'));
+        }
+      });
+    } else if(!pcFocusHospOnMap(name, null)){
+      bazToast(t('mapNoCoord')); bazAnnounce(t('mapNoCoord'));
+    }
+  }
+  pcHighlight();
+  pcSelect(name);      // 별도 창(병원 정보 + 처리 이력)
+}
+window.pcOpenHosp=pcOpenHosp;
 
 function pcHighlight(){
   document.querySelectorAll('#pcLeft .pc-cardwrap').forEach(function(el){ el.classList.toggle('sel', el.getAttribute('data-hname')===pcSelName); });
@@ -4567,18 +4531,12 @@ function pcHighlight(){
   try{ pcMapCtlSync(); }catch(e){}            // 선택이 있으면 '선택 해제' 버튼 노출
 }
 
-// ── 카드 클릭 = 지도를 그 병원으로 ──────────────────────────────────────────
-// 예전에는 카드를 누르면 pcSelect가 우측 패널을 '상세'로 바꿔 지도를 통째로 숨겼다
-// (#pcRight.detail #pcMapPane{visibility:hidden}). 목록에서 고른 병원이 지도 어디인지
-// 확인할 방법이 없었다. 이제 카드 클릭은 지도를 그 병원으로 줌하고, 상세는
-// 카드의 '🕑 이력' 버튼과 지도 말풍선의 '🕑 이력 보기' 버튼으로 연다(둘 다 기존 기능).
-// 지도에 띄워 둔 병원(카드 클릭·검색 1곳). pcShowMap이 재렌더마다 전체 맞춤으로
+// 지도에 띄워 둔 병원(카드·마커 클릭·검색 1곳). pcShowMap이 재렌더마다 전체 맞춤으로
 // 되돌리지 않도록 applyFocus가 이 값을 먼저 본다.
 var pcFocusName=null;
-// 카드 해제 = 지도 포커스·선택·말풍선을 모두 풀고 현재 목록 전체로 되돌린다
+// 선택 해제 = 지도 포커스·선택 강조를 풀고 현재 목록 전체로 되돌린다(지도 컨트롤 ✕)
 function pcClearHospFocus(){
   pcFocusName=null; pcSelName=null;
-  if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
   document.querySelectorAll('#pcRecentCard .rrc-item.sel').forEach(function(el){ el.classList.remove('sel'); });
   pcHighlight();
   pcMapCtl.resetAutoFit();     // 해제는 명시적 요청 — 다음 렌더에서 결과 전체로 다시 맞춘다
@@ -4589,27 +4547,15 @@ function pcClearHospFocus(){
 }
 window.pcClearHospFocus=pcClearHospFocus;
 
-function pcPickHosp(name){
-  // 표 뷰는 지도가 없는 화면(표 전체화면) — 기존 중앙 상세 모달을 그대로 쓴다
-  if(pcListView==='table'){ pcSelect(name); return; }
-  // 이미 지도에 띄워 둔 카드를 다시 누르면 해제 — 목록 전체 보기로 초기화된다
-  if(pcFocusName===name && pcSelName===name){ pcClearHospFocus(); return; }
-  var h=pcHospByName(name);
-  // 지도를 쓸 수 없거나(접힘·모바일) 좌표가 없으면 예전처럼 상세를 연다.
-  // '🕑 이력' 버튼은 이력이 있을 때만 렌더되므로(cardHTML), 이 폴백이 없으면
-  // 좌표도 이력도 없는 병원은 상세로 갈 길이 아예 사라진다.
-  // 지도를 일부러 접어 둔 사용자를 강제로 펼치지도 않는다.
-  if(!pcMapVisible() || !h || h.lat==null || h.lng==null){ pcSelect(name); return; }
-  pcSelName=name;
-  pcHighlight();                  // 목록 카드 강조 + 지도 선택 링
-  pcFocusHospOnMap(name, null);   // 줌 + panTo + 말풍선(이력 보기 버튼 포함)
-}
+/* 카드·표 행 클릭 진입점. 지도 마커 클릭도 같은 함수를 쓴다.
+   예전에는 "같은 카드를 다시 누르면 해제" 토글이었지만, 이제 클릭이 곧 별도 창을
+   여는 동작이라 토글은 혼란스럽다 — 해제는 지도 컨트롤의 ✕(선택 해제)로 한다. */
+function pcPickHosp(name){ pcOpenHosp(name); }
 window.pcPickHosp=pcPickHosp;
 
 // ── 검색어 변경에 대한 지도 반응 ────────────────────────────────────────────
 // pcShowMap은 폴링(pcRefreshProgViewsNow)에서도 불린다. 그래서 "검색어가 실제로 바뀐
-// 순간"에만 반응해야 한다 — 그러지 않으면 폴링마다 말풍선이 다시 열리고 사용자가
-// 옮겨 둔 지도가 계속 되돌아간다.
+// 순간"에만 반응해야 한다 — 그러지 않으면 폴링마다 사용자가 옮겨 둔 지도가 되돌아간다.
 var pcLastSearchQ=null;
 function pcApplySearchView(){
   var q=(searchQ||'').trim();
@@ -4631,7 +4577,6 @@ function pcApplySearchView(){
     // 여러 곳이면 자동으로 고르지 않는다 — 결과 전체를 보여주고(아래 pcShowMap),
     // 사용자가 원하는 카드를 누르면 그때 pcPickHosp가 줌한다.
     pcFocusName=null; pcSelName=null;
-    if(pcFocusIW){ try{ pcFocusIW.close(); }catch(e){} pcFocusIW=null; }
     pcHighlight();
     if(pcMapVisible()){ try{ pcShowMap(pcList||[]); }catch(e){} }   // 이전 포커스를 풀고 결과 전체로 맞춤
   }
@@ -4639,10 +4584,6 @@ function pcApplySearchView(){
 // 검색을 지웠을 때의 초기화. ✕ 버튼과 백스페이스로 비운 경우 모두 여기로 온다
 // (pcApplySearchView가 질의 변화를 감지하므로 호출 지점이 하나뿐이다).
 function pcResetSearchView(){
-  if(pcRightMode==='detail'){
-    pcBackToMap();
-    pcRestoreView=false;   // pcBackToMap은 '보던 위치 복귀'를 켜지만, 초기화는 전체 맞춤이 맞다
-  }
   try{ pcCloseDetailModal(); }catch(e){}
   // 선택·말풍선 해제 + 전체 목록으로 화면 맞춤은 카드 해제와 같은 처리를 쓴다
   pcClearHospFocus();
@@ -4666,7 +4607,7 @@ function pcHistTimeline(name){
 }
 
 function pcRenderDetail(name, box){
-  box = box || document.getElementById('pcDetail'); if(!box) return;
+  box = box || document.getElementById('pcDetailModalBody'); if(!box) return;
   var h=null;
   for(var i=0;i<HOSPITALS.length;i++){ if(HOSPITALS[i].n===name){ h=HOSPITALS[i]; break; } }
   if(!h){ for(var j=0;j<pcList.length;j++){ if(pcList[j].n===name){ h=pcList[j]; break; } } }
@@ -4851,7 +4792,7 @@ function pcMapReset(){
   if(pcMapTimer){ clearTimeout(pcMapTimer); pcMapTimer=null; }
   /* 파기 전 지도에 예약된 relayout/뷰 복원을 새 지도에 적용하지 않는다. */
   try{ pcMapCtl.cancelRelayout(); pcMapCtl.resetAutoFit(); }catch(e){}
-  pcMapObj=null; pcMapClusterer=null; pcSelOv=null; pcFocusIW=null;
+  pcMapObj=null; pcMapClusterer=null; pcSelOv=null;
   pcMapMarkers=[]; pcMarkerByName={}; pcRecentOverlays=[]; pcProgOverlays=[]; pcNearbyMarkers=[];
   pcBaseKey=''; pcOverlayKey=''; pcNearKey='';    // 레이어 키도 비워야 다음 렌더가 실제로 그린다
   pcMapBounds=null; pcMapBoundsAny=false;
@@ -4928,7 +4869,7 @@ function pcShowMap(list){
     pcMapBounds=all; pcMapBoundsAny=any;                  // '전체(완료·진행중 포함)' 버튼용
     pcMapFocusBounds=focus; pcMapFocusAny=focusAny;       // '결과 맞춤' 버튼용
 
-    if(pcRightMode==='map'){
+    {
       var rtl=document.getElementById('pcRightTtl');
       /* '주변 5km'는 검색 결과 주변의 참고 마커다(내 위치 기준 조회 기능은 제거됨). */
       if(rtl) rtl.textContent = nearCnt
@@ -4980,31 +4921,20 @@ function pcShowMap(list){
   });
 }
 
+/* 병원 정보 + 처리 이력 전체 = 별도 창 하나.
+   예전에는 화면 폭에 따라 '오른쪽 drawer'(#pcDetail)와 '가운데 모달'이 갈렸다.
+   지도를 가리거나 지도 옆에 끼어 좁게 눌리는 등 폭마다 다르게 동작했고,
+   지도 말풍선까지 더해 같은 정보를 보여 주는 자리가 셋이었다.
+   → 어디서 눌러도(카드·표·지도 마커) 같은 창 하나로 통일한다. */
 function pcSelect(name){
-  // 표(전체화면) 뷰: 상단 패널이 숨겨져 있으므로 상세를 중앙 모달로 표시
-  if(pcListView==='table'){
-    pcSelName=name;
-    pcRenderDetail(name, document.getElementById('pcDetailModalBody'));
-    BazModal.open(document.getElementById('pcDetailModal'), {
-      name:'pcDetail', sheet:'.pc-dm-sheet', initialFocus:'#pcDetailModalClose'
-    });
-    var dmb=document.getElementById('pcDetailModalBody'); if(dmb) dmb.scrollTop=0;
-    pcHighlight();
-    return;
-  }
-  /* 지도 → 상세: 지금 보고 있는 중심·배율을 저장해 둔다(복귀용).
-     넓은 화면(≥981px)에서는 상세가 오른쪽 drawer 로 얹혀 지도가 계속 보이므로
-     지도 문맥이 끊기지 않는다 — 폭이 줄어드는 만큼 relayout 만 한 번. */
-  if(pcRightMode==='map') pcSaveMapState();
-  pcSelName=name; pcRightMode='detail';
-  pcMapTransition(function(){
-    var r=document.getElementById('pcRight'); if(r) r.classList.add('detail');
-    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
-    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=name;
+  pcSelName=name;
+  var box=document.getElementById('pcDetailModalBody');
+  pcRenderDetail(name, box);
+  BazModal.open(document.getElementById('pcDetailModal'), {
+    name:'pcDetail', sheet:'.pc-dm-sheet', initialFocus:'#pcDetailModalClose'
   });
-  pcRenderDetail(name);
+  if(box) box.scrollTop=0;
   pcHighlight();
-  var body=document.getElementById('pcDetail'); if(body) body.scrollTop=0;
 }
 window.pcSelect=pcSelect;
 
@@ -5014,14 +4944,11 @@ function pcCloseDetailModal(){
 }
 window.pcCloseDetailModal=pcCloseDetailModal;
 
+/* 별도 창을 닫고 지도로 돌아온다(검색 초기화 등에서 호출) */
 function pcBackToMap(){
-  pcRightMode='map';
-  pcMapTransition(function(){
-    var r=document.getElementById('pcRight'); if(r) r.classList.remove('detail');
-    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='none';
-    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 '+t('mapTitle');
-  });
-  pcRestoreView=true;   // 초기화면(전체 fit)이 아니라 이력 확인 당시 위치/줌으로 복귀
+  pcCloseDetailModal();
+  var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent='🗺 '+t('mapTitle');
+  pcRestoreView=true;   // 초기화면(전체 fit)이 아니라 보던 위치/줌으로 복귀
   if(pcMapVisible()) pcShowMap(pcList||[]);   // 표 뷰·접힘(지도 숨김)에서는 지도 렌더 생략
 }
 
@@ -5032,26 +4959,25 @@ function pcRender(list){
   document.querySelectorAll('#pcViewToggle button').forEach(function(b){ b.classList.toggle('on', b.dataset.view===pcListView); });
   document.body.classList.toggle('pc-table', pcListView==='table');   // 표 뷰: 지도/상세 패널 숨김 → 표 전체화면
   if(pcListView==='table' && typeof pcExitFullscreen==='function') pcExitFullscreen();   // 지도 사라지면 전체화면 강제 해제(해제 버튼 접근 불가 방지)
-  if(pcListView!=='table') pcCloseDetailModal();                      // 카드 뷰로 전환 시 상세 모달 닫기
+  /* [수정] 예전에는 '카드 뷰로 전환 시 상세 모달 닫기'로 여기서 무조건 닫았다.
+     상세가 별도 창 하나로 통일된 지금은 이 자리가 40초 폴링 재렌더마다 실행되므로,
+     사용자가 열어 둔 창이 저절로 닫힌다. 닫지 말고 내용만 최신으로 다시 그린다. */
+  try{
+    var _dm=document.getElementById('pcDetailModal');
+    if(_dm && _dm.classList.contains('show') && pcSelName){
+      pcRenderDetail(pcSelName, document.getElementById('pcDetailModalBody'));
+    }
+  }catch(e){}
   // 담당자 오늘 완료 데이터(첫 진입 시 로드) + 좌측 카드 렌더
   if(!pcRecentRequested){
     pcRecentRequested=true;
-    pcLoadRecent(function(){ pcRenderRecentCard(); pcRenderRouteCard(); if(pcRightMode!=='detail' && pcMapVisible()) pcShowMap(pcList); });
+    pcLoadRecent(function(){ pcRenderRecentCard(); pcRenderRouteCard(); if(pcMapVisible()) pcShowMap(pcList); });
   }
   pcRenderRecentCard();
   pcRenderRouteCard();
   pcRenderLeft(pcList);
-  if(pcRightMode==='detail' && pcSelName){
-    var tl=document.getElementById('pcRightTtl'); if(tl) tl.textContent=pcSelName;
-    var bm=document.getElementById('pcBackMap'); if(bm) bm.style.display='';
-    document.getElementById('pcRight').classList.add('detail');
-    pcRenderDetail(pcSelName);
-  } else {
-    var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 '+t('mapTitle');
-    var bm2=document.getElementById('pcBackMap'); if(bm2) bm2.style.display='none';
-    document.getElementById('pcRight').classList.remove('detail');
-    if(pcMapVisible()) pcShowMap(pcList);   // 표 뷰·접힘(지도 숨김)에서는 지도 렌더 생략
-  }
+  var tl2=document.getElementById('pcRightTtl'); if(tl2) tl2.textContent='🗺 '+t('mapTitle');
+  if(pcMapVisible()) pcShowMap(pcList);   // 표 뷰·접힘(지도 숨김)에서는 지도 렌더 생략
   pcHighlight();
   // 검색어가 바뀐 순간에만 지도를 검색 결과에 맞춘다(폴링 재렌더에는 무반응).
   // pcShowMap보다 뒤에 둬야 한 곳으로 좁혀졌을 때의 줌이 전체 맞춤에 덮이지 않는다.
@@ -5089,7 +5015,6 @@ function pcApplyPaneI18n(){
     var bc=vt.querySelector('[data-view="cards"]'); if(bc) bc.textContent=t('viewCards');
     var bt=vt.querySelector('[data-view="table"]'); if(bt) bt.textContent=t('viewTable');
   }
-  var bm=document.getElementById('pcBackMap'); if(bm) bm.textContent='← 🗺 '+t('mapTitle');
   try{ pcMapInteractSync(); }catch(e){}
   // 접기/고정 버튼은 상태에 따라 라벨이 달라진다
   var col=document.body.classList.contains('pc-mapcol'), unpin=document.body.classList.contains('pc-mapunpin');
@@ -5097,7 +5022,7 @@ function pcApplyPaneI18n(){
   var pb=document.querySelector('#pcHeadCtl [data-headctl="pin"]'); if(pb){ var pk=unpin?'mapPin':'mapUnpin'; pb.setAttribute('title',t(pk)); pb.setAttribute('aria-label',t(pk)); }
   var fsb=document.querySelector('#pcHeadCtl [data-headctl="fs"]'); if(fsb){ var fsk=document.body.classList.contains('pc-mapfs')?'mapExitFull':'mapFullscreen'; fsb.setAttribute('title',t(fsk)); fsb.setAttribute('aria-label',t(fsk)); }
   // 지도 모드일 때 제목도 갱신
-  if(pcRightMode==='map'){ var rtl=document.getElementById('pcRightTtl'); if(rtl && rtl.textContent.indexOf('🗺')===0 && rtl.textContent.indexOf('5km')<0) rtl.textContent='🗺 '+t('mapTitle'); }
+  { var rtl=document.getElementById('pcRightTtl'); if(rtl && rtl.textContent.indexOf('🗺')===0 && rtl.textContent.indexOf('5km')<0) rtl.textContent='🗺 '+t('mapTitle'); }
 }
 
 /* ── 자정 넘김 감시 ───────────────────────────────────────────────────────

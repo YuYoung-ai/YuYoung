@@ -519,7 +519,7 @@ ck('휠 리스너가 passive 로 등록된다(preventDefault 를 쓰지 않음)'
   !/pcLeft'\);?\s*\n?\s*if\(window\.innerWidth>=1200/.test(inlineJs));
 ck('+/− 버튼 확대·축소는 유지된다', /data-mapctl="zin"/.test(SRC) && /data-mapctl="zout"/.test(SRC) && /function pcMapZoom/.test(inlineJs));
 ck('내부 스크롤 영역에 overscroll-behavior 가 적용된다',
-  /#filterRail\{[^}]*overscroll-behavior:contain/.test(SRC) && /#pcDetail\{[^}]*overscroll-behavior:contain/.test(SRC));
+  /#filterRail\{[^}]*overscroll-behavior:contain/.test(SRC) && /\.pc-dm-sheet\{[^}]*overscroll-behavior:contain/.test(SRC));
 ck('120ms 뒤 중심·배율을 다시 덮던 코드가 제거되었다',
   !/setTimeout\(function\(\)\{\s*pcMapTimer=null;[\s\S]{0,120}applyFocus\(\)/.test(inlineJs));
 const resetState = new Function(`
@@ -584,108 +584,110 @@ ck('검색 결과 주변 5km 참고 마커는 그대로 유지된다',
 ck('필터 칩 클릭이 더 이상 위치 모드에 막히지 않는다',
   /closest\('\[data-filter\]'\); if\(!c\) return;/.test(inlineJs));
 
-/* ── 9-2. 지도 말풍선: 병원 정보 + 최근 이력 ──────────────────────────────
-   pcMapInfoNode 원문을 최소 DOM 스텁 위에서 실행해 실제 내용을 확인한다. */
-function makeStubDoc() {
-  function node(tag) {
-    return {
-      nodeType: 1, tagName: tag, style: {}, className: '', children: [], _text: '',
-      dataset: {}, attrs: {}, listeners: {},
-      set textContent(v) { this._text = String(v); this.children = []; },
-      get textContent() {
-        return this._text + this.children.map(c => (c.textContent != null ? c.textContent : String(c))).join('');
-      },
-      setAttribute(k, v) { this.attrs[k] = String(v); },
-      appendChild(c) { this.children.push(c); return c; },
-      addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
+/* ── 9-2. 상세는 '별도 창' 하나로 통일 ────────────────────────────────────
+   지도 위 말풍선(InfoWindow)은 제거됐다. 카카오 InfoWindow 는 open() 시점에
+   아직 문서에 붙지 않은 content 노드를 재서 흰 버블 크기를 정하는데, 그 시점에는
+   CSS(grid/flex/max-height)가 적용되지 않아 버블이 첫 줄 높이로만 잡히고
+   나머지 내용이 흰 배경 밖 지도 타일 위로 흘러나왔다(읽을 수 없는 상태). */
+ck('지도 말풍선(InfoWindow)이 제거되었다',
+  !/new kakao\.maps\.InfoWindow/.test(inlineJs) && !/pcFocusIW/.test(inlineJs) &&
+  !/pcMapInfoNode/.test(inlineJs) && !/\.pc-iw/.test(SRC));
+ck('오른쪽 상세 drawer 도 제거되고 별도 창 하나만 남았다',
+  !/id="pcDetail"/.test(SRC) && !/pcBackMap/.test(SRC) &&
+  !/#pcRight\.detail/.test(SRC) && !/pcRightMode/.test(inlineJs));
+ck('pcSelect 는 화면 폭·뷰와 무관하게 항상 별도 창을 연다',
+  /function pcSelect\(name\)\{[\s\S]{0,420}BazModal\.open\(document\.getElementById\('pcDetailModal'\)/.test(inlineJs) &&
+  !/function pcSelect\(name\)\{[\s\S]{0,420}pcListView==='table'/.test(inlineJs));
+ck('별도 창 본문이 전체 이력을 그린다(pcRenderDetail 기본 대상)',
+  /box = box \|\| document\.getElementById\('pcDetailModalBody'\)/.test(inlineJs));
+ck('별도 창에 role/aria-modal 과 닫기 수단이 있다',
+  /class="pc-dm-sheet" role="dialog" aria-modal="true"/.test(SRC) &&
+  /id="pcDetailModalClose"/.test(SRC));
+/* 폴링 재렌더가 열어 둔 창을 닫아 버리면 안 된다 */
+ck('재렌더는 열려 있는 창을 닫지 않고 내용만 갱신한다',
+  !/if\(pcListView!=='table'\) pcCloseDetailModal\(\)/.test(inlineJs) &&
+  /_dm\.classList\.contains\('show'\) && pcSelName\)\{\s*\n\s*pcRenderDetail\(pcSelName/.test(inlineJs));
+
+/* ── 9-3. 카드·마커 클릭 → 지도 이동·확대 + 별도 창 ───────────────────────
+   [회귀] 예전에는 setLevel(tgt,{animate}) 직후 panTo(pos) 를 불렀다. 카카오는 확대
+   애니메이션 중 들어온 panTo 를 흘려버려서, 배율이 바뀌는 첫 클릭에서는 지도가
+   확대만 되고 이동하지 않았다. 두 번째부터는 배율이 이미 목표값이라 setLevel 이
+   no-op → 애니메이션이 없어 panTo 가 먹혔다("처음엔 안 되다가 몇 번 누르면 된다").
+   → 배율이 바뀌든 아니든 setCenter 가 반드시 불리는지 검사한다. */
+function runFocus(startLevel, hosp) {
+  const state = { calls: [], announced: null, ring: null, focusName: null };
+  const fn = new Function('state', `
+    'use strict';
+    var PC_FOCUS_LEVEL=4;
+    var pcFocusName=null, pcListView='cards', pcList=[];
+    var pcMapObj={
+      getLevel:function(){ return state.level; },
+      setLevel:function(l){ state.calls.push('setLevel:'+l); state.level=l; },
+      setCenter:function(c){ state.calls.push('setCenter:'+c.lat+','+c.lng); },
+      panTo:function(){ state.calls.push('panTo'); }
     };
-  }
-  return {
-    createElement: node,
-    createTextNode(txt) { return { nodeType: 3, textContent: String(txt) }; }
-  };
+    state.level=${startLevel};
+    var kakao={maps:{LatLng:function(lat,lng){ this.lat=lat; this.lng=lng; }}};
+    var document={querySelectorAll:function(){ return { forEach:function(){} }; }};
+    var pcMapCtl={markUserView:function(){ state.calls.push('markUserView'); }};
+    function pcMapVisible(){ return true; }
+    function pcMapSelRing(n){ state.ring=n; }
+    function pcMapCtlSync(){}
+    function pcHospByName(){ return state.hosp; }
+    function pcRender(){}
+    ${grab(SRC, 'pcFocusHospOnMap')}
+    return function(n){ var r=pcFocusHospOnMap(n, null); state.focusName=pcFocusName; return r; };
+  `)(state);
+  state.hosp = hosp;
+  state.ok = fn(hosp && hosp.n);
+  return state;
 }
-const stubDoc = makeStubDoc();
-const prevDoc = globalThis.document;
-globalThis.document = stubDoc;
-const HIST_FIX = {
-  '가나다병원': [
-    { d: '2026-08-04', t: '점검', f: '권오성', pay: '무상', fx: '약액 유입 미발생 및 예방 차원 내부 세척 실시' },
-    { d: '2026-07-03', t: 'A/S', f: '권오성', m: 'HP 외 내부 클린' },
-    { d: '2026-06-17', t: '점검', f: '김담당' },
-    { d: '2026-05-02', t: '점검', f: '김담당' }
-  ]
-};
-const iwState = { prog: '가나다병원', today: [{ hosp: '가나다병원', fse: '권오성', gubun: '점검' }], selected: null };
-const iwFn = new Function('BazDom', 'HISTORY', 'state', `
-  'use strict';
-  var t=function(k){ return k; };
-  var normalize=function(x){ return String(x||'').replace(/\\s+/g,''); };
-  var isNcare=function(h){ return !!h.nc && h.nc!=='미가입'; };
-  var pcIsProg=function(n){ return n===state.prog; };
-  var statusDays=function(h){ return h.li ? (h.li+' · 9일 경과') : '-'; };
-  var pcTodayList=function(){ return state.today||[]; };
-  var pcSelect=function(n){ state.selected=n; };
-  var PC_IW_HIST=3;
-  ${grab(SRC, 'pcMapInfoNode')}
-  return pcMapInfoNode;
-`)(BazDom, HIST_FIX, iwState);
-const iwNode = iwFn({ n: '가나다병원', s: 'BW8043', sa: '유비야', rg: '서울 / 경기', st: '정상', nc: 'Basic', li: '2026-08-04' });
-const iwText = iwNode.textContent;
-globalThis.document = prevDoc;
+const farZoom = runFocus(9, { n: '성민의원', lat: 37.5, lng: 127.03 });
+ck('배율이 바뀌는 첫 클릭에서도 중심 이동이 반드시 일어난다',
+  farZoom.ok && farZoom.calls.some(c => c.startsWith('setLevel:')) &&
+  farZoom.calls.some(c => c === 'setCenter:37.5,127.03'), farZoom.calls.join(' > '));
+ck('확대 애니메이션과 경쟁하던 panTo 를 더 이상 쓰지 않는다',
+  !farZoom.calls.includes('panTo') && !/panTo\(/.test(inlineJs), farZoom.calls.join(' > '));
+ck('병원 이동에는 애니메이션 옵션을 주지 않는다(결정적 이동)',
+  /if\(cur!==tgt\) pcMapObj\.setLevel\(tgt\); \}catch/.test(inlineJs) &&
+  !/setLevel\(tgt,/.test(inlineJs));
+const nearZoom = runFocus(3, { n: '성민의원', lat: 37.5, lng: 127.03 });
+ck('이미 가까이 본 배율은 강제로 축소하지 않고 중심만 옮긴다',
+  nearZoom.ok && !nearZoom.calls.some(c => c.startsWith('setLevel:')) &&
+  nearZoom.calls.some(c => c === 'setCenter:37.5,127.03'), nearZoom.calls.join(' > '));
+ck('이동한 병원을 선택 강조하고 사용자 조작으로 기록한다',
+  farZoom.ring === '성민의원' && farZoom.calls.includes('markUserView') && farZoom.focusName === '성민의원');
+const noCoord = runFocus(9, { n: '오블리브의원 서울오리진점', lat: null, lng: null });
+ck('좌표가 없으면 지도를 건드리지 않고 실패를 알린다',
+  noCoord.ok === false && noCoord.calls.length === 0);
 
-ck('말풍선에 병원 이름이 들어간다', /가나다병원/.test(iwText), iwText.slice(0, 80));
-ck('말풍선에 상태·N-CARE 등급·지역이 들어간다',
-  /정상/.test(iwText) && /N-CARE Basic/.test(iwText) && /서울 \/ 경기/.test(iwText));
-ck('말풍선에 장비번호·영업담당·최근 점검이 들어간다',
-  /BW8043/.test(iwText) && /유비야/.test(iwText) && /2026-08-04 · 9일 경과/.test(iwText));
-ck('말풍선에 진행중 표시가 들어간다', /🔵/.test(iwText));
-ck('말풍선에 최근 이력이 요약으로 들어간다',
-  /2026-08-04/.test(iwText) && /약액 유입 미발생/.test(iwText) && /2026-07-03/.test(iwText));
-ck('말풍선 이력은 최근 3건까지만 보여 준다(나머지는 상세로)',
-  /var PC_IW_HIST=3;/.test(inlineJs) && /recs\.slice\(0,PC_IW_HIST\)/.test(inlineJs) &&
-  !/2026-05-02/.test(iwText));
-ck("말풍선에 '이력 전체 보기' 버튼이 있고 상세를 연다", /mapHistBtn/.test(iwText));
-const iwBtn = (function find(n) {
-  if (n && n.tagName === 'button') return n;
-  for (const c of (n && n.children) || []) { const r = find(c); if (r) return r; }
-  return null;
-})(iwNode);
-if (iwBtn && iwBtn.listeners.click) iwBtn.listeners.click[0]();
-ck('버튼을 누르면 그 병원의 상세(이력)가 열린다', iwState.selected === '가나다병원');
+/* 좌표가 없는 병원: 실패 캐시를 무시하고 그 병원만 1회 재지오코딩 */
+ck('클릭한 병원만 즉시 재지오코딩하는 경로가 있다',
+  /function pcGeocodeOne\(h, cb\)/.test(inlineJs) &&
+  /pcGeoRetried\[addr\]/.test(inlineJs) &&
+  /geoCache\[addr\]=\{lat:la,lng:ln\}; geoSaveCache\(\);/.test(inlineJs));
+ck('재지오코딩에 성공하면 마커를 다시 그리고 그 위치로 이동한다',
+  /pcBaseKey='';[\s\S]{0,160}pcShowMap\(pcList\|\|\[\]\);[\s\S]{0,80}pcFocusHospOnMap\(name, null\)/.test(inlineJs));
+ck('끝내 좌표가 없으면 창은 띄우되 이유를 알린다',
+  /mapNoCoord/.test(inlineJs) && /bazToast\(t\('mapNoCoord'\)\)/.test(inlineJs));
+for (const lang of ['ko', 'en', 'ja']) {
+  const at = SRC.indexOf('  ' + lang + ':{ title:');
+  ck('좌표 없음 안내가 ' + lang.toUpperCase() + ' 에 있다',
+    /mapNoCoord:/.test(SRC.slice(at, at + 12000)));
+}
 
-/* 이력이 없는 병원도 말풍선은 정상적으로 뜬다 */
-globalThis.document = makeStubDoc();
-const iwEmptyState = { prog: null, today: [], selected: null };
-const iwEmpty = new Function('BazDom', 'HISTORY', 'state', `
-  'use strict';
-  var t=function(k){ return k; };
-  var normalize=function(x){ return String(x||'').replace(/\\s+/g,''); };
-  var isNcare=function(){ return false; };
-  var pcIsProg=function(){ return false; };
-  var statusDays=function(){ return '-'; };
-  var pcTodayList=function(){ return []; };
-  var pcSelect=function(n){ state.selected=n; };
-  var PC_IW_HIST=3;
-  ${grab(SRC, 'pcMapInfoNode')}
-  return pcMapInfoNode;
-`)(BazDom, {}, iwEmptyState)({ n: '이력없는병원' });
-ck('이력이 없어도 말풍선은 이름과 안내를 보여 준다',
-  /이력없는병원/.test(iwEmpty.textContent) && /histEmpty/.test(iwEmpty.textContent));
-globalThis.document = prevDoc;
-
-/* ── 9-3. 클러스터에 묶인 마커에서도 말풍선이 열린다 ──────────────────────
-   예전에는 InfoWindow.open(map, marker) 로 마커에 붙였다. 마커가 클러스터러
-   (minLevel:7)에 묶여 지도에서 내려가 있으면 아무것도 그려지지 않았다. */
-ck('말풍선을 마커가 아닌 좌표에 연다(클러스터 상태에서도 표시)',
-  /pcFocusIW\.open\(pcMapObj\);/.test(inlineJs) &&
-  !/pcFocusIW\.open\(pcMapObj, mk\)/.test(inlineJs) &&
-  !/var mk=pcMarkerByName\[h\.n\];/.test(inlineJs));
-ck('지도 마커 클릭이 카드 클릭과 같은 처리(pcPickHosp)로 이어진다',
-  /addListener\(mk,'click',function\(\)\{ pcPickHosp\(h\.n\); \}\)/.test(inlineJs) &&
-  !/addListener\(mk,'click',function\(\)\{ pcSelect\(/.test(inlineJs));
-ck('오늘 완료·진행중·주변 마커 클릭도 같은 말풍선을 연다',
-  (inlineJs.match(/pcPickHosp\((?:hn|nm|h\.n)\)/g) || []).length >= 4);
+/* 클릭 진입점 통일 */
+ck('카드·표·지도 마커가 모두 같은 진입점(pcOpenHosp)으로 모인다',
+  /function pcOpenHosp\(name\)/.test(inlineJs) &&
+  /function pcPickHosp\(name\)\{ pcOpenHosp\(name\); \}/.test(inlineJs) &&
+  /addListener\(mk,'click',function\(\)\{ pcPickHosp\(h\.n\); \}\)/.test(inlineJs));
+ck('진입점이 지도 이동과 별도 창을 함께 처리한다',
+  /function pcOpenHosp\(name\)\{[\s\S]{0,900}pcFocusHospOnMap\(name, null\)[\s\S]{0,400}pcSelect\(name\)/.test(inlineJs));
+ck('표 뷰·접힘에서는 지도를 억지로 되살리지 않고 창만 띄운다',
+  /function pcOpenHosp\(name\)\{[\s\S]{0,400}if\(pcMapVisible\(\)\)\{/.test(inlineJs));
+ck('같은 카드를 다시 눌러도 해제되지 않는다(해제는 지도 ✕ 버튼)',
+  !/if\(pcFocusName===name && pcSelName===name\)\{ pcClearHospFocus\(\); return; \}/.test(inlineJs) &&
+  /data-mapctl="clearsel"/.test(SRC));
 
 /* ── 9-4. 확대/축소 뒤 타일 자가 복구 ─────────────────────────────────── */
 const zoomFix = new Function('state', `
