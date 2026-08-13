@@ -64,7 +64,7 @@ const FNS = [
   'filteredRows_', 'hospStateFilter_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows',
   'buildComparisonPeriod', 'exPrevRows',
-  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare',
+  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
   'exMonthTrendNote_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
   'buildNozzleUnrated', 'buildNcareCompare', 'exBuild',
@@ -142,7 +142,7 @@ const SAMPLE = [
   { date: '2026-08-03', hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)', part: "Handpiece Ass'y", cost: '120000', sn: 'SN-1' },
   { date: '2026-08-03', hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)', part: "Handpiece Ass'y", cost: '120000', sn: 'SN-2' },
   { date: '2026-08-04', hosp: '다라의원', gubun: 'A/S', type: '풋스위치 작동 불량', part: 'Foot s/w', cost: '50000' },
-  { date: '2026-08-05', hosp: '마바병원', gubun: '점검', type: '정기점검', part: '없음', ncare: 'Pro' },
+  { date: '2026-08-05', hosp: '마바병원', gubun: '점검', type: '노즐 막힘', part: '없음', ncare: 'Pro' },
   { date: '2026-08-06', hosp: '마바병원', gubun: '점검', type: '정기점검', part: '없음', ncare: 'Pro' },
   { date: '2026-08-07', hosp: '사아의원', gubun: 'A/S', type: '이상 없음', part: '없음' },
   { date: '2026-08-07', hosp: '자차병원', gubun: 'A/S', type: '케이블 단선', part: 'Cable', cost: '30000' },
@@ -248,6 +248,9 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     const s = D.buildExecutiveReportSnapshot(WEEK);
     return s.change.up.some(t => t.k === '노즐누수(약액 유입)' && t.isNew && t.prev === 0);
   })());
+  ck('6-f. 점검 중 발견된 VOC도 변화 카드에 포함하고 정상 점검 표기는 제외',
+    wSnap.change.up.some(t => t.k === '노즐 막힘' && t.cur === 1) &&
+    !wSnap.change.up.concat(wSnap.change.down).some(t => t.k === '정기점검' || t.k === '이상 없음'));
   load(SAMPLE);
 }
 function rebuildX(period) {
@@ -263,9 +266,11 @@ function rebuildX(period) {
 /* ══════ 7·8. VOC TOP5 · 교체품 TOP5 ══════ */
 {
   ck('7. VOC 유형 TOP 5 존재', has(wItems, 'VOC 유형 TOP 5') && wSnap.vocTop.rows.length > 0);
-  ck('7-b. A/S 기록만·"이상 없음" 제외',
+  ck('7-b. A/S·점검 중 실제 이상 유형 통합·정상 점검 표기 제외',
     !wSnap.vocTop.rows.some(r => r.k === '이상 없음') && !wSnap.vocTop.rows.some(r => r.k === '정기점검'),
     wSnap.vocTop.rows.map(r => r.k).join(','));
+  ck('7-b-1. 점검 중 발견된 VOC 유형도 TOP5에 포함',
+    wSnap.vocTop.rows.some(r => r.k === '노즐 막힘' && r.cur === 1));
   ck('7-c. 최대 5행 · 이전 동일 기간 증감 표시',
     wSnap.vocTop.rows.length <= 5 && wSnap.vocTop.rows.every(r => 'd' in r));
   ck('7-d. 고정 VOC 현상 설명 자동 적용',
