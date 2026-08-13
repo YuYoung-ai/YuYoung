@@ -170,9 +170,21 @@ const nav = await page.evaluate(() => {
 });
 ck('따옴표가 섞인 병원명에도 액션 버튼이 만들어진다', nav.has && nav.hn.includes('<img'));
 
-// 3. 카드 클릭 → 선택, 지도 컨트롤의 '선택 해제' 노출
+// 3. 카드 클릭 → 별도 창(병원 정보 + 처리 이력)이 열린다
 await page.click('#pcLeft .pc-cardwrap:nth-child(2)');
-await page.waitForTimeout(200);
+await page.waitForTimeout(300);
+const cardWin = await page.evaluate(() => ({
+  shown: document.getElementById('pcDetailModal').classList.contains('show'),
+  name: (document.querySelector('#pcDetailModalBody .pc-dt-name') || {}).textContent,
+  hist: document.querySelectorAll('#pcDetailModalBody .tl-item, #pcDetailModalBody .tl-empty').length,
+  focusIn: document.getElementById('pcDetailModal').contains(document.activeElement)
+}));
+ck('카드를 누르면 별도 창에 병원 정보와 이력이 열린다',
+  cardWin.shown && !!cardWin.name && cardWin.hist >= 1 && cardWin.focusIn, JSON.stringify(cardWin));
+await page.keyboard.press('Escape');
+await page.waitForTimeout(250);
+ck('Esc 로 별도 창이 닫힌다',
+  !(await page.evaluate(() => document.getElementById('pcDetailModal').classList.contains('show'))));
 ck('카드 클릭 후 화면이 살아 있다', errs.length === 0, errs[0] || '');
 
 // 4. 이력 모달: 열기 → 포커스 진입 → Esc 로 닫기 → 포커스 복원
@@ -231,6 +243,7 @@ await page.click('.chip[data-filter="all"]');
 await page.waitForTimeout(300);
 
 // 7. 카드/표 전환 + 정렬 헤더 키보드
+await page.evaluate(() => window.pcCloseDetailModal && window.pcCloseDetailModal());
 await page.click('#pcViewToggle [data-view="table"]');
 await page.waitForTimeout(300);
 const tbl = await page.evaluate(() => ({
@@ -314,60 +327,82 @@ const mapUp = await page.evaluate(() => ({
 ck('지도 인스턴스와 병원 마커가 만들어진다',
   mapUp.created && !mapUp.fail && mapUp.markers >= 3, JSON.stringify(mapUp));
 
-// 9-d. 카드 클릭 → 지도 말풍선에 병원 정보 + 최근 이력
-// 앞 단계에서 다른 병원이 이미 선택돼 있으면 pcPickHosp 가 '해제'로 동작한다 → 먼저 푼다
-await page.evaluate(() => window.pcClearHospFocus());
-await page.waitForTimeout(200);
-await page.evaluate(() => window.pcPickHosp('부산A병원'));
-await page.waitForTimeout(300);
-const iw = await page.evaluate(() => {
-  const n = document.querySelector('.pc-iw');
-  return n ? {
-    open: true,
-    name: (n.querySelector('.iw-nm') || {}).textContent,
-    tags: [...n.querySelectorAll('.iw-tag')].map(e => e.textContent),
-    rows: n.querySelector('.iw-rows') ? n.querySelector('.iw-rows').textContent : '',
-    hist: [...n.querySelectorAll('.iw-hi')].map(e => e.textContent),
-    btn: (n.querySelector('.iw-btn') || {}).textContent,
-    byPosition: !!(window.__lastIW && window.__lastIW.openedWithoutMarker)
-  } : { open: false, tags: [], hist: [], rows: '', name: '', btn: '' };
+// 9-d. 카드 클릭 → 지도가 그 병원으로 이동·확대 + 별도 창
+// [회귀] 배율이 바뀌는 '첫 클릭'에서도 중심 이동이 반드시 일어나야 한다.
+//   예전에는 확대 애니메이션이 도는 사이 중심 이동 요청이 사라져, 처음 몇 번은
+//   확대만 되고 지도가 그 병원으로 가지 않았다.
+await page.evaluate(() => { window.pcCloseDetailModal && window.pcCloseDetailModal(); window.pcClearHospFocus(); });
+await page.waitForTimeout(250);
+const firstPick = await page.evaluate(async () => {
+  window.__fakeMap.setLevel(9);                     // 전국 축척에서 시작(첫 진입 상태)
+  window.pcOpenHosp('부산A병원');
+  await new Promise(r => setTimeout(r, 250));
+  return {
+    level: window.__fakeMap.level,
+    lat: window.__fakeMap.center.lat, lng: window.__fakeMap.center.lng,
+    shown: document.getElementById('pcDetailModal').classList.contains('show'),
+    name: (document.querySelector('#pcDetailModalBody .pc-dt-name') || {}).textContent,
+    hist: document.querySelectorAll('#pcDetailModalBody .tl-item').length,
+    bubble: !!document.querySelector('.pc-iw')
+  };
 });
-ck('카드 클릭이 지도에 말풍선을 띄운다', iw.open, JSON.stringify(iw).slice(0, 300));
-ck('말풍선에 병원 이름·상태·등급이 보인다',
-  iw.name === '부산A병원' && iw.tags.some(x => /권고/.test(x)) && iw.tags.some(x => /N-CARE Silver/.test(x)),
-  JSON.stringify(iw.tags));
-ck('말풍선에 장비번호·영업담당이 보인다', /SN-2/.test(iw.rows) && /김철수/.test(iw.rows), iw.rows);
-ck('말풍선에 최근 이력이 보인다',
-  iw.hist.length >= 1 && /2026-06-01/.test(iw.hist[0]) && /세척/.test(iw.hist[0]), JSON.stringify(iw.hist));
-ck('말풍선을 마커가 아니라 좌표에 연다(클러스터 상태에서도 표시)', iw.byPosition);
+ck('첫 클릭에도 지도가 그 병원 위치로 이동하고 확대된다',
+  Math.abs(firstPick.lat - 35.1796) < 1e-6 && Math.abs(firstPick.lng - 129.0756) < 1e-6 && firstPick.level === 4,
+  JSON.stringify(firstPick));
+ck('클릭과 동시에 별도 창에 병원 정보와 이력이 뜬다',
+  firstPick.shown && firstPick.name === '부산A병원' && firstPick.hist >= 1, JSON.stringify(firstPick));
+ck('지도 위 말풍선은 더 이상 만들어지지 않는다', !firstPick.bubble);
 
-// 9-e. 지도 마커 클릭도 같은 말풍선을 연다
+// 두 번째·세 번째 클릭도 같은 결과 (예전에는 여기서부터만 동작했다)
+const secondPick = await page.evaluate(async () => {
+  window.pcCloseDetailModal();
+  window.pcOpenHosp('가까운N병원');
+  await new Promise(r => setTimeout(r, 250));
+  return { lat: window.__fakeMap.center.lat, lng: window.__fakeMap.center.lng, level: window.__fakeMap.level,
+           name: (document.querySelector('#pcDetailModalBody .pc-dt-name') || {}).textContent };
+});
+ck('다른 카드를 눌러도 매번 같은 방식으로 이동한다',
+  Math.abs(secondPick.lat - 37.57) < 1e-6 && secondPick.level === 4 && secondPick.name === '가까운N병원',
+  JSON.stringify(secondPick));
+
+// 9-e. 지도 마커 클릭도 같은 창을 연다
+await page.evaluate(() => window.pcCloseDetailModal());
+await page.waitForTimeout(200);
 await page.evaluate(() => {
-  const iwOld = document.querySelector('.pc-iw'); if (iwOld) iwOld.remove();
-  const mk = (window.__fakeMarkers || []).find(m => m.title === '가까운N병원');
+  const mk = (window.__fakeMarkers || []).find(m => m.title === '부산A병원');
   mk && mk.__fire('click');
 });
 await page.waitForTimeout(300);
-const mkIw = await page.evaluate(() => {
-  const n = document.querySelector('.pc-iw');
-  return n ? { name: (n.querySelector('.iw-nm') || {}).textContent, hasBtn: !!n.querySelector('.iw-btn') } : null;
-});
-ck('지도 마커를 눌러도 병원 이름·이력 말풍선이 뜬다',
-  mkIw && mkIw.name === '가까운N병원' && mkIw.hasBtn, JSON.stringify(mkIw));
-
-// 9-f. 말풍선의 '이력 전체 보기' → 상세 패널
-await page.evaluate(() => document.querySelector('.pc-iw .iw-btn').click());
-await page.waitForTimeout(300);
-const detail = await page.evaluate(() => ({
-  mode: document.getElementById('pcRight').classList.contains('detail'),
-  ttl: document.getElementById('pcRightTtl').textContent,
-  name: (document.querySelector('#pcDetail .pc-dt-name') || {}).textContent,
-  histRows: document.querySelectorAll('#pcDetail .tl-item, #pcDetail .tl-empty').length
+const mkWin = await page.evaluate(() => ({
+  shown: document.getElementById('pcDetailModal').classList.contains('show'),
+  name: (document.querySelector('#pcDetailModalBody .pc-dt-name') || {}).textContent,
+  lat: window.__fakeMap.center.lat
 }));
-ck("말풍선의 '이력 전체 보기'가 그 병원 상세·이력을 연다",
-  detail.mode && detail.name === '가까운N병원' && detail.histRows >= 1, JSON.stringify(detail));
-await page.evaluate(() => pcBackToMap());
-await page.waitForTimeout(250);
+ck('지도 마커를 눌러도 같은 별도 창이 열리고 지도가 그 병원으로 간다',
+  mkWin.shown && mkWin.name === '부산A병원' && Math.abs(mkWin.lat - 35.1796) < 1e-6, JSON.stringify(mkWin));
+
+// 9-f. 좌표가 없는 병원 — 창은 열리고 위치가 없다는 안내가 뜬다
+await page.evaluate(() => window.pcCloseDetailModal());
+await page.waitForTimeout(200);
+const noCoord = await page.evaluate(async () => {
+  const h = HOSPITALS.find(x => x.n === '가까운N병원');
+  const keep = { lat: h.lat, lng: h.lng, a: h.a };
+  h.lat = null; h.lng = null; h.a = '';            // 주소도 없어 지오코딩 폴백도 불가
+  window.pcOpenHosp('가까운N병원');
+  await new Promise(r => setTimeout(r, 350));
+  const out = {
+    shown: document.getElementById('pcDetailModal').classList.contains('show'),
+    name: (document.querySelector('#pcDetailModalBody .pc-dt-name') || {}).textContent,
+    toast: (document.getElementById('bazToast') || {}).textContent || ''
+  };
+  h.lat = keep.lat; h.lng = keep.lng; h.a = keep.a;
+  return out;
+});
+ck('좌표가 없는 병원도 창은 열리고 위치가 없다는 안내가 나온다',
+  noCoord.shown && noCoord.name === '가까운N병원' && /위치 정보가 없습니다/.test(noCoord.toast),
+  JSON.stringify(noCoord));
+await page.evaluate(() => window.pcCloseDetailModal());
+await page.waitForTimeout(200);
 
 // 9-g. 확대/축소 반복 후에도 지도가 살아 있다(타일 재계산 1회)
 const zoomLoop = await page.evaluate(async () => {
