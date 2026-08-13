@@ -58,7 +58,9 @@ ck('P2 인계 화면: 부트스트랩 본문 캐시가 있을 때만 rev 전송'
   /baz_handover_bootstrap/.test(O)&&/bootCache\?'&rev='/.test(O)&&/d\.nochange && bootCache/.test(O));
 ck('P2 서버: 인계 부트스트랩 묶음도 rev·nochange 캐시',
   /syncNochange_\('handover_bootstrap'/.test(G)&&/syncMetaPut_\('handover_bootstrap'/.test(G));
-ck('배포: 서비스워커 캐시 버전 갱신',/baz-cs-v127/.test(SW));
+/* 번호를 박아 두면 다른 페이지를 고쳐 캐시를 올릴 때마다 이 검사가 깨진다
+   (sw.js 자체가 "수정할 때마다 반드시 올리라"고 요구한다). 하한만 확인한다. */
+ck('배포: 서비스워커 캐시 버전 갱신(≥127)', Number((SW.match(/baz-cs-v(\d+)/)||[])[1]||0) >= 127);
 
 /* 콜드스타트 회귀: 무거운 강제 호출을 직렬화하고 일시 404/HTML만 1회 재시도한다. */
 const dLoad=grab(D,'loadData'), dTimeout=grab(D,'fetchTimeout'), dGvRetry=grab(D,'gvRetry'),

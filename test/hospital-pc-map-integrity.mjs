@@ -17,7 +17,8 @@
  *   · 전체화면 진입/종료 중심·배율 및 scrollY 보존
  *   · 연속 relayout 요청이 한 번으로 병합
  *   · 오래된 지도 렌더가 최신 렌더를 덮지 않음
- *   · 내 주변 5km 거리 필터와 모드 해제
+ *   · 지도 말풍선에 병원 정보·최근 이력이 담기고 클러스터 상태에서도 열림
+ *   · 확대/축소 뒤 타일 재계산(회색 타일 자가 복구)
  *   · '결과 맞춤' 이 멀리 떨어진 완료 마커 때문에 전국 축척이 되지 않음
  ************************************************************/
 import fs from 'fs';
@@ -37,7 +38,6 @@ const BazDate = require(path.join(ROOT, 'js', 'baz-date.js'));
 const BazHospitalData = require(path.join(ROOT, 'js', 'baz-hospital-data.js'));
 const BazMapController = require(path.join(ROOT, 'js', 'baz-map-controller.js'));
 const BazScrollLock = require(path.join(ROOT, 'js', 'baz-scroll-lock.js'));
-const BazNearby = require(path.join(ROOT, 'js', 'baz-nearby.js'));
 const BazHistoryApi = require(path.join(ROOT, 'js', 'baz-history-api.js'));
 
 let pass = 0, total = 0;
@@ -492,21 +492,31 @@ ck("'결과 맞춤' 버튼은 사용자 보호를 무시하고 강제로 맞춘�
 // 지도 휠 기본 비활성화
 ck('PC/Window 모드에서 지도 휠 확대가 기본 비활성화된다',
   /setZoomable\(pcMapZoomableWanted\(\)\)/.test(inlineJs) && /baz_pc_mapinteract/.test(inlineJs));
-const wheelState = {
-  left: { scrollTop: 0, scrollHeight: 1200, clientHeight: 300 }, prevented: false, hint: 0
-};
-const mapWheel = new Function('state', `
-  var window={innerWidth:1600};
-  var document={getElementById:function(id){return id==='pcLeft'?state.left:null;}};
-  var pcMapCtl={markUserView:function(){state.marked=true;}};
-  function pcMapZoomableWanted(){return false;}
-  function pcMapShowWheelHint(){state.hint++;}
-  ${grab(SRC, 'pcMapHandleWheel')}
-  return pcMapHandleWheel;
-`)(wheelState);
-mapWheel({ deltaY: 180, deltaMode: 0, cancelable: true, preventDefault(){ wheelState.prevented = true; } });
-ck('3열 지도 위 휠은 확대가 꺼졌을 때 결과 목록을 스크롤한다',
-  wheelState.left.scrollTop === 180 && wheelState.prevented && wheelState.hint === 1);
+/* 지도가 상단 전폭으로 돌아오면서 결과 목록은 다시 본문 스크롤을 쓴다 →
+   휠 확대가 꺼져 있으면 아무것도 가로채지 않고 그대로 흘려보내야 한다. */
+function runWheel(zoomable) {
+  const state = { marked: false, zoomNoted: false, hint: 0, prevented: false, listScrolled: false };
+  const fn = new Function('state', `
+    var pcMapCtl={markUserView:function(){state.marked=true;}};
+    var document={getElementById:function(){ state.listScrolled=true; return null; }};
+    function pcMapZoomableWanted(){return ${zoomable ? 'true' : 'false'};}
+    function pcMapShowWheelHint(){state.hint++;}
+    function pcMapNoteZoom(){state.zoomNoted=true;}
+    ${grab(SRC, 'pcMapHandleWheel')}
+    return pcMapHandleWheel;
+  `)(state);
+  fn({ deltaY: 180, deltaMode: 0, cancelable: true, preventDefault() { state.prevented = true; } });
+  return state;
+}
+const wheelOff = runWheel(false);
+ck('휠 확대가 꺼져 있으면 휠을 가로채지 않는다(페이지가 그대로 스크롤된다)',
+  !wheelOff.prevented && !wheelOff.listScrolled && wheelOff.hint === 1);
+const wheelOn = runWheel(true);
+ck('휠 확대가 켜져 있으면 사용자 조작으로 기록하고 타일 재계산을 예약한다',
+  wheelOn.marked && wheelOn.zoomNoted && wheelOn.hint === 0);
+ck('휠 리스너가 passive 로 등록된다(preventDefault 를 쓰지 않음)',
+  /addEventListener\('wheel', pcMapHandleWheel, \{passive:true, capture:true\}\)/.test(inlineJs) &&
+  !/pcLeft'\);?\s*\n?\s*if\(window\.innerWidth>=1200/.test(inlineJs));
 ck('+/− 버튼 확대·축소는 유지된다', /data-mapctl="zin"/.test(SRC) && /data-mapctl="zout"/.test(SRC) && /function pcMapZoom/.test(inlineJs));
 ck('내부 스크롤 영역에 overscroll-behavior 가 적용된다',
   /#filterRail\{[^}]*overscroll-behavior:contain/.test(SRC) && /#pcDetail\{[^}]*overscroll-behavior:contain/.test(SRC));
@@ -526,77 +536,197 @@ const resetState = new Function(`
 ck('지도 재생성 시 예약 relayout과 전체/결과 범위를 모두 초기화한다',
   resetState.calls.cancel === 1 && resetState.calls.reset === 1 &&
   resetState.all === null && !resetState.allAny && resetState.focus === null && !resetState.focusAny);
-ck('일정 안내가 보일 때 3열 콘텐츠를 다음 행으로 내리는 규칙이 있다',
-  /pc-schednotice #schedNotice\{grid-column:1 \/ 3;grid-row:1/.test(SRC) &&
-  /pc-schednotice #filterRail\{grid-row:2 \/ span 2/.test(SRC) &&
-  /classList\.toggle\('pc-schednotice'/.test(inlineJs));
+/* 지도는 '상단 전폭 고정' 하나로 일원화 — 1200px 이상 3열(지도 오른쪽 칸) 규칙은 제거됐다.
+   3열에서 #pcLeft 가 자체 스크롤 컨테이너가 되며 생기던 이중 스크롤·휠 우회도 함께 사라진다. */
+ck('1200px 이상 3열(지도 오른쪽 칸) 레이아웃이 제거되었다',
+  !/@media\(min-width:1200px\)/.test(SRC) &&
+  !/#pcRight\{[^}]*grid-column:3/.test(SRC) &&
+  !/#pcPane\{display:contents/.test(SRC));
+ck('지도는 목록 위에 전폭으로 sticky 고정된다',
+  /body\.mode-window #pcRight\{height:var\(--pc-map-h,400px\);[^}]*position:sticky/.test(SRC) &&
+  SRC.indexOf("id=\"pcRight\"") < SRC.indexOf("id=\"pcToolbar\"") &&
+  SRC.indexOf("id=\"pcToolbar\"") < SRC.indexOf("id=\"pcLeft\""));
+ck('표 뷰는 기존대로 지도를 숨기고 전체 폭을 쓴다',
+  /body\.mode-window\.pc-table #pcRight\{display:none/.test(SRC) &&
+  /classList\.toggle\('pc-table', pcListView==='table'\)/.test(inlineJs));
+ck('#pcLeft 가 더 이상 자체 스크롤 컨테이너가 아니다',
+  !/#pcLeft\{[\s\S]{0,160}overflow:auto/.test(SRC));
+ck('높이 조절 핸들이 넓은 화면에서도 살아 있다',
+  !/min-width:1200px[\s\S]{0,2000}#pcMapGrip\{display:none/.test(SRC) &&
+  /id="pcMapGrip"/.test(SRC));
 ck('mode-window 자동 선택과 지도 sticky 해제 breakpoint 가 일치한다',
   /var PC_WIDE_MIN=980/.test(inlineJs) &&
   /min-width:'\+PC_WIDE_MIN\+'px/.test(inlineJs) &&
   /@media\(max-width:980px\)\{ body\.mode-window #pcRight/.test(SRC));
 
 /* ════════════════════════════════════════════════════════════════════
-   9. 내 주변 5km
+   9. 지도 말풍선(병원 정보 + 이력) · '내 주변 5km' 제거
    ════════════════════════════════════════════════════════════════════ */
-section('9. 내 주변 5km N-CARE');
+section('9. 지도 말풍선 · 내 주변 5km 제거');
 
-const SEOUL = { lat: 37.5665, lng: 126.9780 };
-const hospitals = [
-  { n: '가까운N', nc: 'Gold', lat: 37.5700, lng: 126.9800 },   // ≈0.4km
-  { n: '3km N', nc: 'Silver', lat: 37.5935, lng: 126.9780 },   // ≈3.0km
-  { n: '먼N', nc: 'Gold', lat: 37.7000, lng: 126.9780 },       // ≈14.8km → 제외
-  { n: '가까운미가입', nc: '미가입', lat: 37.5670, lng: 126.9785 },  // N-CARE 아님 → 제외
-  { n: '좌표없음', nc: 'Gold', lat: null, lng: null }            // 좌표 없음 → 제외
-];
-const near = BazNearby.filterNearby(hospitals, SEOUL, { km: 5 });
-ck('5km 이내 N-CARE 만 남는다', near.length === 2 && near.every(h => h.nc !== '미가입'),
-  near.map(h => h.n).join(','));
-ck('거리순으로 정렬된다', near[0].n === '가까운N' && near[1].n === '3km N');
-ck('거리(_dist)가 붙고 원본은 오염되지 않는다',
-  near[0]._dist < 1 && hospitals[0]._dist === undefined);
-ck('위치가 없으면 빈 목록', BazNearby.filterNearby(hospitals, null, { km: 5 }).length === 0);
-
-const states = [];
-const nearby = BazNearby.create({
-  geolocation: {
-    getCurrentPosition(okCb) { okCb({ coords: { latitude: SEOUL.lat, longitude: SEOUL.lng, accuracy: 10 } }); }
-  },
-  onChange: s => states.push(s)
-});
-nearby.request();
-ck('위치 요청 → 성공 상태 전이', states.join('>') === 'locating>ready' && nearby.isActive());
-ck('성공 시 위치 기준 목록을 돌려준다', nearby.apply(hospitals, { km: 5 }).length === 2);
-nearby.off();
-ck('모드 해제 시 off 로 돌아가고 필터가 풀린다',
-  nearby.state() === 'off' && !nearby.isActive() && nearby.apply(hospitals) === null);
-
-const denied = BazNearby.create({
-  geolocation: { getCurrentPosition(_ok, err) { err({ code: 1, message: 'denied' }); } }
-});
-denied.request();
-ck('권한 거부 상태를 구분한다', denied.state() === 'denied');
-
-const broken = BazNearby.create({
-  geolocation: { getCurrentPosition(_ok, err) { err({ code: 2, message: 'unavailable' }); } }
-});
-broken.request();
-ck('위치 실패 상태를 구분한다', broken.state() === 'failed');
-
-const unsupported = BazNearby.create({ geolocation: null });
-unsupported.request();
-ck('위치 API 를 쓸 수 없어도 예외 없이 상태만 바뀐다', unsupported.state() === 'unsupported');
-
-ck('필터 영역에 내 주변 5km 버튼이 있다', /id="nearbyBtn"/.test(SRC) && /id="nearbyState"/.test(SRC));
-// 지도 제목이 두 기능을 다른 문구로 부른다: 내 위치 기준(nearbyOn) vs 검색 결과 주변(mapNearby)
-const titleBlock = inlineJs.slice(inlineJs.indexOf("if(pcRightMode==='map'){"), inlineJs.indexOf("if(pcRightMode==='map'){") + 700);
-ck('내 위치 기준 모드와 검색 결과 주변 마커를 구분해 표기한다',
-  /nearbyMode/.test(titleBlock) && /nearbyOn/.test(titleBlock) && /mapNearby/.test(titleBlock) &&
-  /내 위치 기준 모드|다른 기능/.test(inlineJs));
+/* ── 9-1. '내 주변 5km N-CARE 병원 조회'(브라우저 위치 기준 필터) 완전 제거 ──
+   지도에 뜨는 '검색 결과 주변 5km 참고 마커'(pcDrawNearby)는 다른 기능이라 남는다. */
+ck('내 주변 5km 버튼·상태 영역이 사라졌다',
+  !/id="nearbyBtn"/.test(SRC) && !/id="nearbyState"/.test(SRC) && !/id="nearbyBox"/.test(SRC));
+ck('위치 기반 필터 코드(nearbyMode·myPos·BazNearby)가 남아 있지 않다',
+  !/\bnearbyMode\b/.test(inlineJs) && !/\bBazNearby\b/.test(SRC) && !/js\/baz-nearby\.js/.test(SRC));
+ck('baz-nearby.js 모듈 파일이 삭제되었다', !fs.existsSync(path.join(ROOT, 'js', 'baz-nearby.js')));
 for (const lang of ['ko', 'en', 'ja']) {
-  const seg = SRC.slice(SRC.indexOf('  ' + lang + ':{ title:'), SRC.indexOf('  ' + lang + ':{ title:') + 12000);
-  ck('내 주변 5km 문자열이 ' + lang.toUpperCase() + ' 에 있다',
-    /nearbyOn:/.test(seg) && /locDenied:/.test(seg) && /mapFitResult:/.test(seg) && /lgProg:/.test(seg));
+  const at = SRC.indexOf('  ' + lang + ':{ title:');
+  const seg = SRC.slice(at, at + 12000);
+  ck('위치 조회 문자열이 ' + lang.toUpperCase() + ' 에서 제거되고 지도 문자열은 남았다',
+    !/nearbyOn:/.test(seg) && !/locDenied:/.test(seg) && !/emptyNear:/.test(seg) &&
+    /mapFitResult:/.test(seg) && /lgProg:/.test(seg) && /mapNearby:/.test(seg));
 }
+ck('검색 결과 주변 5km 참고 마커는 그대로 유지된다',
+  /function pcDrawNearby/.test(inlineJs) && /function pcNearbyOf/.test(inlineJs) &&
+  /mapNearby/.test(inlineJs));
+ck('필터 칩 클릭이 더 이상 위치 모드에 막히지 않는다',
+  /closest\('\[data-filter\]'\); if\(!c\) return;/.test(inlineJs));
+
+/* ── 9-2. 지도 말풍선: 병원 정보 + 최근 이력 ──────────────────────────────
+   pcMapInfoNode 원문을 최소 DOM 스텁 위에서 실행해 실제 내용을 확인한다. */
+function makeStubDoc() {
+  function node(tag) {
+    return {
+      nodeType: 1, tagName: tag, style: {}, className: '', children: [], _text: '',
+      dataset: {}, attrs: {}, listeners: {},
+      set textContent(v) { this._text = String(v); this.children = []; },
+      get textContent() {
+        return this._text + this.children.map(c => (c.textContent != null ? c.textContent : String(c))).join('');
+      },
+      setAttribute(k, v) { this.attrs[k] = String(v); },
+      appendChild(c) { this.children.push(c); return c; },
+      addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
+    };
+  }
+  return {
+    createElement: node,
+    createTextNode(txt) { return { nodeType: 3, textContent: String(txt) }; }
+  };
+}
+const stubDoc = makeStubDoc();
+const prevDoc = globalThis.document;
+globalThis.document = stubDoc;
+const HIST_FIX = {
+  '가나다병원': [
+    { d: '2026-08-04', t: '점검', f: '권오성', pay: '무상', fx: '약액 유입 미발생 및 예방 차원 내부 세척 실시' },
+    { d: '2026-07-03', t: 'A/S', f: '권오성', m: 'HP 외 내부 클린' },
+    { d: '2026-06-17', t: '점검', f: '김담당' },
+    { d: '2026-05-02', t: '점검', f: '김담당' }
+  ]
+};
+const iwState = { prog: '가나다병원', today: [{ hosp: '가나다병원', fse: '권오성', gubun: '점검' }], selected: null };
+const iwFn = new Function('BazDom', 'HISTORY', 'state', `
+  'use strict';
+  var t=function(k){ return k; };
+  var normalize=function(x){ return String(x||'').replace(/\\s+/g,''); };
+  var isNcare=function(h){ return !!h.nc && h.nc!=='미가입'; };
+  var pcIsProg=function(n){ return n===state.prog; };
+  var statusDays=function(h){ return h.li ? (h.li+' · 9일 경과') : '-'; };
+  var pcTodayList=function(){ return state.today||[]; };
+  var pcSelect=function(n){ state.selected=n; };
+  var PC_IW_HIST=3;
+  ${grab(SRC, 'pcMapInfoNode')}
+  return pcMapInfoNode;
+`)(BazDom, HIST_FIX, iwState);
+const iwNode = iwFn({ n: '가나다병원', s: 'BW8043', sa: '유비야', rg: '서울 / 경기', st: '정상', nc: 'Basic', li: '2026-08-04' });
+const iwText = iwNode.textContent;
+globalThis.document = prevDoc;
+
+ck('말풍선에 병원 이름이 들어간다', /가나다병원/.test(iwText), iwText.slice(0, 80));
+ck('말풍선에 상태·N-CARE 등급·지역이 들어간다',
+  /정상/.test(iwText) && /N-CARE Basic/.test(iwText) && /서울 \/ 경기/.test(iwText));
+ck('말풍선에 장비번호·영업담당·최근 점검이 들어간다',
+  /BW8043/.test(iwText) && /유비야/.test(iwText) && /2026-08-04 · 9일 경과/.test(iwText));
+ck('말풍선에 진행중 표시가 들어간다', /🔵/.test(iwText));
+ck('말풍선에 최근 이력이 요약으로 들어간다',
+  /2026-08-04/.test(iwText) && /약액 유입 미발생/.test(iwText) && /2026-07-03/.test(iwText));
+ck('말풍선 이력은 최근 3건까지만 보여 준다(나머지는 상세로)',
+  /var PC_IW_HIST=3;/.test(inlineJs) && /recs\.slice\(0,PC_IW_HIST\)/.test(inlineJs) &&
+  !/2026-05-02/.test(iwText));
+ck("말풍선에 '이력 전체 보기' 버튼이 있고 상세를 연다", /mapHistBtn/.test(iwText));
+const iwBtn = (function find(n) {
+  if (n && n.tagName === 'button') return n;
+  for (const c of (n && n.children) || []) { const r = find(c); if (r) return r; }
+  return null;
+})(iwNode);
+if (iwBtn && iwBtn.listeners.click) iwBtn.listeners.click[0]();
+ck('버튼을 누르면 그 병원의 상세(이력)가 열린다', iwState.selected === '가나다병원');
+
+/* 이력이 없는 병원도 말풍선은 정상적으로 뜬다 */
+globalThis.document = makeStubDoc();
+const iwEmptyState = { prog: null, today: [], selected: null };
+const iwEmpty = new Function('BazDom', 'HISTORY', 'state', `
+  'use strict';
+  var t=function(k){ return k; };
+  var normalize=function(x){ return String(x||'').replace(/\\s+/g,''); };
+  var isNcare=function(){ return false; };
+  var pcIsProg=function(){ return false; };
+  var statusDays=function(){ return '-'; };
+  var pcTodayList=function(){ return []; };
+  var pcSelect=function(n){ state.selected=n; };
+  var PC_IW_HIST=3;
+  ${grab(SRC, 'pcMapInfoNode')}
+  return pcMapInfoNode;
+`)(BazDom, {}, iwEmptyState)({ n: '이력없는병원' });
+ck('이력이 없어도 말풍선은 이름과 안내를 보여 준다',
+  /이력없는병원/.test(iwEmpty.textContent) && /histEmpty/.test(iwEmpty.textContent));
+globalThis.document = prevDoc;
+
+/* ── 9-3. 클러스터에 묶인 마커에서도 말풍선이 열린다 ──────────────────────
+   예전에는 InfoWindow.open(map, marker) 로 마커에 붙였다. 마커가 클러스터러
+   (minLevel:7)에 묶여 지도에서 내려가 있으면 아무것도 그려지지 않았다. */
+ck('말풍선을 마커가 아닌 좌표에 연다(클러스터 상태에서도 표시)',
+  /pcFocusIW\.open\(pcMapObj\);/.test(inlineJs) &&
+  !/pcFocusIW\.open\(pcMapObj, mk\)/.test(inlineJs) &&
+  !/var mk=pcMarkerByName\[h\.n\];/.test(inlineJs));
+ck('지도 마커 클릭이 카드 클릭과 같은 처리(pcPickHosp)로 이어진다',
+  /addListener\(mk,'click',function\(\)\{ pcPickHosp\(h\.n\); \}\)/.test(inlineJs) &&
+  !/addListener\(mk,'click',function\(\)\{ pcSelect\(/.test(inlineJs));
+ck('오늘 완료·진행중·주변 마커 클릭도 같은 말풍선을 연다',
+  (inlineJs.match(/pcPickHosp\((?:hn|nm|h\.n)\)/g) || []).length >= 4);
+
+/* ── 9-4. 확대/축소 뒤 타일 자가 복구 ─────────────────────────────────── */
+const zoomFix = new Function('state', `
+  'use strict';
+  var pcMapObj=state.map;
+  var pcMapCtl={scheduleRelayout:function(){state.relayouts++;}};
+  function pcMapVisible(){ return state.visible; }
+  var setTimeout=function(fn){ state.timers.push(fn); return state.timers.length; };
+  var clearTimeout=function(){ state.cleared++; };
+  ${grab(SRC, 'pcMapNoteZoom')}
+  ${grab(SRC, 'pcMapIdleFix')}
+  var pcZoomDirty=false, pcZoomFixT=0;
+  return {
+    note: function(){ pcZoomDirty=true; },
+    idle: function(){
+      if(!pcZoomDirty) return;
+      if(pcZoomFixT) { state.cleared++; }
+      pcZoomFixT=1;
+      state.timers.push(function(){ pcZoomFixT=0; if(!pcZoomDirty||!pcMapObj||!pcMapVisible()) return; pcZoomDirty=false; pcMapCtl.scheduleRelayout(); });
+    },
+    dirty: function(){ return pcZoomDirty; }
+  };
+`);
+const zf = { map: {}, visible: true, relayouts: 0, timers: [], cleared: 0 };
+const zoom = zoomFix(zf);
+zoom.idle();
+ck('배율이 바뀌지 않았으면 idle 에 타일 재계산을 걸지 않는다', zf.timers.length === 0);
+zoom.note(); zoom.idle(); zoom.note(); zoom.idle();
+zf.timers.forEach(fn => fn());
+ck('확대/축소가 있었으면 지도가 멈춘 뒤 타일 재계산을 1회만 건다',
+  zf.relayouts === 1 && zf.cleared >= 1);
+ck('zoom_changed·idle 이 타일 복구 훅에 연결되어 있다',
+  /'zoom_changed',function\(\)\{ pcMapCtlSync\(\); pcMapNoteZoom\(\); \}/.test(inlineJs) &&
+  /'idle',function\(\)\{ pcMapViewSaveDebounced\(\); pcMapIdleFix\(\); \}/.test(inlineJs));
+ck('타일 재계산은 중심·배율을 건드리지 않는다(relayout 요청만)',
+  /pcMapCtl\.scheduleRelayout\(\);\s*\n\s*\}, 260\);/.test(inlineJs));
+ck('연타 확대는 애니메이션을 끄고 마지막 한 번만 부드럽게 한다',
+  /var fast=\(Date\.now\(\)-pcLastZoomAt\)<300;/.test(inlineJs) &&
+  /if\(fast\) pcMapObj\.setLevel\(lv\);/.test(inlineJs));
+ck('크기 0 컨테이너에는 지도를 만들지 않고 미룬다',
+  /box\.width<40 \|\| box\.height<40/.test(inlineJs) && /pcShowMap\(list\); \}, 120\);/.test(inlineJs));
 
 /* ════════════════════════════════════════════════════════════════════
    10. '결과 맞춤' 범위
@@ -675,7 +805,7 @@ ck('상태를 색만으로 전달하지 않는다(범례·배지에 텍스트 �
 section('12. 코드 구조 · 배포');
 
 const modules = ['baz-dom', 'baz-date', 'baz-scroll-lock', 'baz-modal', 'baz-map-controller',
-  'baz-hospital-data', 'baz-nearby', 'baz-history-api'];
+  'baz-hospital-data', 'baz-history-api'];
 for (const m of modules) {
   ck(m + '.js 가 존재하고 페이지에서 로드된다',
     fs.existsSync(path.join(ROOT, 'js', m + '.js')) && SRC.includes('js/' + m + '.js'));
