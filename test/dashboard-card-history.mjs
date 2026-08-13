@@ -49,7 +49,7 @@ const FNS = [
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
   'filteredRows_', 'hospStateFilter_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows', 'buildComparisonPeriod', 'exPrevRows',
-  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare',
+  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
   'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
@@ -99,7 +99,7 @@ const SAMPLE = [
   { date: '2026-08-07', hosp: '다병원', gubun: 'A/S', type: '노즐누수', part: '없음', fse: '김프로', detail: '누수 부위 확인 및 세척' },
   { date: '2026-08-04', hosp: '라병원', gubun: 'A/S', type: ODD_TYPE, part: 'Cable Set' },
   { date: '2026-08-06', hosp: '마병원', gubun: 'A/S', type: '이상 없음', part: '없음' },
-  { date: '2026-08-06', hosp: '바병원', gubun: '점검', type: '정기점검', part: "Handpiece Ass'y" },
+  { date: '2026-08-06', hosp: '바병원', gubun: '점검', type: '노즐누수', part: "Handpiece Ass'y" },
   /* 비교 기간(전주) 2026-07-27 ~ 07-31 */
   { date: '2026-07-28', hosp: '가병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y" },
   { date: '2026-07-29', hosp: '사병원', gubun: 'A/S', type: '풋스위치 불량', part: 'Foot s/w' },
@@ -112,6 +112,7 @@ const WEEK = { from: '2026-08-03', to: '2026-08-07' };
 const x = load(SAMPLE, WEEK);
 
 const vocTop = D.exDimCompare(x.rows, x.prev, 'type', true);
+const vocTopAll = D.exVocTypeCompare_(x.rows, x.prev);
 const partTop = D.exDimCompare(x.rows, x.prev, 'part', false);
 const change = D.buildExecutiveVocChange(x);
 const curOf = (dim, k, onlyAS) => D.exHistoryRows_(x.rows, dim, k, onlyAS);
@@ -119,11 +120,11 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
 
 /* ══════ 1. 카드 수치 == 이력 건수 (중복 제거 없음) ══════ */
 {
-  const bad = vocTop.filter(t => curOf('type', t.k, true).length !== t.cur
-    || prevOf('type', t.k, true).length !== t.prev);
+  const bad = vocTopAll.filter(t => curOf('type', t.k, false).length !== t.cur
+    || prevOf('type', t.k, false).length !== t.prev);
   ck('1. VOC 유형 TOP5 — 카드 cur/prev 와 이력 길이 일치',
-    vocTop.length > 0 && bad.length === 0,
-    bad.map(t => t.k + ' cur=' + t.cur + '/' + curOf('type', t.k, true).length).join(', '));
+    vocTopAll.length > 0 && bad.length === 0,
+    bad.map(t => t.k + ' cur=' + t.cur + '/' + curOf('type', t.k, false).length).join(', '));
   const badP = partTop.filter(t => curOf('part', t.k, false).length !== t.cur
     || prevOf('part', t.k, false).length !== t.prev);
   ck('2. 교체품 TOP5 — 카드 cur/prev 와 이력 길이 일치',
@@ -138,26 +139,27 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
 {
   const up = change.up, down = change.down;
   ck('4. VOC 변화 증가 유형 이력 조회', up.length > 0 &&
-    up.every(t => curOf('type', t.k, true).length === t.cur), up.map(t => t.k).join(','));
+    up.every(t => curOf('type', t.k, false).length === t.cur), up.map(t => t.k).join(','));
   const zeroCur = down.filter(t => t.cur === 0);
   ck('5. 감소 유형 중 현재 0건도 비교 기간 이력이 조회된다',
-    zeroCur.length > 0 && zeroCur.every(t => curOf('type', t.k, true).length === 0
-      && prevOf('type', t.k, true).length === t.prev),
+    zeroCur.length > 0 && zeroCur.every(t => curOf('type', t.k, false).length === 0
+      && prevOf('type', t.k, false).length === t.prev),
     zeroCur.map(t => t.k + ' prev=' + t.prev).join(','));
   ck('6. 현재/비교 기간이 분리된다 (같은 유형이 양쪽에 다르게 존재)',
-    curOf('type', '노즐누수', true).length === 3 && prevOf('type', '노즐누수', true).length === 1);
+    curOf('type', '노즐누수', false).length === 4 && prevOf('type', '노즐누수', false).length === 1);
 }
 
 /* ══════ 3. 집계 기준이 카드와 완전히 같다 ══════ */
 {
-  ck('7. VOC 이력은 A/S 기록만 포함 (점검 제외)',
+  ck('7. VOC 변화·TOP5 이력 모두 점검 중 발견된 실제 이상 유형을 포함',
     curOf('part', "Handpiece Ass'y", false).some(r => r.gubun === '점검') &&
-    curOf('type', '정기점검', true).length === 0);
+    curOf('type', '노즐누수', false).length === 4 &&
+    vocTopAll.some(t => t.k==='노즐누수' && t.cur===4));
   ck('8. "이상 없음" 계열은 VOC 이력에서 제외', curOf('type', '이상 없음', true).length === 0);
   ck('9. 빈 값·"없음" 은 항목으로 세지 않는다',
     curOf('part', '없음', false).length === 0 && curOf('part', '', false).length === 0);
   ck('10. 데모 운영 기록은 모집단에서 이미 빠져 이력에도 없다',
-    curOf('type', '노즐누수', true).every(r => r.hosp !== '데모센터'));
+    curOf('type', '노즐누수', false).every(r => r.hosp !== '데모센터'));
   ck('11. 교체품은 정확히 일치하는 이름만 (부분 일치 금지)',
     curOf('part', 'Handpiece', false).length === 0 &&
     curOf('part', "Handpiece Ass'y", false).length === 3);
@@ -165,22 +167,22 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
 
 /* ══════ 4. 정렬 ══════ */
 {
-  const sorted = D.exHistorySort_(curOf('type', '노즐누수', true));
+  const sorted = D.exHistorySort_(curOf('type', '노즐누수', false));
   const days = sorted.map(r => D.ymd(D.rowDate(r)));
-  ck('12. 최신 처리일 우선 정렬', days.join(',') === '2026-08-07,2026-08-05,2026-08-05', days.join(','));
+  ck('12. 최신 처리일 우선 정렬', days.join(',') === '2026-08-07,2026-08-06,2026-08-05,2026-08-05', days.join(','));
   ck('13. 같은 날짜는 병원명 가나다순',
-    sorted[1].hosp === '가병원' && sorted[2].hosp === '나병원',
+    sorted[2].hosp === '가병원' && sorted[3].hosp === '나병원',
     sorted.map(r => r.hosp).join(','));
   ck('14. 원본 배열을 변형하지 않는다 (slice 후 정렬)',
-    D.exHistoryRows_(x.rows, 'type', '노즐누수', true)[0].hosp === '나병원');
+    D.exHistoryRows_(x.rows, 'type', '노즐누수', false)[0].hosp === '나병원');
 }
 
 /* ══════ 5. 표 표시 — 열 구조·처리 내용 ══════ */
 {
-  const items = D.exHistoryDataset_(curOf('type', '노즐누수', true), prevOf('type', '노즐누수', true));
+  const items = D.exHistoryDataset_(curOf('type', '노즐누수', false), prevOf('type', '노즐누수', false));
   const table = D.exHistoryTable_(items);
   ck('15. 선택·비교 기간 원본 행을 하나의 표 데이터로 합친다',
-    items.length === 4 && items.filter(x => x.period === 'cur').length === 3 &&
+    items.length === 5 && items.filter(x => x.period === 'cur').length === 4 &&
     items.filter(x => x.period === 'prev').length === 1);
   ck('16. 표에 기간·처리일·병원·구분·담당자·VOC 유형·교체품·처리 내용 열이 있다',
     ['기간','처리일','병원','구분','담당자','VOC 유형','교체품','처리 내용']
@@ -232,18 +234,18 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('28. 이력 표 본문이 escape 된다 (태그 주입 불가)',
     table.indexOf('&lt;급수&gt;') >= 0 && table.indexOf('&amp;') >= 0 &&
     table.indexOf('<급수>') < 0, table.slice(0, 220));
-  const html = D.exBars(vocTop, { histDim: 'type' });
+  const html = D.exBars(vocTopAll, { histDim: 'typeAll' });
   const m = html.match(/data-hist-k="([^"]*)"/g) || [];
   /* esc() 는 따옴표를 바꾸지 않으므로 속성에는 escAttr() 를 써야 한다 */
   ck('29. 카드 버튼의 data-hist-k 가 escape 되어 속성이 깨지지 않는다',
-    m.length === vocTop.length && html.indexOf('data-hist-k="노즐 "누수"') < 0 &&
+    m.length === vocTopAll.length && html.indexOf('data-hist-k="노즐 "누수"') < 0 &&
     html.indexOf('&quot;누수&quot;') >= 0, m.join(' | ').slice(0, 200));
   /* 속성에서 되읽은 값이 원래 유형명과 같아야 이력 조회가 맞는다 */
   const back = m.map(a => a.slice('data-hist-k="'.length, -1))
     .map(v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'));
   ck('29-b. 속성에서 되읽은 값이 원래 유형명과 일치',
-    back.indexOf(ODD_TYPE) >= 0 && curOf('type', back[back.indexOf(ODD_TYPE)], true).length === 1);
+    back.indexOf(ODD_TYPE) >= 0 && curOf('type', back[back.indexOf(ODD_TYPE)], false).length === 1);
   ck('30. 표 필터 결과가 0건이면 전용 빈 상태를 표시',
     D.exHistoryTable_([]).indexOf('선택한 필터에 해당하는 처리 이력이 없습니다') >= 0);
   ck('31. 기존 명단의 빈 상태 문구 기능은 그대로',
@@ -253,13 +255,13 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
 
 /* ══════ 8. 카드 렌더 — 버튼·데이터 속성 ══════ */
 {
-  const withBtn = D.exBars(vocTop, { histDim: 'type' });
-  const noBtn = D.exBars(vocTop, {});
+  const withBtn = D.exBars(vocTopAll, { histDim: 'typeAll' });
+  const noBtn = D.exBars(vocTopAll, {});
   ck('32. histDim 을 주면 각 행이 button 이 된다',
-    (withBtn.match(/<button type="button" class="ex-brow ex-row-btn/g) || []).length === vocTop.length);
+    (withBtn.match(/<button type="button" class="ex-brow ex-row-btn/g) || []).length === vocTopAll.length);
   ck('33. histDim 이 없으면 기존 div 행 그대로 (기존 화면 보존)',
     noBtn.indexOf('<button') < 0 && noBtn.indexOf('data-hist-k') < 0 &&
-    (noBtn.match(/class="ex-brow/g) || []).length === vocTop.length);
+    (noBtn.match(/class="ex-brow/g) || []).length === vocTopAll.length);
   ck('34. 수치·막대·증감 표시는 두 경우가 같다',
     withBtn.replace(/<button[^>]*>/g, '<div>').replace(/<\/button>/g, '</div>')
       .replace(/<span class="nm"/g, '<div class="nm"').replace(/<span class="tr"/g, '<div class="tr"')
@@ -316,8 +318,13 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     /@media\(max-width:820px\)\{\.ex-list-box\.history\{height:calc\(100dvh - 20px\)\}/.test(SRC));
   const causeSrc=grab('renderExecutiveCause');
   ck('48. VOC 유형·교체품 TOP5는 선택 기간 0건 항목을 제외한다',
-    /exDimCompare\(x\.rows, x\.prev, 'type', true\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc) &&
+    /exVocTypeCompare_\(x\.rows, x\.prev\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc) &&
     /exDimCompare\(x\.rows, x\.prev, 'part', false\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc));
+  const showHistorySrc=grab('exShowHistory_');
+  ck('49. VOC 변화·TOP5 클릭 이력 모두 A/S·점검 통합 기준을 사용한다',
+    /dim==='typeAll'\)\?'type':dim/.test(showHistorySrc) &&
+    /onlyAS=\(dim==='type'\)/.test(showHistorySrc) && /histDim:'typeAll'/.test(causeSrc) &&
+    /data-hist-dim="typeAll"/.test(grab('renderExecutiveSummary')));
 }
 
 console.log('\n──────────────────────────────');
