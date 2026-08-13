@@ -914,18 +914,21 @@ function loadContentTplCache(){
 /* 구버전 백엔드(handover_bootstrap 미지원) 폴백 — 개별 요청 */
 function loadContentTpl(){
   loadContentTplCache();
-  bazGetJson(_tk(postUrl()+'?action=contenttpl'), 15000).then(function(res){
+  var tpl=bazGetJson(_tk(postUrl()+'?action=contenttpl'), 15000).then(function(res){
     var d=(res.kind==='json')?res.data:null;
     if(d&&d.success&&Array.isArray(d.rows)){ CONTENT_TPL_ROWS=d.rows;
       try{ localStorage.setItem('baz_handover_contenttpl', JSON.stringify(d.rows)); }catch(e){}
-      autoFillDetail(); }
+      autoFillDetail(); return true; }
+    return false;
   });
-  bazGetJson(_tk(postUrl()+'?action=weeklyauto'), 15000).then(function(res){
+  var auto=bazGetJson(_tk(postUrl()+'?action=weeklyauto'), 15000).then(function(res){
     var d=(res.kind==='json')?res.data:null;
     if(d&&d.success&&Array.isArray(d.writers)){ AUTO_FSE=d.writers.slice();
       try{ localStorage.setItem('baz_handover_autofse', JSON.stringify(AUTO_FSE)); }catch(e){}
-      autoFillDetail(); }
+      autoFillDetail(); return true; }
+    return false;
   });
+  return Promise.all([tpl,auto]).then(function(v){ return v.every(function(x){return x!==false;}); });
 }
 loadContentTplCache();
 function isAutoFse(name){
@@ -1708,17 +1711,29 @@ setDbBadge('embed');
    각각 날렸다. v3.1 서버는 handover_bootstrap 1콜로 묶어 준다 — 지원하지 않는
    구버전 배포에서는 기존 개별 요청으로 그대로 폴백한다. */
 function bootHandover(){
-  if(!HANDOVER_URL){ setDbBadge('embed','서버 미설정'); return; }
-  gasPing();
-  bazGetJson(_tk(postUrl()+'?action=handover_bootstrap'), 20000).then(function(res){
-    var d=(res.kind==='json') ? res.data : null;
-    var okBoot = !!(d && d.success===true && d.hospdb);
-    if(!okBoot){
-      console.warn('[handover] bootstrap 미지원 — 개별 요청으로 폴백');
-      loadLiveDB(); masterSync(); loadContentTpl();
-      return;
+  if(!HANDOVER_URL){ setDbBadge('embed','서버 미설정'); return Promise.resolve(false); }
+  /* bootstrap 자체가 GAS와 시트를 깨우고 버전도 돌려주므로 별도 ping은 호출하지 않는다. */
+  return bazGetJson(_tk(postUrl()+'?action=handover_bootstrap'), 20000).then(function(res){
+    if(res.kind!=='json'){
+      setDbBadge('error', res.kind==='timeout'?'서버 응답 지연':'서버 연결 실패 · 임베드 DB 사용');
+      console.warn('[handover] bootstrap 연결 실패 — 추가 호출 없이 임베드 DB 유지:',res.kind);
+      return false;
     }
-    applyBootstrap(d);
+    var d=res.data;
+    if(d && d.success===true && d.hospdb){
+      GAS_VER=d.ver||GAS_VER;
+      applyBootstrap(d);
+      return true;
+    }
+    if(d && d.success===false){
+      var msg=String(d.error||'서버가 데이터를 주지 않았습니다');
+      setDbBadge(/unauthorized|토큰|로그인/i.test(msg)?'auth':'error',msg);
+      return false;
+    }
+    /* JSON은 왔지만 통합 action을 모르는 구버전일 때만 기존 개별 API로 폴백한다. */
+    console.warn('[handover] bootstrap 미지원 — 개별 요청으로 폴백');
+    return Promise.all([loadLiveDB(),masterSync(),loadContentTpl()])
+      .then(function(v){ return v.some(function(x){return x!==false;}); });
   });
 }
 function applyBootstrap(d){

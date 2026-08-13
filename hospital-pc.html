@@ -1313,9 +1313,13 @@ function bazToast(msg){
   rb.addEventListener('click', function(){
     if(rb.classList.contains('spin')) return;
     rb.classList.add('spin');
-    var finish=function(){ rb.classList.remove('spin'); bazToast('최신 데이터로 갱신했습니다'); };
-    if(typeof window.bazRefreshAll==='function'){ window.bazRefreshAll(finish); }
-    else { setTimeout(finish, 600); }
+    var finish=function(ok){
+      rb.classList.remove('spin');
+      bazToast(ok===false?'일부 데이터 갱신에 실패했습니다':'최신 데이터로 갱신했습니다');
+    };
+    if(typeof window.bazRefreshAll==='function'){
+      Promise.resolve(window.bazRefreshAll()).then(finish,function(){ finish(false); });
+    }else finish(false);
   });
 })();
 
@@ -2748,16 +2752,16 @@ applyLang();
     return false;
   }
   function syncIssueHist(force){
-    if(ISSUE_HIST_URL.indexOf('여기에_')===0) return;
+    if(ISSUE_HIST_URL.indexOf('여기에_')===0) return Promise.resolve(true);
     if(!force && cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL)){
-      console.log('[이슈이력] 캐시 신선 — 동기화 생략'); return;
+      console.log('[이슈이력] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
-    bazGet(ISSUE_HIST_URL)
+    return bazGet(ISSUE_HIST_URL)
       .then(function(d){
-        if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return; }
-        acceptIssueHist(d.data, d.revs);
+        if(!d.success || !d.data){ console.warn('[이슈이력] 응답 형식 이상:',d); return false; }
+        acceptIssueHist(d.data, d.revs); return true;
       })
-      .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); });
+      .catch(function(e){ console.warn('[이슈이력] 읽기 실패:',e); return false; });
   }
   /* 이력 편집 저장 직후 최신본을 다시 받기 위한 진입점 */
   window.bazRefreshIssueHist=function(){ syncIssueHist(true); };
@@ -2831,14 +2835,14 @@ applyLang();
 
   function syncHospDB(force){
     if(!force && cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL)){
-      console.log('[병원정보DB] 캐시 신선 — 동기화 생략'); return;
+      console.log('[병원정보DB] 캐시 신선 — 동기화 생략'); return Promise.resolve(true);
     }
-    bazGet(HOSPITAL_DB_URL)
+    return bazGet(HOSPITAL_DB_URL)
       .then(function(d){
-        if(!d.success||!d.data||!d.data.length) return;
-        acceptHospDB(d.data);
+        if(!d.success||!d.data||!d.data.length) return false;
+        acceptHospDB(d.data); return true;
       })
-      .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e);});
+      .catch(function(e){console.warn('[병원정보DB] 읽기 실패:',e); return false;});
   }
   // 칩 필터(전체/N-CARE/점검필요) 활성화 시 재동기화 트리거용으로 노출 (5분 캐시 준수)
   window.refreshHospDB=function(){ syncHospDB(false); };
@@ -2849,30 +2853,46 @@ applyLang();
      action=bootstrap 으로 한 번에 받는다.
      ★ 구버전 백엔드(미재배포)는 bootstrap 을 모르거나 빈 응답을 준다 →
        hospdb/issuehist 중 못 받은 쪽만 기존 개별 요청으로 안전하게 폴백한다. */
+  var BAZ_BOOT_IN_FLIGHT=null;
   function bazBootSync(force){
     applyHospDBCache();
     applyIssueCache();
+    if(BAZ_BOOT_IN_FLIGHT) return BAZ_BOOT_IN_FLIGHT;
     var needH=force || !cacheFresh(HDB_CACHE_TS, HDB_CACHE_TTL);
     var needI=force || !cacheFresh(ISSUE_CACHE_TS, ISSUE_CACHE_TTL);
-    if(!needH && !needI) return;
-    if(!needH){ syncIssueHist(force); return; }   // 한쪽만 필요하면 1콜이 이득이 없다
-    if(!needI){ syncHospDB(force); return; }
-    bazGet(HANDOVER_CORE+'?action=bootstrap')
+    if(!needH && !needI) return Promise.resolve(true);
+    if(!needH) return syncIssueHist(force);   // 한쪽만 필요하면 1콜이 이득이 없다
+    if(!needI) return syncHospDB(force);
+    BAZ_BOOT_IN_FLIGHT=bazGet(HANDOVER_CORE+'?action=bootstrap')
       .then(function(d){
+        if(d && d.success===false){
+          throw {kind:/unauthorized|토큰|로그인/i.test(String(d.error||''))?'auth':'server'};
+        }
         var hd=d && d.hospdb, ih=d && d.issuehist;
         var okH=!!(hd && hd.success && Array.isArray(hd.data) && hd.data.length);
         var okI=!!(ih && ih.success && ih.data);
         if(!okH && !okI) throw {kind:'bootstrap-unsupported'};
         if(okH) acceptHospDB(hd.data);
         if(okI) acceptIssueHist(ih.data, ih.revs);
-        if(!okH) syncHospDB(true);
-        if(!okI) syncIssueHist(true);
+        var missing=[];
+        if(!okH) missing.push(syncHospDB(true));
+        if(!okI) missing.push(syncIssueHist(true));
         console.log('[부트스트랩] 1콜 동기화'+(okH?' · 병원정보DB':'')+(okI?' · 이슈이력':''));
+        return Promise.all(missing).then(function(v){ return v.every(function(x){return x!==false;}); });
       })
       .catch(function(e){
-        console.warn('[부트스트랩] 1콜 불가 — 개별 요청으로 폴백:', (e&&e.kind)||e);
-        syncHospDB(true); syncIssueHist(true);
+        if(e && e.kind==='bootstrap-unsupported'){
+          console.warn('[부트스트랩] 구버전 — 개별 요청으로 폴백');
+          return Promise.all([syncHospDB(true),syncIssueHist(true)])
+            .then(function(v){ return v.every(function(x){return x!==false;}); });
+        }
+        /* 네트워크·타임아웃·인증 장애에서는 2개 요청을 추가해 부하를 증폭시키지 않는다. */
+        console.warn('[부트스트랩] 동기화 실패 — 캐시 유지:', (e&&e.kind)||e);
+        return false;
       });
+    BAZ_BOOT_IN_FLIGHT=BAZ_BOOT_IN_FLIGHT.then(function(v){ BAZ_BOOT_IN_FLIGHT=null; return v; },
+      function(){ BAZ_BOOT_IN_FLIGHT=null; return false; });
+    return BAZ_BOOT_IN_FLIGHT;
   }
   bazBootSync(false);
 
@@ -2893,28 +2913,29 @@ applyLang();
   }
 
   function syncVisitLog(){
-    if(!VISIT_LOG_URL) return;   // 방문로그 비활성화 — 동기화 skip
+    if(!VISIT_LOG_URL) return Promise.resolve(true);   // 방문로그 비활성화 — 동기화 skip
     try{
       var cached=localStorage.getItem(VLOG_CACHE_KEY);
       var ts=parseInt(localStorage.getItem(VLOG_CACHE_TS)||'0',10);
       if(cached){ applyVisits(JSON.parse(cached)); }
       if(cached && (Date.now()-ts)<VLOG_CACHE_TTL){
         console.log('[방문로그] 캐시 신선 — 동기화 생략');
-        return;
+        return Promise.resolve(true);
       }
     }catch(e){ console.warn('[방문로그] 캐시 읽기 오류(무시):',e); }
 
-    bazGet(VISIT_LOG_URL)
+    return bazGet(VISIT_LOG_URL)
       .then(function(d){
-        if(!d.ok||!d.visits) return;
+        if(!d.ok||!d.visits) return false;
         try{
           localStorage.setItem(VLOG_CACHE_KEY, JSON.stringify(d.visits));
           localStorage.setItem(VLOG_CACHE_TS, String(Date.now()));
         }catch(e){}
         try{ applyVisits(d.visits); }
         catch(e){ console.warn('[방문로그] 적용 오류(무시):',e); }
+        return true;
       })
-      .catch(function(e){console.warn('[방문로그] 읽기 실패:',e);});
+      .catch(function(e){console.warn('[방문로그] 읽기 실패:',e); return false;});
   }
   syncVisitLog();
 
@@ -2927,20 +2948,23 @@ applyLang();
       localStorage.removeItem('baz_pc_recent_ts');
     }catch(e){}
     try{ pcRecentTs=0; }catch(e){}   // 신선도 판정은 메모리가 진실 — 강제 새로고침에 함께 초기화
-    try{ bazBootSync(true); }catch(e){ try{ syncHospDB(true); syncIssueHist(true); }catch(_){} }
-    try{ syncVisitLog(); }catch(e){}
     try{ if(typeof bazGeocodeRefresh==='function') bazGeocodeRefresh(); }catch(e){}
-    // 최근 완료(handover) → 오늘 완료·이동시간 카드 갱신
-    try{
-      if(typeof pcLoadRecent==='function'){
-        pcLoadRecent(function(){
-          try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
-          try{ if(typeof pcRenderRouteCard==='function') pcRenderRouteCard(); }catch(e){}
-          try{ if(typeof pcShowMap==='function' && typeof pcRightMode!=='undefined' && pcRightMode!=='detail') pcShowMap(pcList); }catch(e){}
-        });
-      }
-    }catch(e){}
-    if(typeof done==='function') setTimeout(done, 900);
+    var bootP, visitP, recentP;
+    try{ bootP=bazBootSync(true); }catch(e){ bootP=Promise.resolve(false); }
+    try{ visitP=syncVisitLog(); }catch(e){ visitP=Promise.resolve(false); }
+    try{ recentP=(typeof pcLoadRecent==='function')?pcLoadRecent():Promise.resolve(true); }
+    catch(e){ recentP=Promise.resolve(false); }
+    return Promise.all([bootP,visitP,recentP]).then(function(v){
+      try{ if(typeof pcRenderRecentCard==='function') pcRenderRecentCard(); }catch(e){}
+      try{ if(typeof pcRenderRouteCard==='function') pcRenderRouteCard(); }catch(e){}
+      try{ if(typeof pcShowMap==='function' && typeof pcRightMode!=='undefined' && pcRightMode!=='detail') pcShowMap(pcList); }catch(e){}
+      var ok=v.every(function(x){return x!==false;});
+      if(typeof done==='function') done(ok);
+      return ok;
+    },function(){
+      if(typeof done==='function') done(false);
+      return false;
+    });
   };
 })();
 
@@ -3133,6 +3157,7 @@ function pcAutoAdvanceFromHandover(){
 var pcProgHold=0, pcProgHoldAt=0;   // 로컬 변경 직후 폴링이 되돌리지 않도록 보호 + 설정 시각(안전밸브용)
 var PC_HOLD_MS=4000, PC_HOLD_MAX=30000;
 var pcProgRev=0;     // 서버 리비전 — 폴링에 실어 보내면 변경 없을 때 큐 전체를 받지 않는다
+var pcProgInFlight=null;  // 느린 GAS 응답 중 다음 폴링·포커스 요청이 겹치지 않게 공유
 var pcLastAct=0;     // 마지막 조작 시각 — 직후에는 폴링을 촘촘히(공동 편집 반응 개선)
 var pcOpBatch=null;  // 배치 수집 중이면 op 배열 — 연쇄 변경을 POST 1회로 묶는다
 var pcRenderHold=0, pcRenderPending=null;   // >0이면 재렌더를 미뤘다가 배치 끝에 1회로 합친다
@@ -3250,27 +3275,30 @@ function pcProgSend(payload){
   }catch(e){ fallback(); }
 }
 function pcProgPull(){
-  if(!HANDOVER_URL) return;
-  /* [안전밸브] hold가 비정상적으로 오래 유지되면(쓰기 연속 실패 등) 강제로 푼다.
-     이게 없으면 실패하는 쓰기가 반복될 때 읽기가 영원히 막혀 다른 사용자의 변경이 안 들어온다. */
+  if(!HANDOVER_URL) return Promise.resolve(true);
+  /* [안전밸브] hold가 비정상적으로 오래 유지되면(쓰기 연속 실패 등) 강제로 푼다. */
   if(pcProgHold && Date.now()-pcProgHoldAt > PC_HOLD_MAX){ pcProgHold=0; }
-  if(Date.now()<pcProgHold) return;
+  if(Date.now()<pcProgHold) return Promise.resolve(true);
+  if(pcProgInFlight) return pcProgInFlight;
   /* rev 동봉 → 변경이 없으면 서버가 {nochange:true}만 반환(큐 직렬화·전송·파싱 생략) */
   var url=HANDOVER_URL+'?action=progress'+(pcProgRev?('&rev='+pcProgRev):'');
-  bazGet(url)
+  pcProgInFlight=bazGet(url)
     .then(function(d){
       pcPollFailN=0;                                    // 성공 → 백오프 해제
-      if(!d || d.success!==true) return;
-      if(d.nochange===true){ if(typeof d.rev==='number') pcProgRev=d.rev; return; }
-      pcProgAccept(d);
+      if(!d || d.success!==true) return false;
+      if(d.nochange===true){ if(typeof d.rev==='number') pcProgRev=d.rev; return true; }
+      pcProgAccept(d); return true;
     })
-    .catch(function(e){ pcPollFailN++; console.warn('[동기화] progress 실패:', (e&&e.kind)||e); });
+    .catch(function(e){ pcPollFailN++; console.warn('[동기화] progress 실패:', (e&&e.kind)||e); return false; });
+  pcProgInFlight=pcProgInFlight.then(function(v){ pcProgInFlight=null; return v; },
+    function(){ pcProgInFlight=null; pcPollFailN++; return false; });
+  return pcProgInFlight;
 }
 // 초기 동기화 + 적응형 폴링 + 포커스/복귀 시 즉시 갱신(+ 자정 넘김 자동 초기화)
 // 조작 직후 90초는 7초 간격 — 같은 일정을 함께 보는 다른 사용자에게 빠르게 전파된다.
 // 그 외에는 25초, 숨은 탭은 정지. rev 덕분에 촘촘한 폴링도 대부분 빈 응답이라 비용이 낮다.
 // [안정성] 연속 실패 시 백오프(7/25 → 60초)로 죽은 서버를 7초마다 두드리지 않는다.
-var pcPollTimer=null, pcPollFailN=0;
+var pcPollTimer=null, pcPollFailN=0, pcPollCycleInFlight=null;
 function pcPollDelay(){
   if(bazAuthBlocked() || pcPollFailN>=3) return 60000;               // 인증 끊김·연속 실패 → 느리게
   /* [부하] 열린 탭 하나가 하루 종일 도는 폴링이다. 사용자·탭이 늘수록 GAS 실행 슬롯을
@@ -3278,31 +3306,26 @@ function pcPollDelay(){
      완화한다(조작 직후 7→10초, 평상시 25→40초). 서버측 캐시 개선과 함께 적용된다. */
   return (Date.now()-pcLastAct < 90000) ? 10000 : 40000;
 }
-function pcPollTick(){
-  try{
-    if(document.visibilityState!=='hidden'){
-      try{ pcDailyResetCheck(); }catch(e){}
-      try{ pcProgPull(); }catch(e){ console.warn('[동기화] pcProgPull 예외:',e); }
-      try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
-    }
-  } finally {
-    // ★ 무슨 일이 있어도 다음 틱을 반드시 예약한다.
-    //   예전에는 pcProgPull()이 감싸지지 않아, 여기서 동기 예외가 한 번만 나면
-    //   pcPollSchedule()에 도달하지 못해 폴링 체인이 영구히 끊겼다(= 연동 먹통, 새로고침해야 복구).
-    pcPollSchedule();
-  }
-}
+function pcPollTick(){ pcPollCycle_(); }
 function pcPollSchedule(){ try{ clearTimeout(pcPollTimer); }catch(e){} pcPollTimer=setTimeout(pcPollTick, pcPollDelay()); }
-function pcProgWake(){
-  try{
-    try{ pcDailyResetCheck(); }catch(e){}
-    try{ pcProgPull(); }catch(e){ console.warn('[동기화] pcProgPull 예외:',e); }
-    try{ if(pcRecentRequested) pcLoadRecent(); }catch(e){}
-  } finally { pcPollSchedule(); }
+function pcPollCycle_(){
+  if(pcPollCycleInFlight) return pcPollCycleInFlight;
+  if(document.visibilityState==='hidden'){ pcPollSchedule(); return Promise.resolve(true); }
+  try{ pcDailyResetCheck(); }catch(e){}
+  var p;
+  try{ p=pcProgPull(); }catch(e){ console.warn('[동기화] pcProgPull 예외:',e); p=Promise.resolve(false); }
+  pcPollCycleInFlight=Promise.resolve(p).then(function(ok){
+    try{ return pcRecentRequested?pcLoadRecent():ok; }catch(e){ return false; }
+  }).then(function(v){
+    pcPollCycleInFlight=null; pcPollSchedule(); return v;
+  },function(){
+    pcPollCycleInFlight=null; pcPollSchedule(); return false;
+  });
+  return pcPollCycleInFlight;
 }
+function pcProgWake(){ pcPollCycle_(); }
 try{
-  setTimeout(pcProgPull, 250);   // GAS 콜드스타트 예열 겸 첫 동기화를 최대한 앞당긴다
-  pcPollSchedule();
+  setTimeout(pcProgWake, 250);   // 첫 요청이 끝난 뒤 다음 폴링을 예약한다
   document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') pcProgWake(); });
   window.addEventListener('focus', pcProgWake);
 }catch(e){}
@@ -4241,46 +4264,48 @@ function pcSkillBadge(name){
    시트 전체를 다시 받았다. → 메모리 변수를 진실로 삼고 localStorage는 부가 캐시로만 쓴다. */
 var PC_RECENT_TTL=5*60*1000;
 var pcRecentTs=(function(){ try{ return parseInt(localStorage.getItem('baz_pc_recent_ts')||'0',10)||0; }catch(e){ return 0; } })();
-var pcRecentInFlight=false, pcRecentBooted=false;
+var pcRecentInFlight=false, pcRecentBooted=false, pcRecentPromise=null;
 function pcLoadRecent(cb){
   var local=pcLocalRecent();
   var cached=null;
   try{ cached=JSON.parse(localStorage.getItem('baz_pc_recent_cache')||'null'); }catch(e){}
   if(!pcRecentBooted){
     pcRecentBooted=true;
-    // 저장된 ts는 캐시 본문이 실제로 있을 때만 신뢰한다(본문만 날아간 경우 첫 조회를 건너뛰지 않게)
     if(!(cached && cached.length)) pcRecentTs=0;
   }
   if(cached && cached.length){ pcRecent=pcMergeRecent(local.concat(cached)); pcRecentState='done'; if(!pcFseAll.length) pcCollectFse(local.concat(cached), false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
   else if(local.length){ pcRecent=pcMergeRecent(local); if(!pcFseAll.length) pcCollectFse(local, false); try{ pcAutoAdvanceFromHandover(); }catch(e){} if(cb) cb(); }
-  // 신선도 기준은 "마지막으로 성공한 조회 시각" — 응답이 0건이어도 다시 받지 않는다.
-  // (예전처럼 결과 개수로 판단하면 빈 응답이 계속 재요청을 부른다)
-  if(pcRecentTs && (Date.now()-pcRecentTs)<PC_RECENT_TTL) return;
-  if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return; }
-  if(pcRecentInFlight) return;                                            // 중복 요청 방지
+  if(pcRecentTs && (Date.now()-pcRecentTs)<PC_RECENT_TTL) return Promise.resolve(true);
+  if(!HANDOVER_URL){ if(!pcRecent.length){ pcRecentState='done'; } return Promise.resolve(!!pcRecent.length); }
+  if(pcRecentInFlight){
+    if(cb && pcRecentPromise) pcRecentPromise.then(cb,cb);
+    return pcRecentPromise||Promise.resolve(false);
+  }
   pcRecentInFlight=true;
   if(pcRecentState!=='done') pcRecentState='loading';
-  bazGet(HANDOVER_URL+'?action=all')
+  pcRecentPromise=bazGet(HANDOVER_URL+'?action=all')
     .then(function(d){
-      pcRecentInFlight=false;
       var data=(d&&d.data)||[];
       pcRecent=pcMergeRecent(pcLocalRecent().concat(data));
-      pcCollectFse(data, true);   // 전체 handover 응답 기준으로 CS 담당자 목록 갱신(권위)
-      pcBuildSkill(data);         // 같은 응답에서 숙련도 평가 맵 생성(추가 요청 없음)
+      pcCollectFse(data, true);
+      pcBuildSkill(data);
       pcRecentState='done';
-      pcRecentTs=Date.now();      // ★ 메모리가 진실 — localStorage 실패와 무관하게 캐시가 신선해진다
+      pcRecentTs=Date.now();
       try{ localStorage.setItem('baz_pc_recent_cache', JSON.stringify(pcRecent)); localStorage.setItem('baz_pc_recent_ts', String(pcRecentTs)); }catch(e){}
       try{ pcAutoAdvanceFromHandover(); }catch(e){}
       if(cb) cb();
+      return true;
     })
     .catch(function(e){
-      pcRecentInFlight=false;
-      /* 실패해도 곧바로 재시도하지 않도록 절반 TTL만큼 물린다(7초 폭주 방지) */
       pcRecentTs=Date.now()-PC_RECENT_TTL/2;
       pcRecentState=pcRecent.length?'done':'error';
       console.warn('[최근처리] 읽기 실패:', (e&&e.kind)||e);
       if(cb) cb();
+      return false;
     });
+  pcRecentPromise=pcRecentPromise.then(function(v){ pcRecentInFlight=false; pcRecentPromise=null; return v; },
+    function(){ pcRecentInFlight=false; pcRecentPromise=null; return false; });
+  return pcRecentPromise;
 }
 // 오늘 날짜(yyyy-MM-dd) — 서버(handover_gas.gs)·handover 시트와 동일하게 Asia/Seoul 고정.
 // PC 시계/표준시간대가 어긋나 있으면 하루가 엉뚱한 시각에 넘어가 일정이 근무 중에 초기화되고
