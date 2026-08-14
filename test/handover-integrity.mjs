@@ -121,11 +121,11 @@ ck('GAS 버전으로 사진 저장을 추측하던 코드가 사라졌다',
 /* 성공이 아닌 상태에서 해서는 안 되는 동작 */
 const applySaveResult = grab(JS, 'applySaveResult');
 const successBranch = applySaveResult.slice(0, applySaveResult.indexOf('}else if'));
-['clearSnPhoto()', 'enableCopy(!hasUnsaved)', 'rememberRecentHandover_(sent)', 'clearDraft'].forEach(function (frag) {
+['clearSnPhoto({keepServer:true})', 'enableCopy(!hasUnsaved)', 'rememberRecentHandover_(sent)', 'clearDraft'].forEach(function (frag) {
   ck('성공 분기에서만 실행: ' + frag, successBranch.includes(frag));
 });
 const restBranches = applySaveResult.slice(applySaveResult.indexOf('}else if'));
-ck('실패·불명 분기에서는 사진을 지우지 않는다', !restBranches.includes('clearSnPhoto()'));
+ck('실패·불명 분기에서는 사진을 지우지 않는다', !restBranches.includes('clearSnPhoto('));
 ck('실패·불명 분기에서는 복사·이어쓰기를 열지 않는다',
   !restBranches.includes('enableCopy(true)') && /enableCopy\(false\)/.test(restBranches));
 ck('실패·불명 분기에서는 최근 완료를 로컬에 남기지 않는다', !restBranches.includes('rememberRecentHandover_('));
@@ -142,8 +142,11 @@ ck('응답에 구조적 photo 블록이 있다',
   /function photoResult_/.test(GAS) &&
   /required:\s*!!required,\s*saved:\s*!!saved,\s*fileId/.test(GAS) &&
   /photo:\s*photoResult_/.test(doPost));
+/* [v3.4] legacy(base64 업로드)와 신규(사진 참조) 두 경로 모두 같은 사진 열이 필요하다.
+   판정 기준을 photoFile 단독에서 "실제로 시트에 쓸 파일 ID"로 넓혔다. */
 ck('사진 열이 없으면 행 기록 전에 실패로 판정',
-  /if\(photoFile && !photoCol\)/.test(doPost) && /no-photo-column/.test(doPost));
+  /var snFileForSheet = photoFile \? photoFile\.id : snPhotoFileId;/.test(doPost) &&
+  /if\(snFileForSheet && !photoCol\)/.test(doPost) && /no-photo-column/.test(doPost));
 ck('수식 기록 실패 시 행을 되돌린다',
   /rowRollback_\(sh, row, written\)/.test(doPost) && /function rowRollback_/.test(GAS));
 ck('사진 수식 뒤 후속 작업이 실패해도 사진 열까지 롤백한다',
@@ -379,8 +382,9 @@ ck('처리 중임을 접근 가능한 상태 메시지로 알린다',
   /snPhotoSay\(/.test(onSnPhoto) && /id="snPhotoState"[^>]*aria-live="polite"/.test(HTML));
 ck('사진 삭제가 진행 중 변환을 취소한다', /snPhotoSeq\.cancel\(\)/.test(grab(JS, 'clearSnPhoto')));
 ck('변환 중에는 저장이 막힌다', /photoBusy:SN_PHOTO_BUSY/.test(saveFn));
-ck('저장·결과 확인 중에는 사진 교체·삭제 컨트롤을 잠근다',
-  /function syncPhotoControls/.test(JS) && /f\.disabled=locked/.test(JS) && /rm\.disabled=locked/.test(JS));
+ck('저장·결과 확인·결과 불명 중에는 사진 교체·삭제 컨트롤을 잠근다',
+  /function photoControlsLocked/.test(JS) && /SAVE_STATE===BazHandover\.SAVE\.UNKNOWN/.test(JS) &&
+  /f\.disabled=locked/.test(JS) && /rm\.disabled=locked/.test(JS));
 ck('늦은 저장 확인이 새로 교체한 사진을 지우지 않는다',
   /SN_PHOTO!==LAST_SENT_PHOTO/.test(applySaveResult) && /현재 변경은 미기록/.test(applySaveResult));
 ck('저장 뒤 새 사진은 dirty가 되고 동일 텍스트여도 다시 저장할 수 있다',

@@ -1,5 +1,5 @@
 /*******************************************************************
- * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.3.0
+ * BAZ BIOMEDIC CS — 현장 처리 현황(handover) 확장 웹앱  v3.4.1
  * -----------------------------------------------------------------
  * 역할: 바즈바이오메딕 CS팀 수석 매니저 봇 — 모든 응답은
  *       [문제 확인 ➡️ 문제 해결 ➡️ 후속 조치] 3단계 원칙을 따른다.
@@ -26,7 +26,7 @@
  *     ※ 이 열들이 없으면 저장은 되지만 해당 값은 기록되지 않고, 응답 warnings 로
  *       "저장되지 않았다"고 알린다(프런트가 '저장됨'이라고 말하지 않는다).
  *  3) [배포 > 배포 관리 > ✏️ > 버전: 새 버전 > 배포]  ※ "새 배포"가 아님(URL 유지)
- *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.3.0"}
+ *  4) 확인: 배포URL + ?action=ping → {"success":true,"ver":"3.4.1"}
  *
  * v3.1 주요 변경
  *  · 사진 저장 실패를 성공으로 처리하지 않는다(행도 쓰지 않고 실패 응답)
@@ -537,11 +537,17 @@ function doPost(e){
     /* action 이 비어 있는 요청만 handover 행 기록이다. 알 수 없는 action 이
        아래 공통 기록 경로로 흘러 사진 없는 행을 만드는 것을 차단한다. */
     var knownActions = ['progress_save','progress_restore','history_save','weeklywrite',
-                        'menu_save','weeklyauto_save','labeldone'];
+                        'menu_save','weeklyauto_save','labeldone','photo_add','photo_abandon'];
     if(actName && knownActions.indexOf(actName) < 0){
       return json_({success:false, error:'알 수 없는 action: '+String(actName).slice(0,40)});
     }
     var isHandover = !actName;
+
+    /* [v3.4] 사진 전용 액션은 여기서 끝낸다 — 인증은 위에서 이미 통과했고, 아래의
+       handover 행 검증·snPhoto 필수 검사·전역 20초 락으로 흘러가면 안 된다.
+       Drive 업로드는 photoAdd_ 안에서 전역 락 밖에 두고, 메타 확정 구간만 짧은 락을 쓴다. */
+    if(actName === 'photo_add')     return json_(photoAdd_(payload));
+    if(actName === 'photo_abandon') return json_(photoAbandon_(payload));
 
     /* [v2.8] 같은 기록의 재전송을 걸러낸다(멱등성).
        콜드스타트 때 GAS가 JSON 대신 HTML을 돌려주면 프런트의 1차 요청은 "실패"로 보이고
@@ -571,15 +577,22 @@ function doPost(e){
     /* handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다.
        action 없는 행 기록은 서버가 무조건 사진을 요구한다. */
     var photoRequired = isHandover;
-    if(photoRequired && !(payload && payload.snPhoto)){
+    /* [v3.4] S/N 사진은 두 경로 모두 허용한다.
+       · Legacy — payload.snPhoto 에 base64 가 실려 온다(기존 클라이언트)
+       · New    — payload.photos 에 kind:'SN' 참조가 정확히 1개 있고, 그 사진이
+                  recordId(=reqId)+clientPhotoId 로 사진 시트에서 확인된다
+       예전에는 snPhoto 가 없으면 무조건 실패라 신규 참조 요청이 전부 거부됐다. */
+    var photoRefs = isHandover ? hvPhotoRefs_(payload) : [];
+    var usesRefs  = photoRefs.length > 0;
+    var snPhotoFileId = '', linkPhotos = null, causeCount = 0;
+    if(photoRequired && !usesRefs && !(payload && payload.snPhoto)){
       var mfail = {success:false, row:null,
         photo: photoResult_(true, false, '', 'photo-missing'),
         error: '사진이 필수인 기록인데 사진이 전송되지 않았습니다 — 다시 첨부해 주세요.'};
-      if(reqId) reqPut_(reqId, {ts:Date.now(), result:mfail});
       return json_(mfail);
     }
     var photoErr = '';
-    if(photoRequired){
+    if(photoRequired && !usesRefs){
       try{
         photoFile = savePhoto_(payload.snPhoto, {
           date: payload.date || '', hosp: payload.hosp || '', sn: payload.sn || ''
@@ -595,7 +608,6 @@ function doPost(e){
         var pfail = {success:false, row:null,
           photo: photoResult_(true, false, '', photoErr),
           error: '사진 저장 실패 — 기록하지 않았습니다: ' + photoErr};
-        if(reqId) reqPut_(reqId, {ts:Date.now(), result:pfail});
         return json_(pfail);
       }
     }
@@ -635,6 +647,19 @@ function doPost(e){
       }
     }
 
+    /* [v3.4.1] 참조 사진은 사진 추가/폐기와 같은 ScriptLock 안에서 다시 확인한다.
+       예전에는 락 밖에서 확인한 뒤 행 락을 기다리는 사이 photo_abandon 이 파일을
+       지울 수 있어, 휴지통 파일을 가리키는 메인 행이 저장될 수 있었다. */
+    if(photoRequired && usesRefs){
+      var rp = hvResolvePhotos_(reqId, photoRefs);
+      if(!rp.ok){
+        return json_({success:false, row:null,
+          photo: photoResult_(true, false, '', 'photo-ref-invalid'),
+          error: '사진 연결 실패 — 기록하지 않았습니다: ' + rp.error});
+      }
+      snPhotoFileId = rp.snFileId; linkPhotos = rp.list; causeCount = rp.causeCount;
+    }
+
     /* [v3.1] 서버측 검증 — 필수값·길이·허용값·비용 숫자 (클라이언트만 믿지 않는다) */
     var vres = hvValidate_(payload);
     if(!vres.ok){
@@ -642,7 +667,6 @@ function doPost(e){
       var vfail = {success:false, row:null,
         photo: photoResult_(photoRequired, false, '', photoRequired ? '기록이 거부되어 사진을 저장하지 않았습니다' : ''),
         errors: vres.errors, error: vres.errors.join(' · ')};
-      if(reqId) reqPut_(reqId, {ts:Date.now(), result:vfail});
       return json_(vfail);
     }
     var P = vres.clean;
@@ -656,16 +680,25 @@ function doPost(e){
     /* [v3.1] 사진 열 확인을 "행을 쓰기 전에" 한다.
        예전에는 행을 다 쓴 뒤에야 열이 없다는 걸 알고 경고만 붙인 채 success:true 였다.
        사진이 필수인 요청이 사진 없이 기록되는 것은 성공이 아니다. */
-    var photoCol = photoFile ? colBy_(hdr, PHOTO_COLS) : 0;
-    if(photoFile && !photoCol){
-      log_('PHOTO_NOCOL', hdr, {file:photoFile.id});
-      photoDiscard_(photoFile);
+    var snFileForSheet = photoFile ? photoFile.id : snPhotoFileId;
+    var photoCol = snFileForSheet ? colBy_(hdr, PHOTO_COLS) : 0;
+    if(snFileForSheet && !photoCol){
+      log_('PHOTO_NOCOL', hdr, {file:snFileForSheet});
+      photoDiscard_(photoFile);   /* 신규 참조 경로는 photoFile 이 null 이라 no-op */
       var nofail = {success:false, row:null,
         photo: photoResult_(true, false, '', 'no-photo-column'),
         error: '시트에 \''+PHOTO.COL_NAME+'\' 열이 없어 사진을 기록할 수 없습니다 — '
              + '편집기에서 setupHandoverColumns() 를 실행한 뒤 다시 저장하세요.'};
-      if(reqId) reqPut_(reqId, {ts:Date.now(), result:nofail});
       return json_(nofail);
+    }
+
+    /* 신규 참조 경로는 기록 ID가 조인 키다. 일반 셀을 한 칸이라도 쓰기 전에
+       초기 설정 누락을 확인해 실패 행이 시트에 일부 남지 않게 한다. */
+    var recCol = colBy_(hdr, REC_ID_COLS);
+    if(usesRefs && !recCol){
+      return json_({success:false, row:null,
+        photo:photoResult_(true,false,'','no-record-id-column'),
+        error:'시트에 기록 ID 열이 없습니다 — setupPhotoSheet() 를 실행한 뒤 다시 저장하세요.'});
     }
 
     var row = lastDataRow_(sh, hdr) + 1;
@@ -700,6 +733,10 @@ function doPost(e){
     /* 장비 S/N (Q열 '장비SN' 등 · 열이 존재하고 값이 있을 때만) */
     var snCol = colBy_(hdr, ['장비SN','장비 SN','장비 S/N','S/N(장비)']);
     if(snCol && P.sn) put_(snCol, P.sn);
+    /* [v3.4] 기록 ID — 사진 시트와 잇는 유일한 조인 키. 열이 있을 때만 기록한다
+       (setupPhotoSheet 전 배포에서도 기존 저장이 계속 동작해야 한다).
+       롤백 대상(written)에 포함되도록 put_ 를 쓴다. */
+    if(recCol && reqId) put_(recCol, reqId);
     /* 사용자 숙련도 평가 (R·S·T열 · 열이 존재하고 값이 있을 때만) */
     var nsFillCol = colBy_(hdr, ['NS 충진 여부','NS충진여부','NS 충진']);
     if(nsFillCol && P.nsFill) put_(nsFillCol, P.nsFill);
@@ -741,9 +778,9 @@ function doPost(e){
     /* [v2.8] 장비 S/N 사진 (U열) — 업로드는 위에서 이미 끝났고 여기선 수식만 쓴다.
        수식 기록이 실패하면 "행만 남고 사진은 없는" 반쯤 저장된 상태가 되므로 행을 되돌린다. */
     var photoSaved = false;
-    if(photoFile && photoCol){
+    if(snFileForSheet && photoCol){
       try{
-        sh.getRange(row, photoCol).setFormula(photoFormula_(photoFile.id));
+        sh.getRange(row, photoCol).setFormula(photoFormula_(snFileForSheet));
         written.push(photoCol);  /* 수식 뒤의 행 높이 조정이 실패해도 사진 열까지 롤백 */
         if(PHOTO.ROW_HEIGHT > 0) sh.setRowHeight(row, PHOTO.ROW_HEIGHT);
         photoSaved = true;
@@ -754,15 +791,35 @@ function doPost(e){
         if(rolled) photoDiscard_(photoFile);
         log_('PHOTO_FORMULA_ERR:'+fe, hdr, logSafe_(payload));
         var ffail = {success:false, row:null,
-          photo: photoResult_(true, false, photoFile.id, String(fe)),
+          photo: photoResult_(true, false, snFileForSheet, String(fe)),
           error: rolled ? '사진 기록 실패 — 기록을 되돌렸습니다: ' + fe
                         : '사진 기록 실패 후 행 롤백도 실패했습니다 — 관리자에게 행 '+row+' 확인을 요청하세요: '+fe};
-        if(reqId) reqPut_(reqId, {ts:Date.now(), result:ffail});
         return json_(ffail);
       }
     }
 
-    /* 여기부터는 행이 확정됐다 — 뒤에서 무슨 일이 나도 사진을 지우거나 실패로 만들지 않는다 */
+    /* [v3.4.1] 메인 행과 사진 메타데이터를 함께 확정한다. 사진 승격이 실패했는데
+       success:true 를 반환하면 ORPHAN 정리에서 실제 기록 사진이 삭제될 수 있다.
+       따라서 사진 승격까지 성공한 뒤에만 committed 로 바꾼다. */
+    var photoLinked = [];
+    if(linkPhotos && linkPhotos.length){
+      try{
+        var linkedCount = hvCommitPhotos_(reqId, linkPhotos, P.hosp, P.sn);
+        if(linkedCount !== linkPhotos.length) throw new Error('사진 연결 수 불일치');
+        photoLinked = linkPhotos.map(function(it){
+          return {clientPhotoId:it.clientPhotoId, kind:it.kind, seq:it.seq,
+                  fileId:it.fileId, desc:it.desc};
+        });
+      }catch(e){
+        var linkRolled = rowRollback_(sh, row, written);
+        log_('PHOTO_LINK_ERR:'+e, hdr, null);
+        return json_({success:false, row:null,
+          photo:photoResult_(true,false,snFileForSheet||'',String(e)),
+          error:linkRolled ? '사진 연결 실패 — 기록을 되돌렸습니다: '+e
+                           : '사진 연결 실패 후 행 롤백도 실패했습니다 — 관리자에게 행 '+row+' 확인을 요청하세요: '+e});
+      }
+    }
+    /* 여기부터는 행과 사진 메타데이터가 함께 확정됐다. */
     committed = true;
     log_('OK', hdr, logSafe_(payload));
     /* 방금 쓴 기록이 조회에 바로 보이도록 관련 캐시를 전부 비운다.
@@ -776,7 +833,8 @@ function doPost(e){
     warnings.forEach(function(w){ msg += '\n⚠️ ' + w; });
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
     var out = {success:true, row:row, sheet:CONFIG.SHEET_NAME,
-               photo: photoResult_(photoRequired, photoSaved, photoFile?photoFile.id:'', ''),
+               photo: photoResult_(photoRequired, photoSaved, snFileForSheet||'', ''),
+               photos: photoLinked, recordId: reqId,
                savedFields: savedFields, warnings: warnings,
                fseMismatch: !!(authUser && authUser !== P.fse), authUser: authUser,
                inv:inv, msg:msg, error:''};
@@ -821,7 +879,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.3.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.4.1', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -845,7 +903,8 @@ function doGet(e){
     if(action==='contenttpl') return json_(contentTplGet_());  /* 처리내용 자동완성 템플릿 */
     if(action==='progress') return json_(progGet_(p));          /* [v2.4] 진행중 공유 상태 ([v2.7] rev 조건부 응답) */
     if(action==='labellist') return json_(labelList_(p));       /* [v2.8] 장비 Label List 원본 */
-    if(action==='snphoto')   return json_(snPhotos_(p));        /* [v2.8] 장비 S/N 사진 base64 */
+    if(action==='snphoto')   return json_(snPhotos_(p));    /* [v2.8] 장비 S/N 사진 base64 (?sz= 로 썸네일) */
+    if(action==='photolist') return json_(photoList_(p));   /* [v3.4] 사진 메타 보조 조회(로그인 필수) */
     return json_({success:false, error:'알 수 없는 action: '+action});
   }catch(err){
     return json_({success:false, error:String(err)});
@@ -981,7 +1040,9 @@ function safeName_(s){
   return String(s==null?'':s).replace(/[\\\/:*?"<>|\r\n\t]/g,'').trim().slice(0,60);
 }
 
-/** dataURL(base64 JPEG) → Drive 파일 저장 · {id, url} 반환 */
+/** dataURL(base64 JPEG) → Drive 파일 저장 · {id, url} 반환
+    meta.key 를 주면 파일명 끝에 붙인다 — 같은 병원·같은 날 사진이 동명이 되는 것을 막는다
+    (예전에는 `날짜_병원_SN` 고정이라 원인 사진 여러 장이 전부 같은 이름이었다). */
 function savePhoto_(dataUrl, meta){
   var s = String(dataUrl||'');
   var mm = s.match(/^data:(image\/[a-z+.-]+);base64,([\s\S]+)$/i);
@@ -989,7 +1050,7 @@ function savePhoto_(dataUrl, meta){
   var mime = mm[1], b64 = mm[2].replace(/\s/g,'');
   var ext  = mime.indexOf('png')>=0 ? 'png' : (mime.indexOf('webp')>=0 ? 'webp' : 'jpg');
   var name = [safeName_((meta&&meta.date)||''), safeName_((meta&&meta.hosp)||''),
-              safeName_((meta&&meta.sn)||'')].filter(Boolean).join('_') || 'sn_photo';
+              safeName_((meta&&meta.sn)||''), safeName_((meta&&meta.key)||'')].filter(Boolean).join('_') || 'sn_photo';
   var blob = Utilities.newBlob(Utilities.base64Decode(b64), mime, name + '.' + ext);
   var file = photoFolder_().createFile(blob);
   if(PHOTO.SHARE){
@@ -1011,6 +1072,421 @@ function photoIdFromFormula_(f){
   var s = String(f||'');
   var m = s.match(/[?&]id=([A-Za-z0-9_-]{20,})/) || s.match(/\/d\/([A-Za-z0-9_-]{20,})/);
   return m ? m[1] : '';
+}
+
+/* ═══════════ [v3.4] 다중 사진 — '현장 사진' 정규화 시트 ═══════════
+ *  왜 별도 시트인가: 사진 1장당 메인 시트에 열을 늘리면 헤더가 무한히 자라고
+ *  기존 열 탐색(colBy_)과 Excel 출력이 전부 흔들린다. 사진은 행으로 쌓는다.
+ *
+ *  조인 키는 '기록ID'(= 저장 요청의 reqId = 클라이언트 recordId) 하나다.
+ *  병원명+S/N 은 같은 병원 재방문 시 충돌하므로 조인 키로 쓰지 않는다.
+ *
+ *  [보안 주의] 사진은 savePhoto_ 가 ANYONE_WITH_LINK 로 공유한다(=IMAGE 렌더링·
+ *  썸네일 대리 조회에 필요). 링크를 아는 사람은 누구나 열람할 수 있다.
+ *  S/N 라벨과 달리 '문제 원인 사진'에는 병원 내부·환자 주변 환경이 함께 찍힐 수
+ *  있으므로, 촬영 범위를 좁히도록 화면에서 안내한다. 이 공개 범위는 안정성과
+ *  속도를 우선한 의도적 선택이다(비공개 전환은 후속 범위).
+ */
+var SNAP = {
+  SHEET     : '현장 사진',
+  KIND_SN   : 'SN',
+  KIND_CAUSE: 'CAUSE',
+  MAX_CAUSE : 5,                 /* 기록당 원인 사진 상한 */
+  ST_ORPHAN : 'ORPHAN',          /* 업로드됐지만 아직 기록에 연결되지 않음 */
+  ST_OK     : 'OK',              /* 기록에 연결 완료 */
+  MAX_DESC  : 200
+};
+var SNAP_HEAD = ['기록ID','사진ID','병원명','장비S/N','사진구분','순번',
+                 'Drive파일ID','사진설명','등록일시','업로드상태','요청ID'];
+var SNAP_ERR_SETUP = '현장 사진 시트가 준비되지 않았습니다 — Apps Script 편집기에서 setupPhotoSheet() 를 먼저 실행하세요.';
+var REC_ID_COLS = ['기록 ID','기록ID','recordId'];
+
+/** 사진 시트 확보(없으면 생성). histSheet_ 가 헤더 스키마 마이그레이션까지 해 준다. */
+function photoSheet_(){ return histSheet_(SNAP.SHEET, SNAP_HEAD); }
+/** 이미 만들어진 경우에만 반환 — 신규 action 이 시트를 몰래 만들지 않게 한다 */
+function photoSheetIfReady_(){ return sheet_(SNAP.SHEET); }
+
+function photoKeyClean_(v){ return String(v==null?'':v).replace(/[^A-Za-z0-9_-]/g,'').slice(0,64); }
+function photoDescClean_(v){ return String(v==null?'':v).replace(/[\r\n\t]+/g,' ').trim().slice(0, SNAP.MAX_DESC); }
+
+/** 사진 시트 전체를 한 번만 읽어 객체 배열로 — 행마다 조회하지 않는다 */
+function photoReadAll_(){
+  var sh = photoSheetIfReady_();
+  if(!sh) return [];
+  var last = sh.getLastRow();
+  if(last < 2) return [];
+  var v = sh.getRange(2, 1, last-1, SNAP_HEAD.length).getDisplayValues();
+  var out = [];
+  for(var i=0;i<v.length;i++){
+    var r = v[i];
+    if(!String(r[0]||'').trim() && !String(r[6]||'').trim()) continue;   /* 완전 빈 행 스킵 */
+    out.push({ recordId:String(r[0]||'').trim(), photoId:String(r[1]||'').trim(),
+               hosp:String(r[2]||'').trim(), sn:String(r[3]||'').trim(),
+               kind:String(r[4]||'').trim().toUpperCase(), seq:Number(r[5])||0,
+               fileId:String(r[6]||'').trim(), desc:String(r[7]||''),
+               at:String(r[8]||''), status:String(r[9]||'').trim().toUpperCase(),
+               reqId:String(r[10]||'').trim(), _row:i+2 });
+  }
+  return out;
+}
+
+/** recordId+photoId 복합키 조회 — 멱등성의 기준 */
+function photoFind_(rows, recordId, photoId){
+  for(var i=0;i<rows.length;i++){
+    if(rows[i].recordId===recordId && rows[i].photoId===photoId) return rows[i];
+  }
+  return null;
+}
+/** Drive 파일 ID 중복 방지(백필용) */
+function photoHasFile_(rows, fileId){
+  for(var i=0;i<rows.length;i++){ if(rows[i].fileId===fileId) return true; }
+  return false;
+}
+function photoRowValues_(o){
+  return [ o.recordId, o.photoId, safeCell_(o.hosp||''), safeCell_(o.sn||''), o.kind,
+           Number(o.seq)||0, o.fileId, safeCell_(o.desc||''),
+           o.at || Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm:ss'),
+           o.status, o.reqId||'' ];
+}
+function photoAppend_(sh, o){
+  sh.getRange(sh.getLastRow()+1, 1, 1, SNAP_HEAD.length).setValues([photoRowValues_(o)]);
+}
+
+/**
+ * POST {action:'photo_add', recordId, clientPhotoId, uploadReqId, kind, seq, hosp, sn, date, desc, dataUrl, token}
+ * 사진 1장만 업로드한다. Drive 업로드는 전역 락 밖에서, 메타 확정만 짧은 락 안에서.
+ * 멱등 키는 recordId+clientPhotoId 복합키 — 같은 사진 재전송이 Drive 파일을 늘리지 않는다.
+ */
+function photoAdd_(p){
+  var recordId = photoKeyClean_(p && p.recordId);
+  var photoId  = photoKeyClean_(p && p.clientPhotoId);
+  if(!recordId || !photoId) return {success:false, error:'recordId·clientPhotoId 가 필요합니다'};
+  var sh = photoSheetIfReady_();
+  if(!sh) return {success:false, error:SNAP_ERR_SETUP};
+
+  var kind = String((p&&p.kind)||'').trim().toUpperCase();
+  if(kind !== SNAP.KIND_SN && kind !== SNAP.KIND_CAUSE){
+    return {success:false, error:'사진 구분은 SN 또는 CAUSE만 가능합니다'};
+  }
+  var seq  = Math.max(1, Math.min(Number(p&&p.seq)||1, SNAP.MAX_CAUSE));
+
+  /* 1) 락 밖 사전 조회 — 이미 올라간 사진이면 업로드 자체를 건너뛴다 */
+  var pre = photoFind_(photoReadAll_(), recordId, photoId);
+  if(pre) return {success:true, dedup:true, clientPhotoId:photoId, fileId:pre.fileId, status:pre.status};
+
+  /* 2) Drive 업로드는 반드시 락 밖 — 콜드스타트가 락 보유 시간을 잡아먹지 않게 */
+  var file = null;
+  try{ file = savePhoto_(p && p.dataUrl, {date:p&&p.date, hosp:p&&p.hosp, sn:p&&p.sn, key:photoId}); }
+  catch(e){ return {success:false, error:'사진 저장 실패: '+e}; }
+
+  /* 3) 짧은 전용 락 안에서 재조회(double-check) — 동시 요청 둘이 각자 올려도 하나만 남는다 */
+  var lock = LockService.getScriptLock(), held = false;
+  try{ lock.waitLock(15000); held = true; }
+  catch(lockErr){
+    photoDiscard_(file);
+    return {success:false, busy:true, error:'busy — 사진 등록이 진행 중입니다. 잠시 후 다시 시도하세요.'};
+  }
+  try{
+    var again = photoFind_(photoReadAll_(), recordId, photoId);
+    if(again){
+      photoDiscard_(file);                       /* 방금 올린 중복 파일 회수 */
+      return {success:true, dedup:true, clientPhotoId:photoId, fileId:again.fileId, status:again.status};
+    }
+    photoAppend_(sh, {recordId:recordId, photoId:photoId, hosp:p&&p.hosp, sn:p&&p.sn,
+      kind:kind, seq:seq, fileId:file.id, desc:photoDescClean_(p&&p.desc),
+      status:SNAP.ST_ORPHAN, reqId:photoKeyClean_((p&&p.uploadReqId)||photoId)});
+    return {success:true, dedup:false, clientPhotoId:photoId, fileId:file.id, status:SNAP.ST_ORPHAN};
+  }catch(err){
+    photoDiscard_(file);
+    return {success:false, error:String(err)};
+  }finally{
+    if(held){ try{ lock.releaseLock(); }catch(_){} }
+  }
+}
+
+/**
+ * POST {action:'photo_abandon', recordId, clientPhotoId, token}
+ * 아직 기록에 연결되지 않은(ORPHAN) 사진만 폐기한다. 연결 완료(OK)는 거부.
+ * 실패해도 행은 남으므로 cleanupOrphanPhotos 가 나중에 정리한다.
+ */
+function photoAbandon_(p){
+  var recordId = photoKeyClean_(p && p.recordId);
+  var photoId  = photoKeyClean_(p && p.clientPhotoId);
+  if(!recordId || !photoId) return {success:false, error:'recordId·clientPhotoId 가 필요합니다'};
+  var sh = photoSheetIfReady_();
+  if(!sh) return {success:false, error:SNAP_ERR_SETUP};
+
+  var lock = LockService.getScriptLock(), held = false;
+  try{ lock.waitLock(15000); held = true; }
+  catch(lockErr){ return {success:false, busy:true, error:'busy — 잠시 후 다시 시도하세요.'}; }
+  try{
+    var hit = photoFind_(photoReadAll_(), recordId, photoId);
+    if(!hit) return {success:true, removed:false, reason:'not-found'};
+    if(hit.status === SNAP.ST_OK){
+      return {success:false, error:'이미 기록에 연결된 사진은 폐기할 수 없습니다'};
+    }
+    try{ DriveApp.getFileById(hit.fileId).setTrashed(true); }
+    catch(e){
+      /* 메타 행을 먼저 없애면 재시도·정기 정리 모두 불가능한 영구 고아가 된다. */
+      Logger.log('[photo] abandon Drive 정리 실패(메타 유지): '+e);
+      return {success:false, error:'Drive 사진 정리에 실패했습니다 — 잠시 후 다시 시도하세요'};
+    }
+    sh.deleteRow(hit._row);
+    return {success:true, removed:true, clientPhotoId:photoId};
+  }catch(err){
+    return {success:false, error:String(err)};
+  }finally{
+    if(held){ try{ lock.releaseLock(); }catch(_){} }
+  }
+}
+
+/** GET ?action=photolist&recIds=A,B,C — 보조/관리용. 기본 경로는 labelList_ 가 함께 반환한다 */
+function photoList_(p){
+  var want = String((p&&p.recIds)||'').split(',').map(photoKeyClean_).filter(Boolean);
+  var rows = photoReadAll_();
+  var out = {};
+  rows.forEach(function(r){
+    if(r.status !== SNAP.ST_OK) return;
+    if(want.length && want.indexOf(r.recordId) < 0) return;
+    (out[r.recordId] = out[r.recordId] || []).push(
+      {clientPhotoId:r.photoId, kind:r.kind, seq:r.seq, fileId:r.fileId, desc:r.desc});
+  });
+  Object.keys(out).forEach(function(k){ out[k] = photoSortList_(out[k]); });
+  return {success:true, count:Object.keys(out).length, photos:out};
+}
+/** S/N 먼저, 그 다음 원인 사진을 순번대로 — Excel 열 순서와 화면 순서를 같게 유지 */
+function photoSortList_(list){
+  return list.sort(function(a,b){
+    if(a.kind!==b.kind) return a.kind===SNAP.KIND_SN ? -1 : 1;
+    return (a.seq||0)-(b.seq||0);
+  });
+}
+
+/** recordId → 사진 배열 맵. 사진 시트를 한 번만 읽는다(행마다 조회 금지) */
+function photoMapByRecord_(){
+  var map = {};
+  photoReadAll_().forEach(function(r){
+    if(r.status !== SNAP.ST_OK) return;
+    (map[r.recordId] = map[r.recordId] || []).push(
+      {clientPhotoId:r.photoId, kind:r.kind, seq:r.seq, fileId:r.fileId, desc:r.desc});
+  });
+  Object.keys(map).forEach(function(k){ map[k] = photoSortList_(map[k]); });
+  return map;
+}
+
+/* ── 최종 저장에서의 사진 연결 ─────────────────────────────────────────────
+   클라이언트는 최종 payload 에 Drive 파일 ID 를 보내지 않는다. 서버가
+   recordId+clientPhotoId 로 시트를 조회해 파일 ID 를 결정한다 — 위조된 파일 ID 를
+   "검증"하는 구조가 아니라 애초에 받지 않는 구조다. */
+
+/** payload.photos 정규화 (fileId 는 무시한다) */
+function hvPhotoRefs_(payload){
+  var arr = (payload && payload.photos && payload.photos.length) ? payload.photos : [];
+  var out = [];
+  for(var i=0;i<arr.length;i++){
+    var o = arr[i] || {};
+    var id = photoKeyClean_(o.clientPhotoId);
+    var kind = String(o.kind||'').trim().toUpperCase();
+    out.push({ clientPhotoId:id,
+      kind:kind,
+      seq:Math.max(1, Math.min(Number(o.seq)||1, SNAP.MAX_CAUSE)),
+      desc:photoDescClean_(o.desc) });
+  }
+  return out;
+}
+
+/** recordId+clientPhotoId → Drive 파일 ID 결정. 남의 recordId 사진은 조회되지 않는다. */
+function hvResolvePhotos_(recordId, refs){
+  if(!photoSheetIfReady_()) return {ok:false, error:SNAP_ERR_SETUP};
+  var rows = photoReadAll_(), sn = [], causes = [], list = [];
+  if(refs.length > SNAP.MAX_CAUSE + 1){
+    return {ok:false, error:'사진은 S/N 1장과 원인 사진 최대 '+SNAP.MAX_CAUSE+'장까지 등록할 수 있습니다'};
+  }
+  var seen = {};
+  for(var i=0;i<refs.length;i++){
+    if(!refs[i].clientPhotoId) return {ok:false, error:'사진 ID가 비어 있습니다'};
+    if(refs[i].kind !== SNAP.KIND_SN && refs[i].kind !== SNAP.KIND_CAUSE){
+      return {ok:false, error:'허용되지 않은 사진 구분입니다: '+refs[i].kind};
+    }
+    if(seen[refs[i].clientPhotoId]){
+      return {ok:false, error:'같은 사진이 중복 참조됐습니다: '+refs[i].clientPhotoId};
+    }
+    seen[refs[i].clientPhotoId] = true;
+    var hit = photoFind_(rows, recordId, refs[i].clientPhotoId);
+    if(!hit) return {ok:false, error:'연결할 수 없는 사진입니다(업로드 기록 없음): '+refs[i].clientPhotoId};
+    if(hit.status !== SNAP.ST_ORPHAN && hit.status !== SNAP.ST_OK){
+      return {ok:false, error:'사진 상태가 연결 가능하지 않습니다: '+refs[i].clientPhotoId};
+    }
+    if(hit.kind !== refs[i].kind){
+      return {ok:false, error:'업로드된 사진 구분과 저장 요청이 다릅니다: '+refs[i].clientPhotoId};
+    }
+    if(!hit.fileId) return {ok:false, error:'Drive 파일 ID가 없는 사진입니다: '+refs[i].clientPhotoId};
+    var item = {clientPhotoId:refs[i].clientPhotoId, kind:refs[i].kind, seq:refs[i].seq,
+                desc:refs[i].desc, fileId:hit.fileId, at:hit.at, _row:hit._row,
+                previousStatus:hit.status};
+    if(item.kind===SNAP.KIND_SN) sn.push(item); else causes.push(item);
+    list.push(item);
+  }
+  if(sn.length !== 1) return {ok:false, error:'장비 S/N 사진은 정확히 1장이어야 합니다(현재 '+sn.length+'장)'};
+  if(causes.length > SNAP.MAX_CAUSE) return {ok:false, error:'원인 사진은 최대 '+SNAP.MAX_CAUSE+'장입니다'};
+  return {ok:true, snFileId:sn[0].fileId, list:list, causeCount:causes.length};
+}
+
+/** 행 확정 후 ORPHAN → OK 승격 + 설명·순번을 최종 payload 기준으로 재반영 */
+function hvCommitPhotos_(recordId, list, hosp, sn){
+  var sh = photoSheetIfReady_();
+  if(!sh || !list || !list.length) return 0;
+  var n = 0, changed = [];
+  try{
+    list.forEach(function(it){
+      var before = sh.getRange(it._row, 1, 1, SNAP_HEAD.length).getValues()[0];
+      sh.getRange(it._row, 1, 1, SNAP_HEAD.length).setValues([photoRowValues_({
+        recordId:recordId, photoId:it.clientPhotoId, hosp:hosp, sn:sn, kind:it.kind,
+        seq:it.seq, fileId:it.fileId, desc:it.desc, at:it.at,
+        status:SNAP.ST_OK, reqId:recordId})]);
+      changed.push({row:it._row, values:before});
+      n++;
+    });
+  }catch(e){
+    /* 일부 사진만 OK 로 남지 않도록 가능한 범위에서 이전 행을 복원한다. */
+    for(var i=changed.length-1;i>=0;i--){
+      try{ sh.getRange(changed[i].row,1,1,SNAP_HEAD.length).setValues([changed[i].values]); }
+      catch(re){ Logger.log('[photo] 연결 롤백 실패: '+re); }
+    }
+    throw e;
+  }
+  return n;
+}
+
+/* ── 초기 설정 · 백필 · 정리 (편집기에서 수동 실행) ───────────────────────── */
+
+/** 1단계: 시트와 기록 ID 열만 만든다. 백필은 backfillLegacyPhotos 가 따로 한다. */
+function setupPhotoSheet(){
+  photoSheet_();
+  var added = ensureRecordIdColumn_();
+  photoFolder_();                                   /* Drive 권한 승인 유도 */
+  var msg = '✅ 현장 사진 시트 준비 완료' + (added ? ' · 메인 시트에 기록 ID 열 생성' : ' · 기록 ID 열 이미 있음')
+          + '\n다음: backfillLegacyPhotos(200) 을 잔여 0 이 될 때까지 반복 실행하세요.';
+  Logger.log(msg);
+  return msg;
+}
+
+/** 메인 시트에 '기록 ID' 열이 없으면 마지막 헤더 오른쪽에 만든다 */
+function ensureRecordIdColumn_(){
+  var sh = sheet_(CONFIG.SHEET_NAME);
+  if(!sh) throw new Error('시트 없음: ' + CONFIG.SHEET_NAME);
+  var hdr = findHeader_(sh);
+  if(!hdr) throw new Error('헤더(처리일·병원명) 탐지 실패');
+  if(colBy_(hdr, REC_ID_COLS)) return false;
+  var lastCol = 0;
+  hdr.headers.forEach(function(h,i){ if(String(h||'').trim()) lastCol = i+1; });
+  var at = lastCol + 1;
+  if(sh.getMaxColumns() < at) sh.insertColumnsAfter(sh.getMaxColumns(), at - sh.getMaxColumns());
+  sh.getRange(hdr.row, at).setValue(REC_ID_COLS[0]).setFontWeight('bold');
+  try{ sh.getRange(hdr.row+1, at, Math.max(1, sh.getMaxRows()-hdr.row), 1).setNumberFormat('@'); }catch(e){}
+  sh.setColumnWidth(at, 150);
+  return true;
+}
+
+var BACKFILL_CURSOR = 'snap_backfill_row';
+/**
+ * 2단계: 기존 행에 영구 기록 ID를 부여하고 S/N 사진을 현장 사진 시트에 등록한다.
+ * ScriptProperties 에 마지막 처리 행을 남겨 반복 실행할 수 있다(6분 한도 회피).
+ * 멱등: 이미 기록 ID 가 있거나 같은 Drive 파일 ID 가 등록돼 있으면 건너뛴다.
+ */
+function backfillLegacyPhotos(batchSize){
+  var n = Math.max(1, Math.min(Number(batchSize)||200, 1000));
+  var sh = sheet_(CONFIG.SHEET_NAME);
+  var hdr = sh && findHeader_(sh);
+  if(!hdr) throw new Error('헤더 탐지 실패');
+  var recCol = colBy_(hdr, REC_ID_COLS);
+  if(!recCol) throw new Error('기록 ID 열이 없습니다 — setupPhotoSheet() 를 먼저 실행하세요');
+  var photoCol = colBy_(hdr, PHOTO_COLS);
+  var psh = photoSheetIfReady_();
+  if(!psh) throw new Error(SNAP_ERR_SETUP);
+
+  var props = PropertiesService.getScriptProperties();
+  var start = Math.max(hdr.row+1, Number(props.getProperty(BACKFILL_CURSOR)) || (hdr.row+1));
+  var last = lastDataRow_(sh, hdr);
+  if(start > last){ return {success:true, done:true, processed:0, next:start, last:last}; }
+
+  var end = Math.min(last, start + n - 1);
+  var cnt = end - start + 1;
+  var recVals = sh.getRange(start, recCol, cnt, 1).getDisplayValues();
+  var phFx    = photoCol ? sh.getRange(start, photoCol, cnt, 1).getFormulas() : null;
+  var phVal   = photoCol ? sh.getRange(start, photoCol, cnt, 1).getDisplayValues() : null;
+  var hospCol = colBy_(hdr, ['병원명']), snCol = colBy_(hdr, ['장비SN','장비 SN','SN']);
+  var hospVals = hospCol ? sh.getRange(start, hospCol, cnt, 1).getDisplayValues() : null;
+  var snVals   = snCol   ? sh.getRange(start, snCol,   cnt, 1).getDisplayValues() : null;
+
+  var known = photoReadAll_();
+  var newRecIds = [], appendRows = [], made = 0, linked = 0;
+  for(var i=0;i<cnt;i++){
+    var row = start + i;
+    var rec = String(recVals[i][0]||'').trim();
+    var fileId = phFx ? photoIdFromFormula_(phFx[i][0] || (phVal?phVal[i][0]:'')) : '';
+    if(!rec){
+      /* 행 번호는 정렬로 바뀔 수 있으므로 파일 ID 앞자리를 함께 넣어 충돌을 막는다 */
+      rec = 'LEGACY-' + row + '-' + (fileId ? fileId.slice(0,8) : Utilities.getUuid().slice(0,8));
+      made++;
+    }
+    newRecIds.push([rec]);
+    if(fileId && !photoHasFile_(known, fileId)){
+      appendRows.push(photoRowValues_({
+        recordId:rec, photoId:'LEGACYSN-'+fileId.slice(0,12), hosp:hospVals?hospVals[i][0]:'',
+        sn:snVals?snVals[i][0]:'', kind:SNAP.KIND_SN, seq:1, fileId:fileId, desc:'',
+        status:SNAP.ST_OK, reqId:rec}));
+      known.push({recordId:rec, photoId:'', fileId:fileId, status:SNAP.ST_OK});
+      linked++;
+    }
+  }
+  sh.getRange(start, recCol, cnt, 1).setValues(newRecIds);
+  if(appendRows.length){
+    psh.getRange(psh.getLastRow()+1, 1, appendRows.length, SNAP_HEAD.length).setValues(appendRows);
+  }
+  props.setProperty(BACKFILL_CURSOR, String(end+1));
+  var res = {success:true, done:(end>=last), processed:cnt, idsCreated:made, photosLinked:linked,
+             from:start, to:end, last:last, next:end+1};
+  Logger.log(JSON.stringify(res));
+  return res;
+}
+
+/** 백필 진행 상황 */
+function getPhotoMigrationStatus(){
+  var sh = sheet_(CONFIG.SHEET_NAME), hdr = sh && findHeader_(sh);
+  if(!hdr) return {success:false, error:'헤더 탐지 실패'};
+  var last = lastDataRow_(sh, hdr);
+  var total = Math.max(0, last - hdr.row);
+  var cursor = Number(PropertiesService.getScriptProperties().getProperty(BACKFILL_CURSOR)) || (hdr.row+1);
+  var done = Math.max(0, Math.min(total, cursor - hdr.row - 1));
+  var res = {success:true, total:total, done:done, remain:Math.max(0, total-done),
+             lastRow:last, cursor:cursor, photoRows:photoReadAll_().length,
+             hasRecordIdCol:!!colBy_(hdr, REC_ID_COLS), hasPhotoSheet:!!photoSheetIfReady_()};
+  Logger.log(JSON.stringify(res));
+  return res;
+}
+
+/** 오래된 ORPHAN(기록에 끝내 연결되지 않은) 사진과 Drive 파일 정리 */
+function cleanupOrphanPhotos(maxAgeHours){
+  var maxAge = Math.max(1, Number(maxAgeHours)||48);
+  var sh = photoSheetIfReady_();
+  if(!sh) return {success:false, error:SNAP_ERR_SETUP};
+  var cutoff = Date.now() - maxAge*3600*1000;
+  var rows = photoReadAll_(), removed = 0, kept = 0;
+  /* 아래에서 위로 지워야 행 번호가 밀리지 않는다 */
+  rows.sort(function(a,b){ return b._row - a._row; }).forEach(function(r){
+    if(r.status === SNAP.ST_OK){ kept++; return; }
+    var t = Date.parse(String(r.at||'').replace(' ','T'));
+    if(isNaN(t) || t > cutoff){ kept++; return; }
+    var trashed = false;
+    try{ DriveApp.getFileById(r.fileId).setTrashed(true); trashed = true; }
+    catch(e){ Logger.log('[photo] 고아 Drive 정리 실패(메타 유지): '+e); }
+    if(trashed){ try{ sh.deleteRow(r._row); removed++; }catch(e){} }
+    else kept++;
+  });
+  var res = {success:true, removed:removed, kept:kept, maxAgeHours:maxAge};
+  Logger.log(JSON.stringify(res));
+  return res;
 }
 
 /** 현장 처리 현황 시트에 '장비 S/N 사진' 열(U열)을 만든다 — 편집기에서 1회 실행.
@@ -1270,15 +1746,22 @@ function labelList_(p){
   var doneHit = {};
 
   var qf = norm_(String(p.fse||'').trim());
-  var hit = readAll_(true).rows.map(slim_).filter(function(r){   /* true = 사진 열까지 읽기 */
+  /* [v3.4] 기록 ID 를 함께 읽는다. slim_ 에 넣지 않는 이유는 대시보드가 쓰는
+     ?action=all 응답이 행마다 커지기 때문 — 여기서만 원본 행에서 꺼낸다. */
+  var hit = [];
+  readAll_(true).rows.forEach(function(o){                      /* true = 사진 열까지 읽기 */
+    var r = slim_(o);
     var d = parseD_(r.date);
-    if(!d || d < from || d > to) return false;
+    if(!d || d < from || d > to) return;
     var nm = String(r.hosp||'').trim();
-    if(!nm) return false;
-    if(doneSet[norm_(nm)]){ doneHit[norm_(nm)] = nm; return false; }   /* 이미 작성 → 제외 */
-    if(!qf) return true;
-    var f = norm_(r.fse);
-    return !!f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0);
+    if(!nm) return;
+    if(doneSet[norm_(nm)]){ doneHit[norm_(nm)] = nm; return; }   /* 이미 작성 → 제외 */
+    if(qf){
+      var f = norm_(r.fse);
+      if(!(f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0))) return;
+    }
+    r._recId = String(pickH_(o, REC_ID_COLS)||'').trim();
+    hit.push(r);
   });
 
   /* 병원+S/N 중복 제거 — 뒤(최근) 기록이 앞 기록을 덮어쓴다 */
@@ -1289,12 +1772,27 @@ function labelList_(p){
     seen[key] = r;
   });
 
+  /* [v3.4] 사진 시트를 '한 번만' 읽어 recordId 맵으로 만든다 — 행마다 조회하면
+     행 수만큼 시트 왕복이 생기고, photolist 를 따로 부르면 URL 이 길어지고 왕복이 는다. */
+  var photoMap = {};
+  try{ photoMap = photoMapByRecord_(); }catch(e){ Logger.log('[label] 사진 맵 실패(무시): '+e); }
+
   var rows = order.map(function(key){
     var r = seen[key];
+    var recId = r._recId || '';
+    var list = (recId && photoMap[recId]) ? photoMap[recId] : [];
+    /* 기록 ID 가 아직 없는 legacy 행은 S/N 파일 ID 로만 폴백한다 */
+    if(!list.length && r.snPhotoId){
+      list = [{clientPhotoId:'', kind:SNAP.KIND_SN, seq:1, fileId:r.snPhotoId, desc:''}];
+    }
+    var snHit = null;
+    for(var i=0;i<list.length;i++){ if(list[i].kind===SNAP.KIND_SN){ snHit=list[i]; break; } }
     return {
       date: r.date, hosp: r.hosp, sn: r.sn, fse: r.fse, gubun: r.gubun,
       note: /\[데모장비\]/.test(String(r.detail||'')) ? '데모 장비' : '병원 장비',
-      photoId: r.snPhotoId || ''
+      recordId: recId,
+      photoId: (snHit && snHit.fileId) || r.snPhotoId || '',   /* 기존 label.html 호환(단수) */
+      photos: list                                              /* 신규 UI 용(S/N + 원인) */
     };
   });
 
@@ -1310,7 +1808,49 @@ function labelList_(p){
 /** GET ?action=snphoto&ids=ID1,ID2,…  (한 번에 최대 SNPHOTO_MAX개)
  *  Drive 이미지를 base64 dataURL로 돌려준다.
  *  브라우저가 drive.google.com 을 직접 fetch 하면 CORS 로 막히므로 이 프록시가 필요하다. */
-var SNPHOTO_MAX = 4;
+/* [v3.4] 배치 상한 — label.html 의 PHOTO_BATCH 와 반드시 같은 값이어야 한다.
+   서버가 초과분을 조용히 잘라내므로(아래 slice) 불일치하면 사진이 말없이 누락된다.
+   썸네일 응답은 원본의 1/10 수준이라 4 → 8 로 올린다. */
+var SNPHOTO_MAX = 8;
+var SNPHOTO_DEF_SZ = 800;
+
+/** Drive 가 만들어 둔 썸네일을 서버가 대신 받아 온다.
+ *  GAS 에는 이미지 리사이즈 API 가 없어서, 예전에는 원본 blob 을 그대로 base64 로
+ *  부풀려(약 1.33배) 내려보냈다 — label.html 이 느린 핵심 원인이었다.
+ *  파일은 savePhoto_ 가 ANYONE_WITH_LINK 로 공유하므로 무인증 fetch 로 충분하지만,
+ *  공유 설정이 실패한 파일을 위해 OAuth 토큰도 함께 보낸다.
+ *  실패하면 기존 원본 blob 경로로 폴백해 동작 자체는 보장한다. */
+function snPhotoThumbUrl_(id, sz){
+  return 'https://drive.google.com/thumbnail?id=' + id + '&sz=w' + sz;
+}
+function snPhotoFetchThumbs_(ids, sz){
+  var out = {};
+  if(!ids.length || typeof UrlFetchApp === 'undefined') return out;
+  var token = '';
+  try{ token = ScriptApp.getOAuthToken(); }catch(e){}
+  var reqs = ids.map(function(id){
+    var r = {url:snPhotoThumbUrl_(id, sz), muteHttpExceptions:true, followRedirects:true};
+    if(token) r.headers = {Authorization:'Bearer ' + token};
+    return r;
+  });
+  var res;
+  try{ res = UrlFetchApp.fetchAll(reqs); }   /* 같은 배치를 병렬로 */
+  catch(e){ Logger.log('[snphoto] fetchAll 실패(폴백): '+e); return out; }
+  for(var i=0;i<res.length;i++){
+    try{
+      var r = res[i];
+      if(!r || r.getResponseCode() !== 200) continue;
+      var blob = r.getBlob();
+      var ct = String(blob.getContentType()||'');
+      /* 로그인/오류 HTML 을 이미지라고 우기지 않는다 */
+      if(ct.indexOf('image/') !== 0) continue;
+      var bytes = blob.getBytes();
+      if(!bytes || !bytes.length) continue;
+      out[ids[i]] = 'data:' + ct + ';base64,' + Utilities.base64Encode(bytes);
+    }catch(e){}
+  }
+  return out;
+}
 function snPhotos_(p){
   var ids = String(p.ids||'').split(',')
     .map(function(s){ return String(s).trim(); })
@@ -1318,15 +1858,23 @@ function snPhotos_(p){
   if(!ids.length) return {success:false, error:'ids 파라미터 필요'};
   if(ids.length > SNPHOTO_MAX) ids = ids.slice(0, SNPHOTO_MAX);
 
-  var photos = {}, failed = [];
+  /* sz 를 주면 썸네일 경로, 없으면 예전과 똑같이 원본 — 기존 응답 계약을 깨지 않는다 */
+  var wantThumb = String(p.sz||'').trim() !== '';
+  var sz = Math.min(Math.max(Number(p.sz) || SNPHOTO_DEF_SZ, 200), 1600);
+
+  var photos = wantThumb ? snPhotoFetchThumbs_(ids, sz) : {};
+  var thumbHit = Object.keys(photos).length;
+  var failed = [];
   ids.forEach(function(id){
+    if(photos[id]) return;
     try{
-      var blob = DriveApp.getFileById(id).getBlob();
+      var blob = DriveApp.getFileById(id).getBlob();     /* 폴백: 원본 */
       photos[id] = 'data:' + (blob.getContentType()||'image/jpeg') + ';base64,' +
                    Utilities.base64Encode(blob.getBytes());
     }catch(e){ failed.push(id); }
   });
-  return {success:true, count:Object.keys(photos).length, photos:photos, failed:failed};
+  return {success:true, count:Object.keys(photos).length, photos:photos, failed:failed,
+          thumb:thumbHit, sz:wantThumb?sz:0, max:SNPHOTO_MAX};
 }
 
 /** 헤더맵에서 후보 이름으로 열번호 찾기(정규화 완전일치 → 부분일치) · 없으면 0 */
@@ -1875,7 +2423,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.3.0', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.4.1', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -1959,7 +2507,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.3.0',
+  var out = {success:true, ver:'3.4.1',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }
