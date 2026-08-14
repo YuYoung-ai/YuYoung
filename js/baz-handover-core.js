@@ -38,7 +38,8 @@
   ];
 
   var DRAFT_KEY = 'baz_handover_draft_v1';
-  var MAX_LEN = { detail: 4000, remark: 2000, hosp: 120, fse: 40 };
+  var MAX_CAUSE_PHOTOS = 5;      /* 서버 SNAP.MAX_CAUSE 와 같은 값이어야 한다 */
+  var MAX_LEN = { detail: 4000, remark: 2000, hosp: 120, fse: 40, photoDesc: 200 };
 
   function text(v) { return String(v == null ? '' : v).trim(); }
 
@@ -80,6 +81,11 @@
     if (!sn) bad('sn', '장비 S/N을 선택하거나 입력하세요');
     if (opts.photoRequired !== false && !opts.hasPhoto) bad('snPhoto', '장비 S/N 사진을 첨부하세요');
     if (opts.photoBusy) bad('snPhoto', '사진 처리가 끝난 뒤 저장하세요');
+    /* [v3.4] 원인 사진 — 선택이지만 개수 상한과 업로드 완료는 강제한다.
+       업로드가 끝나지 않은 사진이 있으면 서버가 연결할 수 없어 저장이 실패한다. */
+    if (opts.causeBusy) bad('causePhoto', '원인 사진 처리가 끝난 뒤 저장하세요');
+    if (Number(opts.causeCount) > MAX_CAUSE_PHOTOS) bad('causePhoto', '원인 사진은 최대 ' + MAX_CAUSE_PHOTOS + '장입니다');
+    if (Number(opts.causePending) > 0) bad('causePhoto', '업로드하지 못한 원인 사진이 있습니다 — 재시도하거나 삭제하세요');
 
     var c = parseCost(form.cost);
     if (!c.ok) bad('cost', '교체비용: ' + c.error);
@@ -128,11 +134,35 @@
          신규 코드에서는 제조일자와 재사용 여부를 절대 같은 키에 담지 않는다. */
       nozzle: text(form.nozzleReuse) === 'O' ? 'O' : 'X',
       nsFill: text(form.nsFill), nsAmt: text(form.nsAmt), jet: text(form.jet),
+      /* [v3.4] 신규 경로에서는 base64 를 싣지 않는다. 사진은 photo_add 로 미리 올리고
+         여기서는 참조만 보낸다. Drive 파일 ID 는 클라이언트가 보내지 않는다 —
+         서버가 recordId+clientPhotoId 로 사진 시트에서 직접 결정한다. */
       snPhoto: opts.photo || '',
+      photos: normalizePhotoRefs(opts.photos),
       photoRequired: opts.photoRequired !== false,
       reqId: text(opts.reqId),
       token: text(opts.token)
     };
+  }
+
+  /* 최종 payload 에 실을 사진 참조 정규화.
+     fileId 가 섞여 들어와도 여기서 떨어뜨린다(서버가 받지 않는 계약을 클라에서도 지킨다). */
+  function normalizePhotoRefs(list) {
+    if (!list || !list.length) return [];
+    var out = [], causes = 0;
+    for (var i = 0; i < list.length; i++) {
+      var o = list[i] || {};
+      var id = text(o.clientPhotoId);
+      if (!id) continue;
+      var kind = String(o.kind || '').toUpperCase() === 'SN' ? 'SN' : 'CAUSE';
+      if (kind === 'CAUSE') { causes++; if (causes > MAX_CAUSE_PHOTOS) continue; }
+      out.push({
+        clientPhotoId: id, kind: kind,
+        seq: Math.max(1, Math.min(Number(o.seq) || 1, MAX_CAUSE_PHOTOS)),
+        desc: text(o.desc).slice(0, MAX_LEN.photoDesc)
+      });
+    }
+    return out;
   }
 
   /* ── 저장 결과 판정 ──────────────────────────────────────────────
@@ -281,6 +311,8 @@
     parseCost: parseCost,
     costLabel: costLabel,
     validate: validate,
+    normalizePhotoRefs: normalizePhotoRefs,
+    MAX_CAUSE_PHOTOS: MAX_CAUSE_PHOTOS,
     buildPayload: buildPayload,
     classifySaveResult: classifySaveResult,
     classifySaveCheck: classifySaveCheck,

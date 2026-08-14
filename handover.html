@@ -113,6 +113,29 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
 .snphoto-prev{display:none;position:relative;margin-top:8px;border:1px solid var(--gray-line);
   border-radius:9px;overflow:hidden;background:#F0F2F6}
 .snphoto-prev img{display:block;width:100%;max-height:220px;object-fit:contain}
+/* 문제 원인 지점 사진 — S/N 사진과 같은 계열(점선 존 + 카드 미리보기)을 그대로 쓴다 */
+.cause-zone{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
+  min-height:56px;padding:11px;border:1.5px dashed var(--gray-line);border-radius:9px;
+  background:#fff;color:var(--text-muted);font-size:12.5px;font-weight:600;cursor:pointer;text-align:center}
+.cause-zone:active{border-color:var(--teal);background:var(--teal-soft)}
+.cause-zone.full{opacity:.5;cursor:not-allowed}
+.cause-zone input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.cause-zone.full input[type=file]{display:none}
+.cause-warn{color:#8A6D1A;background:#FFF6DF;border:1px solid #F0E2B8;border-radius:7px;padding:6px 8px;margin-top:6px}
+.cause-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;margin-top:8px}
+.cause-item{border:1px solid var(--gray-line);border-radius:9px;overflow:hidden;background:#F0F2F6;position:relative}
+.cause-item.err{border-color:var(--red)}
+.cause-item img{display:block;width:100%;height:96px;object-fit:cover;background:#E4E8EF}
+.cause-item .rm{position:absolute;top:5px;right:5px;width:24px;height:24px;border:none;border-radius:50%;
+  background:rgba(0,0,0,.6);color:#fff;font-size:13px;line-height:24px;padding:0;cursor:pointer;font-family:inherit}
+.cause-item .cs{display:block;font-size:10.5px;font-weight:700;padding:3px 6px;text-align:center}
+.cause-item .cs.busy{background:#FFF6DF;color:#8A6D1A}
+.cause-item .cs.ok{background:#E8F5EE;color:var(--green)}
+.cause-item .cs.err{background:#FBEAE8;color:var(--red)}
+.cause-item .cs button{margin-left:5px;padding:1px 6px;font-size:10.5px;border:none;border-radius:5px;
+  background:var(--teal);color:#fff;font-family:inherit;font-weight:700;cursor:pointer}
+.cause-item input.cd{width:100%;border:none;border-top:1px solid var(--gray-line);border-radius:0;
+  min-height:34px;padding:6px 7px;font-size:12px}
 .snphoto-prev .rm{position:absolute;top:6px;right:6px;width:28px;height:28px;border:none;border-radius:50%;
   background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:28px;padding:0;cursor:pointer;font-family:inherit}
 /* 미리보기 (카톡 말풍선 느낌) */
@@ -196,6 +219,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js"></script>
+<script src="js/baz-photo.js"></script>
 </head>
 <body>
 <header>
@@ -260,6 +284,16 @@ body.is-dirty .dirty-badge{display:inline-block}
           <img id="snPhotoImg" src="" alt="첨부한 장비 S/N 사진 미리보기">
           <button type="button" class="rm" id="snPhotoRemove" aria-label="첨부한 사진 삭제">✕</button>
         </div>
+      </div>
+      <div class="field full">
+        <label for="causeAddFile">문제 원인 지점 사진 <span class="opt">· 선택 · 최대 5장</span></label>
+        <div class="cause-zone" id="causeZone">
+          <span id="causeLabel">📷 원인 지점 촬영 · 사진 선택 (여러 장 가능)</span>
+          <input type="file" accept="image/*" capture="environment" multiple id="causeAddFile" aria-describedby="causeState">
+        </div>
+        <div class="hint cause-warn">⚠️ 사진은 링크를 아는 사람이 열람할 수 있습니다 — 문제 지점만 담기도록 촬영 범위를 좁혀 주세요.</div>
+        <div class="hint" id="causeState" role="status" aria-live="polite"></div>
+        <div class="cause-grid" id="causeGrid"></div>
       </div>
       <div class="field">
         <label for="verUI">UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
@@ -537,6 +571,200 @@ function snPhotoToJpeg(file){
   });
 }
 
+/* ── [v3.4] 문제 원인 지점 사진 (최대 5장) ─────────────────────────────────
+   기록 1건 = recordId 하나. 사진은 저장 버튼을 누르기 전에 photo_add 로 한 장씩
+   미리 올리고, 최종 저장에는 참조(clientPhotoId)만 보낸다. Drive 파일 ID 는
+   클라이언트가 만들지도, 보내지도 않는다 — 서버가 시트에서 직접 결정한다.
+
+   [보안] 사진은 링크를 아는 사람이 열람할 수 있다(ANYONE_WITH_LINK).
+   원인 사진에는 병원 내부·환자 주변이 함께 찍힐 수 있어 화면에 촬영 범위 안내를 둔다.
+   이 공개 범위는 안정성·속도를 우선한 의도적 선택이다. */
+var CAUSE_MAX = (window.BazPhoto && BazPhoto.MAX_CAUSE) || 5;
+var CAUSE_SLOTS = [];        /* {id, seq, dataUrl, desc, state, err, fileId, seqGen} */
+var RECORD_ID = '';          /* 기록 1건의 수명 동안 유지되는 조인 키 */
+var CAUSE_BUSY = 0;
+
+/* recordId 는 저장 성공 후 새 기록을 시작할 때만 새로 만든다.
+   savecheck·재전송까지 같은 값을 유지해야 서버가 같은 사진을 다시 찾을 수 있다. */
+function recordId(){
+  if(!RECORD_ID) RECORD_ID = (window.BazPhoto ? BazPhoto.newRecordId() : newReqId());
+  return RECORD_ID;
+}
+function resetRecordId(){ RECORD_ID = ''; }
+
+function causeCount(){ return CAUSE_SLOTS.length; }
+function causePending(){
+  var n=0; CAUSE_SLOTS.forEach(function(s){ if(s.state!=='ok') n++; }); return n;
+}
+function causeRefs(){
+  return CAUSE_SLOTS.filter(function(s){ return s.state==='ok'; })
+    .map(function(s,i){ return {clientPhotoId:s.id, kind:'CAUSE', seq:i+1, desc:s.desc||''}; });
+}
+function causeSay(msg){ var el=document.getElementById('causeState'); if(el) el.textContent=msg||''; }
+
+function renderCauseGrid(){
+  var g=el('causeGrid'); if(!g) return;
+  var locked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
+  g.innerHTML='';
+  CAUSE_SLOTS.forEach(function(s, i){
+    var d=document.createElement('div');
+    d.className='cause-item'+(s.state==='err'?' err':'');
+    d.setAttribute('data-photo-id', s.id);
+    var img=document.createElement('img');
+    img.src=s.dataUrl||''; img.alt='원인 사진 '+(i+1)+' 미리보기';
+    d.appendChild(img);
+    var rm=document.createElement('button');
+    rm.type='button'; rm.className='rm'; rm.textContent='✕';
+    rm.setAttribute('aria-label', '원인 사진 '+(i+1)+' 삭제');
+    rm.disabled=locked;
+    rm.addEventListener('click', function(){ causeRemove(s.id); });
+    d.appendChild(rm);
+    var st=document.createElement('div');
+    st.className='cs '+(s.state==='ok'?'ok':(s.state==='err'?'err':'busy'));
+    st.textContent = s.state==='compress' ? '압축 중…'
+                   : s.state==='upload'   ? '업로드 중…'
+                   : s.state==='ok'       ? '완료'
+                   : ('실패 — '+(s.err||'알 수 없음'));
+    if(s.state==='err'){
+      var rt=document.createElement('button');
+      rt.type='button'; rt.textContent='재시도'; rt.disabled=locked;
+      rt.addEventListener('click', function(){ causeRetry(s.id); });
+      st.appendChild(rt);
+    }
+    d.appendChild(st);
+    var cd=document.createElement('input');
+    cd.className='cd'; cd.type='text'; cd.value=s.desc||'';
+    cd.placeholder='어디가 문제인지 (선택)';
+    cd.maxLength=200; cd.disabled=locked;
+    cd.setAttribute('aria-label','원인 사진 '+(i+1)+' 설명');
+    cd.addEventListener('input', function(){ s.desc=cd.value; scheduleDraftSave(); });
+    d.appendChild(cd);
+    g.appendChild(d);
+  });
+  var z=el('causeZone'), inp=el('causeAddFile');
+  if(z){
+    var full=CAUSE_SLOTS.length>=CAUSE_MAX;
+    z.classList.toggle('full', full || locked);
+    var lab=el('causeLabel');
+    if(lab) lab.textContent = full ? ('원인 사진 '+CAUSE_MAX+'장 모두 등록됨')
+                                   : '📷 원인 지점 촬영 · 사진 선택 (여러 장 가능)';
+  }
+  if(inp) inp.disabled = locked || CAUSE_SLOTS.length>=CAUSE_MAX;
+}
+
+/** 사진 1장 업로드 — 같은 clientPhotoId 로 재시도하면 서버가 중복 파일을 만들지 않는다 */
+function causeUpload(slot){
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+  var form=readForm();
+  var body={ action:'photo_add', recordId:recordId(), clientPhotoId:slot.id,
+             uploadReqId:(window.BazPhoto?BazPhoto.newUploadReqId():slot.id),
+             kind:'CAUSE', seq:slot.seq, hosp:form.hosp, sn:form.sn, date:form.date,
+             desc:slot.desc||'', dataUrl:slot.dataUrl, token:token };
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 30000):null;
+  return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(body), signal:ctl?ctl.signal:undefined})
+    .then(function(r){ if(timer){clearTimeout(timer);timer=null;} return r.text(); })
+    .then(function(txt){
+      if(/^\s*</.test(txt)) throw new Error('서버가 데이터 대신 페이지를 보냈습니다 (잠시 후 재시도)');
+      var d; try{ d=JSON.parse(txt); }catch(e){ throw new Error('응답을 해석하지 못했습니다'); }
+      if(!d || d.success!==true) throw new Error((d&&d.error)||'업로드 실패');
+      return d.fileId||'';
+    })
+    .catch(function(e){ if(timer){clearTimeout(timer);timer=null;} throw e; });
+}
+
+/** 대기·실패 슬롯만 올린다. 이미 성공한 슬롯은 건드리지 않는다. */
+function causeFlush(){
+  if(!window.BazPhoto) return Promise.resolve();
+  var todo=CAUSE_SLOTS.filter(function(s){ return s.state==='pending' || s.state==='err'; });
+  if(!todo.length) return Promise.resolve();
+  CAUSE_BUSY++;
+  todo.forEach(function(s){ s.state='upload'; s.err=''; });
+  renderCauseGrid();
+  var tasks=todo.map(function(s){
+    return {key:s.id, run:function(){ return causeUpload(s); }};
+  });
+  return BazPhoto.pool(tasks, {limit:2, onDone:function(key, val, err){
+    var s=causeById(key); if(!s) return;
+    if(err){ s.state='err'; s.err=String(err&&err.message||err).slice(0,60); }
+    else { s.state='ok'; s.fileId=val; }
+    renderCauseGrid();
+  }}).then(function(){
+    CAUSE_BUSY--;
+    var bad=CAUSE_SLOTS.filter(function(s){ return s.state==='err'; }).length;
+    causeSay(bad ? (bad+'장 업로드 실패 — 재시도하거나 삭제한 뒤 저장하세요') : '');
+    renderCauseGrid(); render();
+  }, function(){ CAUSE_BUSY--; renderCauseGrid(); });
+}
+function causeById(id){
+  for(var i=0;i<CAUSE_SLOTS.length;i++){ if(CAUSE_SLOTS[i].id===id) return CAUSE_SLOTS[i]; }
+  return null;
+}
+function causeRetry(id){ var s=causeById(id); if(s && s.state==='err'){ s.state='pending'; causeFlush(); } }
+
+/** 삭제·교체 — 아직 기록에 연결되지 않은 사진은 서버에서도 폐기한다 */
+function causeRemove(id){
+  var s=causeById(id); if(!s) return;
+  CAUSE_SLOTS=CAUSE_SLOTS.filter(function(x){ return x.id!==id; });
+  CAUSE_SLOTS.forEach(function(x,i){ x.seq=i+1; });
+  renderCauseGrid(); render(); scheduleDraftSave();
+  if(s.state==='ok'){
+    var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+    /* 실패해도 무시한다 — 서버의 cleanupOrphanPhotos 가 나중에 정리한다 */
+    try{
+      fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:'photo_abandon', recordId:recordId(), clientPhotoId:id, token:token})})
+        .catch(function(){});
+    }catch(e){}
+  }
+}
+
+function onCausePick(evt){
+  var files=Array.prototype.slice.call((evt.target&&evt.target.files)||[]);
+  evt.target.value='';
+  if(!files.length) return;
+  if(!window.BazPhoto){ toast('사진 모듈을 불러오지 못했습니다 — 새로고침해 주세요'); return; }
+  var room=CAUSE_MAX-CAUSE_SLOTS.length;
+  if(room<=0){ toast('원인 사진은 최대 '+CAUSE_MAX+'장입니다'); return; }
+  if(files.length>room){ toast('최대 '+CAUSE_MAX+'장까지만 등록됩니다 — '+room+'장만 추가합니다'); files=files.slice(0,room); }
+
+  CAUSE_BUSY++;
+  var added=files.map(function(f){
+    var slot={ id:BazPhoto.newPhotoId(), seq:CAUSE_SLOTS.length+1, dataUrl:'', desc:'',
+               state:'compress', err:'', fileId:'' };
+    CAUSE_SLOTS.push(slot);
+    return {slot:slot, file:f};
+  });
+  CAUSE_SLOTS.forEach(function(x,i){ x.seq=i+1; });
+  renderCauseGrid(); render();
+  causeSay(added.length+'장 압축 중…');
+
+  /* 압축도 동시 2개로 제한한다 — 한 번에 5장을 돌리면 저사양 공용 PC 가 멈춘다 */
+  BazPhoto.pool(added.map(function(a){
+    return {key:a.slot.id, run:function(){
+      return BazPhoto.compress(a.file, {kind:'CAUSE'}).then(function(r){
+        a.slot.dataUrl=r.dataUrl; a.slot.state='pending'; renderCauseGrid();
+        return r;
+      });
+    }};
+  }), {limit:2, onDone:function(key, val, err){
+    if(err){ var s=causeById(key); if(s){ s.state='err'; s.err='압축 실패'; } renderCauseGrid(); }
+  }}).then(function(){
+    CAUSE_BUSY--;
+    causeSay('');
+    return causeFlush();
+  }, function(){ CAUSE_BUSY--; renderCauseGrid(); });
+}
+
+/** 모든 원인 사진을 폐기(새 기록 시작 시) */
+function clearCausePhotos(){
+  CAUSE_SLOTS=[];
+  var g=el('causeGrid'); if(g) g.innerHTML='';
+  causeSay('');
+  renderCauseGrid();
+}
+
 /* [경합] 사진 A 가 붙은 상태에서 B 로 교체하는 도중 저장하면 A 가 전송되거나,
    B 변환이 끝난 뒤 저장 응답이 B 를 지울 수 있었다.
    → 변환마다 세대 번호를 발급하고, 최신 세대의 결과만 SN_PHOTO 에 반영한다.
@@ -565,7 +793,23 @@ function syncPhotoControls(){
   if(f) f.disabled=locked;
   if(rm) rm.disabled=locked;
   snPhotoBusy(SN_PHOTO_BUSY);
+  try{ renderCauseGrid(); }catch(e){}   /* 원인 사진 슬롯도 같은 규칙으로 잠근다 */
 }
+
+/* [v3.4] 저장이 끝나기 전에 창을 닫으면 올린 사진이 기록에 연결되지 않은 채 남는다.
+   업로드·저장 진행 중이거나 아직 연결되지 않은 사진이 있을 때만 경고한다
+   (평소에도 뜨면 사용자가 무시하게 된다). */
+function hasUnfinishedPhotoWork(){
+  if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING) return true;
+  if(SN_PHOTO_BUSY || CAUSE_BUSY>0) return true;
+  return CAUSE_SLOTS.length>0;
+}
+window.addEventListener('beforeunload', function(e){
+  if(!hasUnfinishedPhotoWork()) return;
+  e.preventDefault();
+  e.returnValue='';       /* 문구는 브라우저가 정한다 */
+  return '';
+});
 
 async function onSnPhoto(evt){
   if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING){
@@ -1093,7 +1337,13 @@ function applySaveResult(res){
     var replacement=!!SN_PHOTO && !!LAST_SENT_PHOTO && SN_PHOTO!==LAST_SENT_PHOTO;
     var textChanged=BazHandover.isDirty(sent, current);
     if(!replacement){
-      if(SN_PHOTO===LAST_SENT_PHOTO) clearSnPhoto();
+      if(SN_PHOTO===LAST_SENT_PHOTO){
+        clearSnPhoto();
+        /* 사진이 기록에 연결됐으므로 이 recordId 의 수명은 끝났다.
+           다음 기록은 새 recordId 로 시작해야 사진이 섞이지 않는다. */
+        clearCausePhotos();
+        resetRecordId();
+      }
     }else{
       UNSAVED_PHOTO=true;
     }
@@ -1161,6 +1411,8 @@ function startNewRecord(){
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('on','warn'); b.setAttribute('aria-pressed','false'); });
   setHospSelection(null);
   clearSnPhoto();
+  clearCausePhotos();
+  resetRecordId();
   SAVED_SNAPSHOT=null; LAST_REQ_ID='';
   UNSAVED_PHOTO=false; LAST_SENT_PHOTO=null; LAST_SAVE_PAYLOAD=null; LAST_SENT_SNAPSHOT=null;
   document.body.classList.remove('is-dirty');
@@ -1239,7 +1491,8 @@ async function saveToSheet(){
   }
 
   var form=readForm();
-  var v=BazHandover.validate(form, {hasPhoto:!!SN_PHOTO, photoBusy:SN_PHOTO_BUSY});
+  var v=BazHandover.validate(form, {hasPhoto:!!SN_PHOTO, photoBusy:SN_PHOTO_BUSY,
+    causeCount:causeCount(), causePending:causePending(), causeBusy:CAUSE_BUSY>0});
   if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
   clearFieldErrors();
 
@@ -1255,10 +1508,15 @@ async function saveToSheet(){
     if(!window.confirm('로그인 사용자('+me+')와 담당 FSE('+form.fse+')가 다릅니다.\n다른 담당자 이름으로 기록할까요?\n(로그인 계정은 감사용으로 함께 기록됩니다)')) return;
   }
 
-  var reqId=newReqId();
+  /* [v3.4] 최종 저장의 reqId 는 recordId 와 같은 값이다 — 사진이 이 키로 이미
+     올라가 있으므로 다른 값을 쓰면 서버가 사진을 찾지 못한다. */
+  var reqId=recordId();
   LAST_REQ_ID=reqId;
   var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true, reqId:reqId, token:token});
+  /* [v3.4] 원인 사진은 이미 photo_add 로 올라가 있으므로 참조만 보낸다.
+     S/N 사진은 아직 base64 경로를 유지한다(기존 서버·기존 클라이언트 호환). */
+  var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true,
+    reqId:reqId, token:token, photos:causeRefs()});
   LAST_SENT_PHOTO=SN_PHOTO;
   LAST_SENT_SNAPSHOT=BazHandover.snapshot(form);
   LAST_SAVE_PAYLOAD=payload;
@@ -1658,6 +1916,9 @@ function bindAll(){
   /* 사진 */
   el('snPhotoFile').addEventListener('change', onSnPhoto);
   el('snPhotoRemove').addEventListener('click', clearSnPhoto);
+  var causeInput=el('causeAddFile');
+  if(causeInput) causeInput.addEventListener('change', onCausePick);
+  renderCauseGrid();
 
   /* 숙련도 세그먼트 */
   document.querySelectorAll('.seg-btn[data-skill]').forEach(function(b){

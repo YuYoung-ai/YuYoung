@@ -142,8 +142,11 @@ ck('응답에 구조적 photo 블록이 있다',
   /function photoResult_/.test(GAS) &&
   /required:\s*!!required,\s*saved:\s*!!saved,\s*fileId/.test(GAS) &&
   /photo:\s*photoResult_/.test(doPost));
+/* [v3.4] legacy(base64 업로드)와 신규(사진 참조) 두 경로 모두 같은 사진 열이 필요하다.
+   판정 기준을 photoFile 단독에서 "실제로 시트에 쓸 파일 ID"로 넓혔다. */
 ck('사진 열이 없으면 행 기록 전에 실패로 판정',
-  /if\(photoFile && !photoCol\)/.test(doPost) && /no-photo-column/.test(doPost));
+  /var snFileForSheet = photoFile \? photoFile\.id : snPhotoFileId;/.test(doPost) &&
+  /if\(snFileForSheet && !photoCol\)/.test(doPost) && /no-photo-column/.test(doPost));
 ck('수식 기록 실패 시 행을 되돌린다',
   /rowRollback_\(sh, row, written\)/.test(doPost) && /function rowRollback_/.test(GAS));
 ck('사진 수식 뒤 후속 작업이 실패해도 사진 열까지 롤백한다',
