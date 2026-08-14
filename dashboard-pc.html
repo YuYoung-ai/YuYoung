@@ -2178,12 +2178,12 @@ var EX_XLSX_THEME={
 };
 function exExcelBorder_(){return {bottom:{style:'thin',color:{argb:EX_XLSX_THEME.grayLine}}};}
 function exExcelDate_(d){
-  return d&&d instanceof Date&&!isNaN(d.getTime())?new Date(d.getFullYear(),d.getMonth(),d.getDate()):null;
+  return d&&d instanceof Date&&!isNaN(d.getTime())?new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())):null;
 }
 function exExcelKeyDate_(key){
   key=Number(key||0);if(!key)return null;
   var y=Math.floor(key/10000),m=Math.floor((key%10000)/100),d=key%100;
-  return y&&m&&d?new Date(y,m-1,d):null;
+  return y&&m&&d?new Date(Date.UTC(y,m-1,d)):null;
 }
 function exExcelPeriodFile_(){
   return exPeriodLabel().replace(/[^0-9A-Za-z가-힣]+/g,'_').replace(/^_+|_+$/g,'')||'전체기간';
@@ -2249,6 +2249,16 @@ function exExcelStatus_(cell,tone){
   cell.font={name:'Pretendard Variable',size:10,bold:true,color:{argb:fg}};
   cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};cell.alignment={vertical:'middle',horizontal:'center'};
 }
+function exExcelCenterRows_(ws,rows,maxCol){
+  rows.forEach(function(r){
+    for(var c=1;c<=maxCol;c++)ws.getCell(r,c).alignment={vertical:'middle',horizontal:'center',wrapText:true};
+  });
+}
+function exExcelCenterTable_(ws,lastRow,maxCol){
+  for(var r=1;r<=lastRow;r++){
+    for(var c=1;c<=maxCol;c++)ws.getCell(r,c).alignment={vertical:'middle',horizontal:'center',wrapText:true};
+  }
+}
 async function exExcelDownload_(wb,fileName){
   var buf=await wb.xlsx.writeBuffer();
   var blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -2260,11 +2270,11 @@ function exHospitalRoster_(rows){
   (rows||[]).forEach(function(r){
     var name=String(r.hosp||'').trim();if(!name)return;
     var key=skNorm_(name),d=exExcelDate_(rowDate(r)),v=String(r.nozzleReuse||'').trim().toUpperCase();
-    var rec=map[key]||(map[key]={key:key,name:name,joined:false,o:false,x:false,lastVisit:null,lastNozzle:null});
+    var rec=map[key]||(map[key]={key:key,name:name,joined:false,o:false,x:false,lastVisit:null,firstNozzle:null});
     if(nzNcare_(r.ncare)==='가입')rec.joined=true;
     if(!rec.lastVisit||(d&&d>=rec.lastVisit)){rec.lastVisit=d;rec.name=name;}
-    if(v==='O'){rec.o=true;if(!rec.lastNozzle||(d&&d>=rec.lastNozzle))rec.lastNozzle=d;}
-    if(v==='X'){rec.x=true;if(!rec.lastNozzle||(d&&d>=rec.lastNozzle))rec.lastNozzle=d;}
+    if(v==='O'){rec.o=true;if(!rec.firstNozzle||(d&&d<rec.firstNozzle))rec.firstNozzle=d;}
+    if(v==='X'){rec.x=true;if(!rec.firstNozzle||(d&&d<rec.firstNozzle))rec.firstNozzle=d;}
   });
   return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return skCmpKo_(a.name,b.name);});
 }
@@ -2281,11 +2291,11 @@ async function exportSkillManagementExcel(){
     var data=roster.map(function(r,i){
       var e=evalMap[r.key],state=K.status[r.key]||'none';
       return [i+1,r.name,state==='need'?'교육 보완 필요':(state==='good'?'평가 양호':'미평가'),
-        e?exExcelKeyDate_(e.key):null,e?e.nsFill:'',e?e.nsAmt:'',e?e.jet:'',
-        needMap[r.key]?needMap[r.key].join(' · '):(state==='none'?'평가값 없음':''),r.lastVisit];
+        e?exExcelKeyDate_(e.key):null,e?e.nsFill:null,e?e.nsAmt:null,e?e.jet:null,
+        needMap[r.key]?needMap[r.key].join(' · '):(state==='none'?'평가값 없음':null),r.lastVisit];
     });
     var wb=exExcelBook_('사용자 교육 관리');
-    var sum=wb.addWorksheet('카드 요약',{views:[{showGridLines:false}]});
+    var sum=wb.addWorksheet('관리 현황',{views:[{showGridLines:false}]});
     var list=wb.addWorksheet('전체 명단',{views:[{state:'frozen',ySplit:1,showGridLines:false}]});
     list.columns=[{width:7},{width:28},{width:18},{width:14},{width:13},{width:13},{width:17},{width:35},{width:14}];
     exExcelHeader_(list,1,['No.','병원','교육 관리 상태','최신 평가일','NS 충진','충진량','젯 분사','교육 보완 필요 항목','최근 방문일']);
@@ -2295,6 +2305,7 @@ async function exportSkillManagementExcel(){
       list.getCell(lr,4).numFmt='yyyy-mm-dd';list.getCell(lr,9).numFmt='yyyy-mm-dd';
       var st=String(list.getCell(lr,3).value||'');exExcelStatus_(list.getCell(lr,3),st==='교육 보완 필요'?'bad':(st==='미평가'?'warn':'good'));
     }
+    exExcelCenterTable_(list,Math.max(1,data.length+1),9);
     if(data.length)list.autoFilter={from:{row:1,column:1},to:{row:data.length+1,column:9}};
     else{list.mergeCells('A3:I3');list.getCell('A3').value='선택한 조건에 해당하는 방문 병원이 없습니다';}
     list.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
@@ -2309,11 +2320,17 @@ async function exportSkillManagementExcel(){
       {label:'교육 필요',value:exExcelFormula_('COUNTIF('+sr+',"교육 보완 필요")',K.needCount),color:EX_XLSX_THEME.red},
       {label:'미흡률',value:exExcelFormula_('IF(COUNTA('+sr+')-COUNTIF('+sr+',"미평가")=0,0,COUNTIF('+sr+',"교육 보완 필요")/(COUNTA('+sr+')-COUNTIF('+sr+',"미평가")))',(K.rate||0)/100),numFmt:'0.0%'}
     ]);
-    exExcelSection_(sum,7,'평가 항목별 현황',10);exExcelHeader_(sum,8,['평가 항목','평가 병원','미흡 병원','미흡률','','','','','','']);
-    var metrics=[['NS 충진',K.gFill.total,K.gFill.bad,K.gFill.percent/100],['충진량',K.gAmt.total,K.gAmt.bad,K.gAmt.percent/100],['젯 분사',K.gJet.total,K.gJet.bad,K.gJet.percent/100]];
-    metrics.forEach(function(v,i){var r=9+i;sum.getCell(r,1).value=v[0];sum.getCell(r,2).value=v[1];sum.getCell(r,3).value=v[2];sum.getCell(r,4).value=v[3];sum.getCell(r,4).numFmt='0.0%';sum.mergeCells(r,4,r,10);});
+    exExcelSection_(sum,7,'평가 항목별 현황',10);exExcelHeader_(sum,8,['평가 항목','평가 병원','미흡 병원','미흡률','평가 내용',null,null,null,null,null]);
+    sum.mergeCells(8,5,8,10);
+    var metrics=[
+      ['NS 충진',K.gFill.total,K.gFill.bad,K.gFill.percent/100,'새 노즐 적용 시 NS 충진 유/무'],
+      ['충진량',K.gAmt.total,K.gAmt.bad,K.gAmt.percent/100,'새 노즐 적용 시 NS 충진량 확인(기준치:0.9cc)'],
+      ['젯 분사',K.gJet.total,K.gJet.bad,K.gJet.percent/100,'병원 담당자가 정상범위 젯 분사 퀄리티 판단 가능 유/무']
+    ];
+    metrics.forEach(function(v,i){var r=9+i;sum.getCell(r,1).value=v[0];sum.getCell(r,2).value=v[1];sum.getCell(r,3).value=v[2];sum.getCell(r,4).value=v[3];sum.getCell(r,4).numFmt='0.0%';sum.getCell(r,5).value=v[4];sum.mergeCells(r,5,r,10);});
     exExcelBody_(sum,9,11,10);
-    exExcelSection_(sum,13,'판단 기준 및 활용 안내',10);sum.mergeCells('A14:J16');sum.getCell('A14').value='교육 보완 필요: NS 충진 X, 충진량 부족, 젯 분사 값에 “교육”이 포함된 병원입니다.\n미평가: 선택 기간 방문 기록은 있으나 세 평가값이 모두 없는 병원입니다.\n전체 명단 시트에서 상태·병원명으로 필터링해 교육 대상 선정과 공유에 활용하세요.';
+    exExcelCenterRows_(sum,[4,5,6,8,9,10,11,12],10);
+    exExcelSection_(sum,13,'판단 기준 및 활용 안내',10);sum.mergeCells('A14:J16');sum.getCell('A14').value='교육 보완 필요: NS 충진 X, 충진량 부족, 젯 분사 값에 “교육”이 포함된 병원입니다.\n미평가: 담당자 불분명, 부재로 확인불가';
     sum.getCell('A14').font={name:'Pretendard Variable',size:10,color:{argb:EX_XLSX_THEME.text}};sum.getCell('A14').alignment={vertical:'top',wrapText:true};
     sum.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:1};
     await exExcelDownload_(wb,'사용자_교육_관리_'+exExcelPeriodFile_()+'.xlsx');toast('📊 사용자 교육 관리 Excel 생성 완료');
@@ -2330,18 +2347,19 @@ async function exportNozzleReuseExcel(){
     var nz=buildNozzleData(EX_ROWS),U=buildNozzleUnrated(EX_ROWS),roster=exHospitalRoster_(EX_ROWS);
     if(!nz)throw new Error('노즐 재사용 통계를 만들 수 없습니다.');
     var data=roster.map(function(r,i){
-      return [i+1,r.name,r.joined?'N-Care':'미가입',r.o?'재사용':(r.x?'미재사용':'미평가'),r.o?'O':'',r.x?'X':'',r.lastNozzle,r.lastVisit];
+      return [i+1,r.name,r.joined?'N-Care':'미가입',r.o?'재사용':(r.x?'미재사용':'미평가'),r.o?'O':null,r.x?'X':null,r.firstNozzle,r.lastVisit];
     });
     var wb=exExcelBook_('노즐 재사용');
-    var sum=wb.addWorksheet('카드 요약',{views:[{showGridLines:false}]});
+    var sum=wb.addWorksheet('재사용 현황',{views:[{showGridLines:false}]});
     var list=wb.addWorksheet('전체 명단',{views:[{state:'frozen',ySplit:1,showGridLines:false}]});
     list.columns=[{width:7},{width:30},{width:14},{width:15},{width:12},{width:12},{width:15},{width:15}];
-    exExcelHeader_(list,1,['No.','병원','N-Care 구분','노즐 재사용 상태','O 기록','X 기록','최근 확인일','최근 방문일']);
+    exExcelHeader_(list,1,['No.','병원','N-Care 구분','노즐 재사용 상태','O 기록','X 기록','최초 확인일','최근 방문일']);
     data.forEach(function(v,i){list.getRow(i+2).values=v;});exExcelBody_(list,2,data.length+1,8);
     for(var lr=2;lr<=data.length+1;lr++){
       list.getCell(lr,7).numFmt='yyyy-mm-dd';list.getCell(lr,8).numFmt='yyyy-mm-dd';
       var st=String(list.getCell(lr,4).value||'');exExcelStatus_(list.getCell(lr,4),st==='재사용'?'info':(st==='미평가'?'warn':'good'));
     }
+    exExcelCenterTable_(list,Math.max(1,data.length+1),8);
     if(data.length)list.autoFilter={from:{row:1,column:1},to:{row:data.length+1,column:8}};
     else{list.mergeCells('A3:H3');list.getCell('A3').value='선택한 조건에 해당하는 방문 병원이 없습니다';}
     list.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
@@ -2358,11 +2376,12 @@ async function exportNozzleReuseExcel(){
       {label:'미가입 재사용률',value:exExcelFormula_('IF(COUNTIF('+gr+',"미가입")=0,0,COUNTIFS('+gr+',"미가입",'+st+',"재사용")/COUNTIF('+gr+',"미가입"))',nz.nonJoined.percent/100),numFmt:'0.0%'},
       {label:'재사용 병원',value:exExcelFormula_('COUNTIF('+st+',"재사용")',reuse),color:EX_XLSX_THEME.teal}
     ]);
-    exExcelSection_(sum,7,'N-Care 구분별 현황',12);exExcelHeader_(sum,8,['구분','방문 병원','재사용 병원','재사용률','','','','','','','','']);
+    exExcelSection_(sum,7,'N-Care 구분별 현황',12);exExcelHeader_(sum,8,['구분','방문 병원','재사용 병원','재사용률',null,null,null,null,null,null,null,null]);
     var groups=[['N-Care',nz.joined],['미가입',nz.nonJoined]];
-    groups.forEach(function(v,i){var r=9+i;sum.getCell(r,1).value=v[0];sum.getCell(r,2).value=v[1].total;sum.getCell(r,3).value=v[1].reuse;sum.getCell(r,4).value=v[1].percent/100;sum.getCell(r,4).numFmt='0.0%';sum.mergeCells(r,4,r,12);});
+    groups.forEach(function(v,i){var r=9+i;sum.getCell(r,1).value=v[0];sum.getCell(r,2).value=v[1].total;sum.getCell(r,3).value=v[1].reuse;sum.getCell(r,4).value=v[1].percent/100;sum.getCell(r,4).numFmt='0.0%';});
     exExcelBody_(sum,9,10,12);
-    exExcelSection_(sum,12,'판단 기준 및 활용 안내',12);sum.mergeCells('A13:L15');sum.getCell('A13').value='재사용: 선택 기간에 O 기록이 한 번이라도 있는 병원입니다(O·X 혼재 포함).\n미재사용: O 기록 없이 X 기록만 있는 병원이며, 미평가는 O·X 기록이 모두 없는 병원입니다.\n전체 명단 시트에서 N-Care 구분과 상태를 함께 필터링해 재사용 관리 대상을 판단하세요.';
+    exExcelCenterRows_(sum,[4,5,6,8,9,10,11],12);
+    exExcelSection_(sum,12,'판단 기준 및 활용 안내',12);sum.mergeCells('A13:L15');sum.getCell('A13').value='재사용: 선택 기간에 O 기록이 한 번이라도 있는 병원입니다(O·X 혼재 포함).\n미재사용: O 기록 없이 X 기록만 있는 병원이며, 미평가는 O·X 기록이 모두 없는 병원입니다.';
     sum.getCell('A13').font={name:'Pretendard Variable',size:10,color:{argb:EX_XLSX_THEME.text}};sum.getCell('A13').alignment={vertical:'top',wrapText:true};
     sum.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:1};
     await exExcelDownload_(wb,'노즐_재사용_'+exExcelPeriodFile_()+'.xlsx');toast('📊 노즐 재사용 Excel 생성 완료');
