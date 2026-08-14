@@ -122,8 +122,12 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
 .cause-zone input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .cause-zone.full input[type=file]{display:none}
 .cause-warn{color:#8A6D1A;background:#FFF6DF;border:1px solid #F0E2B8;border-radius:7px;padding:6px 8px;margin-top:6px}
-.cause-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;margin-top:8px}
+.cause-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+@media (max-width:340px){ .cause-grid{grid-template-columns:1fr} }
+.cause-slot{min-width:0}
+.cs-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px}
 .cause-item{border:1px solid var(--gray-line);border-radius:9px;overflow:hidden;background:#F0F2F6;position:relative}
+.cause-item[hidden],.cause-zone[hidden]{display:none}
 .cause-item.err{border-color:var(--red)}
 .cause-item img{display:block;width:100%;height:96px;object-fit:cover;background:#E4E8EF}
 .cause-item .rm{position:absolute;top:5px;right:5px;width:24px;height:24px;border:none;border-radius:50%;
@@ -274,7 +278,7 @@ body.is-dirty .dirty-badge{display:inline-block}
         <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" aria-label="장비 S/N 직접입력">
       </div>
       <div class="field full">
-        <label for="snPhotoFile">장비 S/N 사진 <span class="req">필수</span> <span class="opt">· 시트 사진 열에 기록</span></label>
+        <label for="snPhotoFile">① 장비 S/N 사진 <span class="req">필수</span> <span class="opt">· 시트 사진 열에 기록</span></label>
         <div class="snphoto-zone need" id="snPhotoZone">
           <span id="snPhotoLabel">📷 S/N 라벨 촬영 · 사진 선택</span>
           <input type="file" accept="image/*" id="snPhotoFile" aria-describedby="snPhotoState">
@@ -286,15 +290,34 @@ body.is-dirty .dirty-badge{display:inline-block}
           <button type="button" class="rm" id="snPhotoRemove" aria-label="첨부한 사진 삭제">✕</button>
         </div>
       </div>
+      <!-- [v3.5] 사진은 S/N · 증상 · 해결 후 3장 구성이다.
+           예전에는 '원인 사진'을 최대 5장까지 자유롭게 받아, 몇 장을 무엇으로 찍어야
+           하는지가 사람마다 달랐고 리포트에서도 순서가 제각각이었다.
+           → 찍을 자리를 두 칸으로 고정해 무엇을 찍어야 하는지 화면이 먼저 말한다. -->
       <div class="field full">
-        <label for="causeAddFile">문제 원인 지점 사진 <span class="opt">· 선택 · 최대 5장</span></label>
-        <div class="cause-zone" id="causeZone">
-          <span id="causeLabel">📷 원인 지점 촬영 · 사진 선택 (여러 장 가능)</span>
-          <input type="file" accept="image/*" capture="environment" multiple id="causeAddFile" aria-describedby="causeState">
-        </div>
+        <label>현장 사진 <span class="opt">· 선택 · 증상 1장 · 해결 후 1장</span></label>
         <div class="hint cause-warn">⚠️ 사진은 링크를 아는 사람이 열람할 수 있습니다 — 문제 지점만 담기도록 촬영 범위를 좁혀 주세요.</div>
+        <div class="cause-grid" id="causeGrid">
+          <div class="cause-slot" data-kind="CAUSE">
+            <div class="cs-title">② 현장에서 확인한 증상</div>
+            <div class="cause-zone" id="causeZone_CAUSE">
+              <span id="causeLabel_CAUSE">📷 증상 촬영 · 사진 선택</span>
+              <input type="file" accept="image/*" capture="environment" id="causeFile_CAUSE"
+                     aria-describedby="causeState" aria-label="현장에서 확인한 증상 사진">
+            </div>
+            <div class="cause-item" id="causeItem_CAUSE" hidden></div>
+          </div>
+          <div class="cause-slot" data-kind="AFTER">
+            <div class="cs-title">③ 증상 해결 후</div>
+            <div class="cause-zone" id="causeZone_AFTER">
+              <span id="causeLabel_AFTER">📷 해결 후 촬영 · 사진 선택</span>
+              <input type="file" accept="image/*" capture="environment" id="causeFile_AFTER"
+                     aria-describedby="causeState" aria-label="증상 해결 후 사진">
+            </div>
+            <div class="cause-item" id="causeItem_AFTER" hidden></div>
+          </div>
+        </div>
         <div class="hint" id="causeState" role="status" aria-live="polite"></div>
-        <div class="cause-grid" id="causeGrid"></div>
       </div>
       <div class="field">
         <label for="verUI">UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
@@ -581,7 +604,16 @@ function snPhotoToJpeg(file){
    원인 사진에는 병원 내부·환자 주변이 함께 찍힐 수 있어 화면에 촬영 범위 안내를 둔다.
    이 공개 범위는 안정성·속도를 우선한 의도적 선택이다. */
 var CAUSE_MAX = (window.BazPhoto && BazPhoto.MAX_CAUSE) || 5;
-var CAUSE_SLOTS = [];        /* {id, seq, dataUrl, desc, state, err, fileId, seqGen} */
+/* [v3.5] 현장 사진은 두 칸 고정 — 증상(CAUSE) 1장, 해결 후(AFTER) 1장.
+   서버의 사진구분 값은 그대로 두고(이미 쌓인 기록과의 호환) 화면 이름만 바꾼다.
+   CAUSE_SLOTS 는 여전히 "붙인 사진 목록"이다 — 비어 있으면 0개, 두 칸이 다 차면 2개. */
+var CAUSE_KINDS = [
+  { kind:'CAUSE', title:'현장에서 확인한 증상', pick:'📷 증상 촬영 · 사진 선택',
+    desc:'어떤 증상인지 (선택)' },
+  { kind:'AFTER', title:'증상 해결 후',       pick:'📷 해결 후 촬영 · 사진 선택',
+    desc:'어떻게 해결했는지 (선택)' }
+];
+var CAUSE_SLOTS = [];        /* {id, kind, seq, dataUrl, desc, state, err, fileId} */
 var RECORD_ID = '';          /* 기록 1건의 수명 동안 유지되는 조인 키 */
 var CAUSE_BUSY = 0;
 var SN_PHOTO_ID = '';        /* 신규 경로의 clientPhotoId */
@@ -601,9 +633,15 @@ function causeCount(){ return CAUSE_SLOTS.length; }
 function causePending(){
   var n=0; CAUSE_SLOTS.forEach(function(s){ if(s.state!=='ok') n++; }); return n;
 }
+/** 칸(구분)별로 붙어 있는 사진 1장 */
+function causeSlotOf(kind){
+  for(var i=0;i<CAUSE_SLOTS.length;i++){ if(CAUSE_SLOTS[i].kind===kind) return CAUSE_SLOTS[i]; }
+  return null;
+}
 function causeRefs(){
+  /* 각 칸 1장이므로 seq 는 항상 1 — 서버도 구분+순번으로 자리를 찾는다 */
   return CAUSE_SLOTS.filter(function(s){ return s.state==='ok'; })
-    .map(function(s,i){ return {clientPhotoId:s.id, kind:'CAUSE', seq:i+1, desc:s.desc||''}; });
+    .map(function(s){ return {clientPhotoId:s.id, kind:s.kind||'CAUSE', seq:1, desc:s.desc||''}; });
 }
 function causeSay(msg){ var el=document.getElementById('causeState'); if(el) el.textContent=msg||''; }
 
@@ -638,22 +676,46 @@ function uploadPhotoSlot(slot, kind){
 }
 
 function renderCauseGrid(){
-  var g=el('causeGrid'); if(!g) return;
+  if(!el('causeGrid')) return;
   var locked=photoControlsLocked();
-  g.innerHTML='';
-  CAUSE_SLOTS.forEach(function(s, i){
-    var d=document.createElement('div');
-    d.className='cause-item'+(s.state==='err'?' err':'');
-    d.setAttribute('data-photo-id', s.id);
+  CAUSE_KINDS.forEach(function(def){
+    var s = causeSlotOf(def.kind);
+    var box = el('causeItem_'+def.kind);
+    var zone = el('causeZone_'+def.kind);
+    var inp = el('causeFile_'+def.kind);
+    var lab = el('causeLabel_'+def.kind);
+    if(!box || !zone) return;
+
+    /* 사진이 없으면 촬영 영역만, 있으면 미리보기 카드까지 */
+    if(!s){
+      box.hidden = true;
+      box.innerHTML = '';
+      zone.hidden = false;
+      zone.classList.toggle('full', locked);
+      if(lab) lab.textContent = def.pick;
+      if(inp) inp.disabled = locked;
+      return;
+    }
+    /* 한 칸에 1장 — 채워지면 촬영 영역을 감추고 미리보기만 남긴다 */
+    zone.hidden = true;
+    if(inp) inp.disabled = true;
+
+    box.hidden = false;
+    box.className = 'cause-item'+(s.state==='err'?' err':'');
+    box.setAttribute('data-photo-id', s.id);
+    box.innerHTML = '';
+
     var img=document.createElement('img');
-    img.src=s.dataUrl||''; img.alt='원인 사진 '+(i+1)+' 미리보기';
-    d.appendChild(img);
+    img.src=s.dataUrl||''; img.alt=def.title+' 사진 미리보기';
+    box.appendChild(img);
+
     var rm=document.createElement('button');
     rm.type='button'; rm.className='rm'; rm.textContent='✕';
-    rm.setAttribute('aria-label', '원인 사진 '+(i+1)+' 삭제');
+    rm.setAttribute('aria-label', def.title+' 사진 삭제');
     rm.disabled=locked;
     rm.addEventListener('click', function(){ causeRemove(s.id); });
-    d.appendChild(rm);
+    box.appendChild(rm);
+
     var st=document.createElement('div');
     st.className='cs '+(s.state==='ok'?'ok':(s.state==='err'?'err':'busy'));
     st.textContent = s.state==='compress' ? '압축 중…'
@@ -666,30 +728,21 @@ function renderCauseGrid(){
       rt.addEventListener('click', function(){ causeRetry(s.id); });
       st.appendChild(rt);
     }
-    d.appendChild(st);
+    box.appendChild(st);
+
     var cd=document.createElement('input');
     cd.className='cd'; cd.type='text'; cd.value=s.desc||'';
-    cd.placeholder='어디가 문제인지 (선택)';
+    cd.placeholder=def.desc;
     cd.maxLength=200; cd.disabled=locked;
-    cd.setAttribute('aria-label','원인 사진 '+(i+1)+' 설명');
+    cd.setAttribute('aria-label', def.title+' 사진 설명');
     cd.addEventListener('input', function(){ s.desc=cd.value; scheduleDraftSave(); });
-    d.appendChild(cd);
-    g.appendChild(d);
+    box.appendChild(cd);
   });
-  var z=el('causeZone'), inp=el('causeAddFile');
-  if(z){
-    var full=CAUSE_SLOTS.length>=CAUSE_MAX;
-    z.classList.toggle('full', full || locked);
-    var lab=el('causeLabel');
-    if(lab) lab.textContent = full ? ('원인 사진 '+CAUSE_MAX+'장 모두 등록됨')
-                                   : '📷 원인 지점 촬영 · 사진 선택 (여러 장 가능)';
-  }
-  if(inp) inp.disabled = locked || CAUSE_SLOTS.length>=CAUSE_MAX;
 }
 
 /** 사진 1장 업로드 — 같은 clientPhotoId 로 재시도하면 서버가 중복 파일을 만들지 않는다 */
 function causeUpload(slot){
-  return uploadPhotoSlot(slot, 'CAUSE');
+  return uploadPhotoSlot(slot, slot.kind||'CAUSE');
 }
 
 /** 대기·실패 슬롯만 올린다. 이미 성공한 슬롯은 건드리지 않는다. */
@@ -739,7 +792,9 @@ function abandonPhoto(photoId){
 function causeRemove(id){
   var s=causeById(id); if(!s) return;
   CAUSE_SLOTS=CAUSE_SLOTS.filter(function(x){ return x.id!==id; });
-  CAUSE_SLOTS.forEach(function(x,i){ x.seq=i+1; });
+  CAUSE_SLOTS.forEach(function(x){ x.seq=1; });   /* 칸마다 1장이므로 순번은 항상 1 */
+  var inp=el('causeFile_'+(s.kind||'CAUSE'));     /* 같은 파일을 다시 골라도 change 가 뜨게 */
+  if(inp) inp.value='';
   renderCauseGrid(); render(); scheduleDraftSave();
   if(s.state==='ok'){
     /* 실패해도 무시한다 — 서버의 cleanupOrphanPhotos 가 나중에 정리한다 */
@@ -747,40 +802,37 @@ function causeRemove(id){
   }
 }
 
-function onCausePick(evt){
+/** 칸 하나에 사진 1장. kind 는 'CAUSE'(증상) 또는 'AFTER'(해결 후). */
+function onCausePick(evt, kind){
+  kind = kind || 'CAUSE';
   if(photoControlsLocked()){
     evt.target.value='';
     toast('기록 결과를 확인한 뒤 사진을 추가해 주세요');
     return;
   }
-  var files=Array.prototype.slice.call((evt.target&&evt.target.files)||[]);
+  var file=(evt.target&&evt.target.files&&evt.target.files[0])||null;
   evt.target.value='';
-  if(!files.length) return;
+  if(!file) return;
   if(!window.BazPhoto){ toast('사진 모듈을 불러오지 못했습니다 — 새로고침해 주세요'); return; }
-  var room=CAUSE_MAX-CAUSE_SLOTS.length;
-  if(room<=0){ toast('원인 사진은 최대 '+CAUSE_MAX+'장입니다'); return; }
-  if(files.length>room){ toast('최대 '+CAUSE_MAX+'장까지만 등록됩니다 — '+room+'장만 추가합니다'); files=files.slice(0,room); }
+  if(causeSlotOf(kind)){ toast('이 칸에는 이미 사진이 있습니다 — ✕ 로 지운 뒤 다시 찍어 주세요'); return; }
+
+  var def=null;
+  CAUSE_KINDS.forEach(function(d){ if(d.kind===kind) def=d; });
 
   CAUSE_BUSY++;
-  var added=files.map(function(f){
-    var slot={ id:BazPhoto.newPhotoId(), seq:CAUSE_SLOTS.length+1, dataUrl:'', desc:'',
-               state:'compress', err:'', fileId:'' };
-    CAUSE_SLOTS.push(slot);
-    return {slot:slot, file:f};
-  });
-  CAUSE_SLOTS.forEach(function(x,i){ x.seq=i+1; });
+  var slot={ id:BazPhoto.newPhotoId(), kind:kind, seq:1, dataUrl:'', desc:'',
+             state:'compress', err:'', fileId:'' };
+  CAUSE_SLOTS.push(slot);
   renderCauseGrid(); render();
-  causeSay(added.length+'장 압축 중…');
+  causeSay((def?def.title:'사진')+' 압축 중…');
 
-  /* 압축도 동시 2개로 제한한다 — 한 번에 5장을 돌리면 저사양 공용 PC 가 멈춘다 */
-  BazPhoto.pool(added.map(function(a){
-    return {key:a.slot.id, run:function(){
-      return BazPhoto.compress(a.file, {kind:'CAUSE'}).then(function(r){
-        a.slot.dataUrl=r.dataUrl; a.slot.state='pending'; renderCauseGrid();
-        return r;
-      });
-    }};
-  }), {limit:2, onDone:function(key, val, err){
+  BazPhoto.pool([{key:slot.id, run:function(){
+    /* 압축 기준은 두 칸 모두 CAUSE 프리셋 — 상황 파악이 목적이라 S/N 라벨보다 작게 잡는다 */
+    return BazPhoto.compress(file, {kind:'CAUSE'}).then(function(r){
+      slot.dataUrl=r.dataUrl; slot.state='pending'; renderCauseGrid();
+      return r;
+    });
+  }}], {limit:1, onDone:function(key, val, err){
     if(err){ var s=causeById(key); if(s){ s.state='err'; s.err='압축 실패'; } renderCauseGrid(); }
   }}).then(function(){
     CAUSE_BUSY--;
@@ -789,12 +841,14 @@ function onCausePick(evt){
   }, function(){ CAUSE_BUSY--; renderCauseGrid(); });
 }
 
-/** 모든 원인 사진을 폐기(새 기록 시작 시) */
+/** 현장 사진(증상·해결 후)을 모두 폐기(새 기록 시작 시) */
 function clearCausePhotos(opts){
   var keepServer=!!(opts && opts.keepServer);
   var old=CAUSE_SLOTS.slice();
   CAUSE_SLOTS=[];
-  var g=el('causeGrid'); if(g) g.innerHTML='';
+  CAUSE_KINDS.forEach(function(d){
+    var inp=el('causeFile_'+d.kind); if(inp) inp.value='';
+  });
   causeSay('');
   renderCauseGrid();
   if(!keepServer){ old.forEach(function(s){ if(s.state==='ok') abandonPhoto(s.id); }); }
@@ -2002,8 +2056,10 @@ function bindAll(){
   el('snPhotoFile').addEventListener('change', onSnPhoto);
   el('snPhotoRemove').addEventListener('click', clearSnPhoto);
   el('snPhotoRetry').addEventListener('click', retrySnPhoto);
-  var causeInput=el('causeAddFile');
-  if(causeInput) causeInput.addEventListener('change', onCausePick);
+  CAUSE_KINDS.forEach(function(def){
+    var inp=el('causeFile_'+def.kind);
+    if(inp) inp.addEventListener('change', function(e){ onCausePick(e, def.kind); });
+  });
   renderCauseGrid();
 
   /* 숙련도 세그먼트 */

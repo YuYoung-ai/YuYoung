@@ -39,6 +39,7 @@
 
   var DRAFT_KEY = 'baz_handover_draft_v1';
   var MAX_CAUSE_PHOTOS = 5;      /* 서버 SNAP.MAX_CAUSE 와 같은 값이어야 한다 */
+  var MAX_AFTER_PHOTOS = 1;      /* 서버 SNAP.MAX_AFTER 와 같은 값이어야 한다 */
   var MAX_LEN = { detail: 4000, remark: 2000, hosp: 120, fse: 40, photoDesc: 200 };
 
   function text(v) { return String(v == null ? '' : v).trim(); }
@@ -149,13 +150,18 @@
      fileId 가 섞여 들어와도 여기서 떨어뜨린다(서버가 받지 않는 계약을 클라에서도 지킨다). */
   function normalizePhotoRefs(list) {
     if (!list || !list.length) return [];
-    var out = [], causes = 0;
+    var out = [], causes = 0, afters = 0;
     for (var i = 0; i < list.length; i++) {
       var o = list[i] || {};
       var id = text(o.clientPhotoId);
       if (!id) continue;
-      var kind = String(o.kind || '').toUpperCase() === 'SN' ? 'SN' : 'CAUSE';
+      /* [v3.5] 사진 구분은 SN(장비 S/N) · CAUSE(증상) · AFTER(해결 후) 세 가지다.
+         예전에는 SN 이 아니면 전부 CAUSE 로 뭉갰다 — 그대로 두면 해결 후 사진이
+         증상 사진으로 저장돼 리포트에서 두 장이 같은 열에 겹친다. */
+      var raw = String(o.kind || '').toUpperCase();
+      var kind = (raw === 'SN' || raw === 'AFTER') ? raw : 'CAUSE';
       if (kind === 'CAUSE') { causes++; if (causes > MAX_CAUSE_PHOTOS) continue; }
+      if (kind === 'AFTER') { afters++; if (afters > MAX_AFTER_PHOTOS) continue; }
       out.push({
         clientPhotoId: id, kind: kind,
         seq: Math.max(1, Math.min(Number(o.seq) || 1, MAX_CAUSE_PHOTOS)),
@@ -313,6 +319,7 @@
     validate: validate,
     normalizePhotoRefs: normalizePhotoRefs,
     MAX_CAUSE_PHOTOS: MAX_CAUSE_PHOTOS,
+    MAX_AFTER_PHOTOS: MAX_AFTER_PHOTOS,
     buildPayload: buildPayload,
     classifySaveResult: classifySaveResult,
     classifySaveCheck: classifySaveCheck,

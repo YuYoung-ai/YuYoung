@@ -50,8 +50,12 @@ ck('메인 시트에는 사진마다 열을 만들지 않고 기록 ID 열 하�
 ck('현장 사진 시트는 정규화된 11개 열을 쓴다',
   /var SNAP_HEAD = \['기록ID','사진ID','병원명','장비S\/N','사진구분','순번',/.test(G) &&
   /'Drive파일ID','사진설명','등록일시','업로드상태','요청ID'\]/.test(G));
-ck('사진 구분은 SN·CAUSE 두 가지를 지원한다',
-  /KIND_SN\s*:\s*'SN'/.test(G) && /KIND_CAUSE\s*:\s*'CAUSE'/.test(G));
+ck('사진 구분은 SN·CAUSE(증상)·AFTER(해결 후) 세 가지를 지원한다',
+  /KIND_SN\s*:\s*'SN'/.test(G) && /KIND_CAUSE\s*:\s*'CAUSE'/.test(G) &&
+  /KIND_AFTER\s*:\s*'AFTER'/.test(G) && /MAX_AFTER\s*:\s*1/.test(G));
+ck('CAUSE 값은 그대로 두고 화면 이름만 증상으로 바꾼다(기존 기록 마이그레이션 없음)',
+  /KIND_CAUSE\s*:\s*'CAUSE',\s*\/\* 현장에서 확인한 증상/.test(G) &&
+  /MAX_CAUSE\s*:\s*5/.test(G));
 ck('시트 생성은 기존 histSheet_ 를 재사용한다(헤더 스키마 자동 마이그레이션)',
   /function photoSheet_\(\)\{ return histSheet_\(SNAP\.SHEET, SNAP_HEAD\); \}/.test(G));
 ck('Base64 를 시트 셀에 저장하지 않는다(파일 ID만 기록)',
@@ -108,7 +112,7 @@ ck('사진 파일명에 사진 ID 를 붙여 동명 충돌을 막는다',
   const mkAdd = () => new Function(
     'photoKeyClean_', 'photoSheetIfReady_', 'photoReadAll_', 'photoFind_', 'savePhoto_',
     'photoDiscard_', 'photoAppend_', 'photoDescClean_', 'LockService', 'Logger', 'SNAP', 'SNAP_ERR_SETUP',
-    grab(G, 'photoAdd_') + '; return photoAdd_;')(
+    grab(G, 'photoKindAllowed_') + '\n' + grab(G, 'photoAdd_') + '; return photoAdd_;')(
       s2 => String(s2 || '').replace(/[^A-Za-z0-9_-]/g, ''),
       () => ({}), readAll, photoFind,
       () => { uploaded++; return { id: 'FILE' + uploaded }; },
@@ -117,7 +121,8 @@ ck('사진 파일명에 사진 ID 를 붙여 동명 충돌을 막는다',
       s2 => String(s2 || ''),
       { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
       { log: () => {} },
-      { KIND_SN: 'SN', KIND_CAUSE: 'CAUSE', MAX_CAUSE: 5, ST_ORPHAN: 'ORPHAN', ST_OK: 'OK' }, 'setup');
+      { KIND_SN: 'SN', KIND_CAUSE: 'CAUSE', KIND_AFTER: 'AFTER', MAX_CAUSE: 5, MAX_AFTER: 1,
+        ST_ORPHAN: 'ORPHAN', ST_OK: 'OK' }, 'setup');
   const a = mkAdd()({ recordId: 'rec_1', clientPhotoId: 'ph_1', kind: 'CAUSE', dataUrl: 'd' });
   const b = mkAdd()({ recordId: 'rec_1', clientPhotoId: 'ph_1', kind: 'CAUSE', dataUrl: 'd' });
   ck('동시 photo_add 실행: 두 요청이 모두 업로드해도 시트 행은 1개', uploaded === 2 && sheetRows.length === 1);
@@ -145,14 +150,15 @@ ck('서버는 payload 의 fileId 를 읽지 않고 시트에서 결정한다',
   /photoFind_\(rows, recordId, refs\[i\]\.clientPhotoId\)/.test(grab(G, 'hvResolvePhotos_')));
 
 {
-  const resolve = gasFn(['hvResolvePhotos_', 'photoFind_'], 'hvResolvePhotos_', {
+  const resolve = gasFn(['hvResolvePhotos_', 'photoFind_', 'photoKindAllowed_'], 'hvResolvePhotos_', {
     photoSheetIfReady_: () => ({}),
     photoReadAll_: () => ([
       { recordId: 'rec_1', photoId: 'sn1', fileId: 'FSN', kind: 'SN', status: 'ORPHAN', at: 't', _row: 2 },
       { recordId: 'rec_1', photoId: 'c1', fileId: 'FC1', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 3 },
       { recordId: 'other', photoId: 'x9', fileId: 'FX', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 4 }
     ]),
-    SNAP: { KIND_SN: 'SN', KIND_CAUSE: 'CAUSE', MAX_CAUSE: 5, ST_ORPHAN: 'ORPHAN', ST_OK: 'OK' },
+    SNAP: { KIND_SN: 'SN', KIND_CAUSE: 'CAUSE', KIND_AFTER: 'AFTER', MAX_CAUSE: 5, MAX_AFTER: 1,
+            ST_ORPHAN: 'ORPHAN', ST_OK: 'OK' },
     SNAP_ERR_SETUP: 'setup'
   });
   const ok = resolve('rec_1', [
@@ -279,8 +285,16 @@ ck('실패 사진 한 장 재시도는 다른 미로딩·실패 사진을 함께
   /targets:\[\{row:rowIdx, pi:photoIdx, ph:ph\}\]/.test(grab(L, 'retryPhoto')));
 ck('기존 단일 S/N 데이터도 정상 표시된다(구버전 서버 폴백)',
   /r\.photoId \? \[\{fileId:r\.photoId, kind:'SN', seq:1, desc:''\}\] : \[\]/.test(L));
-ck('원인 사진 여러 장을 표시하는 UI 가 있다',
-  /cause-thumbs/.test(L) && /row\.causePhotos/.test(L));
+ck('사진은 S/N · 증상 · 해결 후 3칸 고정으로 표시된다',
+  /var PHOTO_SLOTS = \[/.test(L) &&
+  /kind:'SN'/.test(L) && /kind:'CAUSE'/.test(L) && /kind:'AFTER'/.test(L) &&
+  /class="ph-slots"/.test(L));
+ck('예전 기록의 추가 증상 사진도 버리지 않고 보여 준다',
+  /cause-thumbs/.test(L) && /row\.causePhotos/.test(L) &&
+  /\(row\.causePhotos \|\| \[\]\)\.slice\(1\)/.test(L));
+ck('로딩·Excel 순서가 S/N → 증상 → 해결 후 로 서버 정렬과 같다',
+  /if\(row\.afterPhoto && row\.afterPhoto\.fileId\) out\.push\(row\.afterPhoto\);/.test(grab(L, 'rowPhotos')) &&
+  /function photoKindRank_/.test(G));
 ck('labelList_ 가 사진 시트를 한 번만 읽어 recordId 맵으로 만든다',
   /photoMap = photoMapByRecord_\(\)/.test(G) &&
   !/photoReadAll_\(\)[\s\S]{0,200}order\.map/.test(G));
@@ -296,47 +310,78 @@ ck('photolist 는 doGet 로그인 검증 뒤에 라우팅된다',
 section('Excel 동적 사진 열 · 상세 시트');
 
 {
-  const src = ['maxCauseCount', 'driveViewUrl', 'colLetter_', 'buildLabelSheetPlan']
+  const src = ['maxCauseCount', 'maxExtraCount', 'driveViewUrl', 'colLetter_', 'buildLabelSheetPlan']
     .map(n => grab(L, n)).join('\n');
   const P = new Function(src + '; return {plan:buildLabelSheetPlan, col:colLetter_};')();
-  const mk = (hosp, causes, hasSn) => ({
+  /* causes: 증상 사진 설명 배열(첫 장이 '증상', 나머지는 예전 기록의 '추가 증상')
+     after : 해결 후 사진 설명(없으면 null) */
+  const mk = (hosp, causes, hasSn, after) => ({
     hospital: hosp, sn: 'S-' + hosp, note: '병원 장비', imageDataUrl: null,
     snPhoto: { fileId: 'F' + hosp, thumbDataUrl: hasSn ? 'data:sn' : null, state: 'ok', desc: '' },
-    causePhotos: causes.map((d, i) => ({ fileId: 'C' + hosp + i, thumbDataUrl: 'data:c', seq: i + 1, desc: d, state: 'ok' }))
+    causePhotos: causes.map((d, i) => ({ fileId: 'C' + hosp + i, thumbDataUrl: 'data:c', seq: i + 1, desc: d, state: 'ok' })),
+    afterPhoto: after == null
+      ? { fileId: '', thumbDataUrl: null, seq: 1, desc: '', state: 'ok' }
+      : { fileId: 'A' + hosp, thumbDataUrl: 'data:a', seq: 1, desc: after, state: 'ok' }
   });
-  const rows = [mk('A', ['누수', '파손'], true), mk('B', [], true), mk('C', ['x', 'y', 'z'], true)];
-  const p = P.plan(rows, { date: '2026-08', author: '김', maxCause: 5 });
 
-  ck('Excel 열 순서: No.|병원명|S/N|S/N 사진|원인 1..N|원인 내용|비고',
-    p.headers.join('|') === 'No.|병원명|장비 S/N|S/N 사진|원인 사진 1|원인 사진 2|원인 사진 3|원인 내용|비고');
-  ck('원인 사진 최대 개수를 데이터에서 계산한다', p.maxCause === 3);
-  ck('원인 사진 열은 장비 S/N 사진 바로 옆에 만든다',
-    p.snCol === 3 && p.causeStart === 4);
+  /* 새 기록만 있는 경우 — 정확히 3장 구성이어야 한다 */
+  const fresh = P.plan([mk('N', ['누수'], true, '커넥터 교체')], { date: '2026-08', author: '김' });
+  ck('새 기록은 사진 열이 정확히 3개다(S/N · 증상 · 해결 후)',
+    fresh.headers.join('|') ===
+      'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고',
+    fresh.headers.join('|'));
+  ck('추가 증상 사진 열은 예전 기록이 없으면 아예 생기지 않는다', fresh.maxExtra === 0);
+  ck('세 사진이 각자의 열에 배치된다',
+    fresh.images.length === 3 &&
+    fresh.images.find(im => im.kind === 'SN').col === fresh.snCol &&
+    fresh.images.find(im => im.kind === 'CAUSE').col === fresh.causeCol &&
+    fresh.images.find(im => im.kind === 'AFTER').col === fresh.afterCol);
+  ck('증상 내용과 조치 내용을 각각 다른 열에 쓴다',
+    fresh.bodyRows[0].values[fresh.causeTextCol] === '1. 누수' &&
+    fresh.bodyRows[0].values[fresh.afterTextCol] === '커넥터 교체');
+  ck('사진 상세 시트가 구분을 증상·해결 후로 적는다',
+    fresh.detailRows.map(r => r[2]).join('|') === 'S/N|증상|해결 후');
+
+  /* 예전 기록(증상 사진 여러 장)이 섞인 경우 */
+  const rows = [mk('A', ['누수', '파손'], true, '패킹 교체'), mk('B', [], true, null),
+                mk('C', ['x', 'y', 'z'], true, null)];
+  const p = P.plan(rows, { date: '2026-08', author: '김', maxExtra: 4 });
+
+  ck('예전 기록의 추가 증상 사진은 별도 열로 뒤에 붙는다',
+    p.headers.join('|') ===
+      'No.|병원명|장비 S/N|S/N 사진|증상 사진|추가 증상 사진 1|추가 증상 사진 2|해결 후 사진|증상 내용|조치 내용|비고',
+    p.headers.join('|'));
+  ck('추가 증상 사진 개수를 데이터에서 계산한다(증상 첫 장은 제외)', p.maxExtra === 2);
+  ck('사진 열 순서: S/N(3) · 증상(4) · 추가(5~) · 해결 후',
+    p.snCol === 3 && p.causeCol === 4 && p.extraStart === 5 && p.afterCol === 7);
   ck('모든 행의 열 구조가 동일하다',
     p.bodyRows.every(r => r.values.length === p.headers.length));
   ck('사진이 없는 셀은 공백을 유지한다',
-    p.bodyRows[1].values.slice(p.causeStart, p.causeTextCol).every(v => v === ''));
-  ck('사진은 순번대로 배치된다',
-    p.images.filter(im => im.rowIdx === p.bodyRows[0].rowIdx && im.kind === 'CAUSE')
-      .every((im, i) => im.col === p.causeStart + i));
-  ck('원인 내용은 순번에 맞춰 1. 설명 / 2. 설명 형태',
+    p.bodyRows[1].values.slice(p.causeCol, p.causeTextCol).every(v => v === ''));
+  ck('증상 사진은 첫 장이 고정 열, 나머지가 추가 열로 순서대로 간다',
+    p.images.filter(im => im.rowIdx === p.bodyRows[2].rowIdx && im.kind === 'CAUSE')
+      .map(im => im.col).join(',') === [p.causeCol, p.extraStart, p.extraStart + 1].join(','));
+  ck('증상 내용은 순번에 맞춰 1. 설명 / 2. 설명 형태',
     p.bodyRows[0].values[p.causeTextCol] === '1. 누수 / 2. 파손');
-  ck('제목·날짜 병합 범위가 동적 열 수를 따라간다', P.col(p.headers.length) === 'I');
+  ck('제목·날짜 병합 범위가 동적 열 수를 따라간다', P.col(p.headers.length) === 'K');
   ck('사진 상세 시트 행을 만든다(원본 링크 포함)',
     p.detailHeaders.join('|') === '병원명|장비 S/N|사진 구분|순번|사진|설명|원본 링크' &&
-    p.detailRows.length === 8 &&
-    /^https:\/\/drive\.google\.com\/file\/d\/CA0\/view$/.test(p.detailRows[1][6]));
-  const missed = mk('M', ['실패 사진', '정상 사진'], true);
+    p.detailRows.length === 9 &&
+    /^https:\/\/drive\.google\.com\/file\/d\/CA0\/view$/.test(p.detailRows[1][6]),
+    'detailRows=' + p.detailRows.length);
+
+  const missed = mk('M', ['실패 사진', '정상 사진'], true, null);
   missed.causePhotos[0].thumbDataUrl = null;
   const mp = P.plan([missed], {});
   const secondCause = mp.images.find(im => im.kind === 'CAUSE' && im.seq === 2);
   ck('중간 사진 로딩 실패가 있어도 다음 사진의 상세 행이 밀리지 않는다',
     secondCause && secondCause.detailRowIdx === 4 && mp.detailRows[2][5] === '정상 사진');
 
-  const only = P.plan([mk('Z', [], true)], {});
-  ck('기존 S/N 사진 1장만 있는 데이터도 같은 구조로 출력된다',
-    only.maxCause === 0 &&
-    only.headers.join('|') === 'No.|병원명|장비 S/N|S/N 사진|원인 내용|비고' &&
+  const only = P.plan([mk('Z', [], true, null)], {});
+  ck('S/N 사진 1장만 있는 예전 데이터도 같은 3열 구조로 출력된다',
+    only.maxExtra === 0 &&
+    only.headers.join('|') ===
+      'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고' &&
     only.images.length === 1);
 }
 
@@ -364,6 +409,9 @@ ck('Label 작성 완료 기록(labeldone)이 유지된다',
 ck('직접 입력·붙여넣기·일괄 배치는 S/N 사진에 연결된다',
   /rows\[idx\]\.snPhoto\.thumbDataUrl = resized;/.test(L) &&
   /function applyBulkPhotos/.test(L) && /function handleCellPaste/.test(L));
+ck('세 칸 어디에나 직접 첨부·드래그·붙여넣기를 할 수 있다',
+  /function setSlotPhoto/.test(L) && /function clearSlotPhoto/.test(L) &&
+  /setRowImageFromFile\(idx, file, cell\.getAttribute\('data-slot'\) \|\| 'sn'\)/.test(L));
 
 /* ══════════ 8. 클라이언트 압축·동시성 (실제 실행) ══════════ */
 section('압축 기준 · 동시 실행 제한');
@@ -427,16 +475,26 @@ ck('브라우저 압축은 실제 canvas.toBlob 경로를 사용한다',
   /canvas\.toBlob\(/.test(PHOTO_SRC) && /function blobDataUrl/.test(PHOTO_SRC));
 ck('원인 사진 슬롯마다 상태를 표시한다(압축·업로드·완료·실패·재시도)',
   /압축 중…/.test(H) && /업로드 중…/.test(H) && /'완료'/.test(H) && /재시도/.test(H));
-ck('모바일 촬영을 위해 원인 사진에 capture 를 적용한다',
-  /capture="environment"/.test(H));
+ck('모바일 촬영을 위해 현장 사진에 capture 를 적용한다',
+  (H.match(/capture="environment"/g) || []).length === 2);
+ck('현장 촬영 화면이 증상·해결 후 두 칸으로 고정된다',
+  /var CAUSE_KINDS = \[/.test(H) &&
+  /kind:'CAUSE', title:'현장에서 확인한 증상'/.test(H) &&
+  /kind:'AFTER', title:'증상 해결 후'/.test(H) &&
+  /id="causeFile_CAUSE"/.test(H) && /id="causeFile_AFTER"/.test(H));
+ck('한 칸에는 사진 1장만 — 이미 있으면 새로 받지 않는다',
+  /if\(causeSlotOf\(kind\)\)\{ toast\('이 칸에는 이미 사진이 있습니다/.test(H));
+ck('업로드는 칸의 사진 구분을 그대로 보낸다',
+  /uploadPhotoSlot\(slot, slot\.kind\|\|'CAUSE'\)/.test(H) &&
+  /kind:s\.kind\|\|'CAUSE', seq:1/.test(H));
 ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 화면과 코드에 남긴다',
   /링크를 아는 사람이 열람할 수 있습니다/.test(H) && /ANYONE_WITH_LINK/.test(G) &&
   /\[보안 주의\]/.test(G));
 ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
-ck('서비스워커 캐시 버전이 134 이상이다',
-  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 134);
-ck('GAS 버전이 3.4.1 로 올라갔다', /ver:'3\.4\.1'/.test(G));
+ck('서비스워커 캐시 버전이 136 이상이다',
+  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 136);
+ck('GAS 버전이 3.5.0 로 올라갔다', /ver:'3\.5\.0'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);

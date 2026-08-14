@@ -879,7 +879,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.4.1', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.5.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -1087,15 +1087,32 @@ function photoIdFromFormula_(f){
  *  있으므로, 촬영 범위를 좁히도록 화면에서 안내한다. 이 공개 범위는 안정성과
  *  속도를 우선한 의도적 선택이다(비공개 전환은 후속 범위).
  */
+/* [v3.5] 사진은 "장비 S/N · 현장에서 확인한 증상 · 증상 해결 후" 3장 구성이다.
+   CAUSE 는 그 중 '증상 사진'을 가리킨다 — 이름을 바꾸면 이미 시트에 쌓인
+   수천 행의 '사진구분' 값을 전부 마이그레이션해야 하므로 값은 그대로 두고
+   화면 문구만 '증상 사진'으로 부른다.
+   MAX_CAUSE 는 5 로 유지한다. 새 기록은 증상 1장으로 저장하지만, 예전에
+   최대 5장까지 올려 둔 기록을 서버가 거부해서는 안 된다(읽기·재저장 호환). */
 var SNAP = {
   SHEET     : '현장 사진',
   KIND_SN   : 'SN',
-  KIND_CAUSE: 'CAUSE',
-  MAX_CAUSE : 5,                 /* 기록당 원인 사진 상한 */
+  KIND_CAUSE: 'CAUSE',           /* 현장에서 확인한 증상 사진 */
+  KIND_AFTER: 'AFTER',           /* 증상 해결 후 사진 */
+  MAX_CAUSE : 5,                 /* 기록당 증상 사진 상한(legacy 호환) */
+  MAX_AFTER : 1,                 /* 해결 후 사진은 기록당 1장 */
   ST_ORPHAN : 'ORPHAN',          /* 업로드됐지만 아직 기록에 연결되지 않음 */
   ST_OK     : 'OK',              /* 기록에 연결 완료 */
   MAX_DESC  : 200
 };
+/** 사진 구분 표시 순서 — S/N → 증상 → 해결 후. Excel 열·화면 순서가 이 값을 따른다. */
+function photoKindRank_(kind){
+  if(kind === SNAP.KIND_SN) return 0;
+  if(kind === SNAP.KIND_AFTER) return 2;
+  return 1;                      /* CAUSE(증상) 및 알 수 없는 값 */
+}
+function photoKindAllowed_(kind){
+  return kind === SNAP.KIND_SN || kind === SNAP.KIND_CAUSE || kind === SNAP.KIND_AFTER;
+}
 var SNAP_HEAD = ['기록ID','사진ID','병원명','장비S/N','사진구분','순번',
                  'Drive파일ID','사진설명','등록일시','업로드상태','요청ID'];
 var SNAP_ERR_SETUP = '현장 사진 시트가 준비되지 않았습니다 — Apps Script 편집기에서 setupPhotoSheet() 를 먼저 실행하세요.';
@@ -1165,8 +1182,8 @@ function photoAdd_(p){
   if(!sh) return {success:false, error:SNAP_ERR_SETUP};
 
   var kind = String((p&&p.kind)||'').trim().toUpperCase();
-  if(kind !== SNAP.KIND_SN && kind !== SNAP.KIND_CAUSE){
-    return {success:false, error:'사진 구분은 SN 또는 CAUSE만 가능합니다'};
+  if(!photoKindAllowed_(kind)){
+    return {success:false, error:'사진 구분은 SN · CAUSE · AFTER 만 가능합니다'};
   }
   var seq  = Math.max(1, Math.min(Number(p&&p.seq)||1, SNAP.MAX_CAUSE));
 
@@ -1254,10 +1271,11 @@ function photoList_(p){
   Object.keys(out).forEach(function(k){ out[k] = photoSortList_(out[k]); });
   return {success:true, count:Object.keys(out).length, photos:out};
 }
-/** S/N 먼저, 그 다음 원인 사진을 순번대로 — Excel 열 순서와 화면 순서를 같게 유지 */
+/** S/N → 증상 → 해결 후, 같은 구분 안에서는 순번대로 — Excel 열 순서와 화면 순서를 같게 유지 */
 function photoSortList_(list){
   return list.sort(function(a,b){
-    if(a.kind!==b.kind) return a.kind===SNAP.KIND_SN ? -1 : 1;
+    var ra = photoKindRank_(a.kind), rb = photoKindRank_(b.kind);
+    if(ra !== rb) return ra - rb;
     return (a.seq||0)-(b.seq||0);
   });
 }
@@ -1298,14 +1316,15 @@ function hvPhotoRefs_(payload){
 /** recordId+clientPhotoId → Drive 파일 ID 결정. 남의 recordId 사진은 조회되지 않는다. */
 function hvResolvePhotos_(recordId, refs){
   if(!photoSheetIfReady_()) return {ok:false, error:SNAP_ERR_SETUP};
-  var rows = photoReadAll_(), sn = [], causes = [], list = [];
-  if(refs.length > SNAP.MAX_CAUSE + 1){
-    return {ok:false, error:'사진은 S/N 1장과 원인 사진 최대 '+SNAP.MAX_CAUSE+'장까지 등록할 수 있습니다'};
+  var rows = photoReadAll_(), sn = [], causes = [], afters = [], list = [];
+  if(refs.length > SNAP.MAX_CAUSE + SNAP.MAX_AFTER + 1){
+    return {ok:false, error:'사진은 S/N 1장, 증상 사진 최대 '+SNAP.MAX_CAUSE+
+                            '장, 해결 후 사진 '+SNAP.MAX_AFTER+'장까지 등록할 수 있습니다'};
   }
   var seen = {};
   for(var i=0;i<refs.length;i++){
     if(!refs[i].clientPhotoId) return {ok:false, error:'사진 ID가 비어 있습니다'};
-    if(refs[i].kind !== SNAP.KIND_SN && refs[i].kind !== SNAP.KIND_CAUSE){
+    if(!photoKindAllowed_(refs[i].kind)){
       return {ok:false, error:'허용되지 않은 사진 구분입니다: '+refs[i].kind};
     }
     if(seen[refs[i].clientPhotoId]){
@@ -1324,12 +1343,16 @@ function hvResolvePhotos_(recordId, refs){
     var item = {clientPhotoId:refs[i].clientPhotoId, kind:refs[i].kind, seq:refs[i].seq,
                 desc:refs[i].desc, fileId:hit.fileId, at:hit.at, _row:hit._row,
                 previousStatus:hit.status};
-    if(item.kind===SNAP.KIND_SN) sn.push(item); else causes.push(item);
+    if(item.kind===SNAP.KIND_SN) sn.push(item);
+    else if(item.kind===SNAP.KIND_AFTER) afters.push(item);
+    else causes.push(item);
     list.push(item);
   }
   if(sn.length !== 1) return {ok:false, error:'장비 S/N 사진은 정확히 1장이어야 합니다(현재 '+sn.length+'장)'};
-  if(causes.length > SNAP.MAX_CAUSE) return {ok:false, error:'원인 사진은 최대 '+SNAP.MAX_CAUSE+'장입니다'};
-  return {ok:true, snFileId:sn[0].fileId, list:list, causeCount:causes.length};
+  if(causes.length > SNAP.MAX_CAUSE) return {ok:false, error:'증상 사진은 최대 '+SNAP.MAX_CAUSE+'장입니다'};
+  if(afters.length > SNAP.MAX_AFTER) return {ok:false, error:'해결 후 사진은 최대 '+SNAP.MAX_AFTER+'장입니다'};
+  return {ok:true, snFileId:sn[0].fileId, list:list,
+          causeCount:causes.length, afterCount:afters.length};
 }
 
 /** 행 확정 후 ORPHAN → OK 승격 + 설명·순번을 최종 payload 기준으로 재반영 */
@@ -2423,7 +2446,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.4.1', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.5.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2507,7 +2530,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.4.1',
+  var out = {success:true, ver:'3.5.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

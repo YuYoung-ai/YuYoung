@@ -93,7 +93,8 @@ await page.route('**://script.google.com/**', async r => {
           photos: [{ fileId: 'SN2', kind: 'SN', seq: 1, desc: '' }] },
         { hosp: '가피부과의원', sn: 'BV5001', note: '병원 장비', recordId: 'rec_1',
           photos: [{ fileId: 'SN1', kind: 'SN', seq: 1, desc: '' },
-                   { fileId: 'C1', kind: 'CAUSE', seq: 1, desc: '커넥터 파손' }] },
+                   { fileId: 'C1', kind: 'CAUSE', seq: 1, desc: '커넥터 파손' },
+                   { fileId: 'A1', kind: 'AFTER', seq: 1, desc: '커넥터 교체' }] },
         /* S/N 사진 없이 원인 사진만 있는 행 — 재시도 인덱스 오프바이원을 잡는 케이스 */
         { hosp: '다피부과의원', sn: 'BV5003', note: '데모 장비', recordId: 'rec_3',
           photos: [{ fileId: 'CX', kind: 'CAUSE', seq: 1, desc: '누수' }] }
@@ -120,7 +121,9 @@ const rowsOf = () => page.evaluate(() => window.rows.map(r => ({
   h: r.hospital, s: r.sn, n: r.note,
   sn: r.snPhoto ? { id: r.snPhoto.fileId, st: r.snPhoto.state, has: !!r.snPhoto.thumbDataUrl } : null,
   local: !!r.imageDataUrl,
-  c: (r.causePhotos || []).map(p => ({ id: p.fileId, st: p.state, d: p.desc, has: !!p.thumbDataUrl }))
+  c: (r.causePhotos || []).map(p => ({ id: p.fileId, st: p.state, d: p.desc, has: !!p.thumbDataUrl })),
+  a: r.afterPhoto ? { id: r.afterPhoto.fileId, st: r.afterPhoto.state, d: r.afterPhoto.desc,
+                      has: !!r.afterPhoto.thumbDataUrl } : null
 })));
 const visibleRows = () => page.evaluate(() =>
   Array.from(document.querySelectorAll('#tableHolder [data-row-idx]'))
@@ -154,12 +157,21 @@ await page.waitForFunction(() => window.rows.every(r =>
   window.rowPhotos(r).every(p => p.state === 'ok')), null, { timeout: 8000 });
 ck('스크롤하면 IntersectionObserver 가 나머지를 받아 온다', true);
 let rs = await rowsOf();
-ck('3건을 불러오고 사진까지 채운다',
-  rs.length === 3 && rs[1].sn.has && rs[1].c[0].has && rs[2].c[0].has, JSON.stringify(rs.map(r => r.h)));
+ck('3건을 불러오고 S/N·증상·해결 후 사진을 모두 채운다',
+  rs.length === 3 && rs[1].sn.has && rs[1].c[0].has && rs[1].a.has && rs[2].c[0].has,
+  JSON.stringify(rs.map(r => r.h)));
+ck('해결 후 사진(AFTER)이 별도 칸으로 들어온다',
+  rs[1].a.id === 'A1' && rs[1].a.d === '커넥터 교체');
+ck('사진 칸이 행마다 S/N·증상·해결 후 3개로 그려진다',
+  await page.evaluate(() =>
+    document.querySelectorAll('[data-row-idx="1"] .img-cell').length === 3 &&
+    Array.from(document.querySelectorAll('[data-row-idx="1"] .ph-name'))
+      .map(e => e.textContent).join('|') === 'S/N|증상|해결 후'));
 ck('제외된 병원 안내가 뜬다',
   (await page.textContent('#dupNote')).includes('이미쓴의원'));
-ck('사진 개수 배지를 보여준다',
-  (await page.textContent('#badges')).includes('사진 2/3'));   /* 다피부과는 S/N 사진이 없다 */
+ck('3장이 모두 있는 행만 완비로 센다',
+  (await page.textContent('#badges')).includes('사진 3장 1/3'),
+  await page.textContent('#badges'));
 
 section('3. 재시도 인덱스 (S/N 없이 원인 사진만 있는 행)');
 photoScenario = 'failCX';
@@ -169,11 +181,24 @@ await page.evaluate(() => {
   r.causePhotos[0].thumbDataUrl = null;
   window.paintPhotoCell(2);
 });
-const retryAttr = await page.getAttribute('[data-row-idx="2"] .ct.fail', 'onclick');
-ck('S/N 사진이 없는 행의 원인 사진 재시도는 0번을 가리킨다',
+const retryAttr = await page.getAttribute('[data-row-idx="2"] .ph-retry', 'onclick');
+ck('S/N 사진이 없는 행의 증상 사진 재시도는 0번을 가리킨다',
   /retryPhoto\(2,0\)/.test(retryAttr || ''), retryAttr);
+/* 예전 기록(증상 여러 장)의 추가 썸네일도 같은 규칙으로 인덱스를 잡아야 한다 */
+const extraAttr = await page.evaluate(() => {
+  const r = window.rows[2];
+  r.causePhotos.push({ fileId: 'CX2', kind: 'CAUSE', seq: 2, desc: '', thumbDataUrl: null, state: 'failed' });
+  window.paintPhotoCell(2);
+  const b = document.querySelector('[data-row-idx="2"] .cause-thumbs .ct.fail');
+  const at = b ? b.getAttribute('onclick') : '';
+  r.causePhotos.pop();
+  window.paintPhotoCell(2);
+  return at;
+});
+ck('예전 기록의 추가 증상 사진 재시도도 실제 로딩 위치를 가리킨다',
+  /retryPhoto\(2,1\)/.test(extraAttr || ''), extraAttr);
 photoScenario = 'ok';
-await page.click('[data-row-idx="2"] .ct.fail');
+await page.click('[data-row-idx="2"] .ph-retry');
 await page.waitForFunction(() => window.rows[2].causePhotos[0].state === 'ok', null, { timeout: 8000 });
 ck('재시도로 그 사진이 실제로 다시 받아진다',
   (await page.evaluate(() => !!window.rows[2].causePhotos[0].thumbDataUrl)));
@@ -185,7 +210,8 @@ ck('검색이 병원명으로 걸린다', (await visibleRows()).join() === '1');
 await page.fill('#searchInput', '');
 await page.waitForFunction(() => document.querySelectorAll('#tableHolder [data-row-idx]').length === 3);
 await page.click('#filterChips [data-filter="nophoto"]');
-ck('"사진 없음" 필터는 S/N 사진 없는 행만 남긴다', (await visibleRows()).join() === '2');
+ck('"사진 미완" 필터는 3장이 다 차지 않은 행을 남긴다', (await visibleRows()).join() === '0,2',
+  (await visibleRows()).join());
 await page.click('#filterChips [data-filter="all"]');
 
 section('5. 선택 · 선택 삭제 · 되돌리기');
@@ -234,20 +260,28 @@ ck('붙여넣기로 만든 행도 정식 스키마를 가진다(snPhoto·causePh
 section('9. 라이트박스');
 await page.click('[data-row-idx="1"] .img-cell img');
 await page.waitForSelector('#lightbox.show');
-ck('사진 클릭으로 크게 보기가 열린다', (await page.textContent('#lbCount')) === '1 / 2');
+ck('사진 클릭으로 크게 보기가 열리고 3장을 넘겨 본다',
+  (await page.textContent('#lbCount')) === '1 / 3', await page.textContent('#lbCount'));
 await page.click('[data-act="lbnext"]');
-ck('원인 사진으로 넘어가고 설명이 채워진다',
+ck('증상 사진으로 넘어가고 설명이 채워진다',
   (await page.inputValue('#lbDesc')) === '커넥터 파손');
+ck('크게 보기 제목이 칸 이름을 말한다',
+  (await page.textContent('#lbTitle')).includes('현장에서 확인한 증상'),
+  await page.textContent('#lbTitle'));
 await page.fill('#lbDesc', '커넥터 파손(재확인)');
 await page.click('#lbClose');
 await page.waitForFunction(() => !document.getElementById('lightbox').classList.contains('show'));
 ck('라이트박스에서 고친 설명이 데이터에 반영된다',
   (await page.evaluate(() => window.rows[1].causePhotos[0].desc)) === '커넥터 파손(재확인)');
-ck('설명은 Excel 계획의 원인 내용 열로 이어진다',
+ck('설명은 Excel 계획의 증상 내용 열로 이어진다',
   await page.evaluate(() => {
     const p = window.buildLabelSheetPlan([window.rows[1]], {});
-    return p.bodyRows[0].values[p.causeTextCol] === '1. 커넥터 파손(재확인)';
+    return p.bodyRows[0].values[p.causeTextCol] === '1. 커넥터 파손(재확인)' &&
+           p.bodyRows[0].values[p.afterTextCol] === '커넥터 교체';
   }));
+ck('내보내기 열이 정확히 3장 구성이다',
+  await page.evaluate(() => window.buildLabelSheetPlan([window.rows[1]], {}).headers.join('|')
+    === 'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고'));
 
 section('10. 내보내기 범위 · 시트 기록');
 posts.length = 0;

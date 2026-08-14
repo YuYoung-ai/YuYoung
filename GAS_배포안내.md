@@ -58,10 +58,24 @@ Apps Script 는 배포할 때마다 버전이 쌓인다. 오래 운영해 버전
 - **오래된 버전 아카이브**: 안 쓰는 옛 버전은 `배포 관리` 에서 보관/삭제해 목록을 정리.
 - 반영 확인은 `?action=ping` 의 `ver`(auth=`5.1.0-warm`) / handover ping 의 `warmed:true` 로.
 
+## v3.5.0 — 현장 사진 3장 구성 (S/N · 증상 · 해결 후)
+
+`handover_gas.gs` 에 사진 구분 **`AFTER`(증상 해결 후)** 가 추가됐다. **handover_gas 를 재배포해야
+해결 후 사진이 저장된다** — 재배포 전에는 `photo_add` 가 `사진 구분은 SN · CAUSE · AFTER 만 가능합니다`
+로 거절하므로, 프런트만 먼저 올라가면 해결 후 칸이 업로드 실패로 표시된다.
+
+- 시트 스키마는 그대로다(`현장 사진` 시트의 `사진구분` 열에 문자열 `AFTER` 가 늘어날 뿐).
+  **마이그레이션·재설정 실행 불필요.**
+- `CAUSE` 는 이제 화면에서 **'증상 사진'** 으로 부른다. 값은 바꾸지 않았으므로 **이미 쌓인 기록은
+  그대로 읽힌다**(예전 기록의 증상 사진 최대 5장도 계속 조회·출력된다).
+- 상한: `SNAP.MAX_CAUSE = 5`(legacy 호환 유지), `SNAP.MAX_AFTER = 1`.
+- 배포 순서는 아래 '배포 순서'와 같다 — **handover_gas 먼저**, 그다음 정적 파일 push.
+
 ## 배포 확인 (밖에서 curl)
 
 - `인증GAS/exec?action=ping` → `{"ver":"5.1.0-warm","mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
-- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.0.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
+- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.5.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
+  `ver` 가 `3.5.0` 미만이면 해결 후 사진(AFTER)을 아직 받지 못하는 구버전이다.
 - 각 데이터 GAS 편집기에서 `runTokenSelfTest` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
   **모두 같아야** 왕복 0(전부 로컬 검증). 다르면 그 프로젝트만 왕복(감속, 장애 아님).
 - auth 편집기 `authSelfTime()` → 로그인/검증 단계별 실측 ms(목표 로그인 ≤2000ms).

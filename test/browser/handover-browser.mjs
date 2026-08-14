@@ -145,9 +145,10 @@ async function attachPhoto() {
   });
   await page.waitForTimeout(600);
 }
-async function attachCausePhoto() {
-  await page.setInputFiles('#causeAddFile', {
-    name: 'cause.png', mimeType: 'image/png',
+/* [v3.5] 현장 사진은 증상(CAUSE)·해결 후(AFTER) 두 칸 고정 — 칸마다 입력이 따로 있다 */
+async function attachCausePhoto(kind = 'CAUSE') {
+  await page.setInputFiles('#causeFile_' + kind, {
+    name: kind.toLowerCase() + '.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
   });
   await page.waitForTimeout(600);
@@ -206,19 +207,24 @@ ck('필수 사진 없이 저장하면 필드 오류를 표시하고 전송하지
 
 /* 5. 사진 실패 → 사진 유지 · 복사/이어쓰기 비활성 */
 await attachPhoto();
-await attachCausePhoto();
-const uploadedKinds = photoAddRequests.slice(-2).map(p => p.kind).sort();
-ck('S/N과 원인 사진을 각각 photo_add로 먼저 업로드한다',
-  uploadedKinds.join(',') === 'CAUSE,SN', JSON.stringify(uploadedKinds));
+await attachCausePhoto('CAUSE');
+await attachCausePhoto('AFTER');
+const uploadedKinds = photoAddRequests.slice(-3).map(p => p.kind).sort();
+ck('S/N·증상·해결 후 사진을 각각 photo_add로 먼저 업로드한다',
+  uploadedKinds.join(',') === 'AFTER,CAUSE,SN', JSON.stringify(uploadedKinds));
+ck('두 칸 모두 순번 1로 보낸다(칸당 1장)',
+  photoAddRequests.slice(-2).every(p => p.seq === 1),
+  JSON.stringify(photoAddRequests.slice(-2).map(p => ({ k: p.kind, q: p.seq }))));
 scenario = 'photofail';
 await page.click('#btnSave');
 await page.waitForTimeout(1200);
 const firstFinalPayload = finalSaveRequests.at(-1) || {};
-ck('최종 저장에는 Base64 없이 S/N·원인 사진 참조만 보낸다',
+ck('최종 저장에는 Base64 없이 사진 3장 참조만 보낸다',
   firstFinalPayload.snPhoto === '' && Array.isArray(firstFinalPayload.photos) &&
-  firstFinalPayload.photos.length === 2 &&
+  firstFinalPayload.photos.length === 3 &&
   firstFinalPayload.photos.some(p => p.kind === 'SN') &&
   firstFinalPayload.photos.some(p => p.kind === 'CAUSE') &&
+  firstFinalPayload.photos.some(p => p.kind === 'AFTER') &&
   firstFinalPayload.photos.every(p => !Object.prototype.hasOwnProperty.call(p, 'fileId')),
   JSON.stringify(firstFinalPayload.photos));
 const photoFail = await page.evaluate(() => ({
@@ -286,7 +292,8 @@ const unknown = await page.evaluate(() => ({
   photoShown: document.getElementById('snPhotoPrev').style.display,
   snFileDisabled: document.getElementById('snPhotoFile').disabled,
   snRemoveDisabled: document.getElementById('snPhotoRemove').disabled,
-  causeFileDisabled: document.getElementById('causeAddFile').disabled,
+  causeFileDisabled: document.getElementById('causeFile_CAUSE').disabled &&
+                     document.getElementById('causeFile_AFTER').disabled,
   acts: [...document.querySelectorAll('#saveActions button')].map(b => b.textContent)
 }));
 ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',

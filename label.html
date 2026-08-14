@@ -97,7 +97,7 @@ table.list tr.flag td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
 .col-no{width:42px}
 .col-hospital{min-width:190px}
 .col-sn{width:120px}
-.col-photo{width:130px}
+.col-photo{width:224px}
 .col-note{width:150px}
 .col-actions{width:70px}
 table.list input[type=text]{width:100%;border:1px solid transparent;background:transparent;
@@ -109,8 +109,13 @@ table.list input[type=text].bad{border-color:#F0C0BA;background:#FDF6F5}
 table.list td.col-hospital input[type=text]{text-align:left}
 .pick-box{width:auto;min-width:0;margin:0;accent-color:var(--teal)}
 
-/* ── 사진 셀 ─────────────────────────────────────────────────────────── */
-.img-cell{width:96px;height:96px;margin:0 auto;border:1.5px dashed #B8C4D1;border-radius:6px;
+/* ── 사진 셀 (S/N · 증상 · 해결 후 3칸 고정) ────────────────────────── */
+.ph-slots{display:flex;gap:5px;justify-content:center}
+.ph-slot{display:flex;flex-direction:column;align-items:center;gap:3px}
+.ph-name{font-size:10px;font-weight:700;color:var(--text-muted);line-height:1;white-space:nowrap}
+.ph-empty{font-size:18px;color:#B8C4D1;font-weight:700}
+.ph-wait{font-size:9.5px}
+.img-cell{width:62px;height:62px;margin:0;border:1.5px dashed #B8C4D1;border-radius:6px;
   display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--text-muted);
   cursor:pointer;overflow:hidden;position:relative;background:#F7F9FB;line-height:1.4;padding:0}
 .img-cell:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
@@ -126,9 +131,10 @@ table.list td.col-hospital input[type=text]{text-align:left}
 .cause-thumbs .ct.fail{color:var(--red);border-color:var(--red);cursor:pointer;font-family:inherit}
 .cause-thumbs .ct.add{color:var(--teal);border-color:var(--teal);cursor:pointer;font-family:inherit;font-weight:700}
 /* 삭제·확대 버튼은 hover 로만 나오면 터치 기기에서 영원히 닿지 않는다 → 항상 보이게 둔다 */
-.img-cell .cell-tools{position:absolute;top:2px;right:2px;display:flex;gap:2px}
-.img-cell .cell-tools button{background:rgba(0,0,0,.55);color:#fff;width:18px;height:18px;
-  border-radius:50%;font-size:11px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.img-cell .cell-tools{position:absolute;top:1px;right:1px;display:flex;gap:1px}
+.img-cell .cell-tools button{background:rgba(0,0,0,.55);color:#fff;width:16px;height:16px;
+  border-radius:50%;font-size:9.5px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.ph-retry{font-size:9.5px;padding:2px 4px}
 .row-actions{display:flex;flex-direction:column;gap:3px;align-items:center}
 
 /* ── 모바일 카드 ─────────────────────────────────────────────────────── */
@@ -327,7 +333,7 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
         </div>
         <div class="chips" id="filterChips">
           <button type="button" class="chip on" data-filter="all">전체</button>
-          <button type="button" class="chip" data-filter="nophoto">사진 없음</button>
+          <button type="button" class="chip" data-filter="nophoto">사진 미완</button>
           <button type="button" class="chip" data-filter="dup">중복</button>
           <button type="button" class="chip" data-filter="incomplete">빈 항목</button>
           <button type="button" class="chip" data-filter="selected">선택함</button>
@@ -337,7 +343,7 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
           <option value="hospital">병원명 ㄱ→ㅎ</option>
           <option value="hospital-desc">병원명 ㅎ→ㄱ</option>
           <option value="sn">S/N 오름차순</option>
-          <option value="nophoto">사진 없는 행 먼저</option>
+          <option value="nophoto">사진 미완 행 먼저</option>
         </select>
       </div>
 
@@ -392,7 +398,6 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
       </div>
       <div class="acts">
         <button type="button" class="btn-muted btn-sm" id="lbReplace">사진 교체</button>
-        <button type="button" class="btn-muted btn-sm" id="lbAddCause">+ 원인 사진</button>
         <a class="btn-muted btn-sm" id="lbOpen" target="_blank" rel="noopener noreferrer"
            style="display:none;text-decoration:none;line-height:1.6">Drive 원본</a>
         <span class="spacer"></span>
@@ -417,7 +422,18 @@ var PHOTO_PARALLEL=3;      /* 동시에 띄울 배치 수 (예전에는 완전 �
 var PHOTO_THUMB_SZ=800;    /* 서버가 Drive 썸네일을 대신 받아 온다 — 원본 blob 을 받지 않는다 */
 var EXPORT_IMG_PX=720;     /* Excel 삽입용 정사각형 최대 변. 120px 셀에 1000px 을 넣지 않는다 */
 var ATTACH_PARALLEL=3;     /* 사진 일괄 배치 시 동시에 압축할 장수 — 전부 한꺼번에 디코드하면 브라우저가 멈춘다 */
-var MAX_CAUSE_UI=5;        /* 한 행에 붙일 수 있는 원인 사진 수(Excel 열 상한과 같다) */
+var MAX_EXTRA_UI=4;        /* 예전 기록에만 있는 '추가 증상 사진'의 상한(증상 1장 + 추가 4장 = 예전 5장) */
+
+/* [v3.5] 사진은 3장 구성 — 장비 S/N · 현장에서 확인한 증상 · 증상 해결 후.
+   서버의 사진구분 값은 SN / CAUSE / AFTER 이고, CAUSE 가 '증상'이다(이미 쌓인
+   기록과의 호환 때문에 값 이름은 그대로 두고 화면에서만 '증상'이라 부른다).
+   예전 기록은 증상 사진을 최대 5장까지 갖고 있을 수 있어, 첫 장을 '증상' 칸에
+   놓고 나머지는 '추가' 썸네일로 보여 준다(조용히 버리지 않는다). */
+var PHOTO_SLOTS = [
+  { key:'sn',    kind:'SN',    label:'S/N',   title:'장비 S/N 사진' },
+  { key:'cause', kind:'CAUSE', label:'증상',  title:'현장에서 확인한 증상' },
+  { key:'after', kind:'AFTER', label:'해결 후', title:'증상 해결 후' }
+];
 
 var rows = [];
 var activeImgIdx = null;
@@ -443,18 +459,71 @@ function newRow(){
            imageDataUrl:null,            /* S/N 사진의 호환 alias — 직접 입력·PPT 가 쓴다 */
            photoId:'',                   /* 기존 단수 필드 호환 */
            snPhoto:newPhoto('', 'SN', 1, ''),
-           causePhotos:[] };
+           causePhotos:[],               /* 증상 사진 — 새 기록은 1장, 예전 기록은 최대 5장 */
+           afterPhoto:newPhoto('', 'AFTER', 1, '') };
 }
-/* 모든 사진을 한 줄로 — 로딩·Excel 이 같은 순서를 쓴다(S/N 먼저, 원인은 순번대로) */
+/* 모든 사진을 한 줄로 — 로딩·Excel 이 같은 순서를 쓴다(S/N → 증상 → 해결 후).
+   GAS 의 photoSortList_ 와 같은 순서다. */
 function rowPhotos(row){
   var out=[];
   if(row.snPhoto && row.snPhoto.fileId) out.push(row.snPhoto);
   (row.causePhotos||[]).forEach(function(p){ if(p.fileId) out.push(p); });
+  if(row.afterPhoto && row.afterPhoto.fileId) out.push(row.afterPhoto);
   return out;
 }
 function maxCauseCount(list){
   var m=0; (list||[]).forEach(function(r){ m=Math.max(m,(r.causePhotos||[]).length); });
   return m;
+}
+/** 예전 기록에만 있는 '추가 증상 사진' 최대 장수 — 증상 첫 장은 고정 열이므로 뺀다 */
+function maxExtraCount(list){
+  return Math.max(0, maxCauseCount(list) - 1);
+}
+/** 칸(sn·cause·after) → 그 칸의 사진 객체. cause 는 첫 장이 고정 칸이다. */
+function slotPhoto(row, key){
+  if(!row) return null;
+  if(key==='sn') return row.snPhoto || null;
+  if(key==='after') return row.afterPhoto || null;
+  return (row.causePhotos && row.causePhotos[0]) || null;
+}
+function slotUrl(row, key){
+  if(key==='sn') return snUrlOf(row);
+  var p = slotPhoto(row, key);
+  return (p && p.thumbDataUrl) || null;
+}
+/** 칸에 사진을 넣는다(직접 첨부). S/N 은 기존 호환 필드(imageDataUrl)도 함께 채운다. */
+function setSlotPhoto(row, key, dataUrl){
+  if(key==='sn'){
+    row.imageDataUrl = dataUrl;
+    row.snPhoto = row.snPhoto || newPhoto('', 'SN', 1, '');
+    row.snPhoto.thumbDataUrl = dataUrl;
+    row.snPhoto.state = 'ok';
+    return row.snPhoto;
+  }
+  if(key==='after'){
+    row.afterPhoto = row.afterPhoto || newPhoto('', 'AFTER', 1, '');
+    row.afterPhoto.thumbDataUrl = dataUrl;
+    row.afterPhoto.state = 'ok';
+    return row.afterPhoto;
+  }
+  row.causePhotos = row.causePhotos || [];
+  if(!row.causePhotos[0]) row.causePhotos[0] = newPhoto('', 'CAUSE', 1, '');
+  row.causePhotos[0].thumbDataUrl = dataUrl;
+  row.causePhotos[0].state = 'ok';
+  return row.causePhotos[0];
+}
+/** 칸의 사진을 뗀다. fileId 까지 지워야 폴링이 다시 받아오지 않는다. */
+function clearSlotPhoto(row, key){
+  if(key==='sn'){
+    row.imageDataUrl = null;
+    row.snPhoto = newPhoto('', 'SN', 1, '');
+    row.photoId = '';
+  } else if(key==='after'){
+    row.afterPhoto = newPhoto('', 'AFTER', 1, '');
+  } else if(row.causePhotos && row.causePhotos.length){
+    row.causePhotos.shift();          /* 추가 사진이 있으면 그것이 증상 칸으로 올라온다 */
+    row.causePhotos.forEach(function(p,i){ p.seq = i+1; });
+  }
 }
 /** 이 행에 실제로 보여줄 S/N 사진 URL (직접 첨부 → 시트 썸네일 순) */
 function snUrlOf(row){
@@ -479,6 +548,7 @@ function snapshotRows(){
     Object.keys(r).forEach(function(k){ c[k]=r[k]; });
     c.snPhoto = r.snPhoto ? cloneShallow(r.snPhoto) : newPhoto('','SN',1,'');
     c.causePhotos = (r.causePhotos||[]).map(cloneShallow);
+    c.afterPhoto = r.afterPhoto ? cloneShallow(r.afterPhoto) : newPhoto('','AFTER',1,'');
     return c;
   });
 }
@@ -534,6 +604,8 @@ function draftPayload(includeLocal){
         c:(r.causePhotos||[]).map(function(p){
           return { id:p.fileId||'', q:p.seq||1, d:p.desc||'', local:includeLocal?(p.thumbDataUrl||''):'' };
         }),
+        a:{ id:(r.afterPhoto&&r.afterPhoto.fileId)||'', d:(r.afterPhoto&&r.afterPhoto.desc)||'',
+            local:includeLocal?((r.afterPhoto&&r.afterPhoto.thumbDataUrl)||''):'' },
         local: local
       };
     })
@@ -608,6 +680,10 @@ function restoreDraft(d){
       if(p.local){ ph.thumbDataUrl=p.local; ph.state='ok'; }
       return ph;
     });
+    if(x.a){
+      r.afterPhoto = newPhoto(x.a.id||'', 'AFTER', 1, x.a.d||'');
+      if(x.a.local){ r.afterPhoto.thumbDataUrl=x.a.local; r.afterPhoto.state='ok'; }
+    }
     return r;
   });
   if(d.doc){
@@ -647,8 +723,16 @@ function buildDupMap(){
 }
 function rowFlags(row, dup){
   var h=normKey(row.hospital), s=normKey(row.sn);
+  var missing=[];
+  PHOTO_SLOTS.forEach(function(def){
+    var p = slotPhoto(row, def.key);
+    var has = !!slotUrl(row, def.key) || !!(p && p.fileId && p.state!=='failed');
+    if(!has) missing.push(def.label);
+  });
   return {
-    noPhoto: !hasSnPhoto(row),
+    noPhoto: !hasSnPhoto(row),          /* S/N 사진 없음 — 사진 일괄 배치의 대상 판별 */
+    missing: missing,                   /* 3칸 중 비어 있는 칸 이름 */
+    photoIncomplete: missing.length>0,
     dupHosp: !!(h && dup.hosp[h]>1),
     dupSn:   !!(s && dup.sn[s]>1),
     noHosp:  !h,
@@ -669,7 +753,7 @@ function viewIndexes(){
   rows.forEach(function(r, i){
     if(!matchesQuery(r, q)) return;
     var f = rowFlags(r, dup);
-    if(VIEW.filter==='nophoto' && !f.noPhoto) return;
+    if(VIEW.filter==='nophoto' && !f.photoIncomplete) return;
     if(VIEW.filter==='dup' && !(f.dupHosp||f.dupSn)) return;
     if(VIEW.filter==='incomplete' && !(f.noHosp||f.noSn)) return;
     if(VIEW.filter==='selected' && !SELECTED[r.uid]) return;
@@ -691,7 +775,7 @@ function sortRows(mode){
     cmp = function(a,b){ return String(a.r.sn||'').localeCompare(String(b.r.sn||''), 'ko', {numeric:true}); };
   } else {
     cmp = function(a,b){
-      var fa=rowFlags(a.r,dup).noPhoto?0:1, fb=rowFlags(b.r,dup).noPhoto?0:1;
+      var fa=rowFlags(a.r,dup).photoIncomplete?0:1, fb=rowFlags(b.r,dup).photoIncomplete?0:1;
       return fa-fb;
     };
   }
@@ -806,38 +890,21 @@ async function fileToDataUrl(file, kind){
   return await resizeImage(raw);
 }
 
-async function setRowImageFromFile(idx, file){
+/** 칸 하나에 사진을 붙인다. key 는 'sn'|'cause'|'after'. */
+async function setRowImageFromFile(idx, file, slotKey){
   if(!file || file.type.indexOf('image/')!==0) return;
-  var resized = await fileToDataUrl(file, 'SN');
-  rows[idx].imageDataUrl = resized;
-  /* 직접 첨부·붙여넣기·일괄 배치는 모두 S/N 사진에 연결한다(기존 동작 유지) */
+  var key = slotKey || 'sn';
+  var resized = await fileToDataUrl(file, key==='sn' ? 'SN' : 'CAUSE');
+  /* 직접 첨부·붙여넣기·일괄 배치는 기본이 S/N 사진이다(기존 동작 유지) */
   rows[idx].snPhoto = rows[idx].snPhoto || newPhoto('', 'SN', 1, '');
-  rows[idx].snPhoto.thumbDataUrl = resized;
-  rows[idx].snPhoto.state = 'ok';
+  if(key==='sn') rows[idx].snPhoto.thumbDataUrl = resized;
+  setSlotPhoto(rows[idx], key, resized);
   markDirty();
   paintPhotoCell(idx);
   renderBadges();
 }
 
-async function addCausePhotoFromFile(idx, file){
-  if(!file || file.type.indexOf('image/')!==0) return;
-  var row = rows[idx]; if(!row) return;
-  row.causePhotos = row.causePhotos || [];
-  if(row.causePhotos.length >= MAX_CAUSE_UI){
-    toast('원인 사진은 한 행에 최대 '+MAX_CAUSE_UI+'장까지입니다.');
-    return;
-  }
-  var url = await fileToDataUrl(file, 'CAUSE');
-  var ph = newPhoto('', 'CAUSE', row.causePhotos.length+1, '');
-  ph.thumbDataUrl = url;
-  ph.state = 'ok';
-  row.causePhotos.push(ph);
-  markDirty();
-  paintPhotoCell(idx);
-  toast('원인 사진을 추가했습니다 — 설명을 넣으면 엑셀 \'원인 내용\'에 들어갑니다.');
-}
-
-/* 숨은 file input 하나를 용도별로 재사용한다 */
+/* 숨은 file input 하나를 칸별로 재사용한다 */
 var PICK_MODE = 'sn';
 function openFilePicker(idx, mode){
   activeImgIdx = idx;
@@ -847,33 +914,30 @@ function openFilePicker(idx, mode){
 document.getElementById('hiddenFileInput').addEventListener('change', async function(e){
   var file = e.target.files[0];
   if(file && activeImgIdx!==null){
-    if(PICK_MODE==='cause') await addCausePhotoFromFile(activeImgIdx, file);
-    else await setRowImageFromFile(activeImgIdx, file);
+    await setRowImageFromFile(activeImgIdx, file, PICK_MODE);
     if(isLightboxOpen()) refreshLightbox();
   }
   e.target.value = '';
 });
 
-function removeImage(idx, evt){
+function removeImage(idx, evt, slotKey){
   if(evt && evt.stopPropagation) evt.stopPropagation();
+  var key = slotKey || 'sn';
   pushUndo('사진 제거');
-  rows[idx].imageDataUrl = null;
-  /* S/N 사진을 통째로 뗀다 — fileId 까지 지워야 폴링이 다시 받아오지 않는다 */
-  rows[idx].snPhoto = newPhoto('', 'SN', 1, '');
-  rows[idx].photoId = '';
+  clearSlotPhoto(rows[idx], key);
   markDirty();
   paintPhotoCell(idx);
   renderBadges();
   toast('사진을 뺐습니다.', '되돌리기', undoLast);
 }
 
-async function handleCellPaste(idx, evt){
+async function handleCellPaste(idx, evt, slotKey){
   var items = evt.clipboardData && evt.clipboardData.items;
   if(!items) return;
   for(var i=0;i<items.length;i++){
     if(items[i].type.indexOf('image/')===0){
       evt.preventDefault();
-      await setRowImageFromFile(idx, items[i].getAsFile());
+      await setRowImageFromFile(idx, items[i].getAsFile(), slotKey || 'sn');
       break;
     }
   }
@@ -1025,7 +1089,7 @@ function bindDropTargets(holder){
     var host = cell.closest('[data-row-idx]');
     var idx = host ? Number(host.getAttribute('data-row-idx')) : -1;
     var file = firstImageFile(e.dataTransfer);
-    if(idx>=0 && file) await setRowImageFromFile(idx, file);
+    if(idx>=0 && file) await setRowImageFromFile(idx, file, cell.getAttribute('data-slot') || 'sn');
   });
 }
 
@@ -1151,6 +1215,7 @@ async function loadFromSheet(){
       list.forEach(function(ph){
         var kind = String(ph.kind||'SN').toUpperCase();
         if(kind==='SN'){ row.snPhoto = newPhoto(ph.fileId, 'SN', 1, ph.desc||''); }
+        else if(kind==='AFTER'){ row.afterPhoto = newPhoto(ph.fileId, 'AFTER', 1, ph.desc||''); }
         else { row.causePhotos.push(newPhoto(ph.fileId, 'CAUSE', Number(ph.seq)||(row.causePhotos.length+1), ph.desc||'')); }
       });
       row.causePhotos.sort(function(a,b){ return (a.seq||0)-(b.seq||0); });
@@ -1352,50 +1417,59 @@ function ymd(d){ return isoDate(d); }
 function hhmm(d){ return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 
 /* ── 표 렌더링 ───────────────────────────────────────────────────────── */
-/* [v3.4] 사진 셀 마크업을 한 곳에서 만든다 — 전체 렌더와 셀 단위 갱신이 같은 HTML 을 쓴다.
-   S/N 사진(직접 입력 포함)과 원인 사진 여러 장을 함께 보여준다.
+/* [v3.5] 사진 셀 마크업을 한 곳에서 만든다 — 전체 렌더와 셀 단위 갱신이 같은 HTML 을 쓴다.
+   세 칸 고정: 장비 S/N · 현장에서 확인한 증상 · 증상 해결 후.
+   예전 기록에만 있는 증상 사진 2장째 이후는 아래 '추가' 썸네일로 보여 준다.
    ※ 여기서만 인라인 onclick 을 쓴다 — 인자가 전부 숫자 인덱스라 주입 위험이 없고,
      실패 사진 재시도 버튼은 회귀 테스트가 이 형태를 계약으로 고정하고 있다. */
 function photoCellHtml(row, idx){
   var loadList = rowPhotos(row);      /* 재시도 인덱스는 반드시 이 목록 기준이어야 한다 */
-  var snUrl = snUrlOf(row);
-  var snState = (row.snPhoto && row.snPhoto.state) || 'ok';
-  var out = '<div class="img-cell" tabindex="0" role="button" '+
-            'aria-label="'+escapeAttr((row.hospital||'행 '+(idx+1))+' 장비 사진')+'" '+
-            'data-act="cell" data-idx="'+idx+'">';
-  if(snUrl){
-    out += '<img src="'+snUrl+'" alt="'+escapeAttr(row.hospital)+' 장비 사진">'+
-           '<span class="cell-tools">'+
-             '<button type="button" data-act="zoom" data-idx="'+idx+'" title="크게 보기" aria-label="사진 크게 보기">⤢</button>'+
-             '<button type="button" data-act="unset" data-idx="'+idx+'" title="사진 빼기" aria-label="사진 빼기">✕</button>'+
-           '</span>';
-  }else if(snState==='loading'){ out += '사진 받는 중…'; }
-  else if(snState==='failed'){
-    var snAt = loadList.indexOf(row.snPhoto);
-    out += '<span class="ph-fail">실패</span>'+
-           '<button type="button" class="btn-sm btn-muted ph-retry" onclick="retryPhoto('+idx+','+(snAt<0?0:snAt)+');event.stopPropagation()">재시도</button>';
-  }else{ out += '클릭·드래그<br>또는 Ctrl+V'; }
+  var out = '<div class="ph-slots">';
+
+  PHOTO_SLOTS.forEach(function(def){
+    var url = slotUrl(row, def.key);
+    var ph = slotPhoto(row, def.key);
+    var state = (ph && ph.state) || 'ok';
+    out += '<div class="ph-slot">'+
+           '<div class="img-cell" tabindex="0" role="button" '+
+           'aria-label="'+escapeAttr((row.hospital||('행 '+(idx+1)))+' '+def.title)+'" '+
+           'data-act="cell" data-idx="'+idx+'" data-slot="'+def.key+'">';
+    if(url){
+      out += '<img src="'+url+'" alt="'+escapeAttr((row.hospital||'')+' '+def.title)+'">'+
+             '<span class="cell-tools">'+
+               '<button type="button" data-act="zoom" data-idx="'+idx+'" data-slot="'+def.key+'" '+
+                 'title="크게 보기" aria-label="'+escapeAttr(def.title+' 크게 보기')+'">⤢</button>'+
+               '<button type="button" data-act="unset" data-idx="'+idx+'" data-slot="'+def.key+'" '+
+                 'title="사진 빼기" aria-label="'+escapeAttr(def.title+' 빼기')+'">✕</button>'+
+             '</span>';
+    }else if(state==='loading'){ out += '<span class="ph-wait">받는 중…</span>'; }
+    else if(state==='failed'){
+      var at = loadList.indexOf(ph);
+      out += '<span class="ph-fail">실패</span>'+
+             '<button type="button" class="btn-sm btn-muted ph-retry" onclick="retryPhoto('+idx+','+(at<0?0:at)+');event.stopPropagation()">재시도</button>';
+    }else{ out += '<span class="ph-empty">+</span>'; }
+    out += '</div><div class="ph-name">'+escapeAttr(def.label)+'</div></div>';
+  });
   out += '</div>';
 
-  var causes = row.causePhotos || [];
-  out += '<div class="cause-thumbs">';
-  causes.forEach(function(ph, i){
-    /* 예전에는 n=i+1 로 고정해, S/N 사진이 없는 행에서 엉뚱한 사진을 재시도했다.
-       실제 로딩 목록에서의 위치를 찾아 쓴다. */
-    var n = loadList.indexOf(ph);
-    if(ph.thumbDataUrl){
-      out += '<img src="'+ph.thumbDataUrl+'" title="'+escapeAttr(ph.desc||('원인 '+(i+1)))+'" '+
-             'alt="원인 사진 '+(i+1)+'" data-act="zoomcause" data-idx="'+idx+'" data-ci="'+i+'">';
-    }else if(ph.state==='loading'){ out += '<span class="ct busy">…</span>'; }
-    else if(ph.state==='failed'){
-      out += '<button type="button" class="ct fail" title="다시 받기" onclick="retryPhoto('+idx+','+(n<0?0:n)+');event.stopPropagation()">↻</button>';
-    }else{ out += '<span class="ct">·</span>'; }
-  });
-  if(causes.length < MAX_CAUSE_UI){
-    out += '<button type="button" class="ct add" title="원인 사진 추가" '+
-           'data-act="addcause" data-idx="'+idx+'" aria-label="원인 사진 추가">＋</button>';
+  /* 예전 기록의 추가 증상 사진(2장째 이후) — 새 기록에서는 비어 있다 */
+  var extras = (row.causePhotos || []).slice(1);
+  if(extras.length){
+    out += '<div class="cause-thumbs" title="예전 기록의 추가 증상 사진">';
+    extras.forEach(function(ph, i){
+      /* 예전에는 n=i+1 로 고정해, S/N 사진이 없는 행에서 엉뚱한 사진을 재시도했다.
+         실제 로딩 목록에서의 위치를 찾아 쓴다. */
+      var n = loadList.indexOf(ph);
+      if(ph.thumbDataUrl){
+        out += '<img src="'+ph.thumbDataUrl+'" title="'+escapeAttr(ph.desc||('추가 증상 '+(i+1)))+'" '+
+               'alt="추가 증상 사진 '+(i+1)+'" data-act="zoomcause" data-idx="'+idx+'" data-ci="'+(i+1)+'">';
+      }else if(ph.state==='loading'){ out += '<span class="ct busy">…</span>'; }
+      else if(ph.state==='failed'){
+        out += '<button type="button" class="ct fail" title="다시 받기" onclick="retryPhoto('+idx+','+(n<0?0:n)+');event.stopPropagation()">↻</button>';
+      }else{ out += '<span class="ct">·</span>'; }
+    });
+    out += '</div>';
   }
-  out += '</div>';
   return out;
 }
 
@@ -1430,6 +1504,7 @@ function rowClass(flags, selected){
   if(flags.noHosp||flags.noSn||flags.dupHosp||flags.dupSn) c.push('flag');
   return c.join(' ');
 }
+/** 카드/행 배지에 띄울 데이터 문제 — 사진 누락은 세 칸이 직접 보여 주므로 넣지 않는다 */
 function flagTitle(flags){
   var t=[];
   if(flags.noHosp) t.push('병원명 없음');
@@ -1437,6 +1512,12 @@ function flagTitle(flags){
   if(flags.dupHosp) t.push('병원명 중복');
   if(flags.dupSn) t.push('S/N 중복');
   return t.join(' · ');
+}
+/** 행 전체 tooltip — 빠진 사진 칸까지 포함한다 */
+function rowTitle(flags){
+  var t = flagTitle(flags);
+  if(flags.missing && flags.missing.length) t += (t?' · ':'')+'사진 없음: '+flags.missing.join('·');
+  return t;
 }
 
 function tableHtml(view, dup){
@@ -1455,7 +1536,7 @@ function tableHtml(view, dup){
     var row = rows[idx];
     var f = rowFlags(row, dup);
     var sel = !!SELECTED[row.uid];
-    html += '<tr class="'+rowClass(f, sel)+'" title="'+escapeAttr(flagTitle(f))+'">'+
+    html += '<tr class="'+rowClass(f, sel)+'" title="'+escapeAttr(rowTitle(f))+'">'+
       '<td class="col-pick"><input type="checkbox" class="pick-box" data-act="pick" data-idx="'+idx+'"'+(sel?' checked':'')+
         ' aria-label="'+escapeAttr((row.hospital||('행 '+(pos+1)))+' 선택')+'"></td>'+
       '<td class="col-no">'+(pos+1)+'</td>'+
@@ -1483,7 +1564,7 @@ function cardsHtml(view, dup){
     var row = rows[idx];
     var f = rowFlags(row, dup);
     var sel = !!SELECTED[row.uid];
-    html += '<div class="rcard '+rowClass(f, sel)+'">'+
+    html += '<div class="rcard '+rowClass(f, sel)+'" title="'+escapeAttr(rowTitle(f))+'">'+
       '<div class="rcard-top">'+
         '<input type="checkbox" class="pick-box" data-act="pick" data-idx="'+idx+'"'+(sel?' checked':'')+
           ' aria-label="'+escapeAttr((row.hospital||('행 '+(pos+1)))+' 선택')+'">'+
@@ -1556,7 +1637,7 @@ function renderBadges(dup, view){
   var withPhoto = 0, noHosp = 0, noSn = 0, dupCnt = 0, failedPh = 0;
   rows.forEach(function(r){
     var f = rowFlags(r, dup);
-    if(!f.noPhoto) withPhoto++;
+    if(!f.photoIncomplete) withPhoto++;
     if(f.noHosp) noHosp++;
     if(f.noSn) noSn++;
     if(f.dupHosp||f.dupSn) dupCnt++;
@@ -1567,7 +1648,7 @@ function renderBadges(dup, view){
   out.push(badge('총 '+rows.length+'건', rows.length>30?'warn':''));
   if(view.length!==rows.length) out.push(badge('표시 '+view.length+'건', ''));
   if(sel) out.push(badge('선택 '+sel+'건', 'ok'));
-  out.push(badge('사진 '+withPhoto+'/'+rows.length, withPhoto===rows.length&&rows.length?'ok':'warn'));
+  out.push(badge('사진 3장 '+withPhoto+'/'+rows.length, withPhoto===rows.length&&rows.length?'ok':'warn'));
   if(failedPh) out.push(badge('사진 실패 '+failedPh+'장', 'bad'));
   document.getElementById('badges').innerHTML = out.join('');
 
@@ -1624,16 +1705,23 @@ function toast(msg, actLabel, actFn){
 function hideToast(){ document.getElementById('toast').classList.remove('on'); }
 
 /* ── 사진 크게 보기 ─────────────────────────────────────────────────── */
-/** 화면에 보여줄 사진 목록. rowPhotos 와 달리 직접 첨부한(파일 ID 없는) 사진도 포함한다. */
+/** 화면에 보여줄 사진 목록. rowPhotos 와 달리 직접 첨부한(파일 ID 없는) 사진도 포함한다.
+    순서는 표의 칸 순서와 같다 — S/N → 증상 → (예전 추가 증상) → 해결 후. */
 function viewablePhotos(row){
   var out = [];
   var snUrl = snUrlOf(row);
   if(snUrl || (row.snPhoto && row.snPhoto.fileId)){
-    out.push({ph:row.snPhoto, url:snUrl, kind:'SN', label:'장비 S/N 사진', ci:-1});
+    out.push({ph:row.snPhoto, url:snUrl, kind:'SN', slot:'sn', label:'장비 S/N 사진', ci:-1});
   }
   (row.causePhotos||[]).forEach(function(p, i){
-    out.push({ph:p, url:p.thumbDataUrl, kind:'CAUSE', label:'원인 사진 '+(i+1), ci:i});
+    if(!p.thumbDataUrl && !p.fileId) return;
+    out.push({ph:p, url:p.thumbDataUrl, kind:'CAUSE', slot:(i===0?'cause':''),
+              label:(i===0 ? '현장에서 확인한 증상' : ('추가 증상 사진 '+i)), ci:i});
   });
+  var af = row.afterPhoto;
+  if(af && (af.thumbDataUrl || af.fileId)){
+    out.push({ph:af, url:af.thumbDataUrl, kind:'AFTER', slot:'after', label:'증상 해결 후', ci:-1});
+  }
   return out;
 }
 var LB = {rowIdx:-1, at:0};
@@ -1687,15 +1775,17 @@ function refreshLightbox(){
   desc.disabled = cur.kind==='SN';
   document.getElementById('lbDescLabel').innerHTML = cur.kind==='SN'
     ? '사진 설명 <span class="opt">· S/N 사진에는 설명을 쓰지 않습니다</span>'
-    : '사진 설명 <span class="opt">· 엑셀 \'원인 내용\' 열에 들어갑니다</span>';
+    : (cur.kind==='AFTER'
+        ? '사진 설명 <span class="opt">· 엑셀 \'조치 내용\' 열에 들어갑니다</span>'
+        : '사진 설명 <span class="opt">· 엑셀 \'증상 내용\' 열에 들어갑니다</span>');
 
   var link = document.getElementById('lbOpen');
   var fid = (cur.ph && cur.ph.fileId) || '';
   if(fid){ link.style.display=''; link.href = driveViewUrl(fid); }
   else link.style.display='none';
 
-  document.getElementById('lbReplace').style.display = cur.kind==='SN' ? '' : 'none';
-  document.getElementById('lbAddCause').disabled = (row.causePhotos||[]).length >= MAX_CAUSE_UI;
+  /* 고정 3칸(sn·cause·after)만 교체할 수 있다 — 예전 기록의 추가 증상 사진은 빼기만 가능 */
+  document.getElementById('lbReplace').style.display = cur.slot ? '' : 'none';
 }
 function lbMove(step){ LB.at += step; refreshLightbox(); }
 function lbRemoveCurrent(){
@@ -1704,14 +1794,14 @@ function lbRemoveCurrent(){
   var cur = list[LB.at]; if(!cur) return;
   pushUndo('사진 빼기');
   if(cur.kind==='SN'){
-    row.imageDataUrl = null;
-    row.snPhoto = newPhoto('', 'SN', 1, '');
-    row.photoId = '';
+    clearSlotPhoto(row, 'sn');
+  } else if(cur.kind==='AFTER'){
+    clearSlotPhoto(row, 'after');
   } else {
     row.causePhotos.splice(cur.ci, 1);
     row.causePhotos.forEach(function(p,i){ p.seq = i+1; });
-    if(LB.at >= viewablePhotos(row).length) LB.at = Math.max(0, LB.at-1);
   }
+  if(LB.at >= viewablePhotos(row).length) LB.at = Math.max(0, LB.at-1);
   markDirty();
   paintPhotoCell(LB.rowIdx);
   renderBadges();
@@ -1747,7 +1837,7 @@ function bindDelegates(){
     var cell = e.target.closest && e.target.closest('.img-cell');
     if(!cell) return;
     var host = cell.closest('[data-row-idx]');
-    if(host) handleCellPaste(Number(host.getAttribute('data-row-idx')), e);
+    if(host) handleCellPaste(Number(host.getAttribute('data-row-idx')), e, cell.getAttribute('data-slot') || 'sn');
   });
 
   /* 사진 칸은 tabindex 만 있고 키 핸들러가 없어 키보드로는 열 수 없었다 */
@@ -1757,7 +1847,7 @@ function bindDelegates(){
     if(!cell) return;
     e.preventDefault();
     var host = cell.closest('[data-row-idx]');
-    if(host) activateCell(Number(host.getAttribute('data-row-idx')));
+    if(host) activateCell(Number(host.getAttribute('data-row-idx')), cell.getAttribute('data-slot'));
   });
 
   holder.addEventListener('click', function(e){
@@ -1765,8 +1855,9 @@ function bindDelegates(){
     if(!btn) return;
     var act = btn.getAttribute('data-act');
     var idx = Number(btn.getAttribute('data-idx'));
-    if(act==='cell'){ activateCell(idx); return; }
-    if(act==='zoom'){ e.stopPropagation(); openLightbox(idx, 0); return; }
+    var slot = btn.getAttribute('data-slot') || 'sn';
+    if(act==='cell'){ activateCell(idx, slot); return; }
+    if(act==='zoom'){ e.stopPropagation(); openLightbox(idx, slotViewIndex(idx, slot)); return; }
     if(act==='zoomcause'){
       e.stopPropagation();
       var row = rows[idx];
@@ -1774,8 +1865,7 @@ function bindDelegates(){
       openLightbox(idx, base<0?0:base);
       return;
     }
-    if(act==='unset'){ e.stopPropagation(); removeImage(idx, e); return; }
-    if(act==='addcause'){ e.stopPropagation(); openFilePicker(idx, 'cause'); return; }
+    if(act==='unset'){ e.stopPropagation(); removeImage(idx, e, slot); return; }
     if(act==='up'){ moveRow(idx,-1); return; }
     if(act==='down'){ moveRow(idx,1); return; }
     if(act==='del'){ removeRow(idx); return; }
@@ -1792,10 +1882,16 @@ function bindDelegates(){
     if(act==='filter-dup') setFilter('dup');
   });
 }
+/** 크게 보기 목록에서 그 칸의 사진이 몇 번째인지 */
+function slotViewIndex(idx, slotKey){
+  var at = viewablePhotos(rows[idx]).findIndex(function(v){ return v.slot===slotKey; });
+  return at<0 ? 0 : at;
+}
 /** 사진 칸의 기본 동작: 비어 있으면 파일 선택, 사진이 있으면 크게 보기 */
-function activateCell(idx){
-  if(snUrlOf(rows[idx])) openLightbox(idx, 0);
-  else openFilePicker(idx, 'sn');
+function activateCell(idx, slotKey){
+  var key = slotKey || 'sn';
+  if(slotUrl(rows[idx], key)) openLightbox(idx, slotViewIndex(idx, key));
+  else openFilePicker(idx, key);
 }
 function setFilter(f){
   VIEW.filter = f;
@@ -1904,22 +2000,28 @@ function confirmExportScope(list){
    예전에는 exportExcel 안에서 열 인덱스(colIdx=3)를 하드코딩하고 DOM·ExcelJS·canvas 에
    직접 의존해 헤드리스 테스트가 불가능했다. 이제 "무엇을 어디에 그릴지"를 먼저 계산하고
    exportExcel 은 그 계획대로 그리기만 한다(dashboard 임원보고 PPT 와 같은 방식). */
+/* [v3.5] 사진 열은 3장 고정 — S/N 사진 · 증상 사진 · 해결 후 사진.
+   예전 기록에만 있는 증상 사진 2장째 이후는 '추가 증상 사진 N' 열로 뒤에 붙는다.
+   새 기록만 내보내면 그 열은 아예 생기지 않아 정확히 3장 구성이 된다. */
 function buildLabelSheetPlan(list, opts){
   var o = opts || {};
-  var maxCause = Math.min(maxCauseCount(list), Number(o.maxCause)||5);
-  var headers = ['No.','병원명','장비 S/N','S/N 사진'];
-  for(var c=1;c<=maxCause;c++) headers.push('원인 사진 '+c);
-  headers.push('원인 내용','비고');
+  var maxExtra = Math.min(maxExtraCount(list), Number(o.maxExtra)||4);
+  var headers = ['No.','병원명','장비 S/N','S/N 사진','증상 사진'];
+  for(var c=1;c<=maxExtra;c++) headers.push('추가 증상 사진 '+c);
+  headers.push('해결 후 사진','증상 내용','조치 내용','비고');
 
   var PHOTO_COL_WIDTH = 16.4;   /* ≈120px */
-  var columns = [{width:6},{width:38},{width:16},{width:PHOTO_COL_WIDTH}];
-  for(var c2=0;c2<maxCause;c2++) columns.push({width:PHOTO_COL_WIDTH});
-  columns.push({width:34},{width:16});
+  var columns = [{width:6},{width:38},{width:16},{width:PHOTO_COL_WIDTH},{width:PHOTO_COL_WIDTH}];
+  for(var c2=0;c2<maxExtra;c2++) columns.push({width:PHOTO_COL_WIDTH});
+  columns.push({width:PHOTO_COL_WIDTH},{width:34},{width:34},{width:16});
 
   var snCol = 3;                        /* 0-based: No.(0) 병원명(1) S/N(2) S/N사진(3) */
-  var causeStart = 4;
-  var causeTextCol = causeStart + maxCause;
-  var noteCol = causeTextCol + 1;
+  var causeCol = 4;                     /* 증상 사진 */
+  var extraStart = 5;                   /* 예전 기록의 추가 증상 사진 */
+  var afterCol = extraStart + maxExtra; /* 해결 후 사진 */
+  var causeTextCol = afterCol + 1;      /* 증상 내용 */
+  var afterTextCol = causeTextCol + 1;  /* 조치 내용 */
+  var noteCol = afterTextCol + 1;
 
   var hasMeta = !!(o.date || o.author);
   var headerRowIdx = hasMeta ? 3 : 2;
@@ -1927,15 +2029,17 @@ function buildLabelSheetPlan(list, opts){
   var bodyRows = [], images = [], detailRows = [];
   list.forEach(function(row, i){
     var rowIdx = headerRowIdx + 1 + i;             /* 1-based 시트 행 */
-    var causes = (row.causePhotos||[]).slice(0, maxCause);
+    var causes = (row.causePhotos||[]).slice(0, maxExtra + 1);
+    var after = row.afterPhoto || null;
     var vals = new Array(headers.length);
     vals[0]=i+1; vals[1]=row.hospital||''; vals[2]=row.sn||'';
-    vals[snCol]='';
-    for(var k=0;k<maxCause;k++) vals[causeStart+k]='';   /* 사진 없는 셀은 공백 유지 */
-    /* 원인 내용은 사진 순번에 맞춰 '1. 설명 / 2. 설명' 형태 */
+    vals[snCol]=''; vals[causeCol]=''; vals[afterCol]='';
+    for(var k=0;k<maxExtra;k++) vals[extraStart+k]='';   /* 사진 없는 셀은 공백 유지 */
+    /* 증상 내용은 사진 순번에 맞춰 '1. 설명 / 2. 설명' 형태(예전 기록 대응) */
     vals[causeTextCol] = causes.map(function(ph,ci){
       var d=String(ph.desc||'').trim(); return d ? ((ci+1)+'. '+d) : '';
     }).filter(Boolean).join(' / ');
+    vals[afterTextCol] = (after && String(after.desc||'').trim()) || '';
     vals[noteCol] = row.note||'';
     bodyRows.push({rowIdx:rowIdx, values:vals});
 
@@ -1953,16 +2057,27 @@ function buildLabelSheetPlan(list, opts){
     }
     causes.forEach(function(ph, ci){
       var detailRowIdx = detailRows.length + 2;
-      detailRows.push([row.hospital||'', row.sn||'', '원인', ci+1, '', ph.desc||'', driveViewUrl(ph.fileId||'')]);
+      detailRows.push([row.hospital||'', row.sn||'', ci===0?'증상':'추가 증상', ci+1, '',
+        ph.desc||'', driveViewUrl(ph.fileId||'')]);
       if(ph.thumbDataUrl){
-        images.push({rowIdx:rowIdx, col:causeStart+ci, src:ph.thumbDataUrl,
+        images.push({rowIdx:rowIdx, col:(ci===0 ? causeCol : extraStart+ci-1), src:ph.thumbDataUrl,
           fileId:ph.fileId||'', kind:'CAUSE', seq:ci+1, detailRowIdx:detailRowIdx});
       }
     });
+    if(after && (after.thumbDataUrl || after.fileId)){
+      var afterDetailRow = detailRows.length + 2;
+      detailRows.push([row.hospital||'', row.sn||'', '해결 후', 1, '', after.desc||'',
+        driveViewUrl(after.fileId||'')]);
+      if(after.thumbDataUrl){
+        images.push({rowIdx:rowIdx, col:afterCol, src:after.thumbDataUrl,
+          fileId:after.fileId||'', kind:'AFTER', seq:1, detailRowIdx:afterDetailRow});
+      }
+    }
   });
 
-  return {maxCause:maxCause, headers:headers, columns:columns, headerRowIdx:headerRowIdx,
-          hasMeta:hasMeta, snCol:snCol, causeStart:causeStart, causeTextCol:causeTextCol,
+  return {maxExtra:maxExtra, headers:headers, columns:columns, headerRowIdx:headerRowIdx,
+          hasMeta:hasMeta, snCol:snCol, causeCol:causeCol, extraStart:extraStart,
+          afterCol:afterCol, causeTextCol:causeTextCol, afterTextCol:afterTextCol,
           noteCol:noteCol, bodyRows:bodyRows, images:images,
           detailHeaders:['병원명','장비 S/N','사진 구분','순번','사진','설명','원본 링크'],
           detailRows:detailRows};
@@ -1986,7 +2101,7 @@ async function exportExcel(){
     var title = val('docTitle') || '주간 병원별 장비 Label List';
     var date = val('docDate');
     var author = val('docAuthor');
-    var plan = buildLabelSheetPlan(list, {date:date, author:author, maxCause:5});
+    var plan = buildLabelSheetPlan(list, {date:date, author:author, maxExtra:4});
 
     var wb = new ExcelJS.Workbook();
     var ws = wb.addWorksheet('장비 이력');
@@ -2095,7 +2210,8 @@ async function exportExcel(){
     var blob = new Blob([buf], {type:'application/octet-stream'});
     saveAs(blob, fileBaseName()+'.xlsx');
     setStatus('엑셀 파일 생성 완료 ('+list.length+'건) · 시트 기록 중…');
-    setStatus('엑셀 파일 생성 완료 ('+list.length+'건, 원인 사진 열 '+plan.maxCause+'개)' + await markDownloaded(list));
+    setStatus('엑셀 파일 생성 완료 ('+list.length+'건, 사진 3열'
+      + (plan.maxExtra ? (' + 예전 기록 추가 증상 '+plan.maxExtra+'열') : '') + ')' + await markDownloaded(list));
     DIRTY = false;
     toast('엑셀 파일을 만들었습니다 ('+list.length+'건).');
   }catch(err){
@@ -2301,10 +2417,9 @@ function bindControls(){
     if(cur && cur.ph && cur.kind!=='SN'){ cur.ph.desc = this.value; markDirty(); }
   });
   document.getElementById('lbReplace').addEventListener('click', function(){
-    if(LB.rowIdx>=0) openFilePicker(LB.rowIdx, 'sn');
-  });
-  document.getElementById('lbAddCause').addEventListener('click', function(){
-    if(LB.rowIdx>=0) openFilePicker(LB.rowIdx, 'cause');
+    if(LB.rowIdx<0) return;
+    var cur = viewablePhotos(rows[LB.rowIdx])[LB.at];
+    if(cur && cur.slot) openFilePicker(LB.rowIdx, cur.slot);
   });
   document.getElementById('lbRemove').addEventListener('click', lbRemoveCurrent);
 
