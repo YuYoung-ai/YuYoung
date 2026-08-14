@@ -18,6 +18,7 @@ const G = read('handover_gas.gs');
 const H = read('handover.html');
 const L = read('label.html');
 const SW = read('sw.js');
+const PHOTO_SRC = read('js/baz-photo.js');
 const BazPhoto = require_('../js/baz-photo.js');
 const BazHandover = require_('../js/baz-handover-core.js');
 
@@ -147,9 +148,9 @@ ck('서버는 payload 의 fileId 를 읽지 않고 시트에서 결정한다',
   const resolve = gasFn(['hvResolvePhotos_', 'photoFind_'], 'hvResolvePhotos_', {
     photoSheetIfReady_: () => ({}),
     photoReadAll_: () => ([
-      { recordId: 'rec_1', photoId: 'sn1', fileId: 'FSN', status: 'ORPHAN', at: 't', _row: 2 },
-      { recordId: 'rec_1', photoId: 'c1', fileId: 'FC1', status: 'ORPHAN', at: 't', _row: 3 },
-      { recordId: 'other', photoId: 'x9', fileId: 'FX', status: 'ORPHAN', at: 't', _row: 4 }
+      { recordId: 'rec_1', photoId: 'sn1', fileId: 'FSN', kind: 'SN', status: 'ORPHAN', at: 't', _row: 2 },
+      { recordId: 'rec_1', photoId: 'c1', fileId: 'FC1', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 3 },
+      { recordId: 'other', photoId: 'x9', fileId: 'FX', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 4 }
     ]),
     SNAP: { KIND_SN: 'SN', KIND_CAUSE: 'CAUSE', MAX_CAUSE: 5, ST_ORPHAN: 'ORPHAN', ST_OK: 'OK' },
     SNAP_ERR_SETUP: 'setup'
@@ -168,6 +169,14 @@ ck('서버는 payload 의 fileId 를 읽지 않고 시트에서 결정한다',
   const noSn = resolve('rec_1', [{ clientPhotoId: 'c1', kind: 'CAUSE', seq: 1 }]);
   ck('연결 실행: S/N 사진이 없으면 거부된다',
     noSn.ok === false && /정확히 1장/.test(noSn.error));
+  const duplicate = resolve('rec_1', [
+    { clientPhotoId: 'sn1', kind: 'SN', seq: 1 }, { clientPhotoId: 'sn1', kind: 'CAUSE', seq: 1 }]);
+  ck('연결 실행: 같은 clientPhotoId 중복 참조를 거부한다',
+    duplicate.ok === false && /중복 참조/.test(duplicate.error));
+  const wrongKind = resolve('rec_1', [
+    { clientPhotoId: 'sn1', kind: 'SN', seq: 1 }, { clientPhotoId: 'c1', kind: 'SN', seq: 1 }]);
+  ck('연결 실행: 업로드 당시 사진 구분과 다른 참조를 거부한다',
+    wrongKind.ok === false && /사진 구분/.test(wrongKind.error));
 }
 
 const doPost = grab(G, 'doPost');
@@ -183,8 +192,15 @@ ck('사진 결과는 photos 배열로 추가만 하고 기존 필드를 지우�
   /photos: photoLinked, recordId: reqId,/.test(doPost));
 ck('기록 ID 는 롤백 대상(put_)으로 메인 시트에 기록한다',
   /if\(recCol && reqId\) put_\(recCol, reqId\);/.test(doPost));
-ck('사진 연결은 행이 확정된 뒤에만 OK 로 승격한다',
-  doPost.indexOf('committed = true') < doPost.indexOf('hvCommitPhotos_'));
+ck('기록 ID 열 누락은 메인 행을 쓰기 전에 거부한다',
+  doPost.indexOf("var recCol = colBy_(hdr, REC_ID_COLS)") < doPost.indexOf("var row = lastDataRow_(sh, hdr) + 1"));
+ck('사진 메타 연결까지 성공한 뒤에만 행을 최종 확정한다',
+  doPost.indexOf('hvCommitPhotos_') < doPost.indexOf('committed = true'));
+ck('행 확정 전 실패는 같은 recordId의 재시도를 막는 캐시에 저장하지 않는다',
+  (doPost.match(/reqPut_\(reqId/g)||[]).length === 1 &&
+  doPost.indexOf('reqPut_(reqId') > doPost.indexOf('var out ='));
+ck('클라이언트는 S/N과 원인 사진 참조를 함께 보내고 base64는 최종 payload에서 제외한다',
+  /photo:''/.test(H) && /\(snRef\?\[snRef\]:\[\]\)\.concat\(causeRefs\(\)\)/.test(H));
 ck('최종 저장 실패 시 사진을 즉시 삭제하지 않는다(ORPHAN 유지 → 재시도 가능)',
   !/photoDiscard_\(linkPhotos/.test(doPost) && /photo-ref-invalid/.test(doPost));
 ck('클라이언트는 저장 실패 후에도 같은 recordId 를 유지한다',
@@ -259,6 +275,8 @@ ck('IntersectionObserver 로 보이는 사진부터 받는다',
 ck('같은 Drive 파일은 캐시에서 재사용한다', /PHOTO_CACHE\[ph\.fileId\]/.test(L));
 ck('실패 사진에 재시도 버튼을 제공한다',
   /function retryPhoto/.test(L) && /onclick="retryPhoto\(/.test(L));
+ck('실패 사진 한 장 재시도는 다른 미로딩·실패 사진을 함께 요청하지 않는다',
+  /targets:\[\{row:rowIdx, pi:photoIdx, ph:ph\}\]/.test(grab(L, 'retryPhoto')));
 ck('기존 단일 S/N 데이터도 정상 표시된다(구버전 서버 폴백)',
   /r\.photoId \? \[\{fileId:r\.photoId, kind:'SN', seq:1, desc:''\}\] : \[\]/.test(L));
 ck('원인 사진 여러 장을 표시하는 UI 가 있다',
@@ -308,6 +326,12 @@ section('Excel 동적 사진 열 · 상세 시트');
     p.detailHeaders.join('|') === '병원명|장비 S/N|사진 구분|순번|사진|설명|원본 링크' &&
     p.detailRows.length === 8 &&
     /^https:\/\/drive\.google\.com\/file\/d\/CA0\/view$/.test(p.detailRows[1][6]));
+  const missed = mk('M', ['실패 사진', '정상 사진'], true);
+  missed.causePhotos[0].thumbDataUrl = null;
+  const mp = P.plan([missed], {});
+  const secondCause = mp.images.find(im => im.kind === 'CAUSE' && im.seq === 2);
+  ck('중간 사진 로딩 실패가 있어도 다음 사진의 상세 행이 밀리지 않는다',
+    secondCause && secondCause.detailRowIdx === 4 && mp.detailRows[2][5] === '정상 사진');
 
   const only = P.plan([mk('Z', [], true)], {});
   ck('기존 S/N 사진 1장만 있는 데이터도 같은 구조로 출력된다',
@@ -394,7 +418,13 @@ ck('업로드하지 못한 원인 사진이 있으면 저장을 막는다',
   BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: true, causePending: 1 })
     .errors.some(e => e.field === 'causePhoto'));
 ck('저장 완료 전 화면을 닫으면 경고한다',
-  /beforeunload/.test(H) && /function hasUnfinishedPhotoWork/.test(H));
+  /beforeunload/.test(H) && /function hasUnfinishedPhotoWork/.test(H) &&
+  /return !!SN_PHOTO \|\| CAUSE_SLOTS\.length>0;/.test(H));
+ck('S/N 사진도 개별 압축·업로드 후 참조로 최종 저장한다',
+  /BazPhoto\.compress\(file,\{kind:'SN'\}\)/.test(H) &&
+  /uploadPhotoSlot\([^\n]+, 'SN'\)/.test(H) && /function snPhotoRef/.test(H));
+ck('브라우저 압축은 실제 canvas.toBlob 경로를 사용한다',
+  /canvas\.toBlob\(/.test(PHOTO_SRC) && /function blobDataUrl/.test(PHOTO_SRC));
 ck('원인 사진 슬롯마다 상태를 표시한다(압축·업로드·완료·실패·재시도)',
   /압축 중…/.test(H) && /업로드 중…/.test(H) && /'완료'/.test(H) && /재시도/.test(H));
 ck('모바일 촬영을 위해 원인 사진에 capture 를 적용한다',
@@ -404,9 +434,9 @@ ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 화면과 코드에 남긴�
   /\[보안 주의\]/.test(G));
 ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
-ck('서비스워커 캐시 버전이 133 이상이다',
-  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 133);
-ck('GAS 버전이 3.4.0 으로 올라갔다', /ver:'3\.4\.0'/.test(G));
+ck('서비스워커 캐시 버전이 134 이상이다',
+  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 134);
+ck('GAS 버전이 3.4.1 로 올라갔다', /ver:'3\.4\.1'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);

@@ -114,6 +114,32 @@
     return canvas;
   }
 
+  function canvasJpeg(canvas, quality) {
+    return new Promise(function (resolve, reject) {
+      if (canvas.toBlob) {
+        canvas.toBlob(function (blob) {
+          if (!blob) { reject(new Error('사진 압축 결과를 만들지 못했습니다')); return; }
+          resolve({ blob: blob, bytes: blob.size, quality: quality, dataUrl: '' });
+        }, 'image/jpeg', quality);
+        return;
+      }
+      /* 구형 브라우저 폴백 — 이 경로에서만 dataURL 을 즉시 만든다. */
+      try {
+        var url = canvas.toDataURL('image/jpeg', quality);
+        resolve({ blob: null, bytes: dataUrlBytes(url), quality: quality, dataUrl: url });
+      } catch (e) { reject(e); }
+    });
+  }
+
+  function blobDataUrl(blob) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(r.error || new Error('압축 사진을 읽지 못했습니다')); };
+      r.readAsDataURL(blob);
+    });
+  }
+
   /**
    * 파일 → 목표 용량에 맞춘 JPEG dataURL.
    * 반환 {dataUrl, bytes, quality, width, height, over}
@@ -128,30 +154,39 @@
     if (!canUseDom()) return Promise.reject(new Error('브라우저 환경이 아닙니다'));
 
     return loadImage(file).then(function (got) {
-      try {
-        function renderAt(dim) {
-          var size = fitSize(got.img.width, got.img.height, dim);
-          var canvas = drawTo(got.img, size.w, size.h);
-          var cache = {};
-          var pick = chooseQuality(function (q) {
-            cache[q] = canvas.toDataURL('image/jpeg', q);
-            return dataUrlBytes(cache[q]);
-          }, { targetBytes: target, softBytes: soft, minQuality: minQ });
-          return { pick: pick, dataUrl: cache[pick.quality], size: size };
+      function renderAt(dim) {
+        var size = fitSize(got.img.width, got.img.height, dim);
+        var canvas = drawTo(got.img, size.w, size.h);
+        var steps = QUALITY_STEPS.filter(function (q) { return q >= minQ; });
+        if (!steps.length) steps = [minQ];
+        var idx = 0, last = null;
+        function attempt() {
+          var q = steps[idx++];
+          return canvasJpeg(canvas, q).then(function (enc) {
+            last = enc;
+            if (enc.bytes <= soft) { enc.reason = 'soft'; enc.over = false; return enc; }
+            if (enc.bytes <= target) { enc.reason = 'target'; enc.over = false; return enc; }
+            if (idx < steps.length) return attempt();
+            enc.reason = 'min-quality'; enc.over = true; return enc;
+          });
         }
-        var r = renderAt(maxDim);
-        /* 최저 품질에서도 목표를 넘으면 해상도를 한 단계 줄여 한 번만 재시도한다 */
-        if (r.pick.over) {
-          var r2 = renderAt(shrinkDim(maxDim));
-          if (r2.pick.bytes < r.pick.bytes) r = r2;
-        }
-        return {
-          dataUrl: r.dataUrl, bytes: r.pick.bytes, quality: r.pick.quality,
-          width: r.size.w, height: r.size.h, over: !!r.pick.over
-        };
-      } finally {
-        try { URL.revokeObjectURL(got.url); } catch (e) {}
+        return attempt().then(function (enc) { return { enc: enc || last, size: size }; });
       }
+
+      return renderAt(maxDim).then(function (r) {
+        if (!r.enc.over) return r;
+        return renderAt(shrinkDim(maxDim)).then(function (r2) {
+          return r2.enc.bytes < r.enc.bytes ? r2 : r;
+        });
+      }).then(function (r) {
+        var data = r.enc.dataUrl ? Promise.resolve(r.enc.dataUrl) : blobDataUrl(r.enc.blob);
+        return data.then(function (url) {
+          return { dataUrl:url, bytes:r.enc.bytes, quality:r.enc.quality,
+            width:r.size.w, height:r.size.h, over:!!r.enc.over };
+        });
+      }).finally(function () {
+        try { URL.revokeObjectURL(got.url); } catch (e) {}
+      });
     });
   }
 

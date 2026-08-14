@@ -280,6 +280,7 @@ body.is-dirty .dirty-badge{display:inline-block}
           <input type="file" accept="image/*" id="snPhotoFile" aria-describedby="snPhotoState">
         </div>
         <div class="hint" id="snPhotoState" role="status" aria-live="polite"></div>
+        <button type="button" class="btn-muted btn-sm" id="snPhotoRetry" style="display:none">사진 업로드 재시도</button>
         <div class="snphoto-prev" id="snPhotoPrev">
           <img id="snPhotoImg" src="" alt="첨부한 장비 S/N 사진 미리보기">
           <button type="button" class="rm" id="snPhotoRemove" aria-label="첨부한 사진 삭제">✕</button>
@@ -583,6 +584,10 @@ var CAUSE_MAX = (window.BazPhoto && BazPhoto.MAX_CAUSE) || 5;
 var CAUSE_SLOTS = [];        /* {id, seq, dataUrl, desc, state, err, fileId, seqGen} */
 var RECORD_ID = '';          /* 기록 1건의 수명 동안 유지되는 조인 키 */
 var CAUSE_BUSY = 0;
+var SN_PHOTO_ID = '';        /* 신규 경로의 clientPhotoId */
+var SN_PHOTO_FILE_ID = '';   /* 화면 상태 확인용 — 최종 payload 에는 싣지 않는다 */
+var SN_PHOTO_UPLOAD_STATE = 'idle';  /* idle|compress|upload|ok|err */
+var SN_PHOTO_UPLOAD_ERR = '';
 
 /* recordId 는 저장 성공 후 새 기록을 시작할 때만 새로 만든다.
    savecheck·재전송까지 같은 값을 유지해야 서버가 같은 사진을 다시 찾을 수 있다. */
@@ -602,9 +607,39 @@ function causeRefs(){
 }
 function causeSay(msg){ var el=document.getElementById('causeState'); if(el) el.textContent=msg||''; }
 
+/* 결과 불명에서도 사진 변경을 잠근다. 저장이 이미 끝났을 수 있는 recordId에
+   새 사진을 올리면 재확인 성공 뒤 그 사진이 다른 기록과 섞이거나 유실될 수 있다. */
+function photoControlsLocked(){
+  return SAVE_STATE===BazHandover.SAVE.SAVING ||
+         SAVE_STATE===BazHandover.SAVE.CHECKING ||
+         SAVE_STATE===BazHandover.SAVE.UNKNOWN;
+}
+
+/** S/N·원인 공통 개별 업로드. 최종 저장에는 fileId가 아니라 clientPhotoId만 보낸다. */
+function uploadPhotoSlot(slot, kind){
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+  var form=readForm();
+  var body={ action:'photo_add', recordId:recordId(), clientPhotoId:slot.id,
+             uploadReqId:(window.BazPhoto?BazPhoto.newUploadReqId():slot.id),
+             kind:kind, seq:slot.seq||1, hosp:form.hosp, sn:form.sn, date:form.date,
+             desc:slot.desc||'', dataUrl:slot.dataUrl, token:token };
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 30000):null;
+  return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify(body), signal:ctl?ctl.signal:undefined})
+    .then(function(r){ if(timer){clearTimeout(timer);timer=null;} return r.text(); })
+    .then(function(txt){
+      if(/^\s*</.test(txt)) throw new Error('서버가 데이터 대신 페이지를 보냈습니다 (잠시 후 재시도)');
+      var d; try{ d=JSON.parse(txt); }catch(e){ throw new Error('응답을 해석하지 못했습니다'); }
+      if(!d || d.success!==true) throw new Error((d&&d.error)||'업로드 실패');
+      return d.fileId||'';
+    })
+    .catch(function(e){ if(timer){clearTimeout(timer);timer=null;} throw e; });
+}
+
 function renderCauseGrid(){
   var g=el('causeGrid'); if(!g) return;
-  var locked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
+  var locked=photoControlsLocked();
   g.innerHTML='';
   CAUSE_SLOTS.forEach(function(s, i){
     var d=document.createElement('div');
@@ -654,24 +689,7 @@ function renderCauseGrid(){
 
 /** 사진 1장 업로드 — 같은 clientPhotoId 로 재시도하면 서버가 중복 파일을 만들지 않는다 */
 function causeUpload(slot){
-  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  var form=readForm();
-  var body={ action:'photo_add', recordId:recordId(), clientPhotoId:slot.id,
-             uploadReqId:(window.BazPhoto?BazPhoto.newUploadReqId():slot.id),
-             kind:'CAUSE', seq:slot.seq, hosp:form.hosp, sn:form.sn, date:form.date,
-             desc:slot.desc||'', dataUrl:slot.dataUrl, token:token };
-  var ctl=('AbortController' in window)?new AbortController():null;
-  var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 30000):null;
-  return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify(body), signal:ctl?ctl.signal:undefined})
-    .then(function(r){ if(timer){clearTimeout(timer);timer=null;} return r.text(); })
-    .then(function(txt){
-      if(/^\s*</.test(txt)) throw new Error('서버가 데이터 대신 페이지를 보냈습니다 (잠시 후 재시도)');
-      var d; try{ d=JSON.parse(txt); }catch(e){ throw new Error('응답을 해석하지 못했습니다'); }
-      if(!d || d.success!==true) throw new Error((d&&d.error)||'업로드 실패');
-      return d.fileId||'';
-    })
-    .catch(function(e){ if(timer){clearTimeout(timer);timer=null;} throw e; });
+  return uploadPhotoSlot(slot, 'CAUSE');
 }
 
 /** 대기·실패 슬롯만 올린다. 이미 성공한 슬롯은 건드리지 않는다. */
@@ -703,6 +721,20 @@ function causeById(id){
 }
 function causeRetry(id){ var s=causeById(id); if(s && s.state==='err'){ s.state='pending'; causeFlush(); } }
 
+function abandonPhoto(photoId){
+  if(!photoId || !RECORD_ID) return Promise.resolve();
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+  try{
+    return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'photo_abandon', recordId:RECORD_ID, clientPhotoId:photoId, token:token})})
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        var d; try{ d=JSON.parse(txt); }catch(e){ return; }
+        if(d && d.success===false) console.warn('[photo] 폐기 보류:', d.error||'알 수 없음');
+      }).catch(function(){});
+  }catch(e){ return Promise.resolve(); }
+}
+
 /** 삭제·교체 — 아직 기록에 연결되지 않은 사진은 서버에서도 폐기한다 */
 function causeRemove(id){
   var s=causeById(id); if(!s) return;
@@ -710,17 +742,17 @@ function causeRemove(id){
   CAUSE_SLOTS.forEach(function(x,i){ x.seq=i+1; });
   renderCauseGrid(); render(); scheduleDraftSave();
   if(s.state==='ok'){
-    var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
     /* 실패해도 무시한다 — 서버의 cleanupOrphanPhotos 가 나중에 정리한다 */
-    try{
-      fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify({action:'photo_abandon', recordId:recordId(), clientPhotoId:id, token:token})})
-        .catch(function(){});
-    }catch(e){}
+    abandonPhoto(id);
   }
 }
 
 function onCausePick(evt){
+  if(photoControlsLocked()){
+    evt.target.value='';
+    toast('기록 결과를 확인한 뒤 사진을 추가해 주세요');
+    return;
+  }
   var files=Array.prototype.slice.call((evt.target&&evt.target.files)||[]);
   evt.target.value='';
   if(!files.length) return;
@@ -758,11 +790,14 @@ function onCausePick(evt){
 }
 
 /** 모든 원인 사진을 폐기(새 기록 시작 시) */
-function clearCausePhotos(){
+function clearCausePhotos(opts){
+  var keepServer=!!(opts && opts.keepServer);
+  var old=CAUSE_SLOTS.slice();
   CAUSE_SLOTS=[];
   var g=el('causeGrid'); if(g) g.innerHTML='';
   causeSay('');
   renderCauseGrid();
+  if(!keepServer){ old.forEach(function(s){ if(s.state==='ok') abandonPhoto(s.id); }); }
 }
 
 /* [경합] 사진 A 가 붙은 상태에서 B 로 교체하는 도중 저장하면 A 가 전송되거나,
@@ -784,14 +819,14 @@ function snPhotoBusy(on){
   var z=el('snPhotoZone'); if(z) z.setAttribute('aria-busy', on?'true':'false');
 }
 
-/* 저장·결과 확인 중에는 서버로 보낸 사진을 교체하거나 지울 수 없게 한다.
-   결과 불명 상태에서 잠금이 풀린 뒤 새 사진을 붙인 경우에는 applySaveResult가
-   LAST_SENT_PHOTO와 비교해 새 사진을 삭제하지 않는다. */
+/* 저장·결과 확인·결과 불명 중에는 서버로 보낸 사진을 교체하거나 지울 수 없게 한다.
+   결과 불명은 재확인 또는 동일 요청 재전송으로 먼저 해소해야 한다. */
 function syncPhotoControls(){
-  var locked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
-  var f=el('snPhotoFile'), rm=el('snPhotoRemove');
+  var locked=photoControlsLocked();
+  var f=el('snPhotoFile'), rm=el('snPhotoRemove'), rt=el('snPhotoRetry');
   if(f) f.disabled=locked;
   if(rm) rm.disabled=locked;
+  if(rt) rt.disabled=locked || SN_PHOTO_BUSY;
   snPhotoBusy(SN_PHOTO_BUSY);
   try{ renderCauseGrid(); }catch(e){}   /* 원인 사진 슬롯도 같은 규칙으로 잠근다 */
 }
@@ -802,7 +837,7 @@ function syncPhotoControls(){
 function hasUnfinishedPhotoWork(){
   if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING) return true;
   if(SN_PHOTO_BUSY || CAUSE_BUSY>0) return true;
-  return CAUSE_SLOTS.length>0;
+  return !!SN_PHOTO || CAUSE_SLOTS.length>0;
 }
 window.addEventListener('beforeunload', function(e){
   if(!hasUnfinishedPhotoWork()) return;
@@ -811,22 +846,64 @@ window.addEventListener('beforeunload', function(e){
   return '';
 });
 
+function snPhotoRef(){
+  return (SN_PHOTO_UPLOAD_STATE==='ok' && SN_PHOTO_ID)
+    ? {clientPhotoId:SN_PHOTO_ID, kind:'SN', seq:1, desc:''} : null;
+}
+
+function uploadSnPhoto(photoId, generation){
+  if(!SN_PHOTO || !photoId) return Promise.reject(new Error('업로드할 S/N 사진이 없습니다'));
+  SN_PHOTO_UPLOAD_STATE='upload'; SN_PHOTO_UPLOAD_ERR='';
+  el('snPhotoLabel').textContent='⏳ S/N 사진 업로드 중…';
+  el('snPhotoRetry').style.display='none';
+  snPhotoSay('압축이 끝났습니다. 사진을 업로드하고 있습니다.');
+  snPhotoBusy(true);
+  return uploadPhotoSlot({id:photoId,seq:1,desc:'',dataUrl:SN_PHOTO}, 'SN')
+    .then(function(fileId){
+      if(SN_PHOTO_ID!==photoId || (generation && !snPhotoSeq.isCurrent(generation))){
+        abandonPhoto(photoId); return;
+      }
+      SN_PHOTO_FILE_ID=fileId; SN_PHOTO_UPLOAD_STATE='ok';
+      el('snPhotoLabel').textContent='✅ 업로드 완료 · 다시 누르면 교체';
+      snPhotoSay('S/N 사진 업로드가 완료되었습니다.');
+      clearFieldError('snPhoto'); snPhotoZoneState(); render();
+    })
+    .catch(function(e){
+      if(SN_PHOTO_ID!==photoId) return;
+      SN_PHOTO_UPLOAD_STATE='err'; SN_PHOTO_UPLOAD_ERR=String(e&&e.message||e);
+      el('snPhotoLabel').textContent='⚠️ S/N 사진 업로드 실패';
+      el('snPhotoRetry').style.display='inline-flex';
+      snPhotoSay('업로드에 실패했습니다: '+SN_PHOTO_UPLOAD_ERR);
+      toast('S/N 사진 업로드 실패 — 재시도해 주세요');
+    })
+    .finally(function(){ if(SN_PHOTO_ID===photoId) snPhotoBusy(false); });
+}
+
+function retrySnPhoto(){
+  if(!SN_PHOTO || !SN_PHOTO_ID || SN_PHOTO_BUSY) return;
+  uploadSnPhoto(SN_PHOTO_ID, null);
+}
+
 async function onSnPhoto(evt){
-  if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING){
+  if(photoControlsLocked()){
     evt.target.value='';
-    toast('기록 확인이 끝난 뒤 사진을 교체해 주세요');
+    toast('기록 결과를 확인한 뒤 사진을 교체해 주세요');
     return;
   }
   var file=evt.target.files&&evt.target.files[0];
   evt.target.value='';                   /* 같은 파일 재선택도 동작하도록 초기화 */
   if(!file) return;
+  var oldPhotoId=SN_PHOTO_ID, oldState=SN_PHOTO_UPLOAD_STATE;
   var id=snPhotoSeq.next('photo');
+  var photoId=(window.BazPhoto?BazPhoto.newPhotoId():('sn_'+Date.now()));
+  SN_PHOTO_ID=photoId; SN_PHOTO_FILE_ID=''; SN_PHOTO_UPLOAD_STATE='compress'; SN_PHOTO_UPLOAD_ERR='';
   var lab=el('snPhotoLabel');
   lab.textContent='⏳ 사진 처리 중…';
   snPhotoSay('사진을 처리하고 있습니다. 잠시만 기다려 주세요.');
   snPhotoBusy(true);
   try{
-    var jpeg=await snPhotoToJpeg(file);
+    var packed=window.BazPhoto ? await BazPhoto.compress(file,{kind:'SN'}) : {dataUrl:await snPhotoToJpeg(file)};
+    var jpeg=packed.dataUrl;
     if(!snPhotoSeq.isCurrent(id)) return;      /* 그 사이 다른 사진으로 바뀜 → 옛 결과 폐기 */
     if(jpeg.length*3/4 > SNP_MAX_BYTES){
       toast('사진 용량이 큽니다 — 조금 더 멀리서 다시 촬영해 주세요');
@@ -838,32 +915,39 @@ async function onSnPhoto(evt){
     if(SAVED_SNAPSHOT) UNSAVED_PHOTO=true;
     el('snPhotoImg').src=jpeg;
     el('snPhotoPrev').style.display='block';
-    lab.textContent='✅ 첨부됨 · 다시 누르면 교체';
-    snPhotoSay('사진이 첨부되었습니다.');
-    clearFieldError('snPhoto');
+    lab.textContent='⏳ S/N 사진 업로드 중…';
+    snPhotoSay('사진 압축이 끝났습니다. 업로드를 시작합니다.');
     snPhotoZoneState();
     render();
+    await uploadSnPhoto(photoId, id);
+    if(SN_PHOTO_UPLOAD_STATE==='ok' && oldPhotoId && oldState==='ok') abandonPhoto(oldPhotoId);
   }catch(e){
     if(!snPhotoSeq.isCurrent(id)) return;
+    SN_PHOTO_UPLOAD_STATE='err'; SN_PHOTO_UPLOAD_ERR=String(e&&e.message||e);
     toast('사진 처리 실패 — '+e.message);
     lab.textContent='📷 S/N 라벨 촬영 · 사진 선택';
     snPhotoSay('사진 처리에 실패했습니다: '+e.message);
   }finally{
-    if(snPhotoSeq.isCurrent(id)) snPhotoBusy(false);
+    if(snPhotoSeq.isCurrent(id) && SN_PHOTO_UPLOAD_STATE!=='upload') snPhotoBusy(false);
   }
 }
 
-function clearSnPhoto(){
+function clearSnPhoto(opts){
+  var keepServer=!!(opts && opts.keepServer);
+  var oldId=SN_PHOTO_ID, oldState=SN_PHOTO_UPLOAD_STATE;
   snPhotoSeq.cancel();                 /* 진행 중이던 변환 결과가 되살아나지 않게 */
   SN_PHOTO=null;
+  SN_PHOTO_ID=''; SN_PHOTO_FILE_ID=''; SN_PHOTO_UPLOAD_STATE='idle'; SN_PHOTO_UPLOAD_ERR='';
   UNSAVED_PHOTO=false;
   el('snPhotoImg').src='';
   el('snPhotoPrev').style.display='none';
   el('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
+  el('snPhotoRetry').style.display='none';
   snPhotoSay('');
   snPhotoBusy(false);
   snPhotoZoneState();
   render();
+  if(!keepServer && oldId && oldState==='ok') abandonPhoto(oldId);
 }
 
 /* 필수 항목 표시 갱신 — 사진이 없을 때만 붉은 점선으로 눈에 띄게 둔다 */
@@ -1338,10 +1422,10 @@ function applySaveResult(res){
     var textChanged=BazHandover.isDirty(sent, current);
     if(!replacement){
       if(SN_PHOTO===LAST_SENT_PHOTO){
-        clearSnPhoto();
+        clearSnPhoto({keepServer:true});
         /* 사진이 기록에 연결됐으므로 이 recordId 의 수명은 끝났다.
            다음 기록은 새 recordId 로 시작해야 사진이 섞이지 않는다. */
-        clearCausePhotos();
+        clearCausePhotos({keepServer:true});
         resetRecordId();
       }
     }else{
@@ -1491,7 +1575,7 @@ async function saveToSheet(){
   }
 
   var form=readForm();
-  var v=BazHandover.validate(form, {hasPhoto:!!SN_PHOTO, photoBusy:SN_PHOTO_BUSY,
+  var v=BazHandover.validate(form, {hasPhoto:SN_PHOTO_UPLOAD_STATE==='ok', photoBusy:SN_PHOTO_BUSY,
     causeCount:causeCount(), causePending:causePending(), causeBusy:CAUSE_BUSY>0});
   if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
   clearFieldErrors();
@@ -1513,10 +1597,11 @@ async function saveToSheet(){
   var reqId=recordId();
   LAST_REQ_ID=reqId;
   var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  /* [v3.4] 원인 사진은 이미 photo_add 로 올라가 있으므로 참조만 보낸다.
-     S/N 사진은 아직 base64 경로를 유지한다(기존 서버·기존 클라이언트 호환). */
-  var payload=BazHandover.buildPayload(form, {photo:SN_PHOTO, photoRequired:true,
-    reqId:reqId, token:token, photos:causeRefs()});
+  /* [v3.4.1] S/N과 원인 사진을 모두 photo_add 로 미리 올렸으므로 최종 저장에는
+     clientPhotoId 참조만 보낸다. 기존 snPhoto Base64 수신은 서버 하위 호환으로만 남긴다. */
+  var snRef=snPhotoRef();
+  var payload=BazHandover.buildPayload(form, {photo:'', photoRequired:true,
+    reqId:reqId, token:token, photos:(snRef?[snRef]:[]).concat(causeRefs())});
   LAST_SENT_PHOTO=SN_PHOTO;
   LAST_SENT_SNAPSHOT=BazHandover.snapshot(form);
   LAST_SAVE_PAYLOAD=payload;
@@ -1916,6 +2001,7 @@ function bindAll(){
   /* 사진 */
   el('snPhotoFile').addEventListener('change', onSnPhoto);
   el('snPhotoRemove').addEventListener('click', clearSnPhoto);
+  el('snPhotoRetry').addEventListener('click', retrySnPhoto);
   var causeInput=el('causeAddFile');
   if(causeInput) causeInput.addEventListener('change', onCausePick);
   renderCauseGrid();

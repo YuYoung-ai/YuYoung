@@ -531,7 +531,7 @@ function paintPhotoCell(idx){
 
 function loadPhotos(opts){
   var o=opts||{};
-  var targets=photoTargets(o.onlyVisible!==false && !o.all);
+  var targets=o.targets || photoTargets(o.onlyVisible!==false && !o.all);
   var total=targets.length;
   if(!total){ if(!o.quiet) setStatus(rows.length+'건 · 사진 준비 완료'); return Promise.resolve({done:0,failed:0}); }
 
@@ -586,7 +586,8 @@ function retryPhoto(rowIdx, photoIdx){
   var list=rowPhotos(r); var ph=list[photoIdx];
   if(!ph || ph.state==='loading') return;
   ph.state='idle';
-  loadPhotos({all:true, quiet:true}).then(function(){ paintPhotoCell(rowIdx); });
+  loadPhotos({targets:[{row:rowIdx, pi:photoIdx, ph:ph}], quiet:true})
+    .then(function(){ paintPhotoCell(rowIdx); });
 }
 
 /** Excel 생성 전 호출 — lazy loading 으로 아직 안 받은 사진을 전부 채운다.
@@ -848,23 +849,24 @@ function buildLabelSheetPlan(list, opts){
     bodyRows.push({rowIdx:rowIdx, values:vals});
 
     var snUrl = row.imageDataUrl || (row.snPhoto && row.snPhoto.thumbDataUrl);
-    if(snUrl){
-      images.push({rowIdx:rowIdx, col:snCol, src:snUrl,
-        fileId:(row.snPhoto&&row.snPhoto.fileId)||'', kind:'SN', seq:1});
-    }
-    causes.forEach(function(ph, ci){
-      if(!ph.thumbDataUrl) return;
-      images.push({rowIdx:rowIdx, col:causeStart+ci, src:ph.thumbDataUrl,
-        fileId:ph.fileId||'', kind:'CAUSE', seq:ci+1});
-    });
-
     /* 사진 상세 시트 — 원본 링크는 여기서 제공한다 */
-    if(snUrl){
+    var snFileId = (row.snPhoto&&row.snPhoto.fileId)||'';
+    if(snUrl || snFileId){
+      var snDetailRow = detailRows.length + 2;
       detailRows.push([row.hospital||'', row.sn||'', 'S/N', 1, '', (row.snPhoto&&row.snPhoto.desc)||'',
-        driveViewUrl((row.snPhoto&&row.snPhoto.fileId)||'')]);
+        driveViewUrl(snFileId)]);
+      if(snUrl){
+        images.push({rowIdx:rowIdx, col:snCol, src:snUrl,
+          fileId:snFileId, kind:'SN', seq:1, detailRowIdx:snDetailRow});
+      }
     }
     causes.forEach(function(ph, ci){
+      var detailRowIdx = detailRows.length + 2;
       detailRows.push([row.hospital||'', row.sn||'', '원인', ci+1, '', ph.desc||'', driveViewUrl(ph.fileId||'')]);
+      if(ph.thumbDataUrl){
+        images.push({rowIdx:rowIdx, col:causeStart+ci, src:ph.thumbDataUrl,
+          fileId:ph.fileId||'', kind:'CAUSE', seq:ci+1, detailRowIdx:detailRowIdx});
+      }
     });
   });
 
@@ -987,12 +989,12 @@ async function exportExcel(){
         });
       }
       /* 상세 시트 이미지 — 위에서 만든 image ID 를 재사용한다(중복 저장 없음) */
-      var dIdx = 0;
       for(var ii=0; ii<plan.images.length; ii++){
         var im2 = plan.images[ii];
+        if(!im2.detailRowIdx) continue;
         var id2 = await imageIdFor(im2.src, im2.fileId);
-        ds.addImage(id2, {tl:{col:4, row:dIdx+1}, br:{col:5, row:dIdx+2}, editAs:'oneCell'});
-        dIdx++;
+        var detailRow0 = im2.detailRowIdx - 1;
+        ds.addImage(id2, {tl:{col:4, row:detailRow0}, br:{col:5, row:detailRow0+1}, editAs:'oneCell'});
       }
     }
 

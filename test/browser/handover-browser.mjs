@@ -32,7 +32,9 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8099';
 const R = [], errs = [];
 const ck = (n, c, d) => R.push([c ? '✅' : '❌', n, d || '']);
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  executablePath: process.env.PLAYWRIGHT_CHROME || undefined
+});
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await ctx.addInitScript(() => {
   try {
@@ -60,6 +62,8 @@ page.on('dialog', d => d.accept());
 let scenario = 'ok';
 let postCount = 0;
 const saved = new Map();
+const photoAddRequests = [];
+const finalSaveRequests = [];
 
 await page.route('**yuyoung-ai.deno.net/**', r => r.fulfill({
   status: 200, contentType: 'application/json',
@@ -73,6 +77,15 @@ await page.route('**://script.google.com/**', async r => {
   if (req.method() === 'POST') {
     postCount++;
     const p = JSON.parse(req.postData() || '{}');
+    if (p.action === 'photo_add') {
+      photoAddRequests.push(p);
+      return j({ success: true, clientPhotoId: p.clientPhotoId,
+        fileId: 'F-' + p.kind + '-' + photoAddRequests.length, status: 'ORPHAN' });
+    }
+    if (p.action === 'photo_abandon') {
+      return j({ success: true, abandoned: true, clientPhotoId: p.clientPhotoId });
+    }
+    finalSaveRequests.push(p);
     if (scenario === 'photofail') {
       return j({ success: false, row: null, error: '사진 저장 실패 — 기록하지 않았습니다: Drive 오류',
                  photo: { required: true, saved: false, fileId: '', error: 'Drive 오류' } });
@@ -82,7 +95,7 @@ await page.route('**://script.google.com/**', async r => {
       return j({ success: true, row: 9, photo: { required: true, saved: false, fileId: '', error: '열 없음' } });
     }
     if (scenario === 'legacyphoto') return j({ success: true, row: 10 });
-    if (scenario === 'slowok') await new Promise(resolve => setTimeout(resolve, 900));
+    if (scenario === 'slowok') await new Promise(resolve => setTimeout(resolve, 1500));
     saved.set(p.reqId, { success: true, row: 100 + saved.size,
       photo: { required: true, saved: true, fileId: 'F1', error: '' },
       savedFields: { verUI: true, verHP: true, nozzleDate: true, result: true, remark: true, code: true, eqKind: true },
@@ -128,6 +141,13 @@ async function fillForm(hosp = '테스트병원') {
 async function attachPhoto() {
   await page.setInputFiles('#snPhotoFile', {
     name: 'sn.png', mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  });
+  await page.waitForTimeout(600);
+}
+async function attachCausePhoto() {
+  await page.setInputFiles('#causeAddFile', {
+    name: 'cause.png', mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
   });
   await page.waitForTimeout(600);
@@ -186,9 +206,21 @@ ck('필수 사진 없이 저장하면 필드 오류를 표시하고 전송하지
 
 /* 5. 사진 실패 → 사진 유지 · 복사/이어쓰기 비활성 */
 await attachPhoto();
+await attachCausePhoto();
+const uploadedKinds = photoAddRequests.slice(-2).map(p => p.kind).sort();
+ck('S/N과 원인 사진을 각각 photo_add로 먼저 업로드한다',
+  uploadedKinds.join(',') === 'CAUSE,SN', JSON.stringify(uploadedKinds));
 scenario = 'photofail';
 await page.click('#btnSave');
 await page.waitForTimeout(1200);
+const firstFinalPayload = finalSaveRequests.at(-1) || {};
+ck('최종 저장에는 Base64 없이 S/N·원인 사진 참조만 보낸다',
+  firstFinalPayload.snPhoto === '' && Array.isArray(firstFinalPayload.photos) &&
+  firstFinalPayload.photos.length === 2 &&
+  firstFinalPayload.photos.some(p => p.kind === 'SN') &&
+  firstFinalPayload.photos.some(p => p.kind === 'CAUSE') &&
+  firstFinalPayload.photos.every(p => !Object.prototype.hasOwnProperty.call(p, 'fileId')),
+  JSON.stringify(firstFinalPayload.photos));
 const photoFail = await page.evaluate(() => ({
   state: document.getElementById('saveStatus').className,
   photoShown: document.getElementById('snPhotoPrev').style.display,
@@ -229,7 +261,7 @@ ck('photo 확인 블록 없는 구버전 성공 응답을 거부한다',
 /* 6-c. 저장 진행 중 사진 교체·삭제 잠금 */
 scenario = 'slowok';
 const slowSave = page.click('#btnSave');
-await page.waitForTimeout(150);
+await page.waitForFunction(() => document.getElementById('saveStatus').classList.contains('wait'));
 const lockedPhoto = await page.evaluate(() => ({
   file: document.getElementById('snPhotoFile').disabled,
   remove: document.getElementById('snPhotoRemove').disabled,
@@ -252,6 +284,9 @@ const unknown = await page.evaluate(() => ({
   text: document.getElementById('saveStatus').textContent,
   copyDisabled: document.getElementById('btnCopy').disabled,
   photoShown: document.getElementById('snPhotoPrev').style.display,
+  snFileDisabled: document.getElementById('snPhotoFile').disabled,
+  snRemoveDisabled: document.getElementById('snPhotoRemove').disabled,
+  causeFileDisabled: document.getElementById('causeAddFile').disabled,
   acts: [...document.querySelectorAll('#saveActions button')].map(b => b.textContent)
 }));
 ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',
@@ -260,6 +295,9 @@ ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',
 ck('결과 불명이면 재확인·미기록 복사를 제공한다',
   unknown.acts.some(t => t.includes('다시 확인')) && unknown.acts.some(t => t.includes('미기록')),
   unknown.acts.join(' | '));
+ck('결과 불명 중에는 사진 교체·삭제·추가를 잠근다',
+  unknown.snFileDisabled && unknown.snRemoveDisabled && unknown.causeFileDisabled,
+  JSON.stringify(unknown));
 
 /* 8. 정상 저장 → 성공 · 사진 정리 · 복사 활성 · dirty 전환 */
 scenario = 'ok';
