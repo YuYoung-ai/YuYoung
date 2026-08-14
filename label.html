@@ -97,6 +97,9 @@ table.list tr.flag td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
 .col-no{width:42px}
 .col-hospital{min-width:190px}
 .col-sn{width:120px}
+.col-as{width:150px}
+.as-cat{font-size:10px;font-weight:700;color:var(--teal);line-height:1.2;margin-bottom:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .col-photo{width:224px}
 .col-note{width:150px}
 .col-actions{width:70px}
@@ -293,7 +296,8 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
     <div class="two">
       <div>
         <div class="hint">
-          엑셀에서 <b>병원명 → 장비 S/N → 비고</b> 3개 열을 복사(Ctrl+C)해 아래에 붙여넣으세요.<br>
+          엑셀에서 <b>병원명 → 장비 S/N → 비고 → A/S 항목</b> 열을 복사(Ctrl+C)해 아래에 붙여넣으세요.
+          (A/S 항목은 선택 — 없으면 3개 열만 붙여넣어도 됩니다)<br>
           한 줄에 한 병원, 열은 Tab(또는 쉼표)으로 구분됩니다. (비고를 비우면 '병원 장비'로 채워집니다)
         </div>
         <textarea id="bulkText" placeholder="오가나셀피부과의원 청담 본점&#9;BV5026&#9;병원 장비&#10;더힐피부과의원 마포공덕&#9;BV5027&#9;데모 장비"></textarea>
@@ -328,7 +332,7 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
       <div class="toolbar-line">
         <div class="search-box">
           <span class="ico">🔎</span>
-          <input type="text" id="searchInput" placeholder="병원명 · S/N · 비고 검색" autocomplete="off">
+          <input type="text" id="searchInput" placeholder="병원명 · S/N · A/S 항목 · 비고 검색" autocomplete="off">
           <button type="button" class="clr" id="searchClear" title="검색어 지우기" style="display:none">✕</button>
         </div>
         <div class="chips" id="filterChips">
@@ -343,6 +347,7 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
           <option value="hospital">병원명 ㄱ→ㅎ</option>
           <option value="hospital-desc">병원명 ㅎ→ㄱ</option>
           <option value="sn">S/N 오름차순</option>
+        <option value="astype">A/S 항목순</option>
           <option value="nophoto">사진 미완 행 먼저</option>
         </select>
       </div>
@@ -456,6 +461,8 @@ function nextUid(){ UID_SEQ++; return 'r'+UID_SEQ+'_'+Date.now().toString(36); }
 function newRow(){
   return { uid:nextUid(),
            hospital:'', sn:'', note:'병원 장비', recordId:'',
+           asCat:'',                    /* A/S 대분류 — 시트에서만 들어온다(표에서는 읽기 전용) */
+           asType:'',                   /* A/S 소분류(유형) — handover 에서 고른 값 */
            imageDataUrl:null,            /* S/N 사진의 호환 alias — 직접 입력·PPT 가 쓴다 */
            photoId:'',                   /* 기존 단수 필드 호환 */
            snPhoto:newPhoto('', 'SN', 1, ''),
@@ -479,6 +486,14 @@ function maxCauseCount(list){
 function maxExtraCount(list){
   return Math.max(0, maxCauseCount(list) - 1);
 }
+/** A/S 항목 표시 — handover 의 itemText() 와 같은 '대분류 / 소분류' 형태 */
+function asItemText(row){
+  var c = String((row&&row.asCat)||'').trim();
+  var t = String((row&&row.asType)||'').trim();
+  if(c && t) return c + ' / ' + t;
+  return t || c;
+}
+
 /** 칸(sn·cause·after) → 그 칸의 사진 객체. cause 는 첫 장이 고정 칸이다. */
 function slotPhoto(row, key){
   if(!row) return null;
@@ -600,6 +615,7 @@ function draftPayload(includeLocal){
       if(!includeLocal && r.imageDataUrl) dropped++;
       return {
         h:r.hospital, s:r.sn, n:r.note, rid:r.recordId, pid:r.photoId,
+        ac:r.asCat, at:r.asType,
         sn:{ id:(r.snPhoto&&r.snPhoto.fileId)||'', d:(r.snPhoto&&r.snPhoto.desc)||'' },
         c:(r.causePhotos||[]).map(function(p){
           return { id:p.fileId||'', q:p.seq||1, d:p.desc||'', local:includeLocal?(p.thumbDataUrl||''):'' };
@@ -673,6 +689,7 @@ function restoreDraft(d){
     var r = newRow();
     r.hospital=x.h||''; r.sn=x.s||''; r.note=x.n||'병원 장비';
     r.recordId=x.rid||''; r.photoId=x.pid||'';
+    r.asCat=x.ac||''; r.asType=x.at||'';
     r.snPhoto = newPhoto((x.sn&&x.sn.id)||'', 'SN', 1, (x.sn&&x.sn.d)||'');
     if(x.local){ r.imageDataUrl=x.local; r.snPhoto.thumbDataUrl=x.local; r.snPhoto.state='ok'; }
     r.causePhotos = (x.c||[]).map(function(p,i){
@@ -739,11 +756,14 @@ function rowFlags(row, dup){
     noSn:    !s
   };
 }
+/* 검색 대상 — 병원명·S/N·비고에 더해 A/S 항목(대분류·소분류)까지 훑는다.
+   "누수"만 쳐도 그 증상으로 처리한 병원이 바로 걸리게 하기 위한 것이다. */
+function searchText(row){
+  return normKey([row.hospital, row.sn, row.note, row.asCat, row.asType].join(' '));
+}
 function matchesQuery(row, q){
   if(!q) return true;
-  return (normKey(row.hospital).indexOf(q)>=0
-       || normKey(row.sn).indexOf(q)>=0
-       || normKey(row.note).indexOf(q)>=0);
+  return searchText(row).indexOf(q)>=0;
 }
 /** 화면에 그릴 행의 "실제 rows 인덱스" 목록. 정렬은 rows 자체를 바꾸므로 여기서 하지 않는다. */
 function viewIndexes(){
@@ -773,6 +793,13 @@ function sortRows(mode){
     cmp = function(a,b){ return String(a.r.hospital||'').localeCompare(String(b.r.hospital||''), 'ko'); };
   } else if(mode==='sn'){
     cmp = function(a,b){ return String(a.r.sn||'').localeCompare(String(b.r.sn||''), 'ko', {numeric:true}); };
+  } else if(mode==='astype'){
+    /* A/S 항목이 빈 행은 뒤로 — 같은 증상끼리 붙여 놓고 보려는 것이 목적이다 */
+    cmp = function(a,b){
+      var x=asItemText(a.r), y=asItemText(b.r);
+      if(!x !== !y) return x ? -1 : 1;
+      return x.localeCompare(y, 'ko');
+    };
   } else {
     cmp = function(a,b){
       var fa=rowFlags(a.r,dup).photoIncomplete?0:1, fb=rowFlags(b.r,dup).photoIncomplete?0:1;
@@ -953,10 +980,11 @@ function parseBulkText(text){
     var hosp = (cols[0]||'').trim();
     var sn   = (cols[1]||'').trim();
     var note = (cols[2]||'').trim();
+    var asType = (cols[3]||'').trim();   /* 4번째 열은 선택 — 없으면 표에서 채우면 된다 */
     /* 엑셀에서 머리글까지 복사해 오는 일이 잦다 — 첫 줄이 머리글이면 버린다 */
     if(i===0 && /^(병원\s*명?|병원)$/.test(hosp) && /^(장비\s*)?s\/?n$/i.test(sn)) return;
     if(!hosp && !sn) return;
-    out.push({hospital:hosp, sn:sn, note:note || '병원 장비'});
+    out.push({hospital:hosp, sn:sn, note:note || '병원 장비', asType:asType});
   });
   return out;
 }
@@ -979,7 +1007,7 @@ function applyBulkText(){
     if(seen[key]){ skipped++; return; }
     seen[key] = 1;
     var r = newRow();                 /* 예전에는 객체 리터럴을 직접 만들어 snPhoto 가 없는 반쪽 행이 생겼다 */
-    r.hospital = p.hospital; r.sn = p.sn; r.note = p.note;
+    r.hospital = p.hospital; r.sn = p.sn; r.note = p.note; r.asType = p.asType||'';
     rows.push(r);
     added++;
   });
@@ -1211,6 +1239,7 @@ async function loadFromSheet(){
       var row = newRow();
       row.hospital = r.hosp||''; row.sn = r.sn||''; row.note = r.note||'병원 장비';
       row.recordId = r.recordId||''; row.photoId = r.photoId||'';
+      row.asCat = r.asCat||''; row.asType = r.asType||'';   /* handover 에서 고른 A/S 항목 */
       var list = (r.photos && r.photos.length) ? r.photos : (r.photoId ? [{fileId:r.photoId, kind:'SN', seq:1, desc:''}] : []);
       list.forEach(function(ph){
         var kind = String(ph.kind||'SN').toUpperCase();
@@ -1498,6 +1527,14 @@ function fieldHtml(idx, field, value, placeholder, bad){
          'value="'+escapeAttr(value)+'" placeholder="'+escapeAttr(placeholder)+'"'+
          (bad?' class="bad"':'')+'>';
 }
+/* A/S 항목 칸 — 소분류는 고칠 수 있고, 대분류는 시트에서 온 값이라 읽기 전용으로 얹는다.
+   (handover 에서 대분류·소분류를 함께 고르므로 여기서 대분류만 바꾸면 짝이 어긋난다) */
+function asCellHtml(idx, row){
+  var cat = String(row.asCat||'').trim();
+  return (cat ? '<div class="as-cat" title="'+escapeAttr('A/S 대분류: '+cat)+'">'+escapeAttr(cat)+'</div>' : '')
+       + fieldHtml(idx,'asType',row.asType,'A/S 항목 (소분류)',false);
+}
+
 function rowClass(flags, selected){
   var c = [];
   if(selected) c.push('sel');
@@ -1528,6 +1565,7 @@ function tableHtml(view, dup){
     '<th class="col-no" scope="col">No.</th>'+
     '<th class="col-hospital" scope="col">병원명</th>'+
     '<th class="col-sn" scope="col">장비 S/N</th>'+
+    '<th class="col-as" scope="col">A/S 항목</th>'+
     '<th class="col-photo" scope="col">장비 사진</th>'+
     '<th class="col-note" scope="col">비고</th>'+
     '<th class="col-actions" scope="col">관리</th>'+
@@ -1542,6 +1580,7 @@ function tableHtml(view, dup){
       '<td class="col-no">'+(pos+1)+'</td>'+
       '<td class="col-hospital">'+fieldHtml(idx,'hospital',row.hospital,'병원명',f.noHosp||f.dupHosp)+'</td>'+
       '<td class="col-sn">'+fieldHtml(idx,'sn',row.sn,'S/N',f.noSn||f.dupSn)+'</td>'+
+      '<td class="col-as">'+asCellHtml(idx, row)+'</td>'+
       '<td class="col-photo" data-row-idx="'+idx+'">'+photoCellHtml(row, idx)+'</td>'+
       '<td class="col-note">'+fieldHtml(idx,'note',row.note,'병원 장비 / 데모 장비',false)+'</td>'+
       '<td class="col-actions">'+
@@ -1579,6 +1618,7 @@ function cardsHtml(view, dup){
         '<div class="rcard-fields">'+
           fieldHtml(idx,'hospital',row.hospital,'병원명',f.noHosp||f.dupHosp)+
           fieldHtml(idx,'sn',row.sn,'장비 S/N',f.noSn||f.dupSn)+
+          asCellHtml(idx, row)+
           fieldHtml(idx,'note',row.note,'비고 (병원 장비 / 데모 장비)',false)+
         '</div>'+
         '<div class="rcard-photo" data-row-idx="'+idx+'">'+photoCellHtml(row, idx)+'</div>'+
@@ -2006,18 +2046,20 @@ function confirmExportScope(list){
 function buildLabelSheetPlan(list, opts){
   var o = opts || {};
   var maxExtra = Math.min(maxExtraCount(list), Number(o.maxExtra)||4);
-  var headers = ['No.','병원명','장비 S/N','S/N 사진','증상 사진'];
+  var headers = ['No.','병원명','장비 S/N','A/S 항목','S/N 사진','증상 사진'];
   for(var c=1;c<=maxExtra;c++) headers.push('추가 증상 사진 '+c);
   headers.push('해결 후 사진','증상 내용','조치 내용','비고');
 
   var PHOTO_COL_WIDTH = 16.4;   /* ≈120px */
-  var columns = [{width:6},{width:38},{width:16},{width:PHOTO_COL_WIDTH},{width:PHOTO_COL_WIDTH}];
+  var columns = [{width:6},{width:38},{width:16},{width:26},
+                 {width:PHOTO_COL_WIDTH},{width:PHOTO_COL_WIDTH}];
   for(var c2=0;c2<maxExtra;c2++) columns.push({width:PHOTO_COL_WIDTH});
   columns.push({width:PHOTO_COL_WIDTH},{width:34},{width:34},{width:16});
 
-  var snCol = 3;                        /* 0-based: No.(0) 병원명(1) S/N(2) S/N사진(3) */
-  var causeCol = 4;                     /* 증상 사진 */
-  var extraStart = 5;                   /* 예전 기록의 추가 증상 사진 */
+  var asCol = 3;                        /* 0-based: No.(0) 병원명(1) S/N(2) A/S항목(3) */
+  var snCol = 4;                        /* S/N 사진 */
+  var causeCol = 5;                     /* 증상 사진 */
+  var extraStart = 6;                   /* 예전 기록의 추가 증상 사진 */
   var afterCol = extraStart + maxExtra; /* 해결 후 사진 */
   var causeTextCol = afterCol + 1;      /* 증상 내용 */
   var afterTextCol = causeTextCol + 1;  /* 조치 내용 */
@@ -2033,6 +2075,7 @@ function buildLabelSheetPlan(list, opts){
     var after = row.afterPhoto || null;
     var vals = new Array(headers.length);
     vals[0]=i+1; vals[1]=row.hospital||''; vals[2]=row.sn||'';
+    vals[asCol]=asItemText(row);
     vals[snCol]=''; vals[causeCol]=''; vals[afterCol]='';
     for(var k=0;k<maxExtra;k++) vals[extraStart+k]='';   /* 사진 없는 셀은 공백 유지 */
     /* 증상 내용은 사진 순번에 맞춰 '1. 설명 / 2. 설명' 형태(예전 기록 대응) */
@@ -2076,7 +2119,7 @@ function buildLabelSheetPlan(list, opts){
   });
 
   return {maxExtra:maxExtra, headers:headers, columns:columns, headerRowIdx:headerRowIdx,
-          hasMeta:hasMeta, snCol:snCol, causeCol:causeCol, extraStart:extraStart,
+          hasMeta:hasMeta, asCol:asCol, snCol:snCol, causeCol:causeCol, extraStart:extraStart,
           afterCol:afterCol, causeTextCol:causeTextCol, afterTextCol:afterTextCol,
           noteCol:noteCol, bodyRows:bodyRows, images:images,
           detailHeaders:['병원명','장비 S/N','사진 구분','순번','사진','설명','원본 링크'],
@@ -2138,7 +2181,7 @@ async function exportExcel(){
         var cell = r.getCell(ci+1);
         cell.value = (v===undefined?'':v);
         cell.border = thinBorder();
-        cell.alignment = {horizontal: ci===1?'left':'center', vertical:'middle', wrapText:true};
+        cell.alignment = {horizontal: (ci===1||ci===plan.asCol)?'left':'center', vertical:'middle', wrapText:true};
       });
     });
 

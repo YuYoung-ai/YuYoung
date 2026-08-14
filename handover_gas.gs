@@ -879,7 +879,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.5.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.5.1', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -1812,6 +1812,11 @@ function labelList_(p){
     for(var i=0;i<list.length;i++){ if(list[i].kind===SNAP.KIND_SN){ snHit=list[i]; break; } }
     return {
       date: r.date, hosp: r.hosp, sn: r.sn, fse: r.fse, gubun: r.gubun,
+      /* [v3.5.1] handover 에서 고른 A/S 항목을 그대로 내려준다 —
+         slim_ 이 이미 읽고 있는데 여기서 버려 label 이 다시 채워 넣어야 했다.
+         asCat=대분류, asType=소분류(시트의 '유형' 열). */
+      asCat: r.cat || '',
+      asType: r.type || '',
       note: /\[데모장비\]/.test(String(r.detail||'')) ? '데모 장비' : '병원 장비',
       recordId: recId,
       photoId: (snHit && snHit.fileId) || r.snPhotoId || '',   /* 기존 label.html 호환(단수) */
@@ -2446,7 +2451,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.5.0', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.5.1', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2530,7 +2535,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.5.0',
+  var out = {success:true, ver:'3.5.1',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

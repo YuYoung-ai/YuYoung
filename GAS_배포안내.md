@@ -58,6 +58,16 @@ Apps Script 는 배포할 때마다 버전이 쌓인다. 오래 운영해 버전
 - **오래된 버전 아카이브**: 안 쓰는 옛 버전은 `배포 관리` 에서 보관/삭제해 목록을 정리.
 - 반영 확인은 `?action=ping` 의 `ver`(auth=`5.1.0-warm`) / handover ping 의 `warmed:true` 로.
 
+## v3.5.1 — labellist 에 A/S 항목 추가
+
+`labelList_` 응답에 **`asCat`(대분류) · `asType`(소분류/유형)** 두 필드가 늘었다.
+handover 가 이미 시트에 쓰고 있던 값이라 **시트 변경·마이그레이션은 없다** —
+`slim_` 이 읽고 있던 것을 응답에서 버리던 것을 그대로 내려주는 것뿐이다.
+
+- 재배포 전에는 label.html 의 'A/S 항목' 칸이 **빈 칸으로만 뜬다**(표에서 직접 입력은 가능).
+  기능이 깨지지는 않으므로 배포 순서에 제약은 없다.
+- label 의 검색·정렬·엑셀 'A/S 항목' 열이 이 값을 쓴다.
+
 ## v3.5.0 — 현장 사진 3장 구성 (S/N · 증상 · 해결 후)
 
 `handover_gas.gs` 에 사진 구분 **`AFTER`(증상 해결 후)** 가 추가됐다. **handover_gas 를 재배포해야
@@ -74,8 +84,9 @@ Apps Script 는 배포할 때마다 버전이 쌓인다. 오래 운영해 버전
 ## 배포 확인 (밖에서 curl)
 
 - `인증GAS/exec?action=ping` → `{"ver":"5.1.0-warm","mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
-- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.5.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
-  `ver` 가 `3.5.0` 미만이면 해결 후 사진(AFTER)을 아직 받지 못하는 구버전이다.
+- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.5.1","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
+  `ver` 가 `3.5.0` 미만이면 해결 후 사진(AFTER)을 아직 받지 못하는 구버전,
+  `3.5.1` 미만이면 label 의 A/S 항목이 빈 칸으로 뜨는 구버전이다.
 - 각 데이터 GAS 편집기에서 `runTokenSelfTest` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
   **모두 같아야** 왕복 0(전부 로컬 검증). 다르면 그 프로젝트만 왕복(감속, 장애 아님).
 - auth 편집기 `authSelfTime()` → 로그인/검증 단계별 실측 ms(목표 로그인 ≤2000ms).

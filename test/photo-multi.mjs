@@ -310,13 +310,14 @@ ck('photolist 는 doGet 로그인 검증 뒤에 라우팅된다',
 section('Excel 동적 사진 열 · 상세 시트');
 
 {
-  const src = ['maxCauseCount', 'maxExtraCount', 'driveViewUrl', 'colLetter_', 'buildLabelSheetPlan']
+  const src = ['maxCauseCount', 'maxExtraCount', 'asItemText', 'driveViewUrl', 'colLetter_', 'buildLabelSheetPlan']
     .map(n => grab(L, n)).join('\n');
   const P = new Function(src + '; return {plan:buildLabelSheetPlan, col:colLetter_};')();
   /* causes: 증상 사진 설명 배열(첫 장이 '증상', 나머지는 예전 기록의 '추가 증상')
      after : 해결 후 사진 설명(없으면 null) */
   const mk = (hosp, causes, hasSn, after) => ({
     hospital: hosp, sn: 'S-' + hosp, note: '병원 장비', imageDataUrl: null,
+    asCat: '장비', asType: '냉각수 누수',
     snPhoto: { fileId: 'F' + hosp, thumbDataUrl: hasSn ? 'data:sn' : null, state: 'ok', desc: '' },
     causePhotos: causes.map((d, i) => ({ fileId: 'C' + hosp + i, thumbDataUrl: 'data:c', seq: i + 1, desc: d, state: 'ok' })),
     afterPhoto: after == null
@@ -328,9 +329,14 @@ section('Excel 동적 사진 열 · 상세 시트');
   const fresh = P.plan([mk('N', ['누수'], true, '커넥터 교체')], { date: '2026-08', author: '김' });
   ck('새 기록은 사진 열이 정확히 3개다(S/N · 증상 · 해결 후)',
     fresh.headers.join('|') ===
-      'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고',
+      'No.|병원명|장비 S/N|A/S 항목|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고',
     fresh.headers.join('|'));
+  ck('handover 에서 고른 A/S 항목을 대분류 / 소분류 형태로 싣는다',
+    fresh.bodyRows[0].values[fresh.asCol] === '장비 / 냉각수 누수',
+    String(fresh.bodyRows[0].values[fresh.asCol]));
   ck('추가 증상 사진 열은 예전 기록이 없으면 아예 생기지 않는다', fresh.maxExtra === 0);
+  ck('A/S 항목 열은 장비 S/N 다음, 사진 열 앞에 온다',
+    fresh.asCol === 3 && fresh.snCol === 4);
   ck('세 사진이 각자의 열에 배치된다',
     fresh.images.length === 3 &&
     fresh.images.find(im => im.kind === 'SN').col === fresh.snCol &&
@@ -349,11 +355,11 @@ section('Excel 동적 사진 열 · 상세 시트');
 
   ck('예전 기록의 추가 증상 사진은 별도 열로 뒤에 붙는다',
     p.headers.join('|') ===
-      'No.|병원명|장비 S/N|S/N 사진|증상 사진|추가 증상 사진 1|추가 증상 사진 2|해결 후 사진|증상 내용|조치 내용|비고',
+      'No.|병원명|장비 S/N|A/S 항목|S/N 사진|증상 사진|추가 증상 사진 1|추가 증상 사진 2|해결 후 사진|증상 내용|조치 내용|비고',
     p.headers.join('|'));
   ck('추가 증상 사진 개수를 데이터에서 계산한다(증상 첫 장은 제외)', p.maxExtra === 2);
-  ck('사진 열 순서: S/N(3) · 증상(4) · 추가(5~) · 해결 후',
-    p.snCol === 3 && p.causeCol === 4 && p.extraStart === 5 && p.afterCol === 7);
+  ck('사진 열 순서: S/N(4) · 증상(5) · 추가(6~) · 해결 후',
+    p.snCol === 4 && p.causeCol === 5 && p.extraStart === 6 && p.afterCol === 8);
   ck('모든 행의 열 구조가 동일하다',
     p.bodyRows.every(r => r.values.length === p.headers.length));
   ck('사진이 없는 셀은 공백을 유지한다',
@@ -363,7 +369,7 @@ section('Excel 동적 사진 열 · 상세 시트');
       .map(im => im.col).join(',') === [p.causeCol, p.extraStart, p.extraStart + 1].join(','));
   ck('증상 내용은 순번에 맞춰 1. 설명 / 2. 설명 형태',
     p.bodyRows[0].values[p.causeTextCol] === '1. 누수 / 2. 파손');
-  ck('제목·날짜 병합 범위가 동적 열 수를 따라간다', P.col(p.headers.length) === 'K');
+  ck('제목·날짜 병합 범위가 동적 열 수를 따라간다', P.col(p.headers.length) === 'L');
   ck('사진 상세 시트 행을 만든다(원본 링크 포함)',
     p.detailHeaders.join('|') === '병원명|장비 S/N|사진 구분|순번|사진|설명|원본 링크' &&
     p.detailRows.length === 9 &&
@@ -381,8 +387,15 @@ section('Excel 동적 사진 열 · 상세 시트');
   ck('S/N 사진 1장만 있는 예전 데이터도 같은 3열 구조로 출력된다',
     only.maxExtra === 0 &&
     only.headers.join('|') ===
-      'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고' &&
+      'No.|병원명|장비 S/N|A/S 항목|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고' &&
     only.images.length === 1);
+  const noAs = P.plan([Object.assign(mk('Q', [], true, null), { asCat: '', asType: '' })], {});
+  ck('A/S 항목이 없으면 빈 칸으로 두고 열 구조는 그대로 유지한다',
+    noAs.bodyRows[0].values[noAs.asCol] === '' &&
+    noAs.bodyRows[0].values.length === noAs.headers.length);
+  const typeOnly = P.plan([Object.assign(mk('R', [], true, null), { asCat: '' })], {});
+  ck('대분류 없이 소분류만 있으면 소분류만 적는다',
+    typeOnly.bodyRows[0].values[typeOnly.asCol] === '냉각수 누수');
 }
 
 ck('Excel 출력용 이미지는 600~720px 이내로 만든다',
@@ -406,6 +419,16 @@ ck('PPT 생성 기능은 유지된다(시트에서 받은 S/N 썸네일도 사�
   /var pptImg = row\.imageDataUrl \|\| \(row\.snPhoto && row\.snPhoto\.thumbDataUrl\);/.test(L));
 ck('Label 작성 완료 기록(labeldone)이 유지된다',
   /action:'labeldone'/.test(L) && /function markDownloaded/.test(L));
+ck('서버가 A/S 대분류·소분류를 labellist 응답에 실어 준다',
+  /asCat: r\.cat \|\| '',/.test(G) && /asType: r\.type \|\| '',/.test(G) &&
+  /row\.asCat = r\.asCat\|\|''; row\.asType = r\.asType\|\|'';/.test(L));
+ck('검색이 A/S 항목까지 훑는다',
+  /function searchText/.test(L) &&
+  /\[row\.hospital, row\.sn, row\.note, row\.asCat, row\.asType\]/.test(L) &&
+  /A\/S 항목 · 비고 검색/.test(L));
+ck('A/S 소분류는 표에서 고칠 수 있고 대분류는 시트 값 그대로 둔다',
+  /function asCellHtml/.test(L) &&
+  /fieldHtml\(idx,'asType'/.test(L) && !/fieldHtml\(idx,'asCat'/.test(L));
 ck('직접 입력·붙여넣기·일괄 배치는 S/N 사진에 연결된다',
   /rows\[idx\]\.snPhoto\.thumbDataUrl = resized;/.test(L) &&
   /function applyBulkPhotos/.test(L) && /function handleCellPaste/.test(L));
@@ -494,7 +517,7 @@ ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
 ck('서비스워커 캐시 버전이 136 이상이다',
   Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 136);
-ck('GAS 버전이 3.5.0 로 올라갔다', /ver:'3\.5\.0'/.test(G));
+ck('GAS 버전이 3.5.1 로 올라갔다', /ver:'3\.5\.1'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);

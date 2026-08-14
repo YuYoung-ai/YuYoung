@@ -90,8 +90,10 @@ await page.route('**://script.google.com/**', async r => {
       excluded: 1, excludedNames: ['이미쓴의원'],
       rows: [
         { hosp: '나피부과의원', sn: 'BV5002', note: '병원 장비', recordId: 'rec_2',
+          asCat: '핸드피스', asType: '노즐 누수(약액유입)',
           photos: [{ fileId: 'SN2', kind: 'SN', seq: 1, desc: '' }] },
         { hosp: '가피부과의원', sn: 'BV5001', note: '병원 장비', recordId: 'rec_1',
+          asCat: '장비', asType: '냉각수 누수',
           photos: [{ fileId: 'SN1', kind: 'SN', seq: 1, desc: '' },
                    { fileId: 'C1', kind: 'CAUSE', seq: 1, desc: '커넥터 파손' },
                    { fileId: 'A1', kind: 'AFTER', seq: 1, desc: '커넥터 교체' }] },
@@ -118,7 +120,7 @@ const go = async () => {
   await page.waitForFunction(() => typeof window.render === 'function');
 };
 const rowsOf = () => page.evaluate(() => window.rows.map(r => ({
-  h: r.hospital, s: r.sn, n: r.note,
+  h: r.hospital, s: r.sn, n: r.note, ac: r.asCat, at: r.asType,
   sn: r.snPhoto ? { id: r.snPhoto.fileId, st: r.snPhoto.state, has: !!r.snPhoto.thumbDataUrl } : null,
   local: !!r.imageDataUrl,
   c: (r.causePhotos || []).map(p => ({ id: p.fileId, st: p.state, d: p.desc, has: !!p.thumbDataUrl })),
@@ -167,6 +169,17 @@ ck('사진 칸이 행마다 S/N·증상·해결 후 3개로 그려진다',
     document.querySelectorAll('[data-row-idx="1"] .img-cell').length === 3 &&
     Array.from(document.querySelectorAll('[data-row-idx="1"] .ph-name'))
       .map(e => e.textContent).join('|') === 'S/N|증상|해결 후'));
+ck('handover 에서 고른 A/S 항목이 함께 들어온다',
+  rs[0].ac === '핸드피스' && rs[0].at === '노즐 누수(약액유입)' &&
+  rs[1].ac === '장비' && rs[1].at === '냉각수 누수',
+  JSON.stringify(rs.map(r => r.ac + '/' + r.at)));
+ck('표에 A/S 항목 칸이 있고 소분류만 고칠 수 있다',
+  await page.evaluate(() => {
+    const inp = document.querySelector('[data-ri="1"][data-field="asType"]');
+    const cat = document.querySelectorAll('#tableHolder tr')[2].querySelector('.as-cat');
+    return !!inp && inp.value === '냉각수 누수' && !!cat && cat.textContent === '장비' &&
+           !document.querySelector('[data-field="asCat"]');
+  }));
 ck('제외된 병원 안내가 뜬다',
   (await page.textContent('#dupNote')).includes('이미쓴의원'));
 ck('3장이 모두 있는 행만 완비로 센다',
@@ -207,6 +220,13 @@ section('4. 검색 · 필터');
 await page.fill('#searchInput', '가피부과');
 await page.waitForFunction(() => document.querySelectorAll('#tableHolder [data-row-idx]').length === 1);
 ck('검색이 병원명으로 걸린다', (await visibleRows()).join() === '1');
+await page.fill('#searchInput', '누수');
+await page.waitForFunction(() => document.querySelectorAll('#tableHolder [data-row-idx]').length === 2);
+ck('A/S 소분류 키워드로도 검색된다(누수 → 2건)', (await visibleRows()).join() === '0,1',
+  (await visibleRows()).join());
+await page.fill('#searchInput', '핸드피스');
+await page.waitForFunction(() => document.querySelectorAll('#tableHolder [data-row-idx]').length === 1);
+ck('A/S 대분류 키워드로도 검색된다', (await visibleRows()).join() === '0');
 await page.fill('#searchInput', '');
 await page.waitForFunction(() => document.querySelectorAll('#tableHolder [data-row-idx]').length === 3);
 await page.click('#filterChips [data-filter="nophoto"]');
@@ -279,9 +299,15 @@ ck('설명은 Excel 계획의 증상 내용 열로 이어진다',
     return p.bodyRows[0].values[p.causeTextCol] === '1. 커넥터 파손(재확인)' &&
            p.bodyRows[0].values[p.afterTextCol] === '커넥터 교체';
   }));
-ck('내보내기 열이 정확히 3장 구성이다',
+ck('내보내기 열이 A/S 항목 + 사진 3장 구성이다',
   await page.evaluate(() => window.buildLabelSheetPlan([window.rows[1]], {}).headers.join('|')
-    === 'No.|병원명|장비 S/N|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고'));
+    === 'No.|병원명|장비 S/N|A/S 항목|S/N 사진|증상 사진|해결 후 사진|증상 내용|조치 내용|비고'),
+  await page.evaluate(() => window.buildLabelSheetPlan([window.rows[1]], {}).headers.join('|')));
+ck('내보내기에 A/S 항목이 대분류 / 소분류로 실린다',
+  await page.evaluate(() => {
+    const p = window.buildLabelSheetPlan([window.rows[1]], {});
+    return p.bodyRows[0].values[p.asCol] === '장비 / 냉각수 누수';
+  }));
 
 section('10. 내보내기 범위 · 시트 기록');
 posts.length = 0;
