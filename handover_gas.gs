@@ -879,7 +879,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.5.1', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.6.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -903,6 +903,7 @@ function doGet(e){
     if(action==='contenttpl') return json_(contentTplGet_());  /* 처리내용 자동완성 템플릿 */
     if(action==='progress') return json_(progGet_(p));          /* [v2.4] 진행중 공유 상태 ([v2.7] rev 조건부 응답) */
     if(action==='labellist') return json_(labelList_(p));       /* [v2.8] 장비 Label List 원본 */
+    if(action==='asreport')  return json_(asReport_(p));        /* [v3.6] A/S 항목별 증상·조치 집계 */
     if(action==='snphoto')   return json_(snPhotos_(p));    /* [v2.8] 장비 S/N 사진 base64 (?sz= 로 썸네일) */
     if(action==='photolist') return json_(photoList_(p));   /* [v3.4] 사진 메타 보조 조회(로그인 필수) */
     return json_({success:false, error:'알 수 없는 action: '+action});
@@ -1753,6 +1754,123 @@ function setupLabelListSheet(){
   return 'OK';
 }
 
+/* ── A/S 항목별 증상·조치 집계 ─────────────────────────────────────────
+   [v3.6] 왜 필요한가
+     소분류(유형)마다 "실제로 어떤 증상이 들어왔고 어떻게 해결했는지"는 이미
+     기록에 다 있는데, 흩어져 있어 사람이 시트를 훑어야만 보였다. 품질팀에
+     보낼 문서나 보고서를 쓸 때마다 같은 수작업을 반복하게 된다.
+     → 유형 단위로 묶어 사례·교체품·결과 분포와 표준 가이드를 한 번에 준다.
+
+   응답 크기 주의: 사례를 전부 실으면 수천 건이 된다. 유형별 maxCases 로
+   자르고, 잘랐다는 사실(truncated)을 반드시 함께 알린다 — 조용히 줄이면
+   품질 문서가 표본인지 전수인지 알 수 없게 된다. */
+var ASREPORT_MAX_CASES = 50;      /* 유형별 기본 사례 수 */
+var ASREPORT_MAX_CASES_HARD = 500;
+
+/** 값별 건수를 많은 순으로 — 교체품·A/S 결과 분포에 쓴다 */
+function asTally_(map){
+  return Object.keys(map)
+    .map(function(k){ return [k, map[k]]; })
+    .sort(function(a,b){ return b[1]-a[1] || String(a[0]).localeCompare(String(b[0])); });
+}
+
+/** GET ?action=asreport&from=&to=&cat=&type=&fse=&maxCases=
+ *  A/S 항목(대분류/소분류)별로 증상·조치 사례를 모아 준다. */
+function asReport_(p){
+  var from = parseD_(String(p.from||'').trim());
+  var to   = parseD_(String(p.to||'').trim());
+  if(!from || !to) return {success:false, error:'from/to(YYYY-MM-DD) 파라미터 필요'};
+  if(from > to){ var t = from; from = to; to = t; }
+  to.setHours(23,59,59,0);
+
+  var wantCat  = norm_(String(p.cat||'').trim());
+  var wantType = norm_(String(p.type||'').trim());
+  var qf       = norm_(String(p.fse||'').trim());
+  var maxCases = Math.max(1, Math.min(Number(p.maxCases)||ASREPORT_MAX_CASES, ASREPORT_MAX_CASES_HARD));
+
+  var photoMap = {};
+  try{ photoMap = photoMapByRecord_(); }catch(e){ Logger.log('[asreport] 사진 맵 실패(무시): '+e); }
+
+  var groups = {}, order = [], total = 0;
+  readAll_(true).rows.forEach(function(o){
+    var r = slim_(o);
+    var d = parseD_(r.date);
+    if(!d || d < from || d > to) return;
+    var cat = String(r.cat||'').trim(), typ = String(r.type||'').trim();
+    if(!cat && !typ) return;
+    if(wantCat && norm_(cat) !== wantCat) return;
+    if(wantType && norm_(typ) !== wantType) return;
+    if(qf){
+      var f = norm_(r.fse);
+      if(!(f && (f===qf || f.indexOf(qf)>=0 || qf.indexOf(f)>=0))) return;
+    }
+
+    var key = cat + '|' + typ;
+    var g = groups[key];
+    if(!g){
+      g = groups[key] = {cat:cat, type:typ, code:'', count:0, cases:[], truncated:0,
+                         _hosp:{}, _part:{}, _result:{}};
+      order.push(key);
+    }
+    g.count++; total++;
+    if(r.hosp) g._hosp[norm_(r.hosp)] = 1;
+
+    var part   = String(r.part||'').trim();
+    var result = String(pickH_(o, HANDOVER_FIELD_COLS.result)||'').trim();
+    var code   = String(pickH_(o, HANDOVER_FIELD_COLS.code)||'').trim();
+    if(part)   g._part[part]     = (g._part[part]||0)+1;
+    if(result) g._result[result] = (g._result[result]||0)+1;
+    if(code && !g.code) g.code = code;
+
+    /* 사례는 상한까지만 싣되, 잘라낸 건수를 남겨 표본임을 드러낸다 */
+    if(g.cases.length >= maxCases){ g.truncated++; return; }
+
+    var recId = String(pickH_(o, REC_ID_COLS)||'').trim();
+    var list  = (recId && photoMap[recId]) ? photoMap[recId] : [];
+    var symptom = [], after = [], snFileId = r.snPhotoId || '';
+    list.forEach(function(ph){
+      if(ph.kind === SNAP.KIND_SN){ if(!snFileId) snFileId = ph.fileId; return; }
+      var item = {fileId:ph.fileId, desc:ph.desc||'', seq:ph.seq||1};
+      if(ph.kind === SNAP.KIND_AFTER) after.push(item); else symptom.push(item);
+    });
+
+    g.cases.push({
+      date: r.date, hosp: r.hosp, fse: r.fse, sn: r.sn,
+      gubun: r.gubun, part: part, cost: r.cost, result: result,
+      detail: r.detail || '',
+      remark: String(pickH_(o, HANDOVER_FIELD_COLS.remark)||'').trim(),
+      recordId: recId, snPhoto: snFileId,
+      symptom: symptom, after: after
+    });
+  });
+
+  /* 표준 가이드(유형마스터의 문제확인·문제해결·후속조치)를 유형에 붙여 준다 —
+     "지금 이렇게 처리되고 있다"와 "이렇게 처리하기로 돼 있다"를 나란히 보기 위한 것 */
+  var guides = {};
+  try{ guides = (getMaster_({}) || {}).guides || {}; }
+  catch(e){ Logger.log('[asreport] 가이드 조회 실패(무시): '+e); }
+
+  var items = order.map(function(k){
+    var g = groups[k];
+    return {
+      cat: g.cat, type: g.type, code: g.code, count: g.count,
+      hospCount: Object.keys(g._hosp).length,
+      parts: asTally_(g._part), results: asTally_(g._result),
+      guide: guides[g.type] || null,
+      truncated: g.truncated,
+      cases: g.cases
+    };
+  }).sort(function(a,b){
+    return b.count - a.count || String(a.cat+a.type).localeCompare(String(b.cat+b.type));
+  });
+
+  return {success:true, count:items.length, total:total, items:items,
+          maxCases:maxCases,
+          from:Utilities.formatDate(from,'Asia/Seoul','yyyy-MM-dd'),
+          to:  Utilities.formatDate(to,'Asia/Seoul','yyyy-MM-dd'),
+          updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
+}
+
 /** GET ?action=labellist&from=YYYY-MM-DD&to=YYYY-MM-DD&fse=이름
  *  label.html(장비 Label List 생성기)이 표를 채우는 원본.
  *  같은 병원+S/N 이 여러 번 나오면 가장 최근 기록 1건만 남긴다.
@@ -2451,7 +2569,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.5.1', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.6.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2535,7 +2653,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.5.1',
+  var out = {success:true, ver:'3.6.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

@@ -436,6 +436,102 @@ ck('세 칸 어디에나 직접 첨부·드래그·붙여넣기를 할 수 있�
   /function setSlotPhoto/.test(L) && /function clearSlotPhoto/.test(L) &&
   /setRowImageFromFile\(idx, file, cell\.getAttribute\('data-slot'\) \|\| 'sn'\)/.test(L));
 
+/* ══════════ 7-B. A/S 항목별 증상·조치 집계 ══════════ */
+section('A/S 항목별 증상·조치 (asreport)');
+
+const AS = read('asreport.html');
+
+ck('asreport 는 로그인 검증 뒤에 라우팅된다',
+  grab(G, 'doGet').indexOf("verifyLevel_(p.token||'') < 1") <
+    grab(G, 'doGet').indexOf("action==='asreport'"));
+ck('사례 상한이 있고 잘라낸 건수를 함께 돌려준다',
+  /var ASREPORT_MAX_CASES = 50;/.test(G) &&
+  /truncated: g\.truncated/.test(G) && /g\.truncated\+\+; return;/.test(G));
+ck('증상(CAUSE)과 해결 후(AFTER)를 나눠 담는다',
+  /if\(ph\.kind === SNAP\.KIND_AFTER\) after\.push\(item\); else symptom\.push\(item\);/.test(G));
+ck('유형마스터의 표준 대응을 유형에 붙인다',
+  /guides\[g\.type\] \|\| null/.test(G) && /getMaster_\(\{\}\) \|\| \{\}\)\.guides/.test(G));
+
+/* 집계 실행 — 그룹핑·분포·상한이 실제로 동작하는지 본다 */
+{
+  const rows = [
+    { '처리일':'2026-08-01','병원명':'가','CS 담당자':'권','대분류':'장비','유형':'냉각수 누수',
+      '교체품':'호스','내용':'누수','기록 ID':'r1','A/S 결과':'부품 교체' },
+    { '처리일':'2026-08-02','병원명':'나','CS 담당자':'권','대분류':'장비','유형':'냉각수 누수',
+      '교체품':'호스','내용':'누수2','기록 ID':'r2','A/S 결과':'부품 교체' },
+    { '처리일':'2026-08-03','병원명':'가','CS 담당자':'김','대분류':'장비','유형':'냉각수 누수',
+      '교체품':'피팅','내용':'누수3','기록 ID':'r3','A/S 결과':'조치 완료' },
+    { '처리일':'2026-08-04','병원명':'다','CS 담당자':'김','대분류':'핸드피스','유형':'발열',
+      '교체품':'','내용':'발열','기록 ID':'r4','A/S 결과':'이상없음' },
+    { '처리일':'2025-01-01','병원명':'라','CS 담당자':'김','대분류':'장비','유형':'냉각수 누수',
+      '교체품':'','내용':'기간 밖','기록 ID':'r5','A/S 결과':'' }
+  ];
+  const photoMap = {
+    r1: [{ kind:'SN', seq:1, fileId:'S1', desc:'' },
+         { kind:'CAUSE', seq:1, fileId:'C1', desc:'물맺힘' },
+         { kind:'AFTER', seq:1, fileId:'A1', desc:'교체 후 정상' }]
+  };
+  const asReport = gasFn(['asReport_', 'asTally_'], 'asReport_', {
+    parseD_: s2 => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s2||'').trim());
+                     return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; },
+    norm_: s2 => String(s2==null?'':s2).replace(/\s+/g,'').toLowerCase(),
+    readAll_: () => ({ rows }),
+    slim_: o => ({ date:o['처리일'], hosp:o['병원명'], fse:o['CS 담당자'], gubun:o['점검/AS']||'',
+                   cat:o['대분류'], type:o['유형'], part:o['교체품'], cost:o['교체비용']||'',
+                   detail:o['내용'], sn:o['장비SN']||'', snPhotoId:'' }),
+    pickH_: (o, cols) => { for (const c of (cols||[])) if (o[c] != null && o[c] !== '') return o[c]; return ''; },
+    photoMapByRecord_: () => photoMap,
+    getMaster_: () => ({ guides: { '냉각수 누수': { chk:'확인', fix:'호스 교체', fup:'재확인' } } }),
+    REC_ID_COLS: ['기록 ID'],
+    HANDOVER_FIELD_COLS: { result:['A/S 결과'], remark:['비고'], code:['유형 코드','코드'] },
+    SNAP: { KIND_SN:'SN', KIND_CAUSE:'CAUSE', KIND_AFTER:'AFTER' },
+    ASREPORT_MAX_CASES: 50, ASREPORT_MAX_CASES_HARD: 500,
+    Logger: { log(){} },
+    Utilities: { formatDate: d => [d.getFullYear(),
+      String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-') }
+  });
+
+  const out = asReport({ from:'2026-07-01', to:'2026-08-31' });
+  ck('집계 실행: 기간 밖 기록은 빠진다', out.success === true && out.total === 4);
+  ck('집계 실행: 대분류/소분류로 묶고 건수 순으로 정렬한다',
+    out.items.map(i => i.cat + '/' + i.type).join('|') === '장비/냉각수 누수|핸드피스/발열',
+    out.items.map(i => i.cat + '/' + i.type).join('|'));
+  ck('집계 실행: 병원 수는 중복을 뺀 값이다',
+    out.items[0].count === 3 && out.items[0].hospCount === 2);
+  ck('집계 실행: 교체품·결과 분포를 많은 순으로 센다',
+    JSON.stringify(out.items[0].parts) === '[["호스",2],["피팅",1]]' &&
+    JSON.stringify(out.items[0].results) === '[["부품 교체",2],["조치 완료",1]]');
+  ck('집계 실행: 증상과 해결 후 사진을 나눠 담는다',
+    out.items[0].cases[0].symptom.length === 1 && out.items[0].cases[0].symptom[0].desc === '물맺힘' &&
+    out.items[0].cases[0].after.length === 1 && out.items[0].cases[0].after[0].desc === '교체 후 정상' &&
+    out.items[0].cases[0].snPhoto === 'S1');
+  ck('집계 실행: 표준 대응(유형마스터)을 붙인다',
+    out.items[0].guide && out.items[0].guide.fix === '호스 교체' && out.items[1].guide === null);
+
+  const cut = asReport({ from:'2026-07-01', to:'2026-08-31', maxCases:1 });
+  ck('집계 실행: 사례 상한을 넘으면 잘라내되 그 수를 알려 준다',
+    cut.items[0].cases.length === 1 && cut.items[0].truncated === 2 && cut.items[0].count === 3);
+  const one = asReport({ from:'2026-07-01', to:'2026-08-31', type:'발열' });
+  ck('집계 실행: 소분류로 좁혀 조회할 수 있다',
+    one.items.length === 1 && one.items[0].type === '발열');
+  const byFse = asReport({ from:'2026-07-01', to:'2026-08-31', fse:'권' });
+  ck('집계 실행: 담당 FSE 로 좁힐 수 있다', byFse.total === 2);
+}
+
+ck('리포트 화면이 증상·조치를 나란히 보여 준다',
+  /class="pane sym"/.test(AS) && /class="pane act"/.test(AS) &&
+  /현장에서 확인한 증상/.test(AS) && /조치 · 해결/.test(AS));
+ck('엑셀은 요약·사례 두 시트로 나간다',
+  /addWorksheet\('A\/S 항목 요약'\)/.test(AS) && /addWorksheet\('증상·조치 사례'\)/.test(AS) &&
+  /function buildAsReportPlan/.test(AS));
+ck('보고서용 텍스트를 클립보드로 복사할 수 있다',
+  /function reportText/.test(AS) && /navigator\.clipboard\.writeText/.test(AS));
+ck('상한으로 잘린 사실을 화면과 텍스트 양쪽에서 알린다',
+  /조회 상한으로 생략됨/.test(AS) && /사례 '\+it\.truncated\+'건 생략/.test(AS));
+ck('허브 메뉴에 A/S 항목별 타일이 있다',
+  /id="appBtnAsReport"/.test(read('index.html')) &&
+  /asreport:\s*\{name:/.test(read('index.html')));
+
 /* ══════════ 8. 클라이언트 압축·동시성 (실제 실행) ══════════ */
 section('압축 기준 · 동시 실행 제한');
 
@@ -515,9 +611,9 @@ ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 화면과 코드에 남긴�
   /\[보안 주의\]/.test(G));
 ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
-ck('서비스워커 캐시 버전이 136 이상이다',
-  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 136);
-ck('GAS 버전이 3.5.1 로 올라갔다', /ver:'3\.5\.1'/.test(G));
+ck('서비스워커 캐시 버전이 138 이상이다',
+  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 138);
+ck('GAS 버전이 3.6.0 로 올라갔다', /ver:'3\.6\.0'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);
