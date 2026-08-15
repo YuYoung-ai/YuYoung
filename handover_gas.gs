@@ -881,7 +881,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.7.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.8.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -1219,6 +1219,15 @@ function photoSheetIfReady_(){ return sheet_(SNAP.SHEET); }
 function photoKeyClean_(v){ return String(v==null?'':v).replace(/[^A-Za-z0-9_-]/g,'').slice(0,64); }
 function photoDescClean_(v){ return String(v==null?'':v).replace(/[\r\n\t]+/g,' ').trim().slice(0, SNAP.MAX_DESC); }
 
+function photoRowObject_(r, row){
+  return { recordId:String(r[0]||'').trim(), photoId:String(r[1]||'').trim(),
+           hosp:String(r[2]||'').trim(), sn:String(r[3]||'').trim(),
+           kind:String(r[4]||'').trim().toUpperCase(), seq:Number(r[5])||0,
+           fileId:String(r[6]||'').trim(), desc:String(r[7]||''),
+           at:String(r[8]||''), status:String(r[9]||'').trim().toUpperCase(),
+           reqId:String(r[10]||'').trim(), _row:row };
+}
+
 /** 사진 시트 전체를 한 번만 읽어 객체 배열로 — 행마다 조회하지 않는다 */
 function photoReadAll_(){
   var sh = photoSheetIfReady_();
@@ -1230,14 +1239,39 @@ function photoReadAll_(){
   for(var i=0;i<v.length;i++){
     var r = v[i];
     if(!String(r[0]||'').trim() && !String(r[6]||'').trim()) continue;   /* 완전 빈 행 스킵 */
-    out.push({ recordId:String(r[0]||'').trim(), photoId:String(r[1]||'').trim(),
-               hosp:String(r[2]||'').trim(), sn:String(r[3]||'').trim(),
-               kind:String(r[4]||'').trim().toUpperCase(), seq:Number(r[5])||0,
-               fileId:String(r[6]||'').trim(), desc:String(r[7]||''),
-               at:String(r[8]||''), status:String(r[9]||'').trim().toUpperCase(),
-               reqId:String(r[10]||'').trim(), _row:i+2 });
+    out.push(photoRowObject_(r, i+2));
   }
   return out;
+}
+
+/** 특정 기록의 사진만 읽는다.
+ * photo_add 재시도·최종 연결에서 매번 11열 전체를 읽던 비용을 줄이기 위해
+ * 먼저 기록ID 1열만 훑고, 일치 행이 있는 짧은 범위만 상세 11열로 읽는다. */
+function photoReadRecord_(recordId){
+  var sh=photoSheetIfReady_();
+  if(!sh) return [];
+  var last=sh.getLastRow();
+  if(last<2) return [];
+  var ids=sh.getRange(2,1,last-1,1).getDisplayValues();
+  var first=-1, end=-1;
+  for(var i=0;i<ids.length;i++){
+    if(String(ids[i][0]||'').trim()===recordId){
+      if(first<0) first=i+2;
+      end=i+2;
+    }
+  }
+  if(first<0) return [];
+  var vals=sh.getRange(first,1,end-first+1,SNAP_HEAD.length).getDisplayValues();
+  var out=[];
+  for(var j=0;j<vals.length;j++){
+    var o=photoRowObject_(vals[j],first+j);
+    if(o.recordId===recordId) out.push(o);
+  }
+  return out;
+}
+
+function photoFindInSheet_(recordId, photoId){
+  return photoFind_(photoReadRecord_(recordId), recordId, photoId);
 }
 
 /** recordId+photoId 복합키 조회 — 멱등성의 기준 */
@@ -1281,7 +1315,7 @@ function photoAdd_(p){
   var seq  = Math.max(1, Math.min(Number(p&&p.seq)||1, SNAP.MAX_CAUSE));
 
   /* 1) 락 밖 사전 조회 — 이미 올라간 사진이면 업로드 자체를 건너뛴다 */
-  var pre = photoFind_(photoReadAll_(), recordId, photoId);
+  var pre = photoFindInSheet_(recordId, photoId);
   if(pre) return {success:true, dedup:true, clientPhotoId:photoId, fileId:pre.fileId, status:pre.status};
 
   /* 2) Drive 업로드는 반드시 락 밖 — 콜드스타트가 락 보유 시간을 잡아먹지 않게 */
@@ -1297,7 +1331,7 @@ function photoAdd_(p){
     return {success:false, busy:true, error:'busy — 사진 등록이 진행 중입니다. 잠시 후 다시 시도하세요.'};
   }
   try{
-    var again = photoFind_(photoReadAll_(), recordId, photoId);
+    var again = photoFindInSheet_(recordId, photoId);
     if(again){
       photoDiscard_(file);                       /* 방금 올린 중복 파일 회수 */
       return {success:true, dedup:true, clientPhotoId:photoId, fileId:again.fileId, status:again.status};
@@ -1330,7 +1364,7 @@ function photoAbandon_(p){
   try{ lock.waitLock(15000); held = true; }
   catch(lockErr){ return {success:false, busy:true, error:'busy — 잠시 후 다시 시도하세요.'}; }
   try{
-    var hit = photoFind_(photoReadAll_(), recordId, photoId);
+    var hit = photoFindInSheet_(recordId, photoId);
     if(!hit) return {success:true, removed:false, reason:'not-found'};
     if(hit.status === SNAP.ST_OK){
       return {success:false, error:'이미 기록에 연결된 사진은 폐기할 수 없습니다'};
@@ -1409,7 +1443,7 @@ function hvPhotoRefs_(payload){
 /** recordId+clientPhotoId → Drive 파일 ID 결정. 남의 recordId 사진은 조회되지 않는다. */
 function hvResolvePhotos_(recordId, refs){
   if(!photoSheetIfReady_()) return {ok:false, error:SNAP_ERR_SETUP};
-  var rows = photoReadAll_(), sn = [], causes = [], afters = [], list = [];
+  var rows = photoReadRecord_(recordId), sn = [], causes = [], afters = [], list = [];
   if(refs.length > SNAP.MAX_CAUSE + SNAP.MAX_AFTER + 1){
     return {ok:false, error:'사진은 S/N 1장, 증상 사진 최대 '+SNAP.MAX_CAUSE+
                             '장, 해결 후 사진 '+SNAP.MAX_AFTER+'장까지 등록할 수 있습니다'};
@@ -1452,23 +1486,27 @@ function hvResolvePhotos_(recordId, refs){
 function hvCommitPhotos_(recordId, list, hosp, sn){
   var sh = photoSheetIfReady_();
   if(!sh || !list || !list.length) return 0;
-  var n = 0, changed = [];
+  var first=list.reduce(function(n,it){return Math.min(n,it._row);},list[0]._row);
+  var last=list.reduce(function(n,it){return Math.max(n,it._row);},list[0]._row);
+  var range=sh.getRange(first,1,last-first+1,SNAP_HEAD.length);
+  var before=range.getValues();
+  var after=before.map(function(r){return r.slice();});
+  var n = 0;
   try{
     list.forEach(function(it){
-      var before = sh.getRange(it._row, 1, 1, SNAP_HEAD.length).getValues()[0];
-      sh.getRange(it._row, 1, 1, SNAP_HEAD.length).setValues([photoRowValues_({
+      after[it._row-first]=photoRowValues_({
         recordId:recordId, photoId:it.clientPhotoId, hosp:hosp, sn:sn, kind:it.kind,
         seq:it.seq, fileId:it.fileId, desc:it.desc, at:it.at,
-        status:SNAP.ST_OK, reqId:recordId})]);
-      changed.push({row:it._row, values:before});
+        status:SNAP.ST_OK, reqId:recordId});
       n++;
     });
+    /* 보통 세 사진은 연속 행이다. 다른 사용자의 행이 사이에 있어도 before 값을 그대로
+       되써 보존하면서, 사진별 setValues 3회를 범위 setValues 1회로 줄인다. */
+    range.setValues(after);
   }catch(e){
-    /* 일부 사진만 OK 로 남지 않도록 가능한 범위에서 이전 행을 복원한다. */
-    for(var i=changed.length-1;i>=0;i--){
-      try{ sh.getRange(changed[i].row,1,1,SNAP_HEAD.length).setValues([changed[i].values]); }
-      catch(re){ Logger.log('[photo] 연결 롤백 실패: '+re); }
-    }
+    /* 일부 사진만 OK 로 남지 않도록 한 번에 이전 범위를 복원한다. */
+    try{ range.setValues(before); }
+    catch(re){ Logger.log('[photo] 연결 롤백 실패: '+re); }
     throw e;
   }
   return n;
@@ -2675,7 +2713,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.7.0', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.8.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2759,7 +2797,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.7.0',
+  var out = {success:true, ver:'3.8.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

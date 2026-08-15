@@ -123,6 +123,19 @@ ck('기본 기간이 최근 3개월로 채워진다', await page.evaluate(() => 
   return !!a && !!b && days > 80 && days < 100 &&
     document.querySelector('#rangeChips .chip.on').getAttribute('data-range') === 'm3';
 }));
+ck('넓은 화면은 PC 보기가 기본이고 좌우 분할을 유지한다', await page.evaluate(() => {
+  const cols = getComputedStyle(document.querySelector('.split')).gridTemplateColumns.split(' ');
+  return document.body.getAttribute('data-view-mode') === 'pc' && cols.length >= 2 &&
+    document.getElementById('viewPc').getAttribute('aria-pressed') === 'true';
+}));
+await page.click('#viewMobile');
+ck('모바일 보기로 바꾸면 유형 목록이 가로 선택줄이 되고 선택을 기억한다', await page.evaluate(() => {
+  return document.body.getAttribute('data-view-mode') === 'mobile' &&
+    getComputedStyle(document.getElementById('typeList')).display === 'flex' &&
+    localStorage.getItem('baz_asreport_view_mode') === 'mobile' &&
+    document.getElementById('viewMobile').getAttribute('aria-pressed') === 'true';
+}));
+await page.click('#viewPc');
 
 section('2. 집계 불러오기');
 await page.click('#btnLoad');

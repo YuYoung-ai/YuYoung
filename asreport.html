@@ -21,9 +21,15 @@ header{background:var(--navy);color:#fff;padding:14px 16px;
   display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 header h1{margin:0;font-size:17px;font-weight:700}
 header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
+.header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .home-link{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;
   background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.3);color:#cfdbf0;
   font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none;white-space:nowrap}
+.view-switch{display:inline-flex;gap:2px;padding:3px;border-radius:9px;
+  background:rgba(255,255,255,.1);border:1px solid rgba(202,220,252,.28)}
+.view-switch button{padding:4px 8px;border-radius:6px;background:transparent;color:#B9C6E4;
+  font-size:11px;line-height:1.35;white-space:nowrap}
+.view-switch button.on{background:#fff;color:var(--navy);box-shadow:0 1px 4px rgba(0,0,0,.16)}
 .wrap{max-width:1320px;margin:0 auto;padding:16px}
 .card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:16px;margin-bottom:14px}
 .sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
@@ -56,12 +62,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
 /* ── 2단: 유형 목록 · 상세 ─────────────────────────────────────────── */
 .split{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;align-items:start}
-@media (max-width:900px){ .split{grid-template-columns:1fr} }
 
 /* 사례가 길어도 유형 목록은 따라오게 — 유형을 바꿔 가며 훑는 화면이다 */
 .tlist{max-height:calc(100vh - 120px);overflow:auto;border:1px solid var(--gray-line);
   border-radius:10px;position:sticky;top:12px}
-@media (max-width:900px){ .tlist{position:static;max-height:44vh} }
 .titem{display:block;width:100%;text-align:left;border:none;background:#fff;padding:10px 12px;
   border-bottom:1px solid var(--gray-line);cursor:pointer;font-family:inherit}
 .titem:last-child{border-bottom:none}
@@ -90,7 +94,6 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .case-head .spacer{flex:1}
 .case-pick{width:auto;min-width:0;margin:0;accent-color:var(--teal)}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-@media (max-width:640px){ .pair{grid-template-columns:1fr} }
 .pane{border:1px solid var(--gray-line);border-radius:8px;padding:8px 9px;background:#FAFBFD}
 .pane h5{margin:0 0 5px;font-size:11px;font-weight:700;letter-spacing:.3px}
 .pane.sym h5{color:var(--red)}
@@ -126,6 +129,33 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lb-stage{background:#101828;display:flex;align-items:center;justify-content:center;min-height:200px}
 .lb-stage img{max-width:100%;max-height:64vh;object-fit:contain;display:block}
+
+/* ── PC / 모바일 보기 ────────────────────────────────────────────────
+   실제 사용은 PC가 대부분이라 PC 레이아웃을 기본 계약으로 유지한다.
+   모바일 보기는 유형 목록을 가로 선택줄로 바꾸고 사례의 증상·조치를 세로로 쌓아
+   좁은 화면에서 두 칸이 찌그러지지 않게 한다. */
+body.view-mobile .wrap{max-width:680px;padding:10px}
+body.view-mobile .card{padding:12px;margin-bottom:10px}
+body.view-mobile .split{grid-template-columns:1fr;gap:10px}
+body.view-mobile .tlist{position:static;max-height:none;display:flex;overflow-x:auto;
+  overflow-y:hidden;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+body.view-mobile .titem{flex:0 0 min(78vw,260px);border-bottom:none;border-right:1px solid var(--gray-line);
+  scroll-snap-align:start}
+body.view-mobile .pair{grid-template-columns:1fr}
+body.view-mobile .guide dl{grid-template-columns:1fr;gap:2px}
+body.view-mobile .guide dd{margin:0 0 5px}
+body.view-mobile .row>div{flex-basis:100%;min-width:0}
+body.view-mobile .report-actions{width:100%;display:grid!important;grid-template-columns:1fr}
+body.view-mobile .report-actions button{width:100%}
+body.view-mobile .case{padding:10px}
+body.view-mobile .case-head .spacer{display:none}
+
+@media (max-width:640px){
+  header{align-items:stretch;flex-direction:column}
+  .header-actions{justify-content:space-between}
+  .view-switch{flex:1}
+  .view-switch button{flex:1}
+}
 </style>
 <script src="auth.js"></script>
 <script src="js/baz-dom.js"></script>
@@ -139,7 +169,13 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
     <h1>A/S 항목별 증상 · 조치 리포트</h1>
     <p>소분류마다 실제 증상과 조치를 모아 봅니다 — 품질팀 제출·보고서 작성용</p>
   </div>
-  <a href="index.html" class="home-link">← 메뉴</a>
+  <div class="header-actions">
+    <div class="view-switch" role="group" aria-label="화면 보기 방식">
+      <button type="button" id="viewPc" data-view="pc" aria-pressed="false">🖥 PC</button>
+      <button type="button" id="viewMobile" data-view="mobile" aria-pressed="false">📱 모바일</button>
+    </div>
+    <a href="index.html" class="home-link">← 메뉴</a>
+  </div>
 </header>
 
 <div class="wrap">
@@ -216,7 +252,7 @@ footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;f
     </div>
 
     <div class="row" style="justify-content:flex-end;margin-top:14px">
-      <div style="flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap">
+      <div class="report-actions" style="flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-muted" id="btnCopy">📋 보고서용 텍스트 복사</button>
         <button class="btn-dark" id="btnCopySel">📋 선택 사례만 복사</button>
         <button class="btn-primary" id="btnExcel">📊 품질팀 제출용 엑셀 (.xlsx)</button>
@@ -277,6 +313,30 @@ function toast(m){
 function normKey(s){ return String(s==null?'':s).replace(/\s+/g,'').toLowerCase(); }
 function isoDate(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* PC 사용 비중이 높아 넓은 화면은 PC 보기, 실제 휴대폰 폭은 모바일 보기로 시작한다.
+   사용자가 바꾼 선택은 같은 기기에서 다음 방문에도 유지한다. */
+var VIEW_MODE_KEY='baz_asreport_view_mode';
+function preferredViewMode(){
+  var saved='';
+  try{ saved=localStorage.getItem(VIEW_MODE_KEY)||''; }catch(e){}
+  if(saved==='pc'||saved==='mobile') return saved;
+  return window.matchMedia && window.matchMedia('(max-width: 760px)').matches ? 'mobile' : 'pc';
+}
+function setViewMode(mode, remember){
+  mode=(mode==='mobile')?'mobile':'pc';
+  document.body.classList.toggle('view-mobile', mode==='mobile');
+  document.body.classList.toggle('view-pc', mode==='pc');
+  document.body.setAttribute('data-view-mode', mode);
+  ['pc','mobile'].forEach(function(k){
+    var b=el(k==='pc'?'viewPc':'viewMobile');
+    if(!b) return;
+    var on=k===mode;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on?'true':'false');
+  });
+  if(remember){ try{ localStorage.setItem(VIEW_MODE_KEY, mode); }catch(e){} }
 }
 
 /* ── 기간 프리셋 ─────────────────────────────────────────────────────── */
@@ -935,6 +995,8 @@ function closeLightbox(){
 
 /* ── 바인딩 ──────────────────────────────────────────────────────────── */
 function bind(){
+  el('viewPc').addEventListener('click', function(){ setViewMode('pc', true); });
+  el('viewMobile').addEventListener('click', function(){ setViewMode('mobile', true); });
   el('btnLoad').addEventListener('click', loadReport);
   el('btnCancel').addEventListener('click', function(){
     cancelLoad(); setStatus('중단 요청 — 진행 중인 요청을 끊는 중…');
@@ -1013,6 +1075,7 @@ function bind(){
 }
 
 /* ── 시작 ────────────────────────────────────────────────────────────── */
+setViewMode(preferredViewMode(), false);
 applyRange('m3');
 bind();
 render();

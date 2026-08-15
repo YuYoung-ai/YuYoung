@@ -85,10 +85,14 @@ section('photo_add 멱등성 · 동시 요청');
 
 const addSrc = grab(G, 'photoAdd_');
 ck('photo_add: 사전 조회 → 락 밖 업로드 → 락 안 재조회(double-check)',
-  addSrc.indexOf('photoFind_(photoReadAll_(), recordId, photoId)') <
+  addSrc.indexOf('photoFindInSheet_(recordId, photoId)') <
     addSrc.indexOf('savePhoto_') &&
   addSrc.indexOf('savePhoto_') < addSrc.indexOf('waitLock(15000)') &&
-  addSrc.lastIndexOf('photoFind_(photoReadAll_(), recordId, photoId)') > addSrc.indexOf('waitLock(15000)'));
+  addSrc.lastIndexOf('photoFindInSheet_(recordId, photoId)') > addSrc.indexOf('waitLock(15000)'));
+ck('photo_add: 11열 전체 대신 기록ID 1열에서 현재 기록 범위만 찾는다',
+  !/photoReadAll_/.test(addSrc) &&
+  /getRange\(2,1,last-1,1\)/.test(grab(G, 'photoReadRecord_')) &&
+  /getRange\(first,1,end-first\+1,SNAP_HEAD\.length\)/.test(grab(G, 'photoReadRecord_')));
 ck('photo_add: 락 안에서 이미 있으면 방금 올린 중복 파일을 회수한다',
   /if\(again\)\{\s*\n?\s*photoDiscard_\(file\);/.test(addSrc));
 ck('photo_add: Drive 업로드 전체를 락 안에서 실행하지 않는다',
@@ -104,17 +108,20 @@ ck('사진 파일명에 사진 ID 를 붙여 동명 충돌을 막는다',
 {
   const sheetRows = [];
   let uploaded = 0, discarded = 0, reads = 0;
-  const photoFind = gasFn(['photoFind_'], 'photoFind_');
   /* 요청 A 가 읽기 1(사전)·2(락 안)를, 요청 B 가 읽기 3(사전)을 소비하는 동안은 빈 시트 —
      즉 B 의 사전 조회가 A 의 append 보다 먼저 일어난 '진짜 경합' 상황이다.
      읽기 4(B 의 락 안 재조회)부터 A 가 넣은 행이 보인다. */
-  const readAll = () => (++reads <= 3 ? [] : sheetRows.slice());
+  const findInSheet = (recordId, photoId) => {
+    reads++;
+    const rows = reads <= 3 ? [] : sheetRows.slice();
+    return rows.find(r => r.recordId === recordId && r.photoId === photoId) || null;
+  };
   const mkAdd = () => new Function(
-    'photoKeyClean_', 'photoSheetIfReady_', 'photoReadAll_', 'photoFind_', 'savePhoto_',
+    'photoKeyClean_', 'photoSheetIfReady_', 'photoFindInSheet_', 'savePhoto_',
     'photoDiscard_', 'photoAppend_', 'photoDescClean_', 'LockService', 'Logger', 'SNAP', 'SNAP_ERR_SETUP',
     grab(G, 'photoKindAllowed_') + '\n' + grab(G, 'photoAdd_') + '; return photoAdd_;')(
       s2 => String(s2 || '').replace(/[^A-Za-z0-9_-]/g, ''),
-      () => ({}), readAll, photoFind,
+      () => ({}), findInSheet,
       () => { uploaded++; return { id: 'FILE' + uploaded }; },
       () => { discarded++; return true; },
       (sh, o) => sheetRows.push(o),
@@ -152,7 +159,7 @@ ck('서버는 payload 의 fileId 를 읽지 않고 시트에서 결정한다',
 {
   const resolve = gasFn(['hvResolvePhotos_', 'photoFind_', 'photoKindAllowed_'], 'hvResolvePhotos_', {
     photoSheetIfReady_: () => ({}),
-    photoReadAll_: () => ([
+    photoReadRecord_: () => ([
       { recordId: 'rec_1', photoId: 'sn1', fileId: 'FSN', kind: 'SN', status: 'ORPHAN', at: 't', _row: 2 },
       { recordId: 'rec_1', photoId: 'c1', fileId: 'FC1', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 3 },
       { recordId: 'other', photoId: 'x9', fileId: 'FX', kind: 'CAUSE', status: 'ORPHAN', at: 't', _row: 4 }
@@ -202,6 +209,9 @@ ck('기록 ID 열 누락은 메인 행을 쓰기 전에 거부한다',
   doPost.indexOf("var recCol = colBy_(hdr, REC_ID_COLS)") < doPost.indexOf("var row = lastDataRow_(sh, hdr) + 1"));
 ck('사진 메타 연결까지 성공한 뒤에만 행을 최종 확정한다',
   doPost.indexOf('hvCommitPhotos_') < doPost.indexOf('committed = true'));
+ck('사진 3장 상태는 사진별 쓰기가 아니라 한 범위 setValues 로 확정한다',
+  /range\.setValues\(after\)/.test(grab(G, 'hvCommitPhotos_')) &&
+  !/forEach[\s\S]*sh\.getRange\(it\._row/.test(grab(G, 'hvCommitPhotos_')));
 ck('행 확정 전 실패는 같은 recordId의 재시도를 막는 캐시에 저장하지 않는다',
   (doPost.match(/reqPut_\(reqId/g)||[]).length === 1 &&
   doPost.indexOf('reqPut_(reqId') > doPost.indexOf('var out ='));
@@ -529,6 +539,15 @@ ck('유형마스터의 표준 대응을 대분류+유형에 붙인다',
 ck('리포트 화면이 증상·조치를 나란히 보여 준다',
   /class="pane sym"/.test(AS) && /class="pane act"/.test(AS) &&
   /현장에서 확인한 증상/.test(AS) && /조치 · 해결/.test(AS));
+ck('asreport는 PC·모바일 보기 전환을 제공하고 선택을 기억한다',
+  /id="viewPc"/.test(AS) && /id="viewMobile"/.test(AS) &&
+  /function setViewMode/.test(AS) && /baz_asreport_view_mode/.test(AS));
+ck('asreport 모바일 보기는 유형 가로 선택줄·증상/조치 1열을 쓴다',
+  /body\.view-mobile \.tlist\{[^}]*display:flex/.test(AS) &&
+  /body\.view-mobile \.pair\{grid-template-columns:1fr\}/.test(AS));
+ck('asreport PC 보기는 기존 넓은 2단 리포트를 기본으로 유지한다',
+  /\.wrap\{max-width:1320px/.test(AS) &&
+  /\.split\{display:grid;grid-template-columns:minmax\(260px,340px\) 1fr/.test(AS));
 ck('엑셀은 요약·사례 두 시트로 나간다',
   /addWorksheet\('A\/S 항목 요약'\)/.test(AS) && /addWorksheet\('증상·조치 사례'\)/.test(AS) &&
   /function buildAsReportPlan/.test(AS));
@@ -652,6 +671,20 @@ ck('목표 용량: S/N 600~900KB · 원인 400~700KB',
   ck('풀 실행: 재시도는 실패분만 다시 실행한다(성공분 재전송 없음)',
     r2.ran.join() === 'c' && Object.keys(r2.results).sort().join() === 'a,b,c,d,e');
 }
+{
+  const queuePhotoUpload = new Function(
+    'var PHOTO_UPLOAD_LIMIT=2, PHOTO_UPLOAD_ACTIVE=0, PHOTO_UPLOAD_WAIT=[];\n' +
+    grab(H, 'queuePhotoUpload') + '\n' + grab(H, 'drainPhotoUploads') +
+    '; return queuePhotoUpload;')();
+  let live=0, peak=0;
+  const jobs=[1,2,3,4,5].map(i => queuePhotoUpload(() => {
+    live++; peak=Math.max(peak,live);
+    return new Promise(resolve => setTimeout(() => { live--; resolve(i); }, 5));
+  }));
+  const out=await Promise.all(jobs);
+  ck('화면 전체 업로드 큐 실행: S/N·증상·해결 후를 합쳐 동시 2개 이하',
+    peak===2 && out.join(',')==='1,2,3,4,5');
+}
 
 /* ══════════ 9. 기존 계약 보존 ══════════ */
 section('기존 기능 보존');
@@ -678,8 +711,17 @@ ck('브라우저 압축은 실제 canvas.toBlob 경로를 사용한다',
   /canvas\.toBlob\(/.test(PHOTO_SRC) && /function blobDataUrl/.test(PHOTO_SRC));
 ck('원인 사진 슬롯마다 상태를 표시한다(압축·업로드·완료·실패·재시도)',
   /압축 중…/.test(H) && /업로드 중…/.test(H) && /'완료'/.test(H) && /재시도/.test(H));
-ck('모바일 촬영을 위해 현장 사진에 capture 를 적용한다',
+ck('모바일 바로 촬영 입력은 증상·해결 후 두 칸에 유지한다',
   (H.match(/capture="environment"/g) || []).length === 2);
+ck('증상·해결 후마다 capture 없는 갤러리 입력을 따로 제공한다',
+  /id="causeFile_CAUSE"/.test(H) && /id="causeFile_AFTER"/.test(H) &&
+  /for="causeFile_CAUSE">🖼 갤러리 선택/.test(H) &&
+  /for="causeFile_AFTER">🖼 갤러리 선택/.test(H));
+ck('세 사진 전체의 실제 업로드 동시 실행은 2개로 제한한다',
+  /PHOTO_UPLOAD_LIMIT=2/.test(H) && /function queuePhotoUpload/.test(H) &&
+  /return queuePhotoUpload\(function\(\)/.test(grab(H, 'uploadPhotoSlot')));
+ck('모바일에서는 증상·해결 후 사진 칸을 세로로 넓게 쌓는다',
+  /@media \(max-width:560px\)[\s\S]{0,100}\.cause-grid\{grid-template-columns:1fr/.test(H));
 ck('현장 촬영 화면이 증상·해결 후 두 칸으로 고정된다',
   /var CAUSE_KINDS = \[/.test(H) &&
   /kind:'CAUSE', title:'현장에서 확인한 증상'/.test(H) &&
@@ -697,7 +739,7 @@ ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
 ck('서비스워커 캐시 버전이 139 이상이다',
   Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 139);
-ck('GAS 버전이 3.7.0 로 올라갔다', /ver:'3\.7\.0'/.test(G));
+ck('GAS 버전이 3.8.0 로 올라갔다', /ver:'3\.8\.0'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);
