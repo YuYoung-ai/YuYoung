@@ -532,6 +532,80 @@ ck('허브 메뉴에 A/S 항목별 타일이 있다',
   /id="appBtnAsReport"/.test(read('index.html')) &&
   /asreport:\s*\{name:/.test(read('index.html')));
 
+/* ══════════ 7-C. 사진 설명 자주 쓰는 문구 ══════════ */
+section('자주 쓰는 문구 · 관리자 검수');
+
+ck('문구 시트는 구분·문구·대분류·유형·순서·사용 6열이다',
+  /var PHRASE_HEAD = \['구분','문구','대분류','유형','순서','사용'\];/.test(G));
+ck('문구 저장은 Lv.3 토큰을 요구한다',
+  /function photoPhraseSave_/.test(G) &&
+  /verifyLevel_\(p\.token\|\|''\);\s*\n\s*if\(lv < 3\)/.test(grab(G, 'photoPhraseSave_')));
+ck('문구 조회는 로그인만 되면 가능하다(입력 보조)',
+  grab(G, 'doGet').indexOf("verifyLevel_(p.token||'') < 1") <
+    grab(G, 'doGet').indexOf("action==='photophrase'"));
+ck('POST 허용 목록에 photophrase_save 가 등록돼 있다',
+  /'photophrase_save'\]/.test(G) &&
+  /payload\.action==='photophrase_save'/.test(G));
+ck('문구는 시트 수식 주입을 막고 길이를 자른다',
+  /safeCell_\(String\(r\.text==null\?'':r\.text\)/.test(G) &&
+  /slice\(0, PHRASE\.MAX_LEN\)/.test(G));
+
+/* 저장 정규화 실행 — 중복·빈칸·사용여부가 시트 행으로 어떻게 떨어지는지 */
+{
+  const saved = [];
+  const save = new Function(
+    'verifyLevel_', 'MENU', 'PHRASE', 'PHRASE_HEAD', 'safeCell_', 'sheet_', 'ss_', 'Utilities',
+    grab(G, 'phraseKind_') + '\n' + grab(G, 'phraseKindLabel_') + '\n' +
+    grab(G, 'photoPhraseSave_') + '; return photoPhraseSave_;')(
+      () => 3, { AUTH_VERIFY_URL: 'x' },
+      { SHEET: '사진문구', MAX: 200, MAX_LEN: 100 },
+      ['구분', '문구', '대분류', '유형', '순서', '사용'],
+      v => String(v == null ? '' : v),
+      () => ({ clearContents(){}, getRange: (r, c, nr, nc) => ({ setValues(v){ saved.push({ r, v }); } }) }),
+      () => ({ insertSheet(){ return null; } }),
+      { formatDate: () => '2026-08-15 00:00' });
+
+  const out = save({ token: 't', rows: [
+    { kind: 'CAUSE', text: '호스 연결부 물맺힘', cat: '장비', type: '냉각수 누수', order: 1, on: true },
+    { kind: 'AFTER', text: '부품 교체 후 정상', on: true },
+    { kind: 'CAUSE', text: '호스 연결부  물맺힘', on: true },   /* 공백만 다른 중복 */
+    { kind: 'CAUSE', text: '   ', on: true },                   /* 빈 문구 */
+    { kind: 'CAUSE', text: '보류 문구', on: false }
+  ]});
+  const body = saved.find(x => x.r === 2);
+  ck('문구 저장 실행: 중복·빈칸을 접고 개수를 알려 준다',
+    out.success === true && out.count === 3 && out.skipped === 2, JSON.stringify(out));
+  ck('문구 저장 실행: 구분을 증상/해결 라벨로 적는다',
+    body.v[0][0] === '증상' && body.v[1][0] === '해결', JSON.stringify(body.v.map(r => r[0])));
+  ck('문구 저장 실행: 사용 꺼짐은 지우지 않고 FALSE 로 남긴다',
+    body.v[2][1] === '보류 문구' && body.v[2][5] === 'FALSE');
+  ck('문구 저장 실행: 순서를 1부터 다시 매긴다',
+    body.v.map(r => r[4]).join(',') === '1,2,3', body.v.map(r => r[4]).join(','));
+
+  const denied = new Function(
+    'verifyLevel_', 'MENU', 'PHRASE', 'PHRASE_HEAD', 'safeCell_', 'sheet_', 'ss_', 'Utilities',
+    grab(G, 'phraseKind_') + '\n' + grab(G, 'phraseKindLabel_') + '\n' +
+    grab(G, 'photoPhraseSave_') + '; return photoPhraseSave_;')(
+      () => 2, { AUTH_VERIFY_URL: 'x' }, { SHEET: 's', MAX: 200, MAX_LEN: 100 },
+      [], v => v, () => null, () => null, { formatDate: () => '' });
+  const deniedOut = denied({ token: 't', rows: [{ kind: 'CAUSE', text: 'x' }] });
+  ck('문구 저장 실행: Lv.2 는 거부된다',
+    deniedOut.success === false && /보안레벨 3/.test(deniedOut.error), JSON.stringify(deniedOut));
+}
+
+ck('현장 화면이 문구 버튼과 관리자 버튼을 갖는다',
+  /id="phraseChips_CAUSE"/.test(H) && /id="phraseChips_AFTER"/.test(H) &&
+  /id="phraseAdminBtn"/.test(H) && /id="pmModal"/.test(H));
+ck('문구 버튼은 눌렀다 다시 누르면 빠진다(조합 입력)',
+  /function togglePhrase/.test(H) && /parts\.splice\(at, 1\)/.test(H));
+ck('지금 고른 A/S 항목에 맞는 문구를 앞으로 올린다',
+  /function phrasesFor/.test(H) && /hit = 2;/.test(H) && /hit = -1;/.test(H));
+ck('문구 관리 버튼은 Lv.3 에게만 보인다',
+  /function syncPhraseAdminBtn/.test(H) && /pmLevel\(\) >= 3/.test(H) &&
+  /BazAuth\.cachedLevel/.test(H));
+ck('문구 관리 모달은 스크립트보다 먼저 그려진다(바인딩 시점에 존재)',
+  H.indexOf('id="pmModal"') < H.indexOf('function bindPhraseAdmin'));
+
 /* ══════════ 8. 클라이언트 압축·동시성 (실제 실행) ══════════ */
 section('압축 기준 · 동시 실행 제한');
 
@@ -611,9 +685,9 @@ ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 화면과 코드에 남긴�
   /\[보안 주의\]/.test(G));
 ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
-ck('서비스워커 캐시 버전이 138 이상이다',
-  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 138);
-ck('GAS 버전이 3.6.0 로 올라갔다', /ver:'3\.6\.0'/.test(G));
+ck('서비스워커 캐시 버전이 139 이상이다',
+  Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 139);
+ck('GAS 버전이 3.7.0 로 올라갔다', /ver:'3\.7\.0'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);

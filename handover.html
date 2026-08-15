@@ -128,6 +128,43 @@ label .req{display:inline-block;font-size:10.5px;font-weight:700;color:var(--red
 .cs-title{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px}
 .cause-item{border:1px solid var(--gray-line);border-radius:9px;overflow:hidden;background:#F0F2F6;position:relative}
 .cause-item[hidden],.cause-zone[hidden]{display:none}
+/* ── 자주 쓰는 문구 ─────────────────────────────────────────────── */
+.phrase-box{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:420px){ .phrase-box{grid-template-columns:1fr} }
+.phrase-box[hidden]{display:none}
+.phrase-title{font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px}
+.phrase-chips{display:flex;flex-wrap:wrap;gap:4px}
+.phrase-chips .pc{border:1px solid var(--gray-line);background:#fff;color:var(--text);
+  border-radius:14px;padding:5px 10px;font-size:11.5px;font-weight:600;cursor:pointer;
+  font-family:inherit;line-height:1.3;text-align:left}
+.phrase-chips .pc:disabled{opacity:.45;cursor:not-allowed}
+.phrase-chips .pc.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.phrase-chips .pc.hit{border-color:var(--teal);color:var(--teal)}
+.phrase-chips .none{font-size:11px;color:var(--text-muted)}
+/* 문구 관리(Lv.3) */
+.pm-modal{position:fixed;inset:0;background:rgba(10,16,32,.6);z-index:80;
+  display:none;align-items:center;justify-content:center;padding:14px}
+.pm-modal.show{display:flex}
+.pm-sheet{background:#fff;border-radius:12px;max-width:760px;width:100%;
+  max-height:calc(100vh - 28px);display:flex;flex-direction:column;overflow:hidden}
+.pm-head{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--gray-line)}
+.pm-head h3{margin:0;font-size:14px;color:var(--navy);flex:1}
+.pm-body{flex:1;min-height:0;overflow:auto;padding:12px 14px}
+.pm-hint{font-size:11.5px;color:var(--text-muted);margin-bottom:10px;line-height:1.6}
+.pm-row{display:grid;grid-template-columns:76px 1fr 96px 110px 46px 34px;gap:6px;
+  align-items:center;margin-bottom:6px}
+@media (max-width:640px){ .pm-row{grid-template-columns:76px 1fr 46px 34px} .pm-row .pm-ctx{display:none} }
+.pm-row input,.pm-row select{padding:7px 8px;font-size:12px;border:1px solid var(--gray-line);border-radius:7px;width:100%}
+.pm-row .pm-on{display:flex;align-items:center;justify-content:center}
+.pm-row .pm-on input{width:auto;accent-color:var(--teal)}
+.pm-row .pm-del{background:#FBEAE8;color:var(--red);border:none;border-radius:7px;
+  padding:6px 0;font-size:12px;cursor:pointer;font-family:inherit;font-weight:700}
+.pm-cols{display:grid;grid-template-columns:76px 1fr 96px 110px 46px 34px;gap:6px;
+  font-size:10.5px;font-weight:700;color:var(--text-muted);margin-bottom:5px}
+@media (max-width:640px){ .pm-cols{grid-template-columns:76px 1fr 46px 34px} .pm-cols .pm-ctx{display:none} }
+.pm-foot{padding:11px 14px;border-top:1px solid var(--gray-line);display:flex;gap:8px;flex-wrap:wrap}
+.pm-foot .spacer{flex:1}
+.pm-state{font-size:11.5px;color:var(--text-muted);align-self:center}
 .cause-item.err{border-color:var(--red)}
 .cause-item img{display:block;width:100%;height:96px;object-fit:cover;background:#E4E8EF}
 .cause-item .rm{position:absolute;top:5px;right:5px;width:24px;height:24px;border:none;border-radius:50%;
@@ -224,6 +261,8 @@ body.is-dirty .dirty-badge{display:inline-block}
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js"></script>
 <script src="js/baz-photo.js"></script>
+<script src="js/baz-scroll-lock.js"></script>
+<script src="js/baz-modal.js"></script>
 </head>
 <body>
 <header>
@@ -295,7 +334,11 @@ body.is-dirty .dirty-badge{display:inline-block}
            하는지가 사람마다 달랐고 리포트에서도 순서가 제각각이었다.
            → 찍을 자리를 두 칸으로 고정해 무엇을 찍어야 하는지 화면이 먼저 말한다. -->
       <div class="field full">
-        <label>현장 사진 <span class="opt">· 선택 · 증상 1장 · 해결 후 1장</span></label>
+        <label style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>현장 사진 <span class="opt">· 선택 · 증상 1장 · 해결 후 1장</span></span>
+          <button type="button" id="phraseAdminBtn" class="btn-muted btn-sm"
+                  style="display:none;font-weight:700">✎ 문구 관리</button>
+        </label>
         <div class="hint cause-warn">⚠️ 사진은 링크를 아는 사람이 열람할 수 있습니다 — 문제 지점만 담기도록 촬영 범위를 좁혀 주세요.</div>
         <div class="cause-grid" id="causeGrid">
           <div class="cause-slot" data-kind="CAUSE">
@@ -318,6 +361,18 @@ body.is-dirty .dirty-badge{display:inline-block}
           </div>
         </div>
         <div class="hint" id="causeState" role="status" aria-live="polite"></div>
+        <!-- [v3.7] 자주 쓰는 문구 — 눌러서 사진 설명에 넣는다.
+             설명이 사람마다 달라 asreport 에서 같은 증상이 여러 문구로 흩어지던 것을 줄인다. -->
+        <div class="phrase-box" id="phraseBox" hidden>
+          <div class="phrase-group" data-kind="CAUSE">
+            <div class="phrase-title">증상 문구</div>
+            <div class="phrase-chips" id="phraseChips_CAUSE"></div>
+          </div>
+          <div class="phrase-group" data-kind="AFTER">
+            <div class="phrase-title">해결 후 문구</div>
+            <div class="phrase-chips" id="phraseChips_AFTER"></div>
+          </div>
+        </div>
       </div>
       <div class="field">
         <label for="verUI">UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
@@ -448,6 +503,37 @@ body.is-dirty .dirty-badge{display:inline-block}
   <button class="btn btn-save" id="btnSave">📥 시트 기록</button>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- [v3.7] 문구 관리 (Lv.3) — 자주 쓰는 문구를 관리자가 검수·수정한다 -->
+<div class="pm-modal" id="pmModal">
+  <div class="pm-sheet">
+    <div class="pm-head">
+      <h3>사진 설명 · 자주 쓰는 문구 관리</h3>
+      <span class="pm-state" id="pmState"></span>
+      <button type="button" class="btn-muted btn-sm" id="pmClose">닫기</button>
+    </div>
+    <div class="pm-body">
+      <div class="pm-hint">
+        현장에서 <b>버튼 한 번으로 넣는 문구</b>입니다. 표현을 통일해 두면 'A/S 항목별 증상·조치'에서
+        같은 증상이 여러 문구로 흩어지지 않습니다.<br>
+        <b>대분류·유형</b>을 채우면 그 A/S 항목을 골랐을 때 위로 올라옵니다(비우면 공통 문구).
+        <b>사용</b>을 끄면 지우지 않고 화면에서만 감춥니다.
+      </div>
+      <div class="pm-cols">
+        <span>구분</span><span>문구</span>
+        <span class="pm-ctx">대분류</span><span class="pm-ctx">유형</span>
+        <span>사용</span><span></span>
+      </div>
+      <div id="pmRows"></div>
+      <button type="button" class="btn-muted btn-sm" id="pmAdd" style="margin-top:8px">+ 문구 추가</button>
+    </div>
+    <div class="pm-foot">
+      <button type="button" class="btn-muted btn-sm" id="pmReload">시트에서 다시 읽기</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn-primary" id="pmSave">저장</button>
+    </div>
+  </div>
+</div>
 
 <script>
 function el(id){ return document.getElementById(id); }
@@ -738,6 +824,7 @@ function renderCauseGrid(){
     cd.addEventListener('input', function(){ s.desc=cd.value; scheduleDraftSave(); });
     box.appendChild(cd);
   });
+  try{ renderPhraseChips(); }catch(e){}
 }
 
 /** 사진 1장 업로드 — 같은 clientPhotoId 로 재시도하면 서버가 중복 파일을 만들지 않는다 */
@@ -839,6 +926,245 @@ function onCausePick(evt, kind){
     causeSay('');
     return causeFlush();
   }, function(){ CAUSE_BUSY--; renderCauseGrid(); });
+}
+
+/* ── [v3.7] 자주 쓰는 문구 ───────────────────────────────────────────
+   증상·해결 후 설명이 비거나 사람마다 표현이 달라, 모아 보면 같은 증상이
+   여러 문구로 흩어졌다. 버튼으로 넣게 하고 목록은 관리자(Lv.3)가 검수한다. */
+var PHRASES = [];              /* {kind,text,cat,type,order,on} */
+var PHRASE_SEP = ' / ';
+
+function phraseKindOf(v){
+  var k = String(v||'').trim().toUpperCase();
+  return (k==='AFTER' || k==='해결' || k==='해결후') ? 'AFTER' : 'CAUSE';
+}
+/** 지금 고른 A/S 항목에 맞는 문구를 앞으로 — 맥락에 맞는 것부터 보이게 */
+function phrasesFor(kind){
+  var cat = val('cat'), type = subName();
+  var list = PHRASES.filter(function(p){ return p.on !== false && phraseKindOf(p.kind)===kind; });
+  return list.map(function(p){
+    var hit = 0;
+    if(p.type && p.type===type) hit = 2;
+    else if(p.cat && p.cat===cat && !p.type) hit = 1;
+    /* 다른 항목 전용 문구는 아래로 내리되 감추지는 않는다 — 현장에서 찾을 수 있어야 한다 */
+    else if(p.type || p.cat) hit = -1;
+    return {p:p, hit:hit};
+  }).sort(function(a,b){
+    return (b.hit-a.hit) || ((a.p.order||0)-(b.p.order||0))
+        || String(a.p.text).localeCompare(String(b.p.text),'ko');
+  });
+}
+/** 설명 문자열에 그 문구가 이미 들어 있는지 */
+function descHas(desc, text){
+  return String(desc||'').split(PHRASE_SEP).map(function(t){ return t.trim(); }).indexOf(text) >= 0;
+}
+/** 문구 토글 — 누르면 붙고 다시 누르면 뗀다(현장에서 오타 없이 조합) */
+function togglePhrase(kind, text){
+  var slot = causeSlotOf(kind);
+  if(!slot){ toast(phraseKindLabel(kind)+' 사진을 먼저 등록해 주세요'); return; }
+  if(photoControlsLocked()){ toast('기록 결과를 확인한 뒤 수정해 주세요'); return; }
+  var parts = String(slot.desc||'').split(PHRASE_SEP)
+    .map(function(t){ return t.trim(); }).filter(Boolean);
+  var at = parts.indexOf(text);
+  if(at >= 0) parts.splice(at, 1);
+  else parts.push(text);
+  slot.desc = parts.join(PHRASE_SEP);
+  renderCauseGrid();
+  scheduleDraftSave();
+}
+function phraseKindLabel(kind){ return kind==='AFTER' ? '해결 후' : '증상'; }
+
+function renderPhraseChips(){
+  var box = el('phraseBox');
+  if(!box) return;
+  var any = PHRASES.some(function(p){ return p.on !== false; });
+  box.hidden = !any;
+  if(!any) return;
+  var locked = photoControlsLocked();
+  ['CAUSE','AFTER'].forEach(function(kind){
+    var host = el('phraseChips_'+kind);
+    if(!host) return;
+    var slot = causeSlotOf(kind);
+    var list = phrasesFor(kind);
+    if(!list.length){ host.innerHTML = '<span class="none">등록된 문구가 없습니다</span>'; return; }
+    host.innerHTML = '';
+    list.forEach(function(x){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pc' + (slot && descHas(slot.desc, x.p.text) ? ' on' : '')
+                         + (x.hit > 0 ? ' hit' : '');
+      b.textContent = x.p.text;
+      b.disabled = !slot || locked;
+      b.title = !slot ? (phraseKindLabel(kind)+' 사진을 먼저 등록해 주세요')
+              : (x.hit > 0 ? '지금 고른 A/S 항목에 맞는 문구' : '눌러서 설명에 넣기 · 다시 누르면 빼기');
+      b.addEventListener('click', function(){ togglePhrase(kind, x.p.text); });
+      host.appendChild(b);
+    });
+  });
+}
+
+function loadPhrases(){
+  return gv('photophrase', {}).then(function(d){
+    if(!d || !d.success) return false;
+    PHRASES = d.rows || [];
+    try{ localStorage.setItem('baz_photo_phrases', JSON.stringify(PHRASES)); }catch(e){}
+    renderPhraseChips();
+    return true;
+  }).catch(function(e){
+    console.warn('[handover] 문구 목록 생략:', e);
+    return false;
+  });
+}
+function loadPhrasesCached(){
+  /* 시트가 늦게 오면 첫 촬영 때 버튼이 비어 있다 — 지난번 목록을 먼저 보여 준다 */
+  try{
+    var c = JSON.parse(localStorage.getItem('baz_photo_phrases')||'null');
+    if(Array.isArray(c)){ PHRASES = c; renderPhraseChips(); }
+  }catch(e){}
+  return loadPhrases();
+}
+
+/* ── 문구 관리 (Lv.3) ────────────────────────────────────────────── */
+var PM_ROWS = [];
+function pmLevel(){
+  try{ return (window.BazAuth && BazAuth.cachedLevel) ? BazAuth.cachedLevel() : 0; }catch(e){ return 0; }
+}
+function syncPhraseAdminBtn(){
+  var b = el('phraseAdminBtn');
+  if(b) b.style.display = (pmLevel() >= 3) ? 'inline-flex' : 'none';
+}
+function pmSay(msg){ var e=el('pmState'); if(e) e.textContent = msg||''; }
+function pmOpen(){
+  if(pmLevel() < 3){ toast('보안레벨 3(수석 매니저)만 문구를 수정할 수 있습니다'); return; }
+  PM_ROWS = PHRASES.map(function(p){
+    return {kind:phraseKindOf(p.kind), text:p.text||'', cat:p.cat||'', type:p.type||'',
+            order:Number(p.order)||0, on:p.on!==false};
+  });
+  pmRender();
+  pmSay('');
+  var box = el('pmModal');
+  if(window.BazModal && BazModal.markup){
+    BazModal.markup(box, {sheet:'.pm-sheet', label:'자주 쓰는 문구 관리'});
+    BazModal.open(box, {sheet:'.pm-sheet', name:'phrase-admin', initialFocus:'#pmAdd'});
+  } else box.classList.add('show');
+}
+function pmClose(){
+  var box = el('pmModal');
+  if(window.BazModal && BazModal.close) BazModal.close(box);
+  box.classList.remove('show');
+}
+function pmRender(){
+  var host = el('pmRows');
+  if(!host) return;
+  host.innerHTML = '';
+  if(!PM_ROWS.length){
+    host.innerHTML = '<div class="pm-hint" style="margin:0">아직 문구가 없습니다 — 아래 ‘+ 문구 추가’로 만드세요.</div>';
+    return;
+  }
+  PM_ROWS.forEach(function(r, i){
+    var row = document.createElement('div');
+    row.className = 'pm-row';
+
+    var sel = document.createElement('select');
+    [['CAUSE','증상'],['AFTER','해결 후']].forEach(function(o){
+      var op = document.createElement('option'); op.value=o[0]; op.textContent=o[1];
+      sel.appendChild(op);
+    });
+    sel.value = r.kind;
+    sel.addEventListener('change', function(){ r.kind = phraseKindOf(sel.value); });
+    row.appendChild(sel);
+
+    var tx = document.createElement('input');
+    tx.type='text'; tx.value=r.text; tx.maxLength=100; tx.placeholder='예) 호스 연결부 물맺힘';
+    tx.addEventListener('input', function(){ r.text = tx.value; });
+    row.appendChild(tx);
+
+    var cat = document.createElement('input');
+    cat.type='text'; cat.className='pm-ctx'; cat.value=r.cat; cat.maxLength=60; cat.placeholder='대분류(선택)';
+    cat.addEventListener('input', function(){ r.cat = cat.value; });
+    row.appendChild(cat);
+
+    var typ = document.createElement('input');
+    typ.type='text'; typ.className='pm-ctx'; typ.value=r.type; typ.maxLength=120; typ.placeholder='유형(선택)';
+    typ.addEventListener('input', function(){ r.type = typ.value; });
+    row.appendChild(typ);
+
+    var onWrap = document.createElement('div');
+    onWrap.className='pm-on';
+    var on = document.createElement('input');
+    on.type='checkbox'; on.checked = r.on !== false;
+    on.setAttribute('aria-label', '문구 '+(i+1)+' 사용');
+    on.addEventListener('change', function(){ r.on = on.checked; });
+    onWrap.appendChild(on);
+    row.appendChild(onWrap);
+
+    var del = document.createElement('button');
+    del.type='button'; del.className='pm-del'; del.textContent='✕';
+    del.setAttribute('aria-label', '문구 '+(i+1)+' 삭제');
+    del.addEventListener('click', function(){ PM_ROWS.splice(i,1); pmRender(); });
+    row.appendChild(del);
+
+    host.appendChild(row);
+  });
+}
+function pmAdd(){
+  PM_ROWS.push({kind:'CAUSE', text:'', cat:'', type:'', order:PM_ROWS.length+1, on:true});
+  pmRender();
+  var inputs = document.querySelectorAll('#pmRows .pm-row input[type=text]');
+  var last = inputs[inputs.length-2];        /* 구분 select 다음이 문구 입력 */
+  if(last) try{ last.focus(); }catch(e){}
+}
+async function pmSave(){
+  var rows = PM_ROWS.map(function(r, i){
+    return {kind:r.kind, text:String(r.text||'').trim(), cat:String(r.cat||'').trim(),
+            type:String(r.type||'').trim(), order:i+1, on:r.on!==false};
+  }).filter(function(r){ return r.text; });
+  if(!rows.length && PM_ROWS.length){
+    if(!confirm('문구가 모두 비어 있습니다. 전부 지울까요?')) return;
+  }
+  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
+  var btn = el('pmSave');
+  btn.disabled = true; pmSay('저장 중…');
+  try{
+    var res = await fetch(postUrl(), {method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'photophrase_save', rows:rows, token:token})});
+    var txt = await res.text();
+    if(/^\s*</.test(txt)) throw new Error('서버가 데이터 대신 페이지를 보냈습니다 (잠시 후 재시도)');
+    var d; try{ d=JSON.parse(txt); }catch(e){ throw new Error('응답을 해석하지 못했습니다'); }
+    if(!d || d.success!==true) throw new Error((d&&d.error)||'저장 실패');
+    pmSay('저장됨 · '+d.count+'개'+(d.skipped?(' (중복·빈칸 '+d.skipped+'개 제외)'):''));
+    await loadPhrases();
+    toast('문구 '+d.count+'개를 저장했습니다.');
+  }catch(e){
+    pmSay('');
+    alert('문구 저장 실패 — '+(e.message||e));
+  }finally{
+    btn.disabled = false;
+  }
+}
+function bindPhraseAdmin(){
+  var b = el('phraseAdminBtn'); if(b) b.addEventListener('click', pmOpen);
+  var c = el('pmClose');  if(c) c.addEventListener('click', pmClose);
+  var a = el('pmAdd');    if(a) a.addEventListener('click', pmAdd);
+  var sv = el('pmSave');  if(sv) sv.addEventListener('click', pmSave);
+  var rl = el('pmReload');
+  if(rl) rl.addEventListener('click', function(){
+    loadPhrases().then(function(ok){
+      if(!ok){ pmSay('다시 읽지 못했습니다'); return; }
+      PM_ROWS = PHRASES.map(function(p){
+        return {kind:phraseKindOf(p.kind), text:p.text||'', cat:p.cat||'', type:p.type||'',
+                order:Number(p.order)||0, on:p.on!==false};
+      });
+      pmRender(); pmSay('시트에서 다시 읽었습니다');
+    });
+  });
+  var box = el('pmModal');
+  if(box) box.addEventListener('click', function(e){ if(e.target===box) pmClose(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && el('pmModal').classList.contains('show')) pmClose();
+  });
+  syncPhraseAdminBtn();
 }
 
 /** 현장 사진(증상·해결 후)을 모두 폐기(새 기록 시작 시) */
@@ -2029,8 +2355,14 @@ function bindAll(){
   el('hosp').addEventListener('focus', onHospFocus);
   el('hospClear').addEventListener('click', clearHosp);
   el('sn').addEventListener('change', function(){ toggleCustom('sn'); render(); });
-  el('cat').addEventListener('change', function(){ fillSub(); render(); autoFillDetail(); });
-  el('sub').addEventListener('change', function(){ toggleCustom('sub'); render(); autoFillDetail(); });
+  el('cat').addEventListener('change', function(){
+    fillSub(); render(); autoFillDetail();
+    try{ renderPhraseChips(); }catch(e){}
+  });
+  el('sub').addEventListener('change', function(){
+    toggleCustom('sub'); render(); autoFillDetail();
+    try{ renderPhraseChips(); }catch(e){}
+  });
   el('part').addEventListener('change', function(){ render(); autoFillDetail(); });
   el('result').addEventListener('change', function(){ toggleCustom('result'); render(); });
 
@@ -2104,6 +2436,7 @@ function measureActions(){
 
 /* ═══ 초기화 ══════════════════════════════════════════════════════════════ */
 initTax(); fillParts(); fillSN([]); loadFse();
+bindPhraseAdmin(); loadPhrasesCached();
 setVal('date', todayISO());
 bindAll();
 setSaveState(BazHandover.SAVE.IDLE);

@@ -537,7 +537,8 @@ function doPost(e){
     /* action 이 비어 있는 요청만 handover 행 기록이다. 알 수 없는 action 이
        아래 공통 기록 경로로 흘러 사진 없는 행을 만드는 것을 차단한다. */
     var knownActions = ['progress_save','progress_restore','history_save','weeklywrite',
-                        'menu_save','weeklyauto_save','labeldone','photo_add','photo_abandon'];
+                        'menu_save','weeklyauto_save','labeldone','photo_add','photo_abandon',
+                        'photophrase_save'];
     if(actName && knownActions.indexOf(actName) < 0){
       return json_({success:false, error:'알 수 없는 action: '+String(actName).slice(0,40)});
     }
@@ -633,6 +634,7 @@ function doPost(e){
        (아래 액션들은 자체 락이 없어 전역 락 안에 둔다) */
     if(payload && payload.action==='weeklywrite') return json_(wkWrite_(payload));
     if(payload && payload.action==='menu_save')   return json_(menuSave_(payload));
+    if(payload && payload.action==='photophrase_save') return json_(photoPhraseSave_(payload));  /* [v3.7] Lv.3 문구 검수 */
     if(payload && payload.action==='weeklyauto_save') return json_(weeklyAutoSave_(payload));  /* 주간 자동기재 대상 저장(Lv.3) */
     if(payload && payload.action==='labeldone')    return json_(labelDone_(payload));  /* [v2.9] 내려받은 병원 작성 일자 기록 */
 
@@ -879,7 +881,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.6.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.7.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -904,6 +906,7 @@ function doGet(e){
     if(action==='progress') return json_(progGet_(p));          /* [v2.4] 진행중 공유 상태 ([v2.7] rev 조건부 응답) */
     if(action==='labellist') return json_(labelList_(p));       /* [v2.8] 장비 Label List 원본 */
     if(action==='asreport')  return json_(asReport_(p));        /* [v3.6] A/S 항목별 증상·조치 집계 */
+    if(action==='photophrase') return json_(photoPhraseGet_());  /* [v3.7] 사진 설명 자주 쓰는 문구 */
     if(action==='snphoto')   return json_(snPhotos_(p));    /* [v2.8] 장비 S/N 사진 base64 (?sz= 로 썸네일) */
     if(action==='photolist') return json_(photoList_(p));   /* [v3.4] 사진 메타 보조 조회(로그인 필수) */
     return json_({success:false, error:'알 수 없는 action: '+action});
@@ -1018,6 +1021,95 @@ function contentTplGet_(){
                 content:content });
   }
   return {success:true, rows:rows, updated:now};
+}
+
+/* ═══════════ [v3.7] 사진 설명 자주 쓰는 문구 ═══════════
+   왜 필요한가
+     증상·해결 후 사진 설명은 선택 입력이라 현장에서 자주 비워졌고, 적히더라도
+     사람마다 표현이 달라 asreport 로 모아 봤을 때 같은 증상이 여러 문구로
+     흩어졌다. → 자주 쓰는 문구를 버튼으로 눌러 넣게 하고, 그 문구 목록은
+     관리자(Lv.3)가 검수·수정한다.
+
+   시트 '사진문구' 헤더: 구분 | 문구 | 대분류 | 유형 | 순서 | 사용
+     · 구분: 증상(CAUSE) / 해결(AFTER)
+     · 대분류·유형: 비우면 공통 문구, 채우면 그 A/S 항목에서만 위로 올라온다
+     · 사용: FALSE 면 화면에서 감춘다(지우지 않고 보류) */
+var PHRASE = { SHEET: '사진문구', MAX: 200, MAX_LEN: 100 };
+var PHRASE_HEAD = ['구분','문구','대분류','유형','순서','사용'];
+
+/** 화면·저장이 같은 값을 쓰도록 구분을 한 곳에서 정규화한다 */
+function phraseKind_(v){
+  var s = String(v==null?'':v).trim().toUpperCase();
+  if(s==='AFTER' || s==='해결' || s==='해결후' || s==='해결 후') return 'AFTER';
+  return 'CAUSE';
+}
+function phraseKindLabel_(kind){ return kind==='AFTER' ? '해결' : '증상'; }
+
+/** GET ?action=photophrase — 로그인만 되면 누구나 읽는다(입력 보조이므로) */
+function photoPhraseGet_(){
+  var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
+  var sh = sheet_(PHRASE.SHEET);
+  if(!sh || sh.getLastRow()<2) return {success:true, rows:[], updated:now};
+  var v = sh.getDataRange().getDisplayValues();
+  var h = v[0].map(function(s){ return String(s).trim(); });
+  var ci = { kind:h.indexOf('구분'), text:h.indexOf('문구'), cat:h.indexOf('대분류'),
+             type:h.indexOf('유형'), order:h.indexOf('순서'), on:h.indexOf('사용') };
+  if(ci.text < 0) return {success:false, error:'사진문구 헤더(구분/문구) 필요'};
+  var rows = [];
+  for(var i=1;i<v.length;i++){
+    var text = String(v[i][ci.text]||'').trim();
+    if(!text) continue;
+    rows.push({
+      kind : phraseKind_(ci.kind>=0 ? v[i][ci.kind] : ''),
+      text : text.slice(0, PHRASE.MAX_LEN),
+      cat  : ci.cat>=0  ? String(v[i][ci.cat]||'').trim()  : '',
+      type : ci.type>=0 ? String(v[i][ci.type]||'').trim() : '',
+      order: ci.order>=0 ? (Number(v[i][ci.order])||0) : 0,
+      /* 빈 칸은 '사용'으로 본다 — 관리자가 열을 안 채워도 문구가 사라지지 않게 */
+      on   : ci.on>=0 ? String(v[i][ci.on]||'').trim().toUpperCase()!=='FALSE' : true
+    });
+  }
+  rows.sort(function(a,b){ return (a.order-b.order) || a.text.localeCompare(b.text,'ko'); });
+  return {success:true, rows:rows, updated:now};
+}
+
+/** POST {action:'photophrase_save', rows:[…], token} — Lv.3 관리자만 */
+function photoPhraseSave_(p){
+  var lv = verifyLevel_(p.token||'');
+  if(lv < 3){
+    return {success:false, error: MENU.AUTH_VERIFY_URL
+      ? 'unauthorized — 보안레벨 3(수석 매니저) 토큰 필요'
+      : 'AUTH_VERIFY_URL 미설정 — 저장 거부'};
+  }
+  if(!Array.isArray(p.rows)) return {success:false, error:'rows 배열 필요'};
+  if(p.rows.length > PHRASE.MAX) return {success:false, error:'문구는 최대 '+PHRASE.MAX+'개까지입니다'};
+
+  /* 같은 구분 안에서 같은 문구가 두 번 저장되면 버튼이 중복으로 뜬다 — 여기서 접는다 */
+  var seen = {}, out = [];
+  for(var i=0;i<p.rows.length;i++){
+    var r = p.rows[i] || {};
+    var text = safeCell_(String(r.text==null?'':r.text).replace(/[\r\n\t]+/g,' ').trim())
+                 .slice(0, PHRASE.MAX_LEN);
+    if(!text) continue;
+    var kind = phraseKind_(r.kind);
+    var key = kind + '|' + text.replace(/\s+/g,'').toLowerCase();
+    if(seen[key]) continue;
+    seen[key] = true;
+    /* 순서는 클라이언트가 보낸 값이 아니라 '보낸 차례'로 다시 매긴다 —
+       order 를 빠뜨리고 보내면 전부 0 이 되어 화면 정렬이 무너진다. */
+    out.push([ phraseKindLabel_(kind), text,
+               safeCell_(String(r.cat||'').trim()).slice(0,60),
+               safeCell_(String(r.type||'').trim()).slice(0,120),
+               out.length + 1,
+               r.on===false ? 'FALSE' : 'TRUE' ]);
+  }
+
+  var sh = sheet_(PHRASE.SHEET) || ss_().insertSheet(PHRASE.SHEET);
+  sh.clearContents();
+  sh.getRange(1,1,1,PHRASE_HEAD.length).setValues([PHRASE_HEAD]);
+  if(out.length) sh.getRange(2,1,out.length,PHRASE_HEAD.length).setValues(out);
+  var now = Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm');
+  return {success:true, count:out.length, skipped:p.rows.length-out.length, updated:now};
 }
 
 /* ═══════════ [v2.8] 장비 S/N 사진 — Drive 업로드 · U열 =IMAGE() ═══════════ */
@@ -2569,7 +2661,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.6.0', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.7.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2653,7 +2745,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.6.0',
+  var out = {success:true, ver:'3.7.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

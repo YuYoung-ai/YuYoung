@@ -58,6 +58,19 @@ Apps Script 는 배포할 때마다 버전이 쌓인다. 오래 운영해 버전
 - **오래된 버전 아카이브**: 안 쓰는 옛 버전은 `배포 관리` 에서 보관/삭제해 목록을 정리.
 - 반영 확인은 `?action=ping` 의 `ver`(auth=`5.1.0-warm`) / handover ping 의 `warmed:true` 로.
 
+## v3.7.0 — 사진 설명 자주 쓰는 문구 (photophrase)
+
+증상·해결 후 설명이 사람마다 달라 `asreport` 에서 같은 증상이 여러 문구로 흩어지던 것을 줄인다.
+
+- `?action=photophrase` (조회 · 로그인만) / `{action:'photophrase_save'}` (저장 · **Lv.3**)
+- 시트 **`사진문구`** 를 처음 저장할 때 자동으로 만든다. 헤더: `구분 | 문구 | 대분류 | 유형 | 순서 | 사용`
+  · `구분` 증상(CAUSE) / 해결(AFTER)
+  · `대분류·유형` 을 채우면 그 A/S 항목을 골랐을 때 위로 올라온다(비우면 공통)
+  · `사용` FALSE 면 지우지 않고 화면에서만 감춘다
+- **시트를 미리 만들 필요 없다.** 없으면 문구 버튼이 안 보일 뿐이고, 관리자가
+  handover 화면의 **✎ 문구 관리**(Lv.3에게만 보임)에서 저장하면 그때 만들어진다.
+- 재배포 전에는 문구 버튼이 뜨지 않는다(조회가 `알 수 없는 action`). 그 외 동작은 그대로다.
+
 ## v3.6.0 — A/S 항목별 증상·조치 집계 (asreport)
 
 `?action=asreport` 가 새로 생겼다. `asreport.html`(A/S 항목별 증상·조치 리포트)이
@@ -97,10 +110,11 @@ handover 가 이미 시트에 쓰고 있던 값이라 **시트 변경·마이그
 ## 배포 확인 (밖에서 curl)
 
 - `인증GAS/exec?action=ping` → `{"ver":"5.1.0-warm","mode":"signed","fp":"abcd1234",...}` — mode가 signed면 서명 발급 중.
-- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.6.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
+- `handoverGAS/exec?action=ping&warm=1` → `{"ver":"3.7.0","warmed":true,...}` (Core 확장 + 스프레드시트 예열 반영 확인).
   `ver` 가 `3.5.0` 미만이면 해결 후 사진(AFTER)을 아직 받지 못하는 구버전,
   `3.5.1` 미만이면 label 의 A/S 항목이 빈 칸으로 뜨는 구버전,
-  `3.6.0` 미만이면 asreport.html 이 동작하지 않는 구버전이다.
+  `3.6.0` 미만이면 asreport.html 이 동작하지 않는 구버전,
+  `3.7.0` 미만이면 사진 설명 문구 버튼이 뜨지 않는 구버전이다.
 - 각 데이터 GAS 편집기에서 `runTokenSelfTest` 실행 시 로그의 **비밀 지문 앞 8자**가 auth의 `fp` 와
   **모두 같아야** 왕복 0(전부 로컬 검증). 다르면 그 프로젝트만 왕복(감속, 장애 아님).
 - auth 편집기 `authSelfTime()` → 로그인/검증 단계별 실측 ms(목표 로그인 ≤2000ms).
