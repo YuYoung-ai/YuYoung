@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<title>A/S 항목별 증상 · 조치 리포트 | BAZ CS</title>
+<style>
+:root{
+  --navy:#1B2F5E; --teal:#2E7D9E; --teal-soft:#EAF4F8;
+  --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+  --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E; --amber:#8A5B00; --amber-bg:#FDF1DE;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--gray-bg);color:var(--text);
+  font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  font-size:14px;line-height:1.5}
+header{background:var(--navy);color:#fff;padding:14px 16px;
+  display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+header h1{margin:0;font-size:17px;font-weight:700}
+header p{margin:3px 0 0;font-size:12px;color:#B9C6E4}
+.home-link{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;
+  background:rgba(202,220,252,.15);border:1px solid rgba(202,220,252,.3);color:#cfdbf0;
+  font-size:11px;font-weight:700;padding:6px 11px;border-radius:16px;text-decoration:none;white-space:nowrap}
+.wrap{max-width:1320px;margin:0 auto;padding:16px}
+.card{background:#fff;border:1px solid var(--gray-line);border-radius:12px;padding:16px;margin-bottom:14px}
+.sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
+  margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--navy);margin-bottom:5px}
+label .opt{color:var(--text-muted);font-weight:400}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-line);
+  border-radius:8px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;min-width:0}
+input:focus,select:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-soft)}
+.row{display:flex;flex-wrap:wrap;gap:12px}
+.row>div{flex:1 1 170px;min-width:140px}
+.hint{font-size:11.5px;color:var(--text-muted);margin:6px 0 8px;line-height:1.6}
+button{cursor:pointer;border:none;border-radius:8px;font-size:13px;padding:9px 14px;
+  font-weight:700;font-family:inherit;transition:.15s}
+button:hover{filter:brightness(.95)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-dark{background:var(--navy);color:#fff}
+.btn-muted{background:#EEF1F6;color:var(--text)}
+.btn-ghost{background:transparent;color:var(--text-muted);border:1px solid var(--gray-line)}
+.btn-sm{padding:4px 9px;font-size:11.5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#EEF1F6;color:var(--text);border:1px solid transparent;border-radius:16px;
+  padding:5px 12px;font-size:12px;font-weight:700}
+.chip.on{background:var(--teal);color:#fff}
+.count-badge{font-size:12.5px;font-weight:700;color:var(--navy);background:var(--teal-soft);
+  padding:5px 11px;border-radius:20px;white-space:nowrap}
+.count-badge.warn{color:var(--amber);background:var(--amber-bg)}
+
+/* ── 2단: 유형 목록 · 상세 ─────────────────────────────────────────── */
+.split{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;align-items:start}
+@media (max-width:900px){ .split{grid-template-columns:1fr} }
+
+/* 사례가 길어도 유형 목록은 따라오게 — 유형을 바꿔 가며 훑는 화면이다 */
+.tlist{max-height:calc(100vh - 120px);overflow:auto;border:1px solid var(--gray-line);
+  border-radius:10px;position:sticky;top:12px}
+@media (max-width:900px){ .tlist{position:static;max-height:44vh} }
+.titem{display:block;width:100%;text-align:left;border:none;background:#fff;padding:10px 12px;
+  border-bottom:1px solid var(--gray-line);cursor:pointer;font-family:inherit}
+.titem:last-child{border-bottom:none}
+.titem.on{background:var(--teal-soft)}
+.titem .t-cat{font-size:10.5px;font-weight:700;color:var(--teal)}
+.titem .t-type{font-size:13px;font-weight:700;color:var(--text);margin-top:1px;
+  display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.titem .t-n{font-size:11.5px;color:var(--text-muted);font-weight:700;white-space:nowrap}
+.titem .t-bar{height:4px;border-radius:2px;background:#E7ECF3;margin-top:5px;overflow:hidden}
+.titem .t-bar i{display:block;height:100%;background:var(--teal)}
+
+.guide{background:var(--teal-soft);border:1px solid #BFDCE8;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.guide h4{margin:0 0 6px;font-size:12px;color:#1B4E63}
+.guide dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-size:12px}
+.guide dt{font-weight:700;color:#1B4E63;white-space:nowrap}
+.guide dd{margin:0;color:var(--text)}
+
+.tally{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.tally .tg{font-size:11.5px;background:#EEF1F6;border-radius:14px;padding:4px 10px;font-weight:600}
+.tally .tg b{color:var(--navy)}
+
+.case{border:1px solid var(--gray-line);border-radius:10px;padding:11px 12px;margin-bottom:9px;background:#fff}
+.case-head{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin-bottom:7px}
+.case-head .c-hosp{font-size:13px;font-weight:700;color:var(--navy)}
+.case-head .c-meta{font-size:11.5px;color:var(--text-muted)}
+.case-head .spacer{flex:1}
+.case-pick{width:auto;min-width:0;margin:0;accent-color:var(--teal)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:640px){ .pair{grid-template-columns:1fr} }
+.pane{border:1px solid var(--gray-line);border-radius:8px;padding:8px 9px;background:#FAFBFD}
+.pane h5{margin:0 0 5px;font-size:11px;font-weight:700;letter-spacing:.3px}
+.pane.sym h5{color:var(--red)}
+.pane.act h5{color:var(--green)}
+.pane p{margin:0 0 5px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+.pane .none{color:var(--text-muted);font-size:12px}
+.shots{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.shots .sh{width:56px;height:56px;border-radius:6px;border:1px solid var(--gray-line);
+  object-fit:cover;background:#F0F2F6;cursor:pointer;padding:0}
+.shots .sh.ph{display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;color:var(--text-muted);font-family:inherit}
+.tagline{font-size:11.5px;color:var(--text-muted);margin-top:6px}
+
+.note-box{display:none;margin-top:10px;padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.6;
+  background:var(--amber-bg);border:1px solid #F0D9AE;color:var(--amber)}
+.note-box.on{display:block}
+.empty-note{text-align:center;padding:26px;color:var(--text-muted);font-size:13px}
+.status-msg{font-size:12px;color:var(--text-muted);margin-top:8px;text-align:right;min-height:16px}
+footer.appbar{background:var(--teal);color:#fff;text-align:center;padding:11px;font-size:11.5px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);
+  background:var(--navy);color:#fff;padding:10px 14px;border-radius:22px;font-size:12.5px;
+  box-shadow:0 6px 20px rgba(27,47,94,.3);opacity:0;pointer-events:none;transition:.2s;z-index:60;
+  max-width:calc(100vw - 32px)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.lightbox{position:fixed;inset:0;background:rgba(10,16,32,.86);z-index:70;
+  display:none;align-items:center;justify-content:center;padding:16px}
+.lightbox.show{display:flex}
+.lb-sheet{background:#fff;border-radius:12px;max-width:820px;width:100%;overflow:hidden}
+.lb-head{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--gray-line)}
+.lb-head .t{flex:1;min-width:0;font-size:13px;font-weight:700;color:var(--navy);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-stage{background:#101828;display:flex;align-items:center;justify-content:center;min-height:200px}
+.lb-stage img{max-width:100%;max-height:64vh;object-fit:contain;display:block}
+</style>
+<script src="auth.js"></script>
+<script src="js/baz-dom.js"></script>
+<script src="js/baz-scroll-lock.js"></script>
+<script src="js/baz-modal.js"></script>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>A/S 항목별 증상 · 조치 리포트</h1>
+    <p>소분류마다 실제 증상과 조치를 모아 봅니다 — 품질팀 제출·보고서 작성용</p>
+  </div>
+  <a href="index.html" class="home-link">← 메뉴</a>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <p class="sec-title">① 기간 · 범위</p>
+    <div class="hint">
+      handover(현장 처리완료)에 기록된 <b>A/S 항목(대분류 · 소분류)</b>을 기준으로 묶습니다.<br>
+      증상은 <b>현장에서 확인한 증상 사진 설명 + 처리 내용</b>, 조치는 <b>해결 후 사진 설명 + 교체품 · A/S 결과</b>에서 모읍니다.
+    </div>
+    <div style="margin-bottom:10px">
+      <label>조회 기간</label>
+      <div class="chips" id="rangeChips">
+        <button type="button" class="chip" data-range="m1">최근 1개월</button>
+        <button type="button" class="chip" data-range="m3">최근 3개월</button>
+        <button type="button" class="chip" data-range="m6">최근 6개월</button>
+        <button type="button" class="chip" data-range="y1">최근 1년</button>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label for="fromD">시작일</label>
+        <input type="date" id="fromD">
+      </div>
+      <div>
+        <label for="toD">종료일</label>
+        <input type="date" id="toD">
+      </div>
+      <div>
+        <label for="fseIn">담당 FSE <span class="opt">· 비우면 전체</span></label>
+        <input type="text" id="fseIn" placeholder="예) 권오성">
+      </div>
+      <div>
+        <label for="maxCases">유형별 사례 수</label>
+        <select id="maxCases">
+          <option value="30">30건</option>
+          <option value="50" selected>50건</option>
+          <option value="100">100건</option>
+          <option value="200">200건</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button class="btn-primary" id="btnLoad">📥 불러오기</button>
+        <button class="btn-ghost" id="btnCancel" style="display:none">중단</button>
+      </div>
+    </div>
+    <div class="note-box" id="cutNote"></div>
+  </div>
+
+  <div class="card">
+    <p class="sec-title">
+      ② A/S 항목별 증상 · 조치
+      <span class="count-badge" id="totalBadge">0건</span>
+    </p>
+
+    <div class="row" style="margin-bottom:12px">
+      <div style="flex:2 1 260px">
+        <input type="text" id="search" placeholder="유형 · 병원 · 증상 · 조치 내용 검색" autocomplete="off">
+      </div>
+      <div>
+        <select id="catFilter"><option value="">대분류 전체</option></select>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto">
+        <button class="btn-muted btn-sm" id="btnPickAll">보이는 사례 전체 선택</button>
+        <button class="btn-ghost btn-sm" id="btnPickNone">선택 해제</button>
+      </div>
+    </div>
+
+    <div class="split">
+      <div>
+        <div class="tlist" id="typeList"></div>
+      </div>
+      <div id="detail"></div>
+    </div>
+
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <div style="flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn-muted" id="btnCopy">📋 보고서용 텍스트 복사</button>
+        <button class="btn-dark" id="btnCopySel">📋 선택 사례만 복사</button>
+        <button class="btn-primary" id="btnExcel">📊 품질팀 제출용 엑셀 (.xlsx)</button>
+      </div>
+    </div>
+    <div class="status-msg" id="statusMsg" role="status" aria-live="polite"></div>
+  </div>
+
+</div>
+
+<footer class="appbar">BAZ BIOMEDIC · CS팀 내부 도구 — 파일은 브라우저에서 직접 생성되며 서버로 전송되지 않습니다.</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span></div>
+
+<div class="lightbox" id="lightbox">
+  <div class="lb-sheet">
+    <div class="lb-head">
+      <span class="t" id="lbTitle"></span>
+      <a class="btn-muted btn-sm" id="lbOpen" target="_blank" rel="noopener noreferrer"
+         style="text-decoration:none;line-height:1.6">Drive 원본</a>
+      <button type="button" class="btn-muted btn-sm" id="lbClose">닫기</button>
+    </div>
+    <div class="lb-stage" id="lbStage"></div>
+  </div>
+</div>
+
+<script>
+/* ── 시트 연동 (handover.html 의 HANDOVER_URL 과 같은 배포 URL) ────────── */
+var HANDOVER_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
+var PHOTO_BATCH=8;          /* GAS 의 SNPHOTO_MAX 와 같아야 한다 */
+var PHOTO_PARALLEL=3;
+var PHOTO_THUMB_SZ=800;
+var EXPORT_IMG_PX=720;
+
+var ITEMS = [];             /* 서버가 준 유형별 묶음 */
+var CUR = -1;               /* 선택된 유형 인덱스 */
+var VIEW = { q:'', cat:'' };
+var PICKED = {};            /* 보고서에 담을 사례 — "유형키#사례인덱스" */
+var PHOTO_CACHE = {};       /* fileId → dataURL */
+
+function hasDom(){ return !!(window.BazDom && BazDom.escapeAttr); }
+function escapeAttr(s){
+  if(hasDom()) return BazDom.escapeAttr(s);
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/`/g,'&#96;');
+}
+function esc(s){ return escapeAttr(s); }
+function el(id){ return document.getElementById(id); }
+function val(id){ var e=el(id); return e ? e.value.trim() : ''; }
+function setStatus(m){ el('statusMsg').textContent=m; }
+var toastTimer=null;
+function toast(m){
+  el('toastMsg').textContent=m;
+  el('toast').classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ el('toast').classList.remove('on'); }, 2600);
+}
+function normKey(s){ return String(s==null?'':s).replace(/\s+/g,'').toLowerCase(); }
+function isoDate(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+/* ── 기간 프리셋 ─────────────────────────────────────────────────────── */
+function presetRange(kind){
+  var to=new Date(), from=new Date();
+  if(kind==='m1') from.setMonth(from.getMonth()-1);
+  else if(kind==='m3') from.setMonth(from.getMonth()-3);
+  else if(kind==='m6') from.setMonth(from.getMonth()-6);
+  else from.setFullYear(from.getFullYear()-1);
+  return {from:from, to:to};
+}
+function applyRange(kind){
+  var r=presetRange(kind);
+  el('fromD').value=isoDate(r.from);
+  el('toD').value=isoDate(r.to);
+  document.querySelectorAll('#rangeChips .chip').forEach(function(c){
+    c.classList.toggle('on', c.getAttribute('data-range')===kind);
+  });
+}
+
+/* ── 서버 조회 (label.html 과 같은 콜드스타트 대응) ───────────────────── */
+var ACTIVE_CTLS=[], CANCELED=false;
+function cancelLoad(){
+  CANCELED=true;
+  ACTIVE_CTLS.slice().forEach(function(c){ try{ c.abort(); }catch(e){} });
+  ACTIVE_CTLS=[];
+}
+function gvUrl(action, params){
+  var qs=Object.keys(params||{}).map(function(k){ return k+'='+encodeURIComponent(params[k]); }).join('&');
+  var u=HANDOVER_URL+'?action='+action+(qs?'&'+qs:'');
+  if(window.BazAuth && BazAuth.withToken) u=BazAuth.withToken(u);
+  return u;
+}
+/* Apps Script 가 잠들어 있으면 JSON 대신 구글의 리다이렉트 HTML 이 온다 —
+   그대로 파싱하면 연결이 멀쩡한 사용자에게 '실패'로 보인다. */
+function gvJson(action, params, opts){
+  opts=opts||{};
+  var tries=opts.tries||3, timeoutMs=opts.timeoutMs||40000, attempt=0;
+  function once(){
+    if(CANCELED) return Promise.reject({kind:'canceled'});
+    attempt++;
+    if(opts.onAttempt){ try{ opts.onAttempt(attempt,tries); }catch(e){} }
+    var ctl=('AbortController' in window)?new AbortController():null;
+    if(ctl) ACTIVE_CTLS.push(ctl);
+    var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} },timeoutMs):null;
+    function release(){
+      if(timer){ clearTimeout(timer); timer=null; }
+      if(ctl){ var at=ACTIVE_CTLS.indexOf(ctl); if(at>=0) ACTIVE_CTLS.splice(at,1); }
+    }
+    var init={method:'GET'};
+    if(ctl) init.signal=ctl.signal;
+    return fetch(gvUrl(action,params), init)
+      .then(function(res){
+        release();
+        return res.text().then(function(txt){
+          if(/^\s*</.test(txt)) throw {kind:'warmup'};
+          try{ return JSON.parse(txt); }catch(e){ throw {kind:'warmup'}; }
+        });
+      })
+      .catch(function(e){
+        release();
+        if(CANCELED) throw {kind:'canceled'};
+        var kind=(e&&e.kind)?e.kind:(e&&e.name==='AbortError')?'timeout':'network';
+        if(attempt<tries) return new Promise(function(r){ setTimeout(r,1500*attempt); }).then(once);
+        throw {kind:kind};
+      });
+  }
+  return once();
+}
+function gvErrText(err){
+  var k=(err&&err.kind)||'';
+  if(k==='canceled') return '요청을 중단했습니다.';
+  if(k==='warmup'||k==='timeout') return '시트 서버가 아직 깨어나지 않았습니다. 잠시 후 다시 눌러 주세요.';
+  if(k==='network') return '시트 서버에 연결하지 못했습니다 — 네트워크를 확인해 주세요.';
+  var msg=(err&&err.message)||'알 수 없는 오류';
+  if(/알 수 없는 action/.test(msg))
+    return '시트 웹앱이 아직 이전 버전입니다.\n\nhandover_gas.gs 를 v3.6.0 으로 재배포해야 이 기능을 쓸 수 있습니다.';
+  return msg;
+}
+
+async function loadReport(){
+  var from=val('fromD'), to=val('toD');
+  if(!from||!to){ alert('시작일과 종료일을 선택하세요.'); return; }
+  if(from>to){ alert('시작일이 종료일보다 늦습니다.'); return; }
+
+  var btn=el('btnLoad'), cancel=el('btnCancel');
+  btn.disabled=true; btn.textContent='불러오는 중…';
+  cancel.style.display='';
+  CANCELED=false;
+  setStatus('A/S 기록 집계 중…');
+  try{
+    var d=await gvJson('asreport', {from:from, to:to, fse:val('fseIn'), maxCases:val('maxCases')}, {
+      onAttempt:function(n,t){ setStatus(n===1?'A/S 기록 집계 중…':('서버를 깨우는 중… (재시도 '+n+'/'+t+')')); }
+    });
+    if(!d.success) throw new Error(d.error||'조회 실패');
+    ITEMS=d.items||[];
+    CUR=ITEMS.length?0:-1;
+    PICKED={};
+    fillCatFilter();
+    render();
+    showCutNote(d);
+    setStatus('A/S 항목 '+d.count+'종 · 기록 '+d.total+'건 ('+d.from+' ~ '+d.to+')');
+    if(!ITEMS.length) toast('해당 기간에 A/S 기록이 없습니다.');
+    loadVisiblePhotos();
+  }catch(e){
+    console.error(e);
+    var canceled=e&&e.kind==='canceled';
+    setStatus(canceled?'불러오기를 중단했습니다.':'불러오기 실패');
+    if(!canceled) alert('불러오기 실패 — '+gvErrText(e));
+  }finally{
+    btn.disabled=false; btn.textContent='📥 불러오기';
+    cancel.style.display='none';
+    CANCELED=false;
+  }
+}
+
+/* 사례를 잘라 냈으면 반드시 알린다 — 표본을 전수로 오해하면 품질 문서가 틀어진다 */
+function showCutNote(d){
+  var cut=ITEMS.filter(function(it){ return it.truncated>0; });
+  var box=el('cutNote');
+  if(!cut.length){ box.className='note-box'; return; }
+  var n=cut.reduce(function(s,it){ return s+it.truncated; },0);
+  box.className='note-box on';
+  box.innerHTML='⚠️ 유형별 사례를 <b>'+d.maxCases+'건까지만</b> 불러왔습니다 — '
+    + cut.length+'개 유형에서 <b>'+n+'건</b>이 빠졌습니다.<br>'
+    + '전수로 봐야 하면 위의 \'유형별 사례 수\'를 올리거나 기간을 좁혀 다시 불러오세요.';
+}
+
+/* ── 사진 (Drive 는 CORS 로 직접 못 읽는다 → GAS 프록시) ──────────────── */
+function photoTargets(item){
+  var out=[];
+  (item.cases||[]).forEach(function(c, ci){
+    (c.symptom||[]).concat(c.after||[]).forEach(function(ph){
+      if(!ph.fileId || ph._url) return;
+      if(PHOTO_CACHE[ph.fileId]){ ph._url=PHOTO_CACHE[ph.fileId]; return; }
+      out.push(ph);
+    });
+  });
+  return out;
+}
+function loadVisiblePhotos(){
+  var item=ITEMS[CUR];
+  if(!item) return Promise.resolve();
+  return loadPhotoTargets(photoTargets(item), {paint:true});
+}
+
+/** 받은 대상만 공통 배치 로더로 처리한다 — 화면·Excel이 같은 실패 판정을 쓴다. */
+function loadPhotoTargets(targets, opts){
+  opts=opts||{};
+  if(!targets.length) return Promise.resolve();
+
+  var batches=[];
+  for(var i=0;i<targets.length;i+=PHOTO_BATCH) batches.push(targets.slice(i,i+PHOTO_BATCH));
+  var bi=0, done=0;
+  function runBatch(){
+    if(bi>=batches.length) return Promise.resolve();
+    var chunk=batches[bi++];
+    var ids=chunk.map(function(p){ return p.fileId; });
+    return gvJson('snphoto', {ids:ids.join(','), sz:PHOTO_THUMB_SZ}, {tries:2})
+      .then(function(d){
+        var got=(d&&d.photos)||{};
+        chunk.forEach(function(p){
+          var u=got[p.fileId];
+          if(u){ p._url=u; PHOTO_CACHE[p.fileId]=u; done++; }
+          else p._failed=true;
+        });
+      })
+      .catch(function(e){ console.warn('[asreport] 사진 조회 실패:', e); chunk.forEach(function(p){ p._failed=true; }); })
+      .then(function(){ if(opts.paint) paintShots(); return runBatch(); });
+  }
+  var workers=[];
+  for(var w=0; w<Math.min(PHOTO_PARALLEL, batches.length); w++) workers.push(runBatch());
+  return Promise.all(workers).then(function(){
+    var failed=targets.filter(function(p){ return !p._url; })
+      .map(function(p){ return p.fileId; })
+      .filter(function(v,i,a){ return v && a.indexOf(v)===i; });
+    return {done:done, failed:failed};
+  });
+}
+
+/** Excel은 현재 열어 본 유형뿐 아니라 실제 내보낼 모든 사례의 사진을 먼저 받는다. */
+function loadExportPhotos(items, onlyPicked, picked){
+  var targets=[];
+  (items||[]).forEach(function(it){
+    (it.cases||[]).forEach(function(c,ci){
+      if(onlyPicked && !picked[pickKey(it,ci)]) return;
+      (c.symptom||[]).concat(c.after||[]).forEach(function(ph){
+        if(!ph.fileId || ph._url) return;
+        if(PHOTO_CACHE[ph.fileId]){ ph._url=PHOTO_CACHE[ph.fileId]; return; }
+        ph._failed=false;
+        targets.push(ph);
+      });
+    });
+  });
+  if(!targets.length) return Promise.resolve({done:0,failed:[]});
+  return loadPhotoTargets(targets, {paint:false});
+}
+/** 사진 자리만 다시 그린다 — 상세 전체를 재생성하면 스크롤이 튄다 */
+function paintShots(){
+  document.querySelectorAll('#detail [data-shot]').forEach(function(box){
+    var fid=box.getAttribute('data-shot');
+    var u=PHOTO_CACHE[fid];
+    if(!u || box.tagName==='IMG') return;
+    var img=document.createElement('img');
+    img.className='sh'; img.src=u; img.alt=box.getAttribute('data-alt')||'사진';
+    img.setAttribute('data-shot', fid);
+    img.setAttribute('data-alt', box.getAttribute('data-alt')||'');
+    img.setAttribute('data-desc', box.getAttribute('data-desc')||'');
+    box.parentNode.replaceChild(img, box);
+  });
+}
+
+/* ── 검색 · 필터 ──────────────────────────────────────────────────────── */
+function caseText(c){
+  return normKey([c.hosp, c.fse, c.sn, c.detail, c.remark, c.part, c.result,
+    (c.symptom||[]).map(function(p){ return p.desc; }).join(' '),
+    (c.after||[]).map(function(p){ return p.desc; }).join(' ')].join(' '));
+}
+function itemMatches(it, q){
+  if(!q) return true;
+  if(normKey(it.cat+' '+it.type).indexOf(q)>=0) return true;
+  return (it.cases||[]).some(function(c){ return caseText(c).indexOf(q)>=0; });
+}
+function visibleItems(){
+  var q=normKey(VIEW.q);
+  return ITEMS.map(function(it,i){ return {it:it, i:i}; })
+    .filter(function(x){
+      if(VIEW.cat && x.it.cat!==VIEW.cat) return false;
+      return itemMatches(x.it, q);
+    });
+}
+function visibleCases(it){
+  var q=normKey(VIEW.q);
+  if(!q) return (it.cases||[]).map(function(c,i){ return {c:c, i:i}; });
+  /* 유형명이 검색어와 맞으면 사례는 전부 보여 준다(유형을 찾은 것이므로) */
+  if(normKey(it.cat+' '+it.type).indexOf(q)>=0)
+    return (it.cases||[]).map(function(c,i){ return {c:c, i:i}; });
+  return (it.cases||[]).map(function(c,i){ return {c:c, i:i}; })
+    .filter(function(x){ return caseText(x.c).indexOf(q)>=0; });
+}
+function fillCatFilter(){
+  var sel=el('catFilter'), cur=sel.value;
+  var cats=[];
+  ITEMS.forEach(function(it){ if(it.cat && cats.indexOf(it.cat)<0) cats.push(it.cat); });
+  sel.innerHTML='<option value="">대분류 전체</option>';
+  cats.forEach(function(c){
+    var o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o);
+  });
+  if(cats.indexOf(cur)>=0) sel.value=cur;
+}
+
+/* ── 렌더링 ──────────────────────────────────────────────────────────── */
+function itemKey(it){ return it.cat+'|'+it.type; }
+function pickKey(it, ci){ return itemKey(it)+'#'+ci; }
+function pickedCount(){ return Object.keys(PICKED).length; }
+
+function render(){
+  renderList();
+  renderDetail();
+  el('totalBadge').textContent = ITEMS.length
+    ? (ITEMS.length+'종 · '+ITEMS.reduce(function(s,it){ return s+it.count; },0)+'건'
+       + (pickedCount()?(' · 선택 '+pickedCount()):''))
+    : '0건';
+}
+
+function renderList(){
+  var box=el('typeList');
+  var vis=visibleItems();
+  if(!vis.length){
+    box.innerHTML='<div class="empty-note">조건에 맞는 A/S 항목이 없습니다.</div>';
+    return;
+  }
+  var max=vis.reduce(function(m,x){ return Math.max(m,x.it.count); },0)||1;
+  box.innerHTML=vis.map(function(x){
+    var it=x.it;
+    return '<button type="button" class="titem'+(x.i===CUR?' on':'')+'" data-idx="'+x.i+'">'
+      + '<div class="t-cat">'+esc(it.cat||'(대분류 없음)')+(it.code?(' · '+esc(it.code)):'')+'</div>'
+      + '<div class="t-type"><span>'+esc(it.type||'(소분류 없음)')+'</span>'
+      +   '<span class="t-n">'+it.count+'건 · '+it.hospCount+'곳</span></div>'
+      + '<div class="t-bar"><i style="width:'+Math.round(it.count/max*100)+'%"></i></div>'
+      + '</button>';
+  }).join('');
+}
+
+function renderDetail(){
+  var box=el('detail');
+  var it=ITEMS[CUR];
+  if(!it){ box.innerHTML='<div class="empty-note">왼쪽에서 A/S 항목을 고르세요.</div>'; return; }
+
+  var html='';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin-bottom:10px">'
+      + '<div style="font-size:15px;font-weight:700;color:var(--navy)">'
+      +   esc(it.cat||'')+' / '+esc(it.type||'')+'</div>'
+      + '<span class="count-badge">'+it.count+'건 · 병원 '+it.hospCount+'곳</span>'
+      + (it.truncated?('<span class="count-badge warn">사례 '+it.truncated+'건 생략</span>'):'')
+      + '</div>';
+
+  if(it.guide && (it.guide.chk||it.guide.fix||it.guide.fup)){
+    html+='<div class="guide"><h4>표준 대응 (유형마스터 시트)</h4><dl>'
+       + (it.guide.chk?('<dt>문제확인</dt><dd>'+esc(it.guide.chk)+'</dd>'):'')
+       + (it.guide.fix?('<dt>문제해결</dt><dd>'+esc(it.guide.fix)+'</dd>'):'')
+       + (it.guide.fup?('<dt>후속조치</dt><dd>'+esc(it.guide.fup)+'</dd>'):'')
+       + '</dl></div>';
+  }
+
+  if((it.parts||[]).length || (it.results||[]).length){
+    html+='<div class="tally">';
+    (it.results||[]).slice(0,6).forEach(function(r){
+      html+='<span class="tg">결과 '+esc(r[0])+' <b>'+r[1]+'</b></span>';
+    });
+    (it.parts||[]).slice(0,8).forEach(function(r){
+      html+='<span class="tg">교체품 '+esc(r[0])+' <b>'+r[1]+'</b></span>';
+    });
+    html+='</div>';
+  }
+
+  var vis=visibleCases(it);
+  if(!vis.length){ html+='<div class="empty-note">검색어에 맞는 사례가 없습니다.</div>'; }
+  vis.forEach(function(x){
+    html+=caseHtml(it, x.c, x.i);
+  });
+  box.innerHTML=html;
+  paintShots();
+}
+
+function shotsHtml(list, label){
+  if(!list || !list.length) return '';
+  return '<div class="shots">'+list.map(function(ph,i){
+    var alt=label+' 사진 '+(i+1);
+    if(ph._url){
+      return '<img class="sh" src="'+esc(ph._url)+'" alt="'+esc(alt)+'" data-shot="'+esc(ph.fileId)+'" '+
+             'data-alt="'+esc(alt)+'" data-desc="'+esc(ph.desc||'')+'">';
+    }
+    return '<button type="button" class="sh ph" data-shot="'+esc(ph.fileId)+'" '+
+           'data-alt="'+esc(alt)+'" data-desc="'+esc(ph.desc||'')+'">'+
+           (ph._failed?'실패':'…')+'</button>';
+  }).join('')+'</div>';
+}
+
+function caseHtml(it, c, ci){
+  var key=pickKey(it, ci);
+  var symDesc=(c.symptom||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean);
+  var actDesc=(c.after||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean);
+  var meta=[c.date, c.fse, c.sn, c.gubun].filter(Boolean).join(' · ');
+
+  var html='<div class="case">'
+    + '<div class="case-head">'
+    +   '<input type="checkbox" class="case-pick" data-pick="'+esc(key)+'"'+(PICKED[key]?' checked':'')+
+          ' aria-label="'+esc((c.hosp||'')+' 사례 선택')+'">'
+    +   '<span class="c-hosp">'+esc(c.hosp||'(병원명 없음)')+'</span>'
+    +   '<span class="c-meta">'+esc(meta)+'</span>'
+    +   '<span class="spacer"></span>'
+    + '</div>'
+    + '<div class="pair">'
+    +   '<div class="pane sym"><h5>▸ 현장에서 확인한 증상</h5>'
+    +     (symDesc.length ? symDesc.map(function(t){ return '<p>'+esc(t)+'</p>'; }).join('')
+                          : '<p class="none">사진 설명 없음</p>')
+    +     (c.detail ? '<p>'+esc(c.detail)+'</p>' : '')
+    +     shotsHtml(c.symptom, '증상')
+    +   '</div>'
+    +   '<div class="pane act"><h5>▸ 조치 · 해결</h5>'
+    +     (actDesc.length ? actDesc.map(function(t){ return '<p>'+esc(t)+'</p>'; }).join('')
+                          : '<p class="none">해결 후 사진 설명 없음</p>')
+    +     shotsHtml(c.after, '해결 후')
+    +     '<div class="tagline">'
+    +       (c.part?('교체품 <b>'+esc(c.part)+'</b>'):'')
+    +       (c.cost?(' · 비용 '+esc(c.cost)):'')
+    +       (c.result?(' · 결과 <b>'+esc(c.result)+'</b>'):'')
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + (c.remark ? '<div class="tagline">비고 · '+esc(c.remark)+'</div>' : '')
+    + '</div>';
+  return html;
+}
+
+/* ── 보고서용 텍스트 ──────────────────────────────────────────────────
+   품질팀 메일·보고서에 그대로 붙여 넣을 수 있는 형태로 만든다. */
+function caseLines(c){
+  var out=[];
+  var sym=(c.symptom||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean);
+  var act=(c.after||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean);
+  out.push('  · '+[c.date, c.hosp, c.sn].filter(Boolean).join(' | '));
+  if(sym.length || c.detail){
+    out.push('    - 증상: '+[sym.join(' / '), String(c.detail||'').replace(/\s*\n\s*/g,' ')].filter(Boolean).join(' / '));
+  }
+  var actParts=[act.join(' / ')];
+  if(c.part) actParts.push('교체품 '+c.part);
+  if(c.result) actParts.push('결과 '+c.result);
+  var actLine=actParts.filter(Boolean).join(' / ');
+  if(actLine) out.push('    - 조치: '+actLine);
+  return out;
+}
+function reportText(onlyPicked){
+  var head='[A/S 항목별 증상·조치] '+val('fromD')+' ~ '+val('toD')
+         + (val('fseIn')?(' · 담당 '+val('fseIn')):'');
+  var lines=[head, '='.repeat(Math.min(head.length, 60)), ''];
+  var any=false;
+  visibleItems().forEach(function(x){
+    var it=x.it;
+    var cases=visibleCases(it).filter(function(y){
+      return !onlyPicked || PICKED[pickKey(it, y.i)];
+    });
+    if(!cases.length) return;
+    any=true;
+    lines.push('■ '+(it.cat||'')+' / '+(it.type||'')+'  ('+it.count+'건 · 병원 '+it.hospCount+'곳)');
+    if(it.guide && it.guide.fix) lines.push('  표준 조치: '+it.guide.fix);
+    if((it.results||[]).length){
+      lines.push('  결과 분포: '+it.results.slice(0,5).map(function(r){ return r[0]+' '+r[1]; }).join(', '));
+    }
+    if((it.parts||[]).length){
+      lines.push('  교체품: '+it.parts.slice(0,6).map(function(r){ return r[0]+' '+r[1]; }).join(', '));
+    }
+    cases.forEach(function(y){ lines.push.apply(lines, caseLines(y.c)); });
+    if(it.truncated) lines.push('  ※ 사례 '+it.truncated+'건은 조회 상한으로 생략됨');
+    lines.push('');
+  });
+  if(!any) return '';
+  return lines.join('\n');
+}
+async function copyReport(onlyPicked){
+  if(onlyPicked && !pickedCount()){ toast('선택한 사례가 없습니다.'); return; }
+  var txt=reportText(onlyPicked);
+  if(!txt){ toast('복사할 내용이 없습니다.'); return; }
+  try{
+    await navigator.clipboard.writeText(txt);
+    toast('복사했습니다 — 보고서에 붙여넣으세요.');
+  }catch(e){
+    /* 클립보드 권한이 없는 브라우저 — 사용자가 직접 복사할 수 있게 보여 준다 */
+    window.prompt('복사할 내용을 선택해 Ctrl+C 하세요', txt);
+  }
+  setStatus('보고서용 텍스트 '+txt.split('\n').length+'줄 생성');
+}
+
+/* ── 엑셀 (.xlsx) — 품질팀 제출용 ─────────────────────────────────────
+   외부 라이브러리는 버튼을 누른 순간에만 받아온다(label·weekly 와 같은 방식). */
+var XLSX_CDNS=[
+  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+  'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+  'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'
+];
+var SAVER_CDNS=[
+  'https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js',
+  'https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js',
+  'https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js'
+];
+function loadLib(urls, globalName, label){
+  if(window[globalName]) return Promise.resolve();
+  return urls.reduce(function(chain,url){
+    return chain.catch(function(){
+      return new Promise(function(res,rej){
+        var s=document.createElement('script');
+        s.src=url;
+        s.onload=function(){ window[globalName]?res():rej('로드 후 초기화 실패'); };
+        s.onerror=function(){ rej('CDN 실패: '+url); };
+        document.head.appendChild(s);
+      });
+    });
+  }, Promise.reject('start'))
+  .catch(function(){ throw new Error(label+' 라이브러리 로드 실패 — 네트워크 확인'); });
+}
+function thinBorder(){
+  return {top:{style:'thin',color:{argb:'FFCCCCCC'}}, left:{style:'thin',color:{argb:'FFCCCCCC'}},
+          bottom:{style:'thin',color:{argb:'FFCCCCCC'}}, right:{style:'thin',color:{argb:'FFCCCCCC'}}};
+}
+function driveViewUrl(fileId){ return fileId ? ('https://drive.google.com/file/d/'+fileId+'/view') : ''; }
+
+/** 엑셀 배치 계획 — DOM·ExcelJS 없이 계산되는 순수 함수(테스트 대상) */
+function buildAsReportPlan(items, opts){
+  var o=opts||{};
+  var onlyPicked=!!o.onlyPicked, picked=o.picked||{};
+
+  var sumHeaders=['대분류','소분류','코드','총 건수','병원 수','내보낸 사례','조회 상한 생략',
+                  'A/S 결과 분포','교체품 분포',
+                  '표준 문제확인','표준 문제해결','표준 후속조치'];
+  var caseHeaders=['대분류','소분류','처리일','병원명','담당 FSE','장비 S/N','구분',
+                   '증상','조치','교체품','교체비용','A/S 결과','비고','증상 사진','해결 후 사진'];
+  var sumRows=[], caseRows=[], images=[];
+
+  (items||[]).forEach(function(it){
+    var key=it.cat+'|'+it.type;
+    var cases=(it.cases||[]).map(function(c,i){ return {c:c, i:i}; })
+      .filter(function(x){ return !onlyPicked || picked[key+'#'+x.i]; });
+    if(onlyPicked && !cases.length) return;
+
+    sumRows.push([
+      it.cat||'', it.type||'', it.code||'', it.count||0, it.hospCount||0,
+      cases.length, it.truncated||0,
+      (it.results||[]).map(function(r){ return r[0]+' '+r[1]; }).join(', '),
+      (it.parts||[]).map(function(r){ return r[0]+' '+r[1]; }).join(', '),
+      (it.guide&&it.guide.chk)||'', (it.guide&&it.guide.fix)||'', (it.guide&&it.guide.fup)||''
+    ]);
+
+    cases.forEach(function(x){
+      var c=x.c;
+      var sym=(c.symptom||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean).join(' / ');
+      var act=(c.after||[]).map(function(p){ return String(p.desc||'').trim(); }).filter(Boolean).join(' / ');
+      var rowIdx=caseRows.length+2;      /* 1행은 머리글 */
+      caseRows.push([
+        it.cat||'', it.type||'', c.date||'', c.hosp||'', c.fse||'', c.sn||'', c.gubun||'',
+        [sym, String(c.detail||'').replace(/\s*\n\s*/g,' ')].filter(Boolean).join(' / '),
+        act, c.part||'', c.cost||'', c.result||'', c.remark||'', '', ''
+      ]);
+      var first=(c.symptom||[])[0], firstAfter=(c.after||[])[0];
+      if(first && first._url) images.push({rowIdx:rowIdx, col:13, src:first._url, fileId:first.fileId||''});
+      if(firstAfter && firstAfter._url) images.push({rowIdx:rowIdx, col:14, src:firstAfter._url, fileId:firstAfter.fileId||''});
+    });
+  });
+
+  return {sumHeaders:sumHeaders, caseHeaders:caseHeaders,
+          sumRows:sumRows, caseRows:caseRows, images:images};
+}
+
+/* 이미지를 목표 상자에 꽉 차게 크롭 (CSS object-fit: cover 와 같은 계산) */
+function cropToCover(dataUrl, targetW, targetH){
+  return new Promise(function(resolve){
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement('canvas');
+      canvas.width=targetW; canvas.height=targetH;
+      var ctx=canvas.getContext('2d');
+      var sr=img.width/img.height, dr=targetW/targetH, sx,sy,sw,sh;
+      if(sr>dr){ sh=img.height; sw=sh*dr; sx=(img.width-sw)/2; sy=0; }
+      else { sw=img.width; sh=sw/dr; sx=0; sy=(img.height-sh)/2; }
+      ctx.drawImage(img, sx,sy,sw,sh, 0,0,targetW,targetH);
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror=function(){ resolve(dataUrl); };
+    img.src=dataUrl;
+  });
+}
+
+async function exportExcel(){
+  if(!ITEMS.length){ alert('불러온 내용이 없습니다.'); return; }
+  var onlyPicked=pickedCount()>0 &&
+    confirm('선택한 사례 '+pickedCount()+'건만 내보낼까요?\n\n[확인] 선택 사례만\n[취소] 보이는 전체');
+  setStatus('엑셀 생성 중…');
+  try{
+    var items=visibleItems().map(function(x){ return x.it; });
+    var photoReady=await loadExportPhotos(items, onlyPicked, PICKED);
+    if(photoReady.failed.length && !confirm('사진 '+photoReady.failed.length+'장을 받지 못했습니다.\n\n'
+      +'[확인] 실패한 사진은 빈 칸으로 두고 계속\n[취소] 내보내기 중단')){
+      setStatus('엑셀 생성을 취소했습니다 — 사진을 다시 받은 뒤 시도하세요.');
+      return;
+    }
+
+    await loadLib(XLSX_CDNS,'ExcelJS','엑셀');
+    await loadLib(SAVER_CDNS,'saveAs','파일 저장');
+
+    var plan=buildAsReportPlan(items, {onlyPicked:onlyPicked, picked:PICKED});
+    if(!plan.caseRows.length){ setStatus('내보낼 사례가 없습니다.'); alert('내보낼 사례가 없습니다.'); return; }
+
+    var wb=new ExcelJS.Workbook();
+
+    /* ① 요약 — 유형별 건수·분포·표준 대응 */
+    var ws=wb.addWorksheet('A/S 항목 요약');
+    ws.columns=[{width:14},{width:26},{width:9},{width:9},{width:9},{width:11},{width:13},
+                {width:30},{width:30},{width:34},{width:34},{width:34}];
+    var title='A/S 항목별 증상·조치 요약  ('+val('fromD')+' ~ '+val('toD')+')';
+    ws.mergeCells('A1:L1');
+    ws.getCell('A1').value=title;
+    ws.getCell('A1').font={size:14,bold:true};
+    ws.getRow(1).height=24;
+    plan.sumHeaders.forEach(function(h,i){
+      var c=ws.getRow(2).getCell(i+1);
+      c.value=h; c.font={bold:true}; c.border=thinBorder();
+      c.alignment={horizontal:'center',vertical:'middle'};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEFF3F8'}};
+    });
+    ws.getRow(2).height=20;
+    plan.sumRows.forEach(function(r,ri){
+      var row=ws.getRow(ri+3);
+      r.forEach(function(v,ci){
+        var c=row.getCell(ci+1);
+        c.value=v; c.border=thinBorder();
+        c.alignment={horizontal:(ci>=3&&ci<=6)?'center':'left', vertical:'top', wrapText:true};
+      });
+    });
+
+    /* ② 사례 — 증상·조치를 나란히, 사진은 첫 장만 셀에 얹는다 */
+    var cs=wb.addWorksheet('증상·조치 사례');
+    cs.columns=[{width:14},{width:24},{width:12},{width:26},{width:12},{width:14},{width:9},
+                {width:44},{width:36},{width:16},{width:11},{width:12},{width:26},
+                {width:16.4},{width:16.4}];
+    plan.caseHeaders.forEach(function(h,i){
+      var c=cs.getRow(1).getCell(i+1);
+      c.value=h; c.font={bold:true}; c.border=thinBorder();
+      c.alignment={horizontal:'center',vertical:'middle'};
+      c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEFF3F8'}};
+    });
+    cs.getRow(1).height=20;
+    plan.caseRows.forEach(function(r,ri){
+      var row=cs.getRow(ri+2);
+      row.height=90;
+      r.forEach(function(v,ci){
+        var c=row.getCell(ci+1);
+        c.value=v; c.border=thinBorder();
+        c.alignment={horizontal:(ci>=13)?'center':'left', vertical:'top', wrapText:true};
+      });
+    });
+
+    /* 같은 Drive 파일은 workbook 에 한 번만 넣는다 */
+    var idCache={};
+    async function imageIdFor(src, fileId){
+      var k=fileId||src;
+      if(idCache[k]!==undefined) return idCache[k];
+      var filled=await cropToCover(src, EXPORT_IMG_PX, EXPORT_IMG_PX);
+      idCache[k]=wb.addImage({base64:filled.split(',')[1], extension:'jpeg'});
+      return idCache[k];
+    }
+    for(var i=0;i<plan.images.length;i++){
+      var im=plan.images[i];
+      var id=await imageIdFor(im.src, im.fileId);
+      cs.addImage(id, {tl:{col:im.col, row:im.rowIdx-1}, br:{col:im.col+1, row:im.rowIdx}, editAs:'oneCell'});
+      if(im.fileId){
+        try{
+          var cell=cs.getRow(im.rowIdx).getCell(im.col+1);
+          cell.value={text:'', hyperlink:driveViewUrl(im.fileId)};
+        }catch(e){}
+      }
+    }
+
+    var buf=await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buf],{type:'application/octet-stream'}),
+      'AS항목_증상조치_'+val('fromD')+'_'+val('toD')+'.xlsx');
+    setStatus('엑셀 생성 완료 — 유형 '+plan.sumRows.length+'종 · 사례 '+plan.caseRows.length+'건');
+    toast('품질팀 제출용 엑셀을 만들었습니다.');
+  }catch(err){
+    console.error(err);
+    setStatus('엑셀 생성 중 오류가 발생했습니다.');
+    alert('엑셀 생성 중 오류가 발생했습니다: '+err.message);
+  }
+}
+
+/* ── 사진 크게 보기 ──────────────────────────────────────────────────── */
+function openLightbox(fileId, alt, desc){
+  var url=PHOTO_CACHE[fileId];
+  var box=el('lightbox');
+  el('lbTitle').textContent=[alt, desc].filter(Boolean).join(' — ');
+  el('lbStage').innerHTML = url
+    ? '<img src="'+esc(url)+'" alt="'+esc(alt||'사진')+'">'
+    : '<div style="color:#8FA0BF;font-size:13px;padding:60px 20px">아직 사진을 받지 못했습니다.</div>';
+  var link=el('lbOpen');
+  if(fileId){ link.style.display=''; link.href=driveViewUrl(fileId); }
+  else link.style.display='none';
+  if(window.BazModal && BazModal.markup){
+    BazModal.markup(box, {sheet:'.lb-sheet', label:'사진 크게 보기'});
+    BazModal.open(box, {sheet:'.lb-sheet', name:'asreport-photo', initialFocus:'#lbClose'});
+  } else box.classList.add('show');
+}
+function closeLightbox(){
+  var box=el('lightbox');
+  if(window.BazModal && BazModal.close) BazModal.close(box);
+  box.classList.remove('show');
+}
+
+/* ── 바인딩 ──────────────────────────────────────────────────────────── */
+function bind(){
+  el('btnLoad').addEventListener('click', loadReport);
+  el('btnCancel').addEventListener('click', function(){
+    cancelLoad(); setStatus('중단 요청 — 진행 중인 요청을 끊는 중…');
+  });
+  el('rangeChips').addEventListener('click', function(e){
+    var c=e.target.closest('[data-range]');
+    if(c) applyRange(c.getAttribute('data-range'));
+  });
+  ['fromD','toD'].forEach(function(id){
+    el(id).addEventListener('change', function(){
+      document.querySelectorAll('#rangeChips .chip').forEach(function(c){ c.classList.remove('on'); });
+    });
+  });
+
+  var searchTimer=null;
+  el('search').addEventListener('input', function(){
+    var v=this.value;
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(function(){
+      VIEW.q=v;
+      /* 검색으로 현재 유형이 사라졌으면 첫 유형으로 옮긴다 */
+      var vis=visibleItems();
+      if(!vis.some(function(x){ return x.i===CUR; })) CUR = vis.length ? vis[0].i : -1;
+      render(); loadVisiblePhotos();
+    }, 180);
+  });
+  el('catFilter').addEventListener('change', function(){
+    VIEW.cat=this.value;
+    var vis=visibleItems();
+    if(!vis.some(function(x){ return x.i===CUR; })) CUR = vis.length ? vis[0].i : -1;
+    render(); loadVisiblePhotos();
+  });
+
+  el('typeList').addEventListener('click', function(e){
+    var b=e.target.closest('[data-idx]');
+    if(!b) return;
+    CUR=Number(b.getAttribute('data-idx'));
+    render();
+    loadVisiblePhotos();
+  });
+
+  el('detail').addEventListener('change', function(e){
+    var t=e.target;
+    if(t.getAttribute && t.getAttribute('data-pick')!==null && t.type==='checkbox'){
+      var k=t.getAttribute('data-pick');
+      if(t.checked) PICKED[k]=1; else delete PICKED[k];
+      el('totalBadge').textContent = ITEMS.length
+        ? (ITEMS.length+'종 · '+ITEMS.reduce(function(s,it){ return s+it.count; },0)+'건'
+           + (pickedCount()?(' · 선택 '+pickedCount()):''))
+        : '0건';
+    }
+  });
+  el('detail').addEventListener('click', function(e){
+    var s=e.target.closest('[data-shot]');
+    if(!s) return;
+    openLightbox(s.getAttribute('data-shot'), s.getAttribute('data-alt'), s.getAttribute('data-desc'));
+  });
+
+  el('btnPickAll').addEventListener('click', function(){
+    var it=ITEMS[CUR];
+    if(!it){ toast('선택할 A/S 항목이 없습니다.'); return; }
+    visibleCases(it).forEach(function(x){ PICKED[pickKey(it, x.i)]=1; });
+    render();
+  });
+  el('btnPickNone').addEventListener('click', function(){ PICKED={}; render(); });
+
+  el('btnCopy').addEventListener('click', function(){ copyReport(false); });
+  el('btnCopySel').addEventListener('click', function(){ copyReport(true); });
+  el('btnExcel').addEventListener('click', exportExcel);
+
+  el('lbClose').addEventListener('click', closeLightbox);
+  el('lightbox').addEventListener('click', function(e){ if(e.target===this) closeLightbox(); });
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && el('lightbox').classList.contains('show')) closeLightbox();
+  });
+}
+
+/* ── 시작 ────────────────────────────────────────────────────────────── */
+applyRange('m3');
+bind();
+render();
+if(HANDOVER_URL){ fetch(HANDOVER_URL+'?action=ping').catch(function(){}); }   /* 콜드스타트 예열 */
+</script>
+
+</body>
+</html>
