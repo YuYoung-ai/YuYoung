@@ -420,7 +420,12 @@ function photoTargets(item){
 function loadVisiblePhotos(){
   var item=ITEMS[CUR];
   if(!item) return Promise.resolve();
-  var targets=photoTargets(item);
+  return loadPhotoTargets(photoTargets(item), {paint:true});
+}
+
+/** 받은 대상만 공통 배치 로더로 처리한다 — 화면·Excel이 같은 실패 판정을 쓴다. */
+function loadPhotoTargets(targets, opts){
+  opts=opts||{};
   if(!targets.length) return Promise.resolve();
 
   var batches=[];
@@ -440,11 +445,34 @@ function loadVisiblePhotos(){
         });
       })
       .catch(function(e){ console.warn('[asreport] 사진 조회 실패:', e); chunk.forEach(function(p){ p._failed=true; }); })
-      .then(function(){ paintShots(); return runBatch(); });
+      .then(function(){ if(opts.paint) paintShots(); return runBatch(); });
   }
   var workers=[];
   for(var w=0; w<Math.min(PHOTO_PARALLEL, batches.length); w++) workers.push(runBatch());
-  return Promise.all(workers);
+  return Promise.all(workers).then(function(){
+    var failed=targets.filter(function(p){ return !p._url; })
+      .map(function(p){ return p.fileId; })
+      .filter(function(v,i,a){ return v && a.indexOf(v)===i; });
+    return {done:done, failed:failed};
+  });
+}
+
+/** Excel은 현재 열어 본 유형뿐 아니라 실제 내보낼 모든 사례의 사진을 먼저 받는다. */
+function loadExportPhotos(items, onlyPicked, picked){
+  var targets=[];
+  (items||[]).forEach(function(it){
+    (it.cases||[]).forEach(function(c,ci){
+      if(onlyPicked && !picked[pickKey(it,ci)]) return;
+      (c.symptom||[]).concat(c.after||[]).forEach(function(ph){
+        if(!ph.fileId || ph._url) return;
+        if(PHOTO_CACHE[ph.fileId]){ ph._url=PHOTO_CACHE[ph.fileId]; return; }
+        ph._failed=false;
+        targets.push(ph);
+      });
+    });
+  });
+  if(!targets.length) return Promise.resolve({done:0,failed:[]});
+  return loadPhotoTargets(targets, {paint:false});
 }
 /** 사진 자리만 다시 그린다 — 상세 전체를 재생성하면 스크롤이 튄다 */
 function paintShots(){
@@ -721,7 +749,8 @@ function buildAsReportPlan(items, opts){
   var o=opts||{};
   var onlyPicked=!!o.onlyPicked, picked=o.picked||{};
 
-  var sumHeaders=['대분류','소분류','코드','건수','병원 수','A/S 결과 분포','교체품 분포',
+  var sumHeaders=['대분류','소분류','코드','총 건수','병원 수','내보낸 사례','조회 상한 생략',
+                  'A/S 결과 분포','교체품 분포',
                   '표준 문제확인','표준 문제해결','표준 후속조치'];
   var caseHeaders=['대분류','소분류','처리일','병원명','담당 FSE','장비 S/N','구분',
                    '증상','조치','교체품','교체비용','A/S 결과','비고','증상 사진','해결 후 사진'];
@@ -735,6 +764,7 @@ function buildAsReportPlan(items, opts){
 
     sumRows.push([
       it.cat||'', it.type||'', it.code||'', it.count||0, it.hospCount||0,
+      cases.length, it.truncated||0,
       (it.results||[]).map(function(r){ return r[0]+' '+r[1]; }).join(', '),
       (it.parts||[]).map(function(r){ return r[0]+' '+r[1]; }).join(', '),
       (it.guide&&it.guide.chk)||'', (it.guide&&it.guide.fix)||'', (it.guide&&it.guide.fup)||''
@@ -785,10 +815,17 @@ async function exportExcel(){
     confirm('선택한 사례 '+pickedCount()+'건만 내보낼까요?\n\n[확인] 선택 사례만\n[취소] 보이는 전체');
   setStatus('엑셀 생성 중…');
   try{
+    var items=visibleItems().map(function(x){ return x.it; });
+    var photoReady=await loadExportPhotos(items, onlyPicked, PICKED);
+    if(photoReady.failed.length && !confirm('사진 '+photoReady.failed.length+'장을 받지 못했습니다.\n\n'
+      +'[확인] 실패한 사진은 빈 칸으로 두고 계속\n[취소] 내보내기 중단')){
+      setStatus('엑셀 생성을 취소했습니다 — 사진을 다시 받은 뒤 시도하세요.');
+      return;
+    }
+
     await loadLib(XLSX_CDNS,'ExcelJS','엑셀');
     await loadLib(SAVER_CDNS,'saveAs','파일 저장');
 
-    var items=visibleItems().map(function(x){ return x.it; });
     var plan=buildAsReportPlan(items, {onlyPicked:onlyPicked, picked:PICKED});
     if(!plan.caseRows.length){ setStatus('내보낼 사례가 없습니다.'); alert('내보낼 사례가 없습니다.'); return; }
 
@@ -796,10 +833,10 @@ async function exportExcel(){
 
     /* ① 요약 — 유형별 건수·분포·표준 대응 */
     var ws=wb.addWorksheet('A/S 항목 요약');
-    ws.columns=[{width:14},{width:26},{width:9},{width:8},{width:9},
+    ws.columns=[{width:14},{width:26},{width:9},{width:9},{width:9},{width:11},{width:13},
                 {width:30},{width:30},{width:34},{width:34},{width:34}];
     var title='A/S 항목별 증상·조치 요약  ('+val('fromD')+' ~ '+val('toD')+')';
-    ws.mergeCells('A1:J1');
+    ws.mergeCells('A1:L1');
     ws.getCell('A1').value=title;
     ws.getCell('A1').font={size:14,bold:true};
     ws.getRow(1).height=24;
@@ -815,7 +852,7 @@ async function exportExcel(){
       r.forEach(function(v,ci){
         var c=row.getCell(ci+1);
         c.value=v; c.border=thinBorder();
-        c.alignment={horizontal:(ci===3||ci===4)?'center':'left', vertical:'top', wrapText:true};
+        c.alignment={horizontal:(ci>=3&&ci<=6)?'center':'left', vertical:'top', wrapText:true};
       });
     });
 

@@ -97,7 +97,8 @@ await page.route('**://script.google.com/**', async r => {
           cases: [
             { date: '2026-06-11', hosp: '다피부과의원', fse: '권오성', sn: 'BV5003', gubun: '점검',
               part: '', cost: '', result: '이상없음', detail: '사용 중 발열 호소',
-              remark: '', recordId: 'rec_3', snPhoto: '', symptom: [], after: [] }
+              remark: '', recordId: 'rec_3', snPhoto: '',
+              symptom: [{ fileId: 'C3', desc: '핸드피스 표면 온도 상승', seq: 1 }], after: [] }
           ]
         }
       ]
@@ -215,6 +216,17 @@ ck('선택한 사례만 텍스트로 나온다',
 ck('선택이 없는 유형은 텍스트에서 통째로 빠진다', !selTxt.includes('발열'));
 
 section('8. 엑셀 계획(순수 함수)');
+const exportPhotoReady = await page.evaluate(async () => {
+  const ph = window.ITEMS[1].cases[0].symptom[0];
+  ph._url = null;
+  delete window.PHOTO_CACHE[ph.fileId];
+  const before = !!ph._url;
+  const result = await window.loadExportPhotos(window.ITEMS, false, window.PICKED);
+  return { before, after: !!ph._url, failed: result.failed.length };
+});
+ck('Excel 직전에 열어 보지 않은 유형의 사진도 모두 받는다',
+  !exportPhotoReady.before && exportPhotoReady.after && exportPhotoReady.failed === 0,
+  JSON.stringify(exportPhotoReady));
 const plan = await page.evaluate(() => {
   const p = window.buildAsReportPlan(window.ITEMS, {});
   return { sum: p.sumHeaders.join('|'), cs: p.caseHeaders.join('|'),
@@ -222,7 +234,7 @@ const plan = await page.evaluate(() => {
            images: p.images.length, firstSum: p.sumRows[0], firstCase: p.caseRows[0] };
 });
 ck('요약 시트 열: 유형·건수·분포·표준대응',
-  plan.sum === '대분류|소분류|코드|건수|병원 수|A/S 결과 분포|교체품 분포|표준 문제확인|표준 문제해결|표준 후속조치',
+  plan.sum === '대분류|소분류|코드|총 건수|병원 수|내보낸 사례|조회 상한 생략|A/S 결과 분포|교체품 분포|표준 문제확인|표준 문제해결|표준 후속조치',
   plan.sum);
 ck('사례 시트 열: 증상·조치·사진',
   plan.cs === '대분류|소분류|처리일|병원명|담당 FSE|장비 S/N|구분|증상|조치|교체품|교체비용|A/S 결과|비고|증상 사진|해결 후 사진',
@@ -230,10 +242,12 @@ ck('사례 시트 열: 증상·조치·사진',
 ck('요약은 유형 수, 사례는 사례 수만큼 나온다',
   plan.sumRows === 2 && plan.caseRows === 3, `sum=${plan.sumRows} case=${plan.caseRows}`);
 ck('분포를 사람이 읽는 문자열로 편다',
-  plan.firstSum[5] === '부품 교체 2, 조치 완료 1' && plan.firstSum[6] === '냉각 호스 2, 피팅 1');
+  plan.firstSum[7] === '부품 교체 2, 조치 완료 1' && plan.firstSum[8] === '냉각 호스 2, 피팅 1');
+ck('요약에 실제 내보낸 사례와 조회 상한 생략 수를 적는다',
+  plan.firstSum[5] === 2 && plan.firstSum[6] === 2, JSON.stringify(plan.firstSum));
 ck('증상 칸에 사진 설명과 처리 내용을 함께 싣는다',
   plan.firstCase[7] === '호스 연결부 물맺힘 / 펌프 하단에서 냉각수 누수', plan.firstCase[7]);
-ck('받아 온 사진은 모두 셀에 배치된다', plan.images === 3, String(plan.images));
+ck('받아 온 사진은 모두 셀에 배치된다', plan.images === 4, String(plan.images));
 const noPhotoPlan = await page.evaluate(() => {
   const snap = window.ITEMS[0].cases[0].symptom[0]._url;
   window.ITEMS[0].cases[0].symptom[0]._url = null;      /* 아직 못 받은 사진 */
@@ -241,7 +255,7 @@ const noPhotoPlan = await page.evaluate(() => {
   window.ITEMS[0].cases[0].symptom[0]._url = snap;
   return p.images.length;
 });
-ck('아직 받지 못한 사진은 엑셀에 빈 칸으로 남는다', noPhotoPlan === 2, String(noPhotoPlan));
+ck('아직 받지 못한 사진은 엑셀에 빈 칸으로 남는다', noPhotoPlan === 3, String(noPhotoPlan));
 const selPlan = await page.evaluate(() =>
   window.buildAsReportPlan(window.ITEMS, { onlyPicked: true, picked: window.PICKED }));
 ck('선택 내보내기는 선택한 사례만 담는다',

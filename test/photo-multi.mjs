@@ -446,11 +446,11 @@ ck('asreport 는 로그인 검증 뒤에 라우팅된다',
     grab(G, 'doGet').indexOf("action==='asreport'"));
 ck('사례 상한이 있고 잘라낸 건수를 함께 돌려준다',
   /var ASREPORT_MAX_CASES = 50;/.test(G) &&
-  /truncated: g\.truncated/.test(G) && /g\.truncated\+\+; return;/.test(G));
+  /truncated: g\.truncated/.test(G) && /g\.cases\.pop\(\); g\.truncated\+\+;/.test(G));
 ck('증상(CAUSE)과 해결 후(AFTER)를 나눠 담는다',
   /if\(ph\.kind === SNAP\.KIND_AFTER\) after\.push\(item\); else symptom\.push\(item\);/.test(G));
-ck('유형마스터의 표준 대응을 유형에 붙인다',
-  /guides\[g\.type\] \|\| null/.test(G) && /getMaster_\(\{\}\) \|\| \{\}\)\.guides/.test(G));
+ck('유형마스터의 표준 대응을 대분류+유형에 붙인다',
+  /guidesByItem\[asItemKey_\(g\.cat, g\.type\)\]/.test(G) && /guidesByItem/.test(grab(G, 'getMaster_')));
 
 /* 집계 실행 — 그룹핑·분포·상한이 실제로 동작하는지 본다 */
 {
@@ -471,7 +471,7 @@ ck('유형마스터의 표준 대응을 유형에 붙인다',
          { kind:'CAUSE', seq:1, fileId:'C1', desc:'물맺힘' },
          { kind:'AFTER', seq:1, fileId:'A1', desc:'교체 후 정상' }]
   };
-  const asReport = gasFn(['asReport_', 'asTally_'], 'asReport_', {
+  const asReport = gasFn(['asReport_', 'asTally_', 'asItemKey_', 'asCaseLatestFirst_'], 'asReport_', {
     parseD_: s2 => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s2||'').trim());
                      return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; },
     norm_: s2 => String(s2==null?'':s2).replace(/\s+/g,'').toLowerCase(),
@@ -481,7 +481,12 @@ ck('유형마스터의 표준 대응을 유형에 붙인다',
                    detail:o['내용'], sn:o['장비SN']||'', snPhotoId:'' }),
     pickH_: (o, cols) => { for (const c of (cols||[])) if (o[c] != null && o[c] !== '') return o[c]; return ''; },
     photoMapByRecord_: () => photoMap,
-    getMaster_: () => ({ guides: { '냉각수 누수': { chk:'확인', fix:'호스 교체', fup:'재확인' } } }),
+    getMaster_: () => ({
+      guides: { '냉각수 누수': { chk:'잘못된 공통값', fix:'잘못된 조치', fup:'' } },
+      guidesByItem: {
+        ['장비\u001f냉각수누수']: { chk:'확인', fix:'호스 교체', fup:'재확인' }
+      }
+    }),
     REC_ID_COLS: ['기록 ID'],
     HANDOVER_FIELD_COLS: { result:['A/S 결과'], remark:['비고'], code:['유형 코드','코드'] },
     SNAP: { KIND_SN:'SN', KIND_CAUSE:'CAUSE', KIND_AFTER:'AFTER' },
@@ -501,16 +506,19 @@ ck('유형마스터의 표준 대응을 유형에 붙인다',
   ck('집계 실행: 교체품·결과 분포를 많은 순으로 센다',
     JSON.stringify(out.items[0].parts) === '[["호스",2],["피팅",1]]' &&
     JSON.stringify(out.items[0].results) === '[["부품 교체",2],["조치 완료",1]]');
+  const photographed = out.items[0].cases.find(c => c.recordId === 'r1');
   ck('집계 실행: 증상과 해결 후 사진을 나눠 담는다',
-    out.items[0].cases[0].symptom.length === 1 && out.items[0].cases[0].symptom[0].desc === '물맺힘' &&
-    out.items[0].cases[0].after.length === 1 && out.items[0].cases[0].after[0].desc === '교체 후 정상' &&
-    out.items[0].cases[0].snPhoto === 'S1');
+    photographed.symptom.length === 1 && photographed.symptom[0].desc === '물맺힘' &&
+    photographed.after.length === 1 && photographed.after[0].desc === '교체 후 정상' &&
+    photographed.snPhoto === 'S1');
   ck('집계 실행: 표준 대응(유형마스터)을 붙인다',
     out.items[0].guide && out.items[0].guide.fix === '호스 교체' && out.items[1].guide === null);
 
   const cut = asReport({ from:'2026-07-01', to:'2026-08-31', maxCases:1 });
-  ck('집계 실행: 사례 상한을 넘으면 잘라내되 그 수를 알려 준다',
-    cut.items[0].cases.length === 1 && cut.items[0].truncated === 2 && cut.items[0].count === 3);
+  ck('집계 실행: 사례 상한에는 최신 사례를 남기고 잘라낸 수를 알려 준다',
+    cut.items[0].cases.length === 1 && cut.items[0].cases[0].date === '2026-08-03' &&
+    cut.items[0].truncated === 2 && cut.items[0].count === 3,
+    JSON.stringify(cut.items[0].cases));
   const one = asReport({ from:'2026-07-01', to:'2026-08-31', type:'발열' });
   ck('집계 실행: 소분류로 좁혀 조회할 수 있다',
     one.items.length === 1 && one.items[0].type === '발열');
@@ -528,6 +536,8 @@ ck('보고서용 텍스트를 클립보드로 복사할 수 있다',
   /function reportText/.test(AS) && /navigator\.clipboard\.writeText/.test(AS));
 ck('상한으로 잘린 사실을 화면과 텍스트 양쪽에서 알린다',
   /조회 상한으로 생략됨/.test(AS) && /사례 '\+it\.truncated\+'건 생략/.test(AS));
+ck('엑셀 요약에도 내보낸 사례와 조회 상한 생략 수를 적는다',
+  /'내보낸 사례','조회 상한 생략'/.test(AS));
 ck('허브 메뉴에 A/S 항목별 타일이 있다',
   /id="appBtnAsReport"/.test(read('index.html')) &&
   /asreport:\s*\{name:/.test(read('index.html')));

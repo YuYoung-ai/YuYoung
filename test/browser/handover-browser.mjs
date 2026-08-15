@@ -70,7 +70,8 @@ let phraseRows = [
   { kind: '해결', text: '청소 후 정상 동작',  cat: '',     type: '',            order: 4, on: true },
   { kind: '증상', text: '보류 문구',          cat: '',     type: '',            order: 5, on: false },
   /* 목 유형마스터에 실제로 있는 유형에 묶어 둔다 — 맥락 정렬을 확인하기 위한 것 */
-  { kind: '증상', text: '풋스위치 접점 불량',  cat: '장비', type: '풋스위치 작동 불량', order: 6, on: true }
+  { kind: '증상', text: '풋스위치 접점 불량',  cat: '장비', type: '풋스위치 작동 불량', order: 6, on: true },
+  { kind: '증상', text: '다른 대분류 전용 문구', cat: '핸드피스', type: '풋스위치 작동 불량', order: 7, on: true }
 ];
 const saved = new Map();
 const photoAddRequests = [];
@@ -288,6 +289,11 @@ ck('고른 A/S 항목에 맞는 문구가 맨 앞으로 올라온다', await pag
   const first = document.querySelector('#phraseChips_CAUSE .pc');
   return first.textContent === '풋스위치 접점 불량' && first.classList.contains('hit');
 }), await page.evaluate(() => document.querySelector('#phraseChips_CAUSE .pc').textContent));
+ck('동명 유형이어도 대분류가 다르면 맞춤 문구로 올리지 않는다', await page.evaluate(() => {
+  const wrong = Array.from(document.querySelectorAll('#phraseChips_CAUSE .pc'))
+    .find(x => x.textContent === '다른 대분류 전용 문구');
+  return wrong && !wrong.classList.contains('hit');
+}));
 
 /* 관리자(Lv.3) 문구 검수 */
 ck('Lv.3 에게만 문구 관리 버튼이 보인다',
@@ -295,7 +301,7 @@ ck('Lv.3 에게만 문구 관리 버튼이 보인다',
 await page.click('#phraseAdminBtn');
 await page.waitForSelector('#pmModal.show');
 ck('문구 관리에 현재 목록이 그대로 뜬다(사용 꺼진 것 포함)',
-  (await page.evaluate(() => document.querySelectorAll('#pmRows .pm-row').length)) === 6);
+  (await page.evaluate(() => document.querySelectorAll('#pmRows .pm-row').length)) === 7);
 await page.click('#pmAdd');
 await page.evaluate(() => {
   const rows = document.querySelectorAll('#pmRows .pm-row');

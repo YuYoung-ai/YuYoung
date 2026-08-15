@@ -1859,6 +1859,14 @@ function setupLabelListSheet(){
 var ASREPORT_MAX_CASES = 50;      /* 유형별 기본 사례 수 */
 var ASREPORT_MAX_CASES_HARD = 500;
 
+/** 대분류가 다른 동명 유형을 섞지 않는 안정 키 */
+function asItemKey_(cat, type){ return norm_(cat) + '\u001f' + norm_(type); }
+
+/** 사례 상한은 최신 처리일 우선, 같은 날이면 최근에 기록된 행 우선 */
+function asCaseLatestFirst_(a, b){
+  return (b._dateMs-a._dateMs) || (b._srcRow-a._srcRow);
+}
+
 /** 값별 건수를 많은 순으로 — 교체품·A/S 결과 분포에 쓴다 */
 function asTally_(map){
   return Object.keys(map)
@@ -1914,9 +1922,6 @@ function asReport_(p){
     if(result) g._result[result] = (g._result[result]||0)+1;
     if(code && !g.code) g.code = code;
 
-    /* 사례는 상한까지만 싣되, 잘라낸 건수를 남겨 표본임을 드러낸다 */
-    if(g.cases.length >= maxCases){ g.truncated++; return; }
-
     var recId = String(pickH_(o, REC_ID_COLS)||'').trim();
     var list  = (recId && photoMap[recId]) ? photoMap[recId] : [];
     var symptom = [], after = [], snFileId = r.snPhotoId || '';
@@ -1932,14 +1937,22 @@ function asReport_(p){
       detail: r.detail || '',
       remark: String(pickH_(o, HANDOVER_FIELD_COLS.remark)||'').trim(),
       recordId: recId, snPhoto: snFileId,
-      symptom: symptom, after: after
+      symptom: symptom, after: after,
+      _dateMs: d.getTime(), _srcRow: Number(o._row)||0
     });
+    /* 응답 상한 안에는 물리적 시트 앞쪽(대개 오래된 기록)이 아니라 최신 사례를 남긴다. */
+    g.cases.sort(asCaseLatestFirst_);
+    if(g.cases.length > maxCases){ g.cases.pop(); g.truncated++; }
   });
 
   /* 표준 가이드(유형마스터의 문제확인·문제해결·후속조치)를 유형에 붙여 준다 —
      "지금 이렇게 처리되고 있다"와 "이렇게 처리하기로 돼 있다"를 나란히 보기 위한 것 */
-  var guides = {};
-  try{ guides = (getMaster_({}) || {}).guides || {}; }
+  var guides = {}, guidesByItem = null;
+  try{
+    var master = getMaster_({}) || {};
+    guides = master.guides || {};                       /* 구버전 캐시/클라이언트 호환 */
+    guidesByItem = master.guidesByItem || null;
+  }
   catch(e){ Logger.log('[asreport] 가이드 조회 실패(무시): '+e); }
 
   var items = order.map(function(k){
@@ -1948,9 +1961,10 @@ function asReport_(p){
       cat: g.cat, type: g.type, code: g.code, count: g.count,
       hospCount: Object.keys(g._hosp).length,
       parts: asTally_(g._part), results: asTally_(g._result),
-      guide: guides[g.type] || null,
+      guide: guidesByItem ? (guidesByItem[asItemKey_(g.cat, g.type)] || null)
+                          : (guides[g.type] || null),
       truncated: g.truncated,
-      cases: g.cases
+      cases: g.cases.map(function(c){ delete c._dateMs; delete c._srcRow; return c; })
     };
   }).sort(function(a,b){
     return b.count - a.count || String(a.cat+a.type).localeCompare(String(b.cat+b.type));
@@ -2766,8 +2780,14 @@ function getHandoverBootstrap_(p){
 function getMaster_(p){
   /* [성능] 유형마스터는 거의 안 바뀌는데 readAll_ 전체 스캔까지 하고 있었다 → 10분 캐시 */
   var _c = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('hv_master') : null;
-  if(_c){ try{ return JSON.parse(_c); }catch(e){} }
-  var out = {success:true, source:'', taxonomy:{}, parts:[], fse:[], guides:{}};
+  if(_c){
+    try{
+      var cached = JSON.parse(_c);
+      /* v3.7 이전 캐시는 유형만 키로 써 동명 유형의 가이드가 섞인다 — 즉시 다시 만든다. */
+      if(cached && cached.guidesByItem) return cached;
+    }catch(e){}
+  }
+  var out = {success:true, source:'', taxonomy:{}, parts:[], fse:[], guides:{}, guidesByItem:{}};
   var msh = sheet_(CONFIG.MASTER_SHEET);
   if(msh && msh.getLastRow()>1){
     /* 기대 헤더: 대분류 | 유형 | 코드 | 문제확인 | 문제해결 | 후속조치 */
@@ -2779,9 +2799,11 @@ function getMaster_(p){
       var cat=mv[r][ci.cat], typ=mv[r][ci.type];
       if(!cat||!typ) continue;
       (out.taxonomy[cat]=out.taxonomy[cat]||[]).push([ci.code>=0?mv[r][ci.code]:'', typ]);
-      out.guides[typ]={
+      var guide={
         chk: ci.chk>=0?mv[r][ci.chk]:'', fix: ci.fix>=0?mv[r][ci.fix]:'', fup: ci.fup>=0?mv[r][ci.fup]:''
       };
+      out.guides[typ]=guide;                         /* 기존 handover guide 소비자 호환 */
+      out.guidesByItem[asItemKey_(cat,typ)]=guide;  /* asreport 는 대분류+유형으로 정확히 조회 */
     }
     out.source='유형마스터 시트';
   }
