@@ -119,7 +119,7 @@ await page.route('**://script.google.com/**', async r => {
       warnings: [], msg: '✅ 기록 완료' });
     return j(saved.get(p.reqId));
   }
-  if (u.includes('action=ping')) return j({ success: true, ver: '3.7.0' });
+  if (u.includes('action=ping')) return j({ success: true, ver: '3.8.0' });
   if (u.includes('action=photophrase')) return j({ success: true, rows: phraseRows });
   if (u.includes('action=savecheck')) {
     const id = decodeURIComponent((u.match(/reqId=([^&]+)/) || [])[1] || '');
@@ -179,6 +179,14 @@ const boot = await page.evaluate(() => ({
 }));
 ck('부트스트랩으로 최신 DB 를 받아 배지에 표시한다', boot.badge.includes('최신'), boot.badge);
 ck('390px 에서 가로 넘침이 없다', boot.hOverflow === 0);
+ck('모바일에서 증상·해결 후 사진 칸이 세로로 넓게 배치된다', await page.evaluate(() =>
+  getComputedStyle(document.getElementById('causeGrid')).gridTemplateColumns.split(' ').length === 1));
+ck('②·③에 촬영 입력과 갤러리 입력이 각각 분리돼 있다', await page.evaluate(() =>
+  ['CAUSE','AFTER'].every(k => {
+    const camera=document.getElementById('causeCamera_'+k);
+    const gallery=document.getElementById('causeFile_'+k);
+    return camera && camera.getAttribute('capture')==='environment' && gallery && !gallery.hasAttribute('capture');
+  })));
 
 /* 2. 병원 선택 → 종속 필드 채워짐 → 이름 수정 시 초기화 */
 await fillForm();
@@ -333,6 +341,9 @@ await page.evaluate(() => {
 const uploadedKinds = photoAddRequests.slice(-3).map(p => p.kind).sort();
 ck('S/N·증상·해결 후 사진을 각각 photo_add로 먼저 업로드한다',
   uploadedKinds.join(',') === 'AFTER,CAUSE,SN', JSON.stringify(uploadedKinds));
+ck('사진 3장은 최종 기록 전에 사전 업로드 완료로 표시된다',
+  (await page.textContent('#photoTransferState')).includes('3/3장 사전 업로드 완료'),
+  await page.textContent('#photoTransferState'));
 ck('두 칸 모두 순번 1로 보낸다(칸당 1장)',
   photoAddRequests.slice(-2).every(p => p.seq === 1),
   JSON.stringify(photoAddRequests.slice(-2).map(p => ({ k: p.kind, q: p.seq }))));
