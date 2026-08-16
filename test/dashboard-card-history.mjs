@@ -10,7 +10,8 @@
  *   · 이력 필터는 카드 집계(exDim)와 완전히 같은 기준을 쓴다
  *     → 카드의 cur/prev 수치와 이력 배열 길이가 항상 일치한다(중복 제거 없음)
  *   · 현재 기간(x.rows)·비교 기간(x.prev)을 분리해 보여준다
- *   · 클릭 처리 경로에 fetch/GAS/loadData 가 없다
+ *   · 카드 클릭·모달 열기에는 fetch/GAS/loadData 가 없다
+ *     (원본 행을 다시 선택할 때만 대표 사진 메타를 별도 조회한다)
  ************************************************************/
 import fs from 'fs';
 import path from 'path';
@@ -272,7 +273,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     .indexOf('A/S 기록 없음') >= 0);
 }
 
-/* ══════ 9. 네트워크 호출 없음 ══════ */
+/* ══════ 9. 카드 클릭·모달 열기에는 네트워크 호출 없음 ══════ */
 {
   const bodies = ['exShowHistory_', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_',
     'exHistoryFilter_', 'exHistoryTable_', 'exApplyHistoryFilters_', 'exCmpRangeText_', 'exBars', 'exListGroup']
@@ -285,7 +286,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
       }
       return '';
     }).join('\n');
-  ck('36. 클릭 처리 경로에 fetch/GAS/재조회가 없다',
+  ck('36. 카드 클릭·모달 열기 경로에 fetch/GAS/재조회가 없다',
     !/\bfetch\s*\(|\bgv\s*\(|loadData\s*\(|XMLHttpRequest|script\.google/.test(bodies));
   ck('37. 클릭이 전역 필터(F)나 화면을 다시 그리지 않는다',
     !/\bapply\s*\(\)|buildFilters\s*\(\)|F\.(from|to|type|part|hosp)\s*=/.test(bodies));
