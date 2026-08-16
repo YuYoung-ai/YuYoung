@@ -907,6 +907,7 @@ function doGet(e){
     if(action==='labellist') return json_(labelList_(p));       /* [v2.8] 장비 Label List 원본 */
     if(action==='asreport')  return json_(asReport_(p));        /* [v3.6] A/S 항목별 증상·조치 집계 */
     if(action==='photophrase') return json_(photoPhraseGet_());  /* [v3.7] 사진 설명 자주 쓰는 문구 */
+    if(action==='historyphotos') return json_(historyPhotos_(p)); /* 대시보드 선택 행 대표 증상·처리결과 */
     if(action==='snphoto')   return json_(snPhotos_(p));    /* [v2.8] 장비 S/N 사진 base64 (?sz= 로 썸네일) */
     if(action==='photolist') return json_(photoList_(p));   /* [v3.4] 사진 메타 보조 조회(로그인 필수) */
     return json_({success:false, error:'알 수 없는 action: '+action});
@@ -1397,6 +1398,69 @@ function photoList_(p){
   });
   Object.keys(out).forEach(function(k){ out[k] = photoSortList_(out[k]); });
   return {success:true, count:Object.keys(out).length, photos:out};
+}
+
+/** 대시보드 행 식별용 32-bit 지문.
+ *  물리 행 번호만 믿으면 운영자가 중간 행을 정렬·삭제했을 때 다른 기록의 사진이
+ *  보일 수 있다. all 응답에 recordId(행마다 20~36자)를 싣는 대신 브라우저와 서버가
+ *  같은 공개 필드로 짧은 지문을 계산하고, 선택 시점에 현재 행과 다시 대조한다. */
+function historyPhotoSig_(r){
+  var fields=['date','hosp','fse','gubun','cat','type','part','detail','sn'];
+  var s=fields.map(function(k){ return String((r&&r[k])||''); }).join('\u001f');
+  var h=2166136261;
+  for(var i=0;i<s.length;i++){
+    h^=s.charCodeAt(i);
+    h+=(h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24);
+  }
+  return ('00000000'+(h>>>0).toString(16)).slice(-8);
+}
+
+/** GET ?action=historyphotos&row=N&sig=XXXXXXXX
+ *  처리 이력에서 사용자가 고른 한 기록의 대표 사진 메타만 반환한다.
+ *  - all/bootstrap/40초 폴링 경로와 완전히 분리한다.
+ *  - Base64·Blob·DriveApp 호출이 없다. 브라우저가 링크 공유된 Drive 썸네일을 직접 읽는다.
+ *  - 증상(CAUSE)과 처리 결과(AFTER)를 정렬 후 각각 첫 1장만 반환한다. */
+function historyPhotos_(p){
+  var row=Math.floor(Number(p&&p.row)||0);
+  var askedSig=String((p&&p.sig)||'').trim().toLowerCase();
+  if(row<1 || !/^[0-9a-f]{8}$/.test(askedSig)){
+    return {success:false, code:'BAD_REQUEST', error:'row·sig 파라미터가 필요합니다'};
+  }
+
+  var sh=sheet_(CONFIG.SHEET_NAME);
+  if(!sh) return {success:false, code:'SHEET_NOT_FOUND', error:'현장 처리 현황 시트 없음'};
+  var hdr=findHeader_(sh);
+  if(!hdr || row<=hdr.row || row>sh.getLastRow()){
+    return {success:false, code:'STALE_ROW', error:'기록 행이 이동 또는 삭제되었습니다'};
+  }
+
+  /* 정확히 한 행만 읽는다. 전체 현장 처리 현황을 다시 스캔하지 않는다. */
+  var v=sh.getRange(row,1,1,sh.getLastColumn()).getDisplayValues()[0];
+  var o={_row:row};
+  hdr.headers.forEach(function(h,c){ if(h) o[h]=v[c]; });
+  if(hdr.map['__VER_IN'])  o['VerIN']=v[hdr.map['__VER_IN']-1];
+  if(hdr.map['__VER_OUT']) o['VerOUT']=v[hdr.map['__VER_OUT']-1];
+  var slim=slim_(o);
+  if(!String(slim.date||'').trim() || historyPhotoSig_(slim)!==askedSig){
+    return {success:false, code:'STALE_ROW', error:'기록 행이 변경되었습니다 — 대시보드를 새로고침해 주세요'};
+  }
+
+  var recordId=photoKeyClean_(pickH_(o,REC_ID_COLS));
+  if(!recordId){
+    return {success:true, row:row, symptom:null, after:null, legacy:true};
+  }
+  var list=photoSortList_(photoReadRecord_(recordId).filter(function(ph){
+    return ph.status===SNAP.ST_OK &&
+      (ph.kind===SNAP.KIND_CAUSE || ph.kind===SNAP.KIND_AFTER) &&
+      /^[A-Za-z0-9_-]{20,}$/.test(String(ph.fileId||''));
+  }));
+  var symptom=null, after=null;
+  for(var i=0;i<list.length;i++){
+    var one={fileId:photoKeyClean_(list[i].fileId), desc:photoDescClean_(list[i].desc)};
+    if(list[i].kind===SNAP.KIND_CAUSE && !symptom) symptom=one;
+    if(list[i].kind===SNAP.KIND_AFTER && !after) after=one;
+  }
+  return {success:true, row:row, symptom:symptom, after:after, legacy:false};
 }
 /** S/N → 증상 → 해결 후, 같은 구분 안에서는 순번대로 — Excel 열 순서와 화면 순서를 같게 유지 */
 function photoSortList_(list){
@@ -2251,6 +2315,7 @@ function syncMetaPut_(key, out, ttl){
   if(typeof bazCachePut_ !== 'function' || !out || !out.rev) return;
   var meta={rev:out.rev, updated:out.updated||'', count:Number(out.count)||0,
             rows:Number(out._rows)||0};
+  if(out.schema) meta.schema=Number(out.schema)||0;
   try{ bazCachePut_(key+'__meta', JSON.stringify(meta), ttl); }catch(e){}
 }
 function syncNochange_(key, p, paramName){
@@ -2297,15 +2362,27 @@ function syncCacheDrop_(key){
 }
 
 function getAll_(p){
+  var schema=2;                 /* v2: dashboard 선택 행 조회용 data[].row 포함 */
   var started=Date.now();
-  var same=syncNochange_('handover_all',p,'rev');
+  /* 배포 직후 이전 v1 캐시/meta가 5분 남아 있어도 nochange로 돌려보내지 않는다. */
+  var cachedMeta=syncMetaGet_('handover_all');
+  var same=(cachedMeta&&Number(cachedMeta.schema)===schema) ? syncNochange_('handover_all',p,'rev') : null;
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var hit = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
-  if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); syncBytesFrom_(old,hit); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
+  if(hit){ try{
+    var old=JSON.parse(hit);
+    if(Number(old.schema)===schema){
+      var nc=syncNochangeFrom_(old,p,'rev'); syncBytesFrom_(old,hit);
+      return syncObserved_(nc||old,started,old._rows||old.count,'hit');
+    }
+  }catch(e){} }
   var all = readAllMemo_();
-  var out = {success:true, count:all.rows.length,
+  var out = {success:true, schema:schema, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
-             data:all.rows.map(slim_), _rows:all.rows.length};
+             /* 사진 ID·recordId 는 싣지 않는다. 선택 행 메타 조회용 물리 행 번호만 추가한다. */
+             data:all.rows.map(function(o){
+               var s=slim_(o); s.row=Number(o._row)||0; return s;
+             }), _rows:all.rows.length};
   out.rev=syncRevOf_(out.data);
   var allBody=JSON.stringify(out); syncBytesFrom_(out,allBody);
   try{ if(typeof bazCachePut_ === 'function') bazCachePut_('handover_all', allBody, 300); }catch(e){}
