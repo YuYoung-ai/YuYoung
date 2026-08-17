@@ -889,10 +889,17 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .nl-heat:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 .nl-heat:disabled{cursor:default}
 .nl-heat b{font-size:18px;line-height:1.15;color:var(--navy);font-variant-numeric:tabular-nums}
+.nl-heat b u{font-size:.55em;font-weight:700;text-decoration:none;color:var(--text-muted);margin-left:2px}
 .nl-heat span{margin-top:2px;font-size:9.5px;color:var(--text-muted)}
+/* 색의 근거가 되는 "그룹 병원 대비 발생 비율" 줄 — 비중(큰 숫자)과 구분되게 한 단계 강조한다 */
+.nl-heat span.sub{margin-top:3px;padding-top:3px;border-top:1px solid currentColor;font-weight:700;opacity:.9}
+.nl-heat.hot4 span.sub{border-top-color:rgba(255,255,255,.45)}
+/* 표본이 작은 칸은 병원당 값이 크게 흔들린다 — 테두리를 점선으로 두고 꼬리표를 붙인다 */
+.nl-heat.small{border-style:dashed}
+.nl-heat span em{display:inline-block;margin-left:4px;font-style:normal;font-weight:700;opacity:.85}
 .nl-heat.hot1{background:#FFF4EC;border-color:#F0D5C3}.nl-heat.hot2{background:#FBE3D3;border-color:#E8B894}
 .nl-heat.hot3{background:#F3C09F;border-color:#DA8C58}.nl-heat.hot4{background:#D87537;border-color:#C36228;color:#fff}
-.nl-heat.hot4 b,.nl-heat.hot4 span{color:#fff}
+.nl-heat.hot4 b,.nl-heat.hot4 span,.nl-heat.hot4 b u{color:#fff}
 /* 다크에서는 배경과 함께 테두리도 낮춘다 — 배경만 덮으면 밝은 테두리가 어두운 셀 위에 그대로 남는다 */
 body.dark .nl-heat.hot1{background:#2B241E;border-color:#4A3B2C}body.dark .nl-heat.hot2{background:#3B291D;border-color:#61452F}
 body.dark .nl-heat.hot3{background:#57331F;border-color:#7E4C2C}body.dark .nl-heat.hot4{background:#A45128;border-color:#B75E2E}
@@ -5584,14 +5591,40 @@ function nlCompareInsight_(a,b){
   if(!lo.perHospital) return '<b>'+esc(hi.label)+'</b> 그룹에서만 노즐 누수가 발생했습니다.';
   return '<b>'+esc(hi.label)+'</b> 그룹의 병원당 발생이 '+(hi.perHospital/lo.perHospital).toFixed(1)+'배 높게 나타났습니다.';
 }
-function nlHeatClass_(v,max){
-  if(!v||!max) return '';
-  var p=v/max; return p>.74?'hot4':(p>.49?'hot3':(p>.24?'hot2':'hot1'));
+/* 백분율은 그 자체가 눈금이다 — 최댓값 대비로 칠하면 네 그룹이 모두 낮을 때도
+   그중 하나가 새빨갛게 보여 실제보다 심각해 보인다. 절대 구간으로 칠한다. */
+function nlHeatClass_(pct){
+  if(!pct) return '';
+  return pct>=80?'hot4':(pct>=60?'hot3':(pct>=35?'hot2':'hot1'));
 }
-function nlHeatHtml_(a,max,nz,sk){
-  return '<button type="button" class="nl-heat '+nlHeatClass_(a.leaks,max)+'"'
-    +(a.hospitals?' onclick="exShowLeakGroup(\'matrix\',\''+nz+'\',\''+sk+'\')" title="해당 병원 전체 보기"':' disabled')+'>'
-    +'<b>'+exNum(a.leaks)+'건</b><span>'+exNum(a.hospitals)+'곳 · '+a.perHospital.toFixed(2)+'건/곳</span></button>';
+/* ── 사용방식 × 교육 상태 히트맵 한 칸 ──
+   두 가지 비율을 함께 싣는다. 하나만으로는 반드시 오해가 생기기 때문이다.
+     · 큰 숫자 = 전체 누수 중 이 그룹이 차지하는 비중 (네 칸을 더하면 100%)
+       → "누수가 어디에 몰려 있나"를 본다.
+     · 색·아래 줄 = 그 그룹 병원 중 실제로 발생한 비율
+       → 그룹마다 병원 수가 다르므로(11곳 vs 35곳) 비중만으로는 심각도를 견줄 수 없다.
+         건수·비중이 같아도 11곳 중 11곳(100%)과 35곳 중 12곳(34%)은 전혀 다른 상태다. */
+function nlHeatRate_(a){
+  return a.hospitals ? Math.round(a.affected/a.hospitals*1000)/10 : 0;
+}
+function nlHeatShare_(a,total){
+  return total ? Math.round(a.leaks/total*1000)/10 : 0;
+}
+function nlHeatHtml_(a,total,nz,sk){
+  var rate=nlHeatRate_(a), share=nlHeatShare_(a,total), per=a.perHospital||0;
+  var small=(a.hospitals>0 && a.hospitals<5);   /* 표본이 작으면 비율이 크게 흔들린다 */
+  var tip=a.hospitals
+    ? '전체 '+exNum(total)+'건 중 '+exNum(a.leaks)+'건('+share+'%) · '
+      +exNum(a.hospitals)+'곳 중 '+exNum(a.affected)+'곳에서 발생('+rate+'%) · 병원당 '+per.toFixed(2)+'건'
+      +(small?' · 표본이 작아 비율이 흔들릴 수 있습니다':'')+' · 해당 병원 전체 보기'
+    : '';
+  return '<button type="button" class="nl-heat '+nlHeatClass_(rate)+(small?' small':'')+'"'
+    +(a.hospitals?' onclick="exShowLeakGroup(\''+'matrix'+'\',\''+nz+'\',\''+sk+'\')" title="'+escAttr(tip)+'"':' disabled')+'>'
+    +'<b>'+(a.hospitals? share+'<u>%</u>' : '–')+'</b>'
+    +'<span>'+(a.hospitals? '누수 '+exNum(a.leaks)+'건 / 전체 '+exNum(total)+'건' : '해당 병원 없음')+'</span>'
+    +(a.hospitals?'<span class="sub">'+exNum(a.hospitals)+'곳 중 '+exNum(a.affected)+'곳 발생 · '+rate+'%'
+      +(small?'<em>· 표본 적음</em>':'')+'</span>':'')
+  +'</button>';
 }
 function nlStateLabel_(kind,value){
   if(kind==='nozzle') return value==='reuse'?'재사용':(value==='single'?'1회 사용':'미평가');
@@ -5634,19 +5667,37 @@ function renderExecutiveLeak(){
     +'<div class="nl-unrated">교육 미평가 <b>'+exNum(A.skill.none.hospitals)+'곳</b> · 누수 '
       +exNum(A.skill.none.leaks)+'건</div></div>';
 
-  var vals=[A.matrix.reuse.good.leaks,A.matrix.reuse.need.leaks,A.matrix.single.good.leaks,A.matrix.single.need.leaks];
-  var mx=Math.max.apply(null,vals)||0,best=null;
+  /* 비중의 분모는 "평가가 끝난 네 그룹의 합"이다 — 그래야 네 칸이 100%로 떨어진다.
+     (사용방식·교육이 미평가인 병원의 누수는 어느 칸에도 속하지 않아 여기서 빠진다) */
+  var cells=[];
   ['reuse','single'].forEach(function(nz){['good','need'].forEach(function(sk){
-    var c=A.matrix[nz][sk]; if(!best||c.perHospital>best.perHospital) best=c;
+    var c=A.matrix[nz][sk]; if(c.hospitals) cells.push(c);
   });});
-  var bestText=(best&&best.hospitals&&best.leaks)
-    ? nlStateLabel_('nozzle',best.nozzle)+'·'+nlStateLabel_('skill',best.skill)+' 그룹에서 병원당 발생이 가장 높습니다.'
-    : '평가가 완료된 비교 그룹의 노즐 누수 기록이 부족합니다.';
+  var total=cells.reduce(function(s,c){ return s+c.leaks; },0);
+  var bestText;
+  if(!cells.length || !total){
+    bestText='평가가 완료된 비교 그룹의 노즐 누수 기록이 부족합니다.';
+  }else{
+    var nm=function(c){ return nlStateLabel_('nozzle',c.nozzle)+'·'+nlStateLabel_('skill',c.skill); };
+    /* 비중이 가장 큰 그룹과, 병원 대비 발생 비율이 가장 높은 그룹을 함께 짚는다 —
+       둘이 다를 때(건수는 몰려 있지만 병원이 많아 실태는 양호한 경우) 오해가 생기기 때문이다. */
+    var topShare=cells[0], topRate=cells[0];
+    cells.forEach(function(c){
+      if(c.leaks>topShare.leaks) topShare=c;
+      if(nlHeatRate_(c)>nlHeatRate_(topRate)) topRate=c;
+    });
+    bestText='전체 '+exNum(total)+'건 중 '+nm(topShare)+' 그룹이 '
+      +nlHeatShare_(topShare,total)+'%('+exNum(topShare.leaks)+'건)로 가장 큰 비중입니다.';
+    bestText+= (topRate===topShare)
+      ? ' 병원 대비 발생 비율도 '+nlHeatRate_(topRate)+'%로 가장 높습니다.'
+      : ' 다만 병원 대비 발생 비율은 '+nm(topRate)+' 그룹이 '+nlHeatRate_(topRate)+'%로 가장 높습니다'
+        +'('+nm(topShare)+' '+nlHeatRate_(topShare)+'%).';
+  }
   document.getElementById('exLeakMatrixCard').innerHTML=
-    exH3('사용방식 × 교육 상태', '발생 건수 · 병원당 건수')
+    exH3('사용방식 × 교육 상태', '큰 숫자 = 전체 누수 중 비중(4칸 합 100%) · 색 = 그룹 병원 대비 발생 비율')
     +'<div class="ex-cbody"><div class="nl-matrix"><span></span><div class="head">교육 양호</div><div class="head">교육 미흡</div>'
-    +'<div class="head side">재사용</div>'+nlHeatHtml_(A.matrix.reuse.good,mx,'reuse','good')+nlHeatHtml_(A.matrix.reuse.need,mx,'reuse','need')
-    +'<div class="head side">1회 사용</div>'+nlHeatHtml_(A.matrix.single.good,mx,'single','good')+nlHeatHtml_(A.matrix.single.need,mx,'single','need')
+    +'<div class="head side">재사용</div>'+nlHeatHtml_(A.matrix.reuse.good,total,'reuse','good')+nlHeatHtml_(A.matrix.reuse.need,total,'reuse','need')
+    +'<div class="head side">1회 사용</div>'+nlHeatHtml_(A.matrix.single.good,total,'single','good')+nlHeatHtml_(A.matrix.single.need,total,'single','need')
     +'</div><div class="nl-insight"><b>관찰:</b> '+esc(bestText)+'</div></div>';
 
   var affected=A.details.filter(function(d){return d.leaks>0;}).slice(0,6);
