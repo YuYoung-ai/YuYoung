@@ -694,6 +694,12 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 body.dark .lk-bd.hi{background:#3A2320;color:#E9A79D}
 /* 막대 영역만 남는 높이를 흡수한다 — 카드가 짧아져도 아래 특이사항 줄이 밀려나 잘리지 않는다 */
 .lk-bars{flex:1 1 auto;min-height:0;overflow:auto}
+/* 재사용 중단 줄이 생기면 막대가 5개가 된다 — 그때만 줄여 스크롤 없이 다 보이게 한다 */
+.lk-bars.r3 .lk-hd{margin:2px 0 3px}
+.lk-bars.r3 .lk-row{padding:1px 0}
+.lk-bars.r3 .lk-track{height:10px}
+.lk-bars.r3 .lk-val b{font-size:12.5px}
+.lk-bars.r3 .lk-sub{line-height:1.2}
 /* row-gap 을 0 으로 둔다 — gap 을 그대로 쓰면 값 줄과 아래 보조 줄 사이가 벌어져 막대 4개가 카드를 넘긴다 */
 .lk-row{display:grid;grid-template-columns:56px minmax(0,1fr) 60px;align-items:center;
   column-gap:7px;row-gap:0;padding:2px 0}
@@ -701,6 +707,7 @@ body.dark .lk-bd.hi{background:#3A2320;color:#E9A79D}
 .lk-track{height:11px;background:var(--track);border-radius:6px;overflow:hidden;min-width:0}
 .lk-track i{display:block;height:100%;border-radius:6px}
 .lk-track i.bad{background:var(--red)}
+.lk-track i.mid{background:var(--amber)}   /* 재사용 중단 — 위험도 양호도 아닌 전환 중 상태 */
 .lk-track i.ok{background:var(--teal)}
 .lk-val{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1.2}
 .lk-val b{font-size:13px;font-weight:800;color:var(--navy)}
@@ -724,6 +731,17 @@ body.dark .lk-cell>i{opacity:calc(.10 + .46*var(--t,0))}
 .lk-cell span{display:block;margin-top:2px;font-size:9.5px;color:var(--text-muted);
   font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lk-cell.top{border-color:var(--red)}
+/* 재사용 중단 줄이 생겨 3줄이 되면 칸과 문장을 함께 줄인다 —
+   히트맵이 커져 아래 해석 문장이 사실상 안 보이게 되는 것을 막는다(문장이 이 카드의 결론이다). */
+.lk-grid.r3{gap:3px}
+.lk-grid.r3 .lk-gh{font-size:9.5px;padding-bottom:1px}
+.lk-grid.r3 .lk-gr{font-size:10px}
+.lk-grid.r3 .lk-cell{padding:2px 5px}
+.lk-grid.r3 .lk-cell b{font-size:13px;line-height:1.1}
+.lk-grid.r3 .lk-cell small{font-size:9px}
+.lk-grid.r3 .lk-cell span{margin-top:0;font-size:9px;line-height:1.2}
+.lk-grid.r3+.lk-lines{margin-top:4px;font-size:11px;line-height:1.45}
+.lk-grid.r3+.lk-lines li{margin-top:1px}
 /* 자동 해석 문장 — 카드가 좁아지면 이 영역만 스크롤하고 히트맵은 그대로 둔다 */
 .lk-lines{flex:1 1 auto;min-height:0;overflow:auto;margin-top:7px;font-size:11.5px;line-height:1.6;color:var(--text)}
 .lk-lines ul{margin:0;padding:0}
@@ -4057,8 +4075,8 @@ function buildRepeatIssues(rows){
    "노즐을 재사용하는가" 와 "사용자 교육이 충분한가" 가 노즐 누수 발생과 어떤 관계인지
    한 곳에서 집계한다. 판정 기준은 새로 만들지 않고 이미 쓰는 것을 그대로 가져온다.
      누수 판정 : 유형 '노즐누수(약액유입)'(hpCleanKey_ 정규화) · A/S 와 점검 기록 모두 포함
-     재사용    : buildNozzleStatusMap()  → reuse | noreuse | unknown
-     교육      : buildSkillData().status → good  | need    | none
+     재사용    : buildNozzleTrendMap()   → keep | stop | never | unknown  (아래 설명)
+     교육      : buildSkillData().status → good | need | none
      반복 발생 : buildRepeatIssues()      → 30일 이내 재발 · 같은 날 중복은 1회
    세 함수 모두 병원명을 skNorm_ 으로 정규화하므로 별도 변환 없이 그대로 조인된다.
 
@@ -4069,16 +4087,53 @@ function buildRepeatIssues(rows){
    O·X 를 모르는 병원을 X 쪽에 세면 배수가 통째로 흔들린다. */
 var LEAK_TYPE_KEY='노즐누수(약액유입)';
 var LEAK_MIN_N=3;                 /* 그룹 병원 수가 이보다 적으면 배수를 내지 않는다(표본 부족) */
-var LEAK_NOZ_LB={reuse:'재사용 O', noreuse:'재사용 X', unknown:'미확인'};
+var LEAK_NOZ_LB={keep:'재사용 지속', stop:'재사용 중단', never:'미재사용', unknown:'미확인'};
 var LEAK_EDU_LB={need:'교육 미흡', good:'교육 양호', none:'미평가'};
-var LEAK_CELLS=[['reuse','need'],['reuse','good'],['noreuse','need'],['noreuse','good']];
+var LEAK_NOZ_ORDER=['keep','stop','never'];   /* 카드에 그리는 순서(중단은 해당 병원이 있을 때만) */
+var LEAK_EDU_ORDER=['need','good'];
 function isNozzleLeak_(r){
   return !!r && recScope(r)==='customer' && hpCleanKey_(r.type)===LEAK_TYPE_KEY
     && !!String(r.hosp||'').trim() && !!rowDate(r);
 }
+/* ── 카드 전용 노즐 재사용 상태 (최신 기준) ──
+   기존 buildNozzleStatusMap() 은 "한 번이라도 O 면 재사용"이라 재사용을 그만둔 병원도
+   계속 재사용으로 남는다. 반면 교육 상태(buildSkillData)는 최신 방문만 본다 —
+   두 축의 기준이 어긋나 있어 이 카드에서는 재사용도 최신 상태로 판정한다.
+   기존 필터·탭 ③ 노즐 카드·Excel 이 쓰는 buildNozzleStatusMap() 은 그대로 둔다(숫자 불변).
+   대신 여기서는 이름을 지속 / 중단 / 미재사용 으로 달리 붙여 누적 기준과 다른 개념임을 드러낸다.
+
+   방문 1회 = 하루다. 같은 날 장비 2대를 각각 적어 O·X 가 함께 남으면 그날은 O 로 본다
+   (한 대라도 재사용했으면 그 방문은 재사용이다).
+     keep   : O 기록이 있고 아직 중단으로 볼 수 없음(최신이 O 이거나 X 가 1회뿐)
+     stop   : O 기록이 있고 최근 2회 방문이 연속 X — 관행이 바뀐 신호
+     never  : O 기록이 한 번도 없고 X 만 있음
+     unknown: O·X 기록이 전혀 없음(분모에서 제외)
+   X 1회만으로 중단으로 보지 않는 이유: 그날 마침 새 노즐이었을 수 있어 노이즈다. */
+function buildNozzleTrendMap(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    var k=skNorm_(r.hosp); if(!k) return;
+    var v=String(r.nozzleReuse||'').trim().toUpperCase();
+    if(v!=='O'&&v!=='X') return;
+    var d=rowDate(r); if(!d) return;
+    var h=m[k]||(m[k]={}), t=d.getTime();
+    if(v==='O') h[t]=true; else if(h[t]===undefined) h[t]=false;   /* 같은 날은 O 가 이긴다 */
+  });
+  var out={};
+  Object.keys(m).forEach(function(k){
+    var h=m[k];
+    var seq=Object.keys(h).map(Number).sort(function(a,b){ return a-b; })
+              .map(function(t){ return h[t]; });
+    var n=seq.length;
+    if(!n){ out[k]='unknown'; return; }
+    if(seq.indexOf(true)<0){ out[k]='never'; return; }
+    out[k]=(n>=2 && !seq[n-1] && !seq[n-2]) ? 'stop' : 'keep';
+  });
+  return out;
+}
 function buildLeakCauseData(rows){
   rows=rows||[];
-  var nozMap=buildNozzleStatusMap(rows), skMap=buildSkillData(rows).status;
+  var nozMap=buildNozzleTrendMap(rows), skMap=buildSkillData(rows).status;
 
   /* 1) 병원별 누수 발생일 — 같은 날 여러 행은 1건으로 합친다 */
   var days={};
@@ -4100,21 +4155,25 @@ function buildLeakCauseData(rows){
   });
 
   function blank(){ return {hosp:0, leak:0, rep:0, per:0}; }
-  var noz={reuse:blank(), noreuse:blank(), unknown:blank()};
-  var edu={need:blank(),  good:blank(),    none:blank()};
-  var cell={}, out=blank();       /* out = 4분할에 들어가지 못한 병원(미확인 또는 미평가) */
-  LEAK_CELLS.forEach(function(c){ cell[c[0]+'|'+c[1]]=blank(); });
+  var noz={keep:blank(), stop:blank(), never:blank(), unknown:blank()};
+  var edu={need:blank(), good:blank(), none:blank()};
+  var cell={}, out=blank();       /* out = 교차표에 들어가지 못한 병원(미확인 또는 미평가) */
+  LEAK_NOZ_ORDER.forEach(function(s){
+    LEAK_EDU_ORDER.forEach(function(e){ cell[s+'|'+e]=blank(); });
+  });
 
   Object.keys(seen).forEach(function(k){
     var nz=nozMap[k]||'unknown', sk=skMap[k]||'none';
     var n=days[k]?Object.keys(days[k]).length:0, rp=rep[k]?1:0;
     function add(g){ g.hosp++; g.leak+=n; g.rep+=rp; }
     add(noz[nz]); add(edu[sk]);
-    add(cell[nz+'|'+sk]||out);    /* 미확인·미평가가 하나라도 끼면 4분할 밖이다 */
+    add(cell[nz+'|'+sk]||out);    /* 미확인·미평가가 하나라도 끼면 교차표 밖이다 */
   });
-  var all=[noz.reuse,noz.noreuse,noz.unknown,edu.need,edu.good,edu.none,out]
-    .concat(LEAK_CELLS.map(function(c){ return cell[c[0]+'|'+c[1]]; }));
+  var all=[noz.keep,noz.stop,noz.never,noz.unknown,edu.need,edu.good,edu.none,out]
+    .concat(Object.keys(cell).map(function(k){ return cell[k]; }));
   all.forEach(function(g){ g.per = g.hosp ? g.leak/g.hosp : 0; });
+  /* 재사용 중단 병원이 없으면 그 줄은 그리지 않는다 — 늘 비어 있는 칸을 보여주지 않는다 */
+  var nozRows=LEAK_NOZ_ORDER.filter(function(s){ return s!=='stop' || noz.stop.hosp>0; });
 
   /* 4) 배수 — 한두 곳 차이로 값이 튀지 않도록 표본이 얇으면 내지 않는다.
         분모 그룹의 발생이 0건이면 나눌 수 없어 별도 문구로 대체한다. */
@@ -4123,14 +4182,17 @@ function buildLeakCauseData(rows){
     if(!b.per) return {ok:false, why:a.per?'zeroBase':'noEvent'};
     return {ok:true, v:a.per/b.per};
   }
-  var rNoz=ratio(noz.reuse,noz.noreuse), rEdu=ratio(edu.need,edu.good);
-  /* 5) 가장 몰린 조합 — "재사용 O·교육 미흡"으로 미리 정해두지 않고 실제 최댓값 칸을 찾는다 */
+  var rNoz=ratio(noz.keep,noz.never), rEdu=ratio(edu.need,edu.good);
+  var rStop=ratio(noz.stop,noz.keep);      /* 중단이 실제로 줄였는지 — 정책 판단의 핵심 */
+  /* 5) 가장 몰린 조합 — "재사용 지속·교육 미흡"으로 미리 정해두지 않고 실제 최댓값 칸을 찾는다 */
   var top=null, grid=0;
-  LEAK_CELLS.forEach(function(c){
-    var k=c[0]+'|'+c[1], g=cell[k];
-    grid+=g.hosp;
-    if(!g.leak) return;
-    if(!top||g.per>cell[top].per) top=k;
+  nozRows.forEach(function(s){
+    LEAK_EDU_ORDER.forEach(function(e){
+      var k=s+'|'+e, g=cell[k];
+      grid+=g.hosp;
+      if(!g.leak) return;
+      if(!top||g.per>cell[top].per) top=k;
+    });
   });
 
   /* 6) 자동 해석 문장 — 수치가 바뀌면 문장도 바뀐다(고정 문구를 쓰지 않는다) */
@@ -4146,17 +4208,28 @@ function buildLeakCauseData(rows){
     if(r.why==='noEvent')  return hiLb+'·'+loLb+' 어느 쪽에서도 노즐 누수가 발생하지 않았습니다.';
     return '판정 병원이 적어('+hiLb+' '+hi.hosp+'곳 · '+loLb+' '+lo.hosp+'곳) 배수를 내지 않았습니다.';
   }
-  var lines=[
-    cmpLine(rNoz, noz.reuse, noz.noreuse, '재사용 O', '재사용 X', '노즐 <b>재사용</b> 병원', '미사용'),
-    cmpLine(rEdu, edu.need,  edu.good,    '교육 미흡', '교육 양호', '<b>교육 미흡</b> 병원', '교육 양호')
-  ];
+  var lines=[cmpLine(rNoz, noz.keep, noz.never, '재사용 지속', '미재사용', '노즐 <b>재사용</b> 병원', '미사용')];
+  /* 재사용을 그만둔 병원이 실제로 줄었는지 — 중단 병원이 있을 때만 붙인다.
+     이 수치에는 중단 이전 발생이 섞여 있어 "효과 없음"으로 곧장 읽으면 안 된다(특이사항에 명시). */
+  if(noz.stop.hosp){
+    var hd='재사용을 <b>중단</b>한 '+noz.stop.hosp+'곳은 ';
+    var sv='병원당 <b>'+tx(noz.stop.per)+'건</b>', kv='지속 병원('+tx(noz.keep.per)+'건)';
+    lines.push(
+      rStop.ok
+        ? (rStop.v<1 ? hd+sv+'으로 '+kv+'보다 <b>'+tx(1/rStop.v)+'배</b> 낮았습니다.'
+                     : hd+sv+'으로 '+kv+'보다 낮지 않았습니다 — 중단 이전 발생이 포함된 수치입니다.')
+      : rStop.why==='zeroBase' ? hd+sv+'이지만 지속 병원에 누수가 없어 배수를 낼 수 없습니다.'
+      : rStop.why==='noEvent'  ? hd+'지속 병원과 마찬가지로 노즐 누수가 발생하지 않았습니다.'
+      :                          hd+sv+' — 표본이 적어 배수를 내지 않았습니다.');
+  }
+  lines.push(cmpLine(rEdu, edu.need, edu.good, '교육 미흡', '교육 양호', '<b>교육 미흡</b> 병원', '교육 양호'));
   lines.push(top
     ? '특히 <b>'+LEAK_NOZ_LB[top.split('|')[0]]+' · '+LEAK_EDU_LB[top.split('|')[1]]+'</b> 그룹에 '
       +'노즐 누수(병원당 '+tx(cell[top].per)+'건)와 반복 발생('+cell[top].rep+'곳)이 가장 집중되었습니다.'
-    : '재사용 × 교육 4개 조합 중 노즐 누수가 발생한 그룹이 없습니다.');
+    : '재사용 × 교육 조합 중 노즐 누수가 발생한 그룹이 없습니다.');
 
-  return {noz:noz, edu:edu, cell:cell, out:out, top:top, grid:grid,
-          rNoz:rNoz, rEdu:rEdu, lines:lines,
+  return {noz:noz, edu:edu, cell:cell, out:out, top:top, grid:grid, nozRows:nozRows,
+          rNoz:rNoz, rEdu:rEdu, rStop:rStop, lines:lines,
           total:Object.keys(seen).length,
           leakHosp:Object.keys(days).length,
           leakTotal:Object.keys(days).reduce(function(a,k){ return a+Object.keys(days[k]).length; },0)};
@@ -4250,10 +4323,13 @@ var EX_NOTE_NOZ='재사용 판단 불분명';
 /* 노즐 누수 원인 분석 — 두 카드가 같은 모집단·같은 한계를 쓰므로 문구도 한 곳에서만 만든다 */
 var EX_NOTE_LEAK='발생 1건은 병원+발생일 기준이며 같은 날 중복 기록은 1건입니다(A/S·점검 통합). '
   +'그룹별 병원 수가 달라 총건수가 아니라 병원당 평균(건/곳)으로 비교하며, '
-  +'재사용 미확인·교육 미평가 병원은 어느 그룹에도 넣지 않고 분모에서 제외합니다.';
+  +'재사용 미확인·교육 미평가 병원은 어느 그룹에도 넣지 않고 분모에서 제외합니다. '
+  +'재사용 상태는 교육 상태와 같은 최신 기준입니다 — O 기록이 있어도 최근 2회 방문이 연속 X 면 중단으로 봅니다. '
+  +'탭 ③ 노즐 카드는 "한 번이라도 O"인 누적 기준이라 재사용 병원 수가 서로 다를 수 있습니다.';
 var EX_NOTE_LEAK_X='상관관계이지 인과관계가 아닙니다 — 노즐 재사용 O·X 는 방문 시 기록되므로 '
   +'누수가 잦아 자주 방문한 병원일수록 판정될 확률이 높아 배수가 실제보다 커 보일 수 있습니다. '
-  +'반복 발생은 기존 카드와 같은 A/S 기준(30일 이내 재발)입니다.';
+  +'재사용 중단 병원의 누수 건수에는 중단 이전 발생이 섞여 있어, 값이 낮지 않다고 해서 '
+  +'중단이 효과가 없다는 뜻은 아닙니다. 반복 발생은 기존 카드와 같은 A/S 기준(30일 이내 재발)입니다.';
 /* 미평가 대상 표기 — 0곳이면 "미평가 대상 없음" */
 function exUnratedHtml(n){ return n ? '미평가 대상 <b>'+exNum(n)+'곳</b>' : '미평가 대상 없음'; }
 /* 미평가 대상이 없으면 원인 문구를 붙이지 않는다.
@@ -4933,15 +5009,18 @@ function renderExecutiveCause(x){
   /* ── 노즐 누수 원인 비교 (재사용 · 교육) ──
      네 막대가 같은 최댓값을 쓰므로 두 비교 블록의 막대 길이가 카드 안에서 서로 비교된다. */
   var L=x.leak;
-  var mx=Math.max(L.noz.reuse.per, L.noz.noreuse.per, L.edu.need.per, L.edu.good.per);
+  var LK_TONE={keep:'bad', stop:'mid', never:'ok'};   /* 지속=위험 · 중단=전환 중 · 미재사용=양호 */
+  var mx=Math.max.apply(null, L.nozRows.map(function(s){ return L.noz[s].per; })
+           .concat([L.edu.need.per, L.edu.good.per]));
   document.getElementById('exLeakCmpCard').innerHTML=
-    exH3('노즐 누수 원인 비교', 'A/S·점검 통합 · 병원당 평균 · '+per)
+    exH3('노즐 누수 원인 비교', 'A/S·점검 통합 · 병원당 평균 · 최신 상태 기준 · '+per)
     +'<div class="ex-cbody">'
       +(L.total
-        ? '<div class="lk-bars">'
+        ? '<div class="lk-bars'+(L.nozRows.length>2?' r3':'')+'">'
             +'<div class="lk-hd"><span>노즐 재사용</span>'+exLeakBadge_(L.rNoz)+'</div>'
-            +exLeakBar_('재사용 O', L.noz.reuse,   mx, 'bad')
-            +exLeakBar_('재사용 X', L.noz.noreuse, mx, 'ok')
+            +L.nozRows.map(function(s){
+                return exLeakBar_(LEAK_NOZ_LB[s], L.noz[s], mx, LK_TONE[s]);
+              }).join('')
             +'<div class="lk-hd"><span>사용자 교육</span>'+exLeakBadge_(L.rEdu)+'</div>'
             +exLeakBar_('교육 미흡', L.edu.need, mx, 'bad')
             +exLeakBar_('교육 양호', L.edu.good, mx, 'ok')
@@ -4957,7 +5036,10 @@ function renderExecutiveCause(x){
 
   /* ── 재사용 × 교육 교차 분석 (4분할) ──
      색 진하기는 병원당 평균 하나만 나타낸다(건수로 칠하면 병원이 많은 칸이 무조건 진해진다). */
-  var cmax=Math.max.apply(null, LEAK_CELLS.map(function(c){ return L.cell[c[0]+'|'+c[1]].per; }))||0;
+  var cmax=0;
+  L.nozRows.forEach(function(s){
+    LEAK_EDU_ORDER.forEach(function(e){ cmax=Math.max(cmax, L.cell[s+'|'+e].per); });
+  });
   function lkCell(nz,sk){
     var k=nz+'|'+sk, g=L.cell[k], t=cmax>0?g.per/cmax:0;
     return '<div class="lk-cell'+(L.top===k?' top':'')+'"'
@@ -4972,17 +5054,20 @@ function renderExecutiveCause(x){
     exH3('재사용 × 교육 교차 분석', '색 진하기 = 병원당 누수 · '+per)
     +'<div class="ex-cbody">'
       +(L.grid
-        ? '<div class="lk-grid">'
-            +'<div class="lk-gh"></div><div class="lk-gh">교육 미흡</div><div class="lk-gh">교육 양호</div>'
-            +'<div class="lk-gr">재사용 O</div>'+lkCell('reuse','need')  +lkCell('reuse','good')
-            +'<div class="lk-gr">재사용 X</div>'+lkCell('noreuse','need')+lkCell('noreuse','good')
+        ? '<div class="lk-grid'+(L.nozRows.length>2?' r3':'')+'">'
+            +'<div class="lk-gh"></div>'
+            +LEAK_EDU_ORDER.map(function(e){ return '<div class="lk-gh">'+esc(LEAK_EDU_LB[e])+'</div>'; }).join('')
+            +L.nozRows.map(function(s){
+                return '<div class="lk-gr">'+esc(LEAK_NOZ_LB[s])+'</div>'
+                  +LEAK_EDU_ORDER.map(function(e){ return lkCell(s,e); }).join('');
+              }).join('')
           +'</div>'
           +'<div class="lk-lines"><ul>'
             +L.lines.map(function(t){ return '<li>· '+t+'</li>'; }).join('')
           +'</ul></div>'
         : '<div class="ex-empty">재사용·교육이 모두 판정된 병원이 없습니다</div>')
-      +exNote('<em>4분할 대상 '+exNum(L.grid)+'곳 · 판정 제외 '+exNum(L.out.hosp)+'곳</em> — '+esc(EX_NOTE_LEAK_X),
-              '4분할 대상 '+L.grid+'곳 · 판정 제외 '+L.out.hosp+'곳 — '+EX_NOTE_LEAK_X)
+      +exNote('<em>교차표 대상 '+exNum(L.grid)+'곳 · 판정 제외 '+exNum(L.out.hosp)+'곳</em> — '+esc(EX_NOTE_LEAK_X),
+              '교차표 대상 '+L.grid+'곳 · 판정 제외 '+L.out.hosp+'곳 — '+EX_NOTE_LEAK_X)
     +'</div>';
 }
 /* 비교 막대 한 줄 — 길이는 병원당 평균, 아래 작은 줄에 총건수·병원수를 함께 적는다 */
