@@ -19,7 +19,7 @@ function grab(name){
 }
 function grabVar(decl){const at=SRC.indexOf(decl);if(at<0)throw new Error('선언 없음: '+decl);return SRC.slice(at,SRC.indexOf('\n',at));}
 const FNS=['esc','normD','nkey','skCmpKo_','rowDate','ymd','isDemoRecord','recScope','exToday',
-  'hpCleanKey_','hpCleanVal_','isHandpieceCleaning_','hpCleanAsOf_','hpCleanDays_','hpCleanStatus_',
+  'hpCleanKey_','hpIsLeakVoc_','hpCleanVal_','isHandpieceCleaning_','hpCleanAsOf_','hpCleanDays_','hpCleanStatus_',
   'summarizeHandpieceCleanEvents_','buildHandpieceCleaningAnalysis_','filterHandpieceCleaningEvents_',
   'hpCleanTable_','hpCleanKpis_','hpCleanWarning_'];
 const src=[grabVar('var DEMO_MARK='),...FNS.map(grab),'return {'+FNS.join(',')+'};'].join('\n');
