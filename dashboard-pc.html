@@ -501,6 +501,12 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-side-tag{font-size:10px;font-weight:800;letter-spacing:.4px;border-radius:6px;padding:2px 7px;white-space:nowrap}
 .yc-side-tag.l{background:var(--gray-bg);color:var(--text-muted);border:1px solid var(--gray-line)}
 .yc-side-tag.r{background:var(--navy);color:#fff;border:1px solid var(--navy)}
+.yc-side-tag.m{background:var(--teal-soft);color:var(--teal);border:1px solid var(--teal)}
+.yc-divider{width:1px;align-self:stretch;min-height:22px;background:var(--gray-line);margin:0 4px;flex:0 0 auto}
+.yc-mreset{border:1px solid var(--gray-line);background:var(--surface);color:var(--navy);border-radius:6px;
+  padding:3px 9px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.yc-mreset:hover:not(:disabled){background:var(--gray-bg)}
+.yc-mreset:disabled{opacity:.4;cursor:default}
 .yc-range{font-size:11px;font-weight:700;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .yc-vs{font-size:12px;font-weight:800;color:var(--text-muted);padding:0 2px}
 .yc-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;min-width:0}
@@ -557,8 +563,15 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-wchart .ex-vcol .l.hide{visibility:hidden}
 .yc-wchart .ex-vcol.now .ex-vbar{opacity:1}
 .yc-wchart .ex-vcol.now .l{color:var(--amber);font-weight:800;visibility:visible}
+/* 막대가 적어지는 짧은 월 구간에서는 굵게 그려 빈 공간을 남기지 않는다 */
+.yc-wchart.wide{gap:5px}
+.yc-wchart.wide .ex-vbar{max-width:18px}
+.yc-wchart.wide .ex-vcol .l{font-size:10px}
 /* 12개월 = 월 합계만 위에 남기고 막대별 숫자는 접는다 */
 .yc-mchart{gap:4px;min-height:44px}
+.yc-mchart.wide{gap:10px}
+.yc-mchart.wide .ex-mbar{max-width:26px}
+.yc-mchart.wide .ex-mbars{gap:4px}
 .yc-mchart .ex-mbar{max-width:13px}
 .yc-mchart .ex-mbar .n{display:none}
 .yc-mchart .ex-mbars{gap:2px}
@@ -949,6 +962,8 @@ body.ex-narrow .yc-panel{min-height:0}
 /* 좁은 화면에서는 구간 안내 문구를 버튼 줄 위로 올려 버튼이 글자 단위로 접히지 않게 한다 */
 body.ex-narrow .yc-nav{flex-wrap:wrap}
 body.ex-narrow .yc-nav .lb{flex:1 1 100%;order:-1;white-space:normal}
+/* 연도 두 개 / 월 구간을 각각 한 줄씩 쓰도록 구분선 자리에서 줄을 끊는다 */
+body.ex-narrow .yc-divider{flex:1 0 100%;min-height:0;height:0;background:transparent;margin:0}
 /* 세로 스크롤 레이아웃에서는 두 추이 카드가 높이를 나눠 가질 필요가 없다 */
 body.ex-narrow .ex-half{flex:0 0 auto}
 /* 모바일은 카드 높이를 내용에 맡겨 특이사항 전체를 자연스럽게 이어서 보여준다. */
@@ -5602,26 +5617,47 @@ function exShowLeakGroup(dim,value,skillValue){
      · 요일을 가리지 않는다(8주 카드는 월~금만 본다) — 토요일 당직 처리까지 연간 합계에 넣기 위해서다.
    두 패널은 항상 같은 최대값으로 그려 막대 길이를 그대로 비교할 수 있다. */
 var EX_YC_LEFT=null, EX_YC_RIGHT=null;   /* 사용자가 고른 좌·우 연도 (null = 기준일로 자동) */
+var EX_YC_M1=1, EX_YC_M2=12;             /* 좌·우에 함께 적용하는 월 구간 (기본 1~12월 = 연간 전체) */
 var EX_YC_WEEKS=24;                      /* 주 비교 창 크기 */
 var EX_YC_START=null;                    /* 주 비교 창의 시작 주차 인덱스 (null = 최근 구간) */
 var EX_YC_WIN=null;                      /* 마지막으로 그린 주 구간 — 이동 버튼이 다시 집계하지 않도록 */
 var YC_DAY=86400000;
 
-/* 고를 수 있는 연도 — 데이터가 있는 해 ± 기준 연도, 첫 해의 직전 해까지 포함해
-   "첫 해 vs 그 전 해(0건)" 비교도 화면에서 확인할 수 있게 한다. */
+/* 고를 수 있는 연도 — 실제 보고 대상 기록이 있는 해만 담는다.
+   기록이 없는 해를 넣으면 "0건짜리 연도"를 고를 수 있어 비교가 아니라 오해가 된다.
+   담당자·병원 등 화면 필터에는 흔들리지 않도록 데모 기록만 뺀 원본에서 뽑는다. */
 function ycYearOptions_(){
-  var by=exBaseDate().getFullYear(), lo=by, hi=by;
-  RAW.forEach(function(r){ if(r._y){ if(r._y<lo) lo=r._y; if(r._y>hi) hi=r._y; } });
-  var out=[]; for(var y=lo-1;y<=hi;y++) out.push(y);
-  return out;
+  var s={};
+  RAW.forEach(function(r){ if(r._y && recScope(r)==='customer') s[r._y]=1; });
+  return Object.keys(s).map(Number).sort(function(a,b){ return a-b; });
 }
 function ycYears_(){
   var opts=ycYearOptions_(), by=exBaseDate().getFullYear();
+  if(!opts.length) opts=[by];                         /* 기록이 하나도 없을 때의 안전값 */
   var r=(EX_YC_RIGHT!=null&&opts.indexOf(EX_YC_RIGHT)>=0) ? EX_YC_RIGHT
       : (opts.indexOf(by)>=0 ? by : opts[opts.length-1]);
+  /* 왼쪽 기본값 = 오른쪽보다 앞선 해 중 가장 최근 해 (직전 해가 비어 있으면 그 앞 해) */
+  var prev=null;
+  opts.forEach(function(y){ if(y<r && (prev==null||y>prev)) prev=y; });
   var l=(EX_YC_LEFT!=null&&opts.indexOf(EX_YC_LEFT)>=0) ? EX_YC_LEFT
-      : (opts.indexOf(r-1)>=0 ? r-1 : opts[0]);
+      : (prev!=null ? prev : r);
   return {l:l, r:r, opts:opts};
+}
+/* ── 월 구간 ── */
+function ycM1_(){ return Math.min(EX_YC_M1, EX_YC_M2); }
+function ycM2_(){ return Math.max(EX_YC_M1, EX_YC_M2); }
+function ycMonthFull_(){ return ycM1_()===1 && ycM2_()===12; }
+/* 그 해에서 월 구간이 실제로 덮는 날짜 범위 (진행 중인 해는 기준일에서 끊는다).
+   기준일이 구간 시작보다 앞이면 그 해의 그 구간은 아직 시작조차 하지 않았다(started=false). */
+function ycMonthRangeOf_(y){
+  var a=new Date(y, ycM1_()-1, 1), b=new Date(y, ycM2_(), 0), full=new Date(b);
+  var base=exBaseDate(), started=true;
+  if(y>base.getFullYear()) started=false;
+  else if(y===base.getFullYear() && base<b){
+    if(base<a) started=false;
+    else b=new Date(base);
+  }
+  return {from:a, to:b, full:full, started:started};
 }
 /* 해당 연도의 주 격자 — 1월 1일이 속한 주의 월요일부터 12월 31일까지 (52~53주).
    두 해의 같은 인덱스를 같은 주차로 보고 좌우를 맞춘다. */
@@ -5663,15 +5699,22 @@ function ycSum_(list){
   },{n:0,as:0,insp:0});
 }
 /* 진행 중인 해를 지난 해 "전체"와 비교하면 언제나 감소로 보인다 —
-   두 해를 같은 월·일까지 잘라 동일 기간 누계로 비교한다(기준일이 8/17이면 1.1~8.17 끼리). */
+   두 해를 같은 월·일까지 잘라 동일 기간 누계로 비교한다(월 구간 1~12·기준일 8/17이면 1.1~8.17 끼리).
+   월 구간을 좁히면 그 구간의 끝(예: 9월 30일)과 기준일 중 이른 쪽에서 끊는다. */
+function ycMDLess_(a,b){ return a[0]<b[0] || (a[0]===b[0] && a[1]<b[1]); }
 function ycAlignEnd_(ys){
-  var base=exBaseDate(), by=base.getFullYear();
-  function endMD(y){ return (y===by) ? [base.getMonth()+1, base.getDate()] : [12,31]; }
+  var base=exBaseDate(), by=base.getFullYear(), m2=ycM2_();
+  function endMD(y){
+    var full=[m2, new Date(y, m2, 0).getDate()];
+    if(y!==by) return full;
+    var cur=[base.getMonth()+1, base.getDate()];
+    return ycMDLess_(cur, full) ? cur : full;
+  }
   var a=endMD(ys.l), b=endMD(ys.r);
-  return (a[0]<b[0] || (a[0]===b[0] && a[1]<b[1])) ? a : b;
+  return ycMDLess_(a,b) ? a : b;
 }
 function ycRangeStat_(y, md){
-  var a=new Date(y,0,1);
+  var a=new Date(y, ycM1_()-1, 1);
   var lastDay=new Date(y, md[0], 0).getDate();          /* 2/29 가 없는 해 보정 */
   var b=new Date(y, md[0]-1, Math.min(md[1], lastDay)); b.setHours(23,59,59,999);
   var n=0, as=0, insp=0, cost=0, hs={};
@@ -5718,7 +5761,13 @@ function ycCmpSentence_(ys, a, b, scope, tail){
     +' <em>· '+ys.l+'년 '+exNum(a.n)+'건 → '+ys.r+'년 '+exNum(b.n)+'건'+(tail?' · '+tail:'')+'</em>';
 }
 
-/* ── 상단 바: 연도 선택 + 동일 기간 누계 KPI 비교 ── */
+/* ── 상단 바: 연도·월 구간 선택 + 동일 기간 누계 KPI 비교 ── */
+/* 한 해에서 이 월 구간이 실제로 덮는 날짜 문구 — 진행 중인 해는 기준일에서 끊긴 것을 그대로 적는다 */
+function ycSideRangeTxt_(y){
+  var r=ycMonthRangeOf_(y);
+  return r.started ? y+'.'+ycMD_(r.from)+'~'+ycMD_(r.to)
+                   : y+'.'+ycMD_(r.from)+'~'+ycMD_(r.full)+' (시작 전)';
+}
 function ycKpiTile_(label, a, b, unit, polarity, lbl, won){
   var f=function(v){ return (won?'₩':'')+exNum(v); };
   return '<div class="yc-kpi"><span class="lb">'+esc(label)+'</span>'
@@ -5734,20 +5783,36 @@ function ycRenderBar_(ys, md){
       return '<option value="'+y+'"'+(y===sel?' selected':'')+'>'+y+'년</option>';
     }).join('');
   }
-  var full=(md[0]===12 && md[1]===31);
-  var alignTxt=full ? '1.1~12.31 · 연간 전체 비교'
-                    : '1.1~'+md[0]+'.'+md[1]+' · 동일 기간 누계 비교';
+  function mOpts(sel){
+    var o='';
+    for(var m=1;m<=12;m++) o+='<option value="'+m+'"'+(m===sel?' selected':'')+'>'+m+'월</option>';
+    return o;
+  }
+  var m1=ycM1_(), m2=ycM2_();
+  var lastD=new Date(2001, m2, 0).getDate();            /* 안내 문구용 — 실제 끝은 해마다 보정한다 */
+  var alignTxt=(md[0]===m2 && md[1]===lastD)
+    ? m1+'.1~'+m2+'.'+md[1]+' · 구간 전체 비교'
+    : m1+'.1~'+md[0]+'.'+md[1]+' · 동일 기간 누계 비교';
   document.getElementById('exYcBar').innerHTML=
     '<div class="yc-pickrow">'
-      +'<span class="yc-side-tag l">왼쪽</span>'
+      /* 라벨·선택·기간을 한 덩어리(.yc-pick)로 묶는다 — 좁은 화면에서 줄이 바뀌어도 흩어지지 않는다 */
       +'<span class="yc-pick">'
+        +'<span class="yc-side-tag l">왼쪽</span>'
         +'<select class="ex-sel" id="exYcLeftSel" aria-label="왼쪽 비교 연도" onchange="ycSetYear(\'l\',this.value)">'+opts(ys.l)+'</select>'
-        +'<span class="yc-range">'+ys.l+'.01.01~'+ys.l+'.12.31</span></span>'
+        +'<span class="yc-range">'+ycSideRangeTxt_(ys.l)+'</span></span>'
       +'<span class="yc-vs">↔</span>'
-      +'<span class="yc-side-tag r">오른쪽</span>'
       +'<span class="yc-pick">'
+        +'<span class="yc-side-tag r">오른쪽</span>'
         +'<select class="ex-sel" id="exYcRightSel" aria-label="오른쪽 비교 연도" onchange="ycSetYear(\'r\',this.value)">'+opts(ys.r)+'</select>'
-        +'<span class="yc-range">'+ys.r+'.01.01~'+ys.r+'.12.31</span></span>'
+        +'<span class="yc-range">'+ycSideRangeTxt_(ys.r)+'</span></span>'
+      +'<span class="yc-divider"></span>'
+      +'<span class="yc-pick">'
+        +'<span class="yc-side-tag m">월 구간</span>'
+        +'<select class="ex-sel" id="exYcM1Sel" aria-label="시작 월" onchange="ycSetMonth(1,this.value)">'+mOpts(m1)+'</select>'
+        +'<span class="yc-vs">~</span>'
+        +'<select class="ex-sel" id="exYcM2Sel" aria-label="종료 월" onchange="ycSetMonth(2,this.value)">'+mOpts(m2)+'</select>'
+        +'<button type="button" class="yc-mreset" onclick="ycResetMonths()"'+(ycMonthFull_()?' disabled':'')+'>연간 전체</button>'
+      +'</span>'
       +'<span class="ex-fspacer"></span>'
       +'<span class="ex-basis">A/S·점검 처리일 기준 · 기간 외 필터 반영</span>'
       +'<span class="ex-basis today">'+esc(alignTxt)+'</span>'
@@ -5761,21 +5826,43 @@ function ycRenderBar_(ys, md){
     +'</div>';
 }
 
-/* ── 카드 1: 기간별 서비스 추이 (24주) ── */
+/* ── 카드 1: 기간별 서비스 추이 (최대 24주) ── */
+/* 월 구간이 그 해 주 격자에서 차지하는 주차 범위.
+   주는 월을 걸치기 마련이므로 "그 주가 시작하는 월(월요일)"로 소속을 정한다 —
+   5~9월을 고르면 4월에 시작한 주는 빠지고 5월 첫 월요일부터 그린다. */
+function ycMonthWeekBand_(D){
+  if(ycMonthFull_()) return {s:0, e:D.weeks.length-1};   /* 연간 전체는 격자 그대로 */
+  var a=new Date(D.y, ycM1_()-1, 1), e=new Date(D.y, ycM2_(), 0);
+  var s=-1, t=-1;
+  D.weeks.forEach(function(w){
+    if(w.mon>=a && w.mon<=e){ if(s<0) s=w.i; t=w.i; }
+  });
+  return (s<0) ? null : {s:s, e:t};
+}
 function ycWeekWindow_(L,R){
   var len=Math.min(L.weeks.length, R.weeks.length);
-  var n=Math.min(EX_YC_WEEKS, len), maxStart=Math.max(0,len-n), start;
+  /* 좌우를 같은 주차로 맞추려면 밴드도 하나여야 한다 — 오른쪽(비교 해) 기준으로 잡고 좌우에 함께 쓴다 */
+  var band=ycMonthWeekBand_(R) || ycMonthWeekBand_(L) || {s:0, e:len-1};
+  var lo=Math.max(0, Math.min(band.s, len-1));
+  var hi=Math.max(lo, Math.min(band.e, len-1));
+  var span=hi-lo+1;
+  /* 구간이 24주 이하면 통째로 보여 주고(이동 없음), 넘치면 24주 창으로 잘라 이동 버튼을 준다 */
+  var n=Math.min(EX_YC_WEEKS, span);
+  var maxStart=lo+span-n, start;
   if(EX_YC_START!=null) start=EX_YC_START;
   else{
     /* 오른쪽 해가 진행 중이면 기준 주가 창의 마지막이 되도록 잡는다 */
     var ci=-1;
-    R.weeks.forEach(function(w){ if(w.cur) ci=w.i; });
+    R.weeks.forEach(function(w){ if(w.cur && w.i>=lo && w.i<=hi) ci=w.i; });
     start=(ci>=0) ? (ci-n+1) : maxStart;
   }
-  return {start:Math.max(0,Math.min(maxStart,start)), n:n, maxStart:maxStart, len:len};
+  return {start:Math.max(lo,Math.min(maxStart,start)), n:n,
+          minStart:lo, maxStart:maxStart, len:len, span:span, paged:(span>n)};
 }
 function ycWeekChart_(ws, mx){
-  return '<div class="ex-vchart yc-wchart">'+ws.map(function(w,idx){
+  /* 월 구간을 좁혀 막대가 적어지면 굵게 그리고 날짜도 매주 적는다 */
+  var wide=ws.length<=13;
+  return '<div class="ex-vchart yc-wchart'+(wide?' wide':'')+'">'+ws.map(function(w,idx){
     var ah=w.as?Math.max(3,Math.round(w.as/mx*100)):0;
     var ih=w.insp?Math.max(3,Math.round(w.insp/mx*100)):0;
     var lb=w.y+'년 '+(w.i+1)+'주차 '+ycMD_(w.mon)+'~'+ycMD_(w.to)
@@ -5785,7 +5872,7 @@ function ycWeekChart_(ws, mx){
         +'<div class="ex-vbar as"><div class="b'+(w.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
         +'<div class="ex-vbar insp"><div class="b'+(w.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
       +'</div>'
-      +'<div class="l'+((idx%4===0||w.cur)?'':' hide')+'">'+(w.mon.getMonth()+1)+'/'+w.mon.getDate()+'</div>'
+      +'<div class="l'+((wide||idx%4===0||w.cur)?'':' hide')+'">'+(w.mon.getMonth()+1)+'/'+w.mon.getDate()+'</div>'
     +'</div>';
   }).join('')+'</div>';
 }
@@ -5812,13 +5899,18 @@ function ycRenderWeekCard_(ys, L, R){
   var ls=L.weeks.slice(win.start, win.start+win.n);
   var rs=R.weeks.slice(win.start, win.start+win.n);
   var mx=Math.max.apply(null, ls.concat(rs).reduce(function(a,w){ return a.concat([w.as,w.insp]); },[1]));
+  var lbTxt='표시 구간 '+(win.start+1)+'~'+(win.start+win.n)+'주차 · 좌우를 같은 주차로 맞춰 그립니다'
+    +(ycMonthFull_() ? '(연 '+win.len+'주)' : '('+ycM1_()+'~'+ycM2_()+'월 '+win.span+'주)');
   var nav='<div class="yc-nav">'
-    +'<span class="lb">표시 구간 '+(win.start+1)+'~'+(win.start+win.n)+'주차 · 좌우를 같은 주차로 맞춰 그립니다(연 '+win.len+'주)</span>'
+    +'<span class="lb">'+esc(lbTxt)+'</span>'
     +'<span class="yc-legend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></span>'
-    +'<button type="button" onclick="ycJumpWeeks(\'start\')"'+(win.start<=0?' disabled':'')+'>연초</button>'
-    +'<button type="button" onclick="ycShiftWeeks(-4)"'+(win.start<=0?' disabled':'')+'>◀ 이전 4주</button>'
-    +'<button type="button" onclick="ycShiftWeeks(4)"'+(win.start>=win.maxStart?' disabled':'')+'>다음 4주 ▶</button>'
-    +'<button type="button" onclick="ycResetWeeks()">최근</button>'
+    /* 구간이 24주 이하면 이미 전부 보이므로 이동 버튼을 만들지 않는다 */
+    +(win.paged
+      ? '<button type="button" onclick="ycJumpWeeks(\'start\')"'+(win.start<=win.minStart?' disabled':'')+'>'+(ycMonthFull_()?'연초':'구간 처음')+'</button>'
+        +'<button type="button" onclick="ycShiftWeeks(-4)"'+(win.start<=win.minStart?' disabled':'')+'>◀ 이전 4주</button>'
+        +'<button type="button" onclick="ycShiftWeeks(4)"'+(win.start>=win.maxStart?' disabled':'')+'>다음 4주 ▶</button>'
+        +'<button type="button" onclick="ycResetWeeks()">최근</button>'
+      : '')
   +'</div>';
   document.getElementById('exYcWeekCard').innerHTML=
     exH3('기간별 서비스 추이 · '+win.n+'주 비교', ys.l+'년 ↔ '+ys.r+'년 · 주 단위(월~일) · 좌우 같은 눈금')
@@ -5832,7 +5924,8 @@ function ycRenderWeekCard_(ys, L, R){
 
 /* ── 카드 2: 월별 A/S·점검 처리 추이 (12개월) ── */
 function ycMonthChart_(ms, mx){
-  return '<div class="ex-mchart yc-mchart">'+ms.map(function(t){
+  var wide=ms.length<=8;
+  return '<div class="ex-mchart yc-mchart'+(wide?' wide':'')+'">'+ms.map(function(t){
     var ah=t.as?Math.max(3,Math.round(t.as/mx*100)):0;
     var ih=t.insp?Math.max(3,Math.round(t.insp/mx*100)):0;
     var lb=t.y+'년 '+t.m+'월 · A/S '+t.as+'건 · 점검 '+t.insp+'건 · 합계 '+t.n+'건'
@@ -5844,14 +5937,21 @@ function ycMonthChart_(ms, mx){
         +'<div class="ex-mbar as"><div class="b'+(t.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
         +'<div class="ex-mbar insp"><div class="b'+(t.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
       +'</div>'
-      +'<div class="l">'+t.m+'</div>'
+      +'<div class="l">'+t.m+(wide?'월':'')+'</div>'
     +'</div>';
   }).join('')+'</div>';
 }
+/* 선택한 월 구간의 달만 잘라 낸다 — 좌우가 항상 같은 달 묶음을 본다 */
+function ycMonthSlice_(D){ return D.months.slice(ycM1_()-1, ycM2_()); }
 function ycMonthPanel_(side, D, mx){
-  var el=ycElapsedM_(D.y), s=D.total, avg=el? s.n/el : 0;
-  var rangeTxt=(el>=12||!el) ? '01.01~12.31 · 12개월'
-             : '01.01~'+ycMD_(exBaseDate())+' · '+el+'개월 진행 중';
+  var ms=ycMonthSlice_(D), s=ycSum_(ms);
+  /* 아직 오지 않은 달은 평균에서 뺀다 — 8월 중순에 12로 나누면 평균이 실제보다 낮게 나온다 */
+  var done=ms.filter(function(t){ return !t.future; }).length;
+  var avg=done? s.n/done : 0;
+  var r=ycMonthRangeOf_(D.y), inProg=(done<ms.length);
+  var rangeTxt = !r.started
+    ? ycMD_(r.from)+'~'+ycMD_(r.full)+' · 아직 시작 전'
+    : ycMD_(r.from)+'~'+ycMD_(r.to)+' · '+(inProg?done+'개월 진행 중':ms.length+'개월');
   return '<div class="yc-panel '+side+'">'
     +'<div class="yc-phead"><b>'+D.y+'년</b><span>'+esc(rangeTxt)+'</span>'
       +'<i>'+exNum(s.n)+'건</i></div>'
@@ -5860,24 +5960,37 @@ function ycMonthPanel_(side, D, mx){
       +ycPStat_('점검', exNum(s.insp)+'건')
       +ycPStat_('월평균', avg.toFixed(1)+'건')
     +'</div>'
-    +ycMonthChart_(D.months, mx)
+    +ycMonthChart_(ms, mx)
   +'</div>';
 }
 function ycRenderMonthCard_(ys, L, R){
-  var mx=Math.max.apply(null, L.months.concat(R.months).reduce(function(a,t){ return a.concat([t.as,t.insp]); },[1]));
-  /* 진행 중인 해가 섞이면 지난 해 12개월과 견줄 수 없다 — 두 해가 모두 지난 개월까지만 견준다 */
-  var el=Math.min(ycElapsedM_(ys.l), ycElapsedM_(ys.r)) || 12;
-  var la=ycSum_(L.months.slice(0,el)), ra=ycSum_(R.months.slice(0,el));
-  var partial=(ycElapsedM_(ys.l)===el && ys.l===exBaseDate().getFullYear())
-           || (ycElapsedM_(ys.r)===el && ys.r===exBaseDate().getFullYear());
+  var lm=ycMonthSlice_(L), rm=ycMonthSlice_(R);
+  var mx=Math.max.apply(null, lm.concat(rm).reduce(function(a,t){ return a.concat([t.as,t.insp]); },[1]));
+  /* 진행 중인 해가 섞이면 지난 해의 완결된 달과 견줄 수 없다 —
+     두 해 모두 지난 달까지로 잘라 같은 달 묶음끼리만 비교한다. */
+  var m1=ycM1_(), m2=ycM2_();
+  var hi=Math.min(m2, ycElapsedM_(ys.l)||12, ycElapsedM_(ys.r)||12);
+  var note;
+  if(hi<m1){
+    /* 한쪽 해의 구간이 아직 시작되지 않았다 — 0건 대 N건으로 "감소"라 적으면 사실이 아니다 */
+    var only=ycSum_(L.months.slice(m1-1,m2)), only2=ycSum_(R.months.slice(m1-1,m2));
+    var pending=(ycElapsedM_(ys.r)||12)<m1 ? ys.r : ys.l;
+    note='<b>'+pending+'년 '+m1+'~'+m2+'월은 아직 시작되지 않아</b> 견줄 수 있는 달이 없습니다.'
+      +' <em>· '+ys.l+'년 '+exNum(only.n)+'건 · '+ys.r+'년 '+exNum(only2.n)+'건</em>';
+  }else{
+    var la=ycSum_(L.months.slice(m1-1, hi)), ra=ycSum_(R.months.slice(m1-1, hi));
+    var partial=(hi===ycElapsedM_(ys.l) && ys.l===exBaseDate().getFullYear())
+             || (hi===ycElapsedM_(ys.r) && ys.r===exBaseDate().getFullYear());
+    note=ycCmpSentence_(ys, la, ra, m1+'~'+hi+'월 누계', partial?(hi+'월은 아직 진행 중'):null);
+  }
   document.getElementById('exYcMonthCard').innerHTML=
-    exH3('월별 A/S·점검 처리 추이 · 12개월 비교', ys.l+'년 ↔ '+ys.r+'년 · 처리일 기준 · 좌우 같은 눈금')
+    exH3('월별 A/S·점검 처리 추이 · '+lm.length+'개월 비교',
+         ys.l+'년 ↔ '+ys.r+'년 · '+m1+'~'+m2+'월 · 처리일 기준 · 좌우 같은 눈금')
     +'<div class="ex-cbody"><div class="yc-body">'
       +'<div class="yc-legend"><span><i class="mas"></i>A/S</span><span><i class="minsp"></i>점검</span>'
         +'<span>막대 위 숫자 = 월 합계</span></div>'
       +'<div class="yc-grid">'+ycMonthPanel_('l',L,mx)+ycMonthPanel_('r',R,mx)+'</div>'
-      +'<div class="yc-note">'+ycCmpSentence_(ys, la, ra, '1~'+el+'월 누계',
-          partial?(el+'월은 아직 진행 중'):null)+'</div>'
+      +'<div class="yc-note">'+note+'</div>'
     +'</div></div>';
 }
 
@@ -5895,13 +6008,22 @@ function ycSetYear(side, v){
   if(side==='l') EX_YC_LEFT=y; else EX_YC_RIGHT=y;
   ycRedraw_();
 }
+/* 월 구간을 바꾸면 주 창의 시작 주차는 의미가 없어지므로 자동 위치로 되돌린다 */
+function ycSetMonth(which, v){
+  var m=Number(v); if(!(m>=1&&m<=12)) return;
+  if(which===1) EX_YC_M1=m; else EX_YC_M2=m;
+  EX_YC_START=null;
+  ycRedraw_();
+}
+function ycResetMonths(){ EX_YC_M1=1; EX_YC_M2=12; EX_YC_START=null; ycRedraw_(); }
 function ycShiftWeeks(d){
   var w=EX_YC_WIN; if(!w) return;
-  EX_YC_START=Math.max(0, Math.min(w.maxStart, w.start+d));
+  EX_YC_START=Math.max(w.minStart, Math.min(w.maxStart, w.start+d));
   ycRedraw_();
 }
 function ycJumpWeeks(where){
-  EX_YC_START=(where==='start') ? 0 : (EX_YC_WIN?EX_YC_WIN.maxStart:null);
+  var w=EX_YC_WIN; if(!w) return;
+  EX_YC_START=(where==='start') ? w.minStart : w.maxStart;
   ycRedraw_();
 }
 function ycResetWeeks(){ EX_YC_START=null; ycRedraw_(); }
