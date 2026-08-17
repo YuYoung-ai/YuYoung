@@ -2444,7 +2444,7 @@ async function exportNozzleReuseExcel(){
     list.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
 
     sum.columns=Array(12).fill(0).map(function(){return {width:12};});
-    exExcelTitle_(sum,'노즐 재사용','선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 생성 '+ymd(new Date()),12);
+    exExcelTitle_(sum,'노즐 재사용','선택 기간 방문 병원 · 병원별 마지막 평가 기준 · '+exPeriodLabel()+' · 생성 '+ymd(new Date()),12);
     var n=Math.max(2,data.length+1),gr="'전체 명단'!$C$2:$C$"+n,st="'전체 명단'!$D$2:$D$"+n;
     var reuse=nz.joined.reuse+nz.nonJoined.reuse;
     exExcelKpis_(sum,[
@@ -2468,7 +2468,7 @@ async function exportNozzleReuseExcel(){
   finally{if(btn){btn.disabled=false;btn.innerHTML=old;}}
 }
 
-/* ── 노즐 재사용 현황: 공통 Statistics 모듈(auth.js) 재사용 ──
+/* ── 노즐 재사용 현황 ──
    병원 기준(중복 방문 제거) · N-care 가입/미가입 분리 · 재사용률 · 리스트(가나다) */
 function nzNcare_(nc){ nc=String(nc||'').trim(); return (nc && !/미가입/.test(nc)) ? '가입' : '미가입'; }
 function nozGroupHtml_(title, g){
@@ -2486,33 +2486,62 @@ function nozGroupHtml_(title, g){
       +'<ul class="nz-list">'+list+'</ul></div>'
   +'</div>';
 }
-/* 노즐 재사용 집계 — 기존 Statistics.build() 기반 계산·병원 중복 제거 방식 그대로 */
-function buildNozzleData(rows){
-  if(!(window.Statistics&&window.Statistics.build)) return null;
-  /* handover 행 → Statistics 입력형(hosp/ncare 가입·미가입/nozzle O·X)으로 매핑 */
-  var mapped=(rows||[]).map(function(r){ return { hosp:r.hosp, ncare:nzNcare_(r.ncare), nozzle:r.nozzleReuse }; });
-  return window.Statistics.build(mapped).nozzle;
+/* ── 병원별 노즐 사용방식 판정 (단일 기준) ──
+   보고 모드 ③ 관리 대상 카드 · ④ 누수 분석 탭 · 노즐 상태 필터 · Excel·PPT 가 모두 이 함수를 쓴다.
+   기준은 누수 분석 탭과 같은 "마지막 유효 평가"다:
+     · asOfKey(YYYYMMDD) 이후의 평가는 과거 상태를 바꾸지 않는다(생략하면 rows 전체를 본다)
+     · 같은 날짜에 평가가 여러 건이면 나중에 기록된 값을 적용
+     · 날짜가 없는 평가는 날짜 있는 평가보다 뒤로 밀어 최후 수단으로만 쓴다
+   반환: 정규화 병원명 → {state:'reuse'|'noreuse', dateKey, idx} (O·X 평가가 없는 병원은 키 없음)
+   ※ 예전 기준은 "한 번이라도 O 면 재사용"이라 개선된 병원이 계속 재사용으로 남았다. */
+function nozStateMap_(rows, asOfKey){
+  var out={};
+  (rows||[]).forEach(function(r,i){
+    var k=skNorm_(r.hosp); if(!k) return;
+    var v=String(r.nozzleReuse||'').trim().toUpperCase(); if(v!=='O'&&v!=='X') return;
+    var day=nlDateKey_(r); if(asOfKey && day>asOfKey) return;
+    var prev=out[k];
+    if(!prev || day>prev.dateKey || (day===prev.dateKey && i>prev.idx))
+      out[k]={state:(v==='O'?'reuse':'noreuse'), dateKey:day, idx:i};
+  });
+  return out;
 }
-/* 노즐 재사용 필터용 병원 상태 맵 — 정규화 병원명 → 'reuse' | 'noreuse' | 'unknown'
-   기존 통계와 같은 기준: 한 번이라도 'O' 면 재사용(O·X 혼재도 재사용),
-   'O' 없이 'X' 만 있으면 미재사용, 둘 다 없으면 미확인. */
+/* 노즐 재사용 집계 — 병원 중복 제거·N-Care 분리·가나다 정렬은 종전 그대로이고,
+   재사용 판정만 nozStateMap_() 의 마지막 평가 기준을 따른다.
+   (auth.js 의 공통 Statistics.build() 은 weekly.html 등 다른 화면이 함께 쓰므로 건드리지 않는다) */
+function buildNozzleData(rows){
+  var st=nozStateMap_(rows), m={};
+  (rows||[]).forEach(function(r){
+    var name=String(r.hosp||'').trim(); if(!name) return;      /* 병원명 없는 행은 병원 통계에서 제외 */
+    var k=skNorm_(name), rec=m[k]||(m[k]={name:name, joined:false});
+    if(nzNcare_(r.ncare)==='가입') rec.joined=true;             /* 한 번이라도 가입 → 가입 */
+  });
+  var jAll=0,nAll=0,jReuse=[],nReuse=[];
+  Object.keys(m).forEach(function(k){
+    var reuse=!!(st[k]&&st[k].state==='reuse');
+    if(m[k].joined){ jAll++; if(reuse) jReuse.push(m[k].name); }
+    else           { nAll++; if(reuse) nReuse.push(m[k].name); }
+  });
+  jReuse.sort(skCmpKo_); nReuse.sort(skCmpKo_);
+  function pct_(a,b){ return b>0 ? Math.round(a/b*1000)/10 : 0; }
+  return {joined:   {total:jAll, reuse:jReuse.length, percent:pct_(jReuse.length,jAll), hospitals:jReuse},
+          nonJoined:{total:nAll, reuse:nReuse.length, percent:pct_(nReuse.length,nAll), hospitals:nReuse}};
+}
+/* 노즐 상태 필터용 맵 — 정규화 병원명 → 'reuse' | 'noreuse' | 'unknown' (판정은 카드와 동일) */
 function buildNozzleStatusMap(rows){
-  var m={};
+  var st=nozStateMap_(rows), out={};
   (rows||[]).forEach(function(r){
     var k=skNorm_(r.hosp); if(!k) return;
-    var s=m[k]||(m[k]={o:false,x:false});
-    var v=String(r.nozzleReuse||'').trim().toUpperCase();
-    if(v==='O') s.o=true; else if(v==='X') s.x=true;
+    out[k]= st[k] ? st[k].state : 'unknown';
   });
-  var out={};
-  Object.keys(m).forEach(function(k){ out[k]= m[k].o ? 'reuse' : (m[k].x ? 'noreuse' : 'unknown'); });
   return out;
 }
 /* ── 노즐 재사용 미평가 대상 (방문 병원 = 확인 완료 + 미평가) ──
-   기존 재사용률·재사용 병원 명단은 Statistics.build() 결과를 그대로 두고,
-   여기서는 "O·X 가 하나도 없어 판단할 수 없는 병원"만 따로 뽑는다(계산식 변경 없음).
-   병원명 정규화(skNorm_)와 N-Care 가입 판정(nzNcare_)은 Statistics.build() 와 같은 기준이라
+   재사용률·재사용 병원 명단은 buildNozzleData() 가 만들고,
+   여기서는 "O·X 가 하나도 없어 판단할 수 없는 병원"만 따로 뽑는다.
+   병원명 정규화(skNorm_)와 N-Care 가입 판정(nzNcare_)이 buildNozzleData() 와 같은 기준이라
    visited = joined.total + nonJoined.total, done = 확인 완료 로 항상 맞아떨어진다.
+   (확인 완료는 O·X 존재 여부라 마지막 평가 기준으로 바뀌어도 값이 달라지지 않는다)
      visited   : 방문 병원 수(병원명이 있는 고유 병원)
      done      : 확인 완료 병원 수(재사용 또는 미재사용으로 판정된 병원)
      joined    : 미평가 대상 중 N-Care 가입 병원 명단(가나다순)
@@ -2587,7 +2616,9 @@ function buildSkillData(rows){
     var f=String(r.nsFill||'').trim(), a=String(r.nsAmt||'').trim(), t=String(r.jet||'').trim();
     if(!f && !a && !t) return;                       /* 평가 없는 행은 제외 */
     var key=(r._y||0)*10000+(r._m||0)*100+(r._d||0);  /* boot()에서 계산된 연/월/일 */
-    if(map[k] && map[k].key>=key) return;             /* 더 최근 방문만 유지 */
+    /* 더 최근 방문만 유지하되, 같은 날짜에 평가가 여러 건이면 나중에 기록된 값을 적용한다
+       (누수 분석 탭과 같은 기준 — 예전에는 같은 날 첫 기록이 남아 두 탭 결과가 어긋났다) */
+    if(map[k] && map[k].key>key) return;
     map[k]={key:key, name:name, nsFill:f, nsAmt:a, jet:t};
   });
   var recs=Object.keys(map).map(function(k){ return map[k]; });
@@ -2643,27 +2674,22 @@ function nlDateLabel_(rec){
   if(!rec||!rec.key) return '-';
   var s=String(rec.key); return s.slice(0,4)+'.'+s.slice(4,6)+'.'+s.slice(6,8);
 }
-function nlEducationState_(r){
-  var f=String(r&&r.nsFill||'').trim(),a=String(r&&r.nsAmt||'').trim(),t=String(r&&r.jet||'').trim();
-  if(!f&&!a&&!t) return '';
-  return (f.toUpperCase()==='X'||a==='부족'||/교육/.test(t))?'need':'good';
-}
+/* 이 탭의 병원 상태는 ③ 관리 대상 카드·필터와 같은 함수로 판정한다(두 탭이 어긋나지 않게).
+   rows 는 asOfKey 이전으로 이미 잘려 있고, 여기서는 모집단 병원만 남기고 표시용 키로 옮긴다.
+   노즐 'noreuse' 는 이 탭에서 '1회 사용'으로 부른다. */
 function nlLatestStates_(rows, hospitalKeys, asOfKey){
   var nozzle={},skill={};
-  (rows||[]).forEach(function(r,i){
-    var k=skNorm_(r.hosp),day=nlDateKey_(r); if(!k||!hospitalKeys[k]||!day||day>asOfKey) return;
-    var v=String(r.nozzleReuse||'').trim().toUpperCase();
-    if(v==='O'||v==='X'){
-      var old=nozzle[k];
-      if(!old||day>old.key||(day===old.key&&i>old.idx))
-        nozzle[k]={key:day,idx:i,state:v==='O'?'reuse':'single'};
-    }
-    var ed=nlEducationState_(r);
-    if(ed){
-      var prev=skill[k];
-      if(!prev||day>prev.key||(day===prev.key&&i>prev.idx))
-        skill[k]={key:day,idx:i,state:ed};
-    }
+  /* buildSkillData() 는 종료일 개념이 없으므로 여기서 잘라 넘긴다 — 호출부가 이미 잘라 주더라도
+     이 함수 안에서 "종료일 이후 평가는 과거 상태를 바꾸지 않는다"가 항상 성립해야 한다. */
+  var within=asOfKey ? (rows||[]).filter(function(r){ return nlDateKey_(r)<=asOfKey; }) : (rows||[]);
+  var st=nozStateMap_(within,asOfKey);
+  Object.keys(st).forEach(function(k){
+    if(hospitalKeys[k]) nozzle[k]={key:st[k].dateKey,state:(st[k].state==='reuse'?'reuse':'single')};
+  });
+  var S=buildSkillData(within);
+  S.recs.forEach(function(rec){
+    var k=skNorm_(rec.name),state=S.status[k];
+    if(hospitalKeys[k] && (state==='good'||state==='need')) skill[k]={key:rec.key,state:state};
   });
   return {nozzle:nozzle,skill:skill};
 }
@@ -5095,7 +5121,7 @@ function renderExecutiveActions(x){
   }
   var U=x.nozUn;
   document.getElementById('exNozCard').innerHTML=
-    exH3('노즐 재사용', '선택 기간 방문 병원 기준 · '+per, false,
+    exH3('노즐 재사용', '선택 기간 방문 병원 · 병원별 마지막 평가 기준 · '+per, false,
       '<button type="button" class="ex-export-btn" id="exNozzleExcel" onclick="exportNozzleReuseExcel()" title="카드 요약과 전체 명단을 Excel로 생성">📊 Excel</button>')
     +'<div class="ex-cbody">'
     +(nz
@@ -5163,7 +5189,7 @@ function exShowNoz(){
   var nz=buildNozzleData(EX_ROWS);
   if(!nz) return;
   openExList('노즐 재사용 병원 전체 명단',
-    '선택 기간 방문 병원 기준 · '+exPeriodLabel()+' · 가나다순',
+    '선택 기간 방문 병원 · 병원별 마지막 평가 기준 · '+exPeriodLabel()+' · 가나다순',
     exListGroup('N-Care 가입', nz.joined.hospitals)
     +exListGroup('미가입', nz.nonJoined.hospitals));
 }

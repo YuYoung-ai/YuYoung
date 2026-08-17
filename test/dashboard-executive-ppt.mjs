@@ -61,7 +61,7 @@ const FNS = [
   'wkNo', 'wkLabel', 'wkRange', 'isOK',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
-  'filteredRows_', 'hospStateFilter_', 'buildNozzleStatusMap',
+  'filteredRows_', 'hospStateFilter_', 'nozStateMap_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows',
   'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',

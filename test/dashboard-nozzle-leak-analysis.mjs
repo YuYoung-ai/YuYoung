@@ -18,7 +18,8 @@ function grab(name){
   }throw new Error('함수 끝 없음: '+name);
 }
 const FNS=['normD','skNorm_','skCmpKo_','hpCleanKey_','hpIsLeakVoc_','nlDateKey_','nlYmdKey_',
-  'nlDateLabel_','nlEducationState_','nlLatestStates_','nlSummarizeGroup_','buildNozzleLeakAnalysis_','nlIsRiskGroup_'];
+  'nlDateLabel_','nozStateMap_','buildSkillData','nlLatestStates_','nlSummarizeGroup_',
+  'buildNozzleLeakAnalysis_','buildNozzleData','buildNozzleStatusMap','nzNcare_','nlIsRiskGroup_'];
 const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')+'};')();
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
 
@@ -84,6 +85,45 @@ ck('26. 경고색을 배열 순서가 아닌 위험군 기준으로 부여',
 /* 배경만 덮으면 밝은 테두리가 어두운 셀 위에 남는다 */
 ck('27. 다크모드 히트맵은 배경과 테두리를 함께 낮춘다',
   ['hot1','hot2','hot3','hot4'].every(c=>new RegExp('body\\.dark \\.nl-heat\\.'+c+'\\{background:#[0-9A-F]{6};border-color:#[0-9A-F]{6}\\}').test(SRC)));
+
+/* ── ③ 관리 대상 카드·노즐/교육 필터와 ④ 누수 분석 탭이 같은 기준을 쓰는지 ──
+   예전에는 ③이 "한 번이라도 O 면 재사용"·"같은 날짜는 먼저 기록된 평가",
+   ④가 "마지막 유효 평가"라서 같은 병원이 두 탭에서 다른 그룹으로 잡혔다. */
+const uni=rows([
+  {date:'2026-08-01',hosp:'P병원',nozzleReuse:'O',ncare:'N-Care'},
+  {date:'2026-08-10',hosp:'P병원',nozzleReuse:'X',ncare:'N-Care'},   /* 개선 → 마지막 평가는 X */
+  {date:'2026-08-02',hosp:'Q병원',nozzleReuse:'X',ncare:'미가입'},
+  {date:'2026-08-11',hosp:'Q병원',nozzleReuse:'O',ncare:'미가입'},   /* 악화 → 마지막 평가는 O */
+  {date:'2026-08-05',hosp:'R병원',nsFill:'X',ncare:'미가입'},        /* 같은 날 먼저 기록: 미흡 */
+  {date:'2026-08-05',hosp:'R병원',nsFill:'O',nsAmt:'적정',jet:'정상',ncare:'미가입'},
+  {date:'2026-08-12',hosp:'P병원',type:'노즐 누수(약액 유입)',ncare:'N-Care'}
+]);
+const uniNz=D.buildNozzleStatusMap(uni),uniSk=D.buildSkillData(uni).status;
+const uniA=D.buildNozzleLeakAnalysis_(uni,uni,20260831);
+const dOf=h=>uniA.details.find(x=>x.hosp===h);
+const uniData=D.buildNozzleData(uni);
+
+ck('28. 개선된 병원을 ③·④ 모두 재사용에서 제외',
+  uniNz['p병원']==='noreuse'&&dOf('P병원').nozzle==='single',
+  '③='+uniNz['p병원']+' ④='+dOf('P병원').nozzle);
+ck('29. 악화된 병원을 ③·④ 모두 재사용으로 판정',
+  uniNz['q병원']==='reuse'&&dOf('Q병원').nozzle==='reuse',
+  '③='+uniNz['q병원']+' ④='+dOf('Q병원').nozzle);
+ck('30. 같은 날짜 교육평가는 ③·④ 모두 나중 기록을 적용',
+  uniSk['r병원']==='good'&&dOf('R병원').skill==='good',
+  '③='+uniSk['r병원']+' ④='+dOf('R병원').skill);
+ck('31. 재사용률·명단도 마지막 평가 기준을 따른다',
+  uniData.joined.total===1&&uniData.joined.reuse===0
+  &&uniData.nonJoined.reuse===1&&uniData.nonJoined.hospitals[0]==='Q병원',
+  JSON.stringify(uniData));
+ck('32. 노즐 판정을 한 함수(nozStateMap_)로만 내린다',
+  grab('buildNozzleData').includes('nozStateMap_(rows)')
+  &&grab('buildNozzleStatusMap').includes('nozStateMap_(rows)')
+  &&grab('nlLatestStates_').includes('nozStateMap_(within,asOfKey)')
+  &&!/한 번이라도 'O' 면 재사용/.test(SRC));
+ck('33. 종료일 이후 평가는 ④ 안에서도 과거 상태를 바꾸지 않는다',
+  grab('nlLatestStates_').includes('nlDateKey_(r)<=asOfKey')
+  &&grab('nlLatestStates_').includes('buildSkillData(within)'));
 
 console.log('\n──────────────────────────────');console.log(`통과 ${pass}/${total}`);
 if(fails.length){console.log('실패:');fails.forEach(x=>console.log(' -',x));process.exit(1);}console.log('모든 테스트 통과 ✅');

@@ -47,7 +47,7 @@ const FNS = [
   'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd', 'isOK',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
-  'filteredRows_', 'hospStateFilter_', 'buildNozzleStatusMap',
+  'filteredRows_', 'hospStateFilter_', 'nozStateMap_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows', 'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
   'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
