@@ -53,20 +53,30 @@ await page.evaluate(()=>{F.from='2026-08-10';F.to='2026-08-14';buildFilters();ap
 await page.click('[data-tab="leak"]');
 await page.waitForSelector('#exPaneLeak.on');
 ck('1. 누수 분석 탭이 표시된다',await page.isVisible('#exPaneLeak'));
-ck('2. 핵심 지표가 실제 집계값으로 표시된다',(await page.textContent('#exLeakKpis')).includes('전체 노즐 누수4건'));
+ck('2. 핵심 지표가 실제 집계값으로 표시된다',(await page.textContent('#exLeakKpis')).includes('노즐 누수(약액 유입)4건'));
 ck('3. 사용방식·교육 비교 막대가 각각 두 개다',await page.locator('#exLeakNozzleCard .nl-bar-row').count()===2&&await page.locator('#exLeakSkillCard .nl-bar-row').count()===2);
-ck('4. 2×2 교차분석 셀이 네 개다',await page.locator('#exLeakMatrixCard .nl-heat').count()===4);
-ck('5. 마지막 평가 기준 문구만 사용한다',!(await page.textContent('#exPaneLeak')).includes('최근 평가'));
+/* 막대 채움이 span 이라 display:block 이 빠지면 inline 으로 남아 0×0 으로 그려진다 — 실제 렌더 크기를 잰다 */
+const fillBoxes=await page.evaluate(()=>[...document.querySelectorAll('#exPaneLeak .nl-bar-fill')]
+  .map(f=>{const b=f.getBoundingClientRect();return {w:b.width,h:b.height};}));
+ck('4. 비교 막대 채움이 실제 크기로 그려진다',fillBoxes.length===4&&fillBoxes.every(b=>b.w>0&&b.h>0),JSON.stringify(fillBoxes));
+/* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에 붙어야 한다 */
+const alerts=await page.evaluate(()=>({
+  noz:[...document.querySelectorAll('#exLeakNozzleCard .nl-bar-row')].map(r=>r.querySelector('.nl-bar-fill').classList.contains('alert')),
+  skl:[...document.querySelectorAll('#exLeakSkillCard .nl-bar-row')].map(r=>r.querySelector('.nl-bar-fill').classList.contains('alert'))}));
+ck('5. 경고색은 재사용·교육 미흡 그룹에만 붙는다',
+  alerts.noz[0]===true&&alerts.noz[1]===false&&alerts.skl[0]===false&&alerts.skl[1]===true,JSON.stringify(alerts));
+ck('6. 2×2 교차분석 셀이 네 개다',await page.locator('#exLeakMatrixCard .nl-heat').count()===4);
+ck('7. 마지막 평가 기준 문구만 사용한다',!(await page.textContent('#exPaneLeak')).includes('최근 평가'));
 const detailText=await page.textContent('#exLeakDetailCard');
-ck('6. 병원별 평가일·상태·누수 건수를 함께 표시한다',['노즐 평가일','교육 평가일','사용방식','교육 상태','누수'].every(x=>detailText.includes(x)));
+ck('8. 병원별 평가일·상태·누수 건수를 함께 표시한다',['노즐 평가일','교육 평가일','사용방식','교육 상태','누수'].every(x=>detailText.includes(x)));
 await page.locator('#exLeakNozzleCard .nl-bar-row').first().click();
 await page.waitForSelector('#exListModal.show');
-ck('7. 그래프 클릭으로 해당 병원 명단이 열린다',(await page.textContent('#exListTitle')).includes('재사용')&&(await page.textContent('#exListBody')).includes('A병원'));
+ck('9. 그래프 클릭으로 해당 병원 명단이 열린다',(await page.textContent('#exListTitle')).includes('재사용')&&(await page.textContent('#exListBody')).includes('A병원'));
 await page.evaluate(()=>closeExList());
-ck('8. PC에서 분석 패널이 화면 폭을 넘지 않는다',await page.evaluate(()=>document.getElementById('exPaneLeak').getBoundingClientRect().right<=innerWidth+1));
+ck('10. PC에서 분석 패널이 화면 폭을 넘지 않는다',await page.evaluate(()=>document.getElementById('exPaneLeak').getBoundingClientRect().right<=innerWidth+1));
 await page.click('[data-mode="mobile"]');
-ck('9. 모바일 보기에서 비교 영역이 한 열로 바뀐다',await page.evaluate(()=>getComputedStyle(document.querySelector('.nl-grid')).gridTemplateColumns.split(' ').length===1&&document.body.classList.contains('ex-narrow')));
-ck('10. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
+ck('11. 모바일 보기에서 비교 영역이 한 열로 바뀐다',await page.evaluate(()=>getComputedStyle(document.querySelector('.nl-grid')).gridTemplateColumns.split(' ').length===1&&document.body.classList.contains('ex-narrow')));
+ck('12. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT,fullPage:true});
 await browser.close();
 console.log('\n──────────────────────────────');console.log(`통과 ${pass}/${total}`);

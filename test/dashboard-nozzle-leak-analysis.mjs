@@ -17,8 +17,8 @@ function grab(name){
     if(SRC[j]==='{')depth++;else if(SRC[j]==='}'&&--depth===0)return SRC.slice(at,j+1);
   }throw new Error('함수 끝 없음: '+name);
 }
-const FNS=['normD','skNorm_','skCmpKo_','nlVocKey_','nlIsLeak_','nlDateKey_','nlYmdKey_',
-  'nlDateLabel_','nlEducationState_','nlLatestStates_','nlSummarizeGroup_','buildNozzleLeakAnalysis_'];
+const FNS=['normD','skNorm_','skCmpKo_','hpCleanKey_','hpIsLeakVoc_','nlDateKey_','nlYmdKey_',
+  'nlDateLabel_','nlEducationState_','nlLatestStates_','nlSummarizeGroup_','buildNozzleLeakAnalysis_','nlIsRiskGroup_'];
 const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')+'};')();
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
 
@@ -46,6 +46,9 @@ const history=rows([
 const A=D.buildNozzleLeakAnalysis_(cohort,history,20260831);
 
 ck('1. 노즐 누수(약액 유입) 표기 공백 차이를 같은 VOC로 집계',A.leaks===5,'leaks='+A.leaks);
+ck('1-1. 대상 VOC 판정을 내부 세척 분석과 같은 함수로 공유',
+  !/function nlVocKey_|function nlIsLeak_/.test(SRC)&&grab('isHandpieceCleaning_').includes('hpIsLeakVoc_(r)')
+  &&D.hpIsLeakVoc_({type:'노즐 누수(약액 유입)'})===true&&D.hpIsLeakVoc_({type:'노즐 누수'})===false);
 ck('2. 선택 기간 방문 병원을 분모로 유지',A.hospitals===6,'hospitals='+A.hospitals);
 ck('3. 병원별 마지막 노즐 평가를 사용',A.details.find(x=>x.hosp==='A병원').nozzle==='single');
 ck('4. 같은 날짜는 뒤에 기록된 노즐 평가를 사용',A.details.find(x=>x.hosp==='E병원').nozzle==='single');
@@ -68,8 +71,19 @@ ck('19. 탭 전환 허용 목록과 패널 맵에 leak 포함',grab('setExecTab'
 ck('20. 활성 누수 탭만 전용 렌더러 호출',/if\(EX_TAB==='leak'\)\s+renderExecutiveLeak\(\)/.test(grab('renderExecutiveDashboard')));
 ck('21. 전용 분석은 VOC 유형 필터를 제외',grab('buildNozzleLeakCurrent_').includes("ignoreType:true")&&grab('filteredRows_').includes('!ignoreType'));
 ck('22. 원인 확정이 아닌 연관 경향 안내',grab('renderExecutiveLeak').includes('직접 원인을 확정하지 않습니다'));
+ck('22-1. 집계 대상 VOC 범위를 화면에 명시',
+  grab('renderExecutiveLeak').includes('대상 VOC는 핸드피스 ‘노즐 누수(약액 유입)’ 한 가지입니다'));
 ck('23. 그래프와 교차표 클릭 시 병원 명단 연결',grab('renderExecutiveLeak').includes('nlBarsHtml_')&&grab('renderExecutiveLeak').includes('nlHeatHtml_')&&/function exShowLeakGroup/.test(SRC));
 ck('24. 모바일에서 분석 영역을 한 열로 전환',/body\.ex-narrow \.nl-grid,body\.ex-narrow \.nl-bottom\{grid-template-columns:1fr\}/.test(SRC));
+/* span 은 기본이 inline 이라 display:block 이 없으면 width·height 가 무시돼 막대가 0×0 으로 사라진다 */
+ck('25. 비교 막대 트랙·채움을 블록으로 그린다',/\.nl-bar-track\{display:block;/.test(SRC)&&/\.nl-bar-fill\{display:block;/.test(SRC));
+ck('26. 경고색을 배열 순서가 아닌 위험군 기준으로 부여',
+  grab('nlBarsHtml_').includes('nlIsRiskGroup_(g.key)')&&!/i===1\?' alert'/.test(SRC)
+  &&D.nlIsRiskGroup_('reuse')===true&&D.nlIsRiskGroup_('need')===true
+  &&D.nlIsRiskGroup_('single')===false&&D.nlIsRiskGroup_('good')===false);
+/* 배경만 덮으면 밝은 테두리가 어두운 셀 위에 남는다 */
+ck('27. 다크모드 히트맵은 배경과 테두리를 함께 낮춘다',
+  ['hot1','hot2','hot3','hot4'].every(c=>new RegExp('body\\.dark \\.nl-heat\\.'+c+'\\{background:#[0-9A-F]{6};border-color:#[0-9A-F]{6}\\}').test(SRC)));
 
 console.log('\n──────────────────────────────');console.log(`통과 ${pass}/${total}`);
 if(fails.length){console.log('실패:');fails.forEach(x=>console.log(' -',x));process.exit(1);}console.log('모든 테스트 통과 ✅');

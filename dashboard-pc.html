@@ -697,8 +697,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .nl-bar-row:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 .nl-bar-row:disabled{cursor:default;opacity:.72}
 .nl-bar-label{font-size:11.5px;font-weight:700;color:var(--text);text-align:right;white-space:nowrap}
-.nl-bar-track{height:22px;background:var(--track);border-radius:6px;overflow:hidden}
-.nl-bar-fill{height:100%;min-width:3px;border-radius:6px;background:var(--teal);transition:width .3s}
+.nl-bar-track{display:block;height:22px;background:var(--track);border-radius:6px;overflow:hidden}
+/* span 이라 display:block 이 없으면 inline 으로 남아 width·height 가 무시되고 막대가 그려지지 않는다 */
+.nl-bar-fill{display:block;height:100%;min-width:3px;border-radius:6px;background:var(--teal);transition:width .3s}
 .nl-bar-fill.alert{background:#D87537}
 .nl-bar-meta{font-size:10px;color:var(--text-muted);line-height:1.35;white-space:nowrap}
 .nl-bar-meta b{color:var(--navy);font-size:12px;margin-right:3px;font-variant-numeric:tabular-nums}
@@ -717,8 +718,9 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .nl-heat.hot1{background:#FFF4EC;border-color:#F0D5C3}.nl-heat.hot2{background:#FBE3D3;border-color:#E8B894}
 .nl-heat.hot3{background:#F3C09F;border-color:#DA8C58}.nl-heat.hot4{background:#D87537;border-color:#C36228;color:#fff}
 .nl-heat.hot4 b,.nl-heat.hot4 span{color:#fff}
-body.dark .nl-heat.hot1{background:#2B241E}body.dark .nl-heat.hot2{background:#3B291D}
-body.dark .nl-heat.hot3{background:#57331F}body.dark .nl-heat.hot4{background:#A45128}
+/* 다크에서는 배경과 함께 테두리도 낮춘다 — 배경만 덮으면 밝은 테두리가 어두운 셀 위에 그대로 남는다 */
+body.dark .nl-heat.hot1{background:#2B241E;border-color:#4A3B2C}body.dark .nl-heat.hot2{background:#3B291D;border-color:#61452F}
+body.dark .nl-heat.hot3{background:#57331F;border-color:#7E4C2C}body.dark .nl-heat.hot4{background:#A45128;border-color:#B75E2E}
 .nl-insight{margin-top:7px;padding:7px 9px;border-radius:8px;border:1px solid var(--rate-bd);background:var(--rate-bg);
   color:var(--text);font-size:10.5px;line-height:1.5}
 .nl-insight b{color:var(--navy)}
@@ -1929,12 +1931,15 @@ function renderDetailedDashboard(rows){
 function hpCleanKey_(s){
   return String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,'').replace(/[·ㆍ]/g,'');
 }
+/* 대상 VOC 판정 — 핸드피스 '노즐 누수(약액 유입)' 하나로, 내부 세척 분석과 누수 연관 분석이 같은 기준을 쓴다.
+   노즐 카테고리의 '노즐 누수'(괄호 문구 없음)는 다른 코드라 여기에 포함하지 않는다. */
+function hpIsLeakVoc_(r){ return !!r && hpCleanKey_(r.type)==='노즐누수(약액유입)'; }
 function hpCleanVal_(s){
   s=String(s==null?'':s).trim(); return (!s||s==='없음')?'':s;
 }
 function isHandpieceCleaning_(r){
   return !!r && recScope(r)==='customer' && String(r.gubun||'').trim()==='A/S'
-    && hpCleanKey_(r.type)==='노즐누수(약액유입)'
+    && hpIsLeakVoc_(r)
     && hpCleanKey_(r.part)==='내부세척';
 }
 function hpCleanAsOf_(value, today){
@@ -1985,7 +1990,7 @@ function buildHandpieceCleaningAnalysis_(cohortRows, allRows, asOf, today){
   var universe=(allRows||[]).filter(function(r){
     var d=rowDate(r);
     return d&&d<=cutoff&&recScope(r)==='customer'&&String(r.gubun||'').trim()==='A/S'
-      &&hpCleanKey_(r.type)==='노즐누수(약액유입)';
+      &&hpIsLeakVoc_(r);
   });
   var events=cohort.map(function(r,idx){
     var cleanDate=rowDate(r), hosp=hpCleanVal_(r.hosp), sn=hpCleanVal_(r.sn);
@@ -2630,10 +2635,6 @@ function buildSkillData(rows){
    · 모집단: 선택 기간에 방문한 고객 병원(유형·노즐·교육 상태 필터는 비교군 보존을 위해 제외)
    · 상태: 분석 종료일 이전의 마지막 유효 평가값
    · 결과: 노즐 누수(약액 유입) 발생 건수와 병원당 건수 — 원인 확정이 아닌 연관 경향 */
-function nlVocKey_(s){
-  return String(s==null?'':s).trim().toLowerCase().replace(/\s+/g,'').replace(/[·ㆍ]/g,'');
-}
-function nlIsLeak_(r){ return !!r && nlVocKey_(r.type)==='노즐누수(약액유입)'; }
 function nlDateKey_(r){ return (r&&r._y&&r._m&&r._d)?(r._y*10000+r._m*100+r._d):0; }
 function nlYmdKey_(s){
   var d=normD(s); return (d.y&&d.m&&d.d)?(d.y*10000+d.m*100+d.d):0;
@@ -2685,7 +2686,7 @@ function buildNozzleLeakAnalysis_(cohortRows, historyRows, asOfKey){
   asOfKey=Number(asOfKey)||maxDay;
   var states=nlLatestStates_(historyRows,hospitals,asOfKey),leakByHosp={};
   cohortRows.forEach(function(r){
-    if(!nlIsLeak_(r)) return;
+    if(!hpIsLeakVoc_(r)) return;
     var k=skNorm_(r.hosp); if(k&&hospitals[k]) leakByHosp[k]=(leakByHosp[k]||0)+1;
   });
   var details=Object.keys(hospitals).map(function(k){
@@ -2714,7 +2715,7 @@ function buildNozzleLeakAnalysis_(cohortRows, historyRows, asOfKey){
         perHospital:list.length?Math.round(leaks/list.length*100)/100:0,details:list};
     });
   });
-  return {asOfKey:asOfKey,hospitals:details.length,leaks:cohortRows.filter(nlIsLeak_).length,
+  return {asOfKey:asOfKey,hospitals:details.length,leaks:cohortRows.filter(hpIsLeakVoc_).length,
     details:details,nozzle:nozzle,skill:skill,matrix:matrix};
 }
 function buildNozzleLeakCurrent_(){
@@ -5179,14 +5180,16 @@ function exShowNozUnrated(){
 function nlKpiHtml_(label,value,warn){
   return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b></div>';
 }
+/* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에만 붙인다 */
+function nlIsRiskGroup_(key){ return key==='reuse'||key==='need'; }
 function nlBarsHtml_(groups,dim){
   var max=Math.max.apply(null,groups.map(function(g){return g.leaks;}))||1;
-  return '<div class="nl-bar-list">'+groups.map(function(g,i){
+  return '<div class="nl-bar-list">'+groups.map(function(g){
     var w=g.leaks?Math.max(3,Math.round(g.leaks/max*100)):0;
     return '<button type="button" class="nl-bar-row"'+(g.hospitals
       ? ' onclick="exShowLeakGroup(\''+dim+'\',\''+g.key+'\')" title="해당 병원 전체 보기"':' disabled')+'>'
       +'<span class="nl-bar-label">'+esc(g.label)+'</span>'
-      +'<span class="nl-bar-track"><span class="nl-bar-fill'+(i===1?' alert':'')+'" style="width:'+w+'%;'+(w?'':'min-width:0')+'"></span></span>'
+      +'<span class="nl-bar-track"><span class="nl-bar-fill'+(nlIsRiskGroup_(g.key)?' alert':'')+'" style="width:'+w+'%;'+(w?'':'min-width:0')+'"></span></span>'
       +'<span class="nl-bar-meta"><b>'+exNum(g.leaks)+'건</b>'+exNum(g.hospitals)+'곳 · '+g.perHospital.toFixed(2)+'건/곳</span>'
       +'</button>';
   }).join('')+'</div>';
@@ -5229,7 +5232,7 @@ function nlDetailTable_(details){
 function renderExecutiveLeak(){
   var A=buildNozzleLeakCurrent_(),per=exPeriodLabel(); EX_LEAK_STATE=A;
   document.getElementById('exLeakKpis').innerHTML=
-    nlKpiHtml_('전체 노즐 누수',A.leaks,false)
+    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false)
     +nlKpiHtml_('재사용',A.nozzle.reuse.leaks,false)
     +nlKpiHtml_('1회 사용',A.nozzle.single.leaks,false)
     +nlKpiHtml_('교육 양호',A.skill.good.leaks,false)
@@ -5269,7 +5272,8 @@ function renderExecutiveLeak(){
     exH3('병원별 상세 현황', '누수 발생 병원 우선 · '+per)
     +'<div class="ex-cbody"><div class="nl-table-wrap">'+nlDetailTable_(affected)+'</div>'
     +'<button type="button" class="nl-more" onclick="exShowLeakGroup(\'all\',\'all\')">전체 병원 보기 ('+exNum(A.details.length)+')</button>'
-    +'<div class="nl-foot">기간·구분·N-Care·담당자·병원 등 공통 필터는 반영하며, 비교를 위해 VOC 유형·노즐·교육 상태 필터는 제외합니다. 연관 경향을 보여주는 지표로 직접 원인을 확정하지 않습니다.</div></div>';
+    +'<div class="nl-foot">대상 VOC는 핸드피스 ‘노즐 누수(약액 유입)’ 한 가지입니다(노즐 카테고리의 ‘노즐 누수’는 제외). '
+    +'기간·구분·N-Care·담당자·병원 등 공통 필터는 반영하며, 비교를 위해 VOC 유형·노즐·교육 상태 필터는 제외합니다. 연관 경향을 보여주는 지표로 직접 원인을 확정하지 않습니다.</div></div>';
 }
 function exShowLeakGroup(dim,value,skillValue){
   var A=EX_LEAK_STATE||buildNozzleLeakCurrent_(),list=A.details,title='노즐 누수 분석 전체 병원';
