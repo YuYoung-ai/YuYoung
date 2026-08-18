@@ -563,19 +563,56 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-pstat span{display:block;font-size:9.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .yc-pstat b{display:block;font-size:13px;font-weight:800;color:var(--navy);line-height:1.2;
   font-variant-numeric:tabular-nums;white-space:nowrap}
-/* 24주 = 막대가 촘촘하다 — 숫자 라벨을 접고 막대만 남겨 추이를 읽는다(값은 툴팁·읽기 라벨) */
-.yc-wchart{gap:2px;min-height:44px;padding-top:2px}
-.yc-wchart .ex-vbar{max-width:9px;opacity:.85}
-.yc-wchart .ex-vbar .n{display:none}
-.yc-wchart .ex-vbars{height:calc(100% - 14px);gap:1px}
-.yc-wchart .ex-vcol .l{font-size:9px;margin-top:3px}
-.yc-wchart .ex-vcol .l.hide{visibility:hidden}
-.yc-wchart .ex-vcol.now .ex-vbar{opacity:1}
-.yc-wchart .ex-vcol.now .l{color:var(--amber);font-weight:800;visibility:visible}
-/* 막대가 적어지는 짧은 월 구간에서는 굵게 그려 빈 공간을 남기지 않는다 */
-.yc-wchart.wide{gap:5px}
-.yc-wchart.wide .ex-vbar{max-width:18px}
-.yc-wchart.wide .ex-vcol .l{font-size:10px}
+/* ── 주 추이 선 그래프 ──
+   두 기간을 한 좌표축에 겹치고 아래에 차이(오른쪽−왼쪽) 막대를 둔다.
+   실제 픽셀을 재서 1:1 로 그리므로 SVG 안에는 좌표만 있고 색은 전부 아래 클래스가 준다.
+   그래서 다크 모드 토글이 재렌더 없이 그대로 따라온다. */
+.yc-lchart{flex:1 1 auto;min-height:84px;min-width:0}
+.yc-lchart>svg{display:block;width:100%;height:100%}
+.yc-gl{stroke:var(--gray-line);stroke-width:1;shape-rendering:crispEdges}
+.yc-gl.axis{stroke:var(--text-muted);opacity:.55}
+.yc-ax{fill:var(--text-muted);font-size:9.5px;font-variant-numeric:tabular-nums}
+.yc-ax.x{text-anchor:middle} .yc-ax.y{text-anchor:end}
+.yc-ax.now{fill:var(--amber);font-weight:800}
+.yc-ln{fill:none;stroke-linejoin:round;stroke-linecap:round}
+.yc-ln.l{stroke:var(--navy);stroke-width:1.6;stroke-dasharray:5 3}
+.yc-ln.r{stroke:var(--teal);stroke-width:2.2}
+.yc-ln.prog{stroke-dasharray:2 3;opacity:.75}      /* 진행 중인 주로 이어지는 마지막 구간 */
+.yc-dot{stroke-width:1.4}
+.yc-dot.l{fill:var(--navy);stroke:var(--surface)}
+.yc-dot.r{fill:var(--teal);stroke:var(--surface)}
+.yc-dot.part{fill:var(--surface)}                  /* 경계에서 잘린 부분 주 = 속 빈 점 */
+.yc-dot.l.part{stroke:var(--navy)} .yc-dot.r.part{stroke:var(--teal)}
+.yc-dot.now{fill:none;stroke:var(--amber);stroke-width:2}
+.yc-dbar.up{fill:var(--red)} .yc-dbar.down{fill:var(--green)}
+.yc-dbar.prog{fill:var(--amber)}
+.yc-dzero{stroke:var(--text-muted);stroke-width:1;opacity:.6;shape-rendering:crispEdges}
+.yc-band{fill:var(--gray-line);opacity:.16}
+body.dark .yc-band{opacity:.26}
+.yc-band-t{fill:var(--text-muted);font-size:9.5px;text-anchor:middle;opacity:.85}
+/* 히트 영역 — 커서를 올린 주만 가이드선과 점이 뜬다. 자바스크립트 이벤트가 없다. */
+.yc-hit>rect.hz{fill:transparent}
+.yc-hit .gd{stroke:var(--navy);stroke-width:1;opacity:0;shape-rendering:crispEdges}
+.yc-hit .hd{opacity:0}
+.yc-hit:hover .gd{opacity:.35} .yc-hit:hover .hd{opacity:1}
+/* 좌·우 요약 — 옛 패널 머리글·타일이 옮겨온 자리. 선 견본이 범례를 겸한다. */
+.yc-lsum{flex:0 0 auto;display:flex;flex-direction:column;gap:3px;min-width:0}
+.yc-lrow{display:grid;grid-template-columns:150px repeat(3,minmax(0,1fr));gap:5px;align-items:center;min-width:0}
+.yc-lrow.six{grid-template-columns:150px repeat(6,minmax(0,1fr))}
+.yc-lid{display:inline-flex;align-items:baseline;gap:5px;min-width:0}
+.yc-lid i{width:16px;height:0;flex:0 0 auto;align-self:center}
+.yc-lid.l i{border-top:2px dashed var(--navy)}
+.yc-lid.r i{border-top:3px solid var(--teal)}
+.yc-lid b{font-size:11.5px;font-weight:800;color:var(--navy);white-space:nowrap}
+.yc-lid>span{font-size:9.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums;min-width:0}
+.yc-lcell{border:1px solid var(--gray-line);border-radius:6px;background:var(--surface);padding:1px 6px;min-width:0;
+  display:flex;align-items:baseline;gap:5px}
+.yc-lcell span{font-size:9px;color:var(--text-muted);white-space:nowrap}
+.yc-lcell b{font-size:11.5px;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yc-seg{flex:0 0 auto}
+.yc-seg button{font-size:10.5px;padding:2px 9px}
 /* 12개월 = 월 합계만 위에 남기고 막대별 숫자는 접는다 */
 .yc-mchart{gap:4px;min-height:44px}
 .yc-mchart.wide{gap:10px}
@@ -602,9 +639,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-fs-close:hover{background:var(--gray-bg)}
 .yc-fs-card{flex:1 1 auto;min-height:0}
 /* 전체화면은 폭이 넉넉하다 — 막대를 굵히고 접어 두었던 숫자를 편다 */
-.yc-fs-card .yc-wchart .ex-vbar{max-width:15px}
-.yc-fs-card .yc-wchart.wide .ex-vbar{max-width:28px}
-.yc-fs-card .yc-wchart.wide .ex-vbar .n{display:block}
+.yc-fs-card .yc-lchart{min-height:220px}
 .yc-fs-card .yc-mchart .ex-mbar{max-width:22px}
 .yc-fs-card .yc-mchart.wide .ex-mbar{max-width:40px}
 .yc-fs-card .yc-mchart .ex-mbar .n{display:block}
@@ -618,7 +653,6 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-dcol.future b{color:var(--text-muted);font-weight:700}
 /* 전체화면은 칸 아래 줄이 합계를 지니므로 막대 위 합계는 접는다(같은 숫자를 두 번 적지 않는다) */
 .yc-fs-card .yc-mchart .ex-mtot{display:none}
-.yc-wchart .ex-vcol.future{opacity:.45}
 .yc-pstats.five{grid-template-columns:repeat(5,minmax(0,1fr))}
 .yc-pstat em{display:block;font-style:normal;font-size:9px;color:var(--text-muted);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -631,7 +665,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   .yc-fs-card .yc-grid{grid-template-columns:1fr;height:auto}
   .yc-fs-card .yc-body{height:auto}
   .yc-fs-card .yc-panel{overflow:visible;min-height:0}
-  .yc-fs-card .yc-wchart,.yc-fs-card .yc-mchart{height:170px;min-height:0}
+  .yc-fs-card .yc-lchart{height:230px}
+  .yc-fs-card .yc-mchart{height:170px;min-height:0}
   .yc-pstats.five{grid-template-columns:repeat(3,minmax(0,1fr))}
   .yc-fs-top{position:sticky;top:0;z-index:2;background:var(--gray-bg);padding-bottom:4px}
 }
@@ -987,6 +1022,14 @@ body.dark .nl-badge.need{background:#3A2023}body.dark .nl-badge.none{background:
   .yc-pstat b{font-size:11.5px}
   .yc-body{gap:5px}
   .yc-note{font-size:11px;line-height:1.45;padding-top:4px}
+  /* 요약 두 줄을 좌우로 나란히 놓아 한 줄 높이로 줄이고, 그만큼을 선 그래프에 넘긴다 */
+  .yc-lsum{flex-direction:row;gap:6px}
+  .yc-lsum>.yc-lrow{flex:1 1 0;min-width:0;gap:4px;grid-template-columns:118px repeat(3,minmax(0,1fr))}
+  .yc-lcell{padding:0 5px}
+  .yc-lcell b{font-size:10.5px}
+  .yc-lid b{font-size:11px}
+  .yc-seg button{padding:1px 8px}
+  .yc-body{gap:4px}
 }
 /* 좁은 보기 — 한 화면 고정을 풀고 세로 스크롤 레이아웃으로 바꾼다.
    body.ex-narrow 는 (뷰포트 ≤900px) 이거나 (Window/Mobile 토글이 Mobile) 일 때 붙는다.
@@ -1022,7 +1065,11 @@ body.ex-narrow .ex-msum{grid-template-columns:repeat(2,minmax(0,1fr))}
 body.ex-narrow .yc-grid{grid-template-columns:1fr;height:auto}
 body.ex-narrow .yc-body{height:auto}
 body.ex-narrow .yc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-body.ex-narrow .yc-wchart,body.ex-narrow .yc-mchart{height:132px;min-height:0}
+body.ex-narrow .yc-mchart{height:132px;min-height:0}
+/* 선 그래프는 부모 높이를 실측하므로 세로 스크롤 레이아웃에서 확정 높이가 필요하다 */
+body.ex-narrow .yc-lchart{height:200px;min-height:0}
+body.ex-narrow .yc-lrow,body.ex-narrow .yc-lrow.six{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.ex-narrow .yc-lid{grid-column:1/-1}
 body.ex-narrow .yc-panel{min-height:0}
 /* 좁은 화면에서는 구간 안내 문구를 버튼 줄 위로 올려 버튼이 글자 단위로 접히지 않게 한다 */
 body.ex-narrow .yc-nav{flex-wrap:wrap}
@@ -5776,9 +5823,6 @@ var EX_YC_LEFT=null, EX_YC_RIGHT=null;   /* 사용자가 고른 좌·우 연도 
 var EX_YC_MODE='aligned';                /* aligned = 동월·동일일, custom = 좌우 독립 기간 */
 var EX_YC_CUSTOM=null;                   /* {l:{from,to}, r:{from,to}} — YYYY-MM-DD */
 var EX_YC_ALIGN_FROM=[1,1], EX_YC_ALIGN_TO=null; /* 기본: 1/1~기준일, 왼쪽 입력 월·일을 오른쪽에 자동 복제 */
-var EX_YC_WEEKS=24;                      /* 주 비교 창 크기 */
-var EX_YC_START=null;                    /* 주 비교 창의 시작 주차 인덱스 (null = 최근 구간) */
-var EX_YC_WIN=null;                      /* 마지막으로 그린 주 구간 — 이동 버튼이 다시 집계하지 않도록 */
 var YC_DAY=86400000;
 
 /* 고를 수 있는 연도 — 실제 보고 대상 기록이 있는 해만 담는다.
@@ -6025,98 +6069,253 @@ function ycBarHtml_(ys, periods, pfx){
 }
 
 /* ── 카드 1: 기간별 서비스 추이 (카드 최대 24주 · 전체화면은 전 기간) ── */
-function ycWeekChart_(ws, mx, full, side, other){
-  /* 월 구간을 좁혀 막대가 적어지면 굵게 그리고 날짜도 매주 적는다 (전체화면은 폭이 넓어 기준을 올린다) */
-  var wide=ws.length<=(full?26:13);
-  var every=full?2:4;                        /* 날짜 라벨 간격 — 전체화면은 촘촘히 적어도 읽힌다 */
-  /* 칸이 촘촘하면(연간 53주 등) 칸마다 숫자를 적어도 겹쳐서 못 읽는다 — 굵게 그릴 때만 적는다.
-     %까지 넣을 수 있는 폭은 그보다 더 여유로울 때(10주 이하)로 한 번 더 좁힌다.
-     생략된 %는 막대·등락에 커서를 올리면 툴팁으로 볼 수 있다. */
-  var foot=!!(full && wide), footPct=(ws.length<=10);
-  return '<div class="ex-vchart yc-wchart'+(wide?' wide':'')+(full?' full':'')+'">'+ws.map(function(w,idx){
-    var ah=w.as?Math.max(3,Math.round(w.as/mx*100)):0;
-    var ih=w.insp?Math.max(3,Math.round(w.insp/mx*100)):0;
-    var prev=(other&&other[idx])?other[idx].n:null;
-    var lb=w.y+'년 '+(w.i+1)+'주차 '+ycMD_(w.mon)+'~'+ycMD_(w.to)
-      +' · A/S '+w.as+'건 · 점검 '+w.insp+'건 · 합계 '+w.n+'건'+(w.cur?' (진행 중)':'')
-      +(prev!=null?' · 상대 연도 같은 주차 '+prev+'건':'');
-    return '<div class="ex-vcol'+(w.cur?' now':'')+(w.future?' future':'')+'" role="img"'
-      +' title="'+escAttr(lb)+'" aria-label="'+escAttr(lb)+'">'
-      +'<div class="ex-vbars">'
-        +'<div class="ex-vbar as"><div class="n">'+w.as+'</div><div class="b'+(w.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
-        +'<div class="ex-vbar insp"><div class="n">'+w.insp+'</div><div class="b'+(w.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
-      +'</div>'
-      +'<div class="l'+((wide||idx%every===0||w.cur)?'':' hide')+'">'+(w.mon.getMonth()+1)+'/'+w.mon.getDate()+'</div>'
-      +(foot ? ycSlotFoot_(side, w, prev, footPct) : '')
-    +'</div>';
-  }).join('')+'</div>';
+/* ══════════════ 주 추이 — 겹친 선 그래프 ══════════════
+   좌우 두 패널에 묶음 막대를 나눠 그리면, 53주에서 막대가 200개를 넘고 폭이 6~9px가 된다.
+   같은 주차를 비교하려면 화면을 좌우로 왕복해야 해서 비교 차트인데 비교가 안 됐다.
+   → 한 좌표축에 두 기간을 선으로 겹치고, 아래에 차이(오른쪽−왼쪽) 막대를 붙인다.
+
+   SVG는 이 파일에서 여기서만 쓴다. 도입 범위를 좁히기 위해:
+     · 색은 전부 CSS 클래스가 준다 — stroke="var(--x)" 는 동작하지 않고,
+       클래스로 칠해야 body.dark 토큰 교체를 재렌더 없이 따라간다.
+     · id·<defs>·<pattern> 을 쓰지 않는다 — 카드와 전체화면에 SVG가 동시에 2개 존재해 id가 충돌한다.
+     · hover 는 CSS :hover 로만 — <g> 안에 투명 rect·가이드선·강조점을 묶어 한꺼번에 켠다.
+       자바스크립트 이벤트 핸들러가 0개다(이 파일의 다른 차트와 같은 원칙).
+     · 크기는 ResizeObserver 로 실제 px 를 재서 1:1 로 그린다. 고정 뷰박스 + preserveAspectRatio
+       로는 "주당 몇 px 인지"를 알 수 없어 카드(1100px)와 좁은 화면(340px)이 같은 라벨 밀도가 된다. */
+var EX_YC_METRIC='all';                  /* 'all' | 'as' | 'insp' — 한 번에 한 지표만 그린다(선이 4개가 되지 않도록) */
+var EX_YC_PLOTS={};                      /* {hostId: spec} — 측정 후 다시 그릴 때 쓴다. id는 2개뿐이라 누적되지 않는다 */
+var EX_YC_RO=null;                       /* 공유 ResizeObserver */
+function ycMetricVal_(t){ return EX_YC_METRIC==='as' ? t.as : EX_YC_METRIC==='insp' ? t.insp : t.n; }
+function ycMetricLabel_(){ return EX_YC_METRIC==='as' ? 'A/S(VOC)' : EX_YC_METRIC==='insp' ? '점검' : '전체 처리'; }
+/* 눈금은 1·2·2.5·5·10 계열로 올린다. 건수라 정수 눈금만 쓴다. */
+function ycNice_(v, ticks){
+  if(!(v>0)) return {max:1, step:1};
+  var raw=v/ticks, p=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10)), n=raw/p;
+  var step=Math.max(1, Math.ceil((n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p));
+  return {max:step*ticks, step:step};
 }
-function ycWeekPanel_(side, D, ws, mx, full, other){
-  var s=ycSum_(ws), avg=ws.length? s.n/ws.length : 0;
-  var from=ws.length?(ws[0].viewFrom||ws[0].mon):null, to=ws.length?(ws[ws.length-1].viewTo||ws[ws.length-1].to):null;
-  /* 1주차는 전해 12월에서, 마지막 주는 다음 해 1월로 넘어갈 수 있다 —
-     그때만 연도를 덧붙여 앞뒤 날짜가 뒤집힌 것처럼 보이지 않게 한다 */
-  var md_=function(d){ return d ? ycMD_(d)+(d.getFullYear()!==D.y?'('+d.getFullYear()+')':'') : ''; };
-  /* 전체화면은 자리가 넉넉하므로 A/S 비율·최다 주 같은 세부 지표를 함께 싣는다 */
-  var extra='';
-  if(full){
-    var peak=ycPeakOf_(ws, function(t){ return ycMD_(t.mon)+' 주'; });
-    extra=ycPStat_('A/S 비율', (s.n?Math.round(s.as/s.n*100):0)+'%', '점검 '+(s.n?100-Math.round(s.as/s.n*100):0)+'%')
-      +ycPStat_('최다 주', peak.v, peak.s);
+/* 잘린 주(첫·마지막)는 며칠짜리인가 — 선에서는 부분 주가 진짜 급락처럼 보이므로 표시가 필요하다 */
+function ycPartialDays_(w){
+  var a=w.viewFrom||w.mon, b=w.viewTo||w.to;
+  return Math.round((new Date(b.getFullYear(),b.getMonth(),b.getDate())
+                    -new Date(a.getFullYear(),a.getMonth(),a.getDate()))/YC_DAY)+1;
+}
+/* null 을 만나면 선을 끊는다 — 아직 오지 않은 주를 0으로 이으면 급락으로 읽힌다 */
+function ycLinePath_(pts){
+  var d='', up=true;
+  pts.forEach(function(p){
+    if(!p){ up=true; return; }
+    d+=(up?'M':'L')+p.x.toFixed(1)+' '+p.y.toFixed(1); up=false;
+  });
+  return d;
+}
+function ycLineGeom_(W,H,N,full){
+  var GUT=full?34:26, XLB=full?15:12, PADT=6, PADR=8, GAPB=6;
+  var avail=H-PADT-XLB;
+  var deltaH=Math.max(22, Math.min(Math.round(avail*0.30), full?110:46));
+  var lineH=avail-deltaH-GAPB;
+  if(lineH<38){ deltaH=0; lineH=avail; }          /* 선조차 못 그릴 만큼 좁을 때만 델타 밴드를 접는다 */
+  var plotL=GUT, plotR=W-PADR, band=(plotR-plotL)/Math.max(1,N);
+  return {GUT:GUT, XLB:XLB, PADT:PADT, plotL:plotL, plotR:plotR, band:band,
+    lineTop:PADT, lineBot:PADT+lineH, deltaTop:PADT+lineH+GAPB, deltaH:deltaH,
+    xLabY:H-3, ticks:lineH>=140?4:lineH>=90?3:2,
+    xStep:Math.max(1, Math.ceil(N/Math.max(1, Math.floor((plotR-plotL)/(full?52:40))))),
+    showDot:band>=13, barW:Math.max(2, Math.min(band*0.62, full?16:10)),
+    cx:function(i){ return plotL+band*(i+0.5); }};
+}
+/* 주차 하나의 툴팁·읽기 문장 — 양쪽 연도의 실제 날짜·건수·차이를 한 문장에 담는다 */
+function ycWeekTip_(i, lw, rw, ys){
+  var part=function(w,y){
+    if(!w) return y+'년 없음';
+    var d=ycPartialDays_(w), rg=ycMD_(w.viewFrom||w.mon)+'~'+ycMD_(w.viewTo||w.to);
+    return y+'년 '+rg+' '+ycMetricVal_(w)+'건'
+      +(w.future?' (미도래)':(w.cur?' (진행 중)':(d<7?' (부분 주 '+d+'일)':'')));
+  };
+  var t=(i+1)+'주차 · '+part(lw,ys.l)+' · '+part(rw,ys.r);
+  if(lw&&rw&&!lw.future&&!rw.future){
+    if(rw.cur||lw.cur) t+=' · 진행 중이라 아직 견줄 수 없음';
+    else{
+      var a=ycMetricVal_(lw), b=ycMetricVal_(rw), d=b-a;
+      t+=' · '+(d>0?exNum(d)+'건 증가':d<0?exNum(-d)+'건 감소':'동일')
+        +(d&&a>0?' ('+(d>0?'+':'−')+Math.round(Math.abs(d)/a*100)+'%)':'');
+    }
   }
-  return '<div class="yc-panel '+side+'">'
-    +'<div class="yc-phead"><b>'+D.y+'년</b>'
-      +'<span>'+(from?md_(from)+'~'+md_(to)+' · '+ws.length+'주':'구간 없음')+'</span>'
-      +'<i>'+exNum(s.n)+'건</i></div>'
-    +'<div class="yc-pstats'+(full?' five':'')+'">'
-      +ycPStat_('A/S', exNum(s.as)+'건')
-      +ycPStat_('점검', exNum(s.insp)+'건')
-      +ycPStat_('주평균', avg.toFixed(1)+'건')
-      +extra
-    +'</div>'
-    +ycWeekChart_(ws, mx, full, side, other)
-  +'</div>';
+  return t;
+}
+/* 실측 크기로 SVG 문자열을 만든다 — 좌표만 넣고 색은 전부 CSS 클래스가 준다 */
+function ycLineSvg_(spec, W, H){
+  var ls=spec.ls, rs=spec.rs, ys=spec.ys, full=spec.full;
+  var N=Math.max(ls.length, rs.length);
+  if(!N || W<40 || H<40) return '';
+  var g=ycLineGeom_(W,H,N,full);
+  /* y 최댓값 — 두 계열의 선택 지표 최댓값 */
+  var top=0;
+  ls.concat(rs).forEach(function(w){ if(!w.future) top=Math.max(top, ycMetricVal_(w)); });
+  var ny=ycNice_(top, g.ticks), sy=function(v){
+    return g.lineBot-(v/ny.max)*(g.lineBot-g.lineTop);
+  };
+  var o='', i, lw, rw;
+  /* 격자 + y 눈금 */
+  for(i=0;i<=g.ticks;i++){
+    var v=ny.step*i, y=sy(v);
+    o+='<line class="yc-gl'+(i?'':' axis')+'" x1="'+g.plotL+'" y1="'+y.toFixed(1)+'" x2="'+g.plotR+'" y2="'+y.toFixed(1)+'"/>'
+      +'<text class="yc-ax y" x="'+(g.plotL-4)+'" y="'+(y+3.4).toFixed(1)+'">'+exNum(v)+'</text>';
+  }
+  /* 비교 구간 밖 — 좌우 길이가 다르면 짧은 쪽이 끝난 뒤는 차이를 낼 수 없다 */
+  var both=Math.min(ls.length, rs.length);
+  if(both<N){
+    var bx=g.cx(both)-g.band/2;
+    o+='<rect class="yc-band" x="'+bx.toFixed(1)+'" y="'+g.lineTop+'" width="'+(g.plotR-bx).toFixed(1)
+      +'" height="'+(g.lineBot-g.lineTop).toFixed(1)+'"/>'
+      +'<text class="yc-band-t" x="'+((bx+g.plotR)/2).toFixed(1)+'" y="'+((g.lineTop+g.lineBot)/2).toFixed(1)+'">비교 구간 밖</text>';
+  }
+  /* 선 — 왼쪽(파선)을 먼저 그려 오른쪽(실선)이 위에 오게 한다.
+     미도래 주는 점을 만들지 않아 선이 끊긴다. 과거의 실제 0건은 0으로 잇는다(정보이므로). */
+  ['l','r'].forEach(function(side){
+    var arr=side==='l'?ls:rs, pts=[], tail=null, prev=null;
+    arr.forEach(function(w,idx){
+      if(w.future){ pts.push(null); prev=null; return; }
+      var pt={x:g.cx(idx), y:sy(ycMetricVal_(w))};
+      if(w.cur && prev){ tail='M'+prev.x.toFixed(1)+' '+prev.y.toFixed(1)+'L'+pt.x.toFixed(1)+' '+pt.y.toFixed(1); pts.push(null); }
+      else pts.push(pt);
+      prev=pt;
+    });
+    var d=ycLinePath_(pts);
+    if(d) o+='<path class="yc-ln '+side+'" d="'+d+'"/>';
+    if(tail) o+='<path class="yc-ln '+side+' prog" d="'+tail+'"/>';
+  });
+  /* 델타 밴드 — 오른쪽 − 왼쪽. 양쪽 다 값이 있고 진행 중이 아닌 주만. */
+  if(g.deltaH){
+    var dmax=1;
+    for(i=0;i<both;i++){
+      lw=ls[i]; rw=rs[i];
+      if(lw&&rw&&!lw.future&&!rw.future&&!lw.cur&&!rw.cur)
+        dmax=Math.max(dmax, Math.abs(ycMetricVal_(rw)-ycMetricVal_(lw)));
+    }
+    var nd=ycNice_(dmax,1), zero=g.deltaTop+g.deltaH/2, half=g.deltaH/2-2;
+    o+='<line class="yc-dzero" x1="'+g.plotL+'" y1="'+zero.toFixed(1)+'" x2="'+g.plotR+'" y2="'+zero.toFixed(1)+'"/>'
+      +'<text class="yc-ax y" x="'+(g.plotL-4)+'" y="'+(g.deltaTop+8).toFixed(1)+'">+'+exNum(nd.max)+'</text>'
+      +'<text class="yc-ax y" x="'+(g.plotL-4)+'" y="'+(g.deltaTop+g.deltaH).toFixed(1)+'">−'+exNum(nd.max)+'</text>';
+    for(i=0;i<N;i++){
+      lw=ls[i]; rw=rs[i];
+      if(!lw||!rw||lw.future||rw.future) continue;
+      var x=(g.cx(i)-g.barW/2).toFixed(1);
+      if(lw.cur||rw.cur){                       /* 진행 중 = 아직 견줄 수 없다. 납작한 표식만 둔다 */
+        o+='<rect class="yc-dbar prog" x="'+x+'" y="'+(zero-1.5).toFixed(1)+'" width="'+g.barW.toFixed(1)+'" height="3"/>';
+        continue;
+      }
+      var dv=ycMetricVal_(rw)-ycMetricVal_(lw); if(!dv) continue;
+      var h=Math.max(1, Math.abs(dv)/nd.max*half);
+      o+='<rect class="yc-dbar '+(dv>0?'up':'down')+'" x="'+x+'" y="'+(dv>0?zero-h:zero).toFixed(1)
+        +'" width="'+g.barW.toFixed(1)+'" height="'+h.toFixed(1)+'"/>';
+    }
+  }
+  /* x 라벨 — 오른쪽 기간 날짜를 쓰되 없으면 왼쪽 것으로 */
+  for(i=0;i<N;i+=g.xStep){
+    var w=rs[i]||ls[i]; if(!w) continue;
+    o+='<text class="yc-ax x'+(w.cur?' now':'')+'" x="'+g.cx(i).toFixed(1)+'" y="'+g.xLabY+'">'
+      +(w.mon.getMonth()+1)+'/'+w.mon.getDate()+'</text>';
+  }
+  /* 주차별 히트 영역 — 맨 위에 깔아 어디에 올려도 잡힌다. :hover 로 가이드선·강조점이 함께 켜진다. */
+  for(i=0;i<N;i++){
+    lw=ls[i]; rw=rs[i];
+    var tip=ycWeekTip_(i, lw, rw, ys), cx=g.cx(i);
+    o+='<g class="yc-hit" role="img" aria-label="'+escAttr(tip)+'"><title>'+esc(tip)+'</title>'
+      +'<rect class="hz" x="'+(cx-g.band/2).toFixed(1)+'" y="'+g.lineTop+'" width="'+g.band.toFixed(1)
+        +'" height="'+(H-g.lineTop-2).toFixed(1)+'"/>'
+      +'<line class="gd" x1="'+cx.toFixed(1)+'" y1="'+g.lineTop+'" x2="'+cx.toFixed(1)+'" y2="'+g.lineBot.toFixed(1)+'"/>';
+    ['l','r'].forEach(function(side){
+      var w=side==='l'?lw:rw; if(!w||w.future) return;
+      var part=ycPartialDays_(w)<7;
+      o+='<circle class="hd yc-dot '+side+(part?' part':'')+(w.cur?' now':'')+'" cx="'+cx.toFixed(1)
+        +'" cy="'+sy(ycMetricVal_(w)).toFixed(1)+'" r="'+(side==='r'?3.4:3)+'"/>';
+    });
+    o+='</g>';
+  }
+  /* 밀도가 넉넉하면 점을 상시 표시한다 */
+  if(g.showDot){
+    ['l','r'].forEach(function(side){
+      var arr=side==='l'?ls:rs;
+      arr.forEach(function(w,idx){
+        if(w.future) return;
+        var part=ycPartialDays_(w)<7;
+        o+='<circle class="yc-dot '+side+(part?' part':'')+(w.cur?' now':'')+'" cx="'+g.cx(idx).toFixed(1)
+          +'" cy="'+sy(ycMetricVal_(w)).toFixed(1)+'" r="'+(side==='r'?3:2.6)+'"/>';
+      });
+    });
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="group" aria-label="'
+    +escAttr(ys.l+'년과 '+ys.r+'년 주별 '+ycMetricLabel_()+' 추이 · '+N+'주 · 아래 막대는 '+ys.r+'년에서 '+ys.l+'년을 뺀 차이')
+    +'">'+o+'</svg>';
+}
+/* 실측 → 다시 그리기. 보이지 않는 동안(모달 닫힘)에는 0×0 이라 건너뛰고,
+   ResizeObserver 가 보이게 되는 순간 다시 쏘므로 저절로 채워진다. */
+function ycRegisterPlot_(id, spec){ EX_YC_PLOTS[id]=spec; }
+function ycPaintPlots_(){
+  Object.keys(EX_YC_PLOTS).forEach(function(id){
+    var el=document.getElementById(id); if(!el){ delete EX_YC_PLOTS[id]; return; }
+    var spec=EX_YC_PLOTS[id], w=Math.round(el.clientWidth), h=Math.round(el.clientHeight);
+    if(w<40||h<40) return;
+    if(spec._w===w && spec._h===h && el.firstChild) return;   /* 같은 크기면 다시 그리지 않는다 */
+    spec._w=w; spec._h=h;
+    el.innerHTML=ycLineSvg_(spec, w, h);
+    if(!EX_YC_RO && window.ResizeObserver){
+      EX_YC_RO=new ResizeObserver(function(){
+        if(EX_YC_RO._t) return;
+        EX_YC_RO._t=requestAnimationFrame(function(){ EX_YC_RO._t=0; ycPaintPlots_(); });
+      });
+    }
+    if(EX_YC_RO) EX_YC_RO.observe(el);
+  });
+}
+if(!window.ResizeObserver) window.addEventListener('resize', ycPaintPlots_);
+/* 좌·우 요약 — 옛 패널 머리글(.yc-phead)과 타일(.yc-pstats)이 옮겨온 자리.
+   선 견본이 범례를 겸해서 별도 범례 줄이 필요 없다. */
+function ycLineSumRow_(side, D, ws, ys, full){
+  var s=ycSum_(ws), done=ws.filter(function(w){ return !w.future; });
+  var avg=done.length? s.n/done.length : 0;
+  var from=ws.length?(ws[0].viewFrom||ws[0].mon):null, to=ws.length?(ws[ws.length-1].viewTo||ws[ws.length-1].to):null;
+  var md_=function(d){ return d ? ycMD_(d)+(d.getFullYear()!==D.y?'('+d.getFullYear()+')':'') : ''; };
+  var cell=function(lb,v){ return '<span class="yc-lcell"><span>'+esc(lb)+'</span><b>'+v+'</b></span>'; };
+  var o=cell('합계', exNum(s.n)+'건')+cell('A/S', exNum(s.as)+'건')+cell('점검', exNum(s.insp)+'건');
+  if(full){
+    var peak=ycPeakOf_(done, function(t){ return ycMD_(t.mon)+' 주'; });
+    o+=cell('주평균', avg.toFixed(1)+'건')
+      +cell('A/S 비율', (s.n?Math.round(s.as/s.n*100):0)+'%')
+      +cell('최다 주', peak.v);
+  }
+  return '<div class="yc-lrow'+(full?' six':'')+'">'
+    +'<span class="yc-lid '+side+'"><i></i><b>'+D.y+'년</b>'
+      +'<span>'+(from?md_(from)+'~'+md_(to)+' · '+ws.length+'주':'구간 없음')+'</span></span>'
+    +o+'</div>';
 }
 /* 카드와 전체화면이 같은 내용을 쓴다 — 제목·기준·본문을 한 곳에서 만들고 그릴 자리만 다르게 한다 */
 function ycWeekCardParts_(ys, L, R, full){
-  var direct=L.mode==='custom', ls, rs, win=null, lbTxt, navBtns='';
-  if(direct){
-    ls=full?L.weeks:L.weeks.slice(0,EX_YC_WEEKS);
-    rs=full?R.weeks:R.weeks.slice(0,EX_YC_WEEKS);
-    EX_YC_WIN=null;
-    lbTxt=(full?'선택 기간 전체':'각 기간 시작부터 최대 '+EX_YC_WEEKS+'주')+' · 직접 지정 기간은 각 시작일을 1주차로 비교합니다';
-  }else{
-    var len=Math.min(L.weeks.length,R.weeks.length), n=full?len:Math.min(EX_YC_WEEKS,len), maxStart=Math.max(0,len-n);
-    var start=full?0:(EX_YC_START==null?maxStart:Math.max(0,Math.min(maxStart,EX_YC_START)));
-    win={start:start,n:n,minStart:0,maxStart:maxStart,len:len,span:len,paged:!full&&len>n};
-    if(!full) EX_YC_WIN=win;
-    ls=L.weeks.slice(start,start+n); rs=R.weeks.slice(start,start+n);
-    lbTxt=(full?'선택 구간 전체 ':'표시 구간 ')+(start+1)+'~'+(start+n)+'주차 · 동월·동일일을 같은 주차로 맞춥니다';
-    if(win.paged){
-      navBtns='<button type="button" onclick="ycJumpWeeks(\'start\')"'+(start<=0?' disabled':'')+'>구간 처음</button>'
-        +'<button type="button" onclick="ycShiftWeeks(-4)"'+(start<=0?' disabled':'')+'>◀ 이전 4주</button>'
-        +'<button type="button" onclick="ycShiftWeeks(4)"'+(start>=maxStart?' disabled':'')+'>다음 4주 ▶</button>'
-        +'<button type="button" onclick="ycResetWeeks()">최근</button>';
-    }
-  }
-  var mx=Math.max.apply(null, ls.concat(rs).reduce(function(a,w){ return a.concat([w.as,w.insp]); },[1]));
-  /* 칸마다 등락을 적을 수 있는지(26주 이하)를 안내해 "왜 안 보이지"를 없앤다 */
-  if(full) lbTxt+= (Math.max(ls.length,rs.length)<=26)
-    ? ' · 칸 아래 = 주 합계와 상대 연도 대비 등락'
-    : ' · 칸이 촘촘해 등락은 생략 · 막대에 커서를 올리면 상세';
-  var nav='<div class="yc-nav">'
-    +'<span class="lb">'+esc(lbTxt)+'</span>'
-    +'<span class="yc-legend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></span>'
-    +navBtns
-  +'</div>';
+  var ls=L.weeks, rs=R.weeks, N=Math.max(ls.length, rs.length);
+  var host=full?'ycLineFs':'ycLineCard';
+  var lbTxt=(L.mode==='custom')
+    ? '선택 기간 전체 · 직접 지정 기간은 각 시작일을 1주차로 비교합니다'
+    : '선택 기간 전체 · 동월·동일일을 같은 주차로 맞춥니다';
+  if(ls.length!==rs.length)
+    lbTxt+=' · 겹치는 '+Math.min(ls.length,rs.length)+'주만 차이를 계산합니다';
+  lbTxt+=' · 아래 막대 = '+ys.r+'년 − '+ys.l+'년';
+  var seg=['all','전체','as','A/S','insp','점검'], segHtml='';
+  for(var i=0;i<seg.length;i+=2)
+    segHtml+='<button type="button"'+(EX_YC_METRIC===seg[i]?' class="on"':'')
+      +' onclick="ycSetMetric(\''+seg[i]+'\')">'+seg[i+1]+'</button>';
+  ycRegisterPlot_(host, {ls:ls, rs:rs, ys:ys, full:full});
   return {
-    title:'기간별 서비스 추이 · 최대 '+Math.max(ls.length,rs.length)+'주 비교',
-    basis:ycSideRangeTxt_(L.range)+' ↔ '+ycSideRangeTxt_(R.range)+' · 주 단위(월~일) · 좌우 같은 눈금',
+    title:'기간별 서비스 추이 · '+N+'주 · '+ycMetricLabel_(),
+    basis:ycSideRangeTxt_(L.range)+' ↔ '+ycSideRangeTxt_(R.range)+' · 주 단위(월~일) · 한 눈금에 겹쳐 비교',
     body:'<div class="ex-cbody"><div class="yc-body">'
-      +nav
-      +'<div class="yc-grid">'+ycWeekPanel_('l',L,ls,mx,full,rs)+ycWeekPanel_('r',R,rs,mx,full,ls)+'</div>'
-      +'<div class="yc-note">'+ycCmpSentence_(ys, ycSum_(ls), ycSum_(rs),
-          full?'선택 기간 전체':'현재 표시 주차')+'</div>'
+      +'<div class="yc-lsum">'
+        +ycLineSumRow_('l',L,ls,ys,full)
+        +ycLineSumRow_('r',R,rs,ys,full)
+      +'</div>'
+      +'<div class="yc-nav"><span class="lb">'+esc(lbTxt)+'</span>'
+        +'<div class="ex-seg yc-seg">'+segHtml+'</div></div>'
+      +'<div class="yc-lchart" id="'+host+'"></div>'
+      +'<div class="yc-note">'+ycCmpSentence_(ys, ycSum_(ls), ycSum_(rs), '선택 기간 전체')+'</div>'
     +'</div></div>'
   };
 }
@@ -6124,6 +6323,7 @@ function ycRenderWeekCard_(ys, L, R){
   var p=ycWeekCardParts_(ys, L, R, false);
   document.getElementById('exYcWeekCard').innerHTML=
     exH3(p.title, p.basis, false, ycFullBtn_('week'))+p.body;
+  ycPaintPlots_();                       /* innerHTML 로 새로 생긴 host 를 실측해 그린다 */
 }
 
 /* ── 카드 2: 월별 A/S·점검 처리 추이 (12개월) ── */
@@ -6223,16 +6423,18 @@ function ycRenderFull_(ys, L, R){
   document.getElementById('ycFsTitle').textContent=p.title;
   document.getElementById('ycFsBar').innerHTML=ycBarHtml_(ys,ycPeriods_(ys),'Fs');
   document.getElementById('ycFsCard').innerHTML=exH3(p.title, p.basis)+p.body;
+  ycPaintPlots_();
 }
 function openYcFull(kind){
   EX_YC_FS=(kind==='month')?'month':'week';
+  /* 모달이 display:none 인 채로 그리면 선 그래프 실측이 0×0 이 된다 — 먼저 띄우고 그린다 */
+  document.getElementById('ycFsModal').classList.add('show');
   var ys=ycYears_(), periods=ycPeriods_(ys);
   ycRenderFull_(ys,ycPeriodData_(ys.l,periods.l,periods.mode),ycPeriodData_(ys.r,periods.r,periods.mode));
-  document.getElementById('ycFsModal').classList.add('show');
 }
 function closeYcFull(){
   if(!EX_YC_FS) return;
-  EX_YC_FS=null;
+  EX_YC_FS=null; delete EX_YC_PLOTS.ycLineFs;
   document.getElementById('ycFsModal').classList.remove('show');
 }
 document.addEventListener('keydown', function(e){
@@ -6247,12 +6449,11 @@ function ycSetYear(side, v){
     var ys=ycYears_(); ycEnsureCustom_(ys);
     EX_YC_CUSTOM[side]=ycDefaultSideRange_(y,side);
   }
-  EX_YC_START=null;
   ycRedraw_();
 }
 function ycSetMode(mode){
   if(mode!=='aligned'&&mode!=='custom') return;
-  EX_YC_MODE=mode; EX_YC_START=null;
+  EX_YC_MODE=mode;
   if(mode==='custom') ycEnsureCustom_(ycYears_());
   ycRedraw_();
 }
@@ -6262,7 +6463,7 @@ function ycSetCustomDate(side, edge, value){
   if(d.getFullYear()!==y) return;
   var c=ycEnsureCustom_(ys)[side]; c[edge]=value;
   if(c.from>c.to){ if(edge==='from') c.to=value; else c.from=value; }
-  EX_YC_START=null; ycRedraw_();
+  ycRedraw_();
 }
 function ycSetAlignedDate(edge,value){
   if((edge!=='from'&&edge!=='to')||!ycDate_(value)) return;
@@ -6274,20 +6475,14 @@ function ycSetAlignedDate(edge,value){
   if(ycMdCmp_(a.from,a.to)>0){
     if(edge==='from') EX_YC_ALIGN_TO=md.slice(); else EX_YC_ALIGN_FROM=md.slice();
   }
-  EX_YC_START=null; ycRedraw_();
-}
-function ycResetAligned(){ EX_YC_ALIGN_FROM=[1,1]; EX_YC_ALIGN_TO=null; EX_YC_START=null; ycRedraw_(); }
-function ycShiftWeeks(d){
-  var w=EX_YC_WIN; if(!w) return;
-  EX_YC_START=Math.max(w.minStart, Math.min(w.maxStart, w.start+d));
   ycRedraw_();
 }
-function ycJumpWeeks(where){
-  var w=EX_YC_WIN; if(!w) return;
-  EX_YC_START=(where==='start') ? w.minStart : w.maxStart;
-  ycRedraw_();
+function ycResetAligned(){ EX_YC_ALIGN_FROM=[1,1]; EX_YC_ALIGN_TO=null; ycRedraw_(); }
+/* 지표 토글 — 선이 4개가 되지 않도록 한 번에 한 지표만 그린다 */
+function ycSetMetric(v){
+  if(['all','as','insp'].indexOf(v)<0 || v===EX_YC_METRIC) return;
+  EX_YC_METRIC=v; ycRedraw_();
 }
-function ycResetWeeks(){ EX_YC_START=null; ycRedraw_(); }
 
 /* 집계 캐시를 버리고 보고 모드만 다시 그린다 (필터 변경이 아닌 데이터 보강용) */
 function exInvalidate(){
