@@ -1741,17 +1741,36 @@ function isNcareVisit(r){
 /* N-Care 상태 색/이름 — 상세 분석 모드와 보고 모드가 공유.
    구간(30/60/90일)은 그대로 두고 표시 명칭만 중립적으로 바꿨다. */
 var NCK_ST=[['최근 점검 완료','var(--green)'],['점검 예정','var(--amber)'],['점검 필요','#E67E22'],['우선 점검','var(--red)'],['점검 기록 없음','#6B7A99']];
-/* 오늘 기준 N-Care 정기점검 상태 집계 (기간 필터와 무관 — 두 모드가 같은 함수를 쓴다) */
+/* ── 운영률 기준일 ──
+   보고 기간이 지난주인데 운영률만 오늘 값이면 한 화면 안에서 기준일이 둘로 갈린다.
+   기준일 = 선택 기간의 끝. 단 미래로는 가지 않는다.
+     · 최근 완료 주간·지난주 → 기간 끝이 곧 금요일이다(프리셋이 월~금이라 따로 계산할 것이 없다)
+     · 이번 주·이번 달      → 기간 끝이 미래라 오늘로 잘린다
+     · 전체 기간            → 오늘
+   exBaseDate() 가 이미 "F.to 또는 오늘"이므로 오늘로 클램프만 한다. */
+function ncareAsOf_(){ var t=exToday(), b=exBaseDate(); return b>t ? t : b; }
+/* 카드·PPT·모달이 같은 문구를 쓴다 — 기준일이 오늘이 아니면 날짜를 밝힌다 */
+function ncareAsOfLabel_(){
+  var a=ncareAsOf_();
+  return a.getTime()===exToday().getTime() ? '오늘 현황'
+       : (a.getMonth()+1)+'.'+a.getDate()+' 기준';
+}
+/* 기준일 시점의 N-Care 정기점검 상태 집계 (기간 끝을 따라간다 — 두 모드가 같은 함수를 쓴다) */
 function buildNcareStatus(){
-  var today=new Date(); today.setHours(0,0,0,0);
+  var today=ncareAsOf_();
   /* 마지막 점검일 = 병원별 마지막 방문일 (데모 운영 기록 제외) · 기록의 ncare 도 확보 */
   var visit={}, seenNc={};
   RAW.forEach(function(r){
     if(!isNcareVisit(r)) return;
     var d=rowDate(r), k=nkey(r.hosp), nc=String(r.ncare||'').trim();
-    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:nc};
-    /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다 */
+    /* 가입 병원 모집단 보조용 — 병원정보DB가 없을 때만 쓴다.
+       분모(가입 명단)는 시점 보정을 하지 않으므로 기준일 컷오프보다 먼저 모은다. */
     if(nc && !/미가입/.test(nc)) seenNc[k]={name:r.hosp, ncare:nc};
+    /* 기준일 이후 방문은 그 시점 현황을 바꾸지 못한다 — 지난주를 보는데 이번 주 방문이
+       과거 운영률을 올려 주면 "그때 어땠나"를 물은 답이 아니게 된다.
+       (④ 누수 분석의 "종료일 이후 평가는 과거 상태를 바꾸지 않는다"와 같은 원칙) */
+    if(!d || d>today) return;
+    if(!visit[k] || d>visit[k].last) visit[k]={last:d, name:r.hosp, ncare:nc};
   });
   /* 가입 병원 모집단: 병원정보DB 우선, 없으면 기록 기반.
      병원정보DB에는 데모가 등재되지 않으므로 여기서 데모를 따로 거를 필요가 없다.
@@ -1792,7 +1811,8 @@ function ncareCheck(){
     el.innerHTML='<div class="empty">N-Care 가입 병원 기록 없음</div>'; return;
   }
   document.getElementById('tNck').textContent=
-    '가입 병원 '+list.length+' · 정상 '+rate+'%'+(HOSPDB.length?' · 병원정보DB 연동':'');
+    '가입 병원 '+list.length+' · 정상 '+rate+'% · '+ncareAsOfLabel_()
+    +(HOSPDB.length?' · 병원정보DB 연동':'');
   el.innerHTML=
     '<div class="nck-rate">'
       +'<div class="nck-rate-top"><b>✅ 정상 비율 '+rate+'%</b>'
@@ -2122,6 +2142,9 @@ function apply(){
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
   /* 보고 모드는 보고 범위 선택을 따르지 않으므로 활성 필터 수에서도 뺀다(숨은 필터 오해 방지) */
   syncExecFilterUI(EX_ROWS.length, n-F.scope.length);
+  /* N-Care 운영률은 기간 끝을 기준일로 쓰므로 기간이 바뀌면 다시 계산해야 한다.
+     상세 분석 모드 카드는 boot()·병원DB 로드에서만 그려져 그대로 두면 옛 기준일이 남는다. */
+  if(DATA_READY) ncareCheck();
   if(VIEW==='exec'){ DETAIL_DIRTY=true; renderExecutiveDashboard(EX_ROWS); }
   else { DETAIL_DIRTY=false; renderDetailedDashboard(rows); }
 }
@@ -4583,7 +4606,7 @@ function buildExecutiveNotes(x, o){
   if(mNote) s.push(mNote);
   if(K.badCount) s.push('교육이 필요한 병원이 <b>'+K.badCount+'곳</b> 확인됐습니다.');
   if(nozReuse)   s.push('노즐을 재사용한 병원이 <b>'+nozReuse+'곳</b>입니다.');
-  if(remain)     s.push('현재 점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · 오늘 현황)');
+  if(remain)     s.push('점검이 남아있는 병원은 <b>'+remain+'곳</b>입니다. (전체 가입 '+nck.list.length+'곳 · '+ncareAsOfLabel_()+')');
   s.push('N-CARE 비교: 총 <b>'+exNum(G.total)+'건</b>, 고유 병원 <b>'+exNum(G.hosp)+'곳</b>으로 '
     +'중복 처리 기록이 <b>'+exNum(G.dup)+'건</b> 있습니다.');
   s.push('사용자 교육 관리: '+exUnratedSummaryHtml_(K.unratedCount, EX_NOTE_SKILL));
@@ -4646,7 +4669,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
      delta:exDeltaParts(k.hosp, p?p.hosp:null, '곳', 'neutral', cmp)},
     {key:'cost', label:'교체비용 합계', value:'₩'+exNum(k.cost), unit:'',
      delta:exDeltaParts(k.cost, p?p.cost:null, '원', 'bad', cmp)},
-    {key:'ncare', label:'N-CARE 점검 운영률', badge:'오늘 현황',
+    {key:'ncare', label:'N-CARE 점검 운영률', badge:ncareAsOfLabel_(),
      value:nck.list.length?String(nck.rate):'–', unit:nck.list.length?'%':'',
      sub: nck.list.length ? '30일 이내 점검 '+nck.cnt[0]+' / '+nck.list.length+'곳'
                           : 'N-CARE 가입 병원 없음'}
@@ -5250,7 +5273,7 @@ function renderExecutiveSummary(x){
       foot:exDeltaHtml(k.hosp, p?p.hosp:null, '곳', 'neutral', cmp)}),
     exKpiCard({label:'교체비용 합계', value:'₩'+exNum(k.cost), small:true,
       foot:exDeltaHtml(k.cost, p?p.cost:null, '원', 'bad', cmp)}),
-    exKpiCard({label:'N-CARE 점검 운영률', badge:'오늘 현황', value:nck.list.length?(nck.rate+'<u>%</u>'):'–',
+    exKpiCard({label:'N-CARE 점검 운영률', badge:ncareAsOfLabel_(), value:nck.list.length?(nck.rate+'<u>%</u>'):'–',
       foot:'<div class="sub">'+(nck.list.length
             ? '30일 이내 점검 '+nck.cnt[0]+' / '+nck.list.length+'곳'
             : 'N-CARE 가입 병원 없음')+'</div>'})
@@ -5412,10 +5435,10 @@ function exNckDays(r){
 function renderExecutiveActions(x){
   var per=exPeriodLabel();
 
-  /* ── N-CARE 점검 현황 (전체 가입 병원 기준 · 오늘 현황) ── */
+  /* ── N-CARE 점검 현황 (전체 가입 병원 기준 · 선택 기간 끝 시점) ── */
   var S=x.ncare, ST=NCK_ST;
   document.getElementById('exNckCard').innerHTML=
-    exH3('N-CARE 점검 현황', (S.list.length?'가입 '+S.list.length+'곳 · ':'')+'전체 가입 병원 기준 · 오늘 현황', true)
+    exH3('N-CARE 점검 현황', (S.list.length?'가입 '+S.list.length+'곳 · ':'')+'전체 가입 병원 기준 · '+ncareAsOfLabel_(), true)
     +'<div class="ex-cbody">'
     +(S.list.length
       ? '<div class="ex-rate"><b>✅ 점검 운영률 '+S.rate+'%</b>'
@@ -5542,7 +5565,8 @@ function renderExecutiveActions(x){
 function exShowNck(){
   var S=buildNcareStatus(), ST=NCK_ST;
   openExList('잔여 점검 병원 전체 명단',
-    '전체 가입 병원 중 점검이 남아있는 병원 · 전체 가입 병원 기준 · 오늘 현황 · '
+    '전체 가입 병원 중 점검이 남아있는 병원 · '+ncareAsOfLabel_()+' · 경과일은 이 기준일까지 계산 · '
+      +'가입 명단은 현재 병원정보DB 기준(과거 가입 이력은 데이터에 없음) · '
       +'점검 기록 없음 → 우선 점검 → 점검 필요 → 점검 예정 → 경과일이 긴 순',
     exListGroup('잔여 점검 병원', S.need, function(r){
       return esc(r.hosp)+'<em>'+esc(ST[r.si][0])+' · '+esc(r.ncare)+' · '+exNckDays(r)+'</em>';

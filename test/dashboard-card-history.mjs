@@ -51,7 +51,7 @@ const FNS = [
   'filteredRows_', 'hospStateFilter_', 'nozStateMap_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows', 'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
-  'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
+  'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
   'exHistoryUnique_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
