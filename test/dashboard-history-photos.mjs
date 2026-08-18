@@ -58,7 +58,13 @@ ck('5. 매니페스트에서 증상·처리결과 두 예시를 찾는다',
   picked.symptom&&picked.symptom.desc==='누수 확인' && picked.after&&picked.after.desc==='처리 후 정상');
 ck('6. 등록되지 않은 유형은 빈 사진 데이터로 판정한다',
   dataFn(sampleManifest,{cat:'장비',type:'미등록'}).missing===true);
-ck('7. 빈 초기 매니페스트가 유효하다',MANIFEST.schema===1&&MANIFEST.items&&Object.keys(MANIFEST.items).length===0);
+ck('7. 등록 매니페스트는 9개 유형과 갱신일을 가진다',
+  MANIFEST.schema===1&&MANIFEST.updatedAt==='2026-08-18'&&Object.keys(MANIFEST.items||{}).length===9);
+const manifestPhotos=Object.values(MANIFEST.items||{}).flatMap(item=>[item.symptom,item.after].filter(Boolean));
+ck('7-b. 매니페스트의 모든 사진 경로가 실제 WebP 파일을 가리킨다',
+  manifestPhotos.length===15&&manifestPhotos.every(photo=>photo.src.endsWith('.webp')&&fs.existsSync(path.join(ROOT,photo.src))));
+ck('7-c. 체결 강함·약함은 동일 원본 자산을 중복 저장하지 않는다',
+  MANIFEST.items['핸드피스|노즐 체결 강함'].symptom.src===MANIFEST.items['핸드피스|노즐 체결 약함'].symptom.src);
 
 const panel=grab(DASH,'exHistoryPhotoPanel_');
 const select=grab(DASH,'exSelectHistory_');
