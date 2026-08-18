@@ -807,8 +807,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .hst-photo-kicker{flex:0 0 auto;border-radius:999px;padding:3px 7px;background:#DDF3F5;color:#12607F;font-size:9.5px;font-weight:800}
 .hst-photo-status{color:var(--text-muted);text-align:right}.hst-photo-note{margin:0;padding:7px 10px 0;color:var(--text-muted);font-size:10px;line-height:1.4}
 .hst-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
-.hst-photo-grid.single{grid-template-columns:minmax(0,1fr)}
 .hst-photo-card{min-width:0;margin:0}.hst-photo-card figcaption{margin:0 0 5px;color:var(--navy);font-size:11px;font-weight:700}
+#hstPhotoAfterCard{grid-column:2}
 .hst-photo-frame{height:250px;display:flex;align-items:center;justify-content:center;border:1px solid #E5EAF1;
   border-radius:8px;background:#F5F7FA;overflow:hidden}
 .hst-photo-frame img{display:block;width:100%;height:100%;object-fit:contain;background:#111827}
@@ -833,6 +833,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
   .hst-view .hst-table-wrap{min-height:0;flex:0 0 auto;overflow-y:visible}
   .hst-photo-panel{flex:0 0 auto;overflow:hidden}
   .hst-photo-grid{grid-template-columns:1fr}.hst-photo-frame{height:min(210px,26vh)}
+  #hstPhotoAfterCard{grid-column:1}
   .hst-photo-head{align-items:flex-start;flex-direction:column;gap:5px}.hst-photo-head>div{align-items:flex-start;flex-direction:column;gap:4px}
   .hst-photo-status{text-align:left}.hst-photo-note{padding:8px 10px 0}
 }
@@ -4850,6 +4851,9 @@ var EX_TYPE_EXAMPLE_URL='assets/type-examples/index.json';
 var EX_TYPE_EXAMPLE_PROMISE=null;
 
 function exTypeExampleNorm_(v){ return String(v==null?'':v).replace(/\s+/g,' ').trim(); }
+/* 과거 유형값에는 괄호 앞·안쪽 공백이 빠진 기록이 있어, 사진 조회에 한해 공백을 무시한다.
+   화면 표시값과 매니페스트의 기본 키는 운영 표준 표기(예: "노즐 누수(약액 유입)")를 유지한다. */
+function exTypeExampleLooseKey_(v){ return exTypeExampleNorm_(v).replace(/\s+/g,''); }
 function exTypeExampleKey_(r){
   var cat=exTypeExampleNorm_(r&&r.cat), type=exTypeExampleNorm_(r&&r.type);
   return type ? cat+'|'+type : '';
@@ -4861,7 +4865,7 @@ function exTypeExampleAssetUrl_(src){
 }
 function exTypeExampleLoad_(){
   if(EX_TYPE_EXAMPLE_PROMISE) return EX_TYPE_EXAMPLE_PROMISE;
-  EX_TYPE_EXAMPLE_PROMISE=fetch(EX_TYPE_EXAMPLE_URL+'?v=1',{cache:'no-cache',credentials:'same-origin'})
+  EX_TYPE_EXAMPLE_PROMISE=fetch(EX_TYPE_EXAMPLE_URL+'?v=2',{cache:'no-cache',credentials:'same-origin'})
     .then(function(r){ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); })
     .then(function(data){
       return data&&data.items&&typeof data.items==='object' ? data : {schema:1,items:{},loadError:true};
@@ -4874,7 +4878,14 @@ function exTypeExamplePhoto_(raw){
   return src ? {src:src,desc:String((raw&&raw.text)||'').trim().slice(0,300)} : null;
 }
 function exTypeExampleData_(manifest,r){
-  var key=exTypeExampleKey_(r), item=manifest&&manifest.items&&manifest.items[key];
+  var key=exTypeExampleKey_(r), items=manifest&&manifest.items, item=items&&items[key];
+  /* 표준 키가 없으면 공백만 다른 legacy 기록을 같은 유형으로 연결한다. */
+  if(!item&&key&&items){
+    var loose=exTypeExampleLooseKey_(key), k;
+    for(k in items){
+      if(Object.prototype.hasOwnProperty.call(items,k)&&exTypeExampleLooseKey_(k)===loose){ item=items[k]; break; }
+    }
+  }
   return {key:key,symptom:exTypeExamplePhoto_(item&&item.symptom),after:exTypeExamplePhoto_(item&&item.after),
           missing:!item,loadError:!!(manifest&&manifest.loadError)};
 }
@@ -4916,7 +4927,7 @@ function exHistoryPhotoLoading_(it){
   var status=document.getElementById('hstPhotoStatus'), grid=panel&&panel.querySelector('.hst-photo-grid');
   var note=panel&&panel.querySelector('.hst-photo-note'), r=(it&&it.r)||{};
   if(!panel) return; panel.hidden=true; /* 실제 사진 유무를 확인하기 전에는 빈 패널을 노출하지 않는다 */
-  if(grid){ grid.hidden=false; grid.classList.remove('single'); }
+  if(grid) grid.hidden=false;
   if(note) note.hidden=false;
   if(title) title.textContent=(r.type||'VOC 유형')+' · 증상과 처리 결과';
   if(status) status.textContent='';
@@ -4932,7 +4943,7 @@ function exHistoryPhotoRender_(it,data){
   if(data&&data.loadError){ exHistoryPhotoError_('예시 목록을 불러오지 못했습니다 · 새로고침해 주세요'); return; }
   if(!symptom&&!after){ panel.hidden=true; return; } /* 등록 사진이 하나도 없으면 출력 영역 전체를 숨긴다 */
   panel.hidden=false;
-  if(grid){ grid.hidden=false; grid.classList.toggle('single',!(symptom&&after)); }
+  if(grid) grid.hidden=false;
   if(note) note.hidden=false;
   if(symptomCard) symptomCard.hidden=!symptom;
   if(afterCard) afterCard.hidden=!after;

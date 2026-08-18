@@ -48,7 +48,7 @@
         "text": "거치대 교체"
       }
     },
-    "핸드피스|노즐 누수(약액유입)": {
+    "핸드피스|노즐 누수(약액 유입)": {
       "symptom": {
         "src": "assets/type-examples/handpiece-nozzle-leak/symptom-77792fbc78.webp",
         "text": "약액 유입에 의한 동작 불능 상태"

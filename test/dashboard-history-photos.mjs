@@ -33,7 +33,7 @@ const norm=new Function(grab(DASH,'exTypeExampleNorm_')+';return exTypeExampleNo
 const key=new Function(grab(DASH,'exTypeExampleNorm_')+'\n'+grab(DASH,'exTypeExampleKey_')+';return exTypeExampleKey_;')();
 const asset=new Function(grab(DASH,'exTypeExampleAssetUrl_')+';return exTypeExampleAssetUrl_;')();
 const dataFn=new Function(
-  grab(DASH,'exTypeExampleNorm_')+'\n'+grab(DASH,'exTypeExampleKey_')+'\n'+
+  grab(DASH,'exTypeExampleNorm_')+'\n'+grab(DASH,'exTypeExampleLooseKey_')+'\n'+grab(DASH,'exTypeExampleKey_')+'\n'+
   grab(DASH,'exTypeExampleAssetUrl_')+'\n'+grab(DASH,'exTypeExamplePhoto_')+'\n'+
   grab(DASH,'exTypeExampleData_')+';return exTypeExampleData_;')();
 
@@ -65,6 +65,11 @@ ck('7-b. 매니페스트의 모든 사진 경로가 실제 WebP 파일을 가리
   manifestPhotos.length===15&&manifestPhotos.every(photo=>photo.src.endsWith('.webp')&&fs.existsSync(path.join(ROOT,photo.src))));
 ck('7-c. 체결 강함·약함은 동일 원본 자산을 중복 저장하지 않는다',
   MANIFEST.items['핸드피스|노즐 체결 강함'].symptom.src===MANIFEST.items['핸드피스|노즐 체결 약함'].symptom.src);
+ck('7-d. 노즐 누수는 운영 표준 표기인 "노즐 누수(약액 유입)" 키로 등록된다',
+  !!MANIFEST.items['핸드피스|노즐 누수(약액 유입)']&&!MANIFEST.items['핸드피스|노즐 누수(약액유입)']);
+ck('7-e. 표준 표기와 공백이 빠진 legacy 표기 모두 같은 사진으로 연결된다',
+  !!dataFn(MANIFEST,{cat:'핸드피스',type:'노즐 누수(약액 유입)'}).symptom&&
+  !!dataFn(MANIFEST,{cat:'핸드피스',type:'노즐 누수(약액유입)'}).symptom);
 
 const panel=grab(DASH,'exHistoryPhotoPanel_');
 const select=grab(DASH,'exSelectHistory_');
@@ -120,8 +125,10 @@ const loading=grab(DASH,'exHistoryPhotoLoading_');
 const photoError=grab(DASH,'exHistoryPhotoError_');
 ck('24. 사진이 둘 다 없으면 사진 패널 전체를 숨긴다',
   /!symptom&&!after/.test(render) && /panel\.hidden=true/.test(render));
-ck('25. 사진이 한 장뿐이면 없는 카드만 숨기고 한 열로 넓힌다',
-  /symptomCard\.hidden=!symptom/.test(render) && /afterCard\.hidden=!after/.test(render) && /classList\.toggle\('single'/.test(render));
+ck('25. 사진이 한 장뿐이면 없는 카드만 숨기고 PC의 증상·처리 결과 위치를 유지한다',
+  /symptomCard\.hidden=!symptom/.test(render) && /afterCard\.hidden=!after/.test(render) &&
+  /#hstPhotoAfterCard\{grid-column:2\}/.test(DASH) && /#hstPhotoAfterCard\{grid-column:1\}/.test(DASH) &&
+  !/hst-photo-grid\.single/.test(DASH));
 ck('26. 사진 유무 확인 전에는 빈 패널을 노출하지 않는다',/panel\.hidden=true/.test(loading));
 ck('27. 매니페스트 로드 실패는 빈 사진과 구분해 안내한다',
   /exHistoryPhotoError_/.test(render) && /grid\.hidden=true/.test(photoError) && /panel\.hidden=false/.test(photoError));
