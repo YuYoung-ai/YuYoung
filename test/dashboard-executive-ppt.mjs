@@ -66,7 +66,7 @@ const FNS = [
   'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
-  'exMonthTrendNote_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
+  'exMonthTrendNote_', 'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
   'buildNozzleUnrated', 'buildNcareCompare', 'exBuild',
   'exNum', 'exMD_', 'buildTrendSummary_',
   'exUnratedHtml', 'exUnratedNoteText_', 'exUnratedSummaryHtml_',
@@ -182,7 +182,19 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     mSnap.kpi.length === 6 && want.every((w, i) => mSnap.kpi[i].label === w));
   ck('3-c. KPI 6개가 모두 슬라이드에 그려진다', want.every(w => has(wItems, w)));
   ck('3-d. A/S KPI 는 비율을 함께 적는다', /비율 \d+%/.test(wSnap.kpi[1].note || ''), wSnap.kpi[1].note);
-  ck('3-e. N-CARE 운영률은 "오늘 현황" 배지를 유지', wSnap.kpi[5].badge === '오늘 현황' && has(wItems, '오늘 현황'));
+  /* 운영률 기준일은 보고 기간의 끝을 따른다(미래면 오늘로 자름) — 규칙을 테스트가 독립적으로 재현해 고정한다.
+     예전에는 보고 기간과 무관하게 항상 오늘 값이 박혀, 지난주 보고서에 이번 주 운영률이 실렸다. */
+  const _today = new Date(); _today.setHours(0, 0, 0, 0);
+  const wantBadge = (toStr) => {
+    const d = new Date(toStr + 'T00:00:00');
+    const a = d > _today ? _today : d;
+    return a.getTime() === _today.getTime() ? '오늘 현황' : (a.getMonth() + 1) + '.' + a.getDate() + ' 기준';
+  };
+  ck('3-e. N-CARE 운영률 배지가 보고 기간 끝을 따른다',
+    wSnap.kpi[5].badge === wantBadge(WEEK.to) && has(wItems, wSnap.kpi[5].badge),
+    wSnap.kpi[5].badge + ' (기대 ' + wantBadge(WEEK.to) + ')');
+  ck('3-e2. 끝이 미래인 기간은 오늘로 잘린다',
+    mSnap.kpi[5].badge === wantBadge(MONTH.to), mSnap.kpi[5].badge);
   ck('3-f. KPI 6장이 한 줄 — y 좌표가 모두 같다',
     new Set(wItems.filter(o => o.card && o.y === D.L.kpi.y).map(o => o.y)).size === 1 &&
     wItems.filter(o => o.card && o.y === D.L.kpi.y).length === 6);
