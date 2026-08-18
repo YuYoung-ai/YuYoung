@@ -119,7 +119,7 @@ ck('21. PC는 사진 2열, 모바일은 1열 레이아웃을 유지한다',
   /hst-photo-grid\{grid-template-columns:1fr/.test(DASH));
 ck('22. 사진 패널이 열려도 표 최소 높이와 모바일 전체 스크롤을 유지한다',
   /hst-view \.hst-table-wrap\{min-height:\d+px/.test(DASH) && /hst-view\{overflow-y:auto/.test(DASH));
-ck('23. 서비스워커 버전이 정적 예시 전환으로 갱신됐다',/baz-cs-v144/.test(fs.readFileSync(path.join(ROOT,'sw.js'),'utf8')));
+ck('23. 서비스워커 버전이 정적 예시 전환 이후 최신 상태다',/baz-cs-v145/.test(fs.readFileSync(path.join(ROOT,'sw.js'),'utf8')));
 const render=grab(DASH,'exHistoryPhotoRender_');
 const loading=grab(DASH,'exHistoryPhotoLoading_');
 const photoError=grab(DASH,'exHistoryPhotoError_');
