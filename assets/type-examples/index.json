@@ -1,5 +1,84 @@
 {
   "schema": 1,
-  "updatedAt": "",
-  "items": {}
+  "updatedAt": "2026-08-18",
+  "items": {
+    "장비|풋스위치 작동 불량": {
+      "symptom": {
+        "src": "assets/type-examples/equipment-foot-switch/symptom-f072e38111.webp",
+        "text": "케이블 단선에 의한 동작 불능 상태"
+      },
+      "after": {
+        "src": "assets/type-examples/equipment-foot-switch/after-6a3882de7b.webp",
+        "text": "풋스위치 케이블 또는 Ass'y 교체"
+      }
+    },
+    "장비|RFID 스캔 불량": {
+      "symptom": {
+        "src": "assets/type-examples/equipment-rfid/symptom-c05259764f.webp",
+        "text": "RFID 모듈 미인식 상태(인식음 미발생)"
+      },
+      "after": {
+        "src": "assets/type-examples/equipment-rfid/after-c17b1cdc2b.webp",
+        "text": "모듈 내 USB 케이블 재체결 또는 Ass'y 교체"
+      }
+    },
+    "장비|케이블 불량": {
+      "symptom": {
+        "src": "assets/type-examples/equipment-cable/symptom-4b9d0c6a2e.webp",
+        "text": "케이블 단선 또는 접촉 불량에 따른 미동작"
+      }
+    },
+    "장비|구동 키 파손": {
+      "symptom": {
+        "src": "assets/type-examples/equipment-power-key/symptom-eb34ef7099.webp",
+        "text": "사용자 부주의에 의한 구동 키 파손"
+      },
+      "after": {
+        "src": "assets/type-examples/equipment-power-key/after-3565e7183e.webp",
+        "text": "키 작업물 제거 및 교체"
+      }
+    },
+    "장비|거치대 파손": {
+      "symptom": {
+        "src": "assets/type-examples/equipment-holder/symptom-104450b5b3.webp",
+        "text": "사용자 부주의에 의한 거치대 파손"
+      },
+      "after": {
+        "src": "assets/type-examples/equipment-holder/after-5f72e3d68a.webp",
+        "text": "거치대 교체"
+      }
+    },
+    "핸드피스|노즐 누수(약액유입)": {
+      "symptom": {
+        "src": "assets/type-examples/handpiece-nozzle-leak/symptom-77792fbc78.webp",
+        "text": "약액 유입에 의한 동작 불능 상태"
+      },
+      "after": {
+        "src": "assets/type-examples/handpiece-nozzle-leak/after-738710ede9.webp",
+        "text": "내부 약액 세척 실시 또는 Ass'y 교체"
+      }
+    },
+    "핸드피스|노즐 체결 강함": {
+      "symptom": {
+        "src": "assets/type-examples/handpiece-nozzle-fit/symptom-27412008a2.webp",
+        "text": "Perm-holder 또는 노즐 체결 불량"
+      }
+    },
+    "핸드피스|노즐 체결 약함": {
+      "symptom": {
+        "src": "assets/type-examples/handpiece-nozzle-fit/symptom-27412008a2.webp",
+        "text": "Perm-holder 또는 노즐 체결 불량"
+      }
+    },
+    "핸드피스|스프링 파손": {
+      "symptom": {
+        "src": "assets/type-examples/handpiece-spring/symptom-0be6ccce31.webp",
+        "text": "구형 HP Ver(1.0/1.0.1) 스프링 파손(젯 풀림)"
+      },
+      "after": {
+        "src": "assets/type-examples/handpiece-spring/after-03a6834cab.webp",
+        "text": "스프링 교체"
+      }
+    }
+  }
 }
