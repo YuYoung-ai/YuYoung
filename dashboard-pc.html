@@ -3246,13 +3246,14 @@ var FT={face:'맑은 고딕',
 
 /* 레이아웃 상수(inch) — ★ 모든 좌표는 L 에서만 관리한다. draw*() 안에서 숫자 좌표를 만들지 않는다 ★
    권장 배치를 그대로 옮긴 값이다.
-     제목 영역 → KPI 6 한 줄 → [서비스 추이 62% | VOC 유형 변화 38%]
+     제목 영역 → KPI 5 한 줄 → [서비스 추이 62% | VOC 유형 변화 38%]
                             → [VOC TOP5 25% | 교체품 TOP5 25% | 특이사항 50%] → 푸터 */
 var L=(function(){
   var page={w:13.33, h:7.5, left:0.28, right:13.05};
   var W=page.right-page.left;                       /* 12.77 */
   var gap=0.15, kpiGap=0.10;
-  var kpiW=(W-kpiGap*5)/6;                          /* 2.045 */
+  var kpiN=5;                                       /* KPI 카드 수 — 한 줄이 본문 폭을 꽉 채운다 */
+  var kpiW=(W-kpiGap*(kpiN-1))/kpiN;                /* 2.474 */
   var rowA={y:2.46, h:2.42}, rowB={y:4.98, h:2.12};
   var trendW=7.95, changeW=W-trendW-gap;            /* 7.95(62%) / 4.67(37%) */
   /* 하단은 상단 열 경계를 그대로 잇는다 —
@@ -3265,7 +3266,7 @@ var L=(function(){
     header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.1,
              dateX:6.45, dateW:4.7, basisY:1.20, basisH:0.22, basisW:6.0,
              logo:{x:12.01, y:0.16, w:1.07, h:0.58} },
-    kpi:{ y:1.44, h:0.92, w:kpiW, gap:kpiGap, pad:0.10,
+    kpi:{ y:1.44, h:0.92, n:kpiN, w:kpiW, gap:kpiGap, pad:0.10,
           lblDY:0.05, lblH:0.22, badgeW:0.62, badgeH:0.18,
           valDY:0.27, valH:0.36, subDY:0.64, subH:0.24 },
     /* 카드 공통 — 제목 줄(제목 좌 · 기준 우), 좁은 카드는 기준을 둘째 줄에 둔다 */
@@ -3467,7 +3468,7 @@ function buildExecutivePptDeck(snap){
   text({x:P.right-H.basisW, y:H.basisY, w:H.basisW, h:H.basisH,
         t:'증감 기준 · '+snap.cmpLabel+' 대비', size:FT.basis, color:C.mut, align:'right'});
 
-  /* ── ② KPI 6 (한 줄) ── */
+  /* ── ② KPI 5 (한 줄) ── */
   var K=L.kpi;
   snap.kpi.forEach(function(kp,i){
     var x=P.left+i*(K.w+K.gap), iw=K.w-K.pad*2;
@@ -4681,7 +4682,7 @@ function exMonthCmpStat_(mc){
   };
 }
 function exTrendStatDelta_(d){
-  return {foot:'최근 주 '+(d>0?'+':'')+d+'%', tone:d>0?'up':(d<0?'down':'flat')};
+  return {foot:'이번 주 '+(d>0?'+':'')+d+'%', tone:d>0?'up':(d<0?'down':'flat')};
 }
 function buildExecutiveReportSnapshot(opt){
   opt=opt||{};
@@ -4704,7 +4705,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
   var vc=buildExecutiveVocChange(x);
   var mt=buildMonthTrend(), mc=buildMonthTrendCompare(mt), mNote=exMonthTrendNote_(mc);
 
-  /* ── KPI 6 — 주간 핵심보고 KPI 카드와 같은 값·같은 증감 문구 ── */
+  /* ── KPI 5 — 주간 핵심보고 KPI 카드와 같은 값·같은 증감 문구 ── */
   var kpi=[
     {key:'total', label:'전체 서비스 건수', value:exNum(k.total), unit:'건',
      delta:exDeltaParts(k.total, p?p.total:null, '건', 'neutral', cmp)},
@@ -4714,8 +4715,6 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
      delta:exDeltaParts(k.insp, p?p.insp:null, '건', 'neutral', cmp)},
     {key:'hosp', label:'서비스 병원 수', value:exNum(k.hosp), unit:'곳',
      delta:exDeltaParts(k.hosp, p?p.hosp:null, '곳', 'neutral', cmp)},
-    {key:'cost', label:'교체비용 합계', value:'₩'+exNum(k.cost), unit:'',
-     delta:exDeltaParts(k.cost, p?p.cost:null, '원', 'bad', cmp)},
     {key:'ncare', label:'N-CARE 점검 운영률', badge:ncareAsOfLabel_(),
      value:nck.list.length?String(nck.rate):'–', unit:nck.list.length?'%':'',
      sub: nck.list.length ? '30일 이내 점검 '+nck.cnt[0]+' / '+nck.list.length+'곳'
@@ -4752,8 +4751,8 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
         return {label:(t.mon.getMonth()+1)+'/'+t.mon.getDate(), as:t.as, insp:t.insp, n:t.n, sel:t.sel};
       }),
       stats:[
-        {label:'최근 주 A/S',     value:exNum(ts.latest.as)+'건'},
-        {label:'최근 주 점검',    value:exNum(ts.latest.insp)+'건'},
+        {label:'이번 주 A/S',     value:exNum(ts.latest.as)+'건'},
+        {label:'이번 주 점검',    value:exNum(ts.latest.insp)+'건'},
         {label:'A/S 8주 주평균',  value:ts.avgAs.toFixed(1)+'건',   foot:dA.foot, tone:dA.tone},
         {label:'점검 8주 주평균', value:ts.avgInsp.toFixed(1)+'건', foot:dI.foot, tone:dI.tone}
       ]
