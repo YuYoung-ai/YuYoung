@@ -80,13 +80,15 @@
     if (!text(form.fse)) bad('fse', '담당 FSE를 입력하세요');
     var sn = text(form.sn) === '__c' ? text(form.snCustom) : text(form.sn);
     if (!sn) bad('sn', '장비 S/N을 선택하거나 입력하세요');
-    if (opts.photoRequired !== false && !opts.hasPhoto) bad('snPhoto', '장비 S/N 사진을 첨부하세요');
+    /* [v3.9] 장비 S/N 사진은 선택이다(photoRequired:false).
+       사진을 요구하는 호출자만 opts.photoRequired 로 필수를 켠다.
+       붙이는 중(압축·업로드)일 때 저장을 막는 규칙은 그대로다 —
+       끝나지 않은 사진은 서버가 기록에 연결할 수 없다. */
+    if (opts.photoRequired === true && !opts.hasPhoto) bad('snPhoto', '장비 S/N 사진을 첨부하세요');
     if (opts.photoBusy) bad('snPhoto', '사진 처리가 끝난 뒤 저장하세요');
-    /* [v3.4] 원인 사진 — 선택이지만 개수 상한과 업로드 완료는 강제한다.
-       업로드가 끝나지 않은 사진이 있으면 서버가 연결할 수 없어 저장이 실패한다. */
-    if (opts.causeBusy) bad('causePhoto', '원인 사진 처리가 끝난 뒤 저장하세요');
-    if (Number(opts.causeCount) > MAX_CAUSE_PHOTOS) bad('causePhoto', '원인 사진은 최대 ' + MAX_CAUSE_PHOTOS + '장입니다');
-    if (Number(opts.causePending) > 0) bad('causePhoto', '업로드하지 못한 원인 사진이 있습니다 — 재시도하거나 삭제하세요');
+    /* 붙였는데 업로드가 끝나지 않은 사진은 "사진 없음"과 다르다 — 그대로 저장하면
+       사용자는 사진이 함께 기록된 줄 알지만 참조가 실리지 않아 조용히 사라진다. */
+    if (opts.photoPending) bad('snPhoto', '업로드하지 못한 장비 S/N 사진이 있습니다 — 재시도하거나 삭제한 뒤 저장하세요');
 
     var c = parseCost(form.cost);
     if (!c.ok) bad('cost', '교체비용: ' + c.error);
@@ -140,7 +142,8 @@
          서버가 recordId+clientPhotoId 로 사진 시트에서 직접 결정한다. */
       snPhoto: opts.photo || '',
       photos: normalizePhotoRefs(opts.photos),
-      photoRequired: opts.photoRequired !== false,
+      /* "이 요청에 사진을 실었다"는 선언 — 붙였는데 payload 에서 빠진 사고를 서버가 잡는다 */
+      photoRequired: opts.photoRequired === true,
       reqId: text(opts.reqId),
       token: text(opts.token)
     };
@@ -174,7 +177,8 @@
   /* ── 저장 결과 판정 ──────────────────────────────────────────────
      "성공으로 표시해도 되는가"를 한 곳에서만 정한다.
      opaque(no-cors) 응답이나 파싱 실패는 절대 성공이 아니다. */
-  function classifySaveResult(kind, data) {
+  function classifySaveResult(kind, data, opts) {
+    opts = opts || {};
     var out = {
       state: SAVE.UNKNOWN, row: null, photoSaved: false, photoRequired: false,
       error: '', warnings: [], savedFields: null, canClearPhoto: false, message: ''
@@ -192,10 +196,14 @@
     }
 
     var photo = (data.photo && typeof data.photo === 'object') ? data.photo : null;
-    /* handover 저장은 사진이 항상 필수다. 구버전 GAS는 photo 블록 없이
-       {success:true}만 돌려줄 수 있는데, 이를 성공으로 받아들이면 실제 사진
-       저장 여부를 확인하지 못한 채 화면 사진을 지우게 된다. */
-    out.photoRequired = true;
+    /* [v3.9] 사진은 선택이다 — 무엇을 확인해야 하는지는 요청이 정한다.
+       · opts.photoSent : 이 요청이 실제로 사진을 실어 보냈는가(클라이언트가 안다)
+       · photo.required : 서버가 이 요청에 사진을 요구했는가
+       사진을 보낸 요청은 저장까지 확인돼야 성공이다. 구버전 GAS는 photo 블록 없이
+       {success:true}만 돌려줄 수 있는데, 사진을 보냈는데 그 응답을 성공으로 받아들이면
+       실제 저장 여부를 모른 채 화면 사진을 지우게 된다. */
+    var photoSent = opts.photoSent === true;
+    out.photoRequired = photoSent || !!(photo && photo.required === true);
     out.photoSaved = !!(photo && photo.saved);
     out.warnings = Array.isArray(data.warnings) ? data.warnings.slice() : [];
     out.savedFields = (data.savedFields && typeof data.savedFields === 'object') ? data.savedFields : null;
@@ -206,9 +214,10 @@
       out.error = text(data.error) || (photo && text(photo.error)) || '저장 실패';
       return out;
     }
-    /* 성공이라고 해도 구조화된 사진 확인이 없거나 저장되지 않았으면 성공이 아니다.
-       (구버전 서버의 success:true 단독 응답까지 여기서 막는다) */
-    if (!photo || photo.required !== true || !out.photoSaved) {
+    /* 사진이 걸린 요청은 구조화된 사진 확인이 없거나 저장되지 않았으면 성공이 아니다.
+       (구버전 서버의 success:true 단독 응답까지 여기서 막는다)
+       사진이 없는 기록은 이 관문을 건너뛴다 — 확인할 사진이 없다. */
+    if (out.photoRequired && (!photo || !out.photoSaved)) {
       out.state = SAVE.FAILED;
       out.error = (photo && text(photo.error)) ||
         (!photo ? '서버에서 사진 저장 결과를 확인할 수 없습니다 — GAS를 최신 버전으로 재배포해 주세요' :
@@ -222,12 +231,12 @@
   }
 
   /** savecheck 응답 → 저장 상태 */
-  function classifySaveCheck(data) {
+  function classifySaveCheck(data, opts) {
     if (!data || typeof data !== 'object' || data.success !== true) {
       return { state: SAVE.UNKNOWN, result: null };
     }
     if (!data.found) return { state: SAVE.UNKNOWN, result: null, notFound: true };
-    var r = classifySaveResult('json', data.result);
+    var r = classifySaveResult('json', data.result, opts);
     return { state: r.state, result: r };
   }
 

@@ -104,9 +104,22 @@ ck('사진까지 저장된 성공 응답만 SUCCESS', okRes.state === S.SUCCESS 
 
 const failRes = H.classifySaveResult('json', { success: false, error: '시트 없음' });
 ck('success:false 는 FAILED', failRes.state === S.FAILED && failRes.error === '시트 없음');
-const legacySuccess = H.classifySaveResult('json', { success: true, row: 9 });
-ck('구버전 GAS의 photo 확인 없는 success:true 는 실패',
+/* [v3.9] 사진은 선택 — 사진을 보낸 요청만 사진 확인까지 성공해야 한다 */
+const legacySuccess = H.classifySaveResult('json', { success: true, row: 9 }, { photoSent: true });
+ck('사진을 보냈는데 photo 확인이 없는 success:true 는 실패',
   legacySuccess.state === S.FAILED && /사진 저장 결과/.test(legacySuccess.error));
+const noPhotoRes = H.classifySaveResult('json', {
+  success: true, row: 11, photo: { required: false, saved: false, fileId: '', error: '' }
+});
+ck('사진 없는 기록은 사진 확인 없이도 SUCCESS',
+  noPhotoRes.state === S.SUCCESS && noPhotoRes.row === 11 && noPhotoRes.photoRequired === false);
+const noPhotoLegacy = H.classifySaveResult('json', { success: true, row: 12 });
+ck('사진을 안 보낸 요청은 photo 블록이 없어도 SUCCESS', noPhotoLegacy.state === S.SUCCESS);
+const sentButServerSaysNo = H.classifySaveResult('json', {
+  success: true, row: 13, photo: { required: false, saved: false, fileId: '', error: '' }
+}, { photoSent: true });
+ck('보낸 사진이 저장되지 않았으면 서버가 뭐라 하든 실패',
+  sentButServerSaysNo.state === S.FAILED);
 
 ck('no-cors 폴백 코드가 제거되었다', !/mode:\s*['"]no-cors['"]/.test(JS));
 ck('POST/GET 에 타임아웃이 있다',
@@ -157,9 +170,10 @@ ck('행 롤백 실패 시 참조 중일 수 있는 사진 파일을 삭제하지
   /if\(!committed && rollbackOk\) photoDiscard_\(photoFile\)/.test(doPost));
 ck('행 기록이 실패하면 업로드된 사진을 정리한다',
   /function photoDiscard_/.test(GAS) && /if\(!committed && rollbackOk\) photoDiscard_\(photoFile\)/.test(doPost));
-ck('사진이 필수인데 안 실린 요청도 서버가 잡아낸다', /photo-missing/.test(doPost));
-ck('handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다',
-  /var photoRequired = isHandover;/.test(doPost));
+ck('사진을 실었다고 선언했는데 안 실린 요청은 서버가 잡아낸다', /photo-missing/.test(doPost));
+ck('사진은 선택이지만, 실제로 왔거나 선언된 요청은 사진까지 확인한다',
+  /var photoDeclared = !!\(payload && payload\.photoRequired === true\);/.test(doPost) &&
+  /var photoRequired = isHandover && \(usesRefs \|\| photoDeclared \|\| !!\(payload && payload\.snPhoto\)\);/.test(doPost));
 ck('handover 요청은 멱등성 reqId를 반드시 요구한다', /isHandover && !reqId/.test(doPost));
 ck('알 수 없는 action이 사진 없는 handover 행으로 흘러가지 않는다',
   /knownActions/.test(doPost) && /알 수 없는 action/.test(doPost));
@@ -313,7 +327,9 @@ const p = H.buildPayload(form(), { photo: 'data:image/jpeg;base64,AAA', reqId: '
 ck('노즐 제조일자와 재사용 여부가 다른 키다',
   p.nozzleDate === '2025.04.21' && p.nozzleReuse === 'X' && p.nozzleDate !== p.nozzleReuse);
 ck('구버전 호환 nozzle 키는 재사용 여부만 담는다', p.nozzle === 'X');
-ck('사진 필수 선언이 payload 에 실린다', p.photoRequired === true && p.snPhoto.indexOf('data:image') === 0);
+ck('사진 첨부 선언은 명시할 때만 실린다(기본값은 미첨부)',
+  p.photoRequired === false && p.snPhoto.indexOf('data:image') === 0 &&
+  H.buildPayload(form(), { photoRequired: true }).photoRequired === true);
 ck('A/S 결과·비고가 실린다', p.result === '교체' && p.remark === 'N/A');
 ck('직접입력 소분류·결과가 반영된다', (function () {
   const q = H.buildPayload(form({ sub: '__c', subCustom: '기타 증상', result: '__c', resultCustom: '보류' }), {});
@@ -411,9 +427,18 @@ ck('NaN 이 payload 로 가지 않는다', (function () {
   return String(q.cost).indexOf('NaN') < 0;
 })());
 
-const vEmpty = H.validate(form({ hosp: '', fse: '', sn: '', snCustom: '' }), { hasPhoto: false });
+const vEmpty = H.validate(form({ hosp: '', fse: '', sn: '', snCustom: '' }), { photoRequired: true, hasPhoto: false });
 ck('필수값을 필드 단위로 표시한다',
   !vEmpty.ok && ['hosp', 'fse', 'sn', 'snPhoto'].every(f => vEmpty.errors.some(e => e.field === f)));
+const vNoPhoto = H.validate(form(), { hasPhoto: false });
+ck('사진을 안 붙여도 저장을 막지 않는다(선택 항목)', vNoPhoto.ok === true);
+ck('화면은 사진을 필수로 요구하지 않는다', /photoRequired:false/.test(saveFn));
+/* 붙였는데 업로드가 끝나지 않은 사진은 '사진 없음'과 다르다 — 조용히 빠지면 안 된다 */
+const vPending = H.validate(form(), { hasPhoto: false, photoPending: true });
+ck('업로드하지 못한 사진이 있으면 저장을 막는다',
+  !vPending.ok && vPending.errors.some(e => e.field === 'snPhoto' && /업로드하지 못한/.test(e.msg)));
+ck('화면이 업로드 미완료 사진을 검증에 넘긴다',
+  /photoPending:!!SN_PHOTO && SN_PHOTO_UPLOAD_STATE!=='ok'/.test(saveFn));
 ck('첫 오류 필드를 알려 준다', vEmpty.first && vEmpty.first.field === 'hosp');
 ck('첫 오류로 포커스·스크롤한다', /function focusField/.test(JS) && /scrollIntoView/.test(grab(JS, 'focusField')));
 ck('오류 요약을 제공한다', /function showErrors/.test(JS) && /errorSummary/.test(HTML));

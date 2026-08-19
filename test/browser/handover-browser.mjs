@@ -62,17 +62,6 @@ page.on('dialog', d => { if (process.env.DBG) console.log('DIALOG:', d.message()
 /* 서버 시나리오 — 테스트가 바꿔 가며 쓴다 */
 let scenario = 'ok';
 let postCount = 0;
-let phraseSaves = [];
-let phraseRows = [
-  { kind: '증상', text: '호스 연결부 물맺힘', cat: '장비', type: '냉각수 누수', order: 1, on: true },
-  { kind: '증상', text: '이물 유입 확인',     cat: '',     type: '',            order: 2, on: true },
-  { kind: '해결', text: '부품 교체 후 정상',  cat: '',     type: '',            order: 3, on: true },
-  { kind: '해결', text: '청소 후 정상 동작',  cat: '',     type: '',            order: 4, on: true },
-  { kind: '증상', text: '보류 문구',          cat: '',     type: '',            order: 5, on: false },
-  /* 목 유형마스터에 실제로 있는 유형에 묶어 둔다 — 맥락 정렬을 확인하기 위한 것 */
-  { kind: '증상', text: '풋스위치 접점 불량',  cat: '장비', type: '풋스위치 작동 불량', order: 6, on: true },
-  { kind: '증상', text: '다른 대분류 전용 문구', cat: '핸드피스', type: '풋스위치 작동 불량', order: 7, on: true }
-];
 const saved = new Map();
 const photoAddRequests = [];
 const finalSaveRequests = [];
@@ -94,11 +83,6 @@ await page.route('**://script.google.com/**', async r => {
       return j({ success: true, clientPhotoId: p.clientPhotoId,
         fileId: 'F-' + p.kind + '-' + photoAddRequests.length, status: 'ORPHAN' });
     }
-    if (p.action === 'photophrase_save') {
-      phraseSaves.push(p);
-      phraseRows = (p.rows || []).map(r => ({ ...r }));
-      return j({ success: true, count: (p.rows || []).length, skipped: 0, updated: '2026-08-15 00:00' });
-    }
     if (p.action === 'photo_abandon') {
       return j({ success: true, abandoned: true, clientPhotoId: p.clientPhotoId });
     }
@@ -113,14 +97,15 @@ await page.route('**://script.google.com/**', async r => {
     }
     if (scenario === 'legacyphoto') return j({ success: true, row: 10 });
     if (scenario === 'slowok') await new Promise(resolve => setTimeout(resolve, 1500));
+    /* [v3.9] 사진은 선택 — 서버는 사진이 실제로 온 요청에만 photo.required 를 켠다 */
+    const hasSn = Array.isArray(p.photos) && p.photos.some(x => x.kind === 'SN');
     saved.set(p.reqId, { success: true, row: 100 + saved.size,
-      photo: { required: true, saved: true, fileId: 'F1', error: '' },
+      photo: { required: hasSn, saved: hasSn, fileId: hasSn ? 'F1' : '', error: '' },
       savedFields: { verUI: true, verHP: true, nozzleDate: true, result: true, remark: true, code: true, eqKind: true },
       warnings: [], msg: '✅ 기록 완료' });
     return j(saved.get(p.reqId));
   }
-  if (u.includes('action=ping')) return j({ success: true, ver: '3.8.0' });
-  if (u.includes('action=photophrase')) return j({ success: true, rows: phraseRows });
+  if (u.includes('action=ping')) return j({ success: true, ver: '3.9.0' });
   if (u.includes('action=savecheck')) {
     const id = decodeURIComponent((u.match(/reqId=([^&]+)/) || [])[1] || '');
     if (scenario === 'lostresponse_found') return j({ success: true, found: true, reqId: id, result: { success: true, row: 55, photo: { required: true, saved: true, fileId: 'F9', error: '' } } });
@@ -163,14 +148,6 @@ async function attachPhoto() {
   });
   await page.waitForTimeout(600);
 }
-/* [v3.5] 현장 사진은 증상(CAUSE)·해결 후(AFTER) 두 칸 고정 — 칸마다 입력이 따로 있다 */
-async function attachCausePhoto(kind = 'CAUSE') {
-  await page.setInputFiles('#causeFile_' + kind, {
-    name: kind.toLowerCase() + '.png', mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
-  });
-  await page.waitForTimeout(600);
-}
 
 /* 1. 부트스트랩 1콜 · 토큰 · DB 배지 */
 const boot = await page.evaluate(() => ({
@@ -179,14 +156,17 @@ const boot = await page.evaluate(() => ({
 }));
 ck('부트스트랩으로 최신 DB 를 받아 배지에 표시한다', boot.badge.includes('최신'), boot.badge);
 ck('390px 에서 가로 넘침이 없다', boot.hOverflow === 0);
-ck('모바일에서 증상·해결 후 사진 칸이 세로로 넓게 배치된다', await page.evaluate(() =>
-  getComputedStyle(document.getElementById('causeGrid')).gridTemplateColumns.split(' ').length === 1));
-ck('②·③에 촬영 입력과 갤러리 입력이 각각 분리돼 있다', await page.evaluate(() =>
-  ['CAUSE','AFTER'].every(k => {
-    const camera=document.getElementById('causeCamera_'+k);
-    const gallery=document.getElementById('causeFile_'+k);
-    return camera && camera.getAttribute('capture')==='environment' && gallery && !gallery.hasAttribute('capture');
-  })));
+/* [v3.9] 현장 사진(증상·해결 후)과 문구 버튼은 화면에서 삭제됐다 */
+ck('현장 사진·문구 UI 가 화면에 남아 있지 않다', await page.evaluate(() =>
+  !document.getElementById('causeGrid') && !document.getElementById('phraseBox') &&
+  !document.getElementById('phraseAdminBtn') && !document.getElementById('pmModal') &&
+  !document.querySelector('input[capture]')));
+ck('장비 S/N 사진 칸은 필수 배지 없이 선택으로 안내한다', await page.evaluate(() => {
+  const lab = document.querySelector('label[for="snPhotoFile"]');
+  const zone = document.getElementById('snPhotoZone');
+  return !!lab && lab.textContent.includes('선택') && !lab.querySelector('.req') &&
+         !!zone && !zone.classList.contains('need');
+}));
 
 /* 2. 병원 선택 → 종속 필드 채워짐 → 이름 수정 시 초기화 */
 await fillForm();
@@ -218,145 +198,49 @@ const preview = await page.evaluate(() => {
 ck('쉼표 비용이 NaN 없이 표시된다', preview.includes('1,650,000원') && !preview.includes('NaN'));
 await page.evaluate(() => document.getElementById('tplA').click());
 
-/* 4. 사진 없이 저장 → 검증 오류 · 서버 호출 없음 */
+/* 4. 사진 없이 저장 → [v3.9] 사진은 선택이므로 그대로 기록된다 */
 const before = postCount;
 await page.click('#btnSave');
-await page.waitForTimeout(500);
+await page.waitForTimeout(1500);
 const noPhoto = await page.evaluate(() => ({
+  state: document.getElementById('saveStatus').className,
+  text: document.getElementById('saveStatus').textContent,
   errShown: document.getElementById('errorCard').style.display,
   zoneInvalid: document.getElementById('snPhotoZone').classList.contains('invalid'),
   copyDisabled: document.getElementById('btnCopy').disabled
 }));
-ck('필수 사진 없이 저장하면 필드 오류를 표시하고 전송하지 않는다',
-  postCount === before && noPhoto.errShown === 'block' && noPhoto.zoneInvalid && noPhoto.copyDisabled,
+ck('사진 없이도 기록되고 복사·이어쓰기가 열린다',
+  postCount === before + 1 && noPhoto.state.includes('ok') &&
+  noPhoto.errShown === 'none' && !noPhoto.zoneInvalid && !noPhoto.copyDisabled,
   JSON.stringify(noPhoto));
+ck('사진 없이 기록했음을 상태에 밝힌다', noPhoto.text.includes('사진 없이 기록했습니다'), noPhoto.text);
+const noPhotoPayload = finalSaveRequests.at(-1) || {};
+ck('사진 없는 요청은 사진 첨부를 선언하지 않는다',
+  noPhotoPayload.photoRequired === false && Array.isArray(noPhotoPayload.photos) &&
+  noPhotoPayload.photos.length === 0 && noPhotoPayload.snPhoto === '',
+  JSON.stringify({ r: noPhotoPayload.photoRequired, n: (noPhotoPayload.photos || []).length }));
 
-/* 5. 사진 실패 → 사진 유지 · 복사/이어쓰기 비활성 */
-/* ── [v3.7] 자주 쓰는 문구 ─────────────────────────────────────── */
-ck('사진이 없으면 문구 버튼이 눌리지 않는다', await page.evaluate(() => {
-  const b = document.querySelector('#phraseChips_CAUSE .pc');
-  return !!b && b.disabled === true;
-}));
-ck('사용 꺼진 문구는 버튼으로 나오지 않는다',
-  !(await page.textContent('#phraseBox')).includes('보류 문구'));
-
+/* 5. 사진 첨부 → 사진 실패 시 사진 유지 · 복사/이어쓰기 비활성 */
+await page.evaluate(() => startNewRecord());
+await fillForm();
 await attachPhoto();
-await attachCausePhoto('CAUSE');
-await attachCausePhoto('AFTER');
 
-ck('사진을 붙이면 그 칸의 문구 버튼이 열린다', await page.evaluate(() => {
-  const b = document.querySelector('#phraseChips_CAUSE .pc');
-  return !!b && b.disabled === false;
-}));
-/* 문구는 맥락에 따라 순서가 바뀌므로 위치가 아니라 글자로 찾아 누른다 */
-const clickPhrase = (kind, text) => page.evaluate(([k, t]) => {
-  const b = Array.from(document.querySelectorAll('#phraseChips_' + k + ' .pc'))
-    .find(x => x.textContent === t);
-  if (!b) throw new Error('문구 버튼 없음: ' + t);
-  b.click();
-}, [kind, text]);
-
-await clickPhrase('CAUSE', '호스 연결부 물맺힘');
-ck('문구를 누르면 설명 입력에 들어간다',
-  (await page.inputValue('#causeItem_CAUSE input.cd')) === '호스 연결부 물맺힘',
-  await page.inputValue('#causeItem_CAUSE input.cd'));
-await clickPhrase('CAUSE', '이물 유입 확인');
-ck('두 번째 문구는 구분자로 이어 붙는다',
-  (await page.inputValue('#causeItem_CAUSE input.cd')) === '호스 연결부 물맺힘 / 이물 유입 확인',
-  await page.inputValue('#causeItem_CAUSE input.cd'));
-ck('넣은 문구는 눌린 상태로 보인다',
-  (await page.evaluate(() => document.querySelectorAll('#phraseChips_CAUSE .pc.on').length)) === 2);
-await clickPhrase('CAUSE', '호스 연결부 물맺힘');
-ck('같은 문구를 다시 누르면 빠진다',
-  (await page.inputValue('#causeItem_CAUSE input.cd')) === '이물 유입 확인');
-await clickPhrase('AFTER', '부품 교체 후 정상');
-ck('해결 후 문구는 해결 후 칸에만 들어간다', await page.evaluate(() =>
-  document.querySelector('#causeItem_AFTER input.cd').value === '부품 교체 후 정상' &&
-  document.querySelector('#causeItem_CAUSE input.cd').value === '이물 유입 확인'));
-ck('설명이 최종 저장 payload 의 사진 참조에 실린다', await page.evaluate(() =>
-  window.causeRefs().some(r => r.kind === 'CAUSE' && r.desc === '이물 유입 확인') &&
-  window.causeRefs().some(r => r.kind === 'AFTER' && r.desc === '부품 교체 후 정상')));
-
-/* 지금 고른 A/S 항목에 맞는 문구가 앞으로 온다 */
-ck('다른 A/S 항목 전용 문구는 뒤로 내리되 감추지는 않는다', await page.evaluate(() => {
-  const all = Array.from(document.querySelectorAll('#phraseChips_CAUSE .pc')).map(x => x.textContent);
-  return all.includes('풋스위치 접점 불량') && all[0] !== '풋스위치 접점 불량';
-}));
-const ctxPick = await page.evaluate(() => {
-  document.getElementById('cat').value = '장비';
-  document.getElementById('cat').dispatchEvent(new Event('change'));
-  const sub = document.getElementById('sub');
-  let hit = false;
-  for (const o of sub.options) if (o.textContent === '풋스위치 작동 불량') { sub.value = o.value; hit = true; }
-  sub.dispatchEvent(new Event('change'));
-  return { hit, sub: window.subName(), cat: window.val('cat') };
-});
-ck('A/S 항목 선택이 실제로 반영된다',
-  ctxPick.hit && ctxPick.cat === '장비' && ctxPick.sub === '풋스위치 작동 불량', JSON.stringify(ctxPick));
-ck('고른 A/S 항목에 맞는 문구가 맨 앞으로 올라온다', await page.evaluate(() => {
-  const first = document.querySelector('#phraseChips_CAUSE .pc');
-  return first.textContent === '풋스위치 접점 불량' && first.classList.contains('hit');
-}), await page.evaluate(() => document.querySelector('#phraseChips_CAUSE .pc').textContent));
-ck('동명 유형이어도 대분류가 다르면 맞춤 문구로 올리지 않는다', await page.evaluate(() => {
-  const wrong = Array.from(document.querySelectorAll('#phraseChips_CAUSE .pc'))
-    .find(x => x.textContent === '다른 대분류 전용 문구');
-  return wrong && !wrong.classList.contains('hit');
-}));
-
-/* 관리자(Lv.3) 문구 검수 */
-ck('Lv.3 에게만 문구 관리 버튼이 보인다',
-  (await page.evaluate(() => getComputedStyle(document.getElementById('phraseAdminBtn')).display)) !== 'none');
-await page.click('#phraseAdminBtn');
-await page.waitForSelector('#pmModal.show');
-ck('문구 관리에 현재 목록이 그대로 뜬다(사용 꺼진 것 포함)',
-  (await page.evaluate(() => document.querySelectorAll('#pmRows .pm-row').length)) === 7);
-await page.click('#pmAdd');
-await page.evaluate(() => {
-  const rows = document.querySelectorAll('#pmRows .pm-row');
-  const last = rows[rows.length - 1];
-  const tx = last.querySelectorAll('input[type=text]')[0];
-  tx.value = '노즐 체결부 누수';
-  tx.dispatchEvent(new Event('input'));
-  last.querySelector('select').value = 'AFTER';
-  last.querySelector('select').dispatchEvent(new Event('change'));
-});
-await page.click('#pmSave');
-await page.waitForFunction(() => /저장됨/.test(document.getElementById('pmState').textContent),
-  null, { timeout: 5000 });
-ck('관리자가 고친 문구가 Lv.3 토큰과 함께 저장된다', await page.evaluate(() => true) &&
-  phraseSaves.length === 1 && phraseSaves[0].token === 'tok-smoke' &&
-  phraseSaves[0].rows.some(r => r.text === '노즐 체결부 누수' && r.kind === 'AFTER'),
-  JSON.stringify(phraseSaves.map(x => x.rows.length)));
-ck('저장 후 화면 버튼 목록이 새로 고쳐진다',
-  (await page.textContent('#phraseBox')).includes('노즐 체결부 누수'));
-await page.click('#pmClose');
-await page.waitForFunction(() => !document.getElementById('pmModal').classList.contains('show'));
-
-/* 뒷 시나리오가 앞의 설명에 영향을 받지 않게 되돌린다 */
-await page.evaluate(() => {
-  window.CAUSE_SLOTS.forEach(s => { s.desc = ''; });
-  window.renderCauseGrid();
-});
-
-const uploadedKinds = photoAddRequests.slice(-3).map(p => p.kind).sort();
-ck('S/N·증상·해결 후 사진을 각각 photo_add로 먼저 업로드한다',
-  uploadedKinds.join(',') === 'AFTER,CAUSE,SN', JSON.stringify(uploadedKinds));
-ck('사진 3장은 최종 기록 전에 사전 업로드 완료로 표시된다',
-  (await page.textContent('#photoTransferState')).includes('3/3장 사전 업로드 완료'),
+const uploadedKinds = photoAddRequests.slice(-1).map(p => p.kind);
+ck('S/N 사진은 photo_add 로 먼저 업로드한다', uploadedKinds.join(',') === 'SN', JSON.stringify(uploadedKinds));
+ck('사진은 최종 기록 전에 사전 업로드 완료로 표시된다',
+  (await page.textContent('#photoTransferState')).includes('사전 업로드 완료'),
   await page.textContent('#photoTransferState'));
-ck('두 칸 모두 순번 1로 보낸다(칸당 1장)',
-  photoAddRequests.slice(-2).every(p => p.seq === 1),
-  JSON.stringify(photoAddRequests.slice(-2).map(p => ({ k: p.kind, q: p.seq }))));
+
+/* 앞의 '사진 없이 저장' 성공이 남긴 기록과 구분하기 위해 실패 직전 값을 잡아 둔다 */
+const recentBeforeFail = await page.evaluate(() => localStorage.getItem('baz_recent_handover'));
 scenario = 'photofail';
 await page.click('#btnSave');
 await page.waitForTimeout(1200);
 const firstFinalPayload = finalSaveRequests.at(-1) || {};
-ck('최종 저장에는 Base64 없이 사진 3장 참조만 보낸다',
+ck('최종 저장에는 Base64 없이 S/N 사진 참조만 보낸다',
   firstFinalPayload.snPhoto === '' && Array.isArray(firstFinalPayload.photos) &&
-  firstFinalPayload.photos.length === 3 &&
-  firstFinalPayload.photos.some(p => p.kind === 'SN') &&
-  firstFinalPayload.photos.some(p => p.kind === 'CAUSE') &&
-  firstFinalPayload.photos.some(p => p.kind === 'AFTER') &&
+  firstFinalPayload.photos.length === 1 &&
+  firstFinalPayload.photos[0].kind === 'SN' && firstFinalPayload.photoRequired === true &&
   firstFinalPayload.photos.every(p => !Object.prototype.hasOwnProperty.call(p, 'fileId')),
   JSON.stringify(firstFinalPayload.photos));
 const photoFail = await page.evaluate(() => ({
@@ -369,7 +253,8 @@ const photoFail = await page.evaluate(() => ({
 ck('사진 저장 실패 시 사진 미리보기가 유지된다', photoFail.photoShown === 'block', JSON.stringify(photoFail));
 ck('사진 실패 시 복사·이어쓰기가 활성화되지 않는다', photoFail.copyDisabled && photoFail.contDisabled);
 ck('사진 실패 시 실패 상태로 표시된다', photoFail.state.includes('err'));
-ck('사진 실패 시 최근 완료를 로컬에 남기지 않는다', !photoFail.recent);
+ck('사진 실패 시 최근 완료를 로컬에 남기지 않는다', photoFail.recent === recentBeforeFail,
+  String(photoFail.recent).slice(0, 60));
 
 /* 6. success:true 인데 사진 미저장 → 실패로 판정 */
 scenario = 'photolie';
@@ -424,8 +309,6 @@ const unknown = await page.evaluate(() => ({
   photoShown: document.getElementById('snPhotoPrev').style.display,
   snFileDisabled: document.getElementById('snPhotoFile').disabled,
   snRemoveDisabled: document.getElementById('snPhotoRemove').disabled,
-  causeFileDisabled: document.getElementById('causeFile_CAUSE').disabled &&
-                     document.getElementById('causeFile_AFTER').disabled,
   acts: [...document.querySelectorAll('#saveActions button')].map(b => b.textContent)
 }));
 ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',
@@ -434,8 +317,8 @@ ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',
 ck('결과 불명이면 재확인·미기록 복사를 제공한다',
   unknown.acts.some(t => t.includes('다시 확인')) && unknown.acts.some(t => t.includes('미기록')),
   unknown.acts.join(' | '));
-ck('결과 불명 중에는 사진 교체·삭제·추가를 잠근다',
-  unknown.snFileDisabled && unknown.snRemoveDisabled && unknown.causeFileDisabled,
+ck('결과 불명 중에는 사진 교체·삭제를 잠근다',
+  unknown.snFileDisabled && unknown.snRemoveDisabled,
   JSON.stringify(unknown));
 
 /* 8. 정상 저장 → 성공 · 사진 정리 · 복사 활성 · dirty 전환 */

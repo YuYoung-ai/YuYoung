@@ -41,6 +41,14 @@
  *  · all·병원DB·이슈이력·부트스트랩에 rev/nochange 조건부 응답 적용
  *  · 데이터 캐시와 리비전 메타를 함께 무효화해 오래된 nochange 방지
  *
+ * v3.9 주요 변경
+ *  · 장비 S/N 사진이 선택 항목이 됐다 — 사진 없는 기록도 그대로 저장한다.
+ *    사진이 실제로 왔거나 클라이언트가 photoRequired:true 로 "실었다"고 선언한
+ *    요청만 예전처럼 사진까지 성공해야 전체 성공이다(붙였는데 안 실린 사고 방지).
+ *  · handover.html 의 '현장 사진(증상·해결 후)' 입력 화면은 전송 데이터 문제로
+ *    삭제했다. 서버의 CAUSE/AFTER 계약과 photo_add·리포트 출력은 이미 쌓인
+ *    기록을 위해 그대로 둔다.
+ *
  * 엔드포인트
  *  POST                          : 행 기록 (수기 입력 열만 기록, 수식 열 보존)
  *                                  응답 {success, row, photo:{required,saved,fileId,error},
@@ -573,11 +581,6 @@ function doPost(e){
        Drive는 콜드스타트 때 몇 초씩 걸리는데, 그걸 락 안에서 하면 동시에 기록하는
        두 번째 FSE가 20초 대기를 넘겨 통째로 실패한다. 업로드는 행 번호와 무관하므로
        미리 해 두고, 락 안에서는 수식 한 줄만 쓴다. */
-    /* 사진 필수 여부: 사진이 실제로 왔거나, 클라이언트가 "이 요청은 사진 필수"라고 선언한 경우.
-       후자가 있어야 "사진을 붙였다고 생각했는데 payload 에 안 실린" 사고를 서버가 잡아낸다. */
-    /* handover 사진 필수 여부를 클라이언트 플래그에 맡기지 않는다.
-       action 없는 행 기록은 서버가 무조건 사진을 요구한다. */
-    var photoRequired = isHandover;
     /* [v3.4] S/N 사진은 두 경로 모두 허용한다.
        · Legacy — payload.snPhoto 에 base64 가 실려 온다(기존 클라이언트)
        · New    — payload.photos 에 kind:'SN' 참조가 정확히 1개 있고, 그 사진이
@@ -585,6 +588,12 @@ function doPost(e){
        예전에는 snPhoto 가 없으면 무조건 실패라 신규 참조 요청이 전부 거부됐다. */
     var photoRefs = isHandover ? hvPhotoRefs_(payload) : [];
     var usesRefs  = photoRefs.length > 0;
+    /* [v3.9] 장비 S/N 사진은 선택 항목이다 — 사진 없는 기록도 그대로 받는다.
+       다만 "사진이 실제로 왔거나, 클라이언트가 이 요청은 사진을 실었다고 선언한" 경우에는
+       예전처럼 사진까지 성공해야 전체 성공이다. 후자가 있어야 "붙였다고 생각했는데
+       payload 에 안 실린" 사고를 서버가 잡아낸다. */
+    var photoDeclared = !!(payload && payload.photoRequired === true);
+    var photoRequired = isHandover && (usesRefs || photoDeclared || !!(payload && payload.snPhoto));
     var snPhotoFileId = '', linkPhotos = null, causeCount = 0;
     if(photoRequired && !usesRefs && !(payload && payload.snPhoto)){
       var mfail = {success:false, row:null,
@@ -881,7 +890,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.8.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.9.0', warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -2713,7 +2722,7 @@ function getBootstrap_(p){
       Logger.log('[bootstrap] all 캐시 갱신 실패(무시): '+allErr);
     }
   }
-  var out={success:true, ver:'3.8.0', hospdb:hospdb, issuehist:issuehist,
+  var out={success:true, ver:'3.9.0', hospdb:hospdb, issuehist:issuehist,
            allready:allReady, allrev:allRev};
   /* 하위 응답을 다시 직렬화하지 않는다 — bootstrap 은 이 시스템에서 가장 큰 응답이라
      계측 때문에 전량을 한 번 더 문자열로 만들면 새로고침 경로가 그만큼 느려진다. */
@@ -2797,7 +2806,7 @@ function getHandoverBootstrap_(p){
   if(same) return same;
   var hit=(!syncForce_(p) && typeof bazCacheGet_==='function') ? bazCacheGet_('handover_bootstrap') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); return nc||old; }catch(e){} }
-  var out = {success:true, ver:'3.8.0',
+  var out = {success:true, ver:'3.9.0',
              updated: Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm')};
   function part(name, fn){
     try{ out[name] = fn(); }

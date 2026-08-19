@@ -1,6 +1,10 @@
 /************************************************************
  * photo-multi.mjs
- * 다중 사진(장비 S/N + 문제 원인) 등록·조회·출력 회귀 테스트
+ * 사진(장비 S/N + 이미 쌓인 현장 사진) 등록·조회·출력 회귀 테스트
+ *
+ * [v3.9] handover.html 의 '현장 사진(증상·해결 후)' 입력 화면은 전송 데이터 문제로
+ * 삭제했다. 서버·리포트(label.html)의 CAUSE/AFTER 계약은 이미 쌓인 기록을 읽기
+ * 위해 그대로 살아 있으므로, 그쪽 검사는 그대로 둔다.
  * 실행: node test/photo-multi.mjs
  *
  * 정적 문자열 검사만으로는 계약이 지켜지는지 알 수 없는 것들은
@@ -215,8 +219,8 @@ ck('사진 3장 상태는 사진별 쓰기가 아니라 한 범위 setValues 로
 ck('행 확정 전 실패는 같은 recordId의 재시도를 막는 캐시에 저장하지 않는다',
   (doPost.match(/reqPut_\(reqId/g)||[]).length === 1 &&
   doPost.indexOf('reqPut_(reqId') > doPost.indexOf('var out ='));
-ck('클라이언트는 S/N과 원인 사진 참조를 함께 보내고 base64는 최종 payload에서 제외한다',
-  /photo:''/.test(H) && /\(snRef\?\[snRef\]:\[\]\)\.concat\(causeRefs\(\)\)/.test(H));
+ck('클라이언트는 S/N 사진 참조만 보내고 base64는 최종 payload에서 제외한다',
+  /photo:''/.test(H) && /photos:\(snRef\?\[snRef\]:\[\]\)/.test(H));
 ck('최종 저장 실패 시 사진을 즉시 삭제하지 않는다(ORPHAN 유지 → 재시도 가능)',
   !/photoDiscard_\(linkPhotos/.test(doPost) && /photo-ref-invalid/.test(doPost));
 ck('클라이언트는 저장 실패 후에도 같은 recordId 를 유지한다',
@@ -232,7 +236,8 @@ ck('photo_abandon 이 존재하고 knownActions 에 등록돼 있다',
 ck('연결 완료(OK)된 사진은 abandon 으로 지울 수 없다',
   /if\(hit\.status === SNAP\.ST_OK\)\{[\s\S]{0,120}이미 기록에 연결된 사진은 폐기할 수 없습니다/.test(grab(G, 'photoAbandon_')));
 ck('사진 삭제 시 클라이언트가 abandon 을 호출한다',
-  /action:'photo_abandon'/.test(H) && /function causeRemove/.test(H));
+  /action:'photo_abandon'/.test(H) && /function clearSnPhoto/.test(H) &&
+  /abandonPhoto\(oldId\)/.test(grab(H, 'clearSnPhoto')));
 ck('교체는 삭제 후 새 clientPhotoId 를 발급한다',
   /BazPhoto\.newPhotoId\(\)/.test(H));
 ck('cleanupOrphanPhotos 가 오래된 ORPHAN 만 정리한다',
@@ -622,18 +627,13 @@ ck('문구는 시트 수식 주입을 막고 길이를 자른다',
     deniedOut.success === false && /보안레벨 3/.test(deniedOut.error), JSON.stringify(deniedOut));
 }
 
-ck('현장 화면이 문구 버튼과 관리자 버튼을 갖는다',
-  /id="phraseChips_CAUSE"/.test(H) && /id="phraseChips_AFTER"/.test(H) &&
-  /id="phraseAdminBtn"/.test(H) && /id="pmModal"/.test(H));
-ck('문구 버튼은 눌렀다 다시 누르면 빠진다(조합 입력)',
-  /function togglePhrase/.test(H) && /parts\.splice\(at, 1\)/.test(H));
-ck('지금 고른 A/S 항목에 맞는 문구를 앞으로 올린다',
-  /function phrasesFor/.test(H) && /hit = 2;/.test(H) && /hit = -1;/.test(H));
-ck('문구 관리 버튼은 Lv.3 에게만 보인다',
-  /function syncPhraseAdminBtn/.test(H) && /pmLevel\(\) >= 3/.test(H) &&
-  /BazAuth\.cachedLevel/.test(H));
-ck('문구 관리 모달은 스크립트보다 먼저 그려진다(바인딩 시점에 존재)',
-  H.indexOf('id="pmModal"') < H.indexOf('function bindPhraseAdmin'));
+/* [v3.9] 문구는 현장 사진 설명을 채우려고 만든 기능이라 화면과 함께 사라졌다.
+   서버 계약(photophrase·photophrase_save)은 위 검사대로 살아 있다. */
+ck('현장 화면에 문구 버튼·문구 관리 모달이 남아 있지 않다',
+  !/phraseChips_/.test(H) && !/id="phraseAdminBtn"/.test(H) && !/id="pmModal"/.test(H) &&
+  !/function togglePhrase/.test(H) && !/function pmSave/.test(H));
+ck('문구 목록을 더 이상 화면이 불러오지 않는다',
+  !/loadPhrasesCached/.test(H) && !/photophrase/.test(H));
 
 /* ══════════ 8. 클라이언트 압축·동시성 (실제 실행) ══════════ */
 section('압축 기준 · 동시 실행 제한');
@@ -692,54 +692,39 @@ section('기존 기능 보존');
 ck('기존 snPhoto(base64) payload 호환을 유지한다',
   /snPhoto: opts\.photo \|\| '',/.test(read('js/baz-handover-core.js')) &&
   /payload\.snPhoto/.test(doPost));
-ck('S/N 사진 없이 저장하면 여전히 차단된다',
-  BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: false })
-    .errors.some(e => e.field === 'snPhoto'));
+ck('[v3.9] S/N 사진 없이도 저장할 수 있다(선택 항목)',
+  BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: false }).ok === true &&
+  /photoRequired:false/.test(H));
 ck('원인 사진 최대 5장을 클라이언트·서버가 같은 값으로 강제한다',
   BazHandover.MAX_CAUSE_PHOTOS === 5 && /MAX_CAUSE : 5/.test(G) &&
   BazPhoto.MAX_CAUSE === 5);
-ck('업로드하지 못한 원인 사진이 있으면 저장을 막는다',
-  BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: true, causePending: 1 })
-    .errors.some(e => e.field === 'causePhoto'));
+ck('사진을 처리하는 중에는 저장을 막는다',
+  BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: false, photoBusy: true })
+    .errors.some(e => e.field === 'snPhoto'));
 ck('저장 완료 전 화면을 닫으면 경고한다',
   /beforeunload/.test(H) && /function hasUnfinishedPhotoWork/.test(H) &&
-  /return !!SN_PHOTO \|\| CAUSE_SLOTS\.length>0;/.test(H));
+  /return !!SN_PHOTO;/.test(H));
 ck('S/N 사진도 개별 압축·업로드 후 참조로 최종 저장한다',
   /BazPhoto\.compress\(file,\{kind:'SN'\}\)/.test(H) &&
   /uploadPhotoSlot\([^\n]+, 'SN'\)/.test(H) && /function snPhotoRef/.test(H));
 ck('브라우저 압축은 실제 canvas.toBlob 경로를 사용한다',
   /canvas\.toBlob\(/.test(PHOTO_SRC) && /function blobDataUrl/.test(PHOTO_SRC));
-ck('원인 사진 슬롯마다 상태를 표시한다(압축·업로드·완료·실패·재시도)',
-  /압축 중…/.test(H) && /업로드 중…/.test(H) && /'완료'/.test(H) && /재시도/.test(H));
-ck('모바일 바로 촬영 입력은 증상·해결 후 두 칸에 유지한다',
-  (H.match(/capture="environment"/g) || []).length === 2);
-ck('증상·해결 후마다 capture 없는 갤러리 입력을 따로 제공한다',
-  /id="causeFile_CAUSE"/.test(H) && /id="causeFile_AFTER"/.test(H) &&
-  /for="causeFile_CAUSE">🖼 갤러리 선택/.test(H) &&
-  /for="causeFile_AFTER">🖼 갤러리 선택/.test(H));
-ck('세 사진 전체의 실제 업로드 동시 실행은 2개로 제한한다',
+ck('S/N 사진 칸이 압축·업로드·완료·실패·재시도 상태를 알린다',
+  /사진 처리 중…/.test(H) && /S\/N 사진 업로드 중…/.test(H) &&
+  /업로드 완료/.test(H) && /사진 업로드 재시도/.test(H));
+ck('실제 업로드 동시 실행은 2개로 제한한다',
   /PHOTO_UPLOAD_LIMIT=2/.test(H) && /function queuePhotoUpload/.test(H) &&
   /return queuePhotoUpload\(function\(\)/.test(grab(H, 'uploadPhotoSlot')));
-ck('모바일에서는 증상·해결 후 사진 칸을 세로로 넓게 쌓는다',
-  /@media \(max-width:560px\)[\s\S]{0,100}\.cause-grid\{grid-template-columns:1fr/.test(H));
-ck('현장 촬영 화면이 증상·해결 후 두 칸으로 고정된다',
-  /var CAUSE_KINDS = \[/.test(H) &&
-  /kind:'CAUSE', title:'현장에서 확인한 증상'/.test(H) &&
-  /kind:'AFTER', title:'증상 해결 후'/.test(H) &&
-  /id="causeFile_CAUSE"/.test(H) && /id="causeFile_AFTER"/.test(H));
-ck('한 칸에는 사진 1장만 — 이미 있으면 새로 받지 않는다',
-  /if\(causeSlotOf\(kind\)\)\{ toast\('이 칸에는 이미 사진이 있습니다/.test(H));
-ck('업로드는 칸의 사진 구분을 그대로 보낸다',
-  /uploadPhotoSlot\(slot, slot\.kind\|\|'CAUSE'\)/.test(H) &&
-  /kind:s\.kind\|\|'CAUSE', seq:1/.test(H));
-ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 화면과 코드에 남긴다',
-  /링크를 아는 사람이 열람할 수 있습니다/.test(H) && /ANYONE_WITH_LINK/.test(G) &&
-  /\[보안 주의\]/.test(G));
+ck('[v3.9] 현장 사진 촬영 화면이 남김없이 사라졌다',
+  !/cause-grid/.test(H) && !/CAUSE_KINDS/.test(H) && !/causeFile_/.test(H) &&
+  !/capture="environment"/.test(H) && !/CAUSE_SLOTS/.test(H));
+ck('사진 공개 범위(ANYONE_WITH_LINK) 주의를 서버 코드에 남긴다',
+  /ANYONE_WITH_LINK/.test(G) && /\[보안 주의\]/.test(G));
 ck('index.html 은 이번 범위에서 건드리지 않는다',
   !/baz-photo\.js/.test(read('index.html')));
 ck('서비스워커 캐시 버전이 139 이상이다',
   Number((SW.match(/baz-cs-v(\d+)/) || [])[1] || 0) >= 139);
-ck('GAS 버전이 3.8.0 로 올라갔다', /ver:'3\.8\.0'/.test(G));
+ck('GAS 버전이 3.9.0 로 올라갔다', /ver:'3\.9\.0'/.test(G));
 
 console.log('\n──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);
