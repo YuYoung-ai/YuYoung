@@ -4776,9 +4776,9 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
       : ('주간업무보고_'+a.getFullYear()+'년'+wkLabel(a).replace(' ','')+'.pptx'),
     cmp:cmp, cmpLabel:cmpLb, rowCount:x.rows.length,
     kpi:kpi, trend:trend,
-    change:{ title:'VOC 유형 변화', basis:cmpLb+' 대비 · A/S·점검 통합 · 이상 없음·정기점검 제외',
+    change:{ title:'VOC 유형 변화', basis:cmpLb+' 대비 · A/S·점검 통합 · 이상 없음 제외',
              hasPrev:!!x.prev, up:vc.up.map(chRow), down:vc.down.map(chRow) },
-    vocTop:{ title:'VOC 유형 TOP 5', basis:'A/S·점검 통합 · 이상 없음·정기점검 제외 · '+cmpLb+' 대비',
+    vocTop:{ title:'VOC 유형 TOP 5', basis:'A/S·점검 통합 · 이상 없음 제외 · '+cmpLb+' 대비',
              showDescriptions:true,
              rows: exVocTypeCompare_(x.rows, x.prev)
                .filter(function(t){return t.cur>0;}).slice(0,5)
@@ -5104,7 +5104,7 @@ function exShowHistory_(dim, name){
   var cur=exHistorySort_(exHistoryRows_(x.rows, key, name, onlyAS));
   var prev=x.prev ? exHistorySort_(exHistoryRows_(x.prev, key, name, onlyAS)) : null;
   var per=exPeriodLabel(), cmpLb=x.cmp?x.cmp.label:'이전 기간';
-  var sub=(onlyAS?'A/S 기준 · 이상 없음 제외':(dim==='typeAll'?'A/S·점검 통합 · 이상 없음·정기점검 제외':'교체품 수량 기준'))
+  var sub=(onlyAS?'A/S 기준 · 이상 없음 제외':(dim==='typeAll'?'A/S·점검 통합 · 이상 없음 제외':'교체품 수량 기준'))
     +' · 선택 기간 '+per+' '+exNum(cur.length)+'건'
     +(prev ? ' · '+cmpLb+' '+exCmpRangeText_(x.cmp)+' '+exNum(prev.length)+'건'
            : ' · 비교 기간 없음');
@@ -5374,7 +5374,7 @@ function renderExecutiveSummary(x){
       +'</div>';
   }
   document.getElementById('exVocUpCard').innerHTML=
-    exH3('VOC 유형 변화', (cmp?cmp.label:'이전 기간')+' 대비 · A/S·점검 통합 · 이상 없음·정기점검 제외 · '+per)
+    exH3('VOC 유형 변화', (cmp?cmp.label:'이전 기간')+' 대비 · A/S·점검 통합 · 이상 없음 제외 · '+per)
     +'<div class="ex-cbody">'
     +(!x.prev
       ? '<div class="ex-empty">비교 데이터 없음</div>'
@@ -5413,7 +5413,7 @@ function renderExecutiveCause(x){
   var types=exVocTypeCompare_(x.rows, x.prev)
     .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exTypeCard').innerHTML=
-    exH3('VOC 유형 TOP 5', 'A/S·점검 통합 · 이상 없음·정기점검 제외 · '+per+' · '+cmpTxt)
+    exH3('VOC 유형 TOP 5', 'A/S·점검 통합 · 이상 없음 제외 · '+per+' · '+cmpTxt)
     +'<div class="ex-cbody">'+exBars(types,{empty:'VOC 유형 기록 없음', histDim:'typeAll'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
