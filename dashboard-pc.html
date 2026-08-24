@@ -1148,6 +1148,9 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
     <button class="hd-btn" onclick="openMonthly()">📅 월간보고</button>
     <button class="hd-btn" onclick="openSaturdayDuty()">🗓 토요당직 분석</button>
     <button class="hd-btn" onclick="loadData(true)">🔄 새로고침</button>
+    <!-- 관리 도구 — 코드는 이 버튼을 눌렀을 때만 내려받는다(일반 로딩에는 포함되지 않음) -->
+    <button type="button" class="hd-btn" id="teMgrBtn" onclick="exOpenTypeExampleManager()"
+            title="VOC 유형별 예시 사진 등록·교체">🖼 예시사진 관리</button>
     <button type="button" class="hd-btn" id="themeToggle" aria-label="다크모드 전환" title="다크모드">🌙</button>
     <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
       <button type="button" data-mode="window">🖥 Window</button><button type="button" data-mode="mobile">📱 Mobile</button>
@@ -5111,6 +5114,50 @@ function exSelectHistory_(idx,tr){
     if(seq!==EX_HISTORY_PHOTO_SEQ || !EX_HISTORY_STATE || EX_HISTORY_STATE.selectedKey!==key) return;
     exHistoryPhotoError_('유형별 예시 목록을 불러오지 못했습니다 · 새로고침해 주세요');
   });
+}
+/* ══════ 유형별 예시 사진 관리(관리 도구) ══════
+   조회 경로(exTypeExample*)와 등록 경로를 완전히 분리한다.
+   · 일반 사용: 정적 index.json 1회 + 선택한 유형의 정적 이미지만. 아래 코드는 실행되지 않는다.
+   · 관리 사용: 버튼을 누른 순간에만 js/type-example-manager.js 를 내려받는다.
+   관리 모듈은 GAS·Sheets·Drive를 호출하지 않고, 유형 목록은 이미 받아 둔 RAW를,
+   매니페스트는 이미 받아 둔 exTypeExampleLoad_() 결과를 그대로 넘겨받아 쓴다. */
+var EX_TE_MGR_SRC='js/type-example-manager.js';
+var EX_TE_MGR_LOADING=false;
+function exTypeExampleHost_(){
+  return {
+    rows: RAW,                       /* 이미 받아 둔 전체 데이터 — GAS 재호출 없음 */
+    loadManifest: exTypeExampleLoad_,/* 페이지당 1회만 받는 정적 매니페스트 */
+    norm: exTypeExampleNorm_,
+    looseKey: exTypeExampleLooseKey_,
+    assetUrl: exTypeExampleAssetUrl_
+  };
+}
+/* 관리 화면의 오류는 여기서 잡아 대시보드로 번지지 않게 한다 */
+function exTypeExampleManagerOpen_(){
+  try{
+    var p=window.BazTypeExampleManager.open(exTypeExampleHost_());
+    if(p&&p.catch) p.catch(function(e){ toast('예시 사진 관리 오류 · '+((e&&e.message)||e)); });
+  }catch(e){ toast('예시 사진 관리 오류 · '+((e&&e.message)||e)); }
+}
+function exOpenTypeExampleManager(){
+  if(EX_TE_MGR_LOADING) return;                     /* 중복 클릭 방지 */
+  if(window.BazTypeExampleManager){ exTypeExampleManagerOpen_(); return; }
+  EX_TE_MGR_LOADING=true;
+  var btn=document.getElementById('teMgrBtn');
+  if(btn) btn.disabled=true;
+  var s=document.createElement('script');
+  s.src=EX_TE_MGR_SRC; s.async=true;
+  s.onload=function(){
+    EX_TE_MGR_LOADING=false; if(btn) btn.disabled=false;
+    if(window.BazTypeExampleManager) exTypeExampleManagerOpen_();
+    else toast('예시 사진 관리 모듈을 불러오지 못했습니다');
+  };
+  s.onerror=function(){
+    EX_TE_MGR_LOADING=false; if(btn) btn.disabled=false;
+    if(s.parentNode) s.parentNode.removeChild(s);
+    toast('예시 사진 관리 모듈을 불러오지 못했습니다 · 연결을 확인해 주세요');
+  };
+  document.head.appendChild(s);
 }
 function exHistoryControls_(items, hasPrev){
   var gubuns=exHistoryUnique_(items,'gubun'), fses=exHistoryUnique_(items,'fse');

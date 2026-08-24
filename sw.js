@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v147';
+const CACHE_VERSION = 'baz-cs-v148';
 
 // 프리캐시(설치 시 미리 받는 파일) — "셸 최소 구성"만 둔다.
 // ★ 여기에 큰 파일을 추가하지 마세요. 버전을 올릴 때마다 전 사용자가 전량 재다운로드합니다. ★
@@ -23,6 +23,15 @@ const ASSETS = [
 // 내용이 바뀌지 않는 자산 → 캐시 우선(있으면 네트워크를 타지 않음)
 // 폰트(2MB)·아이콘·로고가 재방문마다 다시 내려오는 것을 막는다.
 const IMMUTABLE = /\/(fonts\/|logo\.png|icon-192\.png|icon-512\.png)/;
+
+// VOC 유형별 대표 사진 중 "내용 해시 파일명"만 불변으로 본다.
+//   assets/type-examples/media/<sha256 앞 12자리>.webp
+// 내용이 바뀌면 파일명이 바뀌므로 캐시 우선이어도 옛 사진이 남지 않는다.
+// 첫 요청 이후에는 오프라인에서도 그대로 다시 쓸 수 있다.
+// ★ 프리캐시(ASSETS)에는 절대 넣지 않는다 — 배포마다 전 사용자가 사진을 전량 재다운로드한다.
+//   기존 폴더(equipment-*·handpiece-*)의 사진과 index.json 은 해시 파일명이 아니므로
+//   지금처럼 네트워크 우선으로 둔다(교체 즉시 반영되어야 한다).
+const TYPE_EXAMPLE_IMMUTABLE = /\/assets\/type-examples\/media\/[0-9a-f]{12}\.webp$/;
 
 // ※ 네트워크 우선 요청에 "타임아웃 후 캐시 표시"는 의도적으로 넣지 않는다.
 //    느린 회선에서 옛 HTML이 표시되어 배포 직후 이전 화면이 보이는 문제가 생기기 때문.
@@ -69,8 +78,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ① 불변 자산: 캐시 우선 (폰트·아이콘·로고)
-  if (IMMUTABLE.test(req.url)) {
+  // ① 불변 자산: 캐시 우선 (폰트·아이콘·로고 + 내용 해시 대표 사진)
+  if (IMMUTABLE.test(req.url) || TYPE_EXAMPLE_IMMUTABLE.test(new URL(req.url).pathname)) {
     event.respondWith(
       caches.match(req).then((cached) =>
         cached || fetch(req).then((res) => putCache(req, res))
