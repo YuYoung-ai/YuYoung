@@ -190,11 +190,13 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     const a = d > _today ? _today : d;
     return a.getTime() === _today.getTime() ? '오늘 현황' : (a.getMonth() + 1) + '.' + a.getDate() + ' 기준';
   };
+  const wNcare=wSnap.kpi.find(k=>k.label==='N-CARE 점검 운영률');
+  const mNcare=mSnap.kpi.find(k=>k.label==='N-CARE 점검 운영률');
   ck('3-e. N-CARE 운영률 배지가 보고 기간 끝을 따른다',
-    wSnap.kpi[5].badge === wantBadge(WEEK.to) && has(wItems, wSnap.kpi[5].badge),
-    wSnap.kpi[5].badge + ' (기대 ' + wantBadge(WEEK.to) + ')');
+    !!wNcare && wNcare.badge === wantBadge(WEEK.to) && has(wItems, wNcare.badge),
+    (wNcare?.badge||'KPI 없음') + ' (기대 ' + wantBadge(WEEK.to) + ')');
   ck('3-e2. 끝이 미래인 기간은 오늘로 잘린다',
-    mSnap.kpi[5].badge === wantBadge(MONTH.to), mSnap.kpi[5].badge);
+    !!mNcare && mNcare.badge === wantBadge(MONTH.to), mNcare?.badge||'KPI 없음');
   ck('3-f. KPI 6장이 한 줄 — y 좌표가 모두 같다',
     new Set(wItems.filter(o => o.card && o.y === D.L.kpi.y).map(o => o.y)).size === 1 &&
     wItems.filter(o => o.card && o.y === D.L.kpi.y).length === 6);
@@ -206,18 +208,18 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     wSnap.trend.kind === 'week' && wSnap.trend.bars.length === 8 && has(wItems, '최근 8주 서비스 추이'));
   ck('4-b. A/S·점검 구분 막대 (묶음마다 2개)', wSnap.trend.bars.every(b => 'as' in b && 'insp' in b));
   ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.bars.filter(b => b.sel).length === 1);
-  ck('4-d. 핵심 수치(최근 주 A/S·점검·8주 평균) 유지',
-    ['최근 주 A/S', '최근 주 점검', 'A/S 8주 주평균', '점검 8주 주평균'].every(t => has(wItems, t)));
+  ck('4-d. 핵심 수치(기준 주 A/S·점검·8주 평균) 유지',
+    ['기준 주 A/S', '기준 주 점검', 'A/S 8주 주평균', '점검 8주 주평균'].every(t => has(wItems, t)));
   ck('5. 월간 PPT 최근 6개월 추이 (막대 6묶음)',
     mSnap.trend.kind === 'month' && mSnap.trend.bars.length === 6 && has(mItems, '월별 A/S·점검 처리 추이'));
   ck('5-b. 현재 보고 월 강조', mSnap.trend.bars.filter(b => b.sel).length === 1 &&
     mSnap.trend.bars[mSnap.trend.bars.length - 1].sel === true);
-  ck('5-c. 월간 핵심 수치(이번 달 총 처리·A/S·점검·전월 동기간)',
-    ['이번 달 총 처리', 'A/S 처리', '점검 처리', '전월 동기간 대비'].every(t => has(mItems, t)));
+  ck('5-c. 월간 핵심 수치(기준 월 총 처리·A/S·점검·전월 동기간)',
+    ['기준 월 총 처리', 'A/S 처리', '점검 처리', '전월 동기간 대비'].every(t => has(mItems, t)));
   ck('5-d. 주간 PPT 에는 6개월 추이가 없다', !has(wItems, '월별 A/S·점검 처리 추이'));
   ck('5-e. 월간 PPT 에는 8주 추이가 없다', !has(mItems, '최근 8주 서비스 추이'));
 }
-/* 보고 월이 끝나지 않았으면 "진행 중" */
+/* 선택 종료일이 월말보다 이르면 부분 월로 표시 */
 {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const y = today.getFullYear(), m = today.getMonth();
@@ -226,7 +228,7 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
   });
   const last = cur.trend.bars[cur.trend.bars.length - 1];
   const done = new Date(y, m + 1, 0) <= today;
-  ck('5-f. 보고 월이 완료되지 않았으면 "진행 중" 표시', done ? !last.ongoing : !!last.ongoing);
+  ck('5-f. 보고 월이 완료되지 않았으면 부분 월 표시', done ? !last.ongoing : !!last.ongoing);
   const pm = new Date(y, m - 1, 1);            /* 지난달 = 반드시 완료된 월 */
   const past = D.buildExecutiveReportSnapshot({
     type: 'month', from: D.ymd(pm), to: D.ymd(new Date(y, m, 0))

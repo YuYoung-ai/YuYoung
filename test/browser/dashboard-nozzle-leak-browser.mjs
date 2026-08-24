@@ -53,6 +53,13 @@ await page.evaluate(()=>{F.from='2026-08-10';F.to='2026-08-14';buildFilters();ap
 await page.click('[data-tab="leak"]');
 await page.waitForSelector('#exPaneLeak.on');
 ck('1. 누수 분석 탭이 표시된다',await page.isVisible('#exPaneLeak'));
+const leakFilterUi=await page.evaluate(()=>( {
+  ignored:['exTypeGroup','exNozGroup','exSkillGroup'].every(id=>document.getElementById(id).classList.contains('ignored')),
+  disabled:['exTypeGroup','exNozGroup','exSkillGroup'].every(id=>[...document.getElementById(id).querySelectorAll('button,input')].every(el=>el.disabled)),
+  note:document.getElementById('exTabFilterNote').textContent
+}));
+ck('1-b. 누수 탭에서 제외되는 필터를 비활성·안내 표시',
+  leakFilterUi.ignored&&leakFilterUi.disabled&&leakFilterUi.note.includes('유형·노즐·교육 상태 필터 제외'),JSON.stringify(leakFilterUi));
 ck('2. 핵심 지표가 실제 집계값으로 표시된다',(await page.textContent('#exLeakKpis')).includes('노즐 누수(약액 유입)4건'));
 ck('3. 사용방식·교육 비교 막대가 각각 두 개다',await page.locator('#exLeakNozzleCard .nl-bar-row').count()===2&&await page.locator('#exLeakSkillCard .nl-bar-row').count()===2);
 /* 막대 채움이 span 이라 display:block 이 빠지면 inline 으로 남아 0×0 으로 그려진다 — 실제 렌더 크기를 잰다 */
@@ -76,6 +83,12 @@ await page.evaluate(()=>closeExList());
 ck('10. PC에서 분석 패널이 화면 폭을 넘지 않는다',await page.evaluate(()=>document.getElementById('exPaneLeak').getBoundingClientRect().right<=innerWidth+1));
 await page.click('[data-mode="mobile"]');
 ck('11. 모바일 보기에서 비교 영역이 한 열로 바뀐다',await page.evaluate(()=>getComputedStyle(document.querySelector('.nl-grid')).gridTemplateColumns.split(' ').length===1&&document.body.classList.contains('ex-narrow')));
+await page.click('[data-tab="summary"]');
+const summaryFilterUi=await page.evaluate(()=>( {
+  ignored:['exTypeGroup','exNozGroup','exSkillGroup'].some(id=>document.getElementById(id).classList.contains('ignored')),
+  enabled:['exTypeGroup','exNozGroup','exSkillGroup'].every(id=>[...document.getElementById(id).querySelectorAll('button,input')].every(el=>!el.disabled))
+}));
+ck('11-b. 다른 탭으로 돌아오면 필터가 다시 활성화',!summaryFilterUi.ignored&&summaryFilterUi.enabled,JSON.stringify(summaryFilterUi));
 ck('12. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT,fullPage:true});
 await browser.close();

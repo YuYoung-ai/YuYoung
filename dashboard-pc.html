@@ -349,6 +349,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-btn.ex-reset{color:var(--red);border-color:#E7C9C5}
 .ex-fspacer{flex:1 1 auto}
 .ex-fcount{font-size:11.5px;font-weight:700;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.ex-tab-note{font-size:11px;font-weight:700;color:var(--text-muted);white-space:normal}
 /* 보고 대상 범위 고지 — 보고 모드는 항상 고객 서비스 기준이라 상시 노출한다 */
 .ex-scope{font-size:11px;font-weight:700;color:var(--scope-fg);background:var(--scope-bg);border:1px solid var(--scope-bd);
   border-radius:9px;padding:2px 8px;white-space:nowrap}
@@ -360,6 +361,10 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-dgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}
 .ex-dg h5{margin:0 0 6px;font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:.3px}
 .ex-dg.span2{grid-column:span 2}
+.ex-period-rule{padding:8px 10px;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);
+  color:var(--text-muted);font-size:11px;line-height:1.5}
+.ex-dg.ignored{opacity:.52}
+.ex-dg.ignored:after{content:'현재 탭에서는 적용 제외';display:block;margin-top:5px;color:var(--amber);font-size:10px;font-weight:700}
 
 /* 탭 */
 .ex-tabs{display:flex;gap:4px;flex:0 0 auto;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
@@ -496,7 +501,7 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-mcol .l{flex:0 0 auto;font-size:10.5px;color:var(--text-muted);margin-top:5px;white-space:nowrap}
 .ex-mcol.now .ex-mbar{opacity:1}
 .ex-mcol.now .l{color:var(--navy);font-weight:700}
-/* "진행 중" 표식 — 아직 월이 끝나지 않아 다른 월과 같은 길이로 비교할 수 없음을 알린다 */
+/* 기준 월 표식 — 선택 종료일이 속한 마지막 월을 다른 월과 구분한다 */
 .ex-mnow{font-style:normal;font-size:9px;font-weight:700;color:var(--amber);margin-left:3px;white-space:nowrap}
 
 /* ══════ 연간 비교분석 ══════
@@ -1269,24 +1274,30 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
       <button type="button" class="ex-btn ex-reset" id="exResetBtn">✕ 전체 초기화</button>
       <span class="ex-fspacer"></span>
       <span class="ex-scope" id="exScopeNote"></span>
+      <span class="ex-tab-note" id="exTabFilterNote"></span>
       <span class="ex-fcount" id="exFCount"></span>
 
       <!-- 상세 필터 팝오버 — 기존 필터 항목을 그대로 재사용 -->
       <div class="ex-drawer" id="exDrawer">
         <div class="ex-dgrid">
-          <div class="ex-dg"><h5>년</h5><div class="chips" id="exYear"></div></div>
-          <div class="ex-dg"><h5>월</h5><div class="chips" id="exMonth"></div></div>
-          <div class="ex-dg"><h5>분기</h5><div class="chips" id="exQuarter"></div></div>
+          <div class="ex-dg span2"><h5>보고 기간 기준</h5><div class="ex-period-rule">보고 탭은 상단 기간만 사용합니다. 상세 분석의 연·월·분기 선택은 보고 탭 집계에서 제외됩니다.</div></div>
           <div class="ex-dg"><h5>유 / 무상</h5><div class="chips" id="exPaid"></div></div>
           <div class="ex-dg span2"><h5>대분류</h5><div class="chips" id="exCat"></div></div>
-          <div class="ex-dg"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="exNoz"></div></div>
-          <div class="ex-dg span2"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="exSkill"></div></div>
-          <div class="ex-dg span2"><h5>유형</h5>
+          <div class="ex-dg" id="exNozGroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="exNoz"></div></div>
+          <div class="ex-dg span2" id="exSkillGroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="exSkill"></div></div>
+          <div class="ex-dg span2" id="exTypeGroup"><h5>유형</h5>
             <div class="cb-wrap">
               <input class="hosp-search" id="exCbType" placeholder="유형 검색 후 선택 (복수 가능)" autocomplete="off">
               <div class="ac2" id="exCbTypeDrop"></div>
             </div>
             <div class="chips" id="exTypeSel" style="margin-top:6px"></div>
+          </div>
+          <div class="ex-dg span2"><h5>교체품</h5>
+            <div class="cb-wrap">
+              <input class="hosp-search" id="exCbPart" placeholder="교체품 검색 후 선택 (복수 가능)" autocomplete="off">
+              <div class="ac2" id="exCbPartDrop"></div>
+            </div>
+            <div class="chips" id="exPartSel" style="margin-top:6px"></div>
           </div>
           <div class="ex-dg"><h5>병원 검색</h5>
             <div class="cb-wrap">
@@ -1946,14 +1957,12 @@ function buildFilters(){
   selChips('fTypeSel','type');
   selChips('fHospSel','hosp');
   /* 보고 모드 "상세 필터" 팝오버 — 같은 F 상태를 그대로 재사용한다 */
-  chipGroup('exYear','year', years, function(v){return v+'년';});
-  chipGroup('exMonth','month', months, function(v){return v+'월';});
-  chipGroup('exQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
   chipGroup('exPaid','paid', uniq('paid'));
   chipGroup('exCat','cat', uniq('cat'));
   stateChips('exNoz','noz', NOZ_OPT);
   stateChips('exSkill','skill', SKILL_OPT);
   selChips('exTypeSel','type');
+  selChips('exPartSel','part');
   selChips('exHospSel','hosp');
 }
 /* 고정 옵션 칩 (노즐 재사용 · 사용자 숙련도) — 값이 데이터가 아니라 판정 상태라 목록이 고정이다.
@@ -2008,6 +2017,7 @@ function initCombos(){
   combo('cbType','cbTypeDrop','type','type');
   combo('cbHosp','cbHospDrop','hosp','hosp');
   combo('exCbType','exCbTypeDrop','type','type');
+  combo('exCbPart','exCbPartDrop','part','part');
   combo('exCbHosp','exCbHospDrop','hosp','hosp');
 }
 document.addEventListener('click',function(e){
@@ -2018,9 +2028,21 @@ document.addEventListener('click',function(e){
 });
 /* ── 기간 지정 ── */
 function setRange(){
-  F.from=document.getElementById('fFrom').value||'';
-  F.to  =document.getElementById('fTo').value||'';
+  var from=document.getElementById('fFrom').value||'';
+  var to=document.getElementById('fTo').value||'';
+  if(from&&to&&from>to){
+    toast('⚠️ 시작일은 종료일보다 늦을 수 없습니다');
+    document.getElementById('fFrom').value=F.from||'';
+    document.getElementById('fTo').value=F.to||'';
+    var exFrom=document.getElementById('exFrom'),exTo=document.getElementById('exTo');
+    if(exFrom) exFrom.value=F.from||'';
+    if(exTo) exTo.value=F.to||'';
+    return false;
+  }
+  F.from=from;
+  F.to=to;
   apply();
+  return true;
 }
 function setRangeDates(a,b){ /* Date,Date */
   document.getElementById('fFrom').value=ymd(a);
@@ -2051,7 +2073,7 @@ function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
   F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
   EX_CUSTOM=false;
-  ['cbHosp','cbType','exCbHosp','exCbType','fFrom','fTo','exFrom','exTo'].forEach(function(id){
+  ['cbHosp','cbType','exCbHosp','exCbType','exCbPart','fFrom','fTo','exFrom','exTo'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
   });
   buildFilters(); apply();
@@ -2076,6 +2098,9 @@ function filtered(opt){
    자르기 전에 상태 필터가 걸려서는 안 되므로 두 단계를 분리해 둔다. */
 function filteredRows_(opt){
   var noPeriod=!!(opt&&opt.noPeriod);
+  /* 보고 모드는 상단 F.from/F.to 를 유일한 기간 기준으로 쓴다. 상세 분석에서 고른
+     연·월·분기는 상태를 보존하되 보고 집계에는 겹쳐 적용하지 않는다. */
+  var ignorePeriodChips=!!(opt&&opt.ignorePeriodChips);
   var ignoreType=!!(opt&&opt.ignoreType);  /* 전용 VOC 분석은 비교군 보존을 위해 유형 필터를 무시한다 */
   /* opt.scope 를 주면 F.scope 대신 그 범위를 강제한다. 보고 모드는 항상 'customer' 로 부른다. */
   var scope=(opt&&opt.scope) ? [opt.scope] : F.scope;
@@ -2089,7 +2114,7 @@ function filteredRows_(opt){
       if(fromD && d<fromD) return false;
       if(toD   && d>toD)   return false;
     }
-    if(!noPeriod){
+    if(!noPeriod&&!ignorePeriodChips){
       if(F.year.length   && F.year.indexOf(String(r._y))<0) return false;
       if(F.month.length  && F.month.indexOf(String(r._m))<0) return false;
       if(F.quarter.length&& F.quarter.indexOf(String(r._q))<0) return false;
@@ -2213,15 +2238,15 @@ function apply(){
      두 모드가 서로 다른 모집단을 쓰므로 각각 한 번씩 거른다. */
   var rows=filtered();
   CUR_ROWS=rows;
-  EX_ROWS=filtered({scope:'customer'});
+  EX_ROWS=filtered({scope:'customer',ignorePeriodChips:true});
   EX_CACHE=null; EX_DRAWN={}; EX_LEAK_STATE=null;
   /* 필터 상태 (두 모드 공통) */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
   document.getElementById('fReset').style.display=n?'block':'none';
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
-  /* 보고 모드는 보고 범위 선택을 따르지 않으므로 활성 필터 수에서도 뺀다(숨은 필터 오해 방지) */
-  syncExecFilterUI(EX_ROWS.length, n-F.scope.length);
+  /* 보고 모드는 상단 기간을 따르되, 상세 전용 연·월·분기 칩은 활성 필터 수에서 뺀다. */
+  syncExecFilterUI();
   /* N-Care 운영률은 기간 끝을 기준일로 쓰므로 기간이 바뀌면 다시 계산해야 한다.
      상세 분석 모드 카드는 boot()·병원DB 로드에서만 그려져 그대로 두면 옛 기준일이 남는다. */
   if(DATA_READY) ncareCheck();
@@ -3081,9 +3106,8 @@ function buildNozzleLeakAnalysis_(cohortRows, historyRows, asOfKey){
 }
 function buildNozzleLeakCurrent_(){
   /* F.type 은 이 탭의 고정 VOC와 충돌하므로 제외한다. noz·skill 은 filteredRows_ 단계에서 적용되지 않는다. */
-  var cohort=filteredRows_({scope:'customer',ignoreType:true}),asOf=F.to?nlYmdKey_(F.to):0;
-  if(!asOf) cohort.forEach(function(r){asOf=Math.max(asOf,nlDateKey_(r));});
-  if(!asOf){var t=exToday();asOf=t.getFullYear()*10000+(t.getMonth()+1)*100+t.getDate();}
+  var cohort=filteredRows_({scope:'customer',ignoreType:true,ignorePeriodChips:true});
+  var base=exBaseDate(),asOf=base.getFullYear()*10000+(base.getMonth()+1)*100+base.getDate();
   /* 상태는 선택 기간 안에서 평가가 없더라도, 종료일 이전 마지막 유효 기록까지 거슬러 올라간다. */
   var history=RAW.filter(function(r){return recScope(r)==='customer'&&nlDateKey_(r)&&nlDateKey_(r)<=asOf;});
   return buildNozzleLeakAnalysis_(cohort,history,asOf);
@@ -4110,6 +4134,7 @@ function setExecTab(t){
   Object.keys(map).forEach(function(k){
     document.getElementById(map[k]).classList.toggle('on', k===t);
   });
+  syncExecFilterUI();
   renderActiveView();
 }
 function initExecView(){
@@ -4136,10 +4161,15 @@ var EX_PRESETS=[['lastdone','최근 완료 주간'],['thisweek','이번 주'],['
                 ['last4w','최근 4주'],['thismonth','이번 달'],['lastmonth','지난달'],['custom','직접 지정']];
 function exToday(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
 /* ── 보고 기준일 ──
-   기간 밖까지 보는 추이(8주 · 월별)는 브라우저의 오늘이 아니라 "보고 화면에서 고른 기간의
-   끝날"을 기준으로 구간을 잡는다. 기준일을 과거로 바꾸면 그 시점 기준으로 다시 계산된다.
-   기간을 지정하지 않은 경우에만 오늘로 떨어진다. */
-function exBaseDate(){ return F.to ? new Date(F.to+'T00:00:00') : exToday(); }
+   기간 밖까지 보는 추이(8주 · 월별)는 "보고 화면에서 고른 기간의 끝날"을 기준으로 구간을
+   잡는다. 다만 이번 주·이번 달처럼 종료일이 미래면 아직 오지 않은 빈 주를 최신 주로 만들거나
+   전월 전체와 미완료 현재 월을 비교하지 않도록 오늘까지만 본다. */
+function exBaseDate(){
+  var today=exToday();
+  if(!F.to) return today;
+  var base=new Date(F.to+'T00:00:00');
+  return (!isNaN(base.getTime())&&base<today) ? base : today;
+}
 /* 최근 "완료된" 주(월~금)의 월요일 — 금요일이 지난(토요일 이후) 주만 완료로 본다 */
 function exLastDoneMonday(){
   var t=exToday(), mon=monday(t);
@@ -4236,7 +4266,7 @@ function initExecFilterBar(){
   document.getElementById('exFrom').addEventListener('change', exSetCustomRange);
   document.getElementById('exTo').addEventListener('change', exSetCustomRange);
   document.getElementById('exCmpChk').addEventListener('change', function(){
-    EX_CMP=this.checked; EX_CACHE=null; EX_DRAWN={}; renderActiveView();
+    EX_CMP=this.checked; EX_CACHE=null; EX_DRAWN={}; syncExecFilterUI(); renderActiveView();
   });
   document.getElementById('exGubunSeg').innerHTML=
     [['','전체'],['as','A/S'],['insp','점검']].map(function(s){
@@ -4267,8 +4297,34 @@ function initExecFilterBar(){
   if(VIEW==='exec') exEnsureDefaultPeriod();   /* boot()의 apply() 직전 — 재호출 없음 */
 }
 
-/* 필터 바 표시 동기화 — F가 바뀔 때마다 호출(상태는 F 하나뿐) */
-function syncExecFilterUI(shown, active){
+function exFilterCount_(keys){
+  return (keys||[]).reduce(function(n,k){ return n+(F[k]?F[k].length:0); },0);
+}
+/* 탭마다 집계 목적상 제외하는 필터를 활성 수·표시 건수에도 똑같이 반영한다. */
+function exTabFilterState_(){
+  var fixed=['gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'];
+  var keys=fixed.slice(), shown=EX_ROWS.length, note='';
+  if(EX_TAB==='leak'){
+    keys=keys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
+    shown=DATA_READY?filteredRows_({scope:'customer',ignoreType:true,ignorePeriodChips:true}).length:0;
+    note='누수 분석: 유형·노즐·교육 상태 필터 제외';
+  }else if(EX_TAB==='year'){
+    shown=null;
+    note='연간 비교: 상단 기간은 기본 기준일 · 아래 좌우 비교 기간 우선';
+  }else if(EX_TAB==='actions'){
+    note='N-Care 점검 현황은 전체 가입 병원·기준일만 반영';
+  }
+  var active=exFilterCount_(keys);
+  if(EX_TAB!=='year'&&(F.from||F.to)) active++;
+  return {active:active,shown:shown,note:note};
+}
+function exSetIgnoredGroup_(id,ignored){
+  var el=document.getElementById(id); if(!el) return;
+  el.classList.toggle('ignored',ignored);
+  el.querySelectorAll('button,input').forEach(function(c){c.disabled=ignored;});
+}
+/* 필터 바 표시 동기화 — F가 바뀌거나 탭이 바뀔 때마다 호출(상태는 F 하나뿐) */
+function syncExecFilterUI(){
   if(!EX_FBAR_READY) return;
   var pk=exCurrentPreset();
   document.getElementById('exPeriod').value=pk;
@@ -4288,14 +4344,21 @@ function syncExecFilterUI(shown, active){
   if(F.fse.length>1) opts+='<option value="__multi">담당자 '+F.fse.length+'명 선택</option>';
   if(fs.innerHTML!==opts) fs.innerHTML=opts;
   fs.value = F.fse.length>1 ? '__multi' : (F.fse[0]||'');
-  /* 상세 필터 개수 · 표시 건수 */
-  var adv=0;
-  ['year','month','quarter','paid','cat','type','hosp','noz','skill'].forEach(function(k){ adv+=F[k].length; });
+  var leak=EX_TAB==='leak';
+  exSetIgnoredGroup_('exTypeGroup',leak);
+  exSetIgnoredGroup_('exNozGroup',leak);
+  exSetIgnoredGroup_('exSkillGroup',leak);
+  /* 상세 필터 개수 · 표시 건수 — 연·월·분기는 보고 모드에서 쓰지 않는다. */
+  var advKeys=['paid','cat','type','part','hosp','noz','skill'];
+  if(leak) advKeys=advKeys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
+  var adv=exFilterCount_(advKeys);
   document.getElementById('exMoreCnt').textContent=adv?'('+adv+')':'';
   document.getElementById('exScopeNote').textContent=EX_BASIS;
-  if(shown==null) return;
-  document.getElementById('exFCount').textContent=
-    '활성 필터 '+active+'개 · 표시 '+shown.toLocaleString()+'건 / 전체 '+RAW.length.toLocaleString()+'건';
+  var st=exTabFilterState_();
+  document.getElementById('exTabFilterNote').textContent=st.note;
+  document.getElementById('exFCount').textContent=st.shown==null
+    ? '적용 필터 '+st.active+'개 · 자체 비교 기간 사용'
+    : '적용 필터 '+st.active+'개 · 표시 '+st.shown.toLocaleString()+'건 / 전체 '+RAW.length.toLocaleString()+'건';
 }
 
 /* ── 이전 동일 기간 ── */
@@ -4383,20 +4446,23 @@ function buildWeekTrend(){
   var selB=F.to?new Date(F.to+'T00:00:00'):null;
   var out=[];
   for(var i=7;i>=0;i--){
-    var mo=addD(endMon,-7*i), k=ymd(mo), sun=addD(mo,6);
-    var sunEnd=addD(sun,0); sunEnd.setHours(23,59,59,999);
+    var mo=addD(endMon,-7*i), k=ymd(mo), fri=addD(mo,4);
+    /* 마지막 주가 진행 중이거나 사용자 종료일이 월~목이면 그 날짜까지만 집계한다.
+       선택 종료일 뒤의 목·금 기록이 최신 주 막대에 섞이지 않게 한다. */
+    var viewTo=(i===0&&base<fri)?new Date(base):fri;
+    var viewEnd=new Date(viewTo); viewEnd.setHours(23,59,59,999);
     /* 노즐·숙련도 상태는 각 주의 기록만으로 다시 판정한다.
        뒤 주의 평가가 앞 주 막대의 병원 상태를 바꾸지 않아 주별 시점이 보존된다. */
     var n=0, as=0, insp=0;
-    exWindowRows(mo, sunEnd).forEach(function(r){
+    exWindowRows(mo, viewEnd).forEach(function(r){
       var d=rowDate(r); if(!d) return;
       var w=d.getDay(); if(w===0||w===6) return;       /* 보고 기준과 동일하게 월~금만 집계 */
-      n++;
       var g=String(r.gubun||'').trim();
-      if(g==='A/S') as++; else if(g==='점검') insp++;
+      if(g==='A/S'){ as++; n++; }
+      else if(g==='점검'){ insp++; n++; }
     });
-    var sel = !!(selA&&selB) && !(sun<selA || mo>selB);   /* 선택 기간과 겹치는 주 강조 */
-    out.push({key:k, mon:mo, n:n, as:as, insp:insp, sel:sel});
+    var sel = !!(selA&&selB) && !(viewTo<selA || mo>selB);   /* 선택 기간과 겹치는 주 강조 */
+    out.push({key:k, mon:mo, to:viewTo, partial:viewTo<fri, n:n, as:as, insp:insp, sel:sel});
   }
   return out;
 }
@@ -4431,10 +4497,10 @@ function buildMonthTrend(){
   for(var i=EX_MONTH_TREND_N-1;i>=0;i--){
     var m0=new Date(base.getFullYear(), base.getMonth()-i, 1);
     var cur=(i===0);
-    var to=cur ? new Date(base.getFullYear(), base.getMonth(), base.getDate())
-               : new Date(m0.getFullYear(), m0.getMonth()+1, 0);
+    var monthEnd=new Date(m0.getFullYear(), m0.getMonth()+1, 0);
+    var to=cur ? new Date(base.getFullYear(), base.getMonth(), base.getDate()) : monthEnd;
     var c=exCountRange_(m0, to);
-    out.push({y:m0.getFullYear(), m:m0.getMonth()+1, from:m0, to:to, cur:cur,
+    out.push({y:m0.getFullYear(), m:m0.getMonth()+1, from:m0, to:to, cur:cur,partial:cur&&to<monthEnd,
               n:c.n, as:c.as, insp:c.insp});
   }
   return out;
@@ -4672,7 +4738,7 @@ function buildExecutiveNotes(x, o){
   var K=x.skill, U=x.nozUn, G=x.cmpNc;
   var up=o.up || buildExecutiveVocChange(x).up;
   var mNote=(o.monthNote!==undefined) ? o.monthNote
-          : exMonthTrendNote_(buildMonthTrendCompare(buildMonthTrend()));
+          : (EX_CMP?exMonthTrendNote_(buildMonthTrendCompare(buildMonthTrend())):null);
   var s=[];
   if(!x.prev) s.push('이전 동일 기간 비교 데이터 없음 — 증감은 표시하지 않습니다.');
   else{
@@ -4715,7 +4781,7 @@ function exMonthCmpStat_(mc){
   };
 }
 function exTrendStatDelta_(d){
-  return {foot:'이번 주 '+(d>0?'+':'')+d+'%', tone:d>0?'up':(d<0?'down':'flat')};
+  return {foot:'기준 주 '+(d>0?'+':'')+d+'%', tone:d>0?'up':(d<0?'down':'flat')};
 }
 function buildExecutiveReportSnapshot(opt){
   opt=opt||{};
@@ -4758,8 +4824,9 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
   var trend;
   if(type==='month'){
     var cur=mt[mt.length-1];
-    var monthEnd=new Date(a.getFullYear(), a.getMonth()+1, 0);
-    var ongoing=(monthEnd>exToday());                /* 보고 월이 아직 끝나지 않음 */
+    /* 오늘이 아니라 사용자가 고른 종료일로 부분 월 여부를 판정한다.
+       과거 달의 중간 날짜를 보고해도 월 전체처럼 보이지 않아야 한다. */
+    var ongoing=!!cur.partial;
     trend={
       kind:'month', title:'월별 A/S·점검 처리 추이',
       basis:'처리일 기준 · 최근 '+EX_MONTH_TREND_N+'개월',
@@ -4767,8 +4834,8 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
         return {label:t.m+'월', as:t.as, insp:t.insp, n:t.n, sel:t.cur, ongoing:(t.cur&&ongoing)};
       }),
       stats:[
-        {label:'이번 달 총 처리', value:exNum(cur.n)+'건',
-         foot:exMD_(cur.from)+'~'+exMD_(cur.to)+(ongoing?' · 진행 중':'')},
+        {label:'기준 월 총 처리', value:exNum(cur.n)+'건',
+         foot:exMD_(cur.from)+'~'+exMD_(cur.to)+(ongoing?' · 기준일까지':'')},
         {label:'A/S 처리',  value:exNum(cur.as)+'건',   foot:cur.m+'월 누계'},
         {label:'점검 처리', value:exNum(cur.insp)+'건', foot:cur.m+'월 누계'},
         exMonthCmpStat_(mc)
@@ -4779,13 +4846,13 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride){
     var dA=exTrendStatDelta_(ts.deltaAs), dI=exTrendStatDelta_(ts.deltaInsp);
     trend={
       kind:'week', title:'최근 8주 서비스 추이',
-      basis:'A/S · 점검 비교 · 주 단위(월~금) · 처리일 기준',
+      basis:'선택 종료일 기준 최근 8주 · 주 단위(월~금) · 처리일 기준',
       bars: tr.map(function(t){
         return {label:(t.mon.getMonth()+1)+'/'+t.mon.getDate(), as:t.as, insp:t.insp, n:t.n, sel:t.sel};
       }),
       stats:[
-        {label:'이번 주 A/S',     value:exNum(ts.latest.as)+'건'},
-        {label:'이번 주 점검',    value:exNum(ts.latest.insp)+'건'},
+        {label:'기준 주 A/S',     value:exNum(ts.latest.as)+'건'},
+        {label:'기준 주 점검',    value:exNum(ts.latest.insp)+'건'},
         {label:'A/S 8주 주평균',  value:ts.avgAs.toFixed(1)+'건',   foot:dA.foot, tone:dA.tone},
         {label:'점검 8주 주평균', value:ts.avgInsp.toFixed(1)+'건', foot:dI.foot, tone:dI.tone}
       ]
@@ -5385,7 +5452,7 @@ function exMD_(d){ return (d.getMonth()+1)+'.'+d.getDate(); }
 /* 툴팁·스크린리더가 같은 문장을 읽는다 — 월별 A/S · 점검 · 합계를 모두 담는다 */
 function exMonthTrendLabel_(t){
   return t.y+'년 '+t.m+'월 · A/S '+t.as+'건 · 점검 '+t.insp+'건 · 합계 '+t.n+'건'
-    +' · '+exMD_(t.from)+'~'+exMD_(t.to)+(t.cur?' (진행 중)':'');
+    +' · '+exMD_(t.from)+'~'+exMD_(t.to)+(t.partial?' (기준일까지)':'');
 }
 /* 전월 동기간 대비 요약 타일 — 전월이 0건이면 증감률을 만들지 않고 건수 차이만 적는다 */
 function exMonthCmpTile_(mc){
@@ -5398,18 +5465,19 @@ function exMonthCmpTile_(mc){
     : '전월 동기간 0건 · 증감률 없음';
   return '<div><span>'+esc(span)+'</span><b class="'+cls+'">'+val+'</b><em>'+esc(foot)+'</em></div>';
 }
-function exMonthTrendBody_(mt, mc){
+function exMonthTrendBody_(mt, mc, showCmp){
+  if(showCmp==null) showCmp=true;
   var sum=mt.reduce(function(a,t){ return a+t.n; },0);
   if(!sum) return '<div class="ex-empty">최근 '+EX_MONTH_TREND_N+'개월 처리 기록 없음</div>';
   var cur=mt[mt.length-1];
   var mx=Math.max.apply(null, mt.reduce(function(a,t){ return a.concat([t.as,t.insp]); },[]))||1;
   return '<div class="ex-mtrend">'
     +'<div class="ex-msum">'
-      +'<div><span>이번 달 총 처리</span><b>'+exNum(cur.n)+'건</b>'
-        +'<em>'+esc(exMD_(cur.from)+'~'+exMD_(cur.to)+(cur.cur?' · 진행 중':''))+'</em></div>'
+      +'<div><span>기준 월 총 처리</span><b>'+exNum(cur.n)+'건</b>'
+        +'<em>'+esc(exMD_(cur.from)+'~'+exMD_(cur.to)+(cur.partial?' · 기준일까지':''))+'</em></div>'
       +'<div><span>A/S 처리</span><b>'+exNum(cur.as)+'건</b><em>'+cur.m+'월 누계</em></div>'
       +'<div><span>점검 처리</span><b>'+exNum(cur.insp)+'건</b><em>'+cur.m+'월 누계</em></div>'
-      +exMonthCmpTile_(mc)
+      +(showCmp?exMonthCmpTile_(mc):'<div><span>전월 동기간 대비</span><b>–</b><em>비교 표시 꺼짐</em></div>')
     +'</div>'
     +'<div class="ex-mlegend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></div>'
     +'<div class="ex-mchart">'
@@ -5423,7 +5491,7 @@ function exMonthTrendBody_(mt, mc){
           +'<div class="ex-mbar as"><div class="n">'+t.as+'</div><div class="b'+(t.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
           +'<div class="ex-mbar insp"><div class="n">'+t.insp+'</div><div class="b'+(t.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
         +'</div>'
-        +'<div class="l">'+t.m+'월'+(t.cur?'<em class="ex-mnow">진행 중</em>':'')+'</div>'
+        +'<div class="l">'+t.m+'월'+(t.cur?'<em class="ex-mnow">기준 월</em>':'')+'</div>'
       +'</div>';
     }).join('')
     +'</div></div>';
@@ -5455,24 +5523,24 @@ function renderExecutiveSummary(x){
   /* ── 최근 8주 서비스 추이 ── */
   var tr=buildWeekTrend(), mx=Math.max.apply(null, tr.reduce(function(a,t){ return a.concat([t.as,t.insp]); },[]))||1;
   var ts=buildTrendSummary_(tr);
-  function trendDelta_(d){ return '<em class="'+(d>0?'ex-up':(d<0?'ex-down':''))+'">최근 주 '+(d>0?'+':'')+d+'%</em>'; }
+  function trendDelta_(d){ return '<em class="'+(d>0?'ex-up':(d<0?'ex-down':''))+'">기준 주 '+(d>0?'+':'')+d+'%</em>'; }
   document.getElementById('exTrendCard').innerHTML=
-    exH3('최근 8주 서비스 추이', 'A/S · 점검 비교 · 주 단위(월~금) · 기간 외 필터 반영')
+    exH3('최근 8주 서비스 추이', '선택 종료일 기준 · 주 단위(월~금) · 마지막 주는 기준일까지 · 기간 외 필터 반영')
     +'<div class="ex-cbody"><div class="ex-trend-layout"><div class="ex-trend-chart">'
       +'<div class="ex-trend-legend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></div>'
       +'<div class="ex-vchart">'
       +tr.map(function(t){
         var ah=t.as?Math.max(3,Math.round(t.as/mx*100)):0;
         var ih=t.insp?Math.max(3,Math.round(t.insp/mx*100)):0;
-        return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+' 주 · A/S '+t.as+'건 · 점검 '+t.insp+'건">'
+        return '<div class="ex-vcol'+(t.sel?' sel':'')+'" title="'+t.key+'~'+ymd(t.to)+' · A/S '+t.as+'건 · 점검 '+t.insp+'건'+(t.partial?' · 부분 주':'')+'">'
           +'<div class="ex-vbars">'
             +'<div class="ex-vbar as"><div class="n">'+t.as+'</div><div class="b'+(t.as?'':' zero')+'" style="height:'+ah+'%"></div></div>'
             +'<div class="ex-vbar insp"><div class="n">'+t.insp+'</div><div class="b'+(t.insp?'':' zero')+'" style="height:'+ih+'%"></div></div>'
           +'</div><div class="l">'+(t.mon.getMonth()+1)+'/'+t.mon.getDate()+'</div></div>';
       }).join('')
       +'</div></div><div class="ex-trend-stats">'
-        +'<div class="ex-trend-stat"><span>최근 주 A/S</span><b>'+exNum(ts.latest.as)+'건</b></div>'
-        +'<div class="ex-trend-stat"><span>최근 주 점검</span><b>'+exNum(ts.latest.insp)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>기준 주 A/S</span><b>'+exNum(ts.latest.as)+'건</b></div>'
+        +'<div class="ex-trend-stat"><span>기준 주 점검</span><b>'+exNum(ts.latest.insp)+'건</b></div>'
         +'<div class="ex-trend-stat"><span>A/S 8주 주평균</span><b>'+ts.avgAs.toFixed(1)+'건</b>'+trendDelta_(ts.deltaAs)+'</div>'
         +'<div class="ex-trend-stat"><span>점검 8주 주평균</span><b>'+ts.avgInsp.toFixed(1)+'건</b>'+trendDelta_(ts.deltaInsp)+'</div>'
       +'</div></div></div>';
@@ -5480,11 +5548,11 @@ function renderExecutiveSummary(x){
   /* ── 월별 A/S·점검 처리 추이 (최근 6개월) ──
      위의 8주 카드와 같은 처리 기록을 월 단위로 본다. 두 카드가 혼동되지 않도록
      제목·설명에 "주 단위 단기 / 월 단위 장기"를 각각 적고 막대 색도 다르게 쓴다. */
-  var mt=buildMonthTrend(), mc=buildMonthTrendCompare(mt);
-  var mNote=exMonthTrendNote_(mc);
+  var mt=buildMonthTrend(), mc=EX_CMP?buildMonthTrendCompare(mt):null;
+  var mNote=EX_CMP?exMonthTrendNote_(mc):null;
   document.getElementById('exMonthTrendCard').innerHTML=
     exH3('월별 A/S·점검 처리 추이', '처리일 기준 · 최근 6개월 · 월 단위 장기 추이 · 기간 외 필터 반영')
-    +'<div class="ex-cbody">'+exMonthTrendBody_(mt, mc)+'</div>';
+    +'<div class="ex-cbody">'+exMonthTrendBody_(mt, mc, EX_CMP)+'</div>';
 
   /* ── 이전 기간 대비 VOC 유형 변화: 증가·감소를 함께 표시 ── */
   var vc=buildExecutiveVocChange(x), up=vc.up, down=vc.down;
