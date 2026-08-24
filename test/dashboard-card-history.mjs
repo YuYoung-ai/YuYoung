@@ -61,6 +61,7 @@ const FNS = [
 ];
 const src = [
   'var window={};',
+  'var EX_HISTORY_STATE=null;',
   grabVar('var RAW=[];'), grabVar('var HOSPDB=[];'),
   grabVar('var EX_CMP=true;'), grabVar('var EX_CACHE=null;'),
   grabVar('var F={year:'), grabVar('var DEMO_MARK='), grabVar('var NCK_ST='),
@@ -294,8 +295,8 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('38. 이미 만들어 둔 집계(EX_CACHE)를 재사용한다',
     /var x=EX_CACHE\|\|exBuild\(EX_ROWS\)/.test(SRC));
   ck('39. 리스너는 카드 컨테이너에 한 번만 위임 등록된다',
-    /\['exVocUpCard','exTypeCard','exPartCard'\]\.forEach/.test(SRC) &&
-    (SRC.match(/data-hist-k\]/g) || []).length === 1);
+    /\['exKpis','exVocUpCard','exTypeCard','exPartCard'\]\.forEach/.test(SRC) &&
+    /el\.addEventListener\('click',[\s\S]*?closest\('\[data-hist-dim\]'\)/.test(SRC));
   ck('40. 유형·교체품명을 inline onclick 문자열에 넣지 않는다',
     !/onclick="exShowHistory_/.test(SRC));
   ck('41. 팝업 내부 필터는 전역 필터 F 를 변경하지 않는다',
@@ -304,7 +305,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     /\.ex-list-box\.history\{[^}]*max-width:1180px/.test(SRC) &&
     /@media\(max-width:820px\)/.test(SRC) && /\.hst-table td:before/.test(SRC));
   ck('43. 초기 표시와 필터 초기화 모두 선택 기간으로 돌아간다',
-    /openExList\(name, sub, html, true\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
+    /openExList\(title, sub, html, true\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
     /period\.value='cur'/.test(grab('exResetHistoryFilters_')) &&
     /period:val\('hstPeriod','cur'\)/.test(grab('exApplyHistoryFilters_')));
   ck('44. 처리 이력 모달은 PC에서 계산 가능한 고정 높이를 가진다',

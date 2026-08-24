@@ -282,12 +282,12 @@ const noteFor = (cur, prev) => D.exMonthTrendNote_({
   ck('R1. 최근 6개월 묶음 막대 = 6열', (body.match(/class="ex-mcol/g) || []).length === 6);
   ck('R2. 각 열에 A/S·점검 두 막대', (body.match(/class="ex-mbar as"/g) || []).length === 6 &&
     (body.match(/class="ex-mbar insp"/g) || []).length === 6);
-  ck('R3. 현재 월에 "진행 중" 표시', body.indexOf('ex-mnow">진행 중') >= 0 &&
+  ck('R3. 마지막 월에 "기준 월" 표시', body.indexOf('ex-mnow">기준 월') >= 0 &&
     (body.match(/ex-mnow/g) || []).length === 1);
   ck('R4. 월 합계 표시', body.indexOf('ex-mtot') >= 0);
   ck('R5. 툴팁·aria에 A/S·점검·합계를 모두 적는다',
-    /aria-label="2026년 8월 · A\/S 2건 · 점검 1건 · 합계 3건 · 8\.1~8\.9 \(진행 중\)"/.test(body));
-  ck('R6. 상단 요약 4종', /이번 달 총 처리/.test(body) && /A\/S 처리/.test(body) &&
+    /aria-label="2026년 8월 · A\/S 2건 · 점검 1건 · 합계 3건 · 8\.1~8\.9 \(기준일까지\)"/.test(body));
+  ck('R6. 상단 요약 4종', /기준 월 총 처리/.test(body) && /A\/S 처리/.test(body) &&
     /점검 처리/.test(body) && /전월 동기간 대비/.test(body));
   ck('R7. 고정 색상 없이 기존 토큰만 사용(인라인 색 없음)', !/style="[^"]*(#|rgb)/.test(body));
 }
@@ -296,7 +296,7 @@ const noteFor = (cur, prev) => D.exMonthTrendNote_({
   ck('S1. A/S 네이비 · 점검 청록 토큰 재사용',
     /\.ex-mbar\.as \.b\{background:var\(--navy\)\}/.test(SRC) &&
     /\.ex-mbar\.insp \.b\{background:var\(--teal\)\}/.test(SRC));
-  ck('S2. "진행 중" 표식도 기존 변수(--amber) 사용', /\.ex-mnow\{[^}]*var\(--amber\)/.test(SRC));
+  ck('S2. "기준 월" 표식도 기존 변수(--amber) 사용', /\.ex-mnow\{[^}]*var\(--amber\)/.test(SRC));
   ck('S3. 새 카드 CSS에 하드코딩 색이 없다',
     !/\.ex-m(trend|sum|legend|chart|col|tot|bars|bar|now)[^{]*\{[^}]*#[0-9A-Fa-f]{3,6}/.test(SRC));
   ck('S4. 좁은 화면(Window/Mobile 토글·모바일) 대응 규칙 존재',
