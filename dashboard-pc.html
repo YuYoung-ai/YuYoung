@@ -304,8 +304,10 @@ body.dark .hp-clean-status.stable{background:#173326}body.dark .hp-clean-warn{ba
 @media(max-width:560px){.voc-desc-row{grid-template-columns:1fr}.voc-desc-row input{font-size:12px}}
 /* PPT 생성·미리보기 모달은 다크에서도 라이트 그대로 둔다 — 슬라이드 디자인이 바뀌면 안 된다.
    토큰을 모달 안에서 라이트 값으로 되돌려 안쪽 요소가 전부 원래 색을 쓰게 한다.
-   단, 연간 비교 전체화면은 슬라이드가 아니라 화면 카드를 키운 것이라 화면 테마를 그대로 따른다. */
-body.dark .mbox:not(.yc-fs-box){
+   단, 연간 비교 전체화면은 슬라이드가 아니라 화면 카드를 키운 것이라 화면 테마를 그대로 따른다.
+   전체 명단·처리 이력 조회창(.ex-list-box)도 마찬가지로 제외한다 —
+   화면 카드에서 이어 여는 목록이라 다크에서 흰 판이 튀어나오면 안 된다. */
+body.dark .mbox:not(.yc-fs-box):not(.ex-list-box){
   --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
   --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E; --text-muted:#6B7A99;
   --red:#C0392B; --green:#1E7E4E; --amber:#B8860B; --surface:#FFFFFF; --surface-2:#FBFCFE;
@@ -419,6 +421,11 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-kpi .vl u{font-size:.5em;font-weight:700;text-decoration:none;color:var(--text-muted);margin-left:2px}
 .ex-kpi .dl{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ex-kpi .sub{font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 이력 조회로 이어지는 KPI 카드 — TOP5 행과 같은 눌림·포커스 규칙을 쓴다 */
+.ex-kpi-btn{font:inherit;color:inherit;text-align:left;cursor:pointer}
+.ex-kpi-btn:hover{border-color:var(--teal);background:var(--teal-soft)}
+.ex-kpi-btn:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.ex-kpi-btn .lb:after{content:'▸';margin-left:auto;color:var(--teal);font-size:12px;font-weight:800}
 .ex-up{color:var(--red)} .ex-down{color:var(--green)} .ex-flat{color:var(--text-muted)}
 .ex-neutral{color:var(--text-muted)}
 
@@ -834,6 +841,10 @@ body.dark .yc-band{opacity:.26}
 .hst-badge.cur{background:var(--teal-soft);color:#12607F}
 .hst-badge.prev{background:#F0F2F6;color:var(--text-muted)}
 .hst-table .hosp{font-weight:700;color:var(--navy)}
+/* 교체비용 칸 — 금액은 자릿수를 맞춰 오른쪽으로 읽는다 */
+.hst-table th.cost{text-align:right}
+.hst-table td.cost{text-align:right;font-weight:700;color:var(--navy);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
 .hst-table .muted{color:var(--text-muted)}
 .hst-detail{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);line-height:1.5}
 .hst-empty{padding:35px 16px;text-align:center;color:var(--text-muted);font-size:12px}
@@ -857,6 +868,24 @@ body.dark .yc-band{opacity:.26}
 .hst-photo-frame img{display:block;width:100%;height:100%;object-fit:contain;background:#111827}
 .hst-photo-frame img[hidden]{display:none}.hst-photo-empty{padding:15px;color:var(--text-muted);font-size:11px;text-align:center}
 .hst-photo-desc{min-height:16px;margin:5px 2px 0;color:var(--text-muted);font-size:10.5px;line-height:1.4;overflow-wrap:anywhere}
+/* ── 조회창(전체 명단·처리 이력) 다크 ──
+   창 자체는 .mbox 의 흰 배경 대신 화면 표면색을 쓴다. 안쪽은 토큰(var)으로 이미 따라오므로
+   여기 남은 고정 밝은색만 다크 값으로 바꾼다. color-scheme 은 기본 스크롤바·셀렉트 목록까지
+   맞춘다 — 창 안에서만 켜므로 라이트로 두는 PPT 모달에는 영향이 없다. */
+body.dark .ex-list-box{background:var(--surface);color:var(--text);color-scheme:dark}
+body.dark .ex-list-box .mbtn.cancel{background:var(--track);color:var(--text-muted)}
+body.dark .hst-table th{background:var(--track)}
+body.dark .hst-table td,
+body.dark .hst-table td.detail{border-color:var(--li-line)}
+body.dark .hst-table tbody tr.hst-selected{background:var(--teal-soft)}
+body.dark .hst-badge.cur{color:var(--teal)}
+body.dark .hst-badge.prev{background:var(--track)}
+body.dark .hst-photo-kicker{background:var(--teal-soft);color:var(--teal)}
+body.dark .hst-photo-frame{border-color:var(--gray-line);background:var(--track)}
+body.dark .hst-table-wrap{scrollbar-color:#4A5A72 #141B2A}
+body.dark .hst-table-wrap::-webkit-scrollbar-track{background:#141B2A}
+body.dark .hst-table-wrap::-webkit-scrollbar-thumb{background:#4A5A72;border-color:#141B2A}
+body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
 @media(max-width:820px){
   .ex-list-box.history{height:calc(100vh - 20px);max-height:none;padding:14px}
   .hst-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -866,6 +895,7 @@ body.dark .yc-band{opacity:.26}
   .hst-table tr{display:grid;grid-template-columns:84px 1fr 1fr;gap:5px 9px;margin-top:8px;padding:9px;
     border:1px solid var(--gray-line);border-radius:9px;background:var(--surface)}
   .hst-table td{display:block;padding:0;border:0;min-width:0}
+  .hst-table td.cost{text-align:left}   /* 카드 배치에서는 금액도 라벨 아래 왼쪽에 붙는다 */
   .hst-table td:before{content:attr(data-label);display:block;margin-bottom:1px;color:var(--text-muted);font-size:9.5px;font-weight:700}
   .hst-table td.period{grid-column:1;grid-row:1}.hst-table td.date{grid-column:2;grid-row:1}
   .hst-table td.hosp{grid-column:3;grid-row:1}
@@ -4835,6 +4865,22 @@ function exHistoryRows_(rows, key, value, onlyAS){
     return v===want;
   });
 }
+/* 교체비용 이력 — 유형·교체품 한 가지가 아니라 "비용이 찍힌 기록" 전체를 본다.
+   집계는 KPI 교체비용 합계와 같은 _cost 를 쓴다(따로 계산하지 않는다). */
+function exHistoryCostRows_(rows){
+  return (rows||[]).filter(function(r){ return Number(r._cost||0)>0; });
+}
+function exCostSum_(rows){
+  return (rows||[]).reduce(function(a,r){ return a+Number(r._cost||0); },0);
+}
+/* 교체비용 조회창의 기간 요약 — 금액과 건수를 늘 함께 적는다(금액만 보면 단가 착시가 생긴다) */
+function exCostChip_(rows){
+  return '₩'+exNum(exCostSum_(rows))+' · '+exNum((rows||[]).length)+'건';
+}
+/* 금액 큰 순 — 합계를 끌어올린 기록이 위로 온다. 같은 금액은 처리일 최신순(정렬이 안정적이다). */
+function exHistoryCostSort_(rows){
+  return exHistorySort_(rows).sort(function(a,b){ return Number(b._cost||0)-Number(a._cost||0); });
+}
 /* 최신 처리일 우선, 같은 날짜는 병원명 가나다순 */
 function exHistorySort_(rows){
   return (rows||[]).slice().sort(function(a,b){
@@ -4844,11 +4890,12 @@ function exHistorySort_(rows){
     return skCmpKo_(String(a.hosp||''), String(b.hosp||''));
   });
 }
-/* 선택·비교 기간 원본 행을 하나의 표 데이터로 합친다. 원본 r 은 그대로 보존한다. */
-function exHistoryDataset_(cur, prev){
-  var out=[];
-  exHistorySort_(cur).forEach(function(r){ out.push({period:'cur', r:r}); });
-  exHistorySort_(prev||[]).forEach(function(r){ out.push({period:'prev', r:r}); });
+/* 선택·비교 기간 원본 행을 하나의 표 데이터로 합친다. 원본 r 은 그대로 보존한다.
+   sortFn 을 주면 그 순서로 싣는다(교체비용 이력은 금액 큰 순). */
+function exHistoryDataset_(cur, prev, sortFn){
+  var sort=sortFn||exHistorySort_, out=[];
+  sort(cur).forEach(function(r){ out.push({period:'cur', r:r}); });
+  sort(prev||[]).forEach(function(r){ out.push({period:'prev', r:r}); });
   return out;
 }
 function exHistoryVal_(v){
@@ -4892,11 +4939,15 @@ function exHistoryDetail_(v){
 }
 function exHistoryTable_(items){
   if(!items||!items.length) return '<div class="hst-empty">선택한 필터에 해당하는 처리 이력이 없습니다.</div>';
+  /* 교체비용 이력에서만 금액 칸을 붙인다 — 다른 조회창의 열 구성은 그대로 둔다 */
+  var showCost=!!(EX_HISTORY_STATE&&EX_HISTORY_STATE.showCost);
   return '<table class="hst-table"><colgroup>'
     +'<col style="width:6%"><col style="width:9%"><col style="width:15%"><col style="width:6%">'
-    +'<col style="width:8%"><col style="width:14%"><col style="width:12%"><col style="width:30%">'
+    +'<col style="width:8%"><col style="width:14%"><col style="width:12%">'
+    +(showCost?'<col style="width:9%"><col style="width:21%">':'<col style="width:30%">')
     +'</colgroup><thead><tr><th>기간</th><th>처리일</th><th>병원</th><th>구분</th><th>담당자</th>'
-    +'<th>VOC 유형</th><th>교체품</th><th>처리 내용</th></tr></thead><tbody>'
+    +'<th>VOC 유형</th><th>교체품</th>'+(showCost?'<th class="cost">교체비용</th>':'')
+    +'<th>처리 내용</th></tr></thead><tbody>'
     +items.map(function(it,idx){
       var r=it.r||{}, d=rowDate(r), isCur=it.period==='cur', canPhoto=!!exTypeExampleKey_(r);
       /* role="button" 을 <tr> 에 주면 그 행이 표의 행으로 인식되지 않아 내부 <td> 의
@@ -4913,6 +4964,7 @@ function exHistoryTable_(items){
         +'<td data-label="담당자">'+exHistoryCell_(r.fse)+'</td>'
         +'<td data-label="VOC 유형">'+exHistoryCell_(r.type)+'</td>'
         +'<td data-label="교체품">'+exHistoryCell_(r.part)+'</td>'
+        +(showCost?'<td class="cost" data-label="교체비용">₩'+exNum(r._cost)+'</td>':'')
         +'<td class="detail" data-label="처리 내용"><div class="hst-detail">'+exHistoryDetail_(r.detail)+'</div></td>'
         +'</tr>';
     }).join('')+'</tbody></table>';
@@ -5085,7 +5137,10 @@ function exApplyHistoryFilters_(){
   EX_HISTORY_PHOTO_SEQ++; EX_HISTORY_STATE.filtered=filtered; EX_HISTORY_STATE.selectedKey='';
   var photoPanel=document.getElementById('hstPhotoPanel'); if(photoPanel) photoPanel.hidden=true;
   var count=document.getElementById('hstCount'), host=document.getElementById('hstTableHost');
-  if(count) count.innerHTML='<b>'+exNum(filtered.length)+'건</b> 표시 · 전체 '+exNum(EX_HISTORY_STATE.items.length)+'건';
+  /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
+  if(count) count.innerHTML='<b>'+exNum(filtered.length)+'건</b> 표시 · 전체 '+exNum(EX_HISTORY_STATE.items.length)+'건'
+    +(EX_HISTORY_STATE.showCost
+      ? ' · 표시 합계 <b>₩'+exNum(exCostSum_(filtered.map(function(it){return it.r;})))+'</b>' : '');
   if(host) host.innerHTML=exHistoryTable_(filtered);
 }
 function exResetHistoryFilters_(){
@@ -5097,38 +5152,55 @@ function exResetHistoryFilters_(){
 /* dim: 'typeAll'(VOC 변화·TOP5 · A/S·점검 통합) | 'part'(교체품)
    'type'은 이전 화면 호환용 A/S 전용 값으로만 남긴다. */
 function exShowHistory_(dim, name){
-  if(!name) return;
+  var isCost=(dim==='cost');                 /* 교체비용 합계 KPI — 이름 없이 비용 기록 전체를 본다 */
+  if(!isCost && !name) return;
   var x=EX_CACHE||exBuild(EX_ROWS);          /* 이미 만들어 둔 집계 — 재조회 없음 */
   var onlyAS=(dim==='type');
-  var key=(dim==='typeAll')?'type':dim;
-  var cur=exHistorySort_(exHistoryRows_(x.rows, key, name, onlyAS));
-  var prev=x.prev ? exHistorySort_(exHistoryRows_(x.prev, key, name, onlyAS)) : null;
   var per=exPeriodLabel(), cmpLb=x.cmp?x.cmp.label:'이전 기간';
-  var sub=(onlyAS?'A/S 기준 · 이상 없음 제외':(dim==='typeAll'?'A/S·점검 통합 · 이상 없음 제외':'교체품 수량 기준'))
-    +' · 선택 기간 '+per+' '+exNum(cur.length)+'건'
-    +(prev ? ' · '+cmpLb+' '+exCmpRangeText_(x.cmp)+' '+exNum(prev.length)+'건'
-           : ' · 비교 기간 없음');
-  var items=exHistoryDataset_(cur, prev||[]);
-  EX_HISTORY_STATE={dim:dim,name:name,items:items};
+  var title, sort, cur, prev, sub, curChip, prevChip, orderText;
+  if(isCost){
+    title='교체비용 합계'; sort=exHistoryCostSort_;
+    cur=exHistoryCostRows_(x.rows);
+    prev=x.prev ? exHistoryCostRows_(x.prev) : null;
+    curChip=exCostChip_(cur); prevChip=prev?exCostChip_(prev):'';
+    sub='교체비용이 기록된 건만 · 금액 큰 순'
+      +' · 선택 기간 '+per+' '+curChip
+      +(prev ? ' · '+cmpLb+' '+exCmpRangeText_(x.cmp)+' '+prevChip : ' · 비교 기간 없음');
+    orderText='금액 큰 순 · 행 선택 시 유형별 참고 예시';
+  }else{
+    title=name; sort=exHistorySort_;
+    var key=(dim==='typeAll')?'type':dim;
+    cur=exHistoryRows_(x.rows, key, name, onlyAS);
+    prev=x.prev ? exHistoryRows_(x.prev, key, name, onlyAS) : null;
+    sub=(onlyAS?'A/S 기준 · 이상 없음 제외':(dim==='typeAll'?'A/S·점검 통합 · 이상 없음 제외':'교체품 수량 기준'))
+      +' · 선택 기간 '+per+' '+exNum(cur.length)+'건'
+      +(prev ? ' · '+cmpLb+' '+exCmpRangeText_(x.cmp)+' '+exNum(prev.length)+'건'
+             : ' · 비교 기간 없음');
+    curChip=exNum(cur.length)+'건'; prevChip=prev?(exNum(prev.length)+'건'):'';
+    orderText='처리일 최신순 · 행 선택 시 유형별 참고 예시';
+  }
+  var items=exHistoryDataset_(cur, prev||[], sort);
+  EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost};
   var html='<div class="hst-view">'
-    +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · '+exNum(cur.length)+'건</b></span>'
-    +(prev?'<span class="hst-chip">'+esc(cmpLb)+' <b>'+esc(exCmpRangeText_(x.cmp))+' · '+exNum(prev.length)+'건</b></span>'
+    +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · '+esc(curChip)+'</b></span>'
+    +(prev?'<span class="hst-chip">'+esc(cmpLb)+' <b>'+esc(exCmpRangeText_(x.cmp))+' · '+esc(prevChip)+'</b></span>'
            :'<span class="hst-chip">비교 기간 <b>없음</b></span>')+'</div>'
     +exHistoryControls_(items, !!prev)
     +'<div class="hst-result"><span id="hstCount"><b>'+exNum(items.length)+'건</b> 표시 · 전체 '+exNum(items.length)+'건</span>'
-      +'<span>처리일 최신순 · 행 선택 시 유형별 참고 예시</span></div>'
+      +'<span>'+orderText+'</span></div>'
     +exHistoryPhotoPanel_()
     +'<div class="hst-table-wrap" id="hstTableHost">'+exHistoryTable_(items)+'</div></div>';
-  openExList(name, sub, html, true);
+  openExList(title, sub, html, true);
   exApplyHistoryFilters_();
 }
 /* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
-   유형·교체품명은 data-* 로만 전달하고 inline onclick 문자열에 넣지 않는다. */
-['exVocUpCard','exTypeCard','exPartCard'].forEach(function(id){
+   유형·교체품명은 data-* 로만 전달하고 inline onclick 문자열에 넣지 않는다.
+   data-hist-k 는 이름이 필요한 조회에만 붙는다(교체비용 KPI는 이름 없이 dim 만 쓴다). */
+['exKpis','exVocUpCard','exTypeCard','exPartCard'].forEach(function(id){
   var el=document.getElementById(id);
   if(!el) return;
   el.addEventListener('click', function(e){
-    var b=e.target.closest('[data-hist-k]');
+    var b=e.target.closest('[data-hist-dim]');
     if(!b || !el.contains(b)) return;
     exShowHistory_(b.getAttribute('data-hist-dim'), b.getAttribute('data-hist-k'));
   });
@@ -5232,12 +5304,19 @@ function renderSaturdayDuty(){
 }
 
 /* ══════ 탭 ① 주간 핵심보고 ══════ */
+/* hist 를 주면 카드 자체가 이력 조회 버튼이 된다 — 안쪽 구조는 일반 카드와 같다.
+   실제 조회는 #exKpis 위임 리스너가 data-hist-dim 을 읽어 처리한다. */
 function exKpiCard(o){
-  return '<div class="ex-kpi">'
+  var tag=o.hist?'button':'div';
+  var attr=o.hist
+    ? ' type="button" class="ex-kpi ex-kpi-btn" data-hist-dim="'+escAttr(o.hist)+'"'
+      +' title="'+escAttr(o.histTitle||'처리 이력 보기')+'"'
+    : ' class="ex-kpi"';
+  return '<'+tag+attr+'>'
     +'<div class="lb">'+o.label+(o.badge?' <span class="ex-basis today">'+esc(o.badge)+'</span>':'')+'</div>'
     +'<div class="vl'+(o.small?' sm':'')+'">'+o.value+'</div>'
     +(o.foot||'')
-  +'</div>';
+  +'</'+tag+'>';
 }
 function buildTrendSummary_(tr){
   tr=tr||[];
@@ -5318,6 +5397,7 @@ function renderExecutiveSummary(x){
     exKpiCard({label:'서비스 병원 수', value:exNum(k.hosp)+'<u>곳</u>',
       foot:exDeltaHtml(k.hosp, p?p.hosp:null, '곳', 'neutral', cmp)}),
     exKpiCard({label:'교체비용 합계', value:'₩'+exNum(k.cost), small:true,
+      hist:'cost', histTitle:'교체비용이 기록된 처리 이력 보기',
       foot:exDeltaHtml(k.cost, p?p.cost:null, '원', 'bad', cmp)}),
     exKpiCard({label:'N-CARE 점검 운영률', badge:ncareAsOfLabel_(), value:nck.list.length?(nck.rate+'<u>%</u>'):'–',
       foot:'<div class="sub">'+(nck.list.length
