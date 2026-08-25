@@ -73,6 +73,14 @@ const alerts=await page.evaluate(()=>({
 ck('5. 경고색은 재사용·교육 미흡 그룹에만 붙는다',
   alerts.noz[0]===true&&alerts.noz[1]===false&&alerts.skl[0]===false&&alerts.skl[1]===true,JSON.stringify(alerts));
 ck('6. 2×2 교차분석 셀이 네 개다',await page.locator('#exLeakMatrixCard .nl-heat').count()===4);
+const lowMarks=await page.evaluate(()=>[...document.querySelectorAll('#exLeakMatrixCard .nl-heat.lowest')].map(el=>({
+  mark:el.querySelector('.nl-low-mark')?.textContent,
+  title:el.title,
+  border:getComputedStyle(el).borderColor
+})));
+ck('6-b. 최저 발생 비율 셀에 청록색 최저 표시가 렌더링된다',
+  lowMarks.length===1&&lowMarks[0].mark==='최저'&&lowMarks[0].title.includes('비교 그룹 중 최저 비율')
+  &&lowMarks[0].border==='rgb(22, 133, 116)',JSON.stringify(lowMarks));
 ck('7. 마지막 평가 기준 문구만 사용한다',!(await page.textContent('#exPaneLeak')).includes('최근 평가'));
 const detailText=await page.textContent('#exLeakDetailCard');
 ck('8. 병원별 평가일·상태·누수 건수를 함께 표시한다',['노즐 평가일','교육 평가일','사용방식','교육 상태','누수'].every(x=>detailText.includes(x)));
