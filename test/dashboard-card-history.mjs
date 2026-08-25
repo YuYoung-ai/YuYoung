@@ -46,6 +46,7 @@ function grabVar(decl) {
 
 const FNS = [
   'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd', 'isOK',
+  'hpCleanKey_', 'hpIsLeakVoc_', 'isHandpieceCleaning_',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
   'filteredRows_', 'hospStateFilter_', 'nozStateMap_', 'buildNozzleStatusMap',
@@ -54,9 +55,10 @@ const FNS = [
   'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
-  'exHistoryUnique_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
+  'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
   'exHistoryTable_', 'exHistoryControls_', 'exCmpRangeText_',
+  'exHistoryKpiRows_', 'exHistoryHospitalCount_', 'exHistoryKpiChip_',
   'buildExecutiveVocChange'
 ];
 const src = [
@@ -64,6 +66,7 @@ const src = [
   'var EX_HISTORY_STATE=null;',
   grabVar('var RAW=[];'), grabVar('var HOSPDB=[];'),
   grabVar('var EX_CMP=true;'), grabVar('var EX_CACHE=null;'),
+  grabVar('var YC_CLEAN_SAVING_UNIT='),
   grabVar('var F={year:'), grabVar('var DEMO_MARK='), grabVar('var NCK_ST='),
   ...FNS.map(grab),
   'return {' + FNS.join(',') +
@@ -217,9 +220,12 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     D.exHistoryFilter_(items,{q:'정상 동작'})[0].r.hosp === '나병원');
   ck('25. 필터 옵션은 중복 제거·가나다순',
     D.exHistoryUnique_(items,'fse').join(',') === '김프로,이기사');
+  ck('25-b. VOC 유형 필터',
+    D.exHistoryFilter_(items,{type:'노즐누수'}).length === 5 &&
+    D.exHistoryFilter_(items,{type:'노즐누수'}).every(v => v.r.type === '노즐누수'));
   const controls=D.exHistoryControls_(items,true);
-  ck('26. 기간·구분·담당자·검색·초기화 컨트롤 존재',
-    ['hstPeriod','hstGubun','hstFse','hstQuery','exResetHistoryFilters_']
+  ck('26. 기간·구분·VOC 유형·담당자·검색·초기화 컨트롤 존재',
+    ['hstPeriod','hstGubun','hstType','hstFse','hstQuery','exResetHistoryFilters_']
       .every(t => controls.indexOf(t) >= 0));
   ck('26-b. 처리 이력 기간 기본값은 선택 기간',
     controls.indexOf('value="cur" selected') >= 0 &&
@@ -228,6 +234,46 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     D.exHistoryControls_(items,false).indexOf('value="cur" selected') >= 0 &&
     D.exHistoryControls_(items,false).indexOf('value="prev"') < 0 &&
     D.exHistoryControls_(items,false).indexOf('value="all"') >= 0);
+}
+
+/* ══════ 6-b. 주간 핵심보고 KPI 카드별 처리 이력 ══════ */
+{
+  const totalRows=D.exHistoryKpiRows_(x.rows,'kpiTotal');
+  const asRows=D.exHistoryKpiRows_(x.rows,'kpiAs');
+  const inspRows=D.exHistoryKpiRows_(x.rows,'kpiInsp');
+  const hospRows=D.exHistoryKpiRows_(x.rows,'kpiHosp');
+  ck('26-d. 전체·A/S·점검 KPI 이력 범위가 카드 집계와 일치',
+    totalRows.length===x.kpi.cur.total && asRows.length===x.kpi.cur.as && inspRows.length===x.kpi.cur.insp,
+    'total='+totalRows.length+' as='+asRows.length+' insp='+inspRows.length);
+  ck('26-e. 서비스 병원 카드는 중복 제거 병원 수와 처리 건수를 함께 표시',
+    D.exHistoryHospitalCount_(hospRows)===x.kpi.cur.hosp && D.exHistoryKpiChip_(hospRows,'kpiHosp')==='6곳 · 처리 6건');
+  const currentItems=D.exHistoryDataset_(totalRows,[]);
+  const breakdown=D.exHistoryBreakdownHtml_(currentItems);
+  ck('26-f. 필터 결과에 구분 건수와 VOC 유형별 건수를 표시',
+    breakdown.includes('구분 건수')&&breakdown.includes('A/S <b>5건</b>')&&breakdown.includes('점검 <b>1건</b>')
+    &&breakdown.includes('VOC 유형별 건수')&&breakdown.includes('노즐누수 <b>4건</b>'));
+  ck('26-g. 빈 구분·VOC 유형도 미입력으로 집계해 합계에서 빠지지 않는다',
+    D.exHistoryCounts_([{period:'cur',r:{gubun:'',type:''}}],'type')[0].k==='미입력');
+  const summarySrc=grab('renderExecutiveSummary');
+  ck('26-h. 주간 핵심보고 앞 네 KPI 카드가 모두 처리 이력 버튼이다',
+    ['kpiTotal','kpiAs','kpiInsp','kpiHosp'].every(dim=>summarySrc.includes("hist:'"+dim+"'")));
+  const showSrc=grab('exShowHistory_');
+  ck('26-i. KPI 이력은 기존 집계 캐시를 재사용하고 카드별 범위를 적용',
+    showSrc.includes("['kpiTotal','kpiAs','kpiInsp','kpiHosp','kpiSaving']")
+    &&showSrc.includes('exHistoryKpiRows_(x.rows,dim)')&&showSrc.includes("hospitalMetric:dim==='kpiHosp'"));
+  const savingRows=D.exHistoryKpiRows_([
+    {gubun:'A/S',type:'노즐 누수(약액 유입)',part:'내부 세척',hosp:'절감A'},
+    {gubun:'A/S',type:'노즐누수(약액유입)',part:'내부세척',hosp:'절감B'},
+    {gubun:'A/S',type:'케이블 불량',part:'내부 세척',hosp:'제외'}
+  ],'kpiSaving');
+  ck('26-j. 추정 절감액 이력은 연간 비교와 같은 내부 세척 판정을 사용',
+    savingRows.length===2&&D.exHistoryKpiChip_(savingRows,'kpiSaving')==='₩562,400 · 내부 세척 2건');
+  ck('26-k. 주간 핵심보고에 절감액 KPI와 처리 이력 연결을 추가',
+    summarySrc.includes("label:'추정 교체비용 절감액'")&&summarySrc.includes("hist:'kpiSaving'")
+    &&showSrc.includes("savingMetric:dim==='kpiSaving'"));
+  ck('26-l. 추정 절감액 카드는 교체비용 합계 바로 오른쪽에 배치',
+    summarySrc.indexOf("label:'교체비용 합계'")<summarySrc.indexOf("label:'추정 교체비용 절감액'")
+    &&summarySrc.indexOf("label:'추정 교체비용 절감액'")<summarySrc.indexOf("label:'N-CARE 점검 운영률'"));
 }
 
 /* ══════ 7. 특수문자·따옴표 안전 ══════ */
