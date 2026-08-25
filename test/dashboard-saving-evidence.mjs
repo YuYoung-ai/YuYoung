@@ -49,7 +49,7 @@ ck('10. 연간 비교 절감액 카드도 같은 근거자료 뷰어를 여는 �
 ck('11. PC 전체화면 오버레이와 모바일 가로 미리보기 레이아웃 존재',
   /\.hst-evidence-viewer\{position:fixed;inset:0;z-index:80/.test(SRC)
   &&/@media\(max-width:820px\)[\s\S]*?\.hst-evidence-strip\{display:flex;overflow-x:auto\}/.test(SRC));
-ck('12. 서비스워커 캐시 버전을 v153으로 갱신',SW.includes("CACHE_VERSION = 'baz-cs-v153'"));
+ck('12. 서비스워커 캐시 버전을 v154로 갱신',SW.includes("CACHE_VERSION = 'baz-cs-v154'"));
 
 console.log('\n──────────────────────────────');console.log(`통과 ${pass}/${total}`);
 if(fails.length){console.log('실패:');fails.forEach(x=>console.log(' -',x));process.exit(1);}console.log('모든 테스트 통과 ✅');

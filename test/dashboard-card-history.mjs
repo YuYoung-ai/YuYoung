@@ -255,6 +255,18 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('26-f2. 구분·VOC 유형 건수는 공통 클릭 필터 버튼으로 렌더링',
     breakdown.includes('onclick="exApplyHistoryCountChip_(this)"')
     &&breakdown.includes('data-hst-count-key="gubun"')&&breakdown.includes('data-hst-count-key="type"'));
+  const facetItems=[
+    {period:'cur',r:{gubun:'A/S',type:'노즐누수'}},
+    {period:'cur',r:{gubun:'점검',type:'케이블 불량'}}
+  ];
+  const selectedBreakdown=D.exHistoryBreakdownHtml_(facetItems,{period:'cur',gubun:'A/S',type:'all',fse:'all',q:''});
+  ck('26-f3. 선택 후에도 다른 구분·VOC 유형 버튼을 숨기지 않는다',
+    selectedBreakdown.includes('data-hst-count-value="점검"')
+    &&selectedBreakdown.includes('data-hst-count-value="케이블 불량"')
+    &&selectedBreakdown.includes('케이블 불량 <b>0건</b>'));
+  ck('26-f4. 선택 칩은 강조·해제 상태를 접근성 속성과 함께 표시',
+    /class="hst-count-chip is-active"[^>]*data-hst-count-value="A\/S"[^>]*aria-pressed="true"/.test(selectedBreakdown)
+    &&selectedBreakdown.includes('A/S 필터 해제')&&selectedBreakdown.includes('hst-count-clear'));
   ck('26-g. 빈 구분·VOC 유형도 미입력으로 집계해 합계에서 빠지지 않는다',
     D.exHistoryCounts_([{period:'cur',r:{gubun:'',type:''}}],'type')[0].k==='미입력');
   const missingItems=[{period:'cur',r:{gubun:'',type:'',hosp:'미입력병원'}}];
@@ -282,10 +294,14 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('26-l. 추정 절감액 카드는 교체비용 합계 바로 오른쪽에 배치',
     summarySrc.indexOf("label:'교체비용 합계'")<summarySrc.indexOf("label:'추정 교체비용 절감액'")
     &&summarySrc.indexOf("label:'추정 교체비용 절감액'")<summarySrc.indexOf("label:'N-CARE 점검 운영률'"));
+  const chipSrc=grab('exApplyHistoryCountChip_');
   ck('26-m. 건수 칩은 해당 select만 바꾸고 공통 필터 적용 함수를 호출',
-    grab('exApplyHistoryCountChip_').includes("key==='gubun'?'hstGubun'")
-    &&grab('exApplyHistoryCountChip_').includes("key==='type'?'hstType'")
-    &&grab('exApplyHistoryCountChip_').includes('exApplyHistoryFilters_()'));
+    chipSrc.includes("key==='gubun'?'hstGubun'")&&chipSrc.includes("key==='type'?'hstType'")
+    &&chipSrc.includes('exApplyHistoryFilters_()'));
+  ck('26-n. 같은 칩 재클릭은 전체로 해제하고 다른 칩은 즉시 전환',
+    chipSrc.includes('select.value===value')&&chipSrc.includes("select.value=selected?'all':value"));
+  ck('26-o. 요약 버튼은 필터 결과가 아니라 원본 목록으로 계속 렌더링',
+    grab('exApplyHistoryFilters_').includes('exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt)'));
 }
 
 /* ══════ 7. 특수문자·따옴표 안전 ══════ */
