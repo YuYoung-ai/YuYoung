@@ -40,12 +40,14 @@ const dataFn=new Function(
 ck('1. 유형 키는 대분류|유형으로 만들고 공백을 정규화한다',
   key({cat:' 장비 ',type:'노즐   누수'})==='장비|노즐 누수' && norm('  A   B ')==='A B');
 ck('2. 유형이 없으면 예시 키를 만들지 않는다',key({cat:'장비',type:''})==='');
-ck('3. 저장소 아래의 지원 이미지 형식만 허용한다',
+ck('3. 저장소 아래의 지원 사진·영상 형식만 허용한다',
   asset('assets/type-examples/nozzle-leak/symptom-a1.webp')!=='' &&
-  asset('assets/type-examples/a/b.jpg')!=='' && asset('assets/type-examples/a/b.png')!=='');
+  asset('assets/type-examples/a/b.jpg')!=='' && asset('assets/type-examples/a/b.png')!=='' &&
+  asset('assets/type-examples/media/0123456789ab.mp4')!=='');
 ck('4. 경로 탈출·외부 URL·data URL을 거부한다',
   asset('../secret.webp')==='' && asset('assets/type-examples/../secret.webp')==='' &&
-  asset('https://example.com/a.webp')==='' && asset('data:image/png;base64,AA')==='');
+  asset('https://example.com/a.webp')==='' && asset('data:image/png;base64,AA')==='' &&
+  asset('assets/type-examples/media/0123456789ab.mov')==='');
 
 const sampleManifest={schema:1,items:{
   '장비|노즐 누수':{
@@ -56,6 +58,9 @@ const sampleManifest={schema:1,items:{
 const picked=dataFn(sampleManifest,{cat:'장비',type:'노즐 누수'});
 ck('5. 매니페스트에서 증상·처리결과 두 예시를 찾는다',
   picked.symptom&&picked.symptom.desc==='누수 확인' && picked.after&&picked.after.desc==='처리 후 정상');
+ck('5-b. MP4는 영상 종류로 판정한다',
+  dataFn({schema:1,items:{'장비|영상':{symptom:{src:'assets/type-examples/media/0123456789ab.mp4',kind:'video',bytes:1024,duration:8}}}},
+    {cat:'장비',type:'영상'}).symptom.kind==='video');
 ck('6. 등록되지 않은 유형은 빈 사진 데이터로 판정한다',
   dataFn(sampleManifest,{cat:'장비',type:'미등록'}).missing===true);
 ck('7. 등록 매니페스트는 9개 유형과 갱신일을 가진다',
@@ -78,7 +83,10 @@ const table=grab(DASH,'exHistoryTable_');
 ck('8. PC·모바일 공용 패널은 증상·처리결과 각 한 칸이다',
   (panel.match(/hstPhotoSymptom"/g)||[]).length===1 && (panel.match(/hstPhotoAfter"/g)||[]).length===1);
 ck('9. 실제 기록 사진이 아닌 유형별 참고 예시임을 명시한다',
-  /유형별 참고 예시/.test(panel) && /실제 처리 기록 사진이 아닌/.test(panel));
+  /유형별 참고 예시/.test(panel) && /실제 처리 기록이 아닌/.test(panel));
+ck('9-b. 영상은 자동재생 없이 사용자 재생·기본 음소거·지연 로딩한다',
+  (panel.match(/<video/g)||[]).length===2 && /controls muted playsinline preload="none"/.test(panel) &&
+  !/autoplay/.test(panel) && /isVideo/.test(grab(DASH,'exHistoryPhotoSlot_')));
 ck('10. 행 선택 전에는 이미지 src와 lazy 요청이 없다',
   !/<img[^>]+src=/.test(panel) && !/loading="lazy"/.test(panel));
 ck('11. 행 선택은 기록ID·물리 행 번호가 아니라 유형 키를 사용한다',

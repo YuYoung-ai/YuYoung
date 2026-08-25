@@ -870,8 +870,8 @@ body.dark .yc-band{opacity:.26}
 #hstPhotoAfterCard{grid-column:2}
 .hst-photo-frame{height:250px;display:flex;align-items:center;justify-content:center;border:1px solid #E5EAF1;
   border-radius:8px;background:#F5F7FA;overflow:hidden}
-.hst-photo-frame img{display:block;width:100%;height:100%;object-fit:contain;background:#111827}
-.hst-photo-frame img[hidden]{display:none}.hst-photo-empty{padding:15px;color:var(--text-muted);font-size:11px;text-align:center}
+.hst-photo-frame img,.hst-photo-frame video{display:block;width:100%;height:100%;object-fit:contain;background:#111827}
+.hst-photo-frame img[hidden],.hst-photo-frame video[hidden]{display:none}.hst-photo-empty{padding:15px;color:var(--text-muted);font-size:11px;text-align:center}
 .hst-photo-desc{min-height:16px;margin:5px 2px 0;color:var(--text-muted);font-size:10.5px;line-height:1.4;overflow-wrap:anywhere}
 /* ── 조회창(전체 명단·처리 이력) 다크 ──
    창 자체는 .mbox 의 흰 배경 대신 화면 표면색을 쓴다. 안쪽은 토큰(var)으로 이미 따라오므로
@@ -1155,7 +1155,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
     <button class="hd-btn" onclick="loadData(true)">🔄 새로고침</button>
     <!-- 관리 도구 — 코드는 이 버튼을 눌렀을 때만 내려받는다(일반 로딩에는 포함되지 않음) -->
     <button type="button" class="hd-btn" id="teMgrBtn" onclick="exOpenTypeExampleManager()"
-            title="VOC 유형별 예시 사진 등록·교체">🖼 예시사진 관리</button>
+            title="VOC 유형별 예시 사진·영상 등록·교체">🖼 예시자료 관리</button>
     <button type="button" class="hd-btn" id="themeToggle" aria-label="다크모드 전환" title="다크모드">🌙</button>
     <div class="mode-toggle" id="modeToggle" role="group" aria-label="화면 모드">
       <button type="button" data-mode="window">🖥 Window</button><button type="button" data-mode="mobile">📱 Mobile</button>
@@ -4921,7 +4921,7 @@ function exListGroup(title, arr, fmt, empty){
    VOC 유형 변화 · VOC 유형 TOP 5 · 교체품 TOP 5 의 개별 행을 누르면
    "이미 브라우저에 있는" 현재 기간(x.rows)·비교 기간(x.prev) 원본 기록을 그대로 보여준다.
    모달을 여는 동안은 재조회하지 않는다. 사용자가 원본 행을 선택했을 때만 유형별
-   정적 매니페스트를 최초 1회 읽고, 해당 유형의 예시 이미지만 GitHub Pages에서 로드한다.
+   정적 매니페스트를 최초 1회 읽고, 해당 유형의 예시 자료만 GitHub Pages에서 로드한다.
    원본 행을 중복 제거하지 않는다
    → 카드의 집계 건수와 이력 건수가 항상 같다. */
 /* 카드 집계(exDim)와 완전히 같은 판정으로 원본 행을 고른다 — 기준을 새로 만들지 않는다 */
@@ -5050,7 +5050,7 @@ var EX_TYPE_EXAMPLE_URL='assets/type-examples/index.json';
 var EX_TYPE_EXAMPLE_PROMISE=null;
 
 function exTypeExampleNorm_(v){ return String(v==null?'':v).replace(/\s+/g,' ').trim(); }
-/* 과거 유형값에는 괄호 앞·안쪽 공백이 빠진 기록이 있어, 사진 조회에 한해 공백을 무시한다.
+/* 과거 유형값에는 괄호 앞·안쪽 공백이 빠진 기록이 있어, 예시 조회에 한해 공백을 무시한다.
    화면 표시값과 매니페스트의 기본 키는 운영 표준 표기(예: "노즐 누수(약액 유입)")를 유지한다. */
 function exTypeExampleLooseKey_(v){ return exTypeExampleNorm_(v).replace(/\s+/g,''); }
 function exTypeExampleKey_(r){
@@ -5059,12 +5059,12 @@ function exTypeExampleKey_(r){
 }
 function exTypeExampleAssetUrl_(src){
   src=String(src||'').trim();
-  if(!/^assets\/type-examples\/[A-Za-z0-9_./-]+\.(?:webp|jpe?g|png)$/i.test(src) || src.indexOf('..')>=0) return '';
+  if(!/^assets\/type-examples\/[A-Za-z0-9_./-]+\.(?:webp|jpe?g|png|mp4)$/i.test(src) || src.indexOf('..')>=0) return '';
   return src;
 }
 function exTypeExampleLoad_(){
   if(EX_TYPE_EXAMPLE_PROMISE) return EX_TYPE_EXAMPLE_PROMISE;
-  EX_TYPE_EXAMPLE_PROMISE=fetch(EX_TYPE_EXAMPLE_URL+'?v=2',{cache:'no-cache',credentials:'same-origin'})
+  EX_TYPE_EXAMPLE_PROMISE=fetch(EX_TYPE_EXAMPLE_URL+'?v=3',{cache:'no-cache',credentials:'same-origin'})
     .then(function(r){ if(!r.ok) throw new Error('manifest '+r.status); return r.json(); })
     .then(function(data){
       return data&&data.items&&typeof data.items==='object' ? data : {schema:1,items:{},loadError:true};
@@ -5074,7 +5074,8 @@ function exTypeExampleLoad_(){
 }
 function exTypeExamplePhoto_(raw){
   var src=exTypeExampleAssetUrl_(raw&&raw.src);
-  return src ? {src:src,desc:String((raw&&raw.text)||'').trim().slice(0,300)} : null;
+  var kind=(raw&&raw.kind==='video')||/\.mp4$/i.test(src)?'video':'image';
+  return src ? {src:src,kind:kind,desc:String((raw&&raw.text)||'').trim().slice(0,300)} : null;
 }
 function exTypeExampleData_(manifest,r){
   var key=exTypeExampleKey_(r), items=manifest&&manifest.items, item=items&&items[key];
@@ -5092,27 +5093,37 @@ function exHistoryPhotoPanel_(){
   return '<section class="hst-photo-panel" id="hstPhotoPanel" hidden aria-live="polite">'
     +'<div class="hst-photo-head"><div><span class="hst-photo-kicker">유형별 참고 예시</span><b id="hstPhotoTitle">증상·처리 결과</b></div>'
       +'<span class="hst-photo-status" id="hstPhotoStatus"></span></div>'
-    +'<p class="hst-photo-note">실제 처리 기록 사진이 아닌, 해당 VOC 유형의 이해를 돕기 위한 표준 예시입니다.</p>'
+    +'<p class="hst-photo-note">실제 처리 기록이 아닌, 해당 VOC 유형의 이해를 돕기 위한 표준 예시입니다. 영상은 사용자 재생·기본 음소거로 동작합니다.</p>'
     +'<div class="hst-photo-grid">'
       +'<figure class="hst-photo-card" id="hstPhotoSymptomCard"><figcaption>증상 예시</figcaption><div class="hst-photo-frame">'
         /* src 자체를 행 선택 후에만 넣으므로 lazy가 필요 없다. hidden+lazy 조합은 일부
            브라우저에서 요청을 시작하지 않아 onload가 오지 않는 문제도 피한다. */
         +'<img id="hstPhotoSymptom" alt="유형별 증상 예시 사진" decoding="async" referrerpolicy="no-referrer" hidden>'
+        +'<video id="hstPhotoSymptomVideo" aria-label="유형별 증상 예시 영상" controls muted playsinline preload="none" hidden></video>'
         +'<span class="hst-photo-empty" id="hstPhotoSymptomEmpty">불러오는 중…</span></div><p class="hst-photo-desc" id="hstPhotoSymptomDesc"></p></figure>'
       +'<figure class="hst-photo-card" id="hstPhotoAfterCard"><figcaption>처리 결과 예시</figcaption><div class="hst-photo-frame">'
         +'<img id="hstPhotoAfter" alt="유형별 처리 결과 예시 사진" decoding="async" referrerpolicy="no-referrer" hidden>'
+        +'<video id="hstPhotoAfterVideo" aria-label="유형별 처리 결과 예시 영상" controls muted playsinline preload="none" hidden></video>'
         +'<span class="hst-photo-empty" id="hstPhotoAfterEmpty">불러오는 중…</span></div><p class="hst-photo-desc" id="hstPhotoAfterDesc"></p></figure>'
     +'</div></section>';
 }
 function exHistoryPhotoSlot_(prefix,photo,emptyText){
-  var img=document.getElementById(prefix), empty=document.getElementById(prefix+'Empty');
-  var desc=document.getElementById(prefix+'Desc'), url=photo?exTypeExampleAssetUrl_(photo.src):'';
-  if(!img||!empty||!desc) return;
+  var img=document.getElementById(prefix), video=document.getElementById(prefix+'Video');
+  var empty=document.getElementById(prefix+'Empty'), desc=document.getElementById(prefix+'Desc');
+  var url=photo?exTypeExampleAssetUrl_(photo.src):'', isVideo=!!(photo&&photo.kind==='video');
+  if(!img||!video||!empty||!desc) return;
   img.onload=null; img.onerror=null;
   img.removeAttribute('src'); img.hidden=true; empty.hidden=false;
-  empty.textContent=url?'사진 불러오는 중…':emptyText;
+  video.onerror=null; try{video.pause();}catch(e){} video.removeAttribute('src'); video.load(); video.hidden=true;
+  empty.textContent=url?(isVideo?'재생 버튼을 눌러 영상을 확인하세요':'사진 불러오는 중…'):emptyText;
   desc.textContent=(photo&&photo.desc)||'';
-  if(url){
+  if(url&&isVideo){
+    video.onerror=function(){
+      if(video.getAttribute('src')!==url) return;
+      video.hidden=true; empty.hidden=false; empty.textContent='예시 영상을 재생할 수 없습니다';
+    };
+    video.src=url; video.hidden=false; empty.hidden=true; /* preload=none — 재생 전에는 영상 본문을 받지 않는다 */
+  }else if(url){
     img.onerror=function(){
       if(img.getAttribute('src')!==url) return;
       img.hidden=true; empty.hidden=false; empty.textContent='예시 사진을 열 수 없습니다';
@@ -5125,7 +5136,7 @@ function exHistoryPhotoLoading_(it){
   var panel=document.getElementById('hstPhotoPanel'), title=document.getElementById('hstPhotoTitle');
   var status=document.getElementById('hstPhotoStatus'), grid=panel&&panel.querySelector('.hst-photo-grid');
   var note=panel&&panel.querySelector('.hst-photo-note'), r=(it&&it.r)||{};
-  if(!panel) return; panel.hidden=true; /* 실제 사진 유무를 확인하기 전에는 빈 패널을 노출하지 않는다 */
+  if(!panel) return; panel.hidden=true; /* 실제 예시 유무를 확인하기 전에는 빈 패널을 노출하지 않는다 */
   if(grid) grid.hidden=false;
   if(note) note.hidden=false;
   if(title) title.textContent=(r.type||'VOC 유형')+' · 증상과 처리 결과';
@@ -5140,7 +5151,7 @@ function exHistoryPhotoRender_(it,data){
   var symptomCard=document.getElementById('hstPhotoSymptomCard'), afterCard=document.getElementById('hstPhotoAfterCard');
   if(!panel) return;
   if(data&&data.loadError){ exHistoryPhotoError_('예시 목록을 불러오지 못했습니다 · 새로고침해 주세요'); return; }
-  if(!symptom&&!after){ panel.hidden=true; return; } /* 등록 사진이 하나도 없으면 출력 영역 전체를 숨긴다 */
+  if(!symptom&&!after){ panel.hidden=true; return; } /* 등록 예시가 하나도 없으면 출력 영역 전체를 숨긴다 */
   panel.hidden=false;
   if(grid) grid.hidden=false;
   if(note) note.hidden=false;
@@ -5154,7 +5165,7 @@ function exHistoryPhotoError_(message){
   var panel=document.getElementById('hstPhotoPanel'), status=document.getElementById('hstPhotoStatus');
   var grid=panel&&panel.querySelector('.hst-photo-grid'), note=panel&&panel.querySelector('.hst-photo-note');
   if(panel) panel.hidden=false;
-  if(grid) grid.hidden=true; /* 통신 오류는 숨기지 않되 빈 사진 프레임은 만들지 않는다 */
+  if(grid) grid.hidden=true; /* 통신 오류는 숨기지 않되 빈 예시 프레임은 만들지 않는다 */
   if(note) note.hidden=true;
   if(status) status.textContent=message||'예시 자료를 불러오지 못했습니다';
 }
@@ -5173,7 +5184,7 @@ function exSelectHistory_(idx,tr){
   if(tr&&tr.classList){ tr.classList.add('hst-selected'); tr.setAttribute('aria-current','true'); }
   var seq=++EX_HISTORY_PHOTO_SEQ;
   EX_HISTORY_STATE.selectedKey=key; exHistoryPhotoLoading_(it);
-  /* 매니페스트는 페이지당 한 번만 받고, 실제 이미지는 선택한 유형의 정적 파일만 요청한다. */
+  /* 매니페스트는 페이지당 한 번만 받고, 실제 자료는 선택한 유형의 정적 파일만 연결한다. */
   exTypeExampleLoad_().then(function(manifest){
     if(seq!==EX_HISTORY_PHOTO_SEQ || !EX_HISTORY_STATE || EX_HISTORY_STATE.selectedKey!==key) return;
     exHistoryPhotoRender_(it,exTypeExampleData_(manifest,r));
@@ -5182,9 +5193,9 @@ function exSelectHistory_(idx,tr){
     exHistoryPhotoError_('유형별 예시 목록을 불러오지 못했습니다 · 새로고침해 주세요');
   });
 }
-/* ══════ 유형별 예시 사진 관리(관리 도구) ══════
+/* ══════ 유형별 예시 사진·영상 관리(관리 도구) ══════
    조회 경로(exTypeExample*)와 등록 경로를 완전히 분리한다.
-   · 일반 사용: 정적 index.json 1회 + 선택한 유형의 정적 이미지만. 아래 코드는 실행되지 않는다.
+   · 일반 사용: 정적 index.json 1회 + 선택한 유형의 정적 예시 파일만. 아래 코드는 실행되지 않는다.
    · 관리 사용: 버튼을 누른 순간에만 js/type-example-manager.js 를 내려받는다.
    관리 모듈은 GAS·Sheets·Drive를 호출하지 않고, 유형 목록은 이미 받아 둔 RAW를,
    매니페스트는 이미 받아 둔 exTypeExampleLoad_() 결과를 그대로 넘겨받아 쓴다. */
@@ -5203,8 +5214,8 @@ function exTypeExampleHost_(){
 function exTypeExampleManagerOpen_(){
   try{
     var p=window.BazTypeExampleManager.open(exTypeExampleHost_());
-    if(p&&p.catch) p.catch(function(e){ toast('예시 사진 관리 오류 · '+((e&&e.message)||e)); });
-  }catch(e){ toast('예시 사진 관리 오류 · '+((e&&e.message)||e)); }
+    if(p&&p.catch) p.catch(function(e){ toast('예시 자료 관리 오류 · '+((e&&e.message)||e)); });
+  }catch(e){ toast('예시 자료 관리 오류 · '+((e&&e.message)||e)); }
 }
 function exOpenTypeExampleManager(){
   if(EX_TE_MGR_LOADING) return;                     /* 중복 클릭 방지 */
@@ -5217,12 +5228,12 @@ function exOpenTypeExampleManager(){
   s.onload=function(){
     EX_TE_MGR_LOADING=false; if(btn) btn.disabled=false;
     if(window.BazTypeExampleManager) exTypeExampleManagerOpen_();
-    else toast('예시 사진 관리 모듈을 불러오지 못했습니다');
+    else toast('예시 자료 관리 모듈을 불러오지 못했습니다');
   };
   s.onerror=function(){
     EX_TE_MGR_LOADING=false; if(btn) btn.disabled=false;
     if(s.parentNode) s.parentNode.removeChild(s);
-    toast('예시 사진 관리 모듈을 불러오지 못했습니다 · 연결을 확인해 주세요');
+    toast('예시 자료 관리 모듈을 불러오지 못했습니다 · 연결을 확인해 주세요');
   };
   document.head.appendChild(s);
 }

@@ -1,13 +1,13 @@
 /************************************************************
- * type-example-manager.js — VOC 유형별 대표 사진(예시) 등록 도구
+ * type-example-manager.js — VOC 유형별 대표 사진·짧은 영상(예시) 등록 도구
  * ----------------------------------------------------------
  * 왜 별도 파일인가:
- *  · 대표 사진 조회(dashboard-pc.html의 exTypeExample*)는 정적 index.json + 정적
- *    이미지 한 장이면 끝난다. 반면 "등록"은 캔버스 재인코딩·해시·파일 저장까지
+ *  · 대표 예시 조회(dashboard-pc.html의 exTypeExample*)는 정적 index.json + 정적
+ *    파일 하나면 끝난다. 반면 "등록"은 변환·검증·해시·파일 저장까지
  *    필요해 코드가 크다. 일반 사용자가 대시보드를 열 때 이 무게를 지불할 이유가
  *    없으므로, 관리 버튼을 누른 순간에만 <script>로 내려받는다.
  *  · js/baz-photo.js의 compress()는 업무사진(JPEG → GAS 업로드) 전용이다.
- *    대표 사진은 WebP·공개 저장소용이라 기준이 달라, 회귀 위험을 피하려고
+ *    대표 예시는 WebP/MP4·공개 저장소용이라 기준이 달라, 회귀 위험을 피하려고
  *    여기에 별도 변환기를 둔다(공유·수정하지 않는다).
  *
  * 이 모듈은 GAS·Google Sheets·Drive를 호출하지 않는다. 네트워크 요청 자체가 없고,
@@ -39,6 +39,8 @@
   var DIM_STEPS = [1, 0.85, 0.72, 0.6, 0.5];
   var MIN_DIM = 480;
   var TEXT_MAX = 300;                    /* 대시보드가 표시할 때 자르는 길이와 맞춘다 */
+  var VIDEO_MAX_BYTES = 5 * 1024 * 1024; /* 짧은 예시 영상 상한 */
+  var VIDEO_MAX_SECONDS = 15;             /* 15초를 넘는 영상은 저장하지 않는다 */
 
   /** 공백 정규화 — dashboard-pc.html의 exTypeExampleNorm_ 과 같은 규칙 */
   function norm(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
@@ -57,7 +59,7 @@
   }
 
   /**
-   * 저장소 안의 이미지 경로만 허용한다.
+   * 저장소 안의 이미지·MP4 경로만 허용한다.
    * 경로 탈출(..)·절대경로·외부 URL·data URL·blob URL을 모두 거부한다.
    */
   function isSafeSrc(src) {
@@ -66,19 +68,31 @@
     if (s.indexOf('..') >= 0) return false;
     if (s.charAt(0) === '/' || s.charAt(0) === '\\') return false;
     if (/^[A-Za-z][A-Za-z0-9+.\-]*:/.test(s)) return false;   /* http: https: data: blob: file: … */
-    return /^assets\/type-examples\/[A-Za-z0-9_.\-\/]+\.(?:webp|jpe?g|png)$/.test(s);
+    return /^assets\/type-examples\/[A-Za-z0-9_.\-\/]+\.(?:webp|jpe?g|png|mp4)$/.test(s);
   }
-  /** 이 도구가 새로 만드는 파일 경로인지 — 내용 해시 12자리 WebP만 인정한다 */
+  function mediaKind(src) {
+    return /\.mp4$/i.test(String(src == null ? '' : src).trim()) ? 'video' : 'image';
+  }
+  /** 이 도구가 새로 만드는 파일 경로인지 — 내용 해시 12자리 WebP·MP4만 인정한다 */
   function isMediaPath(src) {
-    return /^assets\/type-examples\/media\/[0-9a-f]{12}\.webp$/.test(String(src == null ? '' : src).trim());
+    return /^assets\/type-examples\/media\/[0-9a-f]{12}\.(?:webp|mp4)$/.test(String(src == null ? '' : src).trim());
   }
   /** 해시 → 저장 경로. 사용자가 폴더 슬러그나 파일명을 정하지 않는다. */
-  function mediaPath(hash12) { return MEDIA_DIR + String(hash12 || '') + '.webp'; }
+  function mediaPath(hash12, kind) { return MEDIA_DIR + String(hash12 || '') + (kind === 'video' ? '.mp4' : '.webp'); }
 
   function toHex(buffer) {
     var view = new Uint8Array(buffer), out = '', i;
     for (i = 0; i < view.length; i++) out += (view[i] < 16 ? '0' : '') + view[i].toString(16);
     return out;
+  }
+  /** MP4 sample entry의 avc1/avc3 표식으로 H.264(AVC) 파일인지 확인한다. */
+  function hasAvcCodec(bytes) {
+    var view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || new ArrayBuffer(0)), i;
+    for (i = 0; i <= view.length - 4; i++) {
+      if (view[i] === 0x61 && view[i + 1] === 0x76 && view[i + 2] === 0x63 &&
+          (view[i + 3] === 0x31 || view[i + 3] === 0x33)) return true;
+    }
+    return false;
   }
   /**
    * 변환 완료된 바이트의 SHA-256 앞 12자리.
@@ -244,7 +258,13 @@
   }
 
   function copyPhoto(p) {
-    return { src: String((p && p.src) || ''), text: String((p && p.text) || '').slice(0, TEXT_MAX) };
+    var out = { src: String((p && p.src) || ''), text: String((p && p.text) || '').slice(0, TEXT_MAX) };
+    if (mediaKind(out.src) === 'video') {
+      out.kind = 'video';
+      out.bytes = Math.round(Number(p && p.bytes) || 0);
+      out.duration = Math.round((Number(p && p.duration) || 0) * 1000) / 1000;
+    }
+    return out;
   }
 
   /**
@@ -323,12 +343,21 @@
         var photo = item[SLOTS[s].id];
         if (photo === undefined) continue;
         slotCount++;
-        if (!photo || typeof photo !== 'object' || Array.isArray(photo)) { errors.push('사진 항목이 객체가 아닙니다: ' + key + ' / ' + SLOTS[s].id); continue; }
+        if (!photo || typeof photo !== 'object' || Array.isArray(photo)) { errors.push('예시 항목이 객체가 아닙니다: ' + key + ' / ' + SLOTS[s].id); continue; }
         if (typeof photo.src !== 'string' || !isSafeSrc(photo.src)) {
           errors.push('허용되지 않는 경로입니다: ' + key + ' / ' + SLOTS[s].id + ' → ' + String(photo.src));
           continue;
         }
-        if (photo.text !== undefined && typeof photo.text !== 'string') errors.push('사진 설명이 문자열이 아닙니다: ' + key + ' / ' + SLOTS[s].id);
+        if (photo.text !== undefined && typeof photo.text !== 'string') errors.push('예시 설명이 문자열이 아닙니다: ' + key + ' / ' + SLOTS[s].id);
+        if (mediaKind(photo.src) === 'video') {
+          if (photo.kind !== 'video') errors.push('MP4 항목의 kind가 video가 아닙니다: ' + key + ' / ' + SLOTS[s].id);
+          if (!(Number(photo.bytes) > 0 && Number(photo.bytes) <= VIDEO_MAX_BYTES)) {
+            errors.push('영상 용량이 5MB 제한을 벗어났습니다: ' + key + ' / ' + SLOTS[s].id);
+          }
+          if (!(Number(photo.duration) > 0 && Number(photo.duration) <= VIDEO_MAX_SECONDS)) {
+            errors.push('영상 길이가 15초 제한을 벗어났습니다: ' + key + ' / ' + SLOTS[s].id);
+          }
+        }
         used[photo.src] = true;
       }
       if (!slotCount) errors.push('증상·처리 결과가 모두 비어 있습니다: ' + key);
@@ -338,7 +367,7 @@
     for (i = 0; i < newFiles.length; i++) {
       var p = String(newFiles[i] || '');
       if (!isSafeSrc(p)) { errors.push('새 파일 경로가 저장소 밖입니다: ' + p); continue; }
-      if (!/\.webp$/.test(p)) { errors.push('새 파일 확장자가 webp 가 아닙니다: ' + p); continue; }
+      if (!/\.(?:webp|mp4)$/.test(p)) { errors.push('새 파일 확장자가 webp 또는 mp4가 아닙니다: ' + p); continue; }
       if (!isMediaPath(p)) { errors.push('새 파일이 내용 해시 경로 규칙과 다릅니다: ' + p); continue; }
       if (seenFile[p]) { errors.push('새 파일 경로가 중복됩니다: ' + p); continue; }
       seenFile[p] = true;
@@ -397,10 +426,12 @@
   var PURE = {
     ASSET_ROOT: ASSET_ROOT, MEDIA_DIR: MEDIA_DIR, MANIFEST_PATH: MANIFEST_PATH, SLOTS: SLOTS,
     MAX_DIM: MAX_DIM, TARGET_BYTES: TARGET_BYTES, IDEAL_MIN_BYTES: IDEAL_MIN_BYTES,
+    VIDEO_MAX_BYTES: VIDEO_MAX_BYTES, VIDEO_MAX_SECONDS: VIDEO_MAX_SECONDS,
     QUALITY_STEPS: QUALITY_STEPS, TEXT_MAX: TEXT_MAX,
     norm: norm, looseKey: looseKey, makeKey: makeKey, splitKey: splitKey,
-    isSafeSrc: isSafeSrc, isMediaPath: isMediaPath, mediaPath: mediaPath,
-    sha256Hex12: sha256Hex12, fitSize: fitSize, dimLadder: dimLadder, pickEncoding: pickEncoding,
+    isSafeSrc: isSafeSrc, isMediaPath: isMediaPath, mediaPath: mediaPath, mediaKind: mediaKind,
+    sha256Hex12: sha256Hex12, hasAvcCodec: hasAvcCodec,
+    fitSize: fitSize, dimLadder: dimLadder, pickEncoding: pickEncoding,
     resolveKey: resolveKey, buildTypeRows: buildTypeRows, slotState: slotState,
     todayLocal: todayLocal, applyChanges: applyChanges, serializeManifest: serializeManifest,
     validateManifest: validateManifest, cleanupCandidates: cleanupCandidates,
@@ -449,7 +480,7 @@
    * 파일 1장 → 대표 사진용 WebP + 저장 경로.
    * 실패해도 기존 데이터는 건드리지 않는다(호출부가 예외만 표시한다).
    */
-  function convert(file) {
+  function convertImage(file) {
     if (!hasDom()) return Promise.reject(new Error('브라우저 환경이 아닙니다'));
     if (!file || !file.size) return Promise.reject(new Error('빈 파일입니다'));
     if (file.type && !/^image\//.test(file.type) && !/\.(?:jpe?g|png|webp|gif|bmp)$/i.test(file.name || '')) {
@@ -466,6 +497,7 @@
           return enc.blob.arrayBuffer().then(function (buf) {
             return sha256Hex12(buf).then(function (hash) {
               return {
+                kind: 'image',
                 blob: enc.blob, bytes: enc.bytes, width: enc.width, height: enc.height,
                 quality: enc.quality, over: !!enc.over, hash: hash, src: mediaPath(hash),
                 origName: file.name || '', origBytes: file.size, origWidth: srcW, origHeight: srcH
@@ -480,6 +512,66 @@
       if (got) { try { URL.revokeObjectURL(got.url); } catch (e2) {} }
       throw e;
     });
+  }
+
+  /** MP4 메타데이터만 읽는다. 브라우저가 재생하지 못하는 코덱이면 onerror로 거부한다. */
+  function loadVideoMeta(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), video = document.createElement('video'), done = false;
+      var timer = setTimeout(function () { finish(new Error('영상 정보를 읽는 시간이 너무 오래 걸립니다')); }, 12000);
+      function finish(err, data) {
+        if (done) return; done = true; clearTimeout(timer);
+        video.onloadedmetadata = null; video.onerror = null;
+        try { video.removeAttribute('src'); video.load(); } catch (e) {}
+        try { URL.revokeObjectURL(url); } catch (e2) {}
+        if (err) reject(err); else resolve(data);
+      }
+      video.preload = 'metadata'; video.muted = true; video.playsInline = true;
+      video.onloadedmetadata = function () {
+        var duration = Number(video.duration), width = Number(video.videoWidth) || 0, height = Number(video.videoHeight) || 0;
+        if (!(duration > 0) || !isFinite(duration)) { finish(new Error('영상 길이를 확인할 수 없습니다')); return; }
+        finish(null, { duration: duration, width: width, height: height });
+      };
+      video.onerror = function () { finish(new Error('재생할 수 없는 MP4입니다. H.264로 내보낸 MP4를 사용해 주세요.')); };
+      video.src = url;
+    });
+  }
+
+  /**
+   * 영상은 브라우저에서 재인코딩하지 않는다. MP4 재생 가능 여부·15초·5MB를 모두
+   * 통과한 원본 바이트만 내용 해시 이름으로 저장한다.
+   */
+  function convertVideo(file) {
+    if (!hasDom()) return Promise.reject(new Error('브라우저 환경이 아닙니다'));
+    if (!file || !file.size) return Promise.reject(new Error('빈 파일입니다'));
+    if (!/\.mp4$/i.test(file.name || '') || (file.type && file.type !== 'video/mp4' && file.type !== 'application/mp4')) {
+      return Promise.reject(new Error('영상은 MP4(H.264/AVC) 파일만 등록할 수 있습니다'));
+    }
+    if (file.size > VIDEO_MAX_BYTES) {
+      return Promise.reject(new Error('영상은 5MB 이하만 등록할 수 있습니다 (' + formatBytes(file.size) + ')'));
+    }
+    return loadVideoMeta(file).then(function (meta) {
+      if (meta.duration > VIDEO_MAX_SECONDS) {
+        throw new Error('영상은 15초 이하만 등록할 수 있습니다 (' + meta.duration.toFixed(1) + '초)');
+      }
+      return file.arrayBuffer().then(function (buf) {
+        if (!hasAvcCodec(buf)) throw new Error('영상 코덱은 H.264(avc1/avc3)만 허용됩니다');
+        return sha256Hex12(buf).then(function (hash) {
+          return {
+            kind: 'video', blob: file, bytes: file.size, width: meta.width, height: meta.height,
+            duration: Math.round(meta.duration * 1000) / 1000, hash: hash, src: mediaPath(hash, 'video'),
+            origName: file.name || '', origBytes: file.size, origWidth: meta.width, origHeight: meta.height,
+            over: false
+          };
+        });
+      });
+    });
+  }
+
+  /** 파일 유형에 따라 사진 변환 또는 제한 검증된 MP4 보존을 선택한다. */
+  function convert(file) {
+    var isVideo = !!file && (/^video\//.test(file.type || '') || /\.mp4$/i.test(file.name || ''));
+    return isVideo ? convertVideo(file) : convertImage(file);
   }
 
   /* ══════════════════════════════════════════════════════════════════
@@ -548,7 +640,7 @@
     '.bte-thumbs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:6px}',
     '.bte-thumbs figure{margin:0;width:120px}',
     '.bte-thumbs figcaption{font-size:10px;color:var(--text-muted,#6B7A99);margin-bottom:3px}',
-    '.bte-thumbs img{width:100%;height:86px;object-fit:contain;background:var(--track,#F0F4F9);border-radius:6px;',
+    '.bte-thumbs img,.bte-thumbs video{display:block;width:100%;height:86px;object-fit:contain;background:#111827;border-radius:6px;',
       'border:1px solid var(--gray-line,#DDE3EE)}',
     '.bte-dropmsg{margin:0 0 6px;font-size:10.5px;color:var(--text-muted,#6B7A99)}',
     '.bte-btn{border:1px solid var(--gray-line,#DDE3EE);background:var(--surface,#fff);color:var(--navy,#1B2F5E);',
@@ -589,14 +681,15 @@
     back.className = 'bte-back';
     back.setAttribute('role', 'dialog');
     back.setAttribute('aria-modal', 'true');
-    back.setAttribute('aria-label', 'VOC 유형별 예시 사진 관리');
+    back.setAttribute('aria-label', 'VOC 유형별 예시 사진·영상 관리');
     back.innerHTML = ''
       + '<div class="bte-panel">'
-      +   '<div class="bte-head"><h2>🖼 VOC 유형별 예시 사진 관리</h2>'
+      +   '<div class="bte-head"><h2>🖼 VOC 유형별 예시 사진·영상 관리</h2>'
       +     '<span class="bte-kicker">유형별 표준 예시</span>'
       +     '<button type="button" class="bte-x" data-act="close">✕ 닫기</button></div>'
-      +   '<p class="bte-safety">여기 등록하는 사진은 <b>실제 처리 기록 사진이 아니라 VOC 유형별 표준 예시</b>입니다. '
-      +     '환자·직원 얼굴, 병원명, 장비 S/N, 문서·모니터의 개인정보가 보이지 않는 사진만 사용하세요. '
+      +   '<p class="bte-safety">여기 등록하는 자료는 <b>실제 처리 기록이 아니라 VOC 유형별 표준 예시</b>입니다. '
+      +     '환자·직원 얼굴, 병원명, 장비 S/N, 문서·모니터의 개인정보가 보이지 않는 자료만 사용하세요. '
+      +     '영상은 MP4(H.264/AVC)·15초 이하·5MB 이하만 허용되며 재생 시 기본 음소거됩니다. '
       +     '저장 버튼을 누르기 전에는 어떤 파일도 기록되지 않습니다.</p>'
       +   '<div class="bte-tools">'
       +     '<select data-act="cat" aria-label="대분류 필터"></select>'
@@ -717,7 +810,7 @@
     var n = { both: 0, symptom: 0, after: 0, none: 0 };
     S.rows.forEach(function (r) { n[r.state]++; });
     S.el.sum.textContent = '전체 ' + S.rows.length + '개 유형 · 증상·처리 결과 모두 등록 ' + n.both
-      + ' · 증상 사진만 ' + n.symptom + ' · 처리 결과 사진만 ' + n.after + ' · 모두 미등록 ' + n.none;
+      + ' · 증상 예시만 ' + n.symptom + ' · 처리 결과 예시만 ' + n.after + ' · 모두 미등록 ' + n.none;
     var c = changeCount();
     S.el.changed.textContent = c ? ('변경된 항목 ' + c + '건 — 저장 전까지 파일은 기록되지 않습니다') : '변경된 항목 없음';
   }
@@ -729,43 +822,54 @@
     var curSrc = cur && isSafeSrc(cur.src) ? cur.src : '';
     var text = ch ? ch.text : String((cur && cur.text) || '');
     var stateLabel = ch ? (ch.blob ? '교체 예정' : '설명 수정') : (curSrc ? '등록됨' : '미등록');
+    function preview(src, alt, kind) {
+      return kind === 'video'
+        ? '<video aria-label="' + escHtml(alt) + '" controls muted playsinline preload="metadata" src="' + escHtml(src) + '"></video>'
+        : '<img alt="' + escHtml(alt) + '" decoding="async" referrerpolicy="no-referrer" src="' + escHtml(src) + '">';
+    }
     var thumbs = '';
     if (curSrc) {
       /* 방금 저장했지만 아직 배포되지 않은 파일은 변환 결과 미리보기를 그대로 재사용한다 */
       var show = S.savedPreviews[curSrc] || curSrc;
-      thumbs += '<figure><figcaption>현재</figcaption><img alt="현재 ' + escHtml(slot.label)
-        + ' 예시" decoding="async" referrerpolicy="no-referrer" src="' + escHtml(show) + '"></figure>';
+      thumbs += '<figure><figcaption>현재</figcaption>' + preview(show, '현재 ' + slot.label + ' 예시', mediaKind(curSrc)) + '</figure>';
     }
     if (ch && ch.previewUrl) {
-      thumbs += '<figure><figcaption>변환 결과</figcaption><img alt="변환된 ' + escHtml(slot.label)
-        + ' 예시" decoding="async" src="' + escHtml(ch.previewUrl) + '"></figure>';
+      thumbs += '<figure><figcaption>' + (ch.kind === 'video' ? '검증 결과' : '변환 결과') + '</figcaption>'
+        + preview(ch.previewUrl, (ch.kind === 'video' ? '검증된 ' : '변환된 ') + slot.label + ' 예시', ch.kind) + '</figure>';
     }
     var meta = '';
     if (ch && ch.blob) {
-      meta = '<p class="bte-meta' + (ch.over ? ' warn' : '') + '">원본 ' + escHtml(ch.origName || '선택한 사진')
-        + ' · ' + formatBytes(ch.origBytes) + ' · ' + ch.origWidth + '×' + ch.origHeight
-        + '<br>변환 WebP · ' + formatBytes(ch.bytes) + ' · ' + ch.width + '×' + ch.height
-        + ' · 품질 ' + ch.quality.toFixed(2)
-        + '<br>저장 경로 ' + escHtml(ch.src)
-        + (ch.over ? '<br>⚠ 최저 품질·최소 해상도에서도 300KB를 넘었습니다. 더 단순한 사진을 권장합니다.' : '') + '</p>';
+      if (ch.kind === 'video') {
+        meta = '<p class="bte-meta">검증된 MP4 · ' + formatBytes(ch.bytes) + ' · ' + ch.duration.toFixed(1) + '초'
+          + (ch.width && ch.height ? ' · ' + ch.width + '×' + ch.height : '')
+          + '<br>제한 통과: 15초 이하 · 5MB 이하 · 자동재생 없음 · 기본 음소거'
+          + '<br>저장 경로 ' + escHtml(ch.src) + '</p>';
+      } else {
+        meta = '<p class="bte-meta' + (ch.over ? ' warn' : '') + '">원본 ' + escHtml(ch.origName || '선택한 사진')
+          + ' · ' + formatBytes(ch.origBytes) + ' · ' + ch.origWidth + '×' + ch.origHeight
+          + '<br>변환 WebP · ' + formatBytes(ch.bytes) + ' · ' + ch.width + '×' + ch.height
+          + ' · 품질 ' + ch.quality.toFixed(2)
+          + '<br>저장 경로 ' + escHtml(ch.src)
+          + (ch.over ? '<br>⚠ 최저 품질·최소 해상도에서도 300KB를 넘었습니다. 더 단순한 사진을 권장합니다.' : '') + '</p>';
+      }
     } else if (curSrc) {
       meta = '<p class="bte-meta">현재 파일 ' + escHtml(curSrc) + '</p>';
     }
     if (ch && ch.error) meta += '<p class="bte-meta err">' + escHtml(ch.error) + '</p>';
 
     return '<section class="bte-slot" data-slot="' + id + '">'
-      + '<div class="bte-slot-head"><b>' + escHtml(slot.label) + ' 사진</b><span>' + escHtml(stateLabel) + '</span></div>'
+      + '<div class="bte-slot-head"><b>' + escHtml(slot.label) + ' 예시</b><span>' + escHtml(stateLabel) + '</span></div>'
       + '<div class="bte-drop" data-act="drop">'
       +   (thumbs ? '<div class="bte-thumbs">' + thumbs + '</div>' : '')
-      +   '<p class="bte-dropmsg">사진을 끌어다 놓거나 파일을 선택하세요 (JPG·PNG·WebP)</p>'
+      +   '<p class="bte-dropmsg">사진 또는 짧은 영상을 선택하세요 (JPG·PNG·WebP / MP4·15초·5MB 이하)</p>'
       +   '<button type="button" class="bte-btn" data-act="pick"' + (S.busy ? ' disabled' : '') + '>파일 선택</button>'
-      +   '<input type="file" accept="image/*" data-act="file" hidden>'
+      +   '<input type="file" accept="image/*,video/mp4,.mp4" data-act="file" hidden>'
       + '</div>'
       + meta
-      + '<label class="bte-label">사진 설명'
+      + '<label class="bte-label">예시 설명'
       +   '<input type="text" maxlength="' + TEXT_MAX + '" data-act="text" value="' + escHtml(text) + '"'
-      +   ((curSrc || (ch && ch.blob)) ? '' : ' disabled placeholder="사진을 먼저 등록하세요"') + '></label>'
-      + (ch ? '<button type="button" class="bte-btn" data-act="undo" style="margin-top:7px">↺ 이 사진 변경 취소</button>' : '')
+      +   ((curSrc || (ch && ch.blob)) ? '' : ' disabled placeholder="예시를 먼저 등록하세요"') + '></label>'
+      + (ch ? '<button type="button" class="bte-btn" data-act="undo" style="margin-top:7px">↺ 이 예시 변경 취소</button>' : '')
       + '</section>';
   }
 
@@ -779,7 +883,7 @@
       +   (changed ? '<span class="bte-flag">변경됨</span>' : '')
       +   '<span class="bte-caret">' + (open ? '▴' : '▾') + '</span>'
       + '</button>'
-      /* 사진 요청은 행을 펼쳤을 때만 일어난다 — 목록을 여는 것만으로 이미지가 내려오지 않는다 */
+      /* 예시 파일 요청은 행을 펼쳤을 때만 일어난다 — 목록을 여는 것만으로 파일이 내려오지 않는다 */
       + (open ? '<div class="bte-slots">' + SLOTS.map(function (s) { return slotHtml(row, s); }).join('') + '</div>' : '')
       + '</article>';
   }
@@ -846,14 +950,17 @@
     var text = String(t.value || '').slice(0, TEXT_MAX);
     if (ch) {
       ch.text = text;
-      /* 사진은 그대로고 설명도 원래대로 돌아왔다면 변경으로 세지 않는다 */
+      /* 예시 파일은 그대로고 설명도 원래대로 돌아왔다면 변경으로 세지 않는다 */
       if (!ch.blob && text === String((cur && cur.text) || '')) { setChange(c.key, c.slot, null); renderList(); }
       else renderSummary();
       return;
     }
     if (!cur || !cur.src) return;
     if (text === String(cur.text || '')) return;
-    setChange(c.key, c.slot, { src: cur.src, text: text, blob: null });
+    setChange(c.key, c.slot, {
+      src: cur.src, text: text, blob: null,
+      kind: cur.kind, bytes: cur.bytes, duration: cur.duration
+    });
     c.rowEl.classList.add('changed');
     renderSummary();
   }
@@ -901,16 +1008,20 @@
     var prev = changeOf(c.key, c.slot);
     var keepText = prev ? prev.text : String((cur && cur.text) || '');
     setBusy(true);
-    note((c.row.type || c.key) + ' · ' + c.slot + ' 사진 변환 중…');
+    var video = /^video\//.test(file.type || '') || /\.mp4$/i.test(file.name || '');
+    note((c.row.type || c.key) + ' · ' + c.slot + (video ? ' 영상 검증 중…' : ' 사진 변환 중…'));
     convert(file).then(function (r) {
       setChange(c.key, c.slot, {
-        src: r.src, text: keepText, blob: r.blob, bytes: r.bytes,
+        kind: r.kind, src: r.src, text: keepText, blob: r.blob, bytes: r.bytes,
         width: r.width, height: r.height, quality: r.quality, over: r.over, hash: r.hash,
+        duration: r.duration,
         origName: r.origName, origBytes: r.origBytes, origWidth: r.origWidth, origHeight: r.origHeight,
         previewUrl: URL.createObjectURL(r.blob), error: ''
       });
-      note('변환 완료 · ' + formatBytes(r.bytes) + ' · ' + r.width + '×' + r.height
-        + (r.over ? ' (목표 300KB 초과)' : ''), r.over ? 'err' : 'ok');
+      note(r.kind === 'video'
+        ? '영상 검증 완료 · ' + formatBytes(r.bytes) + ' · ' + r.duration.toFixed(1) + '초'
+        : '변환 완료 · ' + formatBytes(r.bytes) + ' · ' + r.width + '×' + r.height
+          + (r.over ? ' (목표 300KB 초과)' : ''), r.over ? 'err' : 'ok');
     }, function (err) {
       /* 변환 실패는 기존 등록 내용을 건드리지 않는다 */
       note('변환 실패 · ' + (err && err.message ? err.message : '알 수 없는 오류'), 'err');
@@ -923,7 +1034,7 @@
   function resetAll() {
     if (S.busy) return;
     if (!changeCount()) return;
-    if (typeof confirm === 'function' && !confirm('변환한 사진과 수정한 설명을 모두 되돌립니다. 계속할까요?')) return;
+    if (typeof confirm === 'function' && !confirm('변환·검증한 예시와 수정한 설명을 모두 되돌립니다. 계속할까요?')) return;
     revokeAll();
     S.changes = {};
     note('작업을 초기화했습니다');
@@ -965,8 +1076,8 @@
   }
 
   function afterSave(plan, lines) {
-    /* 저장한 사진은 아직 배포되기 전이라 서버에서 못 받는다 —
-       미리보기 URL을 그대로 재사용해 화면에서 깨진 이미지가 보이지 않게 한다. */
+    /* 저장한 예시는 아직 배포되기 전이라 서버에서 못 받는다 —
+       미리보기 URL을 그대로 재사용해 화면에서 깨진 미리보기가 보이지 않게 한다. */
     var k, s;
     for (k in S.changes) {
       if (!Object.prototype.hasOwnProperty.call(S.changes, k)) continue;
@@ -1040,13 +1151,13 @@
       });
     }).then(function (teDir) {
       var ask = ['저장소 폴더에 다음을 기록합니다.', '',
-        '· 새 사진 ' + (plan.writes.length - existing.length) + '개'];
+        '· 새 예시 파일 ' + (plan.writes.length - existing.length) + '개'];
       if (existing.length) ask.push('· 이미 같은 내용으로 존재해 건너뛰는 파일 ' + existing.length + '개');
       ask.push('· ' + MANIFEST_PATH + ' 덮어쓰기');
       ask.push('', '계속할까요?');
       if (typeof confirm === 'function' && !confirm(ask.join('\n'))) throw new Error('저장을 취소했습니다');
-      note('사진 파일 저장 중…');
-      /* ① 사진 먼저, ② 검증을 통과한 index.json 은 맨 마지막에 — 중간에 실패해도 매니페스트가 깨지지 않는다 */
+      note('예시 파일 저장 중…');
+      /* ① 예시 파일 먼저, ② 검증을 통과한 index.json 은 맨 마지막에 — 중간에 실패해도 매니페스트가 깨지지 않는다 */
       return plan.writes.reduce(function (p, w) {
         return p.then(function () {
           if (existing.indexOf(w.path) >= 0) return null;    /* 내용 해시 경로 = 같은 내용, 덮어쓸 필요 없음 */
@@ -1058,7 +1169,7 @@
       });
     }).then(function () {
       setBusy(false);
-      var lines = ['저장 완료 · 새 사진 ' + (plan.writes.length - existing.length) + '개 · ' + MANIFEST_PATH + ' 갱신'];
+      var lines = ['저장 완료 · 새 예시 파일 ' + (plan.writes.length - existing.length) + '개 · ' + MANIFEST_PATH + ' 갱신'];
       if (existing.length) lines.push('같은 내용이라 건너뛴 파일 ' + existing.length + '개');
       afterSave(plan, lines);
     }, function (e) {
@@ -1161,7 +1272,7 @@
   }
 
   var api = {
-    open: open, close: close, convert: convert, encodeWebp: encodeWebp,
+    open: open, close: close, convert: convert, convertImage: convertImage, convertVideo: convertVideo, encodeWebp: encodeWebp,
     canPickDirectory: canPickDirectory,
     _state: S                                  /* 디버그용 — 대시보드는 참조하지 않는다 */
   };

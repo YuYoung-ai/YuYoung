@@ -84,11 +84,14 @@ ck('8. 공백만 다른 legacy 표기는 기존 키로 흡수돼 중복이 생�
   rows.filter(k=>/누수/.test(k)).join()==='핸드피스|노즐 누수(약액 유입)',rows.filter(k=>/누수/.test(k)).join());
 const sum=String(await page.textContent('.bte-sum'));
 ck('9. 등록 상태 4구분을 요약에 표시한다',
-  ['모두 등록','증상 사진만','처리 결과 사진만','모두 미등록'].every(t=>sum.includes(t)),sum);
+  ['모두 등록','증상 예시만','처리 결과 예시만','모두 미등록'].every(t=>sum.includes(t)),sum);
 
 /* ── 4. 실제 Canvas/WebP 변환 ── */
 await page.click(`.bte-row[data-key="${KEY}"] .bte-row-head`);
 await page.waitForSelector(sel('input[data-act="file"]','symptom'),{state:'attached'});
+const mediaAccept=await page.getAttribute(sel('input[data-act="file"]','symptom'),'accept');
+ck('10-a. 파일 선택기가 사진과 MP4만 받도록 제한한다',
+  /image\/\*/.test(mediaAccept||'')&&/video\/mp4/.test(mediaAccept||'')&&!/video\/\*/.test(mediaAccept||''),mediaAccept||'');
 /* 압축이 잘 안 되는 큰 노이즈 PNG — 품질 하강 경로를 실제로 태운다 */
 const png=await page.evaluate(async()=>{
   const c=document.createElement('canvas');c.width=2400;c.height=1600;const x=c.getContext('2d');
@@ -162,6 +165,20 @@ const after=String(await page.textContent('.bte-msg')).replace(/\s+/g,' ');
 ck('21. 어느 저장소 경로에 넣어야 하는지 안내한다',
   after.includes('assets/type-examples/media/')&&after.includes('assets/type-examples/index.json'));
 ck('22. 커밋 안내로 끝난다',after.includes('변경 파일을 확인한 뒤 커밋'));
+
+/* 용량 초과 영상은 메타데이터를 읽거나 기존 상태를 바꾸기 전에 거절한다 */
+await page.waitForSelector(sel('input[data-act="file"]','after'),{state:'attached'});
+await page.setInputFiles(sel('input[data-act="file"]','after'),{
+  name:'too-large.mp4',mimeType:'video/mp4',buffer:Buffer.alloc(5*1024*1024+1)
+});
+await page.waitForFunction(()=>document.querySelector('.bte-msg')?.textContent.includes('5MB'));
+const videoReject=await page.evaluate(k=>({
+  message:document.querySelector('.bte-msg')?.textContent||'',
+  changed:!!window.BazTypeExampleManager._state.changes[k]?.after
+}),KEY);
+ck('22-a. 5MB 초과 MP4를 거절하고 기존 선택 상태를 보존한다',
+  /변환 실패/.test(videoReject.message)&&/5MB/.test(videoReject.message)&&videoReject.changed===false,
+  JSON.stringify(videoReject));
 
 /* ── 7. 필터 · 레이아웃 · 격리 ── */
 await page.selectOption('.bte-tools [data-act="cat"]','장비');
