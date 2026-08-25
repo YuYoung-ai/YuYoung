@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v148';
+const CACHE_VERSION = 'baz-cs-v149';
 
 // 프리캐시(설치 시 미리 받는 파일) — "셸 최소 구성"만 둔다.
 // ★ 여기에 큰 파일을 추가하지 마세요. 버전을 올릴 때마다 전 사용자가 전량 재다운로드합니다. ★
@@ -32,6 +32,9 @@ const IMMUTABLE = /\/(fonts\/|logo\.png|icon-192\.png|icon-512\.png)/;
 //   기존 폴더(equipment-*·handpiece-*)의 사진과 index.json 은 해시 파일명이 아니므로
 //   지금처럼 네트워크 우선으로 둔다(교체 즉시 반영되어야 한다).
 const TYPE_EXAMPLE_IMMUTABLE = /\/assets\/type-examples\/media\/[0-9a-f]{12}\.webp$/;
+// 짧은 예시 영상은 최대 5MB라 CacheStorage에 쌓지 않는다. 브라우저 HTTP 캐시는 사용할 수 있지만
+// 서비스워커 프리캐시·런타임 캐시에서는 제외해 저장공간 증가와 Range 응답(206) 문제를 피한다.
+const TYPE_EXAMPLE_VIDEO = /\/assets\/type-examples\/media\/[0-9a-f]{12}\.mp4$/;
 
 // ※ 네트워크 우선 요청에 "타임아웃 후 캐시 표시"는 의도적으로 넣지 않는다.
 //    느린 회선에서 옛 HTML이 표시되어 배포 직후 이전 화면이 보이는 문제가 생기기 때문.
@@ -74,6 +77,12 @@ self.addEventListener('fetch', (event) => {
   // 캐시되면 옛 인증 응답이 재사용되어 로그인이 꼬일 수 있다.
   if (req.url.includes('script.google.com') ||
       req.url.includes('script.googleusercontent.com')) {
+    event.respondWith(fetch(req));
+    return;
+  }
+
+  // 정적 MP4: GAS와 무관한 직접 요청. 사용자 재생 시에만 네트워크로 받고 CacheStorage에는 넣지 않는다.
+  if (TYPE_EXAMPLE_VIDEO.test(new URL(req.url).pathname)) {
     event.respondWith(fetch(req));
     return;
   }

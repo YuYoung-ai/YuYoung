@@ -123,6 +123,9 @@ ck('21. 해시는 hex 12자리다', /^[0-9a-f]{12}$/.test(hashA) && hashA === ha
 ck('22. 경로는 assets/type-examples/media/<hash12>.webp 다',
   M.mediaPath(hashA) === 'assets/type-examples/media/' + hashA + '.webp' &&
   M.isMediaPath(M.mediaPath(hashA)) && !M.isMediaPath('assets/type-examples/media/ABCDEF012345.webp'));
+ck('22-b. 영상도 내용 해시 MP4 경로를 사용한다',
+  M.mediaPath(hashA, 'video') === 'assets/type-examples/media/' + hashA + '.mp4' &&
+  M.isMediaPath(M.mediaPath(hashA, 'video')) && M.mediaKind(M.mediaPath(hashA, 'video')) === 'video');
 {
   const blob = { size: 1234 };
   const writes = M.planWrites({
@@ -153,6 +156,13 @@ ck('28. WebP 로만 인코딩하고 캔버스 재인코딩으로 메타데이터
   /drawImage/.test(SRC) && !/'image\/jpeg'/.test(SRC));
 ck('29. 브라우저가 못 여는 파일(HEIC 등)은 이해 가능한 안내를 낸다',
   /HEIC\/HEIF/.test(SRC) && /img\.onerror/.test(SRC));
+ck('29-b. 영상은 MP4·15초·5MB 제한을 코드에서 강제한다',
+  M.VIDEO_MAX_SECONDS === 15 && M.VIDEO_MAX_BYTES === 5 * 1024 * 1024 &&
+  /영상은 15초 이하만/.test(SRC) && /영상은 5MB 이하만/.test(SRC) && /재생할 수 없는 MP4/.test(SRC));
+ck('29-c. MP4 내부 avc1·avc3 표식으로 H.264 코덱을 제한한다',
+  M.hasAvcCodec(new TextEncoder().encode('....avc1....')) &&
+  M.hasAvcCodec(new TextEncoder().encode('....avc3....')) &&
+  !M.hasAvcCodec(new TextEncoder().encode('....hvc1....')) && /H\.264\(avc1\/avc3\)만 허용/.test(SRC));
 
 /* ══════════ 5. index.json 갱신 규칙 ══════════ */
 section('index.json 갱신 · 검증');
@@ -182,7 +192,7 @@ ck('34. updatedAt 은 저장 시점의 로컬 날짜 YYYY-MM-DD 다',
 ck('35. JSON 은 2칸 들여쓰기로 직렬화한다',
   M.serializeManifest(next).split('\n')[1].startsWith('  "') &&
   M.serializeManifest(next).endsWith('}\n') &&
-  M.serializeManifest(MANIFEST) === read('assets/type-examples/index.json'));
+  M.serializeManifest(MANIFEST) === read('assets/type-examples/index.json').replace(/\r\n/g, '\n'));
 ck('36. 정상 매니페스트는 검증을 통과한다',
   M.validateManifest(next, { newFiles: [NEW_A, NEW_B] }).ok === true);
 
@@ -197,12 +207,24 @@ ck('39. 경로 탈출·외부 URL·data URL 을 거부한다',
    '//example.com/a.webp', 'data:image/png;base64,AA', 'blob:https://x/y', '/etc/passwd',
    'other/dir/a.webp'].every(src => M.isSafeSrc(src) === false) &&
   !bad({ schema: 1, updatedAt: '2026-08-24', items: { '장비|X': { symptom: { src: 'data:image/png;base64,AA' } } } }).ok);
-ck('40. 저장소 안 상대 경로만 허용한다',
+ck('40. 저장소 안 사진·MP4 상대 경로만 허용한다',
   M.isSafeSrc('assets/type-examples/media/0123456789ab.webp') &&
-  M.isSafeSrc('assets/type-examples/equipment-cable/symptom-4b9d0c6a2e.webp'));
-ck('41. 새 파일 확장자가 webp 가 아니면 거부한다',
+  M.isSafeSrc('assets/type-examples/media/0123456789ab.mp4') &&
+  M.isSafeSrc('assets/type-examples/equipment-cable/symptom-4b9d0c6a2e.webp') &&
+  !M.isSafeSrc('assets/type-examples/media/0123456789ab.mov'));
+ck('41. 새 파일 확장자가 webp·mp4가 아니면 거부한다',
   !bad({ schema: 1, updatedAt: '2026-08-24', items: { '장비|X': { symptom: { src: 'assets/type-examples/media/aa.png' } } } },
     { newFiles: ['assets/type-examples/media/aa.png'] }).ok);
+{
+  const video={schema:1,updatedAt:'2026-08-24',items:{'장비|영상':{symptom:{
+    src:M.mediaPath(hashA,'video'),text:'작동 영상',kind:'video',bytes:1024,duration:8.4
+  }}}};
+  ck('41-b. 제한 안의 MP4 매니페스트는 허용한다',M.validateManifest(video,{newFiles:[M.mediaPath(hashA,'video')]}).ok);
+  video.items['장비|영상'].symptom.bytes=M.VIDEO_MAX_BYTES+1;
+  ck('41-c. 5MB를 넘는 영상 매니페스트를 거부한다',!M.validateManifest(video).ok);
+  video.items['장비|영상'].symptom.bytes=1024; video.items['장비|영상'].symptom.duration=15.1;
+  ck('41-d. 15초를 넘는 영상 매니페스트를 거부한다',!M.validateManifest(video).ok);
+}
 ck('42. 해시 규칙에 맞지 않는 새 파일 경로를 거부한다',
   !bad(M.applyChanges(MANIFEST, { '장비|X': { symptom: { src: 'assets/type-examples/media/hello.webp' } } }, '2026-08-24'),
     { newFiles: ['assets/type-examples/media/hello.webp'] }).ok);
@@ -274,6 +296,9 @@ ck('56. 내용 해시 WebP 만 캐시 우선 대상이다',
 }
 ck('58. 대표 사진·관리 JS를 프리캐시에 넣지 않는다',
   !/type-example/.test(SW.slice(SW.indexOf('const ASSETS'), SW.indexOf('];', SW.indexOf('const ASSETS')))));
+ck('58-b. MP4는 사용자 재생 요청만 네트워크로 보내고 CacheStorage에 넣지 않는다',
+  /const TYPE_EXAMPLE_VIDEO/.test(SW) &&
+  /TYPE_EXAMPLE_VIDEO\.test\(new URL\(req\.url\)\.pathname\)[\s\S]*?event\.respondWith\(fetch\(req\)\)/.test(SW));
 ck('59. GAS 요청 무캐시 정책이 그대로다',
   /req\.url\.includes\('script\.google\.com'\)/.test(SW) && /event\.respondWith\(fetch\(req\)\)/.test(SW));
 ck('60. 배포 변경에 맞춰 CACHE_VERSION 을 올렸다',
@@ -282,8 +307,10 @@ ck('60. 배포 변경에 맞춰 CACHE_VERSION 을 올렸다',
 /* ══════════ 8. UI 안전성 · 문서 ══════════ */
 section('UI 안전성 · 문서');
 
-ck('61. 실제 기록 사진이 아닌 표준 예시임을 화면에 알린다',
-  /실제 처리 기록 사진이 아니라 VOC 유형별 표준 예시/.test(SRC));
+ck('61. 실제 처리 기록이 아닌 표준 예시임을 화면에 알린다',
+  /실제 처리 기록이 아니라 VOC 유형별 표준 예시/.test(SRC));
+ck('61-b. 영상 제한과 기본 재생 정책을 관리 화면에 표시한다',
+  /MP4\(H\.264\/AVC\)·15초 이하·5MB 이하/.test(SRC) && /기본 음소거/.test(SRC));
 ck('62. 개인정보 노출 금지 안내가 있다',
   /환자·직원 얼굴, 병원명, 장비 S\/N, 문서·모니터의 개인정보/.test(SRC));
 ck('63. 처리 중 중복 클릭을 막는다',
@@ -307,7 +334,7 @@ ck('70. PC 2열 · 모바일 1열 레이아웃과 다크모드에 대응한다',
 ck('71. README 에 관리 화면 등록 절차와 비상 수동 절차가 모두 있다',
   /## 등록 절차 \(권장 · 대시보드 관리 화면\)/.test(README) &&
   /## 등록 절차 \(비상용 · 수동\)/.test(README) &&
-  /🖼 예시사진 관리/.test(README) && /git status/.test(README));
+  /🖼 예시자료 관리/.test(README) && /git status/.test(README) && /15초 이하, 5MB 이하/.test(README));
 
 console.log('\n──────────────────────────────');
 console.log(`통과 ${pass}/${total}`);
