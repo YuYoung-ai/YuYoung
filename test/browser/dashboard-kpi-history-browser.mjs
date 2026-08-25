@@ -87,17 +87,30 @@ await page.click('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value
 modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent,type:document.getElementById('hstType').value}));
 ck('4. VOC 유형별 건수 칩 클릭 시 표시 건수와 두 요약이 함께 갱신',
   modal.type==='케이블 불량'&&modal.count.includes('1건')&&modal.breakdown.includes('A/S 1건')&&modal.breakdown.includes('케이블 불량 1건'),JSON.stringify(modal));
-await page.waitForSelector('#hstPhotoPanel:not([hidden]) .hst-evidence-thumb');
 modal=await page.evaluate(()=>({title:document.getElementById('hstPhotoTitle').textContent,
+  panelHidden:document.getElementById('hstPhotoPanel').hidden,bodyHidden:document.getElementById('hstPhotoBody').hidden,
+  expanded:document.getElementById('hstPhotoToggle').getAttribute('aria-expanded'),
   thumbs:document.querySelectorAll('#hstPhotoPanel .hst-evidence-thumb').length,status:document.getElementById('hstPhotoStatus').textContent}));
-ck('4-b. VOC 유형 필터 선택만으로 해당 예시자료 미리보기가 자동 표시',
-  modal.title.includes('케이블 불량')&&modal.thumbs===1&&modal.status.includes('표준 예시'),JSON.stringify(modal));
+ck('4-b. VOC 유형을 골라도 예시 본문은 기본 접힘으로 필터와 이력 목록을 우선 표시',
+  modal.title.includes('케이블 불량')&&!modal.panelHidden&&modal.bodyHidden&&modal.expanded==='false'&&modal.thumbs===0&&modal.status.includes('접힘'),JSON.stringify(modal));
+await page.click('#hstPhotoToggle');
+await page.waitForSelector('#hstPhotoBody:not([hidden]) .hst-evidence-thumb');
+modal=await page.evaluate(()=>({thumbs:document.querySelectorAll('#hstPhotoPanel .hst-evidence-thumb').length,
+  bodyHidden:document.getElementById('hstPhotoBody').hidden,expanded:document.getElementById('hstPhotoToggle').getAttribute('aria-expanded'),
+  status:document.getElementById('hstPhotoStatus').textContent}));
+ck('4-c. 예시자료 보기 버튼을 눌렀을 때만 선택 유형 미리보기를 표시',
+  !modal.bodyHidden&&modal.expanded==='true'&&modal.thumbs===1&&modal.status.includes('표준 예시'),JSON.stringify(modal));
 await page.click('#hstPhotoPanel .hst-evidence-thumb');
 await page.waitForSelector('#hstEvidenceViewer:not([hidden])');
-ck('4-c. VOC 예시자료가 절감 근거자료와 같은 전체화면 뷰어를 사용',
+ck('4-d. VOC 예시자료가 절감 근거자료와 같은 전체화면 뷰어를 사용',
   (await page.getAttribute('#hstEvidenceImage','src')).includes('equipment-cable')&&
   (await page.getAttribute('#hstEvidenceViewer','aria-label')).includes('선택 VOC 유형 예시자료'));
 await page.evaluate(()=>exCloseSavingEvidence_());
+await page.click('#hstPhotoToggle');
+modal=await page.evaluate(()=>({bodyHidden:document.getElementById('hstPhotoBody').hidden,
+  expanded:document.getElementById('hstPhotoToggle').getAttribute('aria-expanded'),label:document.getElementById('hstPhotoToggle').textContent}));
+ck('4-e. 같은 버튼을 다시 누르면 예시 본문이 즉시 접힌다',
+  modal.bodyHidden&&modal.expanded==='false'&&modal.label.includes('보기'),JSON.stringify(modal));
 await page.evaluate(()=>closeExList());
 
 async function openAndRead(dim){
