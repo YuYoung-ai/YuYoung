@@ -533,8 +533,13 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .yc-range{font-size:11px;font-weight:700;color:var(--text-muted);white-space:nowrap;font-variant-numeric:tabular-nums}
 .yc-vs{font-size:12px;font-weight:800;color:var(--text-muted);padding:0 2px}
 .yc-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;min-width:0}
-.yc-kpi{border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:5px 9px;min-width:0}
+.yc-kpi{position:relative;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:5px 9px;min-width:0}
 .yc-kpi .lb{display:block;font-size:10px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yc-kpi-evidence{font:inherit;color:inherit;text-align:left;cursor:pointer}
+.yc-kpi-evidence:hover{border-color:var(--teal);background:var(--teal-soft)}
+.yc-kpi-evidence:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.yc-kpi-evidence .lb{padding-right:42px}
+.yc-kpi-evidence:after{content:'근거 ⛶';position:absolute;top:5px;right:7px;color:var(--teal);font-size:8.5px;font-weight:800}
 .yc-kpi .vs2{display:flex;align-items:baseline;gap:5px;margin-top:1px;min-width:0}
 .yc-kpi .vs2 .a{font-size:12.5px;font-weight:700;color:var(--text-muted);font-variant-numeric:tabular-nums;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -828,8 +833,33 @@ body.dark .yc-band{opacity:.26}
 .hst-break-card strong{display:block;margin-bottom:5px;color:var(--navy);font-size:10.5px}
 .hst-break-list{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
 .hst-count-chip{flex:0 0 auto;border-radius:999px;background:var(--surface);padding:3px 7px;color:var(--text-muted);
-  font-size:9.5px;white-space:nowrap;border:1px solid var(--gray-line)}
+  font-family:inherit;font-size:9.5px;white-space:nowrap;border:1px solid var(--gray-line);cursor:pointer}
 .hst-count-chip b{margin-left:3px;color:var(--navy);font-size:10.5px;font-variant-numeric:tabular-nums}
+.hst-count-chip:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.hst-count-chip:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
+.hst-evidence{margin:9px 11px 0;border:1px solid var(--gray-line);border-radius:9px;background:var(--surface-2);padding:8px 9px}
+.hst-evidence-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.hst-evidence-head strong{color:var(--navy);font-size:11.5px}.hst-evidence-head span{color:var(--text-muted);font-size:9.5px;text-align:right}
+.hst-evidence-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.hst-evidence-thumb{min-width:0;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);padding:4px;
+  color:var(--text);font:inherit;cursor:pointer;text-align:left}
+.hst-evidence-thumb:hover{border-color:var(--teal);background:var(--teal-soft)}
+.hst-evidence-thumb:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.hst-evidence-thumb img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;background:var(--track)}
+.hst-evidence-thumb span{display:block;margin-top:4px;color:var(--navy);font-size:9.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.hst-evidence-open{overflow:hidden}
+.hst-evidence-viewer{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;padding:14px;
+  background:rgba(3,10,25,.94);color:#fff}
+.hst-evidence-viewer[hidden]{display:none!important}
+.hst-evidence-stage{width:100%;height:100%;display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0}
+.hst-evidence-tools{display:flex;align-items:center;gap:7px;min-width:0}
+.hst-evidence-tools strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.hst-evidence-tools .count{color:#B9C6E4;font-size:11px;white-space:nowrap}.hst-evidence-tools .spacer{flex:1}
+.hst-evidence-tools button,.hst-evidence-tools a{border:1px solid rgba(255,255,255,.38);border-radius:7px;background:#17233A;color:#fff;
+  padding:7px 10px;font:11px inherit;font-weight:700;text-decoration:none;cursor:pointer;white-space:nowrap}
+.hst-evidence-tools button:hover,.hst-evidence-tools a:hover{background:#243553}
+.hst-evidence-canvas{flex:1;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto}
+.hst-evidence-canvas img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#fff}
 .hst-result{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 11px;
   border-top:1px solid var(--gray-line);background:var(--gray-bg);font-size:10.5px;color:var(--text-muted)}
 .hst-result b{color:var(--navy);font-size:11.5px}
@@ -904,6 +934,10 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .ex-list-box.history{height:calc(100vh - 20px);max-height:none;padding:14px}
   .hst-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-breakdown{grid-template-columns:1fr}
+  .hst-evidence-strip{display:flex;overflow-x:auto}.hst-evidence-thumb{flex:0 0 210px}
+  .hst-evidence-head{align-items:flex-start;flex-direction:column;gap:2px}.hst-evidence-head span{text-align:left}
+  .hst-evidence-viewer{padding:8px}.hst-evidence-tools{flex-wrap:wrap}.hst-evidence-tools strong{flex:1 1 calc(100% - 60px)}
+  .hst-evidence-tools .spacer{display:none}
   .hst-field.search{grid-column:1/-1}.hst-reset{grid-column:1/-1}
   .hst-table{min-width:0;display:block;padding:0 9px 9px}
   .hst-table thead{display:none}.hst-table tbody{display:block}
@@ -5040,13 +5074,18 @@ function exHistoryCounts_(items,key){
     .sort(function(a,b){return b.n-a.n||skCmpKo_(a.k,b.k);});
 }
 function exHistoryBreakdownHtml_(items){
-  function card(title,rows){
+  function card(title,rows,key){
     return '<div class="hst-break-card"><strong>'+esc(title)+'</strong><div class="hst-break-list">'
-      +(rows.length?rows.map(function(x){return '<span class="hst-count-chip">'+esc(x.k)+' <b>'+exNum(x.n)+'건</b></span>';}).join('')
+      +(rows.length?rows.map(function(x){
+        var value=x.k==='미입력'?'__missing__':x.k;
+        return '<button type="button" class="hst-count-chip" data-hst-count-key="'+key+'" data-hst-count-value="'+escAttr(value)+'"'
+          +' onclick="exApplyHistoryCountChip_(this)" title="'+escAttr(x.k)+' 처리 이력만 보기">'+esc(x.k)+' <b>'+exNum(x.n)+'건</b></button>';
+      }).join('')
                    :'<span class="hst-count-chip">해당 기록 없음</span>')
       +'</div></div>';
   }
-  return card('구분 건수',exHistoryCounts_(items,'gubun'))+card('VOC 유형별 건수',exHistoryCounts_(items,'type'));
+  return card('구분 건수',exHistoryCounts_(items,'gubun'),'gubun')
+    +card('VOC 유형별 건수',exHistoryCounts_(items,'type'),'type');
 }
 /* 팝업 내부 필터만 적용한다. 대시보드 전역 필터 F 와 카드 집계에는 영향을 주지 않는다. */
 function exHistoryFilter_(items, opt){
@@ -5055,8 +5094,9 @@ function exHistoryFilter_(items, opt){
   return (items||[]).filter(function(it){
     var r=it.r||{};
     if(opt.period&&opt.period!=='all'&&it.period!==opt.period) return false;
-    if(opt.gubun&&opt.gubun!=='all'&&exHistoryVal_(r.gubun)!==opt.gubun) return false;
-    if(opt.type&&opt.type!=='all'&&exHistoryVal_(r.type)!==opt.type) return false;
+    var gv=exHistoryVal_(r.gubun), tv=exHistoryVal_(r.type);
+    if(opt.gubun&&opt.gubun!=='all'&&(opt.gubun==='__missing__'?!!gv:gv!==opt.gubun)) return false;
+    if(opt.type&&opt.type!=='all'&&(opt.type==='__missing__'?!!tv:tv!==opt.type)) return false;
     if(opt.fse&&opt.fse!=='all'&&exHistoryVal_(r.fse)!==opt.fse) return false;
     if(!q) return true;
     var d=rowDate(r);
@@ -5307,6 +5347,77 @@ function exOpenTypeExampleManager(){
   };
   document.head.appendChild(s);
 }
+/* 추정 교체비용 절감액 근거자료 — 정적 PNG라 GAS·Drive 요청이 없고, 해당 카드를 열 때만 lazy 로드한다. */
+var EX_SAVING_EVIDENCE=[
+  {src:'assets/cleaning-evidence/handpiece-quality-review-01.png',label:'1. 품질 검토 결과 요약'},
+  {src:'assets/cleaning-evidence/handpiece-quality-review-02.png',label:'2. 화학적 세척 타당성 및 잔류성 검증'},
+  {src:'assets/cleaning-evidence/handpiece-quality-review-03.png',label:'3. 성능 및 기능 검증'},
+  {src:'assets/cleaning-evidence/handpiece-quality-review-04.png',label:'4. 경제성 및 효과성 분석'}
+];
+var EX_SAVING_EVIDENCE_INDEX=0;
+function exSavingEvidenceHtml_(){
+  return '<section class="hst-evidence" aria-label="절감액 산정 근거자료">'
+    +'<div class="hst-evidence-head"><strong>절감액 산정 근거자료</strong>'
+      +'<span>품질 검토 보고서 4쪽 · 대시보드 단가 281,200원(근거자료 281,208원 절사)</span></div>'
+    +'<div class="hst-evidence-strip">'+EX_SAVING_EVIDENCE.map(function(doc,i){
+      return '<button type="button" class="hst-evidence-thumb" onclick="exOpenSavingEvidence_('+i+')" title="전체화면으로 '+escAttr(doc.label)+' 보기">'
+        +'<img src="'+escAttr(doc.src)+'" alt="'+escAttr(doc.label)+'" loading="lazy" decoding="async">'
+        +'<span>'+esc(doc.label)+'</span></button>';
+    }).join('')+'</div></section>';
+}
+function exSavingEvidenceViewer_(){
+  var v=document.getElementById('hstEvidenceViewer');
+  if(v) return v;
+  v=document.createElement('div');
+  v.id='hstEvidenceViewer'; v.className='hst-evidence-viewer'; v.hidden=true;
+  v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','절감액 산정 근거자료 전체화면');
+  v.setAttribute('tabindex','-1');v.setAttribute('onkeydown','return exSavingEvidenceKey_(event)');
+  v.setAttribute('onclick','if(event.target===this)exCloseSavingEvidence_()');
+  v.innerHTML='<div class="hst-evidence-stage">'
+    +'<div class="hst-evidence-tools"><strong id="hstEvidenceTitle"></strong><span class="count" id="hstEvidenceCount"></span>'
+      +'<span class="spacer"></span><button type="button" onclick="exStepSavingEvidence_(-1)">‹ 이전</button>'
+      +'<button type="button" onclick="exStepSavingEvidence_(1)">다음 ›</button>'
+      +'<a id="hstEvidenceOriginal" target="_blank" rel="noopener">원본 열기</a>'
+      +'<button type="button" onclick="exToggleSavingEvidenceFullscreen_()">⛶ 전체화면</button>'
+      +'<button type="button" onclick="exCloseSavingEvidence_()">닫기</button></div>'
+    +'<div class="hst-evidence-canvas"><img id="hstEvidenceImage" alt=""></div></div>';
+  document.body.appendChild(v); return v;
+}
+function exRenderSavingEvidence_(){
+  var doc=EX_SAVING_EVIDENCE[EX_SAVING_EVIDENCE_INDEX], v=exSavingEvidenceViewer_();
+  var img=document.getElementById('hstEvidenceImage'), title=document.getElementById('hstEvidenceTitle');
+  var count=document.getElementById('hstEvidenceCount'), link=document.getElementById('hstEvidenceOriginal');
+  if(img){img.src=doc.src;img.alt=doc.label;} if(title)title.textContent=doc.label;
+  if(count)count.textContent=(EX_SAVING_EVIDENCE_INDEX+1)+' / '+EX_SAVING_EVIDENCE.length;
+  if(link){link.href=doc.src;link.setAttribute('aria-label',doc.label+' 원본 새 창으로 열기');}
+  return v;
+}
+function exOpenSavingEvidence_(idx){
+  EX_SAVING_EVIDENCE_INDEX=Math.max(0,Math.min(EX_SAVING_EVIDENCE.length-1,Number(idx)||0));
+  var v=exRenderSavingEvidence_();v.hidden=false;document.documentElement.classList.add('hst-evidence-open');v.focus();
+}
+function exStepSavingEvidence_(step){
+  EX_SAVING_EVIDENCE_INDEX=(EX_SAVING_EVIDENCE_INDEX+(Number(step)||0)+EX_SAVING_EVIDENCE.length)%EX_SAVING_EVIDENCE.length;
+  exRenderSavingEvidence_();
+}
+function exToggleSavingEvidenceFullscreen_(){
+  var v=exSavingEvidenceViewer_();
+  if(document.fullscreenElement){if(document.exitFullscreen)document.exitFullscreen();}
+  else if(v.requestFullscreen)v.requestFullscreen();
+}
+function exCloseSavingEvidence_(){
+  var v=document.getElementById('hstEvidenceViewer'); if(!v)return;
+  if(document.fullscreenElement===v&&document.exitFullscreen)document.exitFullscreen();
+  v.hidden=true;document.documentElement.classList.remove('hst-evidence-open');
+  var img=document.getElementById('hstEvidenceImage');if(img)img.removeAttribute('src');
+}
+function exSavingEvidenceKey_(e){
+  if(!e)return true;
+  if(e.key==='Escape'){exCloseSavingEvidence_();return false;}
+  if(e.key==='ArrowLeft'){exStepSavingEvidence_(-1);return false;}
+  if(e.key==='ArrowRight'){exStepSavingEvidence_(1);return false;}
+  return true;
+}
 /* 주간 KPI 카드별 이력 모집단. 카드 집계와 같은 판정을 써 숫자와 조회 범위가 어긋나지 않게 한다. */
 function exHistoryKpiRows_(rows,dim){
   rows=rows||[];
@@ -5345,15 +5456,19 @@ function exHistoryResultHtml_(filtered,all){
 }
 function exHistoryControls_(items, hasPrev){
   var gubuns=exHistoryUnique_(items,'gubun'), types=exHistoryUnique_(items,'type'), fses=exHistoryUnique_(items,'fse');
+  var missingGubun=(items||[]).some(function(it){return !exHistoryVal_(it.r&&it.r.gubun);});
+  var missingType=(items||[]).some(function(it){return !exHistoryVal_(it.r&&it.r.type);});
   return '<div class="hst-controls">'
     +'<div class="hst-field"><label for="hstPeriod">기간</label><select id="hstPeriod" onchange="exApplyHistoryFilters_()">'
       +exHistoryOption_('cur','선택 기간',true)
       +(hasPrev?exHistoryOption_('prev','비교 기간'):'')
       +exHistoryOption_('all','전체 기간')+'</select></div>'
     +'<div class="hst-field"><label for="hstGubun">구분</label><select id="hstGubun" onchange="exApplyHistoryFilters_()">'
-      +exHistoryOption_('all','전체 구분')+gubuns.map(function(v){return exHistoryOption_(v,v);}).join('')+'</select></div>'
+      +exHistoryOption_('all','전체 구분')+gubuns.map(function(v){return exHistoryOption_(v,v);}).join('')
+      +(missingGubun?exHistoryOption_('__missing__','미입력'):'')+'</select></div>'
     +'<div class="hst-field"><label for="hstType">VOC 유형</label><select id="hstType" onchange="exApplyHistoryFilters_()">'
-      +exHistoryOption_('all','전체 VOC 유형')+types.map(function(v){return exHistoryOption_(v,v);}).join('')+'</select></div>'
+      +exHistoryOption_('all','전체 VOC 유형')+types.map(function(v){return exHistoryOption_(v,v);}).join('')
+      +(missingType?exHistoryOption_('__missing__','미입력'):'')+'</select></div>'
     +'<div class="hst-field"><label for="hstFse">담당자</label><select id="hstFse" onchange="exApplyHistoryFilters_()">'
       +exHistoryOption_('all','전체 담당자')+fses.map(function(v){return exHistoryOption_(v,v);}).join('')+'</select></div>'
     +'<div class="hst-field search"><label for="hstQuery">검색</label>'
@@ -5375,6 +5490,18 @@ function exApplyHistoryFilters_(){
   if(count) count.innerHTML=exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(filtered);
   if(host) host.innerHTML=exHistoryTable_(filtered);
+}
+/* 구분·VOC 유형별 건수 칩은 같은 팝업의 해당 select 값을 바꿔 기존 필터 경로를 그대로 탄다. */
+function exApplyHistoryCountChip_(btn){
+  if(!btn||!btn.getAttribute) return;
+  var key=btn.getAttribute('data-hst-count-key');
+  var id=key==='gubun'?'hstGubun':(key==='type'?'hstType':'');
+  var value=btn.getAttribute('data-hst-count-value'), select=id&&document.getElementById(id);
+  if(!select||value==null) return;
+  select.value=value;
+  if(select.value!==value) return;
+  exApplyHistoryFilters_();
+  var next=document.querySelector('.hst-count-chip[data-hst-count-key="'+key+'"]');if(next)next.focus();
 }
 function exResetHistoryFilters_(){
   var period=document.getElementById('hstPeriod'); if(period) period.value='cur';
@@ -5434,6 +5561,7 @@ function exShowHistory_(dim, name){
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · '+esc(curChip)+'</b></span>'
     +(prev?'<span class="hst-chip">'+esc(cmpLb)+' <b>'+esc(exCmpRangeText_(x.cmp))+' · '+esc(prevChip)+'</b></span>'
            :'<span class="hst-chip">비교 기간 <b>없음</b></span>')+'</div>'
+    +(dim==='kpiSaving'?exSavingEvidenceHtml_():'')
     +exHistoryControls_(items, !!prev)
     +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
     +'<div class="hst-result"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
@@ -6353,13 +6481,16 @@ function ycCmpSentence_(ys, a, b, scope, tail){
 
 /* ── 상단 바: 동월·동일일 / 좌우 독립 기간 KPI 비교 ── */
 function ycSideRangeTxt_(r){ return r.from.getFullYear()+'.'+ycMD_(r.from)+'~'+r.to.getFullYear()+'.'+ycMD_(r.to); }
-function ycKpiTile_(label, a, b, unit, polarity, lbl, won){
+function ycKpiTile_(label, a, b, unit, polarity, lbl, won, evidence){
   var f=function(v){ return (won?'₩':'')+exNum(v); };
-  return '<div class="yc-kpi"><span class="lb">'+esc(label)+'</span>'
+  var tag=evidence?'button':'div';
+  var attr=evidence?' type="button" class="yc-kpi yc-kpi-evidence" onclick="exOpenSavingEvidence_(0)" title="절감액 산정 근거자료 전체화면 보기"'
+                   :' class="yc-kpi"';
+  return '<'+tag+attr+'><span class="lb">'+esc(label)+'</span>'
     +'<div class="vs2"><span class="a" title="'+escAttr(lbl)+'">'+f(a)+'</span>'
       +'<span class="ar">→</span><span class="b">'+f(b)+'</span></div>'
     +ycDeltaEm_(b, a, unit, polarity, lbl)
-  +'</div>';
+  +'</'+tag+'>';
 }
 /* 상단 바 HTML — 카드 화면과 전체화면이 같은 조작부를 쓴다.
    두 곳에 동시에 그려지므로 id 가 겹치지 않도록 접두어를 받는다(핸들러는 전역 함수라 id 조회가 없다). */
@@ -6416,7 +6547,7 @@ function ycBarHtml_(ys, periods, pfx){
       +ycKpiTile_('A/S(VOC)',   sl.as,   sr.as,   '건', 'bad',     lbl)
       +ycKpiTile_('점검',       sl.insp, sr.insp, '건', 'neutral', lbl)
       +ycKpiTile_('서비스 병원', sl.hosp, sr.hosp, '곳', 'neutral', lbl)
-      +ycKpiTile_('추정 교체비용 절감액',sl.saving,sr.saving,'원','neutral',lbl+' · 내부 세척 1건당 281,200원',true)
+      +ycKpiTile_('추정 교체비용 절감액',sl.saving,sr.saving,'원','neutral',lbl+' · 내부 세척 1건당 281,200원',true,true)
     +'</div>';
 }
 

@@ -63,15 +63,20 @@ let modal=await page.evaluate(()=>({
   title:document.getElementById('exListTitle').textContent,
   count:document.getElementById('hstCount').textContent,
   breakdown:document.getElementById('hstBreakdown').textContent,
-  hasType:!!document.getElementById('hstType')
+  hasType:!!document.getElementById('hstType'),
+  evidence:document.querySelectorAll('.hst-evidence-thumb').length
 }));
 ck('3. 전체 서비스 이력은 선택 기간 5건과 구분·VOC 유형 건수를 표시',
   modal.title==='전체 서비스 건수'&&modal.count.includes('5건')&&modal.breakdown.includes('A/S 3건')
-  &&modal.breakdown.includes('점검 2건')&&modal.breakdown.includes('VOC 유형별 건수')&&modal.hasType,JSON.stringify(modal));
-await page.selectOption('#hstType','케이블 불량');
-modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent}));
-ck('4. VOC 유형 필터 적용 시 표시 건수와 두 건수 요약이 함께 갱신',
-  modal.count.includes('1건')&&modal.breakdown.includes('A/S 1건')&&modal.breakdown.includes('케이블 불량 1건'),JSON.stringify(modal));
+  &&modal.breakdown.includes('점검 2건')&&modal.breakdown.includes('VOC 유형별 건수')&&modal.hasType&&modal.evidence===0,JSON.stringify(modal));
+await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
+modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
+ck('3-b. 구분 건수 칩 클릭 시 해당 구분 처리 이력만 표시',modal.gubun==='A/S'&&modal.rows===3&&modal.count.includes('3건'),JSON.stringify(modal));
+await page.evaluate(()=>exResetHistoryFilters_());
+await page.click('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]');
+modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent,type:document.getElementById('hstType').value}));
+ck('4. VOC 유형별 건수 칩 클릭 시 표시 건수와 두 요약이 함께 갱신',
+  modal.type==='케이블 불량'&&modal.count.includes('1건')&&modal.breakdown.includes('A/S 1건')&&modal.breakdown.includes('케이블 불량 1건'),JSON.stringify(modal));
 await page.evaluate(()=>closeExList());
 
 async function openAndRead(dim){
@@ -92,8 +97,40 @@ ck('7. 서비스 병원 카드는 중복 제거 4곳과 처리 5건을 함께 �
   hospHist.count.includes('4곳')&&hospHist.count.includes('처리 5건'),JSON.stringify(hospHist));
 ck('8. 절감액 이력은 내부 세척 2건과 562,400원만 표시',
   savingHist.rows===2&&savingHist.count.includes('₩562,400')&&savingHist.text.includes('내부 세척 2건'),JSON.stringify(savingHist));
-ck('9. PC에서 7개 KPI가 한 줄로 배치',await page.evaluate(()=>getComputedStyle(document.getElementById('exKpis')).gridTemplateColumns.split(' ').length===7));
-ck('10. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
+await page.click('#exKpis [data-hist-dim="kpiSaving"]');
+await page.waitForSelector('#exListModal.show');
+ck('9. 절감액 이력 상단에 근거자료 미리보기 4장을 표시',
+  await page.locator('#exListBody .hst-evidence-thumb').count()===4&&
+  (await page.textContent('#exListBody .hst-evidence-head')).includes('281,208원 절사'));
+await page.locator('#exListBody .hst-evidence-thumb').nth(1).click();
+await page.waitForSelector('#hstEvidenceViewer:not([hidden])');
+let viewer=await page.evaluate(()=>({
+  title:document.getElementById('hstEvidenceTitle').textContent,
+  src:document.getElementById('hstEvidenceImage').getAttribute('src'),
+  count:document.getElementById('hstEvidenceCount').textContent,
+  fullscreen:[...document.querySelectorAll('#hstEvidenceViewer button')].some(b=>b.textContent.includes('전체화면'))
+}));
+ck('10. 근거자료를 화면 전체 뷰어로 열고 원본·전체화면 기능을 제공',
+  viewer.title.includes('화학적 세척')&&viewer.src.endsWith('handpiece-quality-review-02.png')&&viewer.count==='2 / 4'&&viewer.fullscreen,JSON.stringify(viewer));
+await page.keyboard.press('ArrowRight');
+ck('11. 키보드로 다음 근거자료 이동',
+  (await page.getAttribute('#hstEvidenceImage','src')).endsWith('handpiece-quality-review-03.png')&&await page.textContent('#hstEvidenceCount')==='3 / 4');
+await page.keyboard.press('Escape');
+ck('12. Escape로 전체화면 뷰어 닫기',await page.locator('#hstEvidenceViewer').getAttribute('hidden')!==null);
+await page.evaluate(()=>closeExList());
+
+await page.click('[data-tab="year"]');
+await page.waitForSelector('#exPaneYear.on');
+ck('13. 연간 비교분석 절감액 카드에도 근거자료 버튼 적용',await page.locator('#exPaneYear .yc-kpi-evidence').count()>=1);
+await page.locator('#exPaneYear .yc-kpi-evidence').first().click();
+await page.waitForSelector('#hstEvidenceViewer:not([hidden])');
+ck('14. 연간 절감액 카드가 같은 근거자료 뷰어를 연다',
+  (await page.getAttribute('#hstEvidenceImage','src')).endsWith('handpiece-quality-review-01.png'));
+await page.evaluate(()=>exCloseSavingEvidence_());
+await page.click('[data-tab="summary"]');
+await page.waitForSelector('#exPaneSummary.on');
+ck('15. PC에서 7개 KPI가 한 줄로 배치',await page.evaluate(()=>getComputedStyle(document.getElementById('exKpis')).gridTemplateColumns.split(' ').length===7));
+ck('16. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 
 await browser.close();
 console.log('\n──────────────────────────────');console.log(`통과 ${pass}/${total}`);
