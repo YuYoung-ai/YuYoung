@@ -275,8 +275,9 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     &&D.exHistoryControls_(missingItems,false).includes('value="__missing__"')
     &&D.exHistoryFilter_(missingItems,{type:'__missing__'}).length===1);
   const summarySrc=grab('renderExecutiveSummary');
-  ck('26-h. 주간 핵심보고 앞 네 KPI 카드가 모두 처리 이력 버튼이다',
-    ['kpiTotal','kpiAs','kpiInsp','kpiHosp'].every(dim=>summarySrc.includes("hist:'"+dim+"'")));
+  ck('26-h. 남은 주간 핵심보고 건수 KPI 카드가 모두 처리 이력 버튼이다',
+    ['kpiTotal','kpiAs','kpiInsp'].every(dim=>summarySrc.includes("hist:'"+dim+"'"))&&
+    !summarySrc.includes("hist:'kpiHosp'"));
   const showSrc=grab('exShowHistory_');
   ck('26-i. KPI 이력은 기존 집계 캐시를 재사용하고 카드별 범위를 적용',
     showSrc.includes("['kpiTotal','kpiAs','kpiInsp','kpiHosp','kpiSaving']")
@@ -293,7 +294,10 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     &&showSrc.includes("savingMetric:dim==='kpiSaving'"));
   ck('26-l. 추정 절감액 카드는 교체비용 합계 바로 오른쪽에 배치',
     summarySrc.indexOf("label:'교체비용 합계'")<summarySrc.indexOf("label:'추정 교체비용 절감액'")
-    &&summarySrc.indexOf("label:'추정 교체비용 절감액'")<summarySrc.indexOf("label:'N-CARE 점검 운영률'"));
+    &&!summarySrc.includes("label:'N-CARE 점검 운영률'"));
+  ck('26-l2. 주간 핵심보고 KPI에서 N-Care 운영률과 서비스 병원 수 카드 제거',
+    !summarySrc.includes('ncareAsOfLabel_()')&&!summarySrc.includes('30일 이내 점검')&&
+    !summarySrc.includes("label:'서비스 병원 수'"));
   const chipSrc=grab('exApplyHistoryCountChip_');
   ck('26-m. 건수 칩은 해당 select만 바꾸고 공통 필터 적용 함수를 호출',
     chipSrc.includes("key==='gubun'?'hstGubun'")&&chipSrc.includes("key==='type'?'hstType'")

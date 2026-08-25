@@ -172,34 +172,23 @@ const wItems = wDeck[0].items, mItems = mDeck[0].items;
 ck('1. 주간 PPT 슬라이드 1장', wDeck.length === 1, '슬라이드 ' + wDeck.length + '장');
 ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDeck.length + '장');
 
-/* ══════ 3. KPI 6개 ══════ */
+/* ══════ 3. KPI 3개 ══════ */
 {
-  const want = ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', '서비스 병원 수', '교체비용 합계', 'N-CARE 점검 운영률'];
-  ck('3. 주간 KPI 6개 (순서·항목 일치)',
-    wSnap.kpi.length === 6 && want.every((w, i) => wSnap.kpi[i].label === w),
+  const want = ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수'];
+  ck('3. 주간 KPI 3개 (순서·항목 일치)',
+    wSnap.kpi.length === 3 && want.every((w, i) => wSnap.kpi[i].label === w),
     wSnap.kpi.map(k => k.label).join(' / '));
-  ck('3-b. 월간 KPI 6개 (주간과 같은 구성)',
-    mSnap.kpi.length === 6 && want.every((w, i) => mSnap.kpi[i].label === w));
-  ck('3-c. KPI 6개가 모두 슬라이드에 그려진다', want.every(w => has(wItems, w)));
+  ck('3-b. 월간 KPI 3개 (주간과 같은 구성)',
+    mSnap.kpi.length === 3 && want.every((w, i) => mSnap.kpi[i].label === w));
+  ck('3-c. KPI 3개가 모두 슬라이드에 그려진다', want.every(w => has(wItems, w)));
   ck('3-d. A/S KPI 는 비율을 함께 적는다', /비율 \d+%/.test(wSnap.kpi[1].note || ''), wSnap.kpi[1].note);
-  /* 운영률 기준일은 보고 기간의 끝을 따른다(미래면 오늘로 자름) — 규칙을 테스트가 독립적으로 재현해 고정한다.
-     예전에는 보고 기간과 무관하게 항상 오늘 값이 박혀, 지난주 보고서에 이번 주 운영률이 실렸다. */
-  const _today = new Date(); _today.setHours(0, 0, 0, 0);
-  const wantBadge = (toStr) => {
-    const d = new Date(toStr + 'T00:00:00');
-    const a = d > _today ? _today : d;
-    return a.getTime() === _today.getTime() ? '오늘 현황' : (a.getMonth() + 1) + '.' + a.getDate() + ' 기준';
-  };
-  const wNcare=wSnap.kpi.find(k=>k.label==='N-CARE 점검 운영률');
-  const mNcare=mSnap.kpi.find(k=>k.label==='N-CARE 점검 운영률');
-  ck('3-e. N-CARE 운영률 배지가 보고 기간 끝을 따른다',
-    !!wNcare && wNcare.badge === wantBadge(WEEK.to) && has(wItems, wNcare.badge),
-    (wNcare?.badge||'KPI 없음') + ' (기대 ' + wantBadge(WEEK.to) + ')');
-  ck('3-e2. 끝이 미래인 기간은 오늘로 잘린다',
-    !!mNcare && mNcare.badge === wantBadge(MONTH.to), mNcare?.badge||'KPI 없음');
-  ck('3-f. KPI 6장이 한 줄 — y 좌표가 모두 같다',
+  ck('3-e. 주간·월간 PPT에서 N-CARE 운영률과 서비스 병원 수를 제거',
+    !wSnap.kpi.some(k=>k.label==='N-CARE 점검 운영률')&&
+    !mSnap.kpi.some(k=>k.label==='N-CARE 점검 운영률')&&
+    !wSnap.kpi.some(k=>k.label==='서비스 병원 수')&&!has(wItems,'N-CARE 점검 운영률'));
+  ck('3-f. KPI 3장이 한 줄 — y 좌표가 모두 같다',
     new Set(wItems.filter(o => o.card && o.y === D.L.kpi.y).map(o => o.y)).size === 1 &&
-    wItems.filter(o => o.card && o.y === D.L.kpi.y).length === 6);
+    wItems.filter(o => o.card && o.y === D.L.kpi.y).length === 3);
 }
 
 /* ══════ 4·5. 추이 카드 — 주간 8주 / 월간 6개월 ══════ */
@@ -399,8 +388,8 @@ function rebuildX(period) {
   ]);
   const s2 = D.buildExecutiveReportSnapshot(WEEK);
   ck('15. 같은 병원·같은 날짜 장비 2대 → 2건',
-    s2.kpi[0].value === '2' && s2.kpi[1].value === '2' && s2.kpi[3].value === '1',
-    '전체 ' + s2.kpi[0].value + ' / A/S ' + s2.kpi[1].value + ' / 병원 ' + s2.kpi[3].value);
+    s2.kpi[0].value === '2' && s2.kpi[1].value === '2' && s2.kpi[2].value === '0',
+    '전체 ' + s2.kpi[0].value + ' / A/S ' + s2.kpi[1].value + ' / 점검 ' + s2.kpi[2].value);
   ck('15-b. 추이 막대도 같은 기준(2건)',
     s2.trend.bars[s2.trend.bars.length - 1].as === 2);
   load(SAMPLE);
@@ -409,17 +398,14 @@ function rebuildX(period) {
 /* ══════ 16. 대시보드 KPI == PPT KPI ══════ */
 {
   const x = rebuildX(WEEK);
-  const k = x.kpi.cur, p = x.kpi.prev, cmp = x.cmp, nck = x.ncare;
+  const k = x.kpi.cur, p = x.kpi.prev, cmp = x.cmp;
   const dash = [
     [String(D.exNum(k.total)), D.exDeltaParts(k.total, p ? p.total : null, '건', 'neutral', cmp).text],
     [String(D.exNum(k.as)), D.exDeltaParts(k.as, p ? p.as : null, '건', 'bad', cmp).text],
-    [String(D.exNum(k.insp)), D.exDeltaParts(k.insp, p ? p.insp : null, '건', 'neutral', cmp).text],
-    [String(D.exNum(k.hosp)), D.exDeltaParts(k.hosp, p ? p.hosp : null, '곳', 'neutral', cmp).text],
-    ['₩' + D.exNum(k.cost), D.exDeltaParts(k.cost, p ? p.cost : null, '원', 'bad', cmp).text],
-    [nck.list.length ? String(nck.rate) : '–', null]
+    [String(D.exNum(k.insp)), D.exDeltaParts(k.insp, p ? p.insp : null, '건', 'neutral', cmp).text]
   ];
   const ppt = wSnap.kpi.map(kp => [kp.value, kp.delta ? kp.delta.text : null]);
-  ck('16. 대시보드 KPI 와 PPT KPI 가 값·증감 문구까지 동일',
+  ck('16. 대시보드 공통 핵심 KPI와 PPT KPI가 값·증감 문구까지 동일',
     JSON.stringify(dash) === JSON.stringify(ppt),
     JSON.stringify(dash) + ' vs ' + JSON.stringify(ppt));
   ck('16-b. A/S 비율도 대시보드와 동일', wSnap.kpi[1].note === '비율 ' + k.asRate + '%');
@@ -483,8 +469,6 @@ function rebuildX(period) {
     });
   ck('19. 긴 병원명·VOC 유형·교체품명이 있어도 칸을 넘지 않는다 (말줄임 적용)',
     over.length === 0, over.slice(0, 3).map(o => JSON.stringify(D.exPptRuns_(o).map(r => r.text).join('')) + ' w=' + o.w).join(' | '));
-  ck('19-b. 큰 교체비용도 잘리지 않고 크기로 맞춘다',
-    s3.kpi[4].value === '₩999,999,999' * 1 ? true : /₩[\d,]+/.test(s3.kpi[4].value));
   ck('19-c. 긴 유형명은 말줄임으로 표기된다', has(i3, '…'));
   load(SAMPLE);
 }
@@ -590,8 +574,8 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     Math.abs(D.L.notes.w - D.L.change.w) < 0.001,
     'notes x=' + D.L.notes.x.toFixed(3) + ' w=' + D.L.notes.w.toFixed(3) +
     ' / change x=' + D.L.change.x.toFixed(3) + ' w=' + D.L.change.w.toFixed(3));
-  ck('R3. KPI 6장이 본문 폭을 정확히 채운다',
-    Math.abs(D.L.kpi.w * 6 + D.L.kpi.gap * 5 - W) < 0.001);
+  ck('R3. KPI 3장이 본문 폭을 정확히 채운다',
+    Math.abs(D.L.kpi.w * 3 + D.L.kpi.gap * 2 - W) < 0.001);
   ck('R4. TOP5 두 장 + gap 이 서비스 추이 카드 폭과 정확히 동일',
     Math.abs(D.L.voc.w + D.L.gap + D.L.part.w - D.L.trend.w) < 0.001,
     D.L.voc.w.toFixed(3) + ' + ' + D.L.gap + ' + ' + D.L.part.w.toFixed(3) +

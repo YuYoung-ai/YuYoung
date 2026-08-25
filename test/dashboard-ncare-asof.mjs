@@ -114,8 +114,8 @@ ck('10. 기록 기반 모집단은 기준일 컷오프 전에 모은다(분모 �
 ck('10-b. 다만 방문은 반영되지 않아 "점검 기록 없음"', S.cnt[4] === 1 && S.rate === 0, 'cnt4=' + S.cnt[4] + ' rate=' + S.rate);
 
 /* ══════ 5. 화면 문구가 기준일을 따라간다 ══════ */
-ck('11. KPI·PPT·모달·관리대상 배지가 ncareAsOfLabel_() 을 쓴다',
-  (SRC.match(/ncareAsOfLabel_\(\)/g) || []).length >= 5,
+ck('11. 남아 있는 N-Care 모달·관리대상 배지가 ncareAsOfLabel_() 을 쓴다',
+  (SRC.match(/ncareAsOfLabel_\(\)/g) || []).length >= 4,
   (SRC.match(/ncareAsOfLabel_\(\)/g) || []).length + '곳');
 ck('12. "오늘 현황" 하드코딩이 남아 있지 않다',
   !/badge:\s*'오늘 현황'/.test(SRC) && !/기준 · 오늘 현황/.test(SRC));
