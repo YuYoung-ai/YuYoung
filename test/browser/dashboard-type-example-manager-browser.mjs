@@ -180,6 +180,40 @@ ck('22-a. 5MB 초과 MP4를 거절하고 기존 선택 상태를 보존한다',
   /변환 실패/.test(videoReject.message)&&/5MB/.test(videoReject.message)&&videoReject.changed===false,
   JSON.stringify(videoReject));
 
+/* 사진 4장을 서버 전송 없이 한 장의 보고서형 WebP로 합성한다 */
+const collageInput=sel('input[data-act="collage-file"]','after');
+await page.waitForSelector(collageInput,{state:'attached'});
+const collageAccept=await page.getAttribute(collageInput,'accept');
+ck('22-b. 합성 선택기는 사진만 받고 여러 장 선택을 허용한다',
+  await page.locator(collageInput).getAttribute('multiple')!==null&&!/video/.test(collageAccept||''),collageAccept||'');
+await page.setInputFiles(collageInput,[0,1,2,3].map(i=>({name:`collage-${i+1}.png`,mimeType:'image/png',buffer:Buffer.from(png)})));
+await page.waitForSelector('.bte-collage:not([hidden])',{timeout:30000});
+ck('22-c. 사진 선택 후 자동 합성하지 않고 수동 조정 미리보기를 먼저 연다',
+  await page.locator('.bte-collage canvas').isVisible()&&await page.locator('.bte-order-item').count()===4);
+await page.click('.bte-order-item[data-index="0"] [data-act="collage-next"]');
+await page.click('[data-act="collage-right"]');
+await page.locator('[data-act="collage-zoom"]').fill('145');
+await page.click('[data-act="collage-rotate"]');
+const manual=await page.evaluate(()=>{
+  const C=window.BazTypeExampleManager._state.collage,i=C.items[C.selected];
+  return {order:C.items.map(x=>x.file.name),selected:C.selected,x:i.x,zoom:i.zoom,rotation:i.rotation};
+});
+ck('22-d. 순서·위치·확대·회전 수동 조정값이 미리보기에 반영된다',
+  manual.order[0]==='collage-2.png'&&manual.order[1]==='collage-1.png'&&manual.selected===1&&manual.x>0&&manual.zoom===1.45&&manual.rotation===90,
+  JSON.stringify(manual));
+await page.click('[data-act="collage-apply"]');
+await page.waitForFunction(()=>document.querySelector('.bte-msg')?.textContent.includes('합성 완료'),null,{timeout:30000});
+const collage=await page.evaluate(k=>{
+  const c=window.BazTypeExampleManager._state.changes[k].after;
+  return {collage:c.collage,manual:c.manual,count:c.sourceCount,w:c.width,h:c.height,bytes:c.bytes,type:c.blob.type,src:c.src};
+},KEY);
+ck('22-e. 수동 배치한 사진 4장을 1200×900 이하·300KB 목표의 단일 해시 WebP로 생성한다',
+  collage.collage&&collage.manual&&collage.count===4&&collage.w===1200&&collage.h===900&&collage.bytes<=300*1024&&
+  collage.type==='image/webp'&&/^assets\/type-examples\/media\/[0-9a-f]{12}\.webp$/.test(collage.src),JSON.stringify(collage));
+const collageMeta=String(await page.textContent(sel('.bte-meta','after'))).replace(/\s+/g,' ');
+ck('22-f. 합성 원본 장수·수동 배치와 결과 크기·해상도를 화면에 표시한다',
+  /합성 원본 4장/.test(collageMeta)&&/수동 배치/.test(collageMeta)&&/변환 WebP/.test(collageMeta)&&/1200×900/.test(collageMeta),collageMeta);
+
 /* ── 7. 필터 · 레이아웃 · 격리 ── */
 await page.selectOption('.bte-tools [data-act="cat"]','장비');
 await page.waitForTimeout(150);

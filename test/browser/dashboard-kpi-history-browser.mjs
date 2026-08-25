@@ -18,13 +18,13 @@ let pass=0,total=0;const fails=[],errs=[];
 function ck(name,cond,detail=''){total++;if(cond)pass++;else fails.push(name+(detail?' — '+detail:''));console.log(cond?'✅':'❌',name,detail);}
 
 const DATA=[
-  {date:'2026-08-10',hosp:'A병원',gubun:'A/S',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'N-Care'},
-  {date:'2026-08-11',hosp:'A병원',gubun:'A/S',type:'노즐누수(약액유입)',part:'내부세척',fse:'이기사',ncare:'N-Care'},
-  {date:'2026-08-12',hosp:'B병원',gubun:'A/S',type:'케이블 불량',part:'Cable Set',fse:'김프로',ncare:'미가입'},
-  {date:'2026-08-13',hosp:'C병원',gubun:'점검',type:'노즐 누수(약액 유입)',part:'없음',fse:'김프로',ncare:'미가입'},
-  {date:'2026-08-14',hosp:'D병원',gubun:'점검',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
-  {date:'2026-08-04',hosp:'E병원',gubun:'A/S',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'미가입'},
-  {date:'2026-08-05',hosp:'F병원',gubun:'점검',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'}
+  {date:'2026-08-10',hosp:'A병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'N-Care'},
+  {date:'2026-08-11',hosp:'A병원',gubun:'A/S',cat:'핸드피스',type:'노즐누수(약액유입)',part:'내부세척',fse:'이기사',ncare:'N-Care'},
+  {date:'2026-08-12',hosp:'B병원',gubun:'A/S',cat:'장비',type:'케이블 불량',part:'Cable Set',fse:'김프로',ncare:'미가입'},
+  {date:'2026-08-13',hosp:'C병원',gubun:'점검',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'없음',fse:'김프로',ncare:'미가입'},
+  {date:'2026-08-14',hosp:'D병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
+  {date:'2026-08-04',hosp:'E병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'미가입'},
+  {date:'2026-08-05',hosp:'F병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'}
 ];
 
 const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROME||undefined});
@@ -70,13 +70,34 @@ ck('3. 전체 서비스 이력은 선택 기간 5건과 구분·VOC 유형 건�
   modal.title==='전체 서비스 건수'&&modal.count.includes('5건')&&modal.breakdown.includes('A/S 3건')
   &&modal.breakdown.includes('점검 2건')&&modal.breakdown.includes('VOC 유형별 건수')&&modal.hasType&&modal.evidence===0,JSON.stringify(modal));
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
-modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
+modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,gubun:document.getElementById('hstGubun').value,
+  rows:document.querySelectorAll('#hstTableHost tbody tr').length,other:!!document.querySelector('#hstBreakdown [data-hst-count-value="점검"]'),
+  active:document.querySelector('#hstBreakdown [data-hst-count-value="A/S"]').getAttribute('aria-pressed')}));
 ck('3-b. 구분 건수 칩 클릭 시 해당 구분 처리 이력만 표시',modal.gubun==='A/S'&&modal.rows===3&&modal.count.includes('3건'),JSON.stringify(modal));
+ck('3-c. 선택 후에도 다른 구분 버튼이 유지되고 선택 상태가 강조',modal.other&&modal.active==='true',JSON.stringify(modal));
+await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
+modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
+ck('3-d. 같은 구분 칩을 다시 누르면 해당 필터만 해제',modal.gubun==='all'&&modal.rows===5,JSON.stringify(modal));
+await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
+await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="점검"]');
+modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
+ck('3-e. 같은 그룹의 다른 구분 칩을 누르면 즉시 전환',modal.gubun==='점검'&&modal.rows===2,JSON.stringify(modal));
 await page.evaluate(()=>exResetHistoryFilters_());
 await page.click('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]');
 modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent,type:document.getElementById('hstType').value}));
 ck('4. VOC 유형별 건수 칩 클릭 시 표시 건수와 두 요약이 함께 갱신',
   modal.type==='케이블 불량'&&modal.count.includes('1건')&&modal.breakdown.includes('A/S 1건')&&modal.breakdown.includes('케이블 불량 1건'),JSON.stringify(modal));
+await page.waitForSelector('#hstPhotoPanel:not([hidden]) .hst-evidence-thumb');
+modal=await page.evaluate(()=>({title:document.getElementById('hstPhotoTitle').textContent,
+  thumbs:document.querySelectorAll('#hstPhotoPanel .hst-evidence-thumb').length,status:document.getElementById('hstPhotoStatus').textContent}));
+ck('4-b. VOC 유형 필터 선택만으로 해당 예시자료 미리보기가 자동 표시',
+  modal.title.includes('케이블 불량')&&modal.thumbs===1&&modal.status.includes('표준 예시'),JSON.stringify(modal));
+await page.click('#hstPhotoPanel .hst-evidence-thumb');
+await page.waitForSelector('#hstEvidenceViewer:not([hidden])');
+ck('4-c. VOC 예시자료가 절감 근거자료와 같은 전체화면 뷰어를 사용',
+  (await page.getAttribute('#hstEvidenceImage','src')).includes('equipment-cable')&&
+  (await page.getAttribute('#hstEvidenceViewer','aria-label')).includes('선택 VOC 유형 예시자료'));
+await page.evaluate(()=>exCloseSavingEvidence_());
 await page.evaluate(()=>closeExList());
 
 async function openAndRead(dim){

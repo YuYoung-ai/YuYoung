@@ -163,6 +163,25 @@ ck('29-c. MP4 내부 avc1·avc3 표식으로 H.264 코덱을 제한한다',
   M.hasAvcCodec(new TextEncoder().encode('....avc1....')) &&
   M.hasAvcCodec(new TextEncoder().encode('....avc3....')) &&
   !M.hasAvcCodec(new TextEncoder().encode('....hvc1....')) && /H\.264\(avc1\/avc3\)만 허용/.test(SRC));
+{
+  const two=M.collageLayout(2,1200,900,12),three=M.collageLayout(3,1200,900,12),four=M.collageLayout(4,1200,900,12);
+  ck('29-d. 합성 레이아웃은 2장 좌우·3장 대소·4장 2×2로 계산한다',
+    two.length===2&&two[0].h===900&&three.length===3&&three[0].h===900&&three[1].h<900&&
+    four.length===4&&four.every(r=>r.w<1200&&r.h<900));
+}
+ck('29-e. 합성은 사진 2~4장·장당 10MB·전체 30MB·1200×900 이내로 제한한다',
+  M.COLLAGE_MAX_FILES===4&&M.COLLAGE_FILE_MAX_BYTES===10*1024*1024&&
+  M.COLLAGE_TOTAL_MAX_BYTES===30*1024*1024&&M.COLLAGE_WIDTH===1200&&
+  /합성은 사진 2~4장을 선택/.test(SRC)&&/width \* COLLAGE_RATIO/.test(SRC));
+ck('29-f. 합성 결과도 WebP·내용 해시 파일명·300KB 목표 경로를 그대로 사용한다',
+  /function encodeCollage/.test(SRC)&&/pickEncoding\(function \(dim, q\) \{ return encodeCollage/.test(SRC)&&
+  /sha256Hex12\(buf\)/.test(SRC)&&/src: mediaPath\(hash\)/.test(SRC));
+ck('29-g. 수동 순서 변경과 위치·확대 범위를 안전하게 제한한다',
+  M.moveCollageItem(['A','B','C'],0,2).join('')==='BCA'&&M.clamp(3,1,2)===2&&M.clamp(-1,-.5,.5)===-.5);
+ck('29-h. 합성 입력 검증은 사진 수·파일별 용량·전체 용량을 생성 전에 차단한다',
+  !M.validateCollageFiles([{name:'a.jpg',type:'image/jpeg',size:100}]).ok&&
+  !M.validateCollageFiles([1,2].map((_,i)=>({name:`${i}.jpg`,type:'image/jpeg',size:11*1024*1024}))).ok&&
+  M.validateCollageFiles([1,2,3,4].map((_,i)=>({name:`${i}.jpg`,type:'image/jpeg',size:1024}))).ok);
 
 /* ══════════ 5. index.json 갱신 규칙 ══════════ */
 section('index.json 갱신 · 검증');
@@ -311,6 +330,12 @@ ck('61. 실제 처리 기록이 아닌 표준 예시임을 화면에 알린다',
   /실제 처리 기록이 아니라 VOC 유형별 표준 예시/.test(SRC));
 ck('61-b. 영상 제한과 기본 재생 정책을 관리 화면에 표시한다',
   /MP4\(H\.264\/AVC\)·15초 이하·5MB 이하/.test(SRC) && /기본 음소거/.test(SRC));
+ck('61-c. 관리 화면에서 사진 2~4장 합성 선택과 브라우저 내부 처리 기준을 안내한다',
+  /data-act="pick-collage"/.test(SRC)&&/data-act="collage-file" multiple/.test(SRC)&&
+  /원본은 서버로 전송되지 않습니다/.test(SRC));
+ck('61-d. 합성 편집기는 순서·드래그 위치·확대·회전·자동 초기화를 제공한다',
+  /data-el="collage-canvas"/.test(SRC)&&/data-act="collage-zoom"/.test(SRC)&&/data-act="collage-rotate"/.test(SRC)&&
+  /data-act="collage-reset"/.test(SRC)&&/pointermove/.test(SRC)&&/draggable="true"/.test(SRC));
 ck('62. 개인정보 노출 금지 안내가 있다',
   /환자·직원 얼굴, 병원명, 장비 S\/N, 문서·모니터의 개인정보/.test(SRC));
 ck('63. 처리 중 중복 클릭을 막는다',
@@ -335,6 +360,10 @@ ck('71. README 에 관리 화면 등록 절차와 비상 수동 절차가 모두
   /## 등록 절차 \(권장 · 대시보드 관리 화면\)/.test(README) &&
   /## 등록 절차 \(비상용 · 수동\)/.test(README) &&
   /🖼 예시자료 관리/.test(README) && /git status/.test(README) && /15초 이하, 5MB 이하/.test(README));
+ck('72. README 에 합성 배치와 공통 전체화면 출력 절차가 있다',
+  /사진 2~4장 합성/.test(README)&&/4장은 2×2/.test(README)&&/공통 전체화면 뷰어/.test(README));
+ck('73. README 에 수동 순서·프레이밍·확대·회전 조정 절차가 있다',
+  /프레이밍 위치/.test(README)&&/확대·90도 회전/.test(README)&&/순서를 바꿀 수 있습니다/.test(README));
 
 console.log('\n──────────────────────────────');
 console.log(`통과 ${pass}/${total}`);
