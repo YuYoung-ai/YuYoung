@@ -20,7 +20,7 @@ function ck(name,cond,detail=''){total++;if(cond)pass++;else fails.push(name+(de
 const DATA=[
   {date:'2026-08-10',hosp:'A병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'N-Care'},
   {date:'2026-08-11',hosp:'A병원',gubun:'A/S',cat:'핸드피스',type:'노즐누수(약액유입)',part:'내부세척',fse:'이기사',ncare:'N-Care'},
-  {date:'2026-08-12',hosp:'B병원',gubun:'A/S',cat:'장비',type:'케이블 불량',part:'Cable Set',fse:'김프로',ncare:'미가입'},
+  {date:'2026-08-12',hosp:'B병원',gubun:'A/S',cat:'장비',type:'케이블 불량',part:'Cable Set',cost:'1,650,000',paid:'무상',fse:'김프로',ncare:'미가입'},
   {date:'2026-08-13',hosp:'C병원',gubun:'점검',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'없음',fse:'김프로',ncare:'미가입'},
   {date:'2026-08-14',hosp:'D병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
   {date:'2026-08-04',hosp:'E병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'미가입'},
@@ -57,9 +57,32 @@ ck('1. 주간 KPI 7개와 요청 카드 5개의 처리 이력 버튼이 렌더�
 ck('2. 추정 절감액은 내부 세척 2건 × 281,200원',
   (await page.textContent('#exKpis [data-hist-dim="kpiSaving"]')).includes('₩562,400'));
 
+await page.click('#exMoreBtn');
+await page.waitForSelector('#exDrawer.on');
+let modal=await page.evaluate(()=>({
+  years:[...document.querySelectorAll('#exYear .chip')].map(x=>x.textContent.trim()),
+  months:[...document.querySelectorAll('#exMonth .chip')].map(x=>x.textContent.trim()),
+  quarters:[...document.querySelectorAll('#exQuarter .chip')].map(x=>x.textContent.trim()),
+  paid:[...document.querySelectorAll('#exPaid .chip')].map(x=>x.textContent.trim())
+}));
+ck('2-b. 보고 상세필터에 연·월·분기와 유상·무상 선택을 표시',
+  modal.years.includes('2026년')&&modal.months.includes('8월')&&modal.quarters.includes('3분기')&&
+  modal.paid.join('|')==='유상|무상',JSON.stringify(modal));
+await page.click('#exQuarter [data-v="1"]');
+modal=await page.evaluate(()=>({shown:document.getElementById('exFCount').textContent,quarter:F.quarter.slice()}));
+ck('2-c. 보고 상세필터의 분기 선택을 상단 기간과 함께 실제 집계에 적용',
+  modal.quarter[0]==='1'&&modal.shown.includes('표시 0건'),JSON.stringify(modal));
+await page.click('#exQuarter [data-v="1"]');
+await page.click('#exPaid [data-v="유상"]');
+modal=await page.evaluate(()=>({shown:document.getElementById('exFCount').textContent,paid:F.paid.slice()}));
+ck('2-d. 교체비용이 있는 기록만 유상 필터로 집계',
+  modal.paid.length===1&&modal.paid[0]==='유상'&&modal.shown.includes('표시 1건'),JSON.stringify(modal));
+await page.click('#exPaid [data-v="유상"]');
+await page.click('#exMoreBtn');
+
 await page.click('#exKpis [data-hist-dim="kpiTotal"]');
 await page.waitForSelector('#exListModal.show');
-let modal=await page.evaluate(()=>({
+modal=await page.evaluate(()=>({
   title:document.getElementById('exListTitle').textContent,
   count:document.getElementById('hstCount').textContent,
   breakdown:document.getElementById('hstBreakdown').textContent,
