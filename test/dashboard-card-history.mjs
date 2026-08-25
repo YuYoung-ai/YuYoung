@@ -252,8 +252,16 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('26-f. 필터 결과에 구분 건수와 VOC 유형별 건수를 표시',
     breakdown.includes('구분 건수')&&breakdown.includes('A/S <b>5건</b>')&&breakdown.includes('점검 <b>1건</b>')
     &&breakdown.includes('VOC 유형별 건수')&&breakdown.includes('노즐누수 <b>4건</b>'));
+  ck('26-f2. 구분·VOC 유형 건수는 공통 클릭 필터 버튼으로 렌더링',
+    breakdown.includes('onclick="exApplyHistoryCountChip_(this)"')
+    &&breakdown.includes('data-hst-count-key="gubun"')&&breakdown.includes('data-hst-count-key="type"'));
   ck('26-g. 빈 구분·VOC 유형도 미입력으로 집계해 합계에서 빠지지 않는다',
     D.exHistoryCounts_([{period:'cur',r:{gubun:'',type:''}}],'type')[0].k==='미입력');
+  const missingItems=[{period:'cur',r:{gubun:'',type:'',hosp:'미입력병원'}}];
+  ck('26-g2. 미입력 건수도 클릭 가능한 필터 값으로 제공',
+    D.exHistoryBreakdownHtml_(missingItems).includes('data-hst-count-value="__missing__"')
+    &&D.exHistoryControls_(missingItems,false).includes('value="__missing__"')
+    &&D.exHistoryFilter_(missingItems,{type:'__missing__'}).length===1);
   const summarySrc=grab('renderExecutiveSummary');
   ck('26-h. 주간 핵심보고 앞 네 KPI 카드가 모두 처리 이력 버튼이다',
     ['kpiTotal','kpiAs','kpiInsp','kpiHosp'].every(dim=>summarySrc.includes("hist:'"+dim+"'")));
@@ -274,6 +282,10 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('26-l. 추정 절감액 카드는 교체비용 합계 바로 오른쪽에 배치',
     summarySrc.indexOf("label:'교체비용 합계'")<summarySrc.indexOf("label:'추정 교체비용 절감액'")
     &&summarySrc.indexOf("label:'추정 교체비용 절감액'")<summarySrc.indexOf("label:'N-CARE 점검 운영률'"));
+  ck('26-m. 건수 칩은 해당 select만 바꾸고 공통 필터 적용 함수를 호출',
+    grab('exApplyHistoryCountChip_').includes("key==='gubun'?'hstGubun'")
+    &&grab('exApplyHistoryCountChip_').includes("key==='type'?'hstType'")
+    &&grab('exApplyHistoryCountChip_').includes('exApplyHistoryFilters_()'));
 }
 
 /* ══════ 7. 특수문자·따옴표 안전 ══════ */
