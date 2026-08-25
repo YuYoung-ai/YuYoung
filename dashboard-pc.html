@@ -1374,8 +1374,11 @@ exApplyLevel3Tools_();
       <!-- 상세 필터 팝오버 — 기존 필터 항목을 그대로 재사용 -->
       <div class="ex-drawer" id="exDrawer">
         <div class="ex-dgrid">
-          <div class="ex-dg span2"><h5>보고 기간 기준</h5><div class="ex-period-rule">보고 탭은 상단 기간만 사용합니다. 상세 분석의 연·월·분기 선택은 보고 탭 집계에서 제외됩니다.</div></div>
+          <div class="ex-dg span2"><h5>보고 기간 기준</h5><div class="ex-period-rule">상단 기간과 아래 연·월·분기 조건을 함께 적용합니다. 연간 비교 탭은 좌우 비교 기간을 우선합니다.</div></div>
           <div class="ex-dg"><h5>유 / 무상</h5><div class="chips" id="exPaid"></div></div>
+          <div class="ex-dg" id="exYearGroup"><h5>년</h5><div class="chips" id="exYear"></div></div>
+          <div class="ex-dg" id="exMonthGroup"><h5>월</h5><div class="chips" id="exMonth"></div></div>
+          <div class="ex-dg" id="exQuarterGroup"><h5>분기</h5><div class="chips" id="exQuarter"></div></div>
           <div class="ex-dg span2"><h5>대분류</h5><div class="chips" id="exCat"></div></div>
           <div class="ex-dg" id="exNozGroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="exNoz"></div></div>
           <div class="ex-dg span2" id="exSkillGroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="exSkill"></div></div>
@@ -1630,6 +1633,7 @@ var RAW=[];              // 전체 레코드
 /* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
    두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
 var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
+var PAID_OPT=['유상','무상'];
 var NOZ_OPT=[['reuse','재사용'],['noreuse','미재사용'],['unknown','미확인']];
 var SKILL_OPT=[['good','평가 양호'],['need','교육 필요'],['none','미평가']];
 /* 보고 범위 — 상세 분석 전용 필터. 기본(빈 배열)은 "전체" 라 기존 데이터가 사라져 보이지 않는다.
@@ -1670,6 +1674,9 @@ function normD(s){ /* '2026. 6. 25' | '2026-07-01' | '2026.317'(점 누락) → 
   return {y:y, m:m, d:d, q:m?Math.ceil(m/3):0};
 }
 function costNum(s){ var n=Number(String(s||'').replace(/[^\d]/g,'')); return isNaN(n)?0:n; }
+/* 유·무상은 별도 표기 유무와 관계없이 실제 교체비용으로 일관되게 판정한다.
+   1원 이상 금액이 있으면 유상, 빈 값·무상·0원은 무상이다. */
+function paidType_(cost){ return costNum(cost)>0?'유상':'무상'; }
 
 /* ── 데이터 로드 ── */
 var DASH_TIMEOUT_FULL=45000, DASH_TIMEOUT_POLL=12000, DASH_TIMEOUT_PING=10000;
@@ -1840,7 +1847,7 @@ function boot(d, fromCache){
   RAW=d.data.map(function(r){
     var dd=normD(r.date);
     r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
-    r.ncare=r.ncare||'미가입'; r.paid=r.paid||''; return r;
+    r.ncare=r.ncare||'미가입'; r.paid=paidType_(r.cost); return r;
   });
   /* 콜드스타트 완화를 위해 hospdb를 먼저 받은 경우에는 당시 RAW가 비어 있어 결합할 수 없다.
      전체 이력이 준비된 직후 다시 결합해야 가입/미가입 필터가 실제 병원 DB와 일치한다. */
@@ -2041,7 +2048,7 @@ function buildFilters(){
   chipGroup('fMonth','month', months, function(v){return v+'월';});
   chipGroup('fQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
   chipGroup('fGubun','gubun', uniq('gubun'));
-  chipGroup('fPaid','paid', uniq('paid'));
+  chipGroup('fPaid','paid', PAID_OPT);
   chipGroup('fNcare','ncare', uniq('ncare'));
   chipGroup('fCat','cat', uniq('cat'));
   chipGroup('fFse','fse', uniq('fse'));
@@ -2051,7 +2058,10 @@ function buildFilters(){
   selChips('fTypeSel','type');
   selChips('fHospSel','hosp');
   /* 보고 모드 "상세 필터" 팝오버 — 같은 F 상태를 그대로 재사용한다 */
-  chipGroup('exPaid','paid', uniq('paid'));
+  chipGroup('exYear','year', years, function(v){return v+'년';});
+  chipGroup('exMonth','month', months, function(v){return v+'월';});
+  chipGroup('exQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
+  chipGroup('exPaid','paid', PAID_OPT);
   chipGroup('exCat','cat', uniq('cat'));
   stateChips('exNoz','noz', NOZ_OPT);
   stateChips('exSkill','skill', SKILL_OPT);
@@ -2192,8 +2202,8 @@ function filtered(opt){
    자르기 전에 상태 필터가 걸려서는 안 되므로 두 단계를 분리해 둔다. */
 function filteredRows_(opt){
   var noPeriod=!!(opt&&opt.noPeriod);
-  /* 보고 모드는 상단 F.from/F.to 를 유일한 기간 기준으로 쓴다. 상세 분석에서 고른
-     연·월·분기는 상태를 보존하되 보고 집계에는 겹쳐 적용하지 않는다. */
+  /* 일부 자체 비교 집계만 연·월·분기를 명시적으로 무시한다. 기본 상세·보고 집계는
+     상단 F.from/F.to 와 연·월·분기 조건을 모두 교집합으로 적용한다. */
   var ignorePeriodChips=!!(opt&&opt.ignorePeriodChips);
   var ignoreType=!!(opt&&opt.ignoreType);  /* 전용 VOC 분석은 비교군 보존을 위해 유형 필터를 무시한다 */
   /* opt.scope 를 주면 F.scope 대신 그 범위를 강제한다. 보고 모드는 항상 'customer' 로 부른다. */
@@ -2332,14 +2342,14 @@ function apply(){
      두 모드가 서로 다른 모집단을 쓰므로 각각 한 번씩 거른다. */
   var rows=filtered();
   CUR_ROWS=rows;
-  EX_ROWS=filtered({scope:'customer',ignorePeriodChips:true});
+  EX_ROWS=filtered({scope:'customer'});
   EX_CACHE=null; EX_DRAWN={}; EX_LEAK_STATE=null;
   /* 필터 상태 (두 모드 공통) */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
   document.getElementById('fReset').style.display=n?'block':'none';
   document.getElementById('statusLine').textContent='표시 '+rows.length+'건 / 전체 '+RAW.length+'건';
-  /* 보고 모드는 상단 기간을 따르되, 상세 전용 연·월·분기 칩은 활성 필터 수에서 뺀다. */
+  /* 보고 모드도 상단 기간과 연·월·분기 칩을 함께 사용한다. */
   syncExecFilterUI();
   /* N-Care 운영률은 기간 끝을 기준일로 쓰므로 기간이 바뀌면 다시 계산해야 한다.
      상세 분석 모드 카드는 boot()·병원DB 로드에서만 그려져 그대로 두면 옛 기준일이 남는다. */
@@ -3200,7 +3210,7 @@ function buildNozzleLeakAnalysis_(cohortRows, historyRows, asOfKey){
 }
 function buildNozzleLeakCurrent_(){
   /* F.type 은 이 탭의 고정 VOC와 충돌하므로 제외한다. noz·skill 은 filteredRows_ 단계에서 적용되지 않는다. */
-  var cohort=filteredRows_({scope:'customer',ignoreType:true,ignorePeriodChips:true});
+  var cohort=filteredRows_({scope:'customer',ignoreType:true});
   var base=exBaseDate(),asOf=base.getFullYear()*10000+(base.getMonth()+1)*100+base.getDate();
   /* 상태는 선택 기간 안에서 평가가 없더라도, 종료일 이전 마지막 유효 기록까지 거슬러 올라간다. */
   var history=RAW.filter(function(r){return recScope(r)==='customer'&&nlDateKey_(r)&&nlDateKey_(r)<=asOf;});
@@ -4398,15 +4408,16 @@ function exFilterCount_(keys){
 }
 /* 탭마다 집계 목적상 제외하는 필터를 활성 수·표시 건수에도 똑같이 반영한다. */
 function exTabFilterState_(){
-  var fixed=['gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'];
+  var fixed=['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'];
   var keys=fixed.slice(), shown=EX_ROWS.length, note='';
   if(EX_TAB==='leak'){
     keys=keys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
-    shown=DATA_READY?filteredRows_({scope:'customer',ignoreType:true,ignorePeriodChips:true}).length:0;
+    shown=DATA_READY?filteredRows_({scope:'customer',ignoreType:true}).length:0;
     note='누수 분석: 유형·노즐·교육 상태 필터 제외';
   }else if(EX_TAB==='year'){
+    keys=keys.filter(function(k){return ['year','month','quarter'].indexOf(k)<0;});
     shown=null;
-    note='연간 비교: 상단 기간은 기본 기준일 · 아래 좌우 비교 기간 우선';
+    note='연간 비교: 연·월·분기는 제외 · 아래 좌우 비교 기간 우선';
   }else if(EX_TAB==='actions'){
     note='N-Care 점검 현황은 전체 가입 병원·기준일만 반영';
   }
@@ -4444,9 +4455,14 @@ function syncExecFilterUI(){
   exSetIgnoredGroup_('exTypeGroup',leak);
   exSetIgnoredGroup_('exNozGroup',leak);
   exSetIgnoredGroup_('exSkillGroup',leak);
-  /* 상세 필터 개수 · 표시 건수 — 연·월·분기는 보고 모드에서 쓰지 않는다. */
-  var advKeys=['paid','cat','type','part','hosp','noz','skill'];
+  var year=EX_TAB==='year';
+  exSetIgnoredGroup_('exYearGroup',year);
+  exSetIgnoredGroup_('exMonthGroup',year);
+  exSetIgnoredGroup_('exQuarterGroup',year);
+  /* 상세 필터 개수 · 표시 건수 — 연·월·분기도 일반 보고 탭에서 함께 집계한다. */
+  var advKeys=['year','month','quarter','paid','cat','type','part','hosp','noz','skill'];
   if(leak) advKeys=advKeys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
+  if(year) advKeys=advKeys.filter(function(k){return ['year','month','quarter'].indexOf(k)<0;});
   var adv=exFilterCount_(advKeys);
   document.getElementById('exMoreCnt').textContent=adv?'('+adv+')':'';
   document.getElementById('exScopeNote').textContent=EX_BASIS;
