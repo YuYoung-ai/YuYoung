@@ -19,7 +19,8 @@ function grab(name){
 }
 const FNS=['normD','skNorm_','skCmpKo_','hpCleanKey_','hpIsLeakVoc_','nlDateKey_','nlYmdKey_',
   'nlDateLabel_','nozStateMap_','buildSkillData','nlLatestStates_','nlSummarizeGroup_',
-  'buildNozzleLeakAnalysis_','buildNozzleData','buildNozzleStatusMap','nzNcare_','nlIsRiskGroup_'];
+  'buildNozzleLeakAnalysis_','buildNozzleData','buildNozzleStatusMap','nzNcare_','nlIsRiskGroup_',
+  'nlHeatRate_','nlHeatLowestRate_'];
 const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')+'};')();
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
 
@@ -85,6 +86,21 @@ ck('26. 경고색을 배열 순서가 아닌 위험군 기준으로 부여',
 /* 배경만 덮으면 밝은 테두리가 어두운 셀 위에 남는다 */
 ck('27. 다크모드 히트맵은 배경과 테두리를 함께 낮춘다',
   ['hot1','hot2','hot3','hot4'].every(c=>new RegExp('body\\.dark \\.nl-heat\\.'+c+'\\{background:#[0-9A-F]{6};border-color:#[0-9A-F]{6}\\}').test(SRC)));
+const lowRate=D.nlHeatLowestRate_([
+  {hospitals:4,affected:4},{hospitals:5,affected:1},{hospitals:3,affected:0},{hospitals:0,affected:0}
+]);
+ck('27-1. 평가 병원이 있는 비교 그룹 중 최저 발생 비율을 계산',lowRate===0,'lowest='+lowRate);
+ck('27-2. 모든 비교 그룹의 비율이 같으면 최저 표시를 생략',
+  D.nlHeatLowestRate_([{hospitals:2,affected:1},{hospitals:4,affected:2}])===null);
+ck('27-3. 최저 동률은 같은 최저값으로 함께 표시 가능',
+  D.nlHeatLowestRate_([{hospitals:2,affected:0},{hospitals:3,affected:0},{hospitals:2,affected:1}])===0);
+ck('27-4. 최저 셀에 청록색 테두리·최저 꼬리표와 다크모드 색상을 제공',
+  grab('nlHeatHtml_').includes("lowest?' lowest':'")&&grab('nlHeatHtml_').includes('nl-low-mark">최저')
+  &&/\.nl-heat\.lowest\{border-color:#168574;/.test(SRC)
+  &&/body\.dark \.nl-heat\.lowest\{border-color:#58C7B2;/.test(SRC));
+ck('27-5. 교차 카드 네 칸에 같은 최저 기준을 전달',
+  (grab('renderExecutiveLeak').match(/nlHeatHtml_\([^)]*,lowestRate\)/g)||[]).length===4
+  &&grab('renderExecutiveLeak').includes('var lowestRate=nlHeatLowestRate_(cells)'));
 
 /* ── ③ 관리 대상 카드·노즐/교육 필터와 ④ 누수 분석 탭이 같은 기준을 쓰는지 ──
    예전에는 ③이 "한 번이라도 O 면 재사용"·"같은 날짜는 먼저 기록된 평가",
