@@ -79,6 +79,7 @@ ck('7-e. 표준 표기와 공백이 빠진 legacy 표기 모두 같은 사진으
 const panel=grab(DASH,'exHistoryPhotoPanel_');
 const select=grab(DASH,'exSelectHistory_');
 const loadExample=grab(DASH,'exLoadHistoryTypeExample_');
+const toggleExample=grab(DASH,'exToggleHistoryTypeExample_');
 const syncType=grab(DASH,'exSyncHistoryTypeExample_');
 const show=grab(DASH,'exShowHistory_');
 const table=grab(DASH,'exHistoryTable_');
@@ -134,22 +135,25 @@ ck('22. 사진 패널이 열려도 표 최소 높이와 모바일 전체 스크�
 ck('23. 서비스워커 버전이 정적 예시 전환 이후 최신 상태다',
   Number((fs.readFileSync(path.join(ROOT,'sw.js'),'utf8').match(/baz-cs-v(\d+)/)||[])[1]||0) >= 145);
 const render=grab(DASH,'exHistoryPhotoRender_');
-const loading=grab(DASH,'exHistoryPhotoLoading_');
 const photoError=grab(DASH,'exHistoryPhotoError_');
 ck('24. 예시가 없으면 선택 유형의 명시적인 미등록 상태를 표시한다',
   /등록된 예시자료가 없습니다/.test(render)&&/panel\.hidden=false/.test(render));
 ck('25. 사진·영상은 증상·처리 결과 순서로 공통 문서 목록을 만든다',
   /push\(data&&data\.symptom,'증상 예시'\)/.test(grab(DASH,'exTypeExampleDocs_'))&&
   /push\(data&&data\.after,'처리 결과 예시'\)/.test(grab(DASH,'exTypeExampleDocs_')));
-ck('26. 유형 선택 즉시 로딩 상태를 노출한다',/panel\.hidden=false/.test(loading)&&/확인하고 있습니다/.test(loading));
+ck('26. 예시자료 본문과 토글은 기본 접힘이며 접근성 상태를 함께 제공한다',
+  /id="hstPhotoBody" hidden/.test(panel)&&/id="hstPhotoToggle" aria-expanded="false"/.test(panel)&&/aria-controls="hstPhotoBody"/.test(panel));
 ck('27. 매니페스트 로드 실패는 빈 사진과 구분해 안내한다',
   /exHistoryPhotoError_/.test(render) && /불러오지 못했습니다/.test(photoError) && /panel\.hidden=false/.test(photoError));
-ck('28. VOC 유형 필터 선택만으로 예시자료를 자동 전환하고 전체 선택 시 닫는다',
+ck('28. VOC 유형 필터 선택은 접힌 제목만 전환하고 전체 선택 시 패널을 닫는다',
   /exLoadHistoryTypeExample_\(found\)/.test(syncType)&&/type==='all'/.test(syncType)&&
-  /exSyncHistoryTypeExample_\(opt\.type,filtered\)/.test(grab(DASH,'exApplyHistoryFilters_')));
+  /!EX_HISTORY_STATE\.typeExampleExpanded/.test(loadExample)&&/exSyncHistoryTypeExample_\(opt\.type,filtered\)/.test(grab(DASH,'exApplyHistoryFilters_')));
 ck('29. 절감 근거자료와 VOC 예시자료가 동일한 전체화면 뷰어 상태를 공유한다',
   /exOpenEvidence_\(EX_SAVING_EVIDENCE/.test(grab(DASH,'exOpenSavingEvidence_'))&&
   /exOpenEvidence_\(docs/.test(grab(DASH,'exOpenTypeExampleEvidence_')));
+ck('30. 토글을 펼칠 때만 선택 유형 자료를 로드하고 다시 누르면 접는다',
+  /expanded=!EX_HISTORY_STATE\.typeExampleExpanded/.test(toggleExample)&&
+  /if\(expanded\)\{ exLoadHistoryTypeExample_/.test(toggleExample)&&/예시자료 접기/.test(grab(DASH,'exSetHistoryPhotoExpanded_')));
 
 console.log('\n──────────────────────────────');
 console.log(`통과 ${pass}/${total}`);

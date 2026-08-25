@@ -911,6 +911,11 @@ html.hst-evidence-open{overflow:hidden}
 .hst-photo-head>div{display:flex;align-items:center;gap:7px;min-width:0}.hst-photo-head b{color:var(--navy);font-size:12px}
 .hst-photo-kicker{flex:0 0 auto;border-radius:999px;padding:3px 7px;background:#DDF3F5;color:#12607F;font-size:9.5px;font-weight:800}
 .hst-photo-status{color:var(--text-muted);text-align:right}.hst-photo-note{margin:0;padding:7px 10px 0;color:var(--text-muted);font-size:10px;line-height:1.4}
+.hst-photo-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.hst-photo-toggle{flex:0 0 auto;border:1px solid var(--teal);border-radius:7px;background:var(--surface);color:var(--teal);
+  padding:5px 9px;font:10px inherit;font-weight:800;cursor:pointer;white-space:nowrap}
+.hst-photo-toggle:hover{background:var(--teal-soft)}.hst-photo-toggle[aria-expanded="true"]{background:var(--teal);color:#fff}
+.hst-photo-toggle:focus-visible{outline:2px solid var(--navy);outline-offset:2px}.hst-photo-body[hidden]{display:none}
 .hst-photo-panel .hst-evidence-strip{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px}
 .hst-photo-emptywide{grid-column:1/-1;padding:18px;border:1px dashed var(--gray-line);border-radius:7px;color:var(--text-muted);font-size:11px;text-align:center}
 .hst-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:10px}
@@ -966,7 +971,7 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-photo-grid{grid-template-columns:1fr}.hst-photo-frame{height:min(210px,26vh)}
   #hstPhotoAfterCard{grid-column:1}
   .hst-photo-head{align-items:flex-start;flex-direction:column;gap:5px}.hst-photo-head>div{align-items:flex-start;flex-direction:column;gap:4px}
-  .hst-photo-status{text-align:left}.hst-photo-note{padding:8px 10px 0}
+  .hst-photo-actions{width:100%;justify-content:space-between}.hst-photo-status{text-align:left}.hst-photo-note{padding:8px 10px 0}
 }
 @supports(height:100dvh){
   .ex-list-box.history{height:min(900px,calc(100dvh - 32px))}
@@ -5223,9 +5228,11 @@ function exTypeExampleData_(manifest,r){
 function exHistoryPhotoPanel_(){
   return '<section class="hst-photo-panel" id="hstPhotoPanel" hidden aria-live="polite">'
     +'<div class="hst-photo-head"><div><span class="hst-photo-kicker">선택 유형 예시자료</span><b id="hstPhotoTitle">VOC 유형을 선택하세요</b></div>'
-      +'<span class="hst-photo-status" id="hstPhotoStatus"></span></div>'
-    +'<p class="hst-photo-note">실제 처리 기록이 아닌 표준 참고 예시입니다. 미리보기를 누르면 공통 전체화면 뷰어가 열리며, 영상은 사용자 조작·기본 음소거로만 재생됩니다.</p>'
-    +'<div class="hst-evidence-strip" id="hstPhotoStrip"></div></section>';
+      +'<div class="hst-photo-actions"><span class="hst-photo-status" id="hstPhotoStatus">접힘</span>'
+      +'<button type="button" class="hst-photo-toggle" id="hstPhotoToggle" aria-expanded="false" aria-controls="hstPhotoBody" onclick="exToggleHistoryTypeExample_()">예시자료 보기</button></div></div>'
+    +'<div class="hst-photo-body" id="hstPhotoBody" hidden>'
+      +'<p class="hst-photo-note">실제 처리 기록이 아닌 표준 참고 예시입니다. 미리보기를 누르면 공통 전체화면 뷰어가 열리며, 영상은 사용자 조작·기본 음소거로만 재생됩니다.</p>'
+      +'<div class="hst-evidence-strip" id="hstPhotoStrip"></div></div></section>';
 }
 function exTypeExampleDocs_(data){
   var docs=[];
@@ -5270,6 +5277,22 @@ function exHistoryPhotoError_(message){
   if(EX_HISTORY_STATE) EX_HISTORY_STATE.typeExampleDocs=[];
   if(status) status.textContent=message||'예시 자료를 불러오지 못했습니다';
 }
+function exSetHistoryPhotoExpanded_(expanded){
+  var state=EX_HISTORY_STATE, body=document.getElementById('hstPhotoBody'), btn=document.getElementById('hstPhotoToggle');
+  expanded=!!expanded;
+  if(state) state.typeExampleExpanded=expanded;
+  if(body) body.hidden=!expanded;
+  if(btn){ btn.setAttribute('aria-expanded',expanded?'true':'false'); btn.textContent=expanded?'예시자료 접기':'예시자료 보기'; }
+}
+function exToggleHistoryTypeExample_(){
+  if(!EX_HISTORY_STATE||!EX_HISTORY_STATE.selectedExampleItem) return;
+  var expanded=!EX_HISTORY_STATE.typeExampleExpanded, status=document.getElementById('hstPhotoStatus');
+  exSetHistoryPhotoExpanded_(expanded);
+  if(expanded){ exLoadHistoryTypeExample_(EX_HISTORY_STATE.selectedExampleItem); return; }
+  if(!EX_HISTORY_STATE.typeExampleReady) EX_HISTORY_PHOTO_SEQ++;
+  if(status) status.textContent=EX_HISTORY_STATE.typeExampleReady
+    ? ('표준 예시 '+EX_HISTORY_STATE.typeExampleDocs.length+'개 · 접힘'):'접힘 · 필요할 때 펼쳐보기';
+}
 function exHistoryRowKey_(e,idx,tr){
   var k=e&&(e.keyCode||e.which);
   if(k===13||k===32){ if(e.preventDefault)e.preventDefault(); exSelectHistory_(idx,tr); return false; }
@@ -5279,9 +5302,24 @@ function exLoadHistoryTypeExample_(it){
   var r=it&&it.r;
   var key=exTypeExampleKey_(r);
   if(!r || !key){ exHistoryPhotoError_('VOC 유형 정보가 없어 예시를 연결할 수 없습니다'); return; }
-  if(EX_HISTORY_STATE&&EX_HISTORY_STATE.selectedKey===key&&EX_HISTORY_STATE.typeExampleReady) return;
+  if(!EX_HISTORY_STATE) return;
+  var panel=document.getElementById('hstPhotoPanel'), title=document.getElementById('hstPhotoTitle');
+  var status=document.getElementById('hstPhotoStatus'), strip=document.getElementById('hstPhotoStrip');
+  var changed=EX_HISTORY_STATE.selectedKey!==key;
+  EX_HISTORY_STATE.selectedExampleItem=it;
+  if(panel) panel.hidden=false;
+  if(title) title.textContent=(r.type||'VOC 유형')+' · 증상과 처리 결과';
+  if(changed){
+    EX_HISTORY_PHOTO_SEQ++;EX_HISTORY_STATE.selectedKey=key;EX_HISTORY_STATE.typeExampleReady=false;EX_HISTORY_STATE.typeExampleDocs=[];
+    if(strip) strip.innerHTML='';
+  }
+  if(!EX_HISTORY_STATE.typeExampleExpanded){
+    if(status) status.textContent='접힘 · 필요할 때 펼쳐보기';
+    return;
+  }
+  if(!changed&&EX_HISTORY_STATE.typeExampleReady) return;
   var seq=++EX_HISTORY_PHOTO_SEQ;
-  EX_HISTORY_STATE.selectedKey=key; EX_HISTORY_STATE.typeExampleReady=false; EX_HISTORY_STATE.typeExampleDocs=[];
+  EX_HISTORY_STATE.typeExampleReady=false; EX_HISTORY_STATE.typeExampleDocs=[];
   exHistoryPhotoLoading_(it);
   /* 매니페스트는 페이지당 한 번만 받고, 실제 자료는 선택한 유형의 정적 파일만 연결한다. */
   exTypeExampleLoad_().then(function(manifest){
@@ -5298,6 +5336,7 @@ function exSyncHistoryTypeExample_(type,filtered){
   if(!EX_HISTORY_STATE) return;
   if(!type||type==='all'||type==='__missing__'){
     EX_HISTORY_PHOTO_SEQ++;EX_HISTORY_STATE.selectedKey='';EX_HISTORY_STATE.typeExampleReady=false;EX_HISTORY_STATE.typeExampleDocs=[];
+    EX_HISTORY_STATE.selectedExampleItem=null;exSetHistoryPhotoExpanded_(false);
     var panel=document.getElementById('hstPhotoPanel');if(panel)panel.hidden=true;
     return;
   }
@@ -5592,7 +5631,7 @@ function exShowHistory_(dim, name){
   var items=exHistoryDataset_(cur, prev||[], sort);
   EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost,
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
-    typeExampleDocs:[],typeExampleReady:false,selectedKey:''};
+    typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
   var html='<div class="hst-view">'
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · '+esc(curChip)+'</b></span>'
     +(prev?'<span class="hst-chip">'+esc(cmpLb)+' <b>'+esc(exCmpRangeText_(x.cmp))+' · '+esc(prevChip)+'</b></span>'
