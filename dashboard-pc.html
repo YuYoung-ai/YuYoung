@@ -819,7 +819,7 @@ body.dark .yc-band{opacity:.26}
 .hst-chip{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:5px 10px;
   color:var(--text-muted);font-size:10.5px;line-height:1.2}
 .hst-chip b{color:var(--navy);font-size:12px;margin-left:3px;font-variant-numeric:tabular-nums}
-.hst-controls{display:grid;grid-template-columns:125px 115px minmax(145px,1fr) 125px minmax(190px,1.25fr) auto;gap:7px;
+.hst-controls{display:grid;grid-template-columns:110px 100px minmax(130px,1fr) 110px 125px minmax(150px,1.1fr) auto;gap:7px;
   align-items:end;padding:10px 11px;background:var(--surface)}
 .hst-field{min-width:0}
 .hst-field label{display:block;margin:0 0 3px;font-size:10px;font-weight:700;color:var(--text-muted)}
@@ -828,7 +828,7 @@ body.dark .yc-band{opacity:.26}
 .hst-field input::placeholder{color:var(--text-muted)}
 .hst-reset{height:34px;border:1px solid var(--gray-line);border-radius:7px;padding:0 11px;background:var(--surface-2);
   color:var(--navy);font:11px inherit;font-weight:700;cursor:pointer;white-space:nowrap}
-.hst-breakdown{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,2.2fr);gap:7px;padding:0 11px 9px;background:var(--surface)}
+.hst-breakdown{display:grid;grid-template-columns:minmax(170px,.7fr) minmax(200px,1fr) minmax(0,2fr);gap:7px;padding:0 11px 9px;background:var(--surface)}
 .hst-break-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
 .hst-break-card strong{display:block;margin-bottom:5px;color:var(--navy);font-size:10.5px}
 .hst-break-list{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
@@ -944,6 +944,10 @@ body.dark .hst-table-wrap{scrollbar-color:#4A5A72 #141B2A}
 body.dark .hst-table-wrap::-webkit-scrollbar-track{background:#141B2A}
 body.dark .hst-table-wrap::-webkit-scrollbar-thumb{background:#4A5A72;border-color:#141B2A}
 body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
+@media(min-width:821px) and (max-width:1100px){
+  .hst-controls{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .hst-field.search{grid-column:span 2}
+}
 @media(max-width:820px){
   .ex-list-box.history{height:calc(100vh - 20px);max-height:none;padding:14px}
   .hst-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1379,6 +1383,7 @@ exApplyLevel3Tools_();
           <div class="ex-dg" id="exYearGroup"><h5>년</h5><div class="chips" id="exYear"></div></div>
           <div class="ex-dg" id="exMonthGroup"><h5>월</h5><div class="chips" id="exMonth"></div></div>
           <div class="ex-dg" id="exQuarterGroup"><h5>분기</h5><div class="chips" id="exQuarter"></div></div>
+          <div class="ex-dg span2"><h5>영업 담당자 <em class="fnote">병원정보DB 현재 담당자 · 복수 선택</em></h5><div class="chips" id="exSales"></div></div>
           <div class="ex-dg span2"><h5>대분류</h5><div class="chips" id="exCat"></div></div>
           <div class="ex-dg" id="exNozGroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="exNoz"></div></div>
           <div class="ex-dg span2" id="exSkillGroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="exSkill"></div></div>
@@ -1499,6 +1504,7 @@ exApplyLevel3Tools_();
       <div class="fgroup"><h5>N-Care</h5><div class="chips" id="fNcare"></div></div>
       <div class="fgroup"><h5>대분류</h5><div class="chips" id="fCat"></div></div>
       <div class="fgroup"><h5>담당자</h5><div class="chips" id="fFse"></div></div>
+      <div class="fgroup"><h5>영업 담당자 <em class="fnote">병원정보DB 현재 담당자</em></h5><div class="chips" id="fSales"></div></div>
       <div class="fgroup"><h5>보고 범위 <em class="fnote">데모 운영 데이터 분리 · 기본 전체</em></h5><div class="chips" id="fScope"></div></div>
       <div class="fgroup"><h5>노즐 재사용 <em class="fnote">병원 기준</em></h5><div class="chips" id="fNoz"></div></div>
       <div class="fgroup"><h5>사용자 숙련도 <em class="fnote">병원별 최신 평가 기준</em></h5><div class="chips" id="fSkill"></div></div>
@@ -1632,7 +1638,7 @@ var DASH_LOAD_IN_FLIGHT=null, DASH_LOAD_FORCE=false, DASH_DATA_REV='';  /* 전�
 var RAW=[];              // 전체 레코드
 /* noz(노즐 재사용) · skill(사용자 숙련도)은 행이 아니라 "병원 상태"로 판정하는 필터다.
    두 모드가 같은 F를 공유하므로 보고 모드에서도 상세 필터 영역에 같은 선택 상태를 보여준다. */
-var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
+var F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],sales:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
 var PAID_OPT=['유상','무상'];
 var NOZ_OPT=[['reuse','재사용'],['noreuse','미재사용'],['unknown','미확인']];
 var SKILL_OPT=[['good','평가 양호'],['need','교육 필요'],['none','미평가']];
@@ -1867,27 +1873,60 @@ function loadHospDB(force){
   if(!HOSPDB_CACHE_APPLIED){
     HOSPDB_CACHE_APPLIED=true;
     try{ var c=JSON.parse(localStorage.getItem('baz_dash_hospdb')||'null');
-      if(Array.isArray(c)) HOSPDB=c;
-      else if(c&&c.data){ HOSPDB=c.data; HOSPDB_REV=c.rev||''; }
-      if(HOSPDB.length){ enrichNcare(); ncareCheck(); exInvalidate(); } }catch(e){}
+      if(Array.isArray(c)) applyHospDB_(c);
+      else if(c&&Array.isArray(c.data)){ HOSPDB_REV=c.rev||''; applyHospDB_(c.data); }
+    }catch(e){}
   }
   if(HOSPDB_IN_FLIGHT) return HOSPDB_IN_FLIGHT;
   var params=force?{force:1,rev:HOSPDB_REV}:(HOSPDB_REV?{rev:HOSPDB_REV}:{});
   HOSPDB_IN_FLIGHT=gvRetry('hospdb',params,2,DASH_TIMEOUT_FULL).then(function(d){
     if(d) console.info('[동기화] dashboard hospdb', {ms:d._ms,rows:d._rows,bytes:d._bytes,cache:d._cache});
     if(d&&d.nochange){ if(d.rev) HOSPDB_REV=d.rev; return HOSPDB.length>0; }
-    if(!d.success||!d.data) return false;
-    HOSPDB=d.data;
+    if(!d||!d.success||!Array.isArray(d.data)) return false;
+    applyHospDB_(d.data);
     HOSPDB_REV=d.rev||HOSPDB_REV;
     try{ localStorage.setItem('baz_dash_hospdb', JSON.stringify({data:HOSPDB,rev:HOSPDB_REV})); }catch(e){}
-    enrichNcare();
-    ncareCheck();
-    exInvalidate();     /* 오늘 기준 N-Care 수치가 바뀌므로 보고 모드도 다시 그린다 */
     return true;
   }).catch(function(){ return false; });
   HOSPDB_IN_FLIGHT=HOSPDB_IN_FLIGHT.then(function(v){ HOSPDB_IN_FLIGHT=null; return v; },
     function(){ HOSPDB_IN_FLIGHT=null; return false; });
   return HOSPDB_IN_FLIGHT;
+}
+/* 이미 받아오는 경량 hospdb의 sale 필드를 재사용한다. 추가 GAS 요청이나 이력 저장은 하지 않는다.
+   담당자만 바뀐 경우에도 필터/집계/열린 처리이력을 갱신한다(N-Care 변경 여부와 독립적). */
+function applyHospDB_(rows){
+  HOSPDB=rows;
+  enrichNcare(true);
+  if(DATA_READY){ buildFilters(); apply(); exRefreshHistoryForHospitalDB_(); }
+}
+/* 병원명 공백·대소문자만 정규화해 정확히 연결한다. 부분 일치로 다른 지점을 추정하지 않는다.
+   동일 병원명에 서로 다른 담당자가 있으면 임의 선택하지 않고 미지정으로 남긴다.
+   DB 배열이 교체될 때만 인덱스를 재구성하므로 각 처리행의 조회는 O(1)이다. */
+function hospitalSales_(name){
+  if(hospitalSales_.source!==HOSPDB){
+    var map=Object.create(null);
+    HOSPDB.forEach(function(h){
+      var k=nkey(h.n||h.name); if(!k) return;
+      var v=String(h.sale!=null?h.sale:(h.sales!=null?h.sales:(h.sa||''))).trim();
+      if(v==='없음'||v==='-') v='';
+      if(Object.prototype.hasOwnProperty.call(map,k)&&map[k]!==v) map[k]='';
+      else if(!Object.prototype.hasOwnProperty.call(map,k)) map[k]=v;
+    });
+    hospitalSales_.source=HOSPDB; hospitalSales_.map=map;
+  }
+  return hospitalSales_.map[nkey(name)]||'';
+}
+function salesFilterChips_(id){
+  var selected=F.sales||[], seen=Object.create(null);
+  HOSPDB.forEach(function(h){var v=hospitalSales_(h.n||h.name);if(v)seen[v]=true;});
+  selected.forEach(function(v){if(v!=='__missing__')seen[v]=true;});
+  var values=Object.keys(seen).sort(skCmpKo_).concat(['__missing__']);
+  document.getElementById(id).innerHTML='<button type="button" class="chip'+(!selected.length?' on':'')+'" data-k="sales" data-v="__all">전체</button>'
+    +values.map(function(v){
+      var on=selected.indexOf(v)>=0;
+      return '<button type="button" class="chip'+(on?' on':'')+'" data-k="sales" data-v="'+escAttr(v)+'" aria-pressed="'+on+'">'
+        +esc(v==='__missing__'?'미지정':v)+'</button>';
+    }).join('');
 }
 /* handover 기록의 N-Care가 비어(미가입) 있으면 같은 스프레드시트의
    병원정보DB 탭(action=hospdb) 값을 병원명 매칭으로 채워 넣는다 */
@@ -1975,7 +2014,9 @@ function buildNcareStatus(){
   if(!Object.keys(subs).length){
     Object.keys(seenNc).forEach(function(k){ subs[k]={name:seenNc[k].name, ncare:seenNc[k].ncare}; });
   }
-  var list=Object.keys(subs).map(function(k){
+  var list=Object.keys(subs).filter(function(k){
+    return !F.sales||!F.sales.length||F.sales.indexOf(hospitalSales_(subs[k].name)||'__missing__')>=0;
+  }).map(function(k){
     var vz=visit[k];
     if(!vz) return {hosp:subs[k].name, ncare:subs[k].ncare, days:null, last:null, si:4};
     var days=Math.floor((today-vz.last)/86400000);
@@ -2052,6 +2093,7 @@ function buildFilters(){
   chipGroup('fNcare','ncare', uniq('ncare'));
   chipGroup('fCat','cat', uniq('cat'));
   chipGroup('fFse','fse', uniq('fse'));
+  salesFilterChips_('fSales');
   stateChips('fScope','scope', SCOPE_OPT);
   stateChips('fNoz','noz', NOZ_OPT);
   stateChips('fSkill','skill', SKILL_OPT);
@@ -2062,6 +2104,7 @@ function buildFilters(){
   chipGroup('exMonth','month', months, function(v){return v+'월';});
   chipGroup('exQuarter','quarter', ['1','2','3','4'], function(v){return v+'분기';});
   chipGroup('exPaid','paid', PAID_OPT);
+  salesFilterChips_('exSales');
   chipGroup('exCat','cat', uniq('cat'));
   stateChips('exNoz','noz', NOZ_OPT);
   stateChips('exSkill','skill', SKILL_OPT);
@@ -2175,7 +2218,7 @@ function toggleF(k,v){
 }
 function setHospQ(v){} /* (구버전 호환용 빈 함수) */
 function resetFilters(){
-  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
+  F={year:[],month:[],quarter:[],gubun:[],paid:[],ncare:[],cat:[],fse:[],sales:[],type:[],part:[],hosp:[],noz:[],skill:[],scope:[],hospQ:'',from:'',to:''};
   EX_CUSTOM=false;
   ['cbHosp','cbType','exCbHosp','exCbType','exCbPart','fFrom','fTo','exFrom','exTo'].forEach(function(id){
     var el=document.getElementById(id); if(el) el.value='';
@@ -2183,7 +2226,7 @@ function resetFilters(){
   buildFilters(); apply();
 }
 function activeCnt(){
-  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill','scope'].forEach(function(k){n+=F[k].length;});
+  var n=0; ['year','month','quarter','gubun','paid','ncare','cat','fse','sales','type','part','hosp','noz','skill','scope'].forEach(function(k){n+=(F[k]||[]).length;});
   if(F.hospQ)n++;
   if(F.from||F.to)n++;
   return n;
@@ -2228,6 +2271,7 @@ function filteredRows_(opt){
     if(F.ncare.length  && F.ncare.indexOf(r.ncare)<0) return false;
     if(F.cat.length    && F.cat.indexOf(r.cat)<0) return false;
     if(F.fse.length    && F.fse.indexOf(r.fse)<0) return false;
+    if(F.sales&&F.sales.length && F.sales.indexOf(hospitalSales_(r.hosp)||'__missing__')<0) return false;
     if(!ignoreType && F.type.length && F.type.indexOf(r.type)<0) return false;
     if(F.part.length   && F.part.indexOf(r.part)<0) return false;
     if(F.hosp.length   && F.hosp.indexOf(r.hosp)<0) return false;
@@ -2606,6 +2650,7 @@ function hpCleanFilterText_(){
   if(F.from||F.to) a.push('세척 기간 '+(F.from||'전체')+'~'+(F.to||'전체'));
   if(F.hosp.length) a.push('병원 '+F.hosp.join(', '));
   if(F.fse.length) a.push('담당자 '+F.fse.join(', '));
+  if(F.sales&&F.sales.length) a.push('영업 담당자 '+F.sales.map(function(v){return v==='__missing__'?'미지정':v;}).join(', '));
   if(F.ncare.length) a.push('N-Care '+F.ncare.join(', '));
   if(F.gubun.length) a.push('구분 '+F.gubun.join(', '));
   if(HP_CLEAN_STATE.status!=='all') a.push('상태 '+HP_CLEAN_STATE.status);
@@ -4408,7 +4453,7 @@ function exFilterCount_(keys){
 }
 /* 탭마다 집계 목적상 제외하는 필터를 활성 수·표시 건수에도 똑같이 반영한다. */
 function exTabFilterState_(){
-  var fixed=['year','month','quarter','gubun','paid','ncare','cat','fse','type','part','hosp','noz','skill'];
+  var fixed=['year','month','quarter','gubun','paid','ncare','cat','fse','sales','type','part','hosp','noz','skill'];
   var keys=fixed.slice(), shown=EX_ROWS.length, note='';
   if(EX_TAB==='leak'){
     keys=keys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
@@ -4419,7 +4464,7 @@ function exTabFilterState_(){
     shown=null;
     note='연간 비교: 연·월·분기는 제외 · 아래 좌우 비교 기간 우선';
   }else if(EX_TAB==='actions'){
-    note='N-Care 점검 현황은 전체 가입 병원·기준일만 반영';
+    note='N-Care 점검 현황은 가입 병원·기준일·영업 담당자만 반영';
   }
   var active=exFilterCount_(keys);
   if(EX_TAB!=='year'&&(F.from||F.to)) active++;
@@ -4460,7 +4505,7 @@ function syncExecFilterUI(){
   exSetIgnoredGroup_('exMonthGroup',year);
   exSetIgnoredGroup_('exQuarterGroup',year);
   /* 상세 필터 개수 · 표시 건수 — 연·월·분기도 일반 보고 탭에서 함께 집계한다. */
-  var advKeys=['year','month','quarter','paid','cat','type','part','hosp','noz','skill'];
+  var advKeys=['year','month','quarter','paid','cat','sales','type','part','hosp','noz','skill'];
   if(leak) advKeys=advKeys.filter(function(k){return ['type','noz','skill'].indexOf(k)<0;});
   if(year) advKeys=advKeys.filter(function(k){return ['year','month','quarter'].indexOf(k)<0;});
   var adv=exFilterCount_(advKeys);
@@ -5079,19 +5124,23 @@ function exHistoryVal_(v){
   v=String(v==null?'':v).trim();
   return (!v||v==='없음')?'':v;
 }
+function exHistoryField_(r,key){
+  r=r||{};
+  return key==='sales'?hospitalSales_(r.hosp):exHistoryVal_(r[key]);
+}
 function exHistoryUnique_(items, key){
-  var seen={}, a=[];
+  var seen=Object.create(null), a=[];
   (items||[]).forEach(function(it){
-    var v=exHistoryVal_(it.r&&it.r[key]);
+    var v=exHistoryField_(it.r,key);
     if(v&&!seen[v]){ seen[v]=1; a.push(v); }
   });
   return a.sort(skCmpKo_);
 }
-/* 필터 결과의 구분·VOC 유형 분포. 빈 값도 '미입력'으로 남겨 각 묶음의 합이 표시 건수와 같게 한다. */
+/* 처리 건수 분포(병원 수 아님). 영업 담당자는 현재 병원DB 기준이며 빈 값도 건수에 포함한다. */
 function exHistoryCounts_(items,key){
-  var m={};
+  var m=Object.create(null);
   (items||[]).forEach(function(it){
-    var v=exHistoryVal_(it.r&&it.r[key])||'미입력';
+    var v=exHistoryField_(it.r,key)||(key==='sales'?'미지정':'미입력');
     m[v]=(m[v]||0)+1;
   });
   return Object.keys(m).map(function(k){return {k:k,n:m[k]};})
@@ -5103,15 +5152,15 @@ function exHistoryBreakdownHtml_(items,opt){
      자기 그룹 조건은 제외해 같은 그룹의 다른 항목이 사라지지 않는 faceted filter 방식이다. */
   function facetRows(key){
     var scoped={period:opt.period||'all',gubun:key==='gubun'?'all':(opt.gubun||'all'),
-      type:key==='type'?'all':(opt.type||'all'),fse:opt.fse||'all',q:opt.q||''};
-    var counts={}, base=exHistoryCounts_(items,key);
+      type:key==='type'?'all':(opt.type||'all'),sales:key==='sales'?'all':(opt.sales||'all'),fse:opt.fse||'all',q:opt.q||''};
+    var counts=Object.create(null), base=exHistoryCounts_(items,key);
     exHistoryCounts_(exHistoryFilter_(items,scoped),key).forEach(function(x){counts[x.k]=x.n;});
     return base.map(function(x){return {k:x.k,n:counts[x.k]||0};});
   }
   function card(title,rows,key){
     return '<div class="hst-break-card"><strong>'+esc(title)+'</strong><div class="hst-break-list">'
       +(rows.length?rows.map(function(x){
-        var value=x.k==='미입력'?'__missing__':x.k;
+        var value=x.k===(key==='sales'?'미지정':'미입력')?'__missing__':x.k;
         var selected=opt[key]===value;
         return '<button type="button" class="hst-count-chip'+(selected?' is-active':'')+(x.n===0?' is-zero':'')+'"'
           +' data-hst-count-key="'+key+'" data-hst-count-value="'+escAttr(value)+'" aria-pressed="'+(selected?'true':'false')+'"'
@@ -5122,6 +5171,7 @@ function exHistoryBreakdownHtml_(items,opt){
       +'</div></div>';
   }
   return card('구분 건수',facetRows('gubun'),'gubun')
+    +card('영업 담당자별 건수',facetRows('sales'),'sales')
     +card('VOC 유형별 건수',facetRows('type'),'type');
 }
 /* 팝업 내부 필터만 적용한다. 대시보드 전역 필터 F 와 카드 집계에는 영향을 주지 않는다. */
@@ -5135,6 +5185,10 @@ function exHistoryFilter_(items, opt){
     if(opt.gubun&&opt.gubun!=='all'&&(opt.gubun==='__missing__'?!!gv:gv!==opt.gubun)) return false;
     if(opt.type&&opt.type!=='all'&&(opt.type==='__missing__'?!!tv:tv!==opt.type)) return false;
     if(opt.fse&&opt.fse!=='all'&&exHistoryVal_(r.fse)!==opt.fse) return false;
+    if(opt.sales&&opt.sales!=='all'){
+      var sales=hospitalSales_(r.hosp);
+      if(opt.sales==='__missing__'?!!sales:sales!==opt.sales) return false;
+    }
     if(!q) return true;
     var d=rowDate(r);
     return [d?ymd(d):'',r.hosp,r.gubun,r.fse,r.type,r.part,r.detail]
@@ -5536,9 +5590,10 @@ function exHistoryResultHtml_(filtered,all){
   return html;
 }
 function exHistoryControls_(items, hasPrev){
-  var gubuns=exHistoryUnique_(items,'gubun'), types=exHistoryUnique_(items,'type'), fses=exHistoryUnique_(items,'fse');
+  var gubuns=exHistoryUnique_(items,'gubun'), types=exHistoryUnique_(items,'type'), fses=exHistoryUnique_(items,'fse'), sales=exHistoryUnique_(items,'sales');
   var missingGubun=(items||[]).some(function(it){return !exHistoryVal_(it.r&&it.r.gubun);});
   var missingType=(items||[]).some(function(it){return !exHistoryVal_(it.r&&it.r.type);});
+  var missingSales=(items||[]).some(function(it){return !exHistoryField_(it.r,'sales');});
   return '<div class="hst-controls">'
     +'<div class="hst-field"><label for="hstPeriod">기간</label><select id="hstPeriod" onchange="exApplyHistoryFilters_()">'
       +exHistoryOption_('cur','선택 기간',true)
@@ -5552,6 +5607,9 @@ function exHistoryControls_(items, hasPrev){
       +(missingType?exHistoryOption_('__missing__','미입력'):'')+'</select></div>'
     +'<div class="hst-field"><label for="hstFse">담당자</label><select id="hstFse" onchange="exApplyHistoryFilters_()">'
       +exHistoryOption_('all','전체 담당자')+fses.map(function(v){return exHistoryOption_(v,v);}).join('')+'</select></div>'
+    +'<div class="hst-field"><label for="hstSales" title="병원정보DB의 현재 담당자 기준">영업 담당자</label><select id="hstSales" onchange="exApplyHistoryFilters_()">'
+      +exHistoryOption_('all','전체 영업 담당자')+sales.map(function(v){return exHistoryOption_(v,v);}).join('')
+      +(missingSales?exHistoryOption_('__missing__','미지정'):'')+'</select></div>'
     +'<div class="hst-field search"><label for="hstQuery">검색</label>'
       +'<input id="hstQuery" type="search" placeholder="병원명·VOC 유형·교체품·처리 내용" oninput="exApplyHistoryFilters_()"></div>'
     +'<button type="button" class="hst-reset" onclick="exResetHistoryFilters_()">필터 초기화</button>'
@@ -5562,7 +5620,7 @@ function exApplyHistoryFilters_(){
   function val(id, fallback){ var el=document.getElementById(id); return el?el.value:fallback; }
   var opt={
     period:val('hstPeriod','cur'), gubun:val('hstGubun','all'), type:val('hstType','all'),
-    fse:val('hstFse','all'), q:val('hstQuery','')
+    fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery','')
   };
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   EX_HISTORY_STATE.filtered=filtered;
@@ -5577,7 +5635,7 @@ function exApplyHistoryFilters_(){
 function exApplyHistoryCountChip_(btn){
   if(!btn||!btn.getAttribute) return;
   var key=btn.getAttribute('data-hst-count-key');
-  var id=key==='gubun'?'hstGubun':(key==='type'?'hstType':'');
+  var id=key==='gubun'?'hstGubun':(key==='type'?'hstType':(key==='sales'?'hstSales':''));
   var value=btn.getAttribute('data-hst-count-value'), select=id&&document.getElementById(id);
   if(!select||value==null) return;
   var selected=select.value===value;
@@ -5589,8 +5647,26 @@ function exApplyHistoryCountChip_(btn){
 }
 function exResetHistoryFilters_(){
   var period=document.getElementById('hstPeriod'); if(period) period.value='cur';
-  ['hstGubun','hstType','hstFse'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='all';});
+  ['hstGubun','hstType','hstFse','hstSales'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='all';});
   var q=document.getElementById('hstQuery'); if(q)q.value='';
+  exApplyHistoryFilters_();
+}
+/* 늦게 도착한 DB나 담당자 변경을 열린 팝업에도 반영하되 사용자가 고른 조건은 유지한다. */
+function exRefreshHistoryForHospitalDB_(){
+  var state=EX_HISTORY_STATE; if(!state) return;
+  var saved=[];
+  ['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'].forEach(function(id){
+    var el=document.getElementById(id); if(!el) return;
+    saved.push({id:id,value:el.value,label:el.selectedOptions&&el.selectedOptions[0]?el.selectedOptions[0].textContent:el.value});
+  });
+  exShowHistory_(state.dim,state.name);
+  saved.forEach(function(s){
+    var el=document.getElementById(s.id); if(!el) return;
+    el.value=s.value;
+    if(el.tagName==='SELECT'&&el.value!==s.value){
+      var opt=document.createElement('option');opt.value=s.value;opt.textContent=s.label;el.appendChild(opt);el.value=s.value;
+    }
+  });
   exApplyHistoryFilters_();
 }
 /* dim: 'kpiTotal'|'kpiAs'|'kpiInsp'|'kpiHosp'|'kpiSaving'(주간 KPI) |
@@ -6031,7 +6107,7 @@ function renderExecutiveActions(x){
   /* ── N-CARE 점검 현황 (전체 가입 병원 기준 · 선택 기간 끝 시점) ── */
   var S=x.ncare, ST=NCK_ST;
   document.getElementById('exNckCard').innerHTML=
-    exH3('N-CARE 점검 현황', (S.list.length?'가입 '+S.list.length+'곳 · ':'')+'전체 가입 병원 기준 · '+ncareAsOfLabel_(), true)
+    exH3('N-CARE 점검 현황', (S.list.length?'가입 '+S.list.length+'곳 · ':'')+'가입 병원 기준 · 영업 담당자 필터 반영 · '+ncareAsOfLabel_(), true)
     +'<div class="ex-cbody">'
     +(S.list.length
       ? '<div class="ex-rate"><b>✅ 점검 운영률 '+S.rate+'%</b>'
@@ -6158,7 +6234,7 @@ function renderExecutiveActions(x){
 function exShowNck(){
   var S=buildNcareStatus(), ST=NCK_ST;
   openExList('잔여 점검 병원 전체 명단',
-    '전체 가입 병원 중 점검이 남아있는 병원 · '+ncareAsOfLabel_()+' · 경과일은 이 기준일까지 계산 · '
+    '가입 병원 중 점검이 남아있는 병원 · 영업 담당자 필터 반영 · '+ncareAsOfLabel_()+' · 경과일은 이 기준일까지 계산 · '
       +'가입 명단은 현재 병원정보DB 기준(과거 가입 이력은 데이터에 없음) · '
       +'점검 기록 없음 → 우선 점검 → 점검 필요 → 점검 예정 → 경과일이 긴 순',
     exListGroup('잔여 점검 병원', S.need, function(r){
