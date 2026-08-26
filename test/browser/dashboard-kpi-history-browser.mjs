@@ -230,7 +230,7 @@ ck('15-e. 공통 유형 필터에서도 공백 변형 기록을 누락하지 않
 await page.evaluate(()=>{F.type=[];apply();});
 await page.click('[data-tab="leak"]');
 await page.waitForSelector('#exPaneLeak.on');
-ck('15-f. 누수 분석 카드 역시 같은 기간 3건 표시',(await page.textContent('#exLeakKpis')).includes('노즐 누수(약액 유입)3건'));
+ck('15-f. 누수 분석 카드 역시 같은 기간 3건 표시',(await page.textContent('#exLeakKpis [data-hist-dim="leak:total"] b'))==='3건');
 ck('16. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 
 await browser.close();

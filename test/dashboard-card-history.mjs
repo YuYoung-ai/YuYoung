@@ -386,7 +386,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('38. 이미 만들어 둔 집계(EX_CACHE)를 재사용한다',
     /var x=EX_CACHE\|\|exBuild\(EX_ROWS\)/.test(SRC));
   ck('39. 리스너는 카드 컨테이너에 한 번만 위임 등록된다',
-    /\['exKpis','exVocUpCard','exTypeCard','exPartCard'\]\.forEach/.test(SRC) &&
+    /\['exKpis','exVocUpCard','exTypeCard','exPartCard','exLeakKpis'\]\.forEach/.test(SRC) &&
     /el\.addEventListener\('click',[\s\S]*?closest\('\[data-hist-dim\]'\)/.test(SRC));
   ck('40. 유형·교체품명을 inline onclick 문자열에 넣지 않는다',
     !/onclick="exShowHistory_/.test(SRC));

@@ -20,26 +20,23 @@ function grab(name){
 const FNS=['normD','skNorm_','skCmpKo_','hpCleanKey_','hpIsLeakVoc_','nlDateKey_','nlYmdKey_',
   'nlDateLabel_','nozStateMap_','buildSkillData','nlLatestStates_','nlSummarizeGroup_',
   'buildNozzleLeakAnalysis_','buildNozzleData','buildNozzleStatusMap','nzNcare_','nlIsRiskGroup_',
-  'nlHeatRate_','nlHeatLowestRate_'];
-const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')+'};')();
-const basisUI=new Function(['esc','exNum','nlKpiHtml_','exShowLeakBasis_'].map(grab).join('\n')
-  +'\nvar lastModal; function openExList(title,sub,html){lastModal={title,sub,html};}'
-  +'\nfunction exPeriodLabel(){return "2026.08.10~08.14";}'
-  +'\nreturn {card:nlKpiHtml_,open:function(){exShowLeakBasis_();return lastModal;}};')();
-const totalCard=basisUI.card('노즐 누수(약액 유입)',5,false,true),basis=basisUI.open();
-ck('집계 기준: 전체 누수 카드에 짧은 안내와 키보드 접근 가능한 버튼 제공',
-  totalCard.includes('<b>5<u>건</u></b>')&&totalCard.includes('처리기록 합계 · 띄어쓰기 통합')
-  &&totalCard.includes('type="button"')&&totalCard.includes('aria-label="노즐 누수 건수 집계 기준 보기"'));
-ck('집계 기준: 다른 그룹 KPI에는 전체 합계 설명을 중복 표시하지 않음',
-  !basisUI.card('재사용',2,false).includes('nl-kpi-basis')
-  &&grab('renderExecutiveLeak').includes("nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false,true)"));
-ck('집계 기준: 현재 선택 기간을 기존 공통 안내창에 표시',basis.sub==='선택 기간: 2026.08.10~08.14'&&basis.title.includes('집계 기준'));
-ck('집계 기준: 기록 단위·표기 통합·미평가 포함·기간 밖 제외 설명',
-  ['처리기록 1행 = 1건','재방문·복수 기록','괄호 없는','미평가 기록도 전체 건수에 포함','기간 밖 기록은 건수에 미포함'].every(t=>basis.html.includes(t)));
-ck('집계 기준: 적용 필터와 원인 분석과의 차이를 명시',
-  ['유/무상','영업 담당자','VOC 유형·노즐 재사용·교육 상태 필터는 적용하지 않습니다','원인 분석 탭과는 건수가 다를 수 있습니다'].every(t=>basis.html.includes(t)));
-ck('집계 기준: 안내를 여는 동작에는 추가 조회나 재집계 없음',
-  !/fetch\(|loadData\(|buildNozzleLeakCurrent_\(/.test(grab('exShowLeakBasis_')));
+  'nlHeatRate_','nlHeatLowestRate_','esc','escAttr','exNum','nlKpiDefs_','nlKpiData_','nlKpiHtml_'];
+const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')
+  +',addKpi:function(def){var base=nlKpiDefs_;nlKpiDefs_=function(){return base().concat([def]);};}};')();
+ck('포함 안내: 별도 집계 기준 버튼과 설명 함수는 제거',!SRC.includes('exShowLeakBasis_')&&!SRC.includes('nl-kpi-basis'));
+ck('포함 안내: 전체와 교차분석의 미평가 포함 여부를 구분',
+  grab('nlKpiDefs_').includes('A/S·점검 포함 · 미평가 포함')&&grab('nlKpiDefs_').includes('구분 필터 선택 시 해당 구분만 집계')
+  &&grab('renderExecutiveLeak').includes('두 평가가 모두 있는 병원만 분석 · 미평가 제외'));
+ck('분모 안내: 교차분석 툴팁·관찰 문장은 전체 발생이 아닌 분석 대상 기준',
+  grab('nlHeatHtml_').includes('교차분석 대상')&&grab('renderExecutiveLeak').includes("bestText='교차분석 대상 '")
+  &&grab('nlHeatHtml_').includes('건 / 분석 대상 ')
+  &&!grab('renderExecutiveLeak').includes('전체 누수 중 비중'));
+ck('확장: 카드 정의 목록이 렌더링과 이력 조회의 공통 진입점',
+  grab('renderExecutiveLeak').includes('nlKpiDefs_().map')&&grab('exShowHistory_').includes('nlKpiData_(EX_LEAK_STATE||buildNozzleLeakCurrent_(),dim.slice(5))'));
+ck('가독성: 제목 13px·수치 28px 고정, 카드 수 증가 시 줄바꿈·세로 스크롤',
+  /\.nl-kpi \.nl-label\{[^}]*font-size:13px/.test(SRC)&&/\.nl-kpi b\{[^}]*font-size:28px/.test(SRC)
+  &&/\.nl-kpis\{[^}]*repeat\(auto-fit,minmax\(220px,1fr\)\)/.test(SRC)
+  &&/#exPaneLeak\{[^}]*minmax\(260px,[^}]*overflow-y:auto/.test(SRC));
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
 
 const cohort=rows([
@@ -64,6 +61,27 @@ const history=rows([
   {date:'2026-09-01',hosp:'F병원',nozzleReuse:'O',nsFill:'X'}
 ]).concat(cohort);
 const A=D.buildNozzleLeakAnalysis_(cohort,history,20260831);
+const metrics=D.nlKpiDefs_().map(def=>D.nlKpiData_(A,def.key));
+ck('이력: 5개 카드의 행 수가 기존 합계 및 그룹 집계와 일치',
+  metrics.map(m=>m.value).join(',')===[A.leaks,A.nozzle.reuse.leaks,A.nozzle.single.leaks,A.skill.good.leaks,A.skill.need.leaks].join(','));
+ck('이력: 원본 행을 유지해 같은 병원 복수 누수 기록을 각각 표시',
+  D.nlKpiData_(A,'reuse').rows.length===2&&D.nlKpiData_(A,'reuse').rows[0]===cohort[1]);
+ck('이력: 평가 기록·다른 VOC는 제외하고 선택 기간의 누수만 조회',
+  metrics.every(m=>m.rows.every(r=>cohort.includes(r)&&D.hpIsLeakVoc_(r))));
+ck('이력: 전체에는 미평가 포함, 평가 그룹에는 임의 편입하지 않음',
+  D.nlKpiData_(A,'total').rows.some(r=>r.hosp==='D병원')&&metrics.slice(1).every(m=>!m.rows.some(r=>r.hosp==='D병원')));
+ck('이력: 모든 카드가 표준 data-hist-dim 이벤트·네이티브 버튼을 사용',
+  metrics.every(m=>{const html=D.nlKpiHtml_(m);return html.startsWith('<button type="button"')&&html.includes('data-hist-dim="leak:'+m.key+'"')&&!html.includes('onclick=');}));
+ck('표기: 공백 통합 집계는 유지하되 안내에서 띄어쓰기 설명은 제외',
+  metrics[0].value===5&&!D.nlKpiHtml_(metrics[0]).includes('띄어쓰기'));
+ck('이력: 알 수 없는 카드 키는 전체 이력으로 확대하지 않고 차단',D.nlKpiData_(A,'not-a-card')===null);
+const empty=D.buildNozzleLeakAnalysis_([],[],20260831);
+ck('이력: 0건 카드도 동일한 필터 조회 버튼과 빈 목록 제공',
+  D.nlKpiData_(empty,'total').value===0&&D.nlKpiData_(empty,'reuse').rows.length===0&&!D.nlKpiHtml_(D.nlKpiData_(empty,'need')).includes('disabled'));
+D.addKpi({key:'unrated',label:'사용방식 미평가',group:['nozzle','unknown']});
+const extra=D.nlKpiData_(A,'unrated');
+ck('확장: 정의만 추가한 새 카드도 같은 행·건수·이력 버튼 생성',
+  extra.value===A.nozzle.unknown.leaks&&extra.rows[0]===cohort[4]&&D.nlKpiHtml_(extra).includes('data-hist-dim="leak:unrated"'));
 
 ck('1. 노즐 누수(약액 유입) 표기 공백 차이를 같은 VOC로 집계',A.leaks===5,'leaks='+A.leaks);
 ck('1-1. 대상 VOC 판정을 내부 세척 분석과 같은 함수로 공유',

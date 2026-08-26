@@ -381,7 +381,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 #exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
 #exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
-#exPaneLeak{grid-template-rows:auto minmax(0,.9fr) minmax(0,1.1fr)}
+/* 카드/행이 늘면 글자를 축소하지 않고 패널의 최소 높이와 세로 스크롤을 유지한다. */
+#exPaneLeak{grid-template-rows:auto minmax(260px,.9fr) minmax(320px,1.1fr);overflow-y:auto;overflow-x:hidden;align-content:start}
 #exPaneYear{grid-template-rows:auto minmax(0,1fr) minmax(0,1fr)}
 .ex-r2{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:8px;min-height:0}
 .ex-col{display:flex;flex-direction:column;gap:8px;min-height:0}
@@ -1005,21 +1006,18 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
 .ex-ctable .ex-mg{color:#9A5A0F}
 
 /* 노즐 누수 연관 분석 — 사용방식·교육 상태의 발생 차이를 한 탭에서 비교한다 */
-.nl-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}
-.nl-kpi{min-width:0;background:var(--surface);border:1px solid var(--gray-line);border-radius:10px;padding:8px 10px}
-.nl-kpi span{display:block;color:var(--text-muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nl-kpi b{display:block;margin-top:2px;color:var(--navy);font-size:20px;line-height:1.15;font-variant-numeric:tabular-nums}
-.nl-kpi b u{margin-left:2px;text-decoration:none;font-size:10px;color:var(--text-muted)}
+.nl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:7px;align-content:start}
+.nl-kpi{min-width:0;background:var(--surface);border:1px solid var(--gray-line);border-radius:10px;padding:10px 12px;font:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column}
+.nl-kpi:hover{border-color:var(--teal);background:var(--teal-soft)}
+.nl-kpi:focus-visible{outline:2px solid var(--navy);outline-offset:-3px}
+.nl-kpi .nl-label{display:flex;justify-content:space-between;gap:6px;color:var(--text-muted);font-size:13px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
+.nl-kpi .nl-open{flex:none;color:var(--teal);font-size:12px}
+.nl-kpi b{display:block;margin-top:4px;color:var(--navy);font-size:28px;line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.nl-kpi b u{margin-left:3px;text-decoration:none;font-size:12px;color:var(--text-muted)}
 .nl-kpi.warn b{color:var(--red)}
-.nl-kpi-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:7px}
-.nl-kpi-meta small{font-size:10px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
-.nl-kpi-basis{border:1px solid var(--gray-line);border-radius:5px;padding:2px 6px;background:var(--surface-2);color:var(--bar);font:inherit;font-size:10px;white-space:nowrap;cursor:pointer}
-.nl-kpi-basis:hover{background:var(--teal-soft)}
-.nl-kpi-basis:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
-.nl-basis-list{margin:0;font-size:12px;line-height:1.7;color:var(--text);overflow-wrap:anywhere}
-.nl-basis-list dt{margin-top:12px;color:var(--navy);font-weight:700}
-.nl-basis-list dt:first-child{margin-top:0}
-.nl-basis-list dd{margin:3px 0 0}
+.nl-kpi-meta{display:block;margin-top:7px;font-size:11.5px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
+.nl-kpi-meta small{display:block;margin-top:2px;font-size:11.5px}
+.nl-analysis-scope{font-size:12px;line-height:1.5;color:var(--text-muted);margin-bottom:7px}
 .nl-grid,.nl-bottom{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
 .nl-bar-list{display:flex;flex-direction:column;gap:8px}
 .nl-bar-row{display:grid;grid-template-columns:74px minmax(0,1fr) 132px;align-items:center;gap:8px;width:100%;
@@ -3268,7 +3266,7 @@ function buildNozzleLeakAnalysis_(cohortRows, historyRows, asOfKey){
         perHospital:list.length?Math.round(leaks/list.length*100)/100:0,details:list};
     });
   });
-  return {asOfKey:asOfKey,hospitals:details.length,leaks:cohortRows.filter(hpIsLeakVoc_).length,
+  return {asOfKey:asOfKey,rows:cohortRows,hospitals:details.length,leaks:cohortRows.filter(hpIsLeakVoc_).length,
     details:details,nozzle:nozzle,skill:skill,matrix:matrix};
 }
 function buildNozzleLeakCurrent_(){
@@ -5712,13 +5710,24 @@ function exRefreshHistoryForHospitalDB_(){
    'type'은 이전 화면 호환용 A/S 전용 값으로만 남긴다. */
 function exShowHistory_(dim, name){
   var isCost=(dim==='cost');                 /* 교체비용 합계 KPI — 이름 없이 비용 기록 전체를 본다 */
+  var isLeak=String(dim||'').indexOf('leak:')===0;
   var isKpi=['kpiTotal','kpiAs','kpiInsp','kpiHosp','kpiSaving'].indexOf(dim)>=0;
-  if(!isCost && !isKpi && !name) return;
+  if(!isCost && !isKpi && !isLeak && !name) return;
   var x=EX_CACHE||exBuild(EX_ROWS);          /* 이미 만들어 둔 집계 — 재조회 없음 */
   var onlyAS=(dim==='type');
   var per=exPeriodLabel(), cmpLb=x.cmp?x.cmp.label:'이전 기간';
   var title, sort, cur, prev, sub, curChip, prevChip, orderText;
-  if(isCost){
+  if(isLeak){
+    /* EX_ROWS는 노즐/교육/유형 필터가 적용돼 이 탭과 다를 수 있다. 카드와 같은 캐시를 사용한다. */
+    var metric=nlKpiData_(EX_LEAK_STATE||buildNozzleLeakCurrent_(),dim.slice(5));
+    if(!metric) return;
+    title=metric.label; sort=exHistorySort_; cur=metric.rows; prev=null;
+    curChip=exNum(cur.length)+'건'; prevChip='';
+    sub='노즐 누수(약액 유입) 처리 이력 · 선택 기간 '+per+' '+curChip
+      +' · '+(metric.group?'병원별 마지막 유효 평가 기준':'미평가 포함')
+      +' · 상단 VOC 유형·노즐·교육 상태 필터 제외';
+    orderText='처리일 최신순 · 행 선택 시 유형별 참고 예시';
+  }else if(isCost){
     title='교체비용 합계'; sort=exHistoryCostSort_;
     cur=exHistoryCostRows_(x.rows);
     prev=x.prev ? exHistoryCostRows_(x.prev) : null;
@@ -5773,7 +5782,7 @@ function exShowHistory_(dim, name){
 /* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
    유형·교체품명은 data-* 로만 전달하고 inline onclick 문자열에 넣지 않는다.
    data-hist-k 는 이름이 필요한 조회에만 붙는다(교체비용 KPI는 이름 없이 dim 만 쓴다). */
-['exKpis','exVocUpCard','exTypeCard','exPartCard'].forEach(function(id){
+['exKpis','exVocUpCard','exTypeCard','exPartCard','exLeakKpis'].forEach(function(id){
   var el=document.getElementById(id);
   if(!el) return;
   el.addEventListener('click', function(e){
@@ -6316,23 +6325,36 @@ function exShowNozUnrated(){
 }
 
 /* ══════ 탭 ④ 노즐 누수 분석 ══════ */
-function nlKpiHtml_(label,value,warn,showBasis){
-  return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b>'
-    +(showBasis?'<div class="nl-kpi-meta"><small>처리기록 합계 · 띄어쓰기 통합</small>'
-      +'<button type="button" class="nl-kpi-basis" onclick="exShowLeakBasis_()" aria-label="노즐 누수 건수 집계 기준 보기" aria-haspopup="dialog">ⓘ 집계 기준</button></div>':'')
-    +'</div>';
+/* 추가 카드도 이 정의에 등록하면 동일한 집계·처리이력·고정 글자 크기를 사용한다. */
+function nlKpiDefs_(){
+  return [
+    {key:'total',label:'노즐 누수(약액 유입)',note:'A/S·점검 포함 · 미평가 포함',hint:'구분 필터 선택 시 해당 구분만 집계'},
+    {key:'reuse',label:'재사용',group:['nozzle','reuse']},
+    {key:'single',label:'1회 사용',group:['nozzle','single']},
+    {key:'good',label:'교육 양호',group:['skill','good']},
+    {key:'need',label:'교육 미흡',group:['skill','need'],warn:true}
+  ];
 }
-/* 실제 집계는 buildNozzleLeakCurrent_를 그대로 사용한다. 안내 조회에는 재집계·통신이 없다. */
-function exShowLeakBasis_(){
-  openExList('노즐 누수(약액 유입) · 집계 기준','선택 기간: '+exPeriodLabel(),
-    '<dl class="nl-basis-list">'
-    +'<dt>1. 처리기록 1행 = 1건</dt><dd>선택 기간 내 고객 서비스 기록을 합산합니다. A/S와 점검 중 발견된 누수 모두 포함하며, 같은 병원의 재방문·복수 기록도 각각 계산합니다. 병원 수가 아닌 처리 건수입니다. 데모 운영 기록은 제외합니다.</dd>'
-    +'<dt>2. 띄어쓰기 차이는 같은 유형</dt><dd>‘노즐누수(약액유입)’, ‘노즐 누수 (약액 유입)’ 등은 ‘노즐 누수(약액 유입)’으로 통합합니다. 괄호 없는 ‘노즐 누수’는 별개 유형으로 제외합니다.</dd>'
-    +'<dt>3. 적용하는 필터</dt><dd>기간(연·월·분기 포함), 구분, 유/무상, N-Care, 대분류, 담당자, 영업 담당자, 병원·병원 검색, 교체품 조건을 반영합니다. 구분을 선택하면 해당 구분의 기록만 합산합니다.</dd>'
-    +'<dt>4. 적용하지 않는 필터</dt><dd>누수 비교군을 유지하기 위해 VOC 유형·노즐 재사용·교육 상태 필터는 적용하지 않습니다. 이 조건을 선택한 원인 분석 탭과는 건수가 다를 수 있습니다.</dd>'
-    +'<dt>5. 미평가 기록도 전체 건수에 포함</dt><dd>노즐 사용방식이나 교육 상태가 미평가인 누수도 포함합니다. 따라서 전체 건수는 ‘재사용 + 1회 사용’ 또는 ‘교육 양호 + 교육 미흡’의 합보다 클 수 있습니다.</dd>'
-    +'<dt>6. 기간 밖 기록은 건수에 미포함</dt><dd>선택 기간 이전 기록은 병원의 마지막 노즐·교육 상태를 판정할 때만 참고하며, 이 카드의 누수 건수에는 더하지 않습니다.</dd>'
-    +'</dl>');
+function nlKpiData_(analysis,key){
+  var def=nlKpiDefs_().filter(function(d){return d.key===key;})[0];
+  if(!def) return null;
+  var members=null;
+  if(def.group){
+    members=Object.create(null);
+    analysis[def.group[0]][def.group[1]].details.forEach(function(d){members[d.key]=true;});
+  }
+  var rows=(analysis.rows||[]).filter(function(r){
+    return hpIsLeakVoc_(r)&&(!members||members[skNorm_(r.hosp)]===true);
+  });
+  return {key:def.key,label:def.label,group:def.group,warn:def.warn,note:def.note,hint:def.hint,rows:rows,value:rows.length};
+}
+function nlKpiHtml_(metric){
+  return '<button type="button" class="nl-kpi'+(metric.warn?' warn':'')+'" data-hist-dim="leak:'+escAttr(metric.key)+'"'
+    +' aria-label="'+escAttr(metric.label+' '+exNum(metric.value)+'건 처리 이력 보기')+'" title="처리 이력 보기">'
+    +'<span class="nl-label">'+esc(metric.label)+'<span class="nl-open" aria-hidden="true">▸</span></span>'
+    +'<b>'+exNum(metric.value)+'<u>건</u></b>'
+    +(metric.note?'<span class="nl-kpi-meta">'+esc(metric.note)+(metric.hint?'<small>'+esc(metric.hint)+'</small>':'')+'</span>':'')
+    +'</button>';
 }
 /* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에만 붙인다 */
 function nlIsRiskGroup_(key){ return key==='reuse'||key==='need'; }
@@ -6364,7 +6386,7 @@ function nlHeatClass_(pct){
 }
 /* ── 사용방식 × 교육 상태 히트맵 한 칸 ──
    두 가지 비율을 함께 싣는다. 하나만으로는 반드시 오해가 생기기 때문이다.
-     · 큰 숫자 = 전체 누수 중 이 그룹이 차지하는 비중 (네 칸을 더하면 100%)
+     · 큰 숫자 = 두 평가가 모두 있는 분석 대상 누수 중 이 그룹의 비중 (누수가 있을 때 네 칸 합 100%)
        → "누수가 어디에 몰려 있나"를 본다.
      · 색·아래 줄 = 그 그룹 병원 중 실제로 발생한 비율
        → 그룹마다 병원 수가 다르므로(11곳 vs 35곳) 비중만으로는 심각도를 견줄 수 없다.
@@ -6388,7 +6410,7 @@ function nlHeatHtml_(a,total,nz,sk,lowestRate){
   var small=(a.hospitals>0 && a.hospitals<5);   /* 표본이 작으면 비율이 크게 흔들린다 */
   var lowest=(a.hospitals>0 && lowestRate!==null && lowestRate!==undefined && rate===lowestRate);
   var tip=a.hospitals
-    ? '전체 '+exNum(total)+'건 중 '+exNum(a.leaks)+'건('+share+'%) · '
+    ? '교차분석 대상 '+exNum(total)+'건 중 '+exNum(a.leaks)+'건('+share+'%) · '
       +exNum(a.hospitals)+'곳 중 '+exNum(a.affected)+'곳에서 발생('+rate+'%) · 병원당 '+per.toFixed(2)+'건'
       +(small?' · 표본이 작아 비율이 흔들릴 수 있습니다':'')+' · 해당 병원 전체 보기'
     : '';
@@ -6397,7 +6419,7 @@ function nlHeatHtml_(a,total,nz,sk,lowestRate){
     +(a.hospitals?' onclick="exShowLeakGroup(\''+'matrix'+'\',\''+nz+'\',\''+sk+'\')" title="'+escAttr(tip)+'"':' disabled')+'>'
     +(lowest?'<span class="nl-low-mark">최저</span>':'')
     +'<b>'+(a.hospitals? share+'<u>%</u>' : '–')+'</b>'
-    +'<span>'+(a.hospitals? '누수 '+exNum(a.leaks)+'건 / 전체 '+exNum(total)+'건' : '해당 병원 없음')+'</span>'
+    +'<span>'+(a.hospitals? '누수 '+exNum(a.leaks)+'건 / 분석 대상 '+exNum(total)+'건' : '해당 병원 없음')+'</span>'
     +(a.hospitals?'<span class="sub">'+exNum(a.hospitals)+'곳 중 '+exNum(a.affected)+'곳 발생 · '+rate+'%'
       +(small?'<em>· 표본 적음</em>':'')+'</span>':'')
   +'</button>';
@@ -6423,11 +6445,7 @@ function nlDetailTable_(details){
 function renderExecutiveLeak(){
   var A=buildNozzleLeakCurrent_(),per=exPeriodLabel(); EX_LEAK_STATE=A;
   document.getElementById('exLeakKpis').innerHTML=
-    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false,true)
-    +nlKpiHtml_('재사용',A.nozzle.reuse.leaks,false)
-    +nlKpiHtml_('1회 사용',A.nozzle.single.leaks,false)
-    +nlKpiHtml_('교육 양호',A.skill.good.leaks,false)
-    +nlKpiHtml_('교육 미흡',A.skill.need.leaks,true);
+    nlKpiDefs_().map(function(def){return nlKpiHtml_(nlKpiData_(A,def.key));}).join('');
 
   document.getElementById('exLeakNozzleCard').innerHTML=
     exH3('노즐 사용방식별 발생', '병원별 마지막 평가 결과 · '+per)
@@ -6463,7 +6481,7 @@ function renderExecutiveLeak(){
       if(c.leaks>topShare.leaks) topShare=c;
       if(nlHeatRate_(c)>nlHeatRate_(topRate)) topRate=c;
     });
-    bestText='전체 '+exNum(total)+'건 중 '+nm(topShare)+' 그룹이 '
+    bestText='교차분석 대상 '+exNum(total)+'건 중 '+nm(topShare)+' 그룹이 '
       +nlHeatShare_(topShare,total)+'%('+exNum(topShare.leaks)+'건)로 가장 큰 비중입니다.';
     bestText+= (topRate===topShare)
       ? ' 병원 대비 발생 비율도 '+nlHeatRate_(topRate)+'%로 가장 높습니다.'
@@ -6471,8 +6489,9 @@ function renderExecutiveLeak(){
         +'('+nm(topShare)+' '+nlHeatRate_(topShare)+'%).';
   }
   document.getElementById('exLeakMatrixCard').innerHTML=
-    exH3('사용방식 × 교육 상태', '큰 숫자 = 전체 누수 중 비중(4칸 합 100%) · 색 = 그룹 병원 대비 발생 비율 · 청록 테두리 = 최저')
-    +'<div class="ex-cbody"><div class="nl-matrix"><span></span><div class="head">교육 양호</div><div class="head">교육 미흡</div>'
+    exH3('사용방식 × 교육 상태', '큰 숫자 = 분석 대상 누수 중 비중 · 색 = 그룹 병원 대비 발생 비율 · 청록 테두리 = 최저')
+    +'<div class="ex-cbody"><div class="nl-analysis-scope">두 평가가 모두 있는 병원만 분석 · 미평가 제외</div>'
+    +'<div class="nl-matrix"><span></span><div class="head">교육 양호</div><div class="head">교육 미흡</div>'
     +'<div class="head side">재사용</div>'+nlHeatHtml_(A.matrix.reuse.good,total,'reuse','good',lowestRate)+nlHeatHtml_(A.matrix.reuse.need,total,'reuse','need',lowestRate)
     +'<div class="head side">1회 사용</div>'+nlHeatHtml_(A.matrix.single.good,total,'single','good',lowestRate)+nlHeatHtml_(A.matrix.single.need,total,'single','need',lowestRate)
     +'</div><div class="nl-insight"><b>관찰:</b> '+esc(bestText)+'</div></div>';
