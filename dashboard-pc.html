@@ -1011,6 +1011,15 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
 .nl-kpi b{display:block;margin-top:2px;color:var(--navy);font-size:20px;line-height:1.15;font-variant-numeric:tabular-nums}
 .nl-kpi b u{margin-left:2px;text-decoration:none;font-size:10px;color:var(--text-muted)}
 .nl-kpi.warn b{color:var(--red)}
+.nl-kpi-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:7px}
+.nl-kpi-meta small{font-size:10px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
+.nl-kpi-basis{border:1px solid var(--gray-line);border-radius:5px;padding:2px 6px;background:var(--surface-2);color:var(--bar);font:inherit;font-size:10px;white-space:nowrap;cursor:pointer}
+.nl-kpi-basis:hover{background:var(--teal-soft)}
+.nl-kpi-basis:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+.nl-basis-list{margin:0;font-size:12px;line-height:1.7;color:var(--text);overflow-wrap:anywhere}
+.nl-basis-list dt{margin-top:12px;color:var(--navy);font-weight:700}
+.nl-basis-list dt:first-child{margin-top:0}
+.nl-basis-list dd{margin:3px 0 0}
 .nl-grid,.nl-bottom{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
 .nl-bar-list{display:flex;flex-direction:column;gap:8px}
 .nl-bar-row{display:grid;grid-template-columns:74px minmax(0,1fr) 132px;align-items:center;gap:8px;width:100%;
@@ -1858,6 +1867,9 @@ function diagnoseFail(err){
 function boot(d, fromCache){
   RAW=d.data.map(function(r){
     var dd=normD(r.date);
+    /* 표기 공백 차이는 로딩 시 한 번 통일한다. 원인 분석·필터·이력·PPT가 같은 유형을 사용하며,
+       원본 시트는 수정하지 않는다. 괄호 없는 '노즐 누수'는 기존대로 별개 유형이다. */
+    if(hpIsLeakVoc_(r)) r.type='노즐 누수(약액 유입)';
     r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
     r.ncare=r.ncare||'미가입'; r.paid=paidType_(r.cost); return r;
   });
@@ -6304,8 +6316,23 @@ function exShowNozUnrated(){
 }
 
 /* ══════ 탭 ④ 노즐 누수 분석 ══════ */
-function nlKpiHtml_(label,value,warn){
-  return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b></div>';
+function nlKpiHtml_(label,value,warn,showBasis){
+  return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b>'
+    +(showBasis?'<div class="nl-kpi-meta"><small>처리기록 합계 · 띄어쓰기 통합</small>'
+      +'<button type="button" class="nl-kpi-basis" onclick="exShowLeakBasis_()" aria-label="노즐 누수 건수 집계 기준 보기" aria-haspopup="dialog">ⓘ 집계 기준</button></div>':'')
+    +'</div>';
+}
+/* 실제 집계는 buildNozzleLeakCurrent_를 그대로 사용한다. 안내 조회에는 재집계·통신이 없다. */
+function exShowLeakBasis_(){
+  openExList('노즐 누수(약액 유입) · 집계 기준','선택 기간: '+exPeriodLabel(),
+    '<dl class="nl-basis-list">'
+    +'<dt>1. 처리기록 1행 = 1건</dt><dd>선택 기간 내 고객 서비스 기록을 합산합니다. A/S와 점검 중 발견된 누수 모두 포함하며, 같은 병원의 재방문·복수 기록도 각각 계산합니다. 병원 수가 아닌 처리 건수입니다. 데모 운영 기록은 제외합니다.</dd>'
+    +'<dt>2. 띄어쓰기 차이는 같은 유형</dt><dd>‘노즐누수(약액유입)’, ‘노즐 누수 (약액 유입)’ 등은 ‘노즐 누수(약액 유입)’으로 통합합니다. 괄호 없는 ‘노즐 누수’는 별개 유형으로 제외합니다.</dd>'
+    +'<dt>3. 적용하는 필터</dt><dd>기간(연·월·분기 포함), 구분, 유/무상, N-Care, 대분류, 담당자, 영업 담당자, 병원·병원 검색, 교체품 조건을 반영합니다. 구분을 선택하면 해당 구분의 기록만 합산합니다.</dd>'
+    +'<dt>4. 적용하지 않는 필터</dt><dd>누수 비교군을 유지하기 위해 VOC 유형·노즐 재사용·교육 상태 필터는 적용하지 않습니다. 이 조건을 선택한 원인 분석 탭과는 건수가 다를 수 있습니다.</dd>'
+    +'<dt>5. 미평가 기록도 전체 건수에 포함</dt><dd>노즐 사용방식이나 교육 상태가 미평가인 누수도 포함합니다. 따라서 전체 건수는 ‘재사용 + 1회 사용’ 또는 ‘교육 양호 + 교육 미흡’의 합보다 클 수 있습니다.</dd>'
+    +'<dt>6. 기간 밖 기록은 건수에 미포함</dt><dd>선택 기간 이전 기록은 병원의 마지막 노즐·교육 상태를 판정할 때만 참고하며, 이 카드의 누수 건수에는 더하지 않습니다.</dd>'
+    +'</dl>');
 }
 /* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에만 붙인다 */
 function nlIsRiskGroup_(key){ return key==='reuse'||key==='need'; }
@@ -6396,7 +6423,7 @@ function nlDetailTable_(details){
 function renderExecutiveLeak(){
   var A=buildNozzleLeakCurrent_(),per=exPeriodLabel(); EX_LEAK_STATE=A;
   document.getElementById('exLeakKpis').innerHTML=
-    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false)
+    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false,true)
     +nlKpiHtml_('재사용',A.nozzle.reuse.leaks,false)
     +nlKpiHtml_('1회 사용',A.nozzle.single.leaks,false)
     +nlKpiHtml_('교육 양호',A.skill.good.leaks,false)
