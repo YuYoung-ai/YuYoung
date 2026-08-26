@@ -45,7 +45,7 @@ function grabVar(decl) {
 }
 
 const FNS = [
-  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd', 'isOK',
+  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'hospitalSales_', 'rowDate', 'monday', 'addD', 'ymd', 'isOK',
   'hpCleanKey_', 'hpIsLeakVoc_', 'isHandpieceCleaning_',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
@@ -55,7 +55,7 @@ const FNS = [
   'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
-  'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
+  'exHistoryField_', 'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
   'exHistoryTable_', 'exHistoryControls_', 'exCmpRangeText_',
   'exHistoryKpiRows_', 'exHistoryHospitalCount_', 'exHistoryKpiChip_',
