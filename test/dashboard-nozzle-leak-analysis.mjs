@@ -22,6 +22,24 @@ const FNS=['normD','skNorm_','skCmpKo_','hpCleanKey_','hpIsLeakVoc_','nlDateKey_
   'buildNozzleLeakAnalysis_','buildNozzleData','buildNozzleStatusMap','nzNcare_','nlIsRiskGroup_',
   'nlHeatRate_','nlHeatLowestRate_'];
 const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')+'};')();
+const basisUI=new Function(['esc','exNum','nlKpiHtml_','exShowLeakBasis_'].map(grab).join('\n')
+  +'\nvar lastModal; function openExList(title,sub,html){lastModal={title,sub,html};}'
+  +'\nfunction exPeriodLabel(){return "2026.08.10~08.14";}'
+  +'\nreturn {card:nlKpiHtml_,open:function(){exShowLeakBasis_();return lastModal;}};')();
+const totalCard=basisUI.card('노즐 누수(약액 유입)',5,false,true),basis=basisUI.open();
+ck('집계 기준: 전체 누수 카드에 짧은 안내와 키보드 접근 가능한 버튼 제공',
+  totalCard.includes('<b>5<u>건</u></b>')&&totalCard.includes('처리기록 합계 · 띄어쓰기 통합')
+  &&totalCard.includes('type="button"')&&totalCard.includes('aria-label="노즐 누수 건수 집계 기준 보기"'));
+ck('집계 기준: 다른 그룹 KPI에는 전체 합계 설명을 중복 표시하지 않음',
+  !basisUI.card('재사용',2,false).includes('nl-kpi-basis')
+  &&grab('renderExecutiveLeak').includes("nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false,true)"));
+ck('집계 기준: 현재 선택 기간을 기존 공통 안내창에 표시',basis.sub==='선택 기간: 2026.08.10~08.14'&&basis.title.includes('집계 기준'));
+ck('집계 기준: 기록 단위·표기 통합·미평가 포함·기간 밖 제외 설명',
+  ['처리기록 1행 = 1건','재방문·복수 기록','괄호 없는','미평가 기록도 전체 건수에 포함','기간 밖 기록은 건수에 미포함'].every(t=>basis.html.includes(t)));
+ck('집계 기준: 적용 필터와 원인 분석과의 차이를 명시',
+  ['유/무상','영업 담당자','VOC 유형·노즐 재사용·교육 상태 필터는 적용하지 않습니다','원인 분석 탭과는 건수가 다를 수 있습니다'].every(t=>basis.html.includes(t)));
+ck('집계 기준: 안내를 여는 동작에는 추가 조회나 재집계 없음',
+  !/fetch\(|loadData\(|buildNozzleLeakCurrent_\(/.test(grab('exShowLeakBasis_')));
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
 
 const cohort=rows([

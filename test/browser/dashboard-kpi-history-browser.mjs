@@ -108,7 +108,18 @@ await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-valu
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="점검"]');
 modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
 ck('3-e. 같은 그룹의 다른 구분 칩을 누르면 즉시 전환',modal.gubun==='점검'&&modal.rows===2,JSON.stringify(modal));
+ck('3-f. 점검에 없는 0건 VOC 유형 칩은 숨김',
+  await page.locator('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]').count()===0&&
+  await page.locator('#hstBreakdown [data-hst-count-key="type"]').count()===2);
+await page.selectOption('#hstType','케이블 불량');
+ck('3-g. 선택한 0건 유형은 칩만 숨기고 드롭다운에서 해제 가능',
+  await page.inputValue('#hstType')==='케이블 불량'&&await page.locator('#hstTableHost tbody tr').count()===0&&
+  await page.locator('#hstBreakdown [data-hst-count-key="type"].is-zero').count()===0);
+await page.selectOption('#hstType','all');
+ck('3-h. 드롭다운 해제로 이력 복구',await page.locator('#hstTableHost tbody tr').count()===2);
 await page.evaluate(()=>exResetHistoryFilters_());
+ck('3-i. 조건 초기화 시 양수로 돌아온 유형 칩 복원',
+  await page.locator('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]').count()===1);
 await page.click('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]');
 modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent,type:document.getElementById('hstType').value}));
 ck('4. VOC 유형별 건수 칩 클릭 시 표시 건수와 두 요약이 함께 갱신',
@@ -188,6 +199,38 @@ await page.evaluate(()=>exCloseSavingEvidence_());
 await page.click('[data-tab="summary"]');
 await page.waitForSelector('#exPaneSummary.on');
 ck('15. PC에서 5개 KPI가 한 줄로 배치',await page.evaluate(()=>getComputedStyle(document.getElementById('exKpis')).gridTemplateColumns.split(' ').length===5));
+
+/* 공백이 다른 누수 VOC도 실제 로딩 → 카드 → 필터 → 이력이 같은 이름/건수로 이어진다. */
+await page.click('[data-tab="cause"]');
+await page.waitForSelector('#exPaneCause.on');
+let normalized=await page.evaluate(()=>({
+  cause:exVocTypeCompare_(EX_ROWS,null).filter(t=>hpIsLeakVoc_({type:t.k})),
+  leak:buildNozzleLeakCurrent_().leaks,
+  variants:RAW.filter(r=>hpIsLeakVoc_(r)&&r.type!=='노즐 누수(약액 유입)').length
+}));
+ck('15-a. 원인 분석의 누수 항목을 표준 이름 3건으로 합산하고 누수 분석과 일치',
+  normalized.cause.length===1&&normalized.cause[0].k==='노즐 누수(약액 유입)'&&
+  normalized.cause[0].cur===3&&normalized.leak===3&&normalized.variants===0,JSON.stringify(normalized));
+await page.click('#exTypeCard [data-hist-k="노즐 누수(약액 유입)"]');
+await page.waitForSelector('#exListModal.show');
+normalized=await page.evaluate(()=>({
+  rows:document.querySelectorAll('#hstTableHost tbody tr').length,
+  options:[...document.getElementById('hstType').options].map(o=>o.value),
+  breakdown:document.getElementById('hstBreakdown').textContent
+}));
+ck('15-b. 원인 분석 카드 클릭 시 합산된 3건의 처리이력 표시',normalized.rows===3,JSON.stringify(normalized));
+ck('15-c. 이력 유형 선택과 건수 칩도 표준 이름 하나로 표시',
+  normalized.options.includes('노즐 누수(약액 유입)')&&!normalized.options.includes('노즐누수(약액유입)')&&
+  normalized.breakdown.includes('노즐 누수(약액 유입) 3건'),JSON.stringify(normalized));
+await page.selectOption('#hstPeriod','prev');
+ck('15-d. 이전 기간 이력도 같은 이름으로 연결',await page.locator('#hstTableHost tbody tr').count()===1);
+await page.evaluate(()=>closeExList());
+await page.evaluate(()=>{F.type=['노즐 누수(약액 유입)'];apply();});
+ck('15-e. 공통 유형 필터에서도 공백 변형 기록을 누락하지 않음',await page.evaluate(()=>EX_ROWS.length===3));
+await page.evaluate(()=>{F.type=[];apply();});
+await page.click('[data-tab="leak"]');
+await page.waitForSelector('#exPaneLeak.on');
+ck('15-f. 누수 분석 카드 역시 같은 기간 3건 표시',(await page.textContent('#exLeakKpis')).includes('노즐 누수(약액 유입)3건'));
 ck('16. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 
 await browser.close();

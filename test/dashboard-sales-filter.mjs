@@ -106,6 +106,22 @@ ck('영업담당자 건수 카드가 구분 바로 오른쪽, VOC 건수 앞에 
   assert.ok(html.includes('data-hst-count-value="영업나"'));
   assert.ok(html.includes('data-hst-count-value="영업가" aria-pressed="true"'));
 });
+ck('영업담당자 건수만 기본 접힘, 접근 가능한 펼침 버튼 제공',()=>{
+  const html=D.exHistoryBreakdownHtml_(items,{period:'cur'});
+  assert.ok(html.includes('id="hstSalesCountsList" hidden'));
+  assert.ok(html.includes('aria-controls="hstSalesCountsList" aria-expanded="false"'));
+  assert.ok(html.includes('펼치기 ▾'));
+  assert.equal((html.match(/ hidden/g)||[]).length,1);
+  const expanded=D.exHistoryBreakdownHtml_(items,{period:'cur',salesExpanded:true});
+  assert.ok(!expanded.includes('id="hstSalesCountsList" hidden'));
+  assert.ok(expanded.includes('aria-expanded="true"'));assert.ok(expanded.includes('접기 ▴'));
+});
+ck('펼침 상태는 모달 내 재필터·DB 갱신 중 유지하고 새 모달에서는 접힘',()=>{
+  assert.ok(grab('exApplyHistoryFilters_').includes('salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded'));
+  assert.ok(grab('exRefreshHistoryForHospitalDB_').includes('salesCountsExpanded=!!state.salesCountsExpanded'));
+  assert.ok(grab('exShowHistory_').includes('salesCountsExpanded:false'));
+  assert.ok(!/exApplyHistoryFilters_\(|fetch\(|gvRetry\(/.test(grab('exToggleHistorySalesCounts_')));
+});
 ck('담당자 칩은 다른 담당자 후보 유지, 자기 조건 제외·다른 그룹 조건 적용',()=>{
   const html=D.exHistoryBreakdownHtml_(items,{period:'cur',sales:'영업가',type:'케이블'});
   const sales=html.slice(html.indexOf('영업 담당자별 건수'),html.indexOf('VOC 유형별 건수'));

@@ -260,10 +260,23 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     {period:'cur',r:{gubun:'점검',type:'케이블 불량'}}
   ];
   const selectedBreakdown=D.exHistoryBreakdownHtml_(facetItems,{period:'cur',gubun:'A/S',type:'all',fse:'all',q:''});
-  ck('26-f3. 선택 후에도 다른 구분·VOC 유형 버튼을 숨기지 않는다',
+  ck('26-f3. 다른 구분 버튼은 유지하고 0건 VOC 유형 칩은 숨긴다',
     selectedBreakdown.includes('data-hst-count-value="점검"')
-    &&selectedBreakdown.includes('data-hst-count-value="케이블 불량"')
-    &&selectedBreakdown.includes('케이블 불량 <b>0건</b>'));
+    &&!selectedBreakdown.includes('data-hst-count-value="케이블 불량"')
+    &&selectedBreakdown.includes('노즐누수 <b>1건</b>'));
+  const selectedZero=D.exHistoryBreakdownHtml_(facetItems,{period:'cur',gubun:'A/S',type:'케이블 불량'});
+  ck('26-f3-b. 선택된 유형도 다른 조건에서 0건이면 칩을 숨기고 드롭다운 후보는 유지',
+    !selectedZero.includes('data-hst-count-key="type" data-hst-count-value="케이블 불량"')
+    &&D.exHistoryControls_(facetItems,false).includes('value="케이블 불량"'));
+  const typeOnly=D.exHistoryBreakdownHtml_(facetItems,{period:'cur',type:'노즐누수'});
+  ck('26-f3-c. 유형 자체 조건은 제외하므로 다른 양수 유형으로 계속 전환 가능',
+    typeOnly.includes('케이블 불량 <b>1건</b>')&&typeOnly.includes('노즐누수 <b>1건</b>'));
+  const prevOnly=[...facetItems,{period:'prev',r:{gubun:'A/S',type:'비교기간전용'}}];
+  ck('26-f3-d. 기간·담당자·검색 변경에 따른 0건 유형도 숨기고 조건 해제 시 복원',
+    !D.exHistoryBreakdownHtml_(prevOnly,{period:'cur'}).includes('비교기간전용')
+    &&D.exHistoryBreakdownHtml_(prevOnly,{period:'all'}).includes('비교기간전용 <b>1건</b>')
+    &&!D.exHistoryBreakdownHtml_(facetItems,{fse:'없는담당자'}).includes('data-hst-count-key="type"')
+    &&D.exHistoryBreakdownHtml_(facetItems,{q:'일치하지않음'}).includes('해당 기록 없음'));
   ck('26-f4. 선택 칩은 강조·해제 상태를 접근성 속성과 함께 표시',
     /class="hst-count-chip is-active"[^>]*data-hst-count-value="A\/S"[^>]*aria-pressed="true"/.test(selectedBreakdown)
     &&selectedBreakdown.includes('A/S 필터 해제')&&selectedBreakdown.includes('hst-count-clear'));

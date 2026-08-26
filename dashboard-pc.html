@@ -832,6 +832,12 @@ body.dark .yc-band{opacity:.26}
 .hst-break-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
 .hst-break-card strong{display:block;margin-bottom:5px;color:var(--navy);font-size:10.5px}
 .hst-break-list{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.hst-break-list[hidden]{display:none}
+.hst-break-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;padding:0;
+  background:none;color:var(--navy);font:inherit;text-align:left;cursor:pointer}
+.hst-break-toggle strong{margin:0}.hst-break-toggle span{flex-shrink:0;color:var(--text-muted);font-size:10px}
+.hst-break-toggle[aria-expanded="true"]{margin-bottom:5px}
+.hst-break-toggle:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:3px}
 .hst-count-chip{flex:0 0 auto;border-radius:999px;background:var(--surface);padding:3px 7px;color:var(--text-muted);
   font-family:inherit;font-size:9.5px;white-space:nowrap;border:1px solid var(--gray-line);cursor:pointer}
 .hst-count-chip b{margin-left:3px;color:var(--navy);font-size:10.5px;font-variant-numeric:tabular-nums}
@@ -1005,6 +1011,15 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
 .nl-kpi b{display:block;margin-top:2px;color:var(--navy);font-size:20px;line-height:1.15;font-variant-numeric:tabular-nums}
 .nl-kpi b u{margin-left:2px;text-decoration:none;font-size:10px;color:var(--text-muted)}
 .nl-kpi.warn b{color:var(--red)}
+.nl-kpi-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-top:7px}
+.nl-kpi-meta small{font-size:10px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
+.nl-kpi-basis{border:1px solid var(--gray-line);border-radius:5px;padding:2px 6px;background:var(--surface-2);color:var(--bar);font:inherit;font-size:10px;white-space:nowrap;cursor:pointer}
+.nl-kpi-basis:hover{background:var(--teal-soft)}
+.nl-kpi-basis:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+.nl-basis-list{margin:0;font-size:12px;line-height:1.7;color:var(--text);overflow-wrap:anywhere}
+.nl-basis-list dt{margin-top:12px;color:var(--navy);font-weight:700}
+.nl-basis-list dt:first-child{margin-top:0}
+.nl-basis-list dd{margin:3px 0 0}
 .nl-grid,.nl-bottom{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
 .nl-bar-list{display:flex;flex-direction:column;gap:8px}
 .nl-bar-row{display:grid;grid-template-columns:74px minmax(0,1fr) 132px;align-items:center;gap:8px;width:100%;
@@ -1852,6 +1867,9 @@ function diagnoseFail(err){
 function boot(d, fromCache){
   RAW=d.data.map(function(r){
     var dd=normD(r.date);
+    /* 표기 공백 차이는 로딩 시 한 번 통일한다. 원인 분석·필터·이력·PPT가 같은 유형을 사용하며,
+       원본 시트는 수정하지 않는다. 괄호 없는 '노즐 누수'는 기존대로 별개 유형이다. */
+    if(hpIsLeakVoc_(r)) r.type='노즐 누수(약액 유입)';
     r._y=dd.y; r._m=dd.m; r._d=dd.d; r._q=dd.q; r._cost=costNum(r.cost);
     r.ncare=r.ncare||'미가입'; r.paid=paidType_(r.cost); return r;
   });
@@ -5148,17 +5166,24 @@ function exHistoryCounts_(items,key){
 }
 function exHistoryBreakdownHtml_(items,opt){
   opt=opt||{};
-  /* 버튼 목록·순서는 원본 이력 기준으로 고정하고, 건수만 나머지 필터 조건에 맞춰 갱신한다.
-     자기 그룹 조건은 제외해 같은 그룹의 다른 항목이 사라지지 않는 faceted filter 방식이다. */
+  /* 원본 순서를 유지하며 자기 그룹 조건은 제외해 다른 항목으로 전환할 수 있게 한다.
+     VOC 유형만 나머지 조건에서 0건인 칩을 숨긴다. 선택 조건은 드롭다운에서 유지·해제한다. */
   function facetRows(key){
     var scoped={period:opt.period||'all',gubun:key==='gubun'?'all':(opt.gubun||'all'),
       type:key==='type'?'all':(opt.type||'all'),sales:key==='sales'?'all':(opt.sales||'all'),fse:opt.fse||'all',q:opt.q||''};
     var counts=Object.create(null), base=exHistoryCounts_(items,key);
     exHistoryCounts_(exHistoryFilter_(items,scoped),key).forEach(function(x){counts[x.k]=x.n;});
-    return base.map(function(x){return {k:x.k,n:counts[x.k]||0};});
+    return base.map(function(x){return {k:x.k,n:counts[x.k]||0};})
+      .filter(function(x){return key!=='type'||x.n>0;});
   }
   function card(title,rows,key){
-    return '<div class="hst-break-card"><strong>'+esc(title)+'</strong><div class="hst-break-list">'
+    var sales=key==='sales', expanded=!!opt.salesExpanded;
+    var heading=sales
+      ? '<button type="button" class="hst-break-toggle" id="hstSalesCountsToggle" aria-controls="hstSalesCountsList" aria-expanded="'+expanded+'" onclick="exToggleHistorySalesCounts_()">'
+        +'<strong>'+esc(title)+'</strong><span>'+(expanded?'접기 ▴':'펼치기 ▾')+'</span></button>'
+      : '<strong>'+esc(title)+'</strong>';
+    return '<div class="hst-break-card">'+heading+'<div class="hst-break-list"'
+      +(sales?' id="hstSalesCountsList"'+(expanded?'':' hidden'):'')+'>'
       +(rows.length?rows.map(function(x){
         var value=x.k===(key==='sales'?'미지정':'미입력')?'__missing__':x.k;
         var selected=opt[key]===value;
@@ -5620,7 +5645,8 @@ function exApplyHistoryFilters_(){
   function val(id, fallback){ var el=document.getElementById(id); return el?el.value:fallback; }
   var opt={
     period:val('hstPeriod','cur'), gubun:val('hstGubun','all'), type:val('hstType','all'),
-    fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery','')
+    fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery',''),
+    salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded
   };
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   EX_HISTORY_STATE.filtered=filtered;
@@ -5630,6 +5656,17 @@ function exApplyHistoryFilters_(){
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
   if(host) host.innerHTML=exHistoryTable_(filtered);
   exSyncHistoryTypeExample_(opt.type,filtered);
+}
+/* 표시 상태만 바꾼다. 필터·목록·건수 재계산이나 네트워크 요청은 하지 않는다. */
+function exToggleHistorySalesCounts_(){
+  if(!EX_HISTORY_STATE) return;
+  var btn=document.getElementById('hstSalesCountsToggle'), list=document.getElementById('hstSalesCountsList');
+  if(!btn||!list) return;
+  var expanded=!EX_HISTORY_STATE.salesCountsExpanded;
+  EX_HISTORY_STATE.salesCountsExpanded=expanded;
+  list.hidden=!expanded;
+  btn.setAttribute('aria-expanded',String(expanded));
+  btn.querySelector('span').textContent=expanded?'접기 ▴':'펼치기 ▾';
 }
 /* 같은 칩 재클릭은 해당 조건만 해제하고, 다른 칩은 같은 그룹의 조건을 즉시 전환한다. */
 function exApplyHistoryCountChip_(btn){
@@ -5660,6 +5697,7 @@ function exRefreshHistoryForHospitalDB_(){
     saved.push({id:id,value:el.value,label:el.selectedOptions&&el.selectedOptions[0]?el.selectedOptions[0].textContent:el.value});
   });
   exShowHistory_(state.dim,state.name);
+  EX_HISTORY_STATE.salesCountsExpanded=!!state.salesCountsExpanded;
   saved.forEach(function(s){
     var el=document.getElementById(s.id); if(!el) return;
     el.value=s.value;
@@ -5715,7 +5753,7 @@ function exShowHistory_(dim, name){
     orderText='처리일 최신순 · 행 선택 시 유형별 참고 예시';
   }
   var items=exHistoryDataset_(cur, prev||[], sort);
-  EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost,
+  EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost,salesCountsExpanded:false,
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
     typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
   var html='<div class="hst-view">'
@@ -6278,8 +6316,23 @@ function exShowNozUnrated(){
 }
 
 /* ══════ 탭 ④ 노즐 누수 분석 ══════ */
-function nlKpiHtml_(label,value,warn){
-  return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b></div>';
+function nlKpiHtml_(label,value,warn,showBasis){
+  return '<div class="nl-kpi'+(warn?' warn':'')+'"><span>'+esc(label)+'</span><b>'+exNum(value)+'<u>건</u></b>'
+    +(showBasis?'<div class="nl-kpi-meta"><small>처리기록 합계 · 띄어쓰기 통합</small>'
+      +'<button type="button" class="nl-kpi-basis" onclick="exShowLeakBasis_()" aria-label="노즐 누수 건수 집계 기준 보기" aria-haspopup="dialog">ⓘ 집계 기준</button></div>':'')
+    +'</div>';
+}
+/* 실제 집계는 buildNozzleLeakCurrent_를 그대로 사용한다. 안내 조회에는 재집계·통신이 없다. */
+function exShowLeakBasis_(){
+  openExList('노즐 누수(약액 유입) · 집계 기준','선택 기간: '+exPeriodLabel(),
+    '<dl class="nl-basis-list">'
+    +'<dt>1. 처리기록 1행 = 1건</dt><dd>선택 기간 내 고객 서비스 기록을 합산합니다. A/S와 점검 중 발견된 누수 모두 포함하며, 같은 병원의 재방문·복수 기록도 각각 계산합니다. 병원 수가 아닌 처리 건수입니다. 데모 운영 기록은 제외합니다.</dd>'
+    +'<dt>2. 띄어쓰기 차이는 같은 유형</dt><dd>‘노즐누수(약액유입)’, ‘노즐 누수 (약액 유입)’ 등은 ‘노즐 누수(약액 유입)’으로 통합합니다. 괄호 없는 ‘노즐 누수’는 별개 유형으로 제외합니다.</dd>'
+    +'<dt>3. 적용하는 필터</dt><dd>기간(연·월·분기 포함), 구분, 유/무상, N-Care, 대분류, 담당자, 영업 담당자, 병원·병원 검색, 교체품 조건을 반영합니다. 구분을 선택하면 해당 구분의 기록만 합산합니다.</dd>'
+    +'<dt>4. 적용하지 않는 필터</dt><dd>누수 비교군을 유지하기 위해 VOC 유형·노즐 재사용·교육 상태 필터는 적용하지 않습니다. 이 조건을 선택한 원인 분석 탭과는 건수가 다를 수 있습니다.</dd>'
+    +'<dt>5. 미평가 기록도 전체 건수에 포함</dt><dd>노즐 사용방식이나 교육 상태가 미평가인 누수도 포함합니다. 따라서 전체 건수는 ‘재사용 + 1회 사용’ 또는 ‘교육 양호 + 교육 미흡’의 합보다 클 수 있습니다.</dd>'
+    +'<dt>6. 기간 밖 기록은 건수에 미포함</dt><dd>선택 기간 이전 기록은 병원의 마지막 노즐·교육 상태를 판정할 때만 참고하며, 이 카드의 누수 건수에는 더하지 않습니다.</dd>'
+    +'</dl>');
 }
 /* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에만 붙인다 */
 function nlIsRiskGroup_(key){ return key==='reuse'||key==='need'; }
@@ -6370,7 +6423,7 @@ function nlDetailTable_(details){
 function renderExecutiveLeak(){
   var A=buildNozzleLeakCurrent_(),per=exPeriodLabel(); EX_LEAK_STATE=A;
   document.getElementById('exLeakKpis').innerHTML=
-    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false)
+    nlKpiHtml_('노즐 누수(약액 유입)',A.leaks,false,true)
     +nlKpiHtml_('재사용',A.nozzle.reuse.leaks,false)
     +nlKpiHtml_('1회 사용',A.nozzle.single.leaks,false)
     +nlKpiHtml_('교육 양호',A.skill.good.leaks,false)
