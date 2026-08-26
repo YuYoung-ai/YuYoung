@@ -89,7 +89,13 @@ const detailText=await page.textContent('#exLeakDetailCard');
 ck('8. 병원별 평가일·상태·누수 건수를 함께 표시한다',['노즐 평가일','교육 평가일','사용방식','교육 상태','누수'].every(x=>detailText.includes(x)));
 ck('8-a. 집계 기준 버튼 대신 짧은 포함 안내만 표시',
   await page.locator('.nl-kpi-basis').count()===0&&(await page.textContent('#exLeakKpis')).includes('A/S·점검 포함 · 미평가 포함')
-  &&!(await page.textContent('#exLeakKpis')).includes('띄어쓰기'));
+  &&!(await page.textContent('#exLeakKpis')).includes('띄어쓰기')
+  &&!(await page.textContent('#exLeakKpis')).includes('구분 필터 선택'));
+const inlineNote=await page.locator('#exLeakKpis .nl-kpi').first().evaluate(el=>{
+  const n=el.querySelector('b').getBoundingClientRect(),m=el.querySelector('.nl-kpi-meta').getBoundingClientRect();
+  return {beside:m.left>=n.right&&m.top<n.bottom,height:el.getBoundingClientRect().height,font:getComputedStyle(el.querySelector('b')).fontSize};
+});
+ck('8-a2. PC에서는 건수 오른쪽에 안내 표시·32px 수치·낮은 카드 높이',inlineNote.beside&&inlineNote.font==='32px'&&inlineNote.height<100,JSON.stringify(inlineNote));
 ck('8-b. 교차분석의 미평가 제외·분모 기준을 정확히 표시',
   (await page.textContent('#exLeakMatrixCard')).includes('두 평가가 모두 있는 병원만 분석 · 미평가 제외')
   &&!(await page.textContent('#exLeakMatrixCard')).includes('전체 누수 중'));
@@ -141,9 +147,9 @@ await page.evaluate(()=>{
 });
 const expandedGrid=await page.evaluate(()=>{const list=[...document.querySelectorAll('#exLeakKpis .nl-kpi')];return {
   count:list.length,lines:new Set(list.map(el=>el.offsetTop)).size,
-  fixed:list.every(el=>getComputedStyle(el.querySelector('b')).fontSize==='28px'&&getComputedStyle(el.querySelector('.nl-label')).fontSize==='13px'),
+  fixed:list.every(el=>getComputedStyle(el.querySelector('b')).fontSize==='32px'&&getComputedStyle(el.querySelector('.nl-label')).fontSize==='13px'),
   scroll:getComputedStyle(document.getElementById('exPaneLeak')).overflowY};});
-ck('8-l. 12개 카드로 늘어나도 글자는 동일하고 행·스크롤만 늘어남',expandedGrid.count===12&&expandedGrid.lines>1&&expandedGrid.fixed&&expandedGrid.scroll==='auto'&&fontBefore.value==='28px',JSON.stringify(expandedGrid));
+ck('8-l. 12개 카드로 늘어나도 글자는 동일하고 행·스크롤만 늘어남',expandedGrid.count===12&&expandedGrid.lines>1&&expandedGrid.fixed&&expandedGrid.scroll==='auto'&&fontBefore.value==='32px',JSON.stringify(expandedGrid));
 await page.click('#exLeakKpis [data-hist-dim="leak:extra0"]');
 ck('8-m. 새 카드도 별도 이벤트 코드 없이 같은 처리이력 필터 연결',await page.locator('#hstTableHost tbody tr').count()===1&&(await page.textContent('#hstTableHost')).includes('D병원'));
 await page.click('#exListModal .mbtn.cancel');
@@ -151,7 +157,7 @@ await page.evaluate(()=>{nlKpiDefs_=TEST_ORIGINAL_NL_DEFS;renderExecutiveLeak();
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT,fullPage:true});
 await page.click('#themeToggle');
 ck('8-n. 다크모드에서도 카드 제목·수치 크기는 유지',await page.locator('#exLeakKpis .nl-kpi').first().evaluate(el=>
-  getComputedStyle(el.querySelector('b')).fontSize==='28px'&&getComputedStyle(el.querySelector('.nl-label')).fontSize==='13px'));
+  getComputedStyle(el.querySelector('b')).fontSize==='32px'&&getComputedStyle(el.querySelector('.nl-label')).fontSize==='13px'));
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT.replace('.png','-dark.png'),fullPage:true});
 await page.click('#themeToggle');
 await page.locator('#exLeakNozzleCard .nl-bar-row').first().click();
@@ -163,8 +169,12 @@ await page.click('[data-mode="mobile"]');
 ck('11. 모바일 보기에서 비교 영역이 한 열로 바뀐다',await page.evaluate(()=>getComputedStyle(document.querySelector('.nl-grid')).gridTemplateColumns.split(' ').length===1&&document.body.classList.contains('ex-narrow')));
 await page.setViewportSize({width:390,height:844});
 const mobile=await page.locator('#exLeakKpis').evaluate(el=>({overflow:el.scrollWidth>el.clientWidth,
-  fonts:[...el.querySelectorAll('b')].every(b=>getComputedStyle(b).fontSize==='28px')}));
+  fonts:[...el.querySelectorAll('b')].every(b=>getComputedStyle(b).fontSize==='32px')}));
 ck('11-c. 390px 모바일에서도 글자 크기 유지·카드 가로 넘침 없음',!mobile.overflow&&mobile.fonts,JSON.stringify(mobile));
+ck('11-c2. 좁은 카드에서 안내만 다음 줄로 이동',await page.locator('#exLeakKpis .nl-kpi').first().evaluate(el=>{
+  const n=el.querySelector('b').getBoundingClientRect(),m=el.querySelector('.nl-kpi-meta').getBoundingClientRect();
+  return m.top>=n.bottom&&el.scrollWidth<=el.clientWidth;
+}));
 await page.click('#exLeakKpis [data-hist-dim="leak:total"]');
 ck('11-d. 모바일 처리이력은 4건·필터를 정상 표시',await page.locator('#hstTableHost tbody tr').count()===4&&await page.locator('#hstGubun').isVisible());
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT.replace('.png','-mobile-history.png'),fullPage:true});

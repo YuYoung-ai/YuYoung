@@ -988,11 +988,6 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .ex-list-box.history{height:min(900px,calc(100dvh - 32px))}
   @media(max-width:820px){.ex-list-box.history{height:calc(100dvh - 20px)}}
 }
-.ex-rate{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:4px;flex:0 0 auto}
-.ex-rate b{font-size:14px;color:var(--green)}
-.ex-rate span{color:var(--text-muted);font-size:11px}
-.ex-ratebar{height:8px;background:var(--track);border-radius:4px;overflow:hidden;margin-bottom:9px;flex:0 0 auto}
-.ex-ratebar i{display:block;height:100%;background:var(--green);border-radius:4px}
 
 /* 비교표 */
 .ex-ctable{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -1012,11 +1007,11 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
 .nl-kpi:focus-visible{outline:2px solid var(--navy);outline-offset:-3px}
 .nl-kpi .nl-label{display:flex;justify-content:space-between;gap:6px;color:var(--text-muted);font-size:13px;line-height:1.45;white-space:normal;overflow-wrap:anywhere}
 .nl-kpi .nl-open{flex:none;color:var(--teal);font-size:12px}
-.nl-kpi b{display:block;margin-top:4px;color:var(--navy);font-size:28px;line-height:1.2;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.nl-kpi-value{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+.nl-kpi b{display:block;flex:none;color:var(--navy);font-size:32px;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap}
 .nl-kpi b u{margin-left:3px;text-decoration:none;font-size:12px;color:var(--text-muted)}
 .nl-kpi.warn b{color:var(--red)}
-.nl-kpi-meta{display:block;margin-top:7px;font-size:11.5px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
-.nl-kpi-meta small{display:block;margin-top:2px;font-size:11.5px}
+.nl-kpi-meta{font-size:11.5px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
 .nl-analysis-scope{font-size:12px;line-height:1.5;color:var(--text-muted);margin-bottom:7px}
 .nl-grid,.nl-bottom{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;min-height:0}
 .nl-bar-list{display:flex;flex-direction:column;gap:8px}
@@ -6157,10 +6152,7 @@ function renderExecutiveActions(x){
     exH3('N-CARE 점검 현황', (S.list.length?'가입 '+S.list.length+'곳 · ':'')+'가입 병원 기준 · 영업 담당자 필터 반영 · '+ncareAsOfLabel_(), true)
     +'<div class="ex-cbody">'
     +(S.list.length
-      ? '<div class="ex-rate"><b>✅ 점검 운영률 '+S.rate+'%</b>'
-           +'<span>30일 이내 점검 '+S.cnt[0]+' / '+S.list.length+'</span></div>'
-       +'<div class="ex-ratebar"><i style="width:'+Math.max(2,S.rate)+'%"></i></div>'
-       +'<div class="ex-nckbar">'+ST.slice(0,4).map(function(s,i){
+      ? '<div class="ex-nckbar">'+ST.slice(0,4).map(function(s,i){
            return '<div style="background:'+s[1]+'"><b>'+S.cnt[i]+'</b>'+s[0]+'</div>';
          }).join('')+'</div>'
        +'<div class="ex-nckbar wide"><div style="background:'+ST[4][1]+'"><b>'+S.cnt[4]+'</b>'+ST[4][0]+'</div></div>'
@@ -6328,7 +6320,7 @@ function exShowNozUnrated(){
 /* 추가 카드도 이 정의에 등록하면 동일한 집계·처리이력·고정 글자 크기를 사용한다. */
 function nlKpiDefs_(){
   return [
-    {key:'total',label:'노즐 누수(약액 유입)',note:'A/S·점검 포함 · 미평가 포함',hint:'구분 필터 선택 시 해당 구분만 집계'},
+    {key:'total',label:'노즐 누수(약액 유입)',note:'A/S·점검 포함 · 미평가 포함'},
     {key:'reuse',label:'재사용',group:['nozzle','reuse']},
     {key:'single',label:'1회 사용',group:['nozzle','single']},
     {key:'good',label:'교육 양호',group:['skill','good']},
@@ -6346,15 +6338,15 @@ function nlKpiData_(analysis,key){
   var rows=(analysis.rows||[]).filter(function(r){
     return hpIsLeakVoc_(r)&&(!members||members[skNorm_(r.hosp)]===true);
   });
-  return {key:def.key,label:def.label,group:def.group,warn:def.warn,note:def.note,hint:def.hint,rows:rows,value:rows.length};
+  return {key:def.key,label:def.label,group:def.group,warn:def.warn,note:def.note,rows:rows,value:rows.length};
 }
 function nlKpiHtml_(metric){
   return '<button type="button" class="nl-kpi'+(metric.warn?' warn':'')+'" data-hist-dim="leak:'+escAttr(metric.key)+'"'
     +' aria-label="'+escAttr(metric.label+' '+exNum(metric.value)+'건 처리 이력 보기')+'" title="처리 이력 보기">'
     +'<span class="nl-label">'+esc(metric.label)+'<span class="nl-open" aria-hidden="true">▸</span></span>'
-    +'<b>'+exNum(metric.value)+'<u>건</u></b>'
-    +(metric.note?'<span class="nl-kpi-meta">'+esc(metric.note)+(metric.hint?'<small>'+esc(metric.hint)+'</small>':'')+'</span>':'')
-    +'</button>';
+    +'<span class="nl-kpi-value"><b>'+exNum(metric.value)+'<u>건</u></b>'
+    +(metric.note?'<span class="nl-kpi-meta">'+esc(metric.note)+'</span>':'')
+    +'</span></button>';
 }
 /* 경고색은 배열 순서가 아니라 위험군(노즐 재사용 · 교육 미흡)에만 붙인다 */
 function nlIsRiskGroup_(key){ return key==='reuse'||key==='need'; }

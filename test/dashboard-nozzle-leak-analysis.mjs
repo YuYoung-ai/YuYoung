@@ -25,7 +25,7 @@ const D=new Function(FNS.map(grab).join('\n')+'\nreturn {'+FNS.join(',')
   +',addKpi:function(def){var base=nlKpiDefs_;nlKpiDefs_=function(){return base().concat([def]);};}};')();
 ck('포함 안내: 별도 집계 기준 버튼과 설명 함수는 제거',!SRC.includes('exShowLeakBasis_')&&!SRC.includes('nl-kpi-basis'));
 ck('포함 안내: 전체와 교차분석의 미평가 포함 여부를 구분',
-  grab('nlKpiDefs_').includes('A/S·점검 포함 · 미평가 포함')&&grab('nlKpiDefs_').includes('구분 필터 선택 시 해당 구분만 집계')
+  grab('nlKpiDefs_').includes('A/S·점검 포함 · 미평가 포함')&&!SRC.includes('구분 필터 선택 시 해당 구분만 집계')
   &&grab('renderExecutiveLeak').includes('두 평가가 모두 있는 병원만 분석 · 미평가 제외'));
 ck('분모 안내: 교차분석 툴팁·관찰 문장은 전체 발생이 아닌 분석 대상 기준',
   grab('nlHeatHtml_').includes('교차분석 대상')&&grab('renderExecutiveLeak').includes("bestText='교차분석 대상 '")
@@ -33,8 +33,8 @@ ck('분모 안내: 교차분석 툴팁·관찰 문장은 전체 발생이 아닌
   &&!grab('renderExecutiveLeak').includes('전체 누수 중 비중'));
 ck('확장: 카드 정의 목록이 렌더링과 이력 조회의 공통 진입점',
   grab('renderExecutiveLeak').includes('nlKpiDefs_().map')&&grab('exShowHistory_').includes('nlKpiData_(EX_LEAK_STATE||buildNozzleLeakCurrent_(),dim.slice(5))'));
-ck('가독성: 제목 13px·수치 28px 고정, 카드 수 증가 시 줄바꿈·세로 스크롤',
-  /\.nl-kpi \.nl-label\{[^}]*font-size:13px/.test(SRC)&&/\.nl-kpi b\{[^}]*font-size:28px/.test(SRC)
+ck('가독성: 제목 13px·수치 32px 고정, 카드 수 증가 시 줄바꿈·세로 스크롤',
+  /\.nl-kpi \.nl-label\{[^}]*font-size:13px/.test(SRC)&&/\.nl-kpi b\{[^}]*font-size:32px/.test(SRC)
   &&/\.nl-kpis\{[^}]*repeat\(auto-fit,minmax\(220px,1fr\)\)/.test(SRC)
   &&/#exPaneLeak\{[^}]*minmax\(260px,[^}]*overflow-y:auto/.test(SRC));
 function rows(a){return a.map(r=>{const o=Object.assign({hosp:'',type:'',nozzleReuse:'',nsFill:'',nsAmt:'',jet:''},r);const d=D.normD(o.date);o._y=d.y;o._m=d.m;o._d=d.d;o._q=d.q;return o;});}
@@ -74,6 +74,9 @@ ck('이력: 모든 카드가 표준 data-hist-dim 이벤트·네이티브 버튼
   metrics.every(m=>{const html=D.nlKpiHtml_(m);return html.startsWith('<button type="button"')&&html.includes('data-hist-dim="leak:'+m.key+'"')&&!html.includes('onclick=');}));
 ck('표기: 공백 통합 집계는 유지하되 안내에서 띄어쓰기 설명은 제외',
   metrics[0].value===5&&!D.nlKpiHtml_(metrics[0]).includes('띄어쓰기'));
+ck('표기: 건수와 포함 안내를 같은 줄에 배치하고 좁을 때만 줄바꿈',
+  D.nlKpiHtml_(metrics[0]).includes('<span class="nl-kpi-value"><b>5<u>건</u></b><span class="nl-kpi-meta">')
+  &&/\.nl-kpi-value\{[^}]*display:flex[^}]*flex-wrap:wrap/.test(SRC));
 ck('이력: 알 수 없는 카드 키는 전체 이력으로 확대하지 않고 차단',D.nlKpiData_(A,'not-a-card')===null);
 const empty=D.buildNozzleLeakAnalysis_([],[],20260831);
 ck('이력: 0건 카드도 동일한 필터 조회 버튼과 빈 목록 제공',
