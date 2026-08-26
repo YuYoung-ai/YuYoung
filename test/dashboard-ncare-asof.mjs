@@ -120,6 +120,13 @@ ck('11. 남아 있는 N-Care 모달·관리대상 배지가 ncareAsOfLabel_() �
 ck('12. "오늘 현황" 하드코딩이 남아 있지 않다',
   !/badge:\s*'오늘 현황'/.test(SRC) && !/기준 · 오늘 현황/.test(SRC));
 ck('13. 기간이 바뀌면 상세 분석 카드도 다시 그린다', /if\(DATA_READY\)\s*ncareCheck\(\);/.test(SRC));
+const actions = grab('renderExecutiveActions');
+const ncareCard = actions.slice(actions.indexOf("document.getElementById('exNckCard')"), actions.indexOf('var K=x.skill'));
+ck('14. 관리 대상 N-Care 카드에 운영률 수치·비율 막대를 표시하지 않는다',
+  !ncareCard.includes('점검 운영률') && !ncareCard.includes('S.rate') && !ncareCard.includes('ex-rate'));
+ck('15. 가입 병원 수·기준일·5개 점검 구간·잔여 명단은 유지',
+  ['S.list.length','ncareAsOfLabel_()','ST.slice(0,4)','S.cnt[i]','S.cnt[4]','잔여 점검 병원','exShowNck()','N-CARE 가입 병원 기록 없음']
+    .every(s=>ncareCard.includes(s)));
 
 console.log('──────────────────────────────');
 console.log('통과 ' + pass + '/' + total);

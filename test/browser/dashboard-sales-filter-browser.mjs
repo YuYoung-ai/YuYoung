@@ -50,6 +50,19 @@ try{
     await page.click('[data-tab="'+tab+'"]');
     const s=await page.evaluate(()=>({sales:F.sales,rows:EX_ROWS.length,drawn:EX_DRAWN[EX_TAB],note:document.getElementById('exTabFilterNote').textContent}));
     ck(tab+' 탭 전환에도 담당자 필터 유지 및 정상 렌더',s.sales[0]==='영업가'&&s.rows===2&&s.drawn,s);
+    if(tab==='actions'){
+      const ncareCard=await page.locator('#exNckCard').evaluate(el=>({
+        text:el.textContent,rate:el.querySelectorAll('.ex-rate,.ex-ratebar').length,
+        counts:[...el.querySelectorAll('.ex-nckbar b')].map(b=>Number(b.textContent)),
+        expected:EX_CACHE.ncare.cnt,asOf:ncareAsOfLabel_()
+      }));
+      ck('N-Care 카드에서 점검 운영률·백분율·비율 막대 제거',
+        ncareCard.rate===0&&!ncareCard.text.includes('운영률')&&!ncareCard.text.includes('%'));
+      ck('N-Care 카드 가입 수·기준일·구간별 병원 수·잔여 명단은 유지',
+        ncareCard.text.includes('가입 2곳')&&ncareCard.text.includes(ncareCard.asOf)
+        &&ncareCard.counts.length===5&&ncareCard.counts.join()===ncareCard.expected.join()
+        &&ncareCard.text.includes('잔여 점검 병원'),ncareCard);
+    }
   }
   const compare=await page.evaluate(()=>({
     prev:exWindowRows(new Date('2026-08-10'),new Date('2026-08-14T23:59:59')).length,
