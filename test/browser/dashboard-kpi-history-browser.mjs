@@ -108,7 +108,18 @@ await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-valu
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="점검"]');
 modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
 ck('3-e. 같은 그룹의 다른 구분 칩을 누르면 즉시 전환',modal.gubun==='점검'&&modal.rows===2,JSON.stringify(modal));
+ck('3-f. 점검에 없는 0건 VOC 유형 칩은 숨김',
+  await page.locator('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]').count()===0&&
+  await page.locator('#hstBreakdown [data-hst-count-key="type"]').count()===2);
+await page.selectOption('#hstType','케이블 불량');
+ck('3-g. 선택한 0건 유형은 칩만 숨기고 드롭다운에서 해제 가능',
+  await page.inputValue('#hstType')==='케이블 불량'&&await page.locator('#hstTableHost tbody tr').count()===0&&
+  await page.locator('#hstBreakdown [data-hst-count-key="type"].is-zero').count()===0);
+await page.selectOption('#hstType','all');
+ck('3-h. 드롭다운 해제로 이력 복구',await page.locator('#hstTableHost tbody tr').count()===2);
 await page.evaluate(()=>exResetHistoryFilters_());
+ck('3-i. 조건 초기화 시 양수로 돌아온 유형 칩 복원',
+  await page.locator('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]').count()===1);
 await page.click('#hstBreakdown [data-hst-count-key="type"][data-hst-count-value="케이블 불량"]');
 modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,breakdown:document.getElementById('hstBreakdown').textContent,type:document.getElementById('hstType').value}));
 ck('4. VOC 유형별 건수 칩 클릭 시 표시 건수와 두 요약이 함께 갱신',

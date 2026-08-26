@@ -5148,14 +5148,15 @@ function exHistoryCounts_(items,key){
 }
 function exHistoryBreakdownHtml_(items,opt){
   opt=opt||{};
-  /* 버튼 목록·순서는 원본 이력 기준으로 고정하고, 건수만 나머지 필터 조건에 맞춰 갱신한다.
-     자기 그룹 조건은 제외해 같은 그룹의 다른 항목이 사라지지 않는 faceted filter 방식이다. */
+  /* 원본 순서를 유지하며 자기 그룹 조건은 제외해 다른 항목으로 전환할 수 있게 한다.
+     VOC 유형만 나머지 조건에서 0건인 칩을 숨긴다. 선택 조건은 드롭다운에서 유지·해제한다. */
   function facetRows(key){
     var scoped={period:opt.period||'all',gubun:key==='gubun'?'all':(opt.gubun||'all'),
       type:key==='type'?'all':(opt.type||'all'),sales:key==='sales'?'all':(opt.sales||'all'),fse:opt.fse||'all',q:opt.q||''};
     var counts=Object.create(null), base=exHistoryCounts_(items,key);
     exHistoryCounts_(exHistoryFilter_(items,scoped),key).forEach(function(x){counts[x.k]=x.n;});
-    return base.map(function(x){return {k:x.k,n:counts[x.k]||0};});
+    return base.map(function(x){return {k:x.k,n:counts[x.k]||0};})
+      .filter(function(x){return key!=='type'||x.n>0;});
   }
   function card(title,rows,key){
     return '<div class="hst-break-card"><strong>'+esc(title)+'</strong><div class="hst-break-list">'
