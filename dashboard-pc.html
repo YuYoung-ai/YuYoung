@@ -832,6 +832,12 @@ body.dark .yc-band{opacity:.26}
 .hst-break-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
 .hst-break-card strong{display:block;margin-bottom:5px;color:var(--navy);font-size:10.5px}
 .hst-break-list{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.hst-break-list[hidden]{display:none}
+.hst-break-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;padding:0;
+  background:none;color:var(--navy);font:inherit;text-align:left;cursor:pointer}
+.hst-break-toggle strong{margin:0}.hst-break-toggle span{flex-shrink:0;color:var(--text-muted);font-size:10px}
+.hst-break-toggle[aria-expanded="true"]{margin-bottom:5px}
+.hst-break-toggle:focus-visible{outline:2px solid var(--teal);outline-offset:3px;border-radius:3px}
 .hst-count-chip{flex:0 0 auto;border-radius:999px;background:var(--surface);padding:3px 7px;color:var(--text-muted);
   font-family:inherit;font-size:9.5px;white-space:nowrap;border:1px solid var(--gray-line);cursor:pointer}
 .hst-count-chip b{margin-left:3px;color:var(--navy);font-size:10.5px;font-variant-numeric:tabular-nums}
@@ -5159,7 +5165,13 @@ function exHistoryBreakdownHtml_(items,opt){
       .filter(function(x){return key!=='type'||x.n>0;});
   }
   function card(title,rows,key){
-    return '<div class="hst-break-card"><strong>'+esc(title)+'</strong><div class="hst-break-list">'
+    var sales=key==='sales', expanded=!!opt.salesExpanded;
+    var heading=sales
+      ? '<button type="button" class="hst-break-toggle" id="hstSalesCountsToggle" aria-controls="hstSalesCountsList" aria-expanded="'+expanded+'" onclick="exToggleHistorySalesCounts_()">'
+        +'<strong>'+esc(title)+'</strong><span>'+(expanded?'접기 ▴':'펼치기 ▾')+'</span></button>'
+      : '<strong>'+esc(title)+'</strong>';
+    return '<div class="hst-break-card">'+heading+'<div class="hst-break-list"'
+      +(sales?' id="hstSalesCountsList"'+(expanded?'':' hidden'):'')+'>'
       +(rows.length?rows.map(function(x){
         var value=x.k===(key==='sales'?'미지정':'미입력')?'__missing__':x.k;
         var selected=opt[key]===value;
@@ -5621,7 +5633,8 @@ function exApplyHistoryFilters_(){
   function val(id, fallback){ var el=document.getElementById(id); return el?el.value:fallback; }
   var opt={
     period:val('hstPeriod','cur'), gubun:val('hstGubun','all'), type:val('hstType','all'),
-    fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery','')
+    fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery',''),
+    salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded
   };
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   EX_HISTORY_STATE.filtered=filtered;
@@ -5631,6 +5644,17 @@ function exApplyHistoryFilters_(){
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
   if(host) host.innerHTML=exHistoryTable_(filtered);
   exSyncHistoryTypeExample_(opt.type,filtered);
+}
+/* 표시 상태만 바꾼다. 필터·목록·건수 재계산이나 네트워크 요청은 하지 않는다. */
+function exToggleHistorySalesCounts_(){
+  if(!EX_HISTORY_STATE) return;
+  var btn=document.getElementById('hstSalesCountsToggle'), list=document.getElementById('hstSalesCountsList');
+  if(!btn||!list) return;
+  var expanded=!EX_HISTORY_STATE.salesCountsExpanded;
+  EX_HISTORY_STATE.salesCountsExpanded=expanded;
+  list.hidden=!expanded;
+  btn.setAttribute('aria-expanded',String(expanded));
+  btn.querySelector('span').textContent=expanded?'접기 ▴':'펼치기 ▾';
 }
 /* 같은 칩 재클릭은 해당 조건만 해제하고, 다른 칩은 같은 그룹의 조건을 즉시 전환한다. */
 function exApplyHistoryCountChip_(btn){
@@ -5661,6 +5685,7 @@ function exRefreshHistoryForHospitalDB_(){
     saved.push({id:id,value:el.value,label:el.selectedOptions&&el.selectedOptions[0]?el.selectedOptions[0].textContent:el.value});
   });
   exShowHistory_(state.dim,state.name);
+  EX_HISTORY_STATE.salesCountsExpanded=!!state.salesCountsExpanded;
   saved.forEach(function(s){
     var el=document.getElementById(s.id); if(!el) return;
     el.value=s.value;
@@ -5716,7 +5741,7 @@ function exShowHistory_(dim, name){
     orderText='처리일 최신순 · 행 선택 시 유형별 참고 예시';
   }
   var items=exHistoryDataset_(cur, prev||[], sort);
-  EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost,
+  EX_HISTORY_STATE={dim:dim,name:title,items:items,showCost:isCost,salesCountsExpanded:false,
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
     typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
   var html='<div class="hst-view">'
