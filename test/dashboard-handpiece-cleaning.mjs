@@ -32,6 +32,7 @@ const cohort=rows([
   {date:'2026-08-02',hosp:'A병원',sn:'SN-2',fse:'이기사',type:'노즐누수(약액 유입)',part:'내부 세척',detail:'세척 완료'},
   {date:'2026-08-03',hosp:'B병원',sn:'',fse:'김기사',type:'노즐 누수(약액 유입)',part:'내부 세척',detail:'장비번호 미입력'},
   {date:'2026-08-04',hosp:'C병원',sn:'SN-3',type:'노즐 누수(약액 유입)',part:'내부 세척'},
+  {date:'2026-08-04',hosp:'P병원',sn:'SN-P',fse:'박기사',gubun:'점검',type:'노즐 누수(약액 유입)',part:'내부 세척',detail:'점검 중 내부 세척'},
   {date:'2026-08-05',hosp:'D병원',sn:'SN-4',type:'케이블 불량',part:'내부 세척'},
   {date:'2026-08-06',hosp:'E병원',sn:'SN-5',type:'노즐 누수(약액 유입)',part:"Handpiece Ass'y"},
   {date:'2026-08-07',hosp:'데모센터',sn:'D-1',type:'노즐 누수(약액 유입)',part:'내부 세척',detail:'[데모장비]\n내부 세척'}
@@ -42,13 +43,17 @@ const later=rows([
   {date:'2026-08-08',hosp:'A병원',sn:'SN-9',type:'노즐 누수(약액 유입)',detail:'다른 장비'},
   {date:'2026-08-09',hosp:'B병원',sn:'B-2',type:'노즐 누수(약액 유입)',detail:'병원 단위 추정 재접수'},
   {date:'2026-08-15',hosp:'C병원',sn:'SN-3',type:'출력 약함',detail:'다른 VOC'},
+  {date:'2026-08-20',hosp:'P병원',sn:'SN-P',gubun:'점검',type:'노즐 누수(약액 유입)',detail:'점검 중 동일 VOC 재확인'},
   {date:'2026-09-05',hosp:'A병원',sn:'SN-2',type:'노즐 누수(약액 유입)',detail:'선택 기간 밖 후속 재접수'}
 ]);
 const all=cohort.concat(later);
 const A=D.buildHandpieceCleaningAnalysis_(cohort,all,'2026-09-10',new Date('2026-09-30T00:00:00'));
 
-ck('1. 노즐 누수 + 내부 세척 + 고객 서비스만 세척 사례',A.events.length===5,'events='+A.events.length);
+ck('1. 노즐 누수 발생 후 내부 세척한 고객 서비스 사례',A.events.length===6,'events='+A.events.length);
 ck('2. VOC 유형 공백 차이는 같은 값으로 처리',cohort.slice(0,2).every(D.isHandpieceCleaning_));
+ck('2-a. 점검에서 수행한 내부 세척도 분석 대상',A.events.some(e=>e.hosp==='P병원'&&e.row.gubun==='점검'));
+ck('2-b. 구분값이 아니라 노즐 누수와 내부 세척 조합으로 판정',
+  D.isHandpieceCleaning_(rows([{date:'2026-08-04',hosp:'기타병원',gubun:'기타',type:'노즐 누수(약액 유입)',part:'내부 세척'}])[0]));
 ck('3. 다른 VOC의 내부 세척 제외',!A.events.some(e=>e.hosp==='D병원'));
 ck('4. 실제 교체품 기록 제외',!A.events.some(e=>e.hosp==='E병원'));
 ck('5. 데모 운영 기록 제외',!A.events.some(e=>e.hosp==='데모센터'));
@@ -58,11 +63,13 @@ const sn1=A.events.find(e=>e.sn==='SN-1');
 const sn2=A.events.find(e=>e.sn==='SN-2');
 const b=A.events.find(e=>e.hosp==='B병원');
 const c=A.events.find(e=>e.hosp==='C병원');
+const p=A.events.find(e=>e.hosp==='P병원');
 ck('7. 같은 날 동일 VOC는 재발에서 제외',D.ymd(sn1.recurrenceDate)==='2026-08-10');
 ck('8. 동일 병원·동일 장비·동일 VOC만 재발',sn1.recurrence&&sn1.days===9);
 ck('9. 다른 장비번호의 동일 VOC는 재발 아님',D.ymd(sn2.recurrenceDate)==='2026-09-05');
 ck('10. 선택 기간 밖 후속 기록도 RAW 전체에서 재발 검색',sn2.recurrence&&sn2.days===34);
 ck('11. 장비번호 미입력은 병원 단위 추정',b.recurrence&&b.confidence==='병원 단위 추정'&&D.ymd(b.recurrenceDate)==='2026-08-09');
+ck('11-a. 점검의 동일 VOC도 후속 재발 기록으로 검색',p.recurrence&&D.ymd(p.recurrenceDate)==='2026-08-20');
 ck('12. 다른 VOC 유형은 재발 아님',!c.recurrence&&c.days===37);
 ck('13. 재발/14일/30일 상태 구간',sn1.status==='재발'&&c.status==='30일 이상 무재발');
 ck('14. 데이터 품질에 장비번호 미입력 포함',A.quality.some(q=>q.issue==='장비번호 미입력'&&q.event.hosp==='B병원'));
@@ -84,11 +91,23 @@ const table=D.hpCleanTable_(A.events);
 ck('21. 표에 근거 열과 처리 내용 표시',
   ['세척일','병원','장비번호','담당자','처리 내용','경과일','이후 동일 VOC','판정 기준','상태','JET TEST 정상'].every(x=>table.includes(x)));
 ck('22. 카드 DOM과 Excel 생성 버튼 존재',/id="hpCleanCard"/.test(SRC)&&/id="hpCleanExport"/.test(SRC));
+ck('22-a. 카드와 Excel에 노즐 누수 발생 후 내부 세척 기준 명시',
+  /노즐 누수\(약액 유입\) 발생 후 ‘내부 세척’ 조치/.test(SRC)&&/VOC 노즐 누수\(약액 유입\) 발생 후 내부 세척 조치/.test(SRC));
 ck('23. 상세 분석 렌더러가 카드 렌더 호출',/renderHandpieceCleaningCard_\(rows\)/.test(grab('renderDetailedDashboard')));
 ck('24. Excel은 카드에 표시된 필터 결과를 사용',/var events=HP_CLEAN_STATE\.shown\|\|\[\]/.test(grab('exportHandpieceCleaningExcel')));
 ck('25. Excel 4개 시트 생성',
   ['분석 요약','세척 경과 상세','재발 이력','데이터 품질'].every(n=>SRC.includes("addWorksheet('"+n+"'")));
 ck('26. Excel에 자동 필터·고정 헤더·날짜 형식',/autoFilter/.test(grab('exportHandpieceCleaningExcel'))&&/state:'frozen'/.test(grab('exportHandpieceCleaningExcel'))&&/yyyy-mm-dd/.test(grab('exportHandpieceCleaningExcel')));
+ck('26-a. 요약 시트 값·설명 구간을 분리 병합하고 가운데 높이로 정렬',
+  /mergeCells\(r,2,r,3\)/.test(grab('exportHandpieceCleaningExcel'))&&
+  /mergeCells\(r,4,r,6\)/.test(grab('exportHandpieceCleaningExcel'))&&
+  /vertical:'middle',horizontal:'left'/.test(grab('exportHandpieceCleaningExcel')));
+ck('26-b. 상세 시트 긴 헤더와 처리 내용에 맞춘 열 너비·행 높이 적용',
+  /headers\(s2,1,dh,42\)/.test(grab('exportHandpieceCleaningExcel'))&&
+  /Math\.min\(96,Math\.max\(24,15\*Math\.max\(detailLines,recurLines\)\)\)/.test(grab('exportHandpieceCleaningExcel')));
+ck('26-c. 상세 일반 열은 가운데, 긴 처리 내용 열은 위쪽 정렬',
+  /\[1,3,4,6,8,9,10,11,12,13\]/.test(grab('exportHandpieceCleaningExcel'))&&
+  /\[7,14\].+vertical:'top'/.test(grab('exportHandpieceCleaningExcel')));
 ck('27. 요약 수치는 상세 시트 참조 수식과 결과값 포함',/formula:/.test(grab('exportHandpieceCleaningExcel'))&&/result:summary\./.test(grab('exportHandpieceCleaningExcel')));
 ck('28. Excel 파일명에 세척 기간·기준일 포함',/핸드피스_내부세척_효과분석_/.test(grab('exportHandpieceCleaningExcel'))&&/기준일/.test(grab('exportHandpieceCleaningExcel')));
 ck('29. 기존 교체품 집계와 PPT 로직은 분석 함수에서 변경하지 않음',

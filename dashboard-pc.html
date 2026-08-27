@@ -1558,7 +1558,7 @@ exApplyLevel3Tools_();
     <!-- 현장 내부 세척 후 동일 VOC 재접수 여부·경과일 근거 분석 -->
     <div class="card hp-clean-card" id="hpCleanCard">
       <h3><span class="hp-clean-title">핸드피스 내부 세척 효과 분석
-        <small>노즐 누수(약액 유입) · 교체품 ‘내부 세척’ · 고객 서비스 기준 · 데모 제외</small></span>
+        <small>노즐 누수(약액 유입) 발생 후 ‘내부 세척’ 조치 · 고객 서비스 기준 · 데모 제외</small></span>
         <button type="button" class="hp-clean-export" id="hpCleanExport" onclick="exportHandpieceCleaningExcel()">📊 근거자료 Excel</button>
       </h3>
       <div id="cHpClean"></div>
@@ -2467,8 +2467,9 @@ function hpIsLeakVoc_(r){ return !!r && hpCleanKey_(r.type)==='노즐누수(약�
 function hpCleanVal_(s){
   s=String(s==null?'':s).trim(); return (!s||s==='없음')?'':s;
 }
+/* 구분(A/S·점검)이 아니라 '대상 VOC 발생 후 내부 세척 조치' 자체를 효과 분석 사례로 본다. */
 function isHandpieceCleaning_(r){
-  return !!r && recScope(r)==='customer' && String(r.gubun||'').trim()==='A/S'
+  return !!r && recScope(r)==='customer'
     && hpIsLeakVoc_(r)
     && hpCleanKey_(r.part)==='내부세척';
 }
@@ -2519,7 +2520,7 @@ function buildHandpieceCleaningAnalysis_(cohortRows, allRows, asOf, today){
   });
   var universe=(allRows||[]).filter(function(r){
     var d=rowDate(r);
-    return d&&d<=cutoff&&recScope(r)==='customer'&&String(r.gubun||'').trim()==='A/S'
+    return d&&d<=cutoff&&recScope(r)==='customer'
       &&hpIsLeakVoc_(r);
   });
   var events=cohort.map(function(r,idx){
@@ -2618,7 +2619,7 @@ function hpCleanRefreshResults_(){
   var t=document.getElementById('hpCleanTableHost'),w=document.getElementById('hpCleanWarning');
   if(k) k.innerHTML=hpCleanKpis_(ss);
   if(r) r.innerHTML='<span>현재 카드 조건 <b>'+shown.length+'건</b> · 전체 세척 사례 '+a.events.length+'건</span>'
-    +'<span>처리일 최신순 · 재발 검색은 기준일까지 전체 고객 서비스 기록 사용</span>';
+    +'<span>처리일 최신순 · 재발 검색은 기준일까지 전체 고객 서비스의 동일 VOC 기록 사용</span>';
   if(t) t.innerHTML=hpCleanTable_(shown);
   if(w){var warning=hpCleanWarning_(ss);w.innerHTML=warning;w.style.display=warning?'block':'none';}
 }
@@ -2645,7 +2646,7 @@ function renderHandpieceCleaningCard_(rows){
     +'<button type="button" class="hp-clean-reset" onclick="resetHandpieceCleaningFilters_()">분석 필터 초기화</button></div>'
     +'<div id="hpCleanKpis">'+hpCleanKpis_(ss)+'</div>'
     +'<div class="hp-clean-result" id="hpCleanResult"><span>현재 카드 조건 <b>'+shown.length+'건</b> · 전체 세척 사례 '+a.events.length+'건</span>'
-      +'<span>처리일 최신순 · 재발 검색은 기준일까지 전체 고객 서비스 기록 사용</span></div>'
+      +'<span>처리일 최신순 · 재발 검색은 기준일까지 전체 고객 서비스의 동일 VOC 기록 사용</span></div>'
     +'<div class="hp-clean-table-wrap" id="hpCleanTableHost">'+hpCleanTable_(shown)+'</div>'
     +'<div class="hp-clean-warn" id="hpCleanWarning" style="display:'+(hpCleanWarning_(ss)?'block':'none')+'">'
       +hpCleanWarning_(ss)+'</div>';
@@ -2699,15 +2700,15 @@ async function exportHandpieceCleaningExcel(){
       ws.mergeCells(1,1,2,lastCol);var c=ws.getCell(1,1);c.value=text;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:navy}};
       c.font={name:font,size:17,bold:true,color:{argb:white}};c.alignment={horizontal:'left',vertical:'middle'};ws.getRow(1).height=25;
     }
-    function headers(ws,row,labels){
+    function headers(ws,row,labels,height){
       labels.forEach(function(v,i){var c=ws.getCell(row,i+1);c.value=v;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:navy}};
         c.font={name:font,size:10,bold:true,color:{argb:white}};c.alignment={horizontal:'center',vertical:'middle',wrapText:true};});
-      ws.getRow(row).height=24;
+      ws.getRow(row).height=height||30;
     }
     function bodyStyle(ws,from,to,cols){
       for(var r=from;r<=to;r++){
         for(var c=1;c<=cols;c++){var x=ws.getCell(r,c);x.font={name:font,size:10,color:{argb:'FF1A1A2E'}};
-          x.alignment={vertical:'top',wrapText:true};x.border=border();}
+          x.alignment={vertical:'middle',wrapText:true};x.border=border();}
         if(r%2===0) for(var j=1;j<=cols;j++) ws.getCell(r,j).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF8FAFD'}};
       }
     }
@@ -2715,14 +2716,14 @@ async function exportHandpieceCleaningExcel(){
 
     /* 1. 분석 요약 — 중요한 수치는 상세 시트를 참조하는 수식과 계산 결과를 함께 저장 */
     var s1=wb.addWorksheet('분석 요약',{views:[{showGridLines:false}]});
-    s1.columns=[{width:25},{width:18},{width:58},{width:3},{width:20},{width:20}];title(s1,'핸드피스 내부 세척 효과 분석',6);
+    s1.columns=[{width:25},{width:19},{width:34},{width:12},{width:26},{width:34}];title(s1,'핸드피스 내부 세척 효과 분석',6);
     var meta=[['생성일',new Date(),''],['경과 기준일',hpCleanExcelDate_(HP_CLEAN_STATE.analysis.asOf),'기준일 이후 기록 제외'],
-      ['분석 조건',hpCleanFilterText_(),'VOC 노즐 누수(약액 유입) · 조치 내부 세척 · 고객 서비스 · 데모 제외'],
+      ['분석 조건',hpCleanFilterText_(),'VOC 노즐 누수(약액 유입) 발생 후 내부 세척 조치 · 고객 서비스 · 데모 제외'],
       ['재발 판정','동일 병원·동일 장비번호·동일 VOC','세척 다음 날부터 기준일까지 검색 · 장비번호 없으면 병원 단위 추정']];
-    meta.forEach(function(v,i){var r=4+i;s1.getCell(r,1).value=v[0];s1.getCell(r,2).value=v[1];s1.mergeCells(r,2,r,3);s1.getCell(r,4).value='';s1.getCell(r,5).value=v[2];s1.mergeCells(r,5,r,6);});
+    meta.forEach(function(v,i){var r=4+i;s1.getCell(r,1).value=v[0];s1.getCell(r,2).value=v[1];s1.mergeCells(r,2,r,3);s1.getCell(r,4).value=v[2];s1.mergeCells(r,4,r,6);});
     s1.getCell(4,2).numFmt='yyyy-mm-dd hh:mm';s1.getCell(5,2).numFmt='yyyy-mm-dd';
-    for(var mr=4;mr<=7;mr++){s1.getCell(mr,1).font={name:font,bold:true,color:{argb:navy}};for(var mc=1;mc<=6;mc++){s1.getCell(mr,mc).alignment={vertical:'top',wrapText:true};s1.getCell(mr,mc).border=border();}}
-    headers(s1,9,['지표','값','계산 기준','','','']);
+    for(var mr=4;mr<=7;mr++){s1.getRow(mr).height=mr>=6?34:24;s1.getCell(mr,1).font={name:font,bold:true,color:{argb:navy}};for(var mc=1;mc<=6;mc++){s1.getCell(mr,mc).alignment={vertical:'middle',horizontal:'left',wrapText:true};s1.getCell(mr,mc).border=border();}}
+    headers(s1,9,['지표','값','계산 기준','','',''],30);s1.mergeCells(9,3,9,6);
     var statusCol="'세척 경과 상세'!$L$2:$L$"+detailEnd,daysCol="'세척 경과 상세'!$I$2:$I$"+detailEnd,snCol="'세척 경과 상세'!$C$2:$C$"+detailEnd;
     var kpis=[
       ['내부 세척 실시 건수',{formula:"COUNTA('세척 경과 상세'!$A$2:$A$"+detailEnd+')',result:summary.total},'현재 카드 조건의 세척 사례'],
@@ -2735,20 +2736,27 @@ async function exportHandpieceCleaningExcel(){
       ['현재 재접수 없음 비율',{formula:'IFERROR(B13/COUNTIF('+statusCol+',"<>판정 불가"),0)',result:summary.evaluable?summary.noRecurrence/summary.evaluable:0},'재접수 없음 / 판정 가능 사례']
     ];
     kpis.forEach(function(v,i){var r=10+i;s1.getCell(r,1).value=v[0];s1.getCell(r,2).value=v[1];s1.getCell(r,3).value=v[2];s1.mergeCells(r,3,r,6);});
-    bodyStyle(s1,10,17,6);for(var kr=10;kr<=17;kr++){s1.getCell(kr,1).font={name:font,bold:true,color:{argb:navy}};s1.getCell(kr,2).font={name:font,bold:true,size:12,color:{argb:teal}};}
+    bodyStyle(s1,10,17,6);for(var kr=10;kr<=17;kr++){s1.getRow(kr).height=24;s1.getCell(kr,1).font={name:font,bold:true,color:{argb:navy}};s1.getCell(kr,2).font={name:font,bold:true,size:12,color:{argb:teal}};s1.getCell(kr,2).alignment={vertical:'middle',horizontal:'right'};}
     s1.getCell(14,2).numFmt='0.0';s1.getCell(17,2).numFmt='0.0%';s1.views=[{state:'frozen',ySplit:2,showGridLines:false}];
     s1.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:1,printArea:'A1:F17'};
 
     /* 2. 세척 경과 상세 */
     var s2=wb.addWorksheet('세척 경과 상세',{views:[{state:'frozen',ySplit:1,showGridLines:false}]});
-    s2.columns=[{width:12},{width:23},{width:16},{width:12},{width:25},{width:14},{width:48},{width:12},{width:10},{width:16},{width:12},{width:21},{width:18},{width:42}];
-    var dh=['세척일','병원','장비번호','담당자','VOC 유형','조치','처리 내용','경과 기준일','경과일','이후 동일 VOC 발생일','재발까지 경과일','판정','판정 신뢰도','재발 처리 내용'];headers(s2,1,dh);
+    s2.columns=[{width:13},{width:25},{width:16},{width:12},{width:25},{width:14},{width:50},{width:14},{width:10},{width:19},{width:16},{width:22},{width:18},{width:44}];
+    var dh=['세척일','병원','장비번호','담당자','VOC 유형','조치','처리 내용','경과 기준일','경과일','이후 동일 VOC 발생일','재발까지 경과일','판정','판정 신뢰도','재발 처리 내용'];headers(s2,1,dh,42);
     events.forEach(function(e,i){var r=2+i;s2.getRow(r).values=[hpCleanExcelDate_(e.cleanDate),e.hosp,e.sn||'미입력',e.fse,e.type,e.part,e.detail,
         hpCleanExcelDate_(e.asOf),e.days,e.recurrenceDate?hpCleanExcelDate_(e.recurrenceDate):null,e.recurrence?e.days:null,e.status,e.confidence,e.recurrenceDetail];
-      s2.getRow(r).height=Math.max(21,15*(String(e.detail||'').split('\n').length));
+      var detailLines=String(e.detail||'').split('\n').reduce(function(n,v){return n+Math.max(1,Math.ceil(v.length/42));},0);
+      var recurLines=String(e.recurrenceDetail||'').split('\n').reduce(function(n,v){return n+Math.max(1,Math.ceil(v.length/36));},0);
+      s2.getRow(r).height=Math.min(96,Math.max(24,15*Math.max(detailLines,recurLines)));
     });
     bodyStyle(s2,2,detailEnd,14);dateCols(s2,[1,8,10],2,detailEnd);s2.autoFilter={from:{row:1,column:1},to:{row:detailEnd,column:14}};
-    for(var dr=2;dr<=detailEnd;dr++){var st=s2.getCell(dr,12);if(st.value==='재발')st.font={name:font,bold:true,color:{argb:red}};else if(st.value==='판정 불가')st.font={name:font,bold:true,color:{argb:amber}};else st.font={name:font,bold:true,color:{argb:green}};}
+    for(var dr=2;dr<=detailEnd;dr++){
+      [1,3,4,6,8,9,10,11,12,13].forEach(function(col){s2.getCell(dr,col).alignment={vertical:'middle',horizontal:'center',wrapText:true};});
+      [2,5].forEach(function(col){s2.getCell(dr,col).alignment={vertical:'middle',horizontal:'left',wrapText:true};});
+      [7,14].forEach(function(col){s2.getCell(dr,col).alignment={vertical:'top',horizontal:'left',wrapText:true};});
+      var st=s2.getCell(dr,12);if(st.value==='재발')st.font={name:font,bold:true,color:{argb:red}};else if(st.value==='판정 불가')st.font={name:font,bold:true,color:{argb:amber}};else st.font={name:font,bold:true,color:{argb:green}};
+    }
     s2.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0};
 
     /* 3. 재발 이력 */
