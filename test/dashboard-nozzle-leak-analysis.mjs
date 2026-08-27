@@ -27,10 +27,14 @@ ck('포함 안내: 별도 집계 기준 버튼과 설명 함수는 제거',!SRC.
 ck('포함 안내: 전체와 교차분석의 미평가 포함 여부를 구분',
   grab('nlKpiDefs_').includes('A/S·점검 포함 · 미평가 포함')&&!SRC.includes('구분 필터 선택 시 해당 구분만 집계')
   &&grab('renderExecutiveLeak').includes('두 평가가 모두 있는 병원만 분석 · 미평가 제외'));
-ck('분모 안내: 교차분석 툴팁·관찰 문장은 전체 발생이 아닌 분석 대상 기준',
-  grab('nlHeatHtml_').includes('교차분석 대상')&&grab('renderExecutiveLeak').includes("bestText='교차분석 대상 '")
-  &&grab('nlHeatHtml_').includes('건 / 분석 대상 ')
-  &&!grab('renderExecutiveLeak').includes('전체 누수 중 비중'));
+ck('교차표 안내: 분석 대상 누수 비중을 제거하고 그룹 병원 대비 발생률만 사용',
+  !SRC.includes('분석 대상 누수 중 비중')&&!SRC.includes('function nlHeatShare_')
+  &&grab('renderExecutiveLeak').includes("bestText='그룹 병원 대비 발생 비율은 '")
+  &&!grab('renderExecutiveLeak').includes('topShare'));
+ck('교차표 우선순위: 큰 숫자는 그룹 병원 대비 발생 비율, 아래는 누수 건수',
+  grab('nlHeatHtml_').includes("'<b>'+(a.hospitals? rate+'<u>%</u>'")
+  &&grab('nlHeatHtml_').includes('<span class="sub">누수 ')
+  &&grab('renderExecutiveLeak').includes('큰 숫자·색 = 그룹 병원 대비 발생 비율 · 아래 = 누수 건수'));
 ck('확장: 카드 정의 목록이 렌더링과 이력 조회의 공통 진입점',
   grab('renderExecutiveLeak').includes('nlKpiDefs_().map')&&grab('exShowHistory_').includes('nlKpiData_(EX_LEAK_STATE||buildNozzleLeakCurrent_(),dim.slice(5))'));
 ck('가독성: 제목 13px·수치 32px 고정, 카드 수 증가 시 줄바꿈·세로 스크롤',
