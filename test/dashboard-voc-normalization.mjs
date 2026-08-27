@@ -14,7 +14,7 @@ function grab(name){
   }
   throw new Error('함수 끝 없음: '+name);
 }
-const names=['boot','normD','costNum','paidType_','hpCleanKey_','hpIsLeakVoc_',
+const names=['boot','vocTypeCanonical_','normD','costNum','paidType_','hpCleanKey_','hpIsLeakVoc_',
   'isOK','exDim','exDimCompare','exVocTypeCompare_','exHistoryRows_'];
 // UI·병원 DB 결합만 대체하고 실제 boot/집계/이력 함수 원문을 실행한다.
 const D=new Function(`
@@ -54,4 +54,24 @@ const previous=D.rows();
 const comparison=D.exVocTypeCompare_(current,previous).find(t=>t.k===canonical);
 ck('이전 기간도 같은 표준 이름으로 비교',comparison,{k:canonical,cur:4,prev:1,d:3});
 ck('이전 기간 처리이력과 비교 건수 일치',D.exHistoryRows_(previous,'type',canonical,false).length,comparison.prev);
+
+const footCanonical='풋스위치 작동 불량';
+const footRows=[
+  {type:'풋스위치 불량',date:'2025-06-10',hosp:'구형병원',gubun:'A/S'},
+  {type:'풋스위치 작동 불량',date:'2026-03-11',hosp:'현재병원',gubun:'A/S'},
+  {type:' 풋 스위치  동작 불능 ',date:'2026-04-12',hosp:'별칭병원',gubun:'점검'}
+];
+D.boot({data:footRows,updated:'test'},false);
+const footAll=D.rows();
+ck('풋스위치: 구형·현재·띄어쓰기 별칭을 현재 표준명으로 통일',
+  footAll.map(r=>r.type),Array(3).fill(footCanonical));
+const byYear=y=>footAll.filter(r=>r._y===y);
+const foot2025=D.exVocTypeCompare_(byYear(2025),null).find(t=>t.k===footCanonical);
+const foot2026=D.exVocTypeCompare_(byYear(2026),null).find(t=>t.k===footCanonical);
+const footTotal=D.exVocTypeCompare_(footAll,null).find(t=>t.k===footCanonical);
+ck('풋스위치: 전체 기간 합계가 2025년과 2026년 합계의 합과 일치',
+  footTotal.cur,foot2025.cur+foot2026.cur);
+ck('풋스위치: 전체 기간 TOP5 건수와 처리이력 건수가 일치',
+  D.exHistoryRows_(footAll,'type',footCanonical,false).length,footTotal.cur);
+ck('풋스위치: 원본 행을 제거하거나 중복 생성하지 않음',footAll.length,footRows.length);
 console.log(`통과 ${pass}/${pass}`);

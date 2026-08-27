@@ -24,7 +24,10 @@ const DATA=[
   {date:'2026-08-13',hosp:'C병원',gubun:'점검',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'없음',fse:'김프로',ncare:'미가입'},
   {date:'2026-08-14',hosp:'D병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
   {date:'2026-08-04',hosp:'E병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'미가입'},
-  {date:'2026-08-05',hosp:'F병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'}
+  {date:'2026-08-05',hosp:'F병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
+  {date:'2025-03-10',hosp:'G병원',gubun:'A/S',cat:'장비',type:'풋스위치 불량',part:'Foot s/w',fse:'김프로',ncare:'미가입'},
+  {date:'2025-07-11',hosp:'H병원',gubun:'점검',cat:'장비',type:' 풋 스위치 동작 불능 ',part:'없음',fse:'이기사',ncare:'미가입'},
+  {date:'2026-01-12',hosp:'I병원',gubun:'A/S',cat:'장비',type:'풋스위치 작동 불량',part:'Foot s/w',fse:'김프로',ncare:'미가입'}
 ];
 
 const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_CHROME||undefined});
@@ -231,6 +234,23 @@ await page.evaluate(()=>{F.type=[];apply();});
 await page.click('[data-tab="leak"]');
 await page.waitForSelector('#exPaneLeak.on');
 ck('15-f. 누수 분석 카드 역시 같은 기간 3건 표시',(await page.textContent('#exLeakKpis [data-hist-dim="leak:total"] b'))==='3건');
+async function footCount(year){
+  await page.evaluate(y=>{F.from='';F.to='';F.year=y?[String(y)]:[];F.type=[];buildFilters();apply();},year);
+  await page.click('[data-tab="cause"]');
+  await page.waitForSelector('#exPaneCause.on');
+  const btn=page.locator('#exTypeCard [data-hist-k="풋스위치 작동 불량"]');
+  return Number((await btn.locator('.vl').textContent()).replace(/,/g,''));
+}
+const foot2025=await footCount(2025),foot2026=await footCount(2026),footAll=await footCount(null);
+ck('15-g. 풋스위치 전체 기간 TOP5가 2025년·2026년 합계와 일치',
+  foot2025===2&&foot2026===1&&footAll===foot2025+foot2026,
+  JSON.stringify({foot2025,foot2026,footAll}));
+ck('15-h. 전체 기간에는 구형 명칭 없이 현재 표준명 하나만 표시',await page.evaluate(()=>
+  RAW.every(r=>!/풋\s*스위치\s*(?:불량|동작\s*불능)/.test(String(r.type||''))||r.type==='풋스위치 작동 불량')));
+await page.click('#exTypeCard [data-hist-k="풋스위치 작동 불량"]');
+await page.waitForSelector('#exListModal.show');
+ck('15-i. 전체 기간 TOP5 풋스위치 3건과 처리이력 3건이 일치',await page.locator('#hstTableHost tbody tr').count()===3);
+await page.evaluate(()=>closeExList());
 ck('16. 런타임 오류가 없다',errs.length===0,errs.join(' | '));
 
 await browser.close();
