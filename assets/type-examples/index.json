@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updatedAt": "2026-08-18",
+  "updatedAt": "2026-08-28",
   "items": {
     "장비|풋스위치 작동 불량": {
       "symptom": {
@@ -40,7 +40,7 @@
     },
     "장비|거치대 파손": {
       "symptom": {
-        "src": "assets/type-examples/equipment-holder/symptom-104450b5b3.webp",
+        "src": "assets/type-examples/media/f544cac9d2a7.webp",
         "text": "사용자 부주의에 의한 거치대 파손"
       },
       "after": {
@@ -50,11 +50,11 @@
     },
     "핸드피스|노즐 누수(약액 유입)": {
       "symptom": {
-        "src": "assets/type-examples/handpiece-nozzle-leak/symptom-77792fbc78.webp",
+        "src": "assets/type-examples/media/0ff450208650.webp",
         "text": "약액 유입에 의한 동작 불능 상태"
       },
       "after": {
-        "src": "assets/type-examples/handpiece-nozzle-leak/after-738710ede9.webp",
+        "src": "assets/type-examples/media/1cc006d1c73b.webp",
         "text": "내부 약액 세척 실시 또는 Ass'y 교체"
       }
     },
@@ -62,12 +62,20 @@
       "symptom": {
         "src": "assets/type-examples/handpiece-nozzle-fit/symptom-27412008a2.webp",
         "text": "Perm-holder 또는 노즐 체결 불량"
+      },
+      "after": {
+        "src": "assets/type-examples/media/b6671de5cdbf.webp",
+        "text": ""
       }
     },
     "핸드피스|노즐 체결 약함": {
       "symptom": {
         "src": "assets/type-examples/handpiece-nozzle-fit/symptom-27412008a2.webp",
         "text": "Perm-holder 또는 노즐 체결 불량"
+      },
+      "after": {
+        "src": "assets/type-examples/media/b6671de5cdbf.webp",
+        "text": "Perm-holder 체결부 불량"
       }
     },
     "핸드피스|스프링 파손": {
