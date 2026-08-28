@@ -268,7 +268,7 @@ ck('47. index.json 은 사진을 모두 쓴 뒤 마지막에 저장한다',
 ck('48. 교체로 참조가 끊긴 기존 파일은 정리 후보로만 안내하고 자동 삭제하지 않는다',
   /* 노즐 누수 after 를 새 파일로 바꿨으니 옛 after 파일 하나만 후보가 된다 */
   M.cleanupCandidates(MANIFEST, next).length === 1 &&
-  M.cleanupCandidates(MANIFEST, next)[0] === 'assets/type-examples/handpiece-nozzle-leak/after-738710ede9.webp' &&
+  M.cleanupCandidates(MANIFEST, next)[0] === MANIFEST.items['핸드피스|노즐 누수(약액 유입)'].after.src &&
   /* 같은 파일을 계속 참조하는 항목은 후보가 아니다 */
   M.cleanupCandidates(MANIFEST, MANIFEST).length === 0 &&
   !/removeEntry|removeFile|fs\.unlink/.test(SRC) && /정리 후보\(자동 삭제하지 않음\)/.test(SRC));

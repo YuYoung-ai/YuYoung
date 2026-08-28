@@ -130,12 +130,13 @@ const plan=await page.evaluate(()=>{
   return {v:M.validateManifest(next,{newFiles:writes.map(w=>w.path)}),
     writes:writes.map(w=>w.path),items:next.items,updatedAt:next.updatedAt,
     baseCount:Object.keys(S.manifest.items).length,
+    baseNozzleAfter:S.manifest.items['핸드피스|노즐 누수(약액 유입)'].after.src,
     json:M.serializeManifest(next)};
 });
 ck('15. 갱신된 매니페스트가 검증을 통과한다',plan.v.ok===true,plan.v.errors.join(' | '));
 ck('16. 기존 항목을 모두 보존하고 바꾼 슬롯만 갱신한다',
   Object.keys(plan.items).length===plan.baseCount+1&&
-  plan.items['핸드피스|노즐 누수(약액 유입)'].after.src==='assets/type-examples/handpiece-nozzle-leak/after-738710ede9.webp'&&
+  plan.items['핸드피스|노즐 누수(약액 유입)'].after.src===plan.baseNozzleAfter&&
   plan.items[KEY].symptom.src===conv.src&&plan.items[KEY].symptom.text==='노즐 크랙 예시');
 ck('17. updatedAt 은 오늘 로컬 날짜다',
   plan.updatedAt===new Date().toLocaleDateString('sv-SE'),plan.updatedAt);
