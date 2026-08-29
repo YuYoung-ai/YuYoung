@@ -65,6 +65,8 @@ const FNS = [
   'exWindowBaseRows_', 'exWindowRows',
   'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
+  'exTrendVocType_', 'exCountVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
+  'exTrendIsVocType_', 'exTrendLineSpec_', 'ycNice_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
   'exMonthTrendNote_', 'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
   'buildNozzleUnrated', 'buildNcareCompare', 'exBuild',
@@ -73,7 +75,7 @@ const FNS = [
   'exDeltaParts', 'exDeltaHtml',
   'exVocDescKey_', 'exVocDesc_',
   'buildExecutiveVocChange', 'buildExecutiveNotes',
-  'exDayLabel_', 'exMonthCmpStat_', 'exTrendStatDelta_',
+  'exDayLabel_',
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
   'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
@@ -94,6 +96,7 @@ const src = [
   grabVar('var EX_NOTE_SKILL='),
   grabVar('var EX_NOTE_NOZ='),
   grabVar('var EX_PPT_BASIS='),
+  grabVar('var EX_TREND_METRIC_AS='),
   grabVar('var EX_TONE_CLS='),
   grabVar('var EX_NOTE_EDITS='),
   grabObj('var C={navy:'), grabObj('var FT={face:'), grabObj('var L=(function(){'),
@@ -193,19 +196,21 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
 
 /* ══════ 4·5. 추이 카드 — 주간 8주 / 월간 6개월 ══════ */
 {
-  ck('4. 주간 PPT 최근 8주 추이 (막대 8묶음)',
-    wSnap.trend.kind === 'week' && wSnap.trend.bars.length === 8 && has(wItems, '최근 8주 서비스 추이'));
-  ck('4-b. A/S·점검 구분 막대 (묶음마다 2개)', wSnap.trend.bars.every(b => 'as' in b && 'insp' in b));
-  ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.bars.filter(b => b.sel).length === 1);
-  ck('4-d. 핵심 수치(기준 주 A/S·점검·8주 평균) 유지',
-    ['기준 주 A/S', '기준 주 점검', 'A/S 8주 주평균', '점검 8주 주평균'].every(t => has(wItems, t)));
-  ck('5. 월간 PPT 최근 6개월 추이 (막대 6묶음)',
-    mSnap.trend.kind === 'month' && mSnap.trend.bars.length === 6 && has(mItems, '월별 A/S·점검 처리 추이'));
-  ck('5-b. 현재 보고 월 강조', mSnap.trend.bars.filter(b => b.sel).length === 1 &&
-    mSnap.trend.bars[mSnap.trend.bars.length - 1].sel === true);
-  ck('5-c. 월간 핵심 수치(기준 월 총 처리·A/S·점검·전월 동기간)',
-    ['기준 월 총 처리', 'A/S 처리', '점검 처리', '전월 동기간 대비'].every(t => has(mItems, t)));
-  ck('5-d. 주간 PPT 에는 6개월 추이가 없다', !has(wItems, '월별 A/S·점검 처리 추이'));
+  ck('4. 주간 PPT 최근 8주 추이 (구간 8개)',
+    wSnap.trend.kind === 'week' && wSnap.trend.line.pts.length === 8 && has(wItems, '최근 8주 서비스 추이'));
+  ck('4-b. 최근 8주(주 계열)와 직전 8주(참조 계열)를 겹쳐 그린다',
+    wSnap.trend.line.mainName === '최근 8주' && wSnap.trend.line.refName === '직전 8주' &&
+    wSnap.trend.line.pts.every(p => typeof p.main === 'number' && typeof p.ref === 'number'));
+  ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.line.pts.filter(p => p.sel).length === 1);
+  ck('4-d. 핵심 수치 4칸(기준 주·최근 8주·직전 8주·증감)',
+    ['기준 주 전체 처리', '최근 8주 합계', '직전 8주 합계', '직전 8주 대비'].every(t => has(wItems, t)));
+  ck('5. 월간 PPT 최근 6개월 추이 (구간 6개)',
+    mSnap.trend.kind === 'month' && mSnap.trend.line.pts.length === 6 && has(mItems, '월별 처리 추이'));
+  ck('5-b. 현재 보고 월 강조', mSnap.trend.line.pts.filter(p => p.sel).length === 1 &&
+    mSnap.trend.line.pts[mSnap.trend.line.pts.length - 1].sel === true);
+  ck('5-c. 월간 핵심 수치 4칸(기준 월·최근 6개월·직전 6개월·증감)',
+    ['기준 월 전체 처리', '최근 6개월 합계', '직전 6개월 합계', '직전 6개월 대비'].every(t => has(mItems, t)));
+  ck('5-d. 주간 PPT 에는 6개월 추이가 없다', !has(wItems, '월별 처리 추이'));
   ck('5-e. 월간 PPT 에는 8주 추이가 없다', !has(mItems, '최근 8주 서비스 추이'));
 }
 /* 선택 종료일이 월말보다 이르면 부분 월로 표시 */
@@ -215,7 +220,7 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
   const cur = D.buildExecutiveReportSnapshot({
     type: 'month', from: D.ymd(new Date(y, m, 1)), to: D.ymd(new Date(y, m + 1, 0))
   });
-  const last = cur.trend.bars[cur.trend.bars.length - 1];
+  const last = cur.trend.line.pts[cur.trend.line.pts.length - 1];
   const done = new Date(y, m + 1, 0) <= today;
   ck('5-f. 보고 월이 완료되지 않았으면 부분 월 표시', done ? !last.ongoing : !!last.ongoing);
   const pm = new Date(y, m - 1, 1);            /* 지난달 = 반드시 완료된 월 */
@@ -223,7 +228,7 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     type: 'month', from: D.ymd(pm), to: D.ymd(new Date(y, m, 0))
   });
   ck('5-g. 완료된 과거 월에는 "진행 중"이 없다',
-    !past.trend.bars.some(b => b.ongoing) && !has(itemsOf(past), '진행 중'));
+    !past.trend.line.pts.some(p => p.ongoing) && !has(itemsOf(past), '진행 중'));
 
   const now = D.exToday();
   const curPeriod = D.exMonthPeriod_(D.ymd(new Date(now.getFullYear(), now.getMonth(), 1)));
@@ -390,8 +395,8 @@ function rebuildX(period) {
   ck('15. 같은 병원·같은 날짜 장비 2대 → 2건',
     s2.kpi[0].value === '2' && s2.kpi[1].value === '2' && s2.kpi[2].value === '0',
     '전체 ' + s2.kpi[0].value + ' / A/S ' + s2.kpi[1].value + ' / 점검 ' + s2.kpi[2].value);
-  ck('15-b. 추이 막대도 같은 기준(2건)',
-    s2.trend.bars[s2.trend.bars.length - 1].as === 2);
+  ck('15-b. 추이 선도 같은 기준(2건)',
+    s2.trend.line.pts[s2.trend.line.pts.length - 1].main === 2);
   load(SAMPLE);
 }
 
@@ -783,6 +788,141 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('P5. 넘치면 남은 항목 수를 알린다', hp.dropped > 0 &&
     hp.lays.some(l => l && l.lines.map(x => x.runs.map(r => r.text).join('')).join('').indexOf('외 ') >= 0),
     'dropped=' + hp.dropped);
+}
+
+/* ══════ V. 추이 그래프 — 이번 구간 ↔ 직전 같은 길이 구간을 겹쳐 본다 (연간 비교분석 탭 방식) ══════ */
+{
+  /* 16주 표본: 앞 8주(직전 구간)는 평평하고, 뒤 8주(최근 구간)에서 노즐누수는 늘고 케이블은 준다 */
+  const rows = [];
+  const mondays = [];
+  for (let i = 15; i >= 0; i--) {
+    const d = new Date('2026-08-03T00:00:00'); d.setDate(d.getDate() - 7 * i); mondays.push(D.ymd(d));
+  }
+  mondays.forEach((w, i) => {
+    const day = k => { const x = new Date(w + 'T00:00:00'); x.setDate(x.getDate() + k); return D.ymd(x); };
+    const recent = i >= 8, j = i - 8;
+    const leak = recent ? j + 2 : 2;            /* 최근 8주 2→9 (합 44) · 직전 8주 2 (합 16) */
+    const cable = recent ? 9 - j : 9;           /* 최근 8주 9→2 (합 44) · 직전 8주 9 (합 72) */
+    for (let k = 0; k < leak; k++) rows.push({ date: day(k % 5), hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)' });
+    for (let k = 0; k < cable; k++) rows.push({ date: day(k % 5), hosp: '다라의원', gubun: 'A/S', type: '케이블 단선' });
+    rows.push({ date: day(1), hosp: '마바병원', gubun: '점검', type: '정기점검' });
+    rows.push({ date: day(2), hosp: '사아의원', gubun: 'A/S', type: '이상 없음' });
+  });
+  load(rows);
+  const snapOf = f => D.buildExecutiveReportSnapshot(Object.assign({ vocFocus: f }, WEEK));
+  const plain = snapOf('');
+  const leak = snapOf('노즐누수(약액 유입)');
+  const cable = snapOf('케이블 단선');
+  const asOnly = snapOf('__as__');
+  const inspOnly = snapOf('__insp__');
+
+  ck('V1. 유형 목록은 추이 구간(8주)에서 실제로 센 유형만 담는다',
+    plain.vocOptions.length === 2 &&
+    plain.vocOptions.every(o => o.k !== '정기점검' && o.k !== '이상 없음'),
+    plain.vocOptions.map(o => o.k + ':' + o.n).join(' / '));
+  ck('V1-b. 목록 건수는 그 유형의 최근 8주 합계와 같다',
+    plain.vocOptions.find(o => o.k === '노즐누수(약액 유입)').n === leak.trend.line.sum,
+    'options=' + plain.vocOptions[0].n + ' line.sum=' + leak.trend.line.sum);
+
+  ck('V2. 겹치는 두 계열은 최근 8주와 직전 8주다',
+    leak.trend.line.mainName === '최근 8주' && leak.trend.line.refName === '직전 8주' &&
+    leak.trend.line.pts.map(p => p.main).join(',') === '2,3,4,5,6,7,8,9' &&
+    leak.trend.line.pts.every(p => p.ref === 2),
+    leak.trend.line.pts.map(p => p.main + '/' + p.ref).join(' '));
+  ck('V2-b. 차이 막대는 같은 주차끼리(최근 − 직전)',
+    leak.trend.line.deltas.join(',') === '0,1,2,3,4,5,6,7',
+    JSON.stringify(leak.trend.line.deltas));
+  ck('V3. 합계 비교로 증가·감소를 판정',
+    leak.trend.line.cmp.dir === 'up' && leak.trend.line.sum === 44 && leak.trend.line.prevSum === 16 &&
+    cable.trend.line.cmp.dir === 'down' && cable.trend.line.prevSum === 72,
+    leak.trend.line.cmp.label + ' / ' + cable.trend.line.cmp.label);
+  ck('V3-b. 직전 구간이 0건이면 증감률을 내지 않는다', (() => {
+    load(rows.filter(r => new Date(r.date) >= new Date('2026-06-15')));
+    const only8 = snapOf('노즐누수(약액 유입)');
+    load(rows);
+    return only8.trend.line.prevSum === 0 && only8.trend.line.cmp.pct === null &&
+           only8.trend.line.cmp.foot.includes('직전 구간 0건');
+  })());
+
+  ck('V4. 드롭다운으로 전체·A/S·점검·유형 중 무엇을 셀지 고른다',
+    plain.trend.line.pts.every((p, i) => p.main === asOnly.trend.line.pts[i].main + inspOnly.trend.line.pts[i].main) &&
+    inspOnly.trend.line.pts.every(p => p.main === 1) &&
+    asOnly.trend.line.metricLabel === 'A/S(VOC)' && inspOnly.trend.line.metricLabel === '점검' &&
+    plain.trend.line.metricLabel === '전체 처리(A/S·점검)');
+  ck('V5. 카드 제목·기준 줄이 무엇을 어느 기간과 견주는지 밝힌다',
+    leak.trend.title.includes('노즐누수(약액 유입)') && leak.trend.title.includes('직전 8주 대비') &&
+    leak.trend.basis.includes('집계 대상 노즐누수(약액 유입)') && leak.trend.basis.includes('↔'),
+    leak.trend.title);
+  ck('V6. 유형 선택은 추이 카드에만 적용된다 (기존 KPI 3장·TOP5·특이사항은 전체 기준)',
+    JSON.stringify(leak.kpi.slice(0, 3)) === JSON.stringify(plain.kpi) &&
+    JSON.stringify(leak.vocTop) === JSON.stringify(plain.vocTop) &&
+    JSON.stringify(leak.partTop) === JSON.stringify(plain.partTop) &&
+    JSON.stringify(leak.notes) === JSON.stringify(plain.notes));
+  ck('V6-b. 고른 VOC 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
+    const c = leak.kpi[3];
+    /* 8/3~8/7 주에 노즐누수 9건(최근 8주 마지막 구간) · 전주 8건 */
+    return leak.kpi.length === 4 && c.key === 'vocFocus' && c.label === '노즐누수(약액 유입)' &&
+      c.value === '9' && c.unit === '건' && /▲ 1건/.test(c.delta.text) && c.delta.tone === 'up' &&
+      c.value === String(leak.trend.line.last.main) &&
+      c.note === '비율 ' + Math.round(9 / Number(leak.kpi[0].value.replace(/,/g, '')) * 100) + '%';
+  })(), JSON.stringify(leak.kpi[3]));
+  ck('V6-c. 전체·A/S·점검을 고르면 KPI 는 3장 그대로 (이미 있는 카드와 겹치지 않는다)',
+    plain.kpi.length === 3 && asOnly.kpi.length === 3 && inspOnly.kpi.length === 3);
+  ck('V6-d. KPI 4장도 한 줄 — y 좌표가 같고 본문 폭을 꽉 채운다', (() => {
+    const cards = itemsOf(leak).filter(o => o.card && o.y === D.L.kpi.y);
+    if (cards.length !== 4) return false;
+    const P = D.L.page, K = D.L.kpi;
+    const last = cards[cards.length - 1];
+    return cards.every(c => Math.abs(c.w - K.widthFor(4)) < 0.001) &&
+      Math.abs(cards[0].x - P.left) < 0.001 &&
+      Math.abs(last.x + last.w - P.right) < 0.01;
+  })());
+  ck('V6-e. 카드 숫자는 추이 그래프와 같은 유형 판정을 쓴다',
+    D.exCountVocType_([{ gubun: 'A/S', type: '노즐누수(약액 유입)' }, { gubun: '점검', type: '노즐누수(약액 유입)' },
+                       { gubun: 'A/S', type: '이상 없음' }, { gubun: '설치', type: '노즐누수(약액 유입)' }],
+                      '노즐누수(약액 유입)') === 2);
+
+  /* 표시 목록 — 연간 탭과 같은 구성(선·점·차이 막대)이 실제로 그려지는지 */
+  const fi = itemsOf(leak);
+  const segs = fi.filter(o => o.k === 'seg'), dots = fi.filter(o => o.k === 'dot');
+  ck('V7. 막대그래프가 아니라 꺾은선으로 그린다 (구간 사이 선 + 점)',
+    segs.length >= 7 * 2 && dots.length === 16, 'seg=' + segs.length + ' dot=' + dots.length);
+  ck('V7-b. 직전 구간은 파선으로 구분한다', segs.some(o => o.dash) && segs.some(o => !o.dash));
+  ck('V8. 차이 막대는 증가 빨강 · 감소 초록', (() => {
+    const up = itemsOf(leak), dn = itemsOf(cable);
+    return up.some(o => o.k === 'rect' && o.fill === D.C.red) &&
+           dn.some(o => o.k === 'rect' && o.fill === D.C.green);
+  })());
+  ck('V9. 두 기간의 값을 모두 숫자로 적는다 (인쇄물에는 마우스오버가 없다)',
+    leak.trend.line.pts.every(p => has(fi, String(p.main)) && has(fi, String(p.ref))));
+  ck('V10. 선·점·차이 막대가 카드 안에 머문다', (() => {
+    const T = D.L.trend, top = T.y, bot = T.y + T.h;
+    return segs.concat(dots).every(o => o.k === 'seg'
+      ? (o.y1 >= top && o.y1 <= bot && o.y2 >= top && o.y2 <= bot)
+      : (o.cy - o.r >= top && o.cy + o.r <= bot));
+  })());
+  ck('V11. 핵심 수치 4칸(기준 주·최근 합계·직전 합계·증감)',
+    leak.trend.stats.length === 4 &&
+    has(fi, '최근 8주 합계') && has(fi, '직전 8주 합계') && has(fi, '직전 8주 대비'));
+
+  /* 진행 중 구간 — 아직 기간이 덜 차 견줄 수 없다 */
+  const today = D.exToday(), mon = D.monday(today);
+  if (today < D.addD(mon, 4)) {
+    load(rows.concat([{ date: D.ymd(mon), hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)' }]));
+    const cur = D.buildExecutiveReportSnapshot({
+      type: 'week', from: D.ymd(mon), to: D.ymd(today), vocFocus: '노즐누수(약액 유입)' });
+    const pts = cur.trend.line.pts;
+    ck('V12. 진행 중인 주는 차이 막대를 내지 않는다',
+      pts[pts.length - 1].ongoing && cur.trend.line.deltas[pts.length - 1] === null);
+  }
+
+  /* 월간도 같은 방식 — 직전 6개월과 겹친다 */
+  const mLeak = D.buildExecutiveReportSnapshot(Object.assign({ vocFocus: '노즐누수(약액 유입)' }, MONTH));
+  ck('V13. 월간은 최근 6개월과 직전 6개월을 겹친다',
+    mLeak.trend.line.mainName === '최근 6개월' && mLeak.trend.line.refName === '직전 6개월' &&
+    mLeak.trend.line.pts.length === 6 && mLeak.trend.line.pts.every(p => typeof p.ref === 'number'),
+    mLeak.trend.title);
+  load(SAMPLE);
 }
 
 console.log('\n──────────────────────────────');
