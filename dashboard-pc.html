@@ -1279,9 +1279,9 @@ exApplyLevel3Tools_();
       <div class="mhint">시트 처리일 기준 최근 8주 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
-      <label>추이 그래프 VOC 유형</label>
+      <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">고른 유형이 최근 8주 동안 늘고 있는지 줄고 있는지를 추이 그래프로 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상을 최근 8주 ↔ 직전 8주로 겹쳐 그려 늘었는지 줄었는지를 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
     <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
     <details class="voc-desc-editor" id="wkVocDescBox">
@@ -1328,9 +1328,9 @@ exApplyLevel3Tools_();
       <div class="mhint">시트 처리일 기준 최근 12개월 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
-      <label>추이 그래프 VOC 유형</label>
+      <label>추이 그래프 대상</label>
       <select id="mnVocSel" onchange="exOnReportVocChange_('month')"></select>
-      <div class="mhint">고른 유형이 최근 6개월 동안 늘고 있는지 줄고 있는지를 추이 그래프로 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상을 최근 6개월 ↔ 직전 6개월로 겹쳐 그려 늘었는지 줄었는지를 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
     <div class="mhint">주간업무보고와 같은 배치이며, 최근 8주 추이 대신 최근 6개월 월별 A/S·점검 처리 추이를 싣습니다.</div>
     <details class="voc-desc-editor" id="mnVocDescBox">
@@ -3862,8 +3862,8 @@ function buildExecutivePptDeck(snap){
     pts.forEach(function(p,idx){
       var d=ln.deltas[idx], bx=cx(idx)-PL.deltaBarW/2;
       if(d==null){
-        /* 첫 구간과 진행 중 구간은 견줄 수 없다 — 납작한 표식만 둔다 */
-        if(idx) rect({x:bx, y:zero-PL.deltaMin, w:PL.deltaBarW, h:PL.deltaMin*2, fill:C.line});
+        /* 견줄 수 없는 구간(진행 중 · 직전 구간 없음) — 납작한 표식만 둔다 */
+        rect({x:bx, y:zero-PL.deltaMin, w:PL.deltaBarW, h:PL.deltaMin*2, fill:C.line});
         return;
       }
       if(!d) return;
@@ -4199,13 +4199,19 @@ function exRefreshVocFocusSelect_(type){
   var opts=snap.vocOptions||[];
   var cur=EX_PPT_VOC_FOCUS[type]||'';
   /* 새 기간에 없는 유형이 남아 있으면 전체로 되돌린다 */
-  if(cur && !opts.some(function(o){ return o.k===cur; })){ cur=''; EX_PPT_VOC_FOCUS[type]=''; }
-  var span=(type==='month')?(EX_MONTH_TREND_N+'개월'):'8주';
+  if(exTrendIsVocType_(cur) && !opts.some(function(o){ return o.k===cur; })){
+    cur=''; EX_PPT_VOC_FOCUS[type]='';
+  }
+  var span=(type==='month')?('최근 '+EX_MONTH_TREND_N+'개월'):'최근 8주';
+  /* 앞의 셋은 구분(전체·A/S·점검), 그 뒤가 VOC 유형별 — 연간 비교분석 탭의 지표 선택과 같은 갈래다 */
   sel.innerHTML='<option value="">전체 (A/S·점검)</option>'
-    +opts.map(function(o){
-      return '<option value="'+escAttr(o.k)+'"'+(o.k===cur?' selected':'')+'>'
-        +esc(o.k)+' · 최근 '+span+' '+o.n+'건</option>';
-    }).join('');
+    +'<option value="'+EX_TREND_METRIC_AS+'"'+(cur===EX_TREND_METRIC_AS?' selected':'')+'>A/S(VOC) 전체</option>'
+    +'<option value="'+EX_TREND_METRIC_INSP+'"'+(cur===EX_TREND_METRIC_INSP?' selected':'')+'>점검 전체</option>'
+    +(opts.length?('<optgroup label="VOC 유형별">'
+      +opts.map(function(o){
+        return '<option value="'+escAttr(o.k)+'"'+(o.k===cur?' selected':'')+'>'
+          +esc(o.k)+' · '+span+' '+o.n+'건</option>';
+      }).join('')+'</optgroup>'):'');
 }
 function exOnReportVocChange_(type){
   var sel=document.getElementById((type==='month'?'mn':'wk')+'VocSel');
@@ -4787,17 +4793,18 @@ function exTrendTypeCounts_(a, b, weekdayOnly){
 
 /* 최근 8주 서비스 추이 — 기간 필터만 제외하고 같은 모집단을 쓴다.
    focus 를 주면 그 VOC 유형 건수(ty)를 주별로 함께 센다(A/S·점검 합계는 그대로 둔다). */
-function buildWeekTrend(focus){
+function buildWeekTrend(focus, back){
   var base=exBaseDate();
   var endMon=monday(base);
   var selA=F.from?new Date(F.from+'T00:00:00'):null;
   var selB=F.to?new Date(F.to+'T00:00:00'):null;
+  var shift=(back||0)*8;                              /* 8 = 직전 8주 구간(같은 주차끼리 맞춘다) */
   var out=[];
   for(var i=7;i>=0;i--){
-    var mo=addD(endMon,-7*i), k=ymd(mo), fri=addD(mo,4);
+    var mo=addD(endMon,-7*(i+shift)), k=ymd(mo), fri=addD(mo,4);
     /* 마지막 주가 진행 중이거나 사용자 종료일이 월~목이면 그 날짜까지만 집계한다.
        선택 종료일 뒤의 목·금 기록이 최신 주 막대에 섞이지 않게 한다. */
-    var viewTo=(i===0&&base<fri)?new Date(base):fri;
+    var viewTo=(i===0&&!shift&&base<fri)?new Date(base):fri;
     var viewEnd=new Date(viewTo); viewEnd.setHours(23,59,59,999);
     /* 노즐·숙련도 상태는 각 주의 기록만으로 다시 판정한다.
        뒤 주의 평가가 앞 주 막대의 병원 상태를 바꾸지 않아 주별 시점이 보존된다. */
@@ -4810,7 +4817,8 @@ function buildWeekTrend(focus){
       else if(g==='점검'){ insp++; n++; }
       if(focus && exTrendVocType_(r)===focus) ty++;
     });
-    var sel = !!(selA&&selB) && !(viewTo<selA || mo>selB);   /* 선택 기간과 겹치는 주 강조 */
+    /* 선택 기간과 겹치는 주 강조 — 직전 구간에서는 쓰지 않는다 */
+    var sel = !shift && !!(selA&&selB) && !(viewTo<selA || mo>selB);
     out.push({key:k, mon:mo, to:viewTo, partial:viewTo<fri, n:n, as:as, insp:insp, ty:ty, sel:sel});
   }
   return out;
@@ -4842,11 +4850,12 @@ function exCountRange_(a, b, focus){
   return {n:n, as:as, insp:insp, ty:ty};
 }
 /* 최근 6개월 — 지난 달들은 1일~말일, 현재 월만 1일~기준일(아직 진행 중) */
-function buildMonthTrend(focus){
+function buildMonthTrend(focus, back){
   var base=exBaseDate(), out=[];
+  var shift=(back||0)*EX_MONTH_TREND_N;               /* 직전 6개월 구간 */
   for(var i=EX_MONTH_TREND_N-1;i>=0;i--){
-    var m0=new Date(base.getFullYear(), base.getMonth()-i, 1);
-    var cur=(i===0);
+    var m0=new Date(base.getFullYear(), base.getMonth()-i-shift, 1);
+    var cur=(i===0&&!shift);
     var monthEnd=new Date(m0.getFullYear(), m0.getMonth()+1, 0);
     var to=cur ? new Date(base.getFullYear(), base.getMonth(), base.getDate()) : monthEnd;
     var c=exCountRange_(m0, to, focus);
@@ -5118,66 +5127,58 @@ function buildExecutiveNotes(x, o){
    PPT 전용 집계 기준·전용 문장은 만들지 않는다 — 미리보기와 실제 PPT도 이 결과 하나만 쓴다. */
 var EX_PPT_BASIS='처리일 기준 · 고객 서비스 · 데모 운영 제외';
 function exDayLabel_(d){ return (d.getMonth()+1)+'월 '+d.getDate()+'일'; }
-/* 전월 동기간 대비 요약 — 화면 카드(exMonthCmpTile_)와 같은 문구·같은 판정을 쓴다 */
-function exMonthCmpStat_(mc){
-  if(!mc) return {label:'전월 동기간 대비', value:'–', foot:'비교 데이터 없음', tone:'flat'};
-  var d=mc.d.n;
-  return {
-    label:'전월 동기간 대비'+(mc.pct!=null?' ('+(mc.pct>0?'+':'')+mc.pct+'%)':''),
-    value: d ? ((d>0?'▲ ':'▼ ')+exNum(Math.abs(d))+'건') : '±0건',
-    tone: d>0?'up':(d<0?'down':'flat'),
-    foot: mc.prev.n>0 ? exMD_(mc.from)+'~'+exMD_(mc.to)+' '+exNum(mc.prev.n)+'건'
-                      : '전월 동기간 0건 · 증감률 없음'
-  };
-}
-function exTrendStatDelta_(d){
-  return {foot:'기준 주 '+(d>0?'+':'')+d+'%', tone:d>0?'up':(d<0?'down':'flat')};
-}
 
 /* ══════ 보고서 추이 카드의 선 그래프 자료 ══════
-   연간 비교분석 탭 "기간별 서비스 추이"와 같은 방식으로 읽는다 —
-   한 좌표축에 선을 그리고, 아래에 구간 간 증감 막대를 붙여 늘고 있는지 줄고 있는지를 본다.
-   다른 점은 겹치는 두 계열이 "두 해"가 아니라 이 보고서가 보는 한 구간이라는 것뿐이다.
-     · 유형 미선택 → 주 계열 A/S · 참조 계열 점검 (기존 카드와 같은 두 계열)
-     · 유형 선택   → 주 계열 그 유형 · 참조 계열 A/S 전체(유형만의 움직임인지 보기 위한 배경)
-   증감 막대는 항상 "직전 구간 대비 주 계열의 증감"이다. 진행 중인 마지막 구간은
-   아직 기간이 덜 찼으므로 증감을 내지 않고 납작한 표식만 둔다(감소로 오해되지 않게). */
-function exTrendLineSpec_(buckets, focus, unit){
-  var pts=buckets.map(function(b){
-    return {label:b.label, sel:!!b.sel, ongoing:!!b.ongoing,
-            main: focus ? b.ty : b.as,
-            ref:  focus ? b.as : b.insp};
-  });
-  /* 증감 — 직전 구간 대비. 진행 중 구간과 그 다음 구간은 비교 대상에서 뺀다. */
-  var deltas=pts.map(function(p,i){
-    if(!i || p.ongoing || pts[i-1].ongoing) return null;
-    return p.main-pts[i-1].main;
-  });
-  /* 추세 — 앞 절반 평균과 뒤 절반 평균을 견준다(진행 중 구간 제외).
-     구간이 8개면 4:4, 6개면 3:3 이라 "최근 흐름"을 한 문장으로 말할 수 있다. */
-  var done=pts.filter(function(p){ return !p.ongoing; });
-  var trend={dir:'flat', pct:null, label:'–', tone:'flat', foot:'비교 구간 부족'};
-  if(done.length>=4){
-    var h=Math.floor(done.length/2);
-    var avg=function(a){ return a.reduce(function(x,p){ return x+p.main; },0)/(a.length||1); };
-    var a0=avg(done.slice(0,h)), a1=avg(done.slice(done.length-h));
-    var d=a1-a0;
-    var pct=a0>0 ? Math.round(d/a0*100) : (a1>0?null:0);
-    trend={dir:d>0?'up':(d<0?'down':'flat'),
-           pct:pct,
-           tone:d>0?'up':(d<0?'down':'flat'),
-           label: d===0 ? '변화 없음'
-                : (d>0?'▲ ':'▼ ')+(pct==null?Math.abs(d).toFixed(1)+(unit||'건'):Math.abs(pct)+'%'),
-           foot: a0.toFixed(1)+' → '+a1.toFixed(1)+(unit||'건')};
-  }
-  var sum=pts.reduce(function(x,p){ return x+p.main; },0);
-  return {pts:pts, deltas:deltas, trend:trend, focus:focus||'',
-          sum:sum, avg:done.length?sum/pts.length:0,
-          last:pts.length?pts[pts.length-1]:null,
-          /* 범례 이름 — 유형명은 카드 제목이 이미 밝히므로 범례에는 짧은 이름만 둔다 */
-          mainName: focus?'선택 유형':'A/S', refName: focus?'A/S 전체':'점검',
-          refMuted: !!focus};
+   연간 비교분석 탭 "기간별 서비스 추이"와 같은 방식이다 —
+   한 좌표축에 두 기간을 선으로 겹치고, 아래에 같은 구간끼리의 차이를 막대로 붙인다.
+   다른 점은 겹치는 두 기간이 "두 해"가 아니라 "이번 구간 ↔ 바로 앞 구간"이라는 것뿐이다.
+     · 주간 → 최근 8주(실선) ↔ 직전 8주(파선) · 1주차끼리, 2주차끼리 나란히
+     · 월간 → 최근 6개월(실선) ↔ 직전 6개월(파선)
+   무엇을 셀지는 생성 모달의 드롭다운이 정한다(전체 처리 · A/S · 점검 · VOC 유형 하나).
+   진행 중인 마지막 구간은 기간이 덜 차 견줄 수 없으므로 차이 막대를 내지 않는다. */
+var EX_TREND_METRIC_AS='__as__', EX_TREND_METRIC_INSP='__insp__';
+/* 드롭다운 값 → 구간에서 읽을 값 · 표시 이름. 유형명은 그대로 쓰고 앞의 둘만 예약어다. */
+function exTrendMetricVal_(b, focus){
+  return focus===EX_TREND_METRIC_AS ? b.as
+       : focus===EX_TREND_METRIC_INSP ? b.insp
+       : focus ? b.ty : b.n;
 }
+function exTrendMetricLabel_(focus){
+  return focus===EX_TREND_METRIC_AS ? 'A/S(VOC)'
+       : focus===EX_TREND_METRIC_INSP ? '점검'
+       : focus || '전체 처리(A/S·점검)';
+}
+function exTrendIsVocType_(focus){
+  return !!focus && focus!==EX_TREND_METRIC_AS && focus!==EX_TREND_METRIC_INSP;
+}
+function exTrendLineSpec_(cur, prev, focus, names){
+  var val=function(b){ return exTrendMetricVal_(b, focus); };
+  var pts=cur.map(function(b,i){
+    var pb=prev[i];
+    return {label:b.label, sel:!!b.sel, ongoing:!!b.ongoing,
+            main: val(b), ref: pb?val(pb):null};
+  });
+  /* 차이 — 같은 구간끼리(최근 − 직전). 진행 중 구간은 아직 견줄 수 없다. */
+  var deltas=pts.map(function(p){
+    return (p.ref==null || p.ongoing) ? null : p.main-p.ref;
+  });
+  var sum=function(a){ return a.reduce(function(x,b){ return x+val(b); },0); };
+  var sCur=sum(cur), sPrev=sum(prev);
+  var d=sCur-sPrev, pct=sPrev>0?Math.round(d/sPrev*100):null;
+  /* 진행 중 구간이 있으면 합계 비교가 불리하게 나오므로 그 사실을 밝힌다 */
+  var ongoing=pts.some(function(p){ return p.ongoing; });
+  var cmp={dir:d>0?'up':(d<0?'down':'flat'), pct:pct, tone:d>0?'up':(d<0?'down':'flat'),
+           label: d===0 ? '±0건'
+                : (d>0?'▲ ':'▼ ')+exNum(Math.abs(d))+'건'+(pct==null?'':' ('+(d>0?'+':'−')+Math.abs(pct)+'%)'),
+           foot: sPrev>0 ? (ongoing?'마지막 구간 진행 중':'') : '직전 구간 0건'};
+  return {pts:pts, deltas:deltas, cmp:cmp, focus:focus||'',
+          sum:sCur, prevSum:sPrev, avg:pts.length?sCur/pts.length:0,
+          last:pts.length?pts[pts.length-1]:null,
+          metricLabel:exTrendMetricLabel_(focus),
+          mainName:(names&&names.main)||'이번 구간', refName:(names&&names.ref)||'직전 구간',
+          refMuted:true};
+}
+
 function buildExecutiveReportSnapshot(opt){
   opt=opt||{};
   var type=(opt.type==='month')?'month':'week';
@@ -5210,69 +5211,65 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
      delta:exDeltaParts(k.insp, p?p.insp:null, '건', 'neutral', cmp)}
   ];
 
-  /* ── 추이 카드 — 주간은 최근 8주, 월간은 최근 6개월(같은 처리 기록을 기간 단위만 바꿔 본다) ──
-     그래프는 연간 비교분석 탭과 같은 선 + 증감 막대 방식이고, 생성 모달에서 고른 VOC 유형이
-     있으면 그 유형의 발생 추이를 주 계열로 그린다(다른 카드의 집계 기준은 건드리지 않는다). */
-  var trend, vocOptions, focus=String(vocFocus||'');
+  /* ── 추이 카드 — 이번 구간(주간 8주 · 월간 6개월)과 바로 앞 같은 길이의 구간을 겹쳐 본다 ──
+     연간 비교분석 탭 "기간별 서비스 추이"와 같은 읽는 법이고,
+     무엇을 셀지는 생성 모달의 드롭다운(전체 처리 · A/S · 점검 · VOC 유형 하나)이 정한다.
+     이 선택은 추이 카드에만 적용한다 — KPI·VOC 변화·TOP5·특이사항은 전체 기준 그대로다. */
+  var trend, vocOptions, focus=String(vocFocus||''), isVoc=exTrendIsVocType_(focus);
+  var metricLb=exTrendMetricLabel_(focus);
   if(type==='month'){
-    var mtf=focus?buildMonthTrend(focus):mt;
+    var mtf=focus?buildMonthTrend(focus):mt, mtp=buildMonthTrend(focus, 1);
     var cur=mtf[mtf.length-1];
     /* 오늘이 아니라 사용자가 고른 종료일로 부분 월 여부를 판정한다.
        과거 달의 중간 날짜를 보고해도 월 전체처럼 보이지 않아야 한다. */
     var ongoing=!!cur.partial;
-    var mBuckets=mtf.map(function(t){
+    var mBucket=function(t){
       return {label:t.m+'월', as:t.as, insp:t.insp, ty:t.ty, n:t.n,
-              sel:t.cur, ongoing:(t.cur&&ongoing)};
-    });
-    var mLine=exTrendLineSpec_(mBuckets, focus);
+              sel:t.cur, ongoing:(t.cur&&!!t.partial)};
+    };
+    var mLine=exTrendLineSpec_(mtf.map(mBucket), mtp.map(mBucket), focus,
+      {main:'최근 '+EX_MONTH_TREND_N+'개월', ref:'직전 '+EX_MONTH_TREND_N+'개월'});
     vocOptions=exTrendTypeCounts_(mtf[0].from, mtf[mtf.length-1].to, false);
     trend={
       kind:'month',
-      title: focus ? ('월별 '+focus+' 발생 추이') : '월별 A/S·점검 처리 추이',
-      basis: focus ? ('선택 유형 '+focus+' · A/S·점검 통합 · 최근 '+EX_MONTH_TREND_N+'개월 · 처리일 기준')
-                   : ('처리일 기준 · 최근 '+EX_MONTH_TREND_N+'개월'),
+      title:(isVoc?('월별 '+focus+' 발생 추이'):'월별 처리 추이')
+            +' · 직전 '+EX_MONTH_TREND_N+'개월 대비',
+      /* 두 구간의 실제 날짜는 아래 수치 타일이 밝힌다 — 제목 줄에서는 무엇을 어떻게 견주는지만 적는다 */
+      basis:'집계 대상 '+metricLb+' · 최근 '+EX_MONTH_TREND_N+'개월 ↔ 직전 '+EX_MONTH_TREND_N
+            +'개월(같은 순서끼리) · 처리일 기준',
       line: mLine,
-      stats: focus ? [
-        {label:'기준 월 '+focus, value:exNum(cur.ty)+'건',
+      stats:[
+        {label:'기준 월 '+metricLb, value:exNum(exTrendMetricVal_(mBucket(cur), focus))+'건',
          foot:exMD_(cur.from)+'~'+exMD_(cur.to)+(ongoing?' · 기준일까지':'')},
-        {label:EX_MONTH_TREND_N+'개월 합계', value:exNum(mLine.sum)+'건', foot:'선택 유형 기준'},
-        {label:'월평균', value:mLine.avg.toFixed(1)+'건', foot:EX_MONTH_TREND_N+'개월 평균'},
-        {label:'추세 (전반→후반)', value:mLine.trend.label,
-         valueTone:mLine.trend.tone, foot:mLine.trend.foot}
-      ] : [
-        {label:'기준 월 총 처리', value:exNum(cur.n)+'건',
-         foot:exMD_(cur.from)+'~'+exMD_(cur.to)+(ongoing?' · 기준일까지':'')},
-        {label:'A/S 처리',  value:exNum(cur.as)+'건',   foot:cur.m+'월 누계'},
-        {label:'점검 처리', value:exNum(cur.insp)+'건', foot:cur.m+'월 누계'},
-        exMonthCmpStat_(mc)
+        {label:'최근 '+EX_MONTH_TREND_N+'개월 합계', value:exNum(mLine.sum)+'건', foot:'월평균 '+mLine.avg.toFixed(1)+'건'},
+        {label:'직전 '+EX_MONTH_TREND_N+'개월 합계', value:exNum(mLine.prevSum)+'건',
+         foot:exMD_(mtp[0].from)+'~'+exMD_(mtp[mtp.length-1].to)},
+        {label:'직전 '+EX_MONTH_TREND_N+'개월 대비', value:mLine.cmp.label,
+         valueTone:mLine.cmp.tone, foot:mLine.cmp.foot}
       ]
     };
   }else{
-    var tr=buildWeekTrend(focus), ts=buildTrendSummary_(tr);
-    var dA=exTrendStatDelta_(ts.deltaAs), dI=exTrendStatDelta_(ts.deltaInsp);
-    var wBuckets=tr.map(function(t){
+    var tr=buildWeekTrend(focus), trPrev=buildWeekTrend(focus, 1);
+    var wBucket=function(t){
       return {label:(t.mon.getMonth()+1)+'/'+t.mon.getDate(),
               as:t.as, insp:t.insp, ty:t.ty, n:t.n, sel:t.sel, ongoing:!!t.partial};
-    });
-    var wLine=exTrendLineSpec_(wBuckets, focus);
+    };
+    var wLine=exTrendLineSpec_(tr.map(wBucket), trPrev.map(wBucket), focus,
+      {main:'최근 8주', ref:'직전 8주'});
     vocOptions=exTrendTypeCounts_(tr[0].mon, tr[tr.length-1].to, true);
     trend={
       kind:'week',
-      title: focus ? ('최근 8주 '+focus+' 발생 추이') : '최근 8주 서비스 추이',
-      basis: focus ? ('선택 유형 '+focus+' · A/S·점검 통합 · 최근 8주(월~금) · 처리일 기준')
-                   : '선택 종료일 기준 최근 8주 · 주 단위(월~금) · 처리일 기준',
+      title:(isVoc?('최근 8주 '+focus+' 발생 추이'):'최근 8주 서비스 추이')+' · 직전 8주 대비',
+      basis:'집계 대상 '+metricLb+' · 최근 8주 ↔ 직전 8주(같은 주차끼리) · 주 단위(월~금) · 처리일 기준',
       line: wLine,
-      stats: focus ? [
-        {label:'기준 주 '+focus, value:exNum(wLine.last?wLine.last.main:0)+'건'},
-        {label:'8주 합계', value:exNum(wLine.sum)+'건', foot:'선택 유형 기준'},
-        {label:'8주 주평균', value:wLine.avg.toFixed(1)+'건'},
-        {label:'추세 (전반→후반)', value:wLine.trend.label,
-         valueTone:wLine.trend.tone, foot:wLine.trend.foot}
-      ] : [
-        {label:'기준 주 A/S',     value:exNum(ts.latest.as)+'건'},
-        {label:'기준 주 점검',    value:exNum(ts.latest.insp)+'건'},
-        {label:'A/S 8주 주평균',  value:ts.avgAs.toFixed(1)+'건',   foot:dA.foot, tone:dA.tone},
-        {label:'점검 8주 주평균', value:ts.avgInsp.toFixed(1)+'건', foot:dI.foot, tone:dI.tone}
+      stats:[
+        {label:'기준 주 '+metricLb, value:exNum(wLine.last?wLine.last.main:0)+'건',
+         foot:wLine.last&&wLine.last.ongoing?'진행 중':''},
+        {label:'최근 8주 합계', value:exNum(wLine.sum)+'건', foot:'주평균 '+wLine.avg.toFixed(1)+'건'},
+        {label:'직전 8주 합계', value:exNum(wLine.prevSum)+'건',
+         foot:exMD_(trPrev[0].mon)+'~'+exMD_(trPrev[trPrev.length-1].to)},
+        {label:'직전 8주 대비', value:wLine.cmp.label,
+         valueTone:wLine.cmp.tone, foot:wLine.cmp.foot}
       ]
     };
   }
