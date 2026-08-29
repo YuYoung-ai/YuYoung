@@ -65,7 +65,7 @@ const FNS = [
   'exWindowBaseRows_', 'exWindowRows',
   'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
-  'exTrendVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
+  'exTrendVocType_', 'exCountVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
   'exTrendIsVocType_', 'exTrendLineSpec_', 'ycNice_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
   'exMonthTrendNote_', 'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
@@ -853,11 +853,34 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     leak.trend.title.includes('노즐누수(약액 유입)') && leak.trend.title.includes('직전 8주 대비') &&
     leak.trend.basis.includes('집계 대상 노즐누수(약액 유입)') && leak.trend.basis.includes('↔'),
     leak.trend.title);
-  ck('V6. 유형 선택은 추이 카드에만 적용된다 (KPI·TOP5·특이사항은 전체 기준)',
-    JSON.stringify(leak.kpi) === JSON.stringify(plain.kpi) &&
+  ck('V6. 유형 선택은 추이 카드에만 적용된다 (기존 KPI 3장·TOP5·특이사항은 전체 기준)',
+    JSON.stringify(leak.kpi.slice(0, 3)) === JSON.stringify(plain.kpi) &&
     JSON.stringify(leak.vocTop) === JSON.stringify(plain.vocTop) &&
     JSON.stringify(leak.partTop) === JSON.stringify(plain.partTop) &&
     JSON.stringify(leak.notes) === JSON.stringify(plain.notes));
+  ck('V6-b. 고른 VOC 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
+    const c = leak.kpi[3];
+    /* 8/3~8/7 주에 노즐누수 9건(최근 8주 마지막 구간) · 전주 8건 */
+    return leak.kpi.length === 4 && c.key === 'vocFocus' && c.label === '노즐누수(약액 유입)' &&
+      c.value === '9' && c.unit === '건' && /▲ 1건/.test(c.delta.text) && c.delta.tone === 'up' &&
+      c.value === String(leak.trend.line.last.main) &&
+      c.note === '비율 ' + Math.round(9 / Number(leak.kpi[0].value.replace(/,/g, '')) * 100) + '%';
+  })(), JSON.stringify(leak.kpi[3]));
+  ck('V6-c. 전체·A/S·점검을 고르면 KPI 는 3장 그대로 (이미 있는 카드와 겹치지 않는다)',
+    plain.kpi.length === 3 && asOnly.kpi.length === 3 && inspOnly.kpi.length === 3);
+  ck('V6-d. KPI 4장도 한 줄 — y 좌표가 같고 본문 폭을 꽉 채운다', (() => {
+    const cards = itemsOf(leak).filter(o => o.card && o.y === D.L.kpi.y);
+    if (cards.length !== 4) return false;
+    const P = D.L.page, K = D.L.kpi;
+    const last = cards[cards.length - 1];
+    return cards.every(c => Math.abs(c.w - K.widthFor(4)) < 0.001) &&
+      Math.abs(cards[0].x - P.left) < 0.001 &&
+      Math.abs(last.x + last.w - P.right) < 0.01;
+  })());
+  ck('V6-e. 카드 숫자는 추이 그래프와 같은 유형 판정을 쓴다',
+    D.exCountVocType_([{ gubun: 'A/S', type: '노즐누수(약액 유입)' }, { gubun: '점검', type: '노즐누수(약액 유입)' },
+                       { gubun: 'A/S', type: '이상 없음' }, { gubun: '설치', type: '노즐누수(약액 유입)' }],
+                      '노즐누수(약액 유입)') === 2);
 
   /* 표시 목록 — 연간 탭과 같은 구성(선·점·차이 막대)이 실제로 그려지는지 */
   const fi = itemsOf(leak);

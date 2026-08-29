@@ -3512,7 +3512,10 @@ var L=(function(){
     header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.1,
              dateX:6.45, dateW:4.7, basisY:1.20, basisH:0.22, basisW:6.0,
              logo:{x:12.01, y:0.16, w:1.07, h:0.58} },
+    /* 카드 수는 3장(기본) 또는 4장(추이 대상 VOC 유형을 함께 실을 때)이다.
+       한 줄이 본문 폭을 꽉 채우도록 폭만 장수로 나눈다 — y·높이는 그대로다. */
     kpi:{ y:1.44, h:0.92, n:kpiN, w:kpiW, gap:kpiGap, pad:0.10,
+          widthFor:function(n){ return (W-kpiGap*((n||kpiN)-1))/(n||kpiN); },
           lblDY:0.05, lblH:0.22, badgeW:0.62, badgeH:0.18,
           valDY:0.27, valH:0.36, subDY:0.64, subH:0.24 },
     /* 카드 공통 — 제목 줄(제목 좌 · 기준 우), 좁은 카드는 기준을 둘째 줄에 둔다 */
@@ -3725,19 +3728,19 @@ function buildExecutivePptDeck(snap){
         t:'증감 기준 · '+snap.cmpLabel+' 대비', size:FT.basis, color:C.mut, align:'right'});
 
   /* ── ② KPI 3 (한 줄) ── */
-  var K=L.kpi;
+  var K=L.kpi, kw=K.widthFor(snap.kpi.length);
   snap.kpi.forEach(function(kp,i){
-    var x=P.left+i*(K.w+K.gap), iw=K.w-K.pad*2;
-    rect({x:x, y:K.y, w:K.w, h:K.h, r:0.04, card:true,
+    var x=P.left+i*(kw+K.gap), iw=kw-K.pad*2;
+    rect({x:x, y:K.y, w:kw, h:K.h, r:0.04, card:true,
           fill:C.kpiBg, line:{color:C.kpiLine, width:0.75}});
     var labW=iw-(kp.badge?(K.badgeW+0.06):0);
     var lab=kp.label+(kp.note?' · '+kp.note:'');
     text({x:x+K.pad, y:K.y+K.lblDY, w:labW, h:K.lblH,
           t:exFitTxt_(lab, labW, FT.kpiLabel), size:FT.kpiLabel, color:C.mut});
     if(kp.badge){
-      rect({x:x+K.w-K.pad-K.badgeW, y:K.y+K.lblDY+0.02, w:K.badgeW, h:K.badgeH, r:0.03,
+      rect({x:x+kw-K.pad-K.badgeW, y:K.y+K.lblDY+0.02, w:K.badgeW, h:K.badgeH, r:0.03,
             fill:C.headBg, line:{color:C.kpiLine, width:0.5}});
-      text({x:x+K.w-K.pad-K.badgeW, y:K.y+K.lblDY+0.02, w:K.badgeW, h:K.badgeH,
+      text({x:x+kw-K.pad-K.badgeW, y:K.y+K.lblDY+0.02, w:K.badgeW, h:K.badgeH,
             t:kp.badge, size:FT.kpiBadge, color:C.navy, align:'center'});
     }
     var vs=exFitPair_(kp.value, kp.unit, iw, [FT.kpiValue,16,15,14,13,12,11]);
@@ -4776,6 +4779,12 @@ function exTrendVocType_(r){
   if(!v || v==='없음' || isOK(v) || /^정기\s*점검$/.test(v)) return '';
   return v;
 }
+/* 지정한 행 묶음에서 그 VOC 유형이 몇 건인지 — KPI 카드와 추이 그래프가 같은 판정을 쓴다 */
+function exCountVocType_(rows, focus){
+  var n=0;
+  (rows||[]).forEach(function(r){ if(exTrendVocType_(r)===focus) n++; });
+  return n;
+}
 /* 추이 구간 전체의 유형별 건수 — 생성 모달 드롭다운과 그래프가 같은 집계를 쓴다.
    weekdayOnly 는 주간 추이(월~금만 집계)와 목록 건수를 어긋나지 않게 하기 위한 것이다. */
 function exTrendTypeCounts_(a, b, weekdayOnly){
@@ -5201,7 +5210,9 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
   var vc=buildExecutiveVocChange(x);
   var mt=buildMonthTrend(), mc=buildMonthTrendCompare(mt), mNote=exMonthTrendNote_(mc);
 
-  /* ── KPI 3 — 주간·월간 PPT 공통 핵심 지표 ── */
+  /* ── KPI — 주간·월간 PPT 공통 핵심 지표 ──
+     추이 그래프 대상으로 VOC 유형을 고르면 그 유형의 보고 기간 건수를 같은 줄에 한 장 더 싣는다.
+     한 줄은 언제나 "보고 기간" 기준이다 — 추이 카드의 8주·6개월 합계와 섞지 않는다. */
   var kpi=[
     {key:'total', label:'전체 서비스 건수', value:exNum(k.total), unit:'건',
      delta:exDeltaParts(k.total, p?p.total:null, '건', 'neutral', cmp)},
@@ -5210,6 +5221,14 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     {key:'insp', label:'점검 건수', value:exNum(k.insp), unit:'건',
      delta:exDeltaParts(k.insp, p?p.insp:null, '건', 'neutral', cmp)}
   ];
+  if(exTrendIsVocType_(vocFocus)){
+    /* 유형 판정은 추이 그래프와 같은 함수를 쓴다 — 카드 숫자와 그래프가 갈라질 수 없다 */
+    var fCur=exCountVocType_(x.rows, vocFocus), fPrev=x.prev?exCountVocType_(x.prev, vocFocus):null;
+    kpi.push({key:'vocFocus', label:vocFocus,
+      note:'비율 '+(k.total?Math.round(fCur/k.total*100):0)+'%',
+      value:exNum(fCur), unit:'건',
+      delta:exDeltaParts(fCur, fPrev, '건', 'bad', cmp)});
+  }
 
   /* ── 추이 카드 — 이번 구간(주간 8주 · 월간 6개월)과 바로 앞 같은 길이의 구간을 겹쳐 본다 ──
      연간 비교분석 탭 "기간별 서비스 추이"와 같은 읽는 법이고,

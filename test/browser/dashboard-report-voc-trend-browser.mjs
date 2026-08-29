@@ -98,7 +98,16 @@ ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
   focus.includes('기준 주 노즐 누수(약액 유입)') && focus.includes('직전 8주 대비'));
 /* '직전 8주 대비'는 카드 제목에도 나오므로 마지막(수치 타일) 쪽을 본다 */
 ck('6. 직전 8주보다 늘어난 유형은 증가로 판정', /▲/.test(focus.split('직전 8주 대비').pop()));
-ck('7. 유형을 골라도 KPI·TOP5는 전체 기준 그대로',
+ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
+  const kpiRow = focus.split('전체 서비스 건수')[1] || '';
+  /* 상단 KPI 줄 = 전체 · A/S · 점검 · 선택 유형 순 */
+  return kpiRow.indexOf('노즐 누수(약액 유입) · 비율') >= 0 &&
+         kpiRow.indexOf('노즐 누수(약액 유입)') < kpiRow.indexOf('최근 8주');
+})());
+ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
+  (plain.split('전체 서비스 건수')[1] || '').indexOf('비율') ===
+  (plain.split('전체 서비스 건수')[1] || '').lastIndexOf('비율'));
+ck('7. 유형을 골라도 기존 KPI·TOP5는 전체 기준 그대로',
   ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', 'VOC 유형 TOP 5', '교체품 TOP 5']
     .every(t => plain.includes(t) && focus.includes(t)));
 ck('8. 미리보기 추이 그래프가 꺾은선·점으로 그려진다', await page.evaluate(async () => {
