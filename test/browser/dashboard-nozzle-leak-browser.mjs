@@ -114,40 +114,40 @@ ck('8-a2. PC에서는 건수 오른쪽에 안내 표시·32px 수치·낮은 카
 ck('8-b. 교차분석의 미평가 제외·분모 기준을 정확히 표시',
   (await page.textContent('#exLeakMatrixCard')).includes('두 평가가 모두 있는 병원만 분석 · 미평가 제외')
   &&!(await page.textContent('#exLeakMatrixCard')).includes('전체 누수 중'));
-for(const [key,n] of [['total',4],['reuse',1],['single',2],['good',2],['need',1]]){
+for(const [key,n,latest] of [['total',4,3],['reuse',1,1],['single',2,1],['good',2,1],['need',1,1]]){
   await page.click('#exLeakKpis [data-hist-dim="leak:'+key+'"]');
   await page.waitForSelector('#exListModal.show');
-  const state=await page.evaluate(()=>({count:EX_HISTORY_STATE.filtered.length,
+  const state=await page.evaluate(()=>({count:EX_HISTORY_STATE.filtered.length,sourceCount:EX_HISTORY_STATE.comparison.sourceCount,
     rows:[...document.querySelectorAll('#hstTableHost tbody tr')].length,
     valid:EX_HISTORY_STATE.filtered.every(it=>it.r.date>='2026-08-10'&&hpIsLeakVoc_(it.r)),
     controls:['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'].every(id=>!!document.getElementById(id)),
     salesCollapsed:!EX_HISTORY_STATE.salesCountsExpanded,previewCollapsed:!EX_HISTORY_STATE.typeExampleExpanded}));
-  ck('8-c. '+key+' 카드의 '+n+'건과 공통 이력 필터가 정확히 일치',state.count===n&&state.rows===n&&state.valid&&state.controls&&state.salesCollapsed&&state.previewCollapsed,JSON.stringify(state));
+  ck('8-c. '+key+' 카드 원본 '+n+'건과 최신 선택 '+latest+'건을 구분',state.sourceCount===n&&state.count===latest&&state.rows===latest&&state.valid&&state.controls&&state.salesCollapsed&&state.previewCollapsed,JSON.stringify(state));
   await page.click('#exListModal .mbtn.cancel');
 }
 await page.click('#exLeakKpis [data-hist-dim="leak:total"]');
 await page.selectOption('#hstGubun','점검');
 ck('8-d. 누수 이력 구분 필터는 점검 중 누수 1건만 표시',await page.locator('#hstTableHost tbody tr').count()===1);
-await page.click('#exListModal .hst-reset');
+await page.getByRole('button',{name:'필터 초기화',exact:true}).click();
 await page.selectOption('#hstFse','처리나');
-ck('8-e. 처리 담당자 필터 적용',await page.locator('#hstTableHost tbody tr').count()===2);
-await page.click('#exListModal .hst-reset');
+ck('8-e. 처리 담당자 필터 적용',await page.locator('#hstTableHost tbody tr').count()===1);
+await page.getByRole('button',{name:'필터 초기화',exact:true}).click();
 await page.fill('#hstQuery','B병원');
-ck('8-f. 병원 검색으로 복수 처리기록 조회',await page.locator('#hstTableHost tbody tr').count()===2);
+ck('8-f. 병원 검색으로 최신 선택 처리기록 조회',await page.locator('#hstTableHost tbody tr').count()===1);
 await page.selectOption('#hstSales','영업가');
 ck('8-g. 서로 교집합이 없는 조건은 0건 표시',await page.locator('#hstTableHost tbody tr').count()===0);
-await page.click('#exListModal .hst-reset');
+await page.getByRole('button',{name:'필터 초기화',exact:true}).click();
 await page.click('#hstSalesCountsToggle');
 await page.click('#hstBreakdown [data-hst-count-key="sales"][data-hst-count-value="영업나"]');
-ck('8-h. 영업담당자 건수 칩도 이력 필터와 연결',await page.locator('#hstTableHost tbody tr').count()===2);
+ck('8-h. 영업담당자 건수 칩도 이력 필터와 연결',await page.locator('#hstTableHost tbody tr').count()===1);
 await page.evaluate(()=>applyHospDB_([{n:'A병원',sale:'영업가'},{n:'B병원',sale:'영업나'}]));
 ck('8-i. 병원DB 갱신 후에도 누수 카드 범위·필터·펼침 상태 유지',
-  await page.inputValue('#hstSales')==='영업나'&&await page.locator('#hstTableHost tbody tr').count()===2
+  await page.inputValue('#hstSales')==='영업나'&&await page.locator('#hstTableHost tbody tr').count()===1
   &&await page.getAttribute('#hstSalesCountsToggle','aria-expanded')==='true');
 await page.click('#exListModal .mbtn.cancel');
 await page.evaluate(()=>{F.type=['케이블 불량'];F.noz=['reuse'];F.skill=['need'];apply();});
 await page.click('#exLeakKpis [data-hist-dim="leak:total"]');
-ck('8-j. 누수 탭에서 제외하는 상단 필터가 이력에도 잘못 적용되지 않음',await page.locator('#hstTableHost tbody tr').count()===4);
+ck('8-j. 누수 탭에서 제외하는 상단 필터가 이력에도 잘못 적용되지 않음',await page.locator('#hstTableHost tbody tr').count()===3);
 await page.click('#exListModal .mbtn.cancel');
 await page.evaluate(()=>{F.type=[];F.noz=[];F.skill=[];F.gubun=['점검'];apply();});
 await page.click('#exLeakKpis [data-hist-dim="leak:reuse"]');
@@ -191,7 +191,7 @@ ck('11-c2. 좁은 카드에서 안내만 다음 줄로 이동',await page.locato
   return m.top>=n.bottom&&el.scrollWidth<=el.clientWidth;
 }));
 await page.click('#exLeakKpis [data-hist-dim="leak:total"]');
-ck('11-d. 모바일 처리이력은 4건·필터를 정상 표시',await page.locator('#hstTableHost tbody tr').count()===4&&await page.locator('#hstGubun').isVisible());
+ck('11-d. 모바일 처리이력은 최신 3건·필터를 정상 표시',await page.locator('#hstTableHost tbody tr').count()===3&&await page.locator('#hstGubun').isVisible());
 if(process.env.SHOT)await page.screenshot({path:process.env.SHOT.replace('.png','-mobile-history.png'),fullPage:true});
 await page.click('#exListModal .mbtn.cancel');
 await page.setViewportSize({width:1440,height:900});
