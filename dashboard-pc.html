@@ -3533,9 +3533,12 @@ var L=(function(){
             /* 선 그래프 영역 — 연간 비교분석 탭과 같은 구성(격자·선·점 · 아래 증감 막대).
                plot.top ~ plot.top+plot.h 가 선, 그 아래 gap 만큼 띄우고 증감 밴드,
                밴드 아래가 곧 baseY(가로축)라 x 라벨 자리는 막대형과 같다. */
-            plot:{ top:rowA.y+1.04, h:0.78, gap:0.06, deltaH:0.28,
+            /* top ─ h ─ labPad(값 라벨 여유) ─ gap ─ deltaH 가 정확히 baseY 에서 끝난다.
+               labPad 가 없으면 맨 아래 점의 값 라벨이 증감 밴드에 막혀 위로 접히고,
+               그러면 상대 계열 라벨과 붙는다. */
+            plot:{ top:rowA.y+0.98, h:0.64, labPad:0.14, headPad:0.09, gap:0.06, deltaH:0.34,
                    gut:0.36, ticks:3, dotR:0.045, lineW:1.75, refW:1.25,
-                   numDY:0.16, numH:0.15, axLblW:0.34, axLblH:0.14,
+                   numDY:0.15, numH:0.15, numGap:0.01, axLblW:0.34, axLblH:0.14,
                    deltaBarW:0.13, deltaMin:0.015 } },
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
@@ -3812,7 +3815,7 @@ function buildExecutivePptDeck(snap){
     var pts=ln.pts, m=pts.length||1;
     var plotL=T.chartX+PL.gut, plotR=T.chartX+T.chartW, band=(plotR-plotL)/m;
     var lineBot=PL.top+PL.h;
-    var deltaTop=lineBot+PL.gap, zero=deltaTop+PL.deltaH/2, half=PL.deltaH/2-0.02;
+    var deltaTop=lineBot+PL.labPad+PL.gap, zero=deltaTop+PL.deltaH/2, half=PL.deltaH/2-0.02;
     var cx=function(i){ return plotL+band*(i+0.5); };
     /* 보고 기간과 겹치는 구간 강조 — 막대형 카드와 같은 자리·같은 색 */
     pts.forEach(function(p,i){
@@ -3844,24 +3847,46 @@ function buildExecutivePptDeck(snap){
         dot({cx:cx(idx), cy:sy(v), r:PL.dotR*(key==='main'?1:0.85), fill:sr[1]});
       });
     });
-    /* 값 — 인쇄물에는 마우스오버가 없으므로 두 계열 모두 숫자를 적는다(주 계열 위 · 참조 아래) */
+    /* 값 — 인쇄물에는 마우스오버가 없으므로 두 계열 모두 숫자를 적는다.
+       두 선이 오르내리며 교차하므로 "주 계열은 항상 위"로 두면 값이 뒤집힌 구간에서
+       상대 계열의 점·숫자와 겹친다. 그 구간의 위아래 관계로 자리를 정한다:
+         값이 큰 쪽 = 선 위 · 값이 작은 쪽 = 선 아래.
+       한쪽이 그래프 끝에 막히면 둘 다 반대쪽에 값 순서대로 쌓아 겹침을 막는다. */
+    /* 라벨은 맨 위 눈금선 위(핵심 수치 타일 아래 여백)까지 나갈 수 있다 —
+       그만큼을 빼두지 않으면 최댓값 근처 라벨이 "위가 막혔다"고 판정돼 아래로 접힌다. */
+    var lblTop=PL.top-PL.headPad+PL.numH/2, lblBot=lineBot+PL.labPad-PL.numH/2;
+    var lblSpots=function(p){
+      if(p.ref==null) return {main:Math.max(lblTop, sy(p.main)-PL.numDY), ref:null};
+      var mIsHi=p.main>=p.ref;
+      var hiY=sy(mIsHi?p.main:p.ref), loY=sy(mIsHi?p.ref:p.main);
+      var hi=hiY-PL.numDY, lo=loY+PL.numDY;
+      if(lo>lblBot){ lo=loY-PL.numDY; hi=Math.min(hi, lo-PL.numH-PL.numGap); }  /* 아래가 막힘 */
+      if(hi<lblTop){ hi=hiY+PL.numDY; lo=Math.max(lo, hi+PL.numH+PL.numGap); }  /* 위가 막힘 */
+      return mIsHi ? {main:hi, ref:lo} : {main:lo, ref:hi};
+    };
     pts.forEach(function(p,idx){
-      var x=cx(idx)-band/2, w=band;
-      text({x:x, y:sy(p.main)-PL.numDY-PL.numH/2, w:w, h:PL.numH, t:String(p.main),
-            size:FT.barNum, bold:true, color:C.navy, align:'center'});
-      if(p.ref!=null)
-        text({x:x, y:sy(p.ref)+PL.numDY-PL.numH/2, w:w, h:PL.numH, t:String(p.ref),
-              size:FT.barNum, color:ln.refMuted?C.mut:C.teal, align:'center'});
+      var x=cx(idx)-band/2, w=band, at=lblSpots(p);
+      /* trendVal·trendIdx 는 표시 목록 표식이다 — 회귀 테스트가 라벨 자리를 짚어본다
+         (TOP5 표의 topCard·topRow 표식과 같은 쓰임). */
+      text({x:x, y:at.main-PL.numH/2, w:w, h:PL.numH, t:String(p.main),
+            size:FT.barNum, bold:true, color:C.navy, align:'center',
+            trendVal:'main', trendIdx:idx});
+      if(at.ref!=null)
+        text({x:x, y:at.ref-PL.numH/2, w:w, h:PL.numH, t:String(p.ref),
+              size:FT.barNum, color:ln.refMuted?C.mut:C.teal, align:'center',
+              trendVal:'ref', trendIdx:idx});
     });
-    /* 증감 막대 — 직전 구간 대비 주 계열의 변화(위=증가 빨강 · 아래=감소 초록) */
+    /* 증감 막대 — 같은 구간끼리의 차이(위=증가 빨강 · 아래=감소 초록).
+       밴드가 얇아 눈금을 올려 잡으면(20 같은 값) 작은 차이가 선처럼 눌린다.
+       실제 최대 차이를 그대로 밴드 높이에 맞춰 서로의 크기를 비교할 수 있게 한다. */
     var dmax=1;
     ln.deltas.forEach(function(d){ if(d!=null) dmax=Math.max(dmax, Math.abs(d)); });
-    var nd=ycNice_(dmax, 1);
     line({x:plotL, y:zero, w:plotR-plotL, color:C.line, width:0.75});
-    text({x:plotL-PL.axLblW-0.04, y:deltaTop-PL.axLblH/2+0.02, w:PL.axLblW, h:PL.axLblH,
-          t:'+'+exNum(nd.max), size:FT.legend, color:C.mut, align:'right'});
-    text({x:plotL-PL.axLblW-0.04, y:deltaTop+PL.deltaH-PL.axLblH/2-0.02, w:PL.axLblW, h:PL.axLblH,
-          t:'−'+exNum(nd.max), size:FT.legend, color:C.mut, align:'right'});
+    /* ±최대 라벨은 밴드 안에 둔다 — 밖으로 나가면 값 라벨(위)·구간 라벨(아래)과 겹친다 */
+    text({x:plotL-PL.axLblW-0.04, y:deltaTop, w:PL.axLblW, h:PL.axLblH,
+          t:'+'+exNum(dmax), size:FT.legend, color:C.mut, align:'right'});
+    text({x:plotL-PL.axLblW-0.04, y:deltaTop+PL.deltaH-PL.axLblH, w:PL.axLblW, h:PL.axLblH,
+          t:'−'+exNum(dmax), size:FT.legend, color:C.mut, align:'right'});
     pts.forEach(function(p,idx){
       var d=ln.deltas[idx], bx=cx(idx)-PL.deltaBarW/2;
       if(d==null){
@@ -3870,7 +3895,7 @@ function buildExecutivePptDeck(snap){
         return;
       }
       if(!d) return;
-      var h=Math.max(PL.deltaMin, Math.abs(d)/nd.max*half);
+      var h=Math.max(PL.deltaMin, Math.abs(d)/dmax*half);
       rect({x:bx, y:d>0?zero-h:zero, w:PL.deltaBarW, h:h, fill:d>0?C.red:C.green});
     });
     /* 가로축 · 구간 라벨 */

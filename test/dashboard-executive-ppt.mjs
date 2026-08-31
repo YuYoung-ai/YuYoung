@@ -916,6 +916,59 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
       pts[pts.length - 1].ongoing && cur.trend.line.deltas[pts.length - 1] === null);
   }
 
+  /* ── 값 라벨 자리 ──
+     두 선이 교차하거나 값이 붙으면 숫자가 서로/점 위에 겹쳐 읽을 수 없게 된다.
+     교차·동일값·0·최댓값이 모두 들어간 표본으로 라벨 자리를 검사한다. */
+  {
+    const PL = D.L.trend.plot, lineBot = PL.top + PL.h;
+    const lay = snap => {
+      const v = itemsOf(snap).filter(o => o.trendVal);
+      const by = {};
+      v.forEach(o => { (by[o.trendIdx] = by[o.trendIdx] || {})[o.trendVal] = o; });
+      return { all: v, by: by };
+    };
+    /* 최근 8주 ↔ 직전 8주가 여러 번 교차하고 0·최댓값·같은 값이 섞인 표본 */
+    const CUR = [9, 20, 9, 13, 8, 6, 9, 6], PREV = [9, 7, 6, 6, 5, 10, 8, 0];
+    const rows2 = [];
+    const mon2 = [];
+    for (let i = 15; i >= 0; i--) {
+      const d = new Date('2026-08-03T00:00:00'); d.setDate(d.getDate() - 7 * i); mon2.push(D.ymd(d));
+    }
+    mon2.forEach((w, i) => {
+      const day = k => { const x = new Date(w + 'T00:00:00'); x.setDate(x.getDate() + k); return D.ymd(x); };
+      const n = i >= 8 ? CUR[i - 8] : PREV[i];
+      for (let k = 0; k < n; k++) rows2.push({ date: day(k % 5), hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)' });
+    });
+    load(rows2);
+    const cross = D.buildExecutiveReportSnapshot(Object.assign({ vocFocus: '노즐누수(약액 유입)' }, WEEK));
+    const L2 = lay(cross);
+    ck('V14. 구간마다 두 계열의 값을 모두 적는다',
+      L2.all.length === 16 && cross.trend.line.pts.every((p, i) =>
+        L2.by[i].main.t === String(p.main) && L2.by[i].ref.t === String(p.ref)));
+    ck('V14-b. 같은 구간의 두 숫자가 세로로 겹치지 않는다', (() => {
+      return cross.trend.line.pts.every((p, i) => {
+        const a = L2.by[i].main, b = L2.by[i].ref;
+        return Math.abs((a.y + a.h / 2) - (b.y + b.h / 2)) >= PL.numH - 0.001;
+      });
+    })(), cross.trend.line.pts.map((p, i) =>
+      p.main + '/' + p.ref + ':' + (L2.by[i].main.y < L2.by[i].ref.y ? '↑' : '↓')).join(' '));
+    ck('V14-c. 값이 큰 쪽이 위, 작은 쪽이 아래에 온다 (자리가 있는 구간)',
+      cross.trend.line.pts.every((p, i) => {
+        if (p.main === p.ref) return true;
+        const hi = p.main > p.ref ? L2.by[i].main : L2.by[i].ref;
+        const lo = p.main > p.ref ? L2.by[i].ref : L2.by[i].main;
+        return hi.y < lo.y;
+      }));
+    ck('V14-d. 숫자가 증감 밴드·카드 밖으로 나가지 않는다',
+      L2.all.every(o => o.y >= PL.top - PL.headPad - 0.001 &&
+                        o.y + o.h <= lineBot + PL.labPad + 0.001));
+    ck('V14-e. 증감 막대는 실제 최대 차이에 맞춰 그린다 (작은 차이가 눌리지 않는다)', (() => {
+      const dmax = Math.max.apply(null, cross.trend.line.deltas.filter(d => d != null).map(Math.abs));
+      return has(itemsOf(cross), '+' + dmax) && has(itemsOf(cross), '−' + dmax);
+    })());
+    load(rows);
+  }
+
   /* 월간도 같은 방식 — 직전 6개월과 겹친다 */
   const mLeak = D.buildExecutiveReportSnapshot(Object.assign({ vocFocus: '노즐누수(약액 유입)' }, MONTH));
   ck('V13. 월간은 최근 6개월과 직전 6개월을 겹친다',
