@@ -30,10 +30,10 @@ function grabVar(decl){
   const at=SRC.indexOf(decl); if(at<0) throw new Error('선언을 찾지 못했습니다: '+decl);
   return SRC.slice(at,SRC.indexOf('\n',at));
 }
-const FNS=['normD','costNum','paidType_','rowDate','monday','addD','ymd','exToday','exBaseDate',
+const FNS=['normD','costNum','paidType_','rowDate','monday', 'addD', 'weekEnd', 'isReportDay_','ymd','exToday','exBaseDate',
   'isDemoRecord','recScope','filteredRows_','hospStateFilter_','exWindowBaseRows_','exWindowRows','buildWeekTrend'];
 const runtime=[
-  grabVar('var RAW=[];'),grabVar('var F={year:'),grabVar('var DEMO_MARK='),
+  grabVar('var RAW=[];'),grabVar('var F={year:'),grabVar('var WK_LAST='),grabVar('var WK_LEN='),grabVar('var WK_DAYS_LABEL='),grabVar('var DEMO_MARK='),
   ...FNS.map(grab),
   'return {'+FNS.join(',')+',setRAW:function(v){RAW=v;},setF:function(v){F=v;}};'
 ].join('\n');

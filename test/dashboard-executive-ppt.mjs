@@ -57,7 +57,7 @@ function grabObj(decl) {
 }
 
 const FNS = [
-  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd',
+  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'weekEnd', 'isReportDay_', 'ymd',
   'wkNo', 'wkLabel', 'wkRange', 'isOK',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
@@ -90,7 +90,8 @@ const src = [
   grabVar('var EX_CMP=true;'),
   grabVar('var EX_CACHE=null;'),
   grabVar('var F={year:'),
-  grabVar('var DEMO_MARK='),
+  grabVar('var WK_LAST='), grabVar('var WK_LEN='), grabVar('var WK_DAYS_LABEL='),
+  grabVar('var WK_LAST='),grabVar('var WK_LEN='),grabVar('var WK_DAYS_LABEL='),grabVar('var DEMO_MARK='),
   grabVar('var EX_MONTH_TREND_N='),
   grabVar('var NCK_ST='),
   grabVar('var EX_NOTE_SKILL='),
@@ -162,7 +163,7 @@ const SAMPLE = [
   /* 데모 운영 기록 — 보고 대상에서 제외되어야 한다 */
   { date: '2026-08-04', hosp: '데모센터', gubun: 'A/S', type: '데모 점검', part: 'Demo', detail: '[데모장비] 데모 운영 기록' }
 ];
-const WEEK = { type: 'week', from: '2026-08-03', to: '2026-08-07' };
+const WEEK = { type: 'week', from: '2026-08-03', to: '2026-08-08' };   /* 보고 주 = 월~토 */
 const MONTH = { type: 'month', from: '2026-08-01', to: '2026-08-31' };
 
 load(SAMPLE);
@@ -523,7 +524,7 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   ck('21. 회사 기본 양식 제목 문구 유지', has(wItems, 'CS팀 주간업무보고') &&
     has(mItems, 'CS팀 월간업무보고'));
   ck('21-b. 회사 기본 양식의 필드 현황·보고기간 표기',
-    /필드 현황 \(8월 1주차\) 8월 3일 ~ 8월 7일/.test(allText(wItems)) &&
+    /필드 현황 \(8월 1주차\) 8월 3일 ~ 8월 8일/.test(allText(wItems)) &&
     /필드 현황 \(8월\) 8월 1일 ~ 8월 31일/.test(allText(mItems)));
   ck('21-c. 우측 BAZ 로고 유지',
     wItems.some(o => o.k === 'logo' && o.x > 11.5) && mItems.some(o => o.k === 'logo'));
@@ -907,7 +908,7 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
 
   /* 진행 중 구간 — 아직 기간이 덜 차 견줄 수 없다 */
   const today = D.exToday(), mon = D.monday(today);
-  if (today < D.addD(mon, 4)) {
+  if (today < D.weekEnd(mon)) {
     load(rows.concat([{ date: D.ymd(mon), hosp: '가나병원', gubun: 'A/S', type: '노즐누수(약액 유입)' }]));
     const cur = D.buildExecutiveReportSnapshot({
       type: 'week', from: D.ymd(mon), to: D.ymd(today), vocFocus: '노즐누수(약액 유입)' });

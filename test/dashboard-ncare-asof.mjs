@@ -57,11 +57,11 @@ function load(rows) {
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 
 /* ══════ 1. 기준일 규칙 ══════ */
-D.setTo('2026-08-14');                      /* 지난주 금요일 — 과거 */
-ck('1. 지난주(월~금) 선택 → 기준일은 그 주 금요일', ymd(D.ncareAsOf_()) === '2026-08-14', ymd(D.ncareAsOf_()));
-ck('1-b. 기준일이 오늘이 아니면 날짜를 밝힌다', D.ncareAsOfLabel_() === '8.14 기준', D.ncareAsOfLabel_());
+D.setTo('2026-08-15');                      /* 지난주 토요일(보고 주의 끝) — 과거 */
+ck('1. 지난주(월~토) 선택 → 기준일은 그 주 토요일', ymd(D.ncareAsOf_()) === '2026-08-15', ymd(D.ncareAsOf_()));
+ck('1-b. 기준일이 오늘이 아니면 날짜를 밝힌다', D.ncareAsOfLabel_() === '8.15 기준', D.ncareAsOfLabel_());
 
-D.setTo('2026-08-21');                      /* 이번 주 금요일 — 미래 */
+D.setTo('2026-08-22');                      /* 이번 주 토요일 — 미래 */
 ck('2. 이번 주 선택(끝이 미래) → 오늘로 잘린다', ymd(D.ncareAsOf_()) === TODAY, ymd(D.ncareAsOf_()));
 ck('2-b. 기준일이 오늘이면 "오늘 현황"', D.ncareAsOfLabel_() === '오늘 현황', D.ncareAsOfLabel_());
 

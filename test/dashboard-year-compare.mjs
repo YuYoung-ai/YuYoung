@@ -17,7 +17,7 @@ function grab(name){
     if(SRC[j]==='{')depth++;else if(SRC[j]==='}'&&--depth===0)return SRC.slice(at,j+1);
   }throw new Error('함수 끝 없음: '+name);
 }
-const FNS=['monday','addD','ymd','rowDate','hpCleanKey_','hpIsLeakVoc_','isHandpieceCleaning_',
+const FNS=['monday', 'addD', 'weekEnd', 'isReportDay_','ymd','rowDate','hpCleanKey_','hpIsLeakVoc_','isHandpieceCleaning_',
   'ycDate_','ycRange_','ycDefaultSideRange_','ycEnsureCustom_','ycMdCmp_','ycMdInYear_',
   'ycAlignedMd_','ycAlignedRange_','ycPeriods_','ycRangeStat_','ycDayDiff_','ycSum_','ycPeriodData_',
   'esc','escAttr','exNum','ycMD_','ycMetricVal_','ycMetricLabel_','ycNice_','ycPartialDays_',

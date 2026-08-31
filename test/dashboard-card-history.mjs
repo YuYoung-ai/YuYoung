@@ -45,7 +45,7 @@ function grabVar(decl) {
 }
 
 const FNS = [
-  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'hospitalSales_', 'rowDate', 'monday', 'addD', 'ymd', 'isOK',
+  'esc', 'escAttr', 'normD', 'costNum', 'nkey', 'hospitalSales_', 'rowDate', 'monday', 'addD', 'weekEnd', 'isReportDay_', 'ymd', 'isOK',
   'hpCleanKey_', 'hpIsLeakVoc_', 'isHandpieceCleaning_',
   'isDemoRecord', 'recScope', 'isNcareVisit', 'nzNcare_', 'cmpGroup_',
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
@@ -67,7 +67,7 @@ const src = [
   grabVar('var RAW=[];'), grabVar('var HOSPDB=[];'),
   grabVar('var EX_CMP=true;'), grabVar('var EX_CACHE=null;'),
   grabVar('var YC_CLEAN_SAVING_UNIT='),
-  grabVar('var F={year:'), grabVar('var DEMO_MARK='), grabVar('var NCK_ST='),
+  grabVar('var F={year:'), grabVar('var WK_LAST='),grabVar('var WK_LEN='),grabVar('var WK_DAYS_LABEL='),grabVar('var DEMO_MARK='), grabVar('var NCK_ST='),
   ...FNS.map(grab),
   'return {' + FNS.join(',') +
   ', setRAW:function(v){RAW=v;}, setF:function(v){F=v;}, getF:function(){return F;},' +
@@ -99,14 +99,14 @@ function load(rows, period) {
 /* 특수문자·따옴표가 섞인 유형명을 일부러 포함한다 */
 const ODD_TYPE = '노즐 "누수" & <급수> \'A\'';
 const SAMPLE = [
-  /* 현재 기간 2026-08-03 ~ 08-07 */
+  /* 현재 기간 2026-08-03 ~ 08-08 (보고 주 = 월~토) */
   { date: '2026-08-05', hosp: '나병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '김프로', detail: '내부 세척\n정상 동작 확인' },
   { date: '2026-08-05', hosp: '가병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y", fse: '이기사', detail: '핸드피스 교체' },
   { date: '2026-08-07', hosp: '다병원', gubun: 'A/S', type: '노즐누수', part: '없음', fse: '김프로', detail: '누수 부위 확인 및 세척' },
   { date: '2026-08-04', hosp: '라병원', gubun: 'A/S', type: ODD_TYPE, part: 'Cable Set' },
   { date: '2026-08-06', hosp: '마병원', gubun: 'A/S', type: '이상 없음', part: '없음' },
   { date: '2026-08-06', hosp: '바병원', gubun: '점검', type: '노즐누수', part: "Handpiece Ass'y" },
-  /* 비교 기간(전주) 2026-07-27 ~ 07-31 */
+  /* 비교 기간(전주) 2026-07-27 ~ 08-01 */
   { date: '2026-07-28', hosp: '가병원', gubun: 'A/S', type: '노즐누수', part: "Handpiece Ass'y" },
   { date: '2026-07-29', hosp: '사병원', gubun: 'A/S', type: '풋스위치 불량', part: 'Foot s/w' },
   { date: '2026-07-30', hosp: '아병원', gubun: 'A/S', type: '풋스위치 불량', part: 'Foot s/w' },
@@ -114,7 +114,7 @@ const SAMPLE = [
   /* 데모 기록 — 모집단에서 이미 빠진다 */
   { date: '2026-08-05', hosp: '데모센터', gubun: 'A/S', type: '노즐누수', part: 'Demo', detail: '[데모장비] 데모' }
 ];
-const WEEK = { from: '2026-08-03', to: '2026-08-07' };
+const WEEK = { from: '2026-08-03', to: '2026-08-08' };
 const x = load(SAMPLE, WEEK);
 
 const vocTop = D.exDimCompare(x.rows, x.prev, 'type', true);
