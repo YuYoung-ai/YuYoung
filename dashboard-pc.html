@@ -1274,7 +1274,7 @@ exApplyLevel3Tools_();
   <div class="mbox report-box">
     <h2>📑 주간업무보고 PPT 생성</h2>
     <div class="mrow">
-      <label>보고 주차 (월~금)</label>
+      <label>보고 주차 (월~토)</label>
       <select id="wkSel" onchange="exOnReportPeriodChange_('week')"></select>
       <div class="mhint">시트 처리일 기준 최근 8주 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
     </div>
@@ -1511,7 +1511,7 @@ exApplyLevel3Tools_();
           <button type="button" class="chip" onclick="preset(7)">최근 7일</button>
           <button type="button" class="chip" onclick="preset(30)">최근 30일</button>
           <button type="button" class="chip" onclick="presetThisMonth()">이번 달</button>
-          <button type="button" class="chip" onclick="presetLastWeek()">지난주 월~금</button>
+          <button type="button" class="chip" onclick="presetLastWeek()">지난주 월~토</button>
         </div>
       </div>
       <div class="fgroup"><h5>년</h5><div class="chips" id="fYear"></div></div>
@@ -2007,7 +2007,7 @@ var NCK_ST=[['최근 점검 완료','var(--green)'],['점검 예정','var(--ambe
 /* ── 운영률 기준일 ──
    보고 기간이 지난주인데 운영률만 오늘 값이면 한 화면 안에서 기준일이 둘로 갈린다.
    기준일 = 선택 기간의 끝. 단 미래로는 가지 않는다.
-     · 최근 완료 주간·지난주 → 기간 끝이 곧 금요일이다(프리셋이 월~금이라 따로 계산할 것이 없다)
+     · 최근 완료 주간·지난주 → 기간 끝이 곧 보고 주의 마지막 날(토요일)이다(프리셋이 그 기준이라 따로 계산할 것이 없다)
      · 이번 주·이번 달      → 기간 끝이 미래라 오늘로 잘린다
      · 전체 기간            → 오늘
    exBaseDate() 가 이미 "F.to 또는 오늘"이므로 오늘로 클램프만 한다. */
@@ -2240,7 +2240,7 @@ function presetThisMonth(){
 }
 function presetLastWeek(){
   var mon=addD(monday(new Date()),-7);
-  setRangeDates(mon, addD(mon,4));
+  setRangeDates(mon, weekEnd(mon));
 }
 function toggleF(k,v){
   if(v==='__all'){ if(!F[k].length) return; F[k]=[]; buildFilters(); apply(); return; }  /* "전체" = 선택 해제 */
@@ -3562,7 +3562,16 @@ function addD(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
 function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function wkNo(mon){ return Math.floor((mon.getDate()-1)/7)+1; } /* 월 내 주차 */
 function wkLabel(mon){ return (mon.getMonth()+1)+'월 '+wkNo(mon)+'주차'; }
-function wkRange(mon){ var f=addD(mon,4);
+/* ── 업무보고 한 주 = 월요일 ~ 토요일 ──
+   토요일 당직 처리도 그 주의 실적이므로 보고 주에 넣는다. 주 길이는 여기서만 관리한다 —
+   기간 프리셋·주간 보고 기간·8주 추이 집계·비교 기간(전주) 판정이 모두 이 값을 따른다. */
+var WK_LAST=5;                                   /* 월요일 + 5일 = 토요일 */
+var WK_LEN=WK_LAST+1;                            /* 한 주 6일(월~토) */
+var WK_DAYS_LABEL='월~토';
+function weekEnd(mon){ return addD(mon, WK_LAST); }
+/* 보고 대상 요일 — 일요일 기록만 주간 집계에서 뺀다 */
+function isReportDay_(d){ return d.getDay()!==0; }
+function wkRange(mon){ var f=weekEnd(mon);
   return (mon.getMonth()+1)+'월 '+mon.getDate()+'일 ~ '+(f.getMonth()+1)+'월 '+f.getDate()+'일'; }
 function isOK(t){ return /이상없음|점검이상무|이상 없음/.test(String(t||'')); }
 
@@ -4165,9 +4174,9 @@ async function exLoadLogo_(){
 }
 
 /* ══════ 보고 기간 · 모달 ══════ */
-/* 주간 = 선택 주차의 월~금 · 월간 = 선택 월의 1일~말일.
+/* 주간 = 선택 주차의 월~토 · 월간 = 선택 월의 1일~말일.
    이 기간을 그대로 F.from/F.to 로 쓰므로 비교 기간(전주·전월)도 대시보드와 같은 규칙으로 잡힌다. */
-function exWeekPeriod_(v){ var m=new Date(v+'T00:00:00'); return {from:ymd(m), to:ymd(addD(m,4))}; }
+function exWeekPeriod_(v){ var m=new Date(v+'T00:00:00'); return {from:ymd(m), to:ymd(weekEnd(m))}; }
 function exMonthPeriod_(v){
   var m=new Date(v+'T00:00:00');
   var end=new Date(m.getFullYear(), m.getMonth()+1, 0), today=exToday();
@@ -4504,7 +4513,7 @@ function initExecView(){
 }
 
 /* ══════ 고정 필터 ══════ */
-/* 기간 프리셋 — 주간은 기존과 동일하게 월요일~금요일 기준 */
+/* 기간 프리셋 — 주간은 보고 주 단위(월요일~토요일) 기준 */
 var EX_PRESETS=[['lastdone','최근 완료 주간'],['thisweek','이번 주'],['lastweek','지난주'],
                 ['last4w','최근 4주'],['thismonth','이번 달'],['lastmonth','지난달'],['custom','직접 지정']];
 function exToday(){ var t=new Date(); t.setHours(0,0,0,0); return t; }
@@ -4518,17 +4527,17 @@ function exBaseDate(){
   var base=new Date(F.to+'T00:00:00');
   return (!isNaN(base.getTime())&&base<today) ? base : today;
 }
-/* 최근 "완료된" 주(월~금)의 월요일 — 금요일이 지난(토요일 이후) 주만 완료로 본다 */
+/* 최근 "완료된" 보고 주의 월요일 — 주 마지막 날(토요일)이 지난 주만 완료로 본다 */
 function exLastDoneMonday(){
   var t=exToday(), mon=monday(t);
-  return (t>addD(mon,4)) ? mon : addD(mon,-7);
+  return (t>weekEnd(mon)) ? mon : addD(mon,-7);
 }
 function exPresetRange(k){
   var t=exToday(), mon;
-  if(k==='lastdone'){ mon=exLastDoneMonday();  return [mon, addD(mon,4)]; }
-  if(k==='thisweek'){ mon=monday(t);           return [mon, addD(mon,4)]; }
-  if(k==='lastweek'){ mon=addD(monday(t),-7);  return [mon, addD(mon,4)]; }
-  if(k==='last4w'  ){ mon=exLastDoneMonday();  return [addD(mon,-21), addD(mon,4)]; }
+  if(k==='lastdone'){ mon=exLastDoneMonday();  return [mon, weekEnd(mon)]; }
+  if(k==='thisweek'){ mon=monday(t);           return [mon, weekEnd(mon)]; }
+  if(k==='lastweek'){ mon=addD(monday(t),-7);  return [mon, weekEnd(mon)]; }
+  if(k==='last4w'  ){ mon=exLastDoneMonday();  return [addD(mon,-21), weekEnd(mon)]; }
   if(k==='thismonth') return [new Date(t.getFullYear(),t.getMonth(),1),   new Date(t.getFullYear(),t.getMonth()+1,0)];
   if(k==='lastmonth') return [new Date(t.getFullYear(),t.getMonth()-1,1), new Date(t.getFullYear(),t.getMonth(),0)];
   return null;
@@ -4552,7 +4561,7 @@ function exSetPreset(k){
   var r=exPresetRange(k); if(!r) return;
   setRangeDates(r[0], r[1]);                        /* 기존 setRangeDates → setRange → apply */
 }
-/* 기본 화면 = 최근 완료된 주간(월~금) — 보고 모드를 처음 볼 때 한 번만 적용한다 */
+/* 기본 화면 = 최근 완료된 보고 주(월~토) — 보고 모드를 처음 볼 때 한 번만 적용한다 */
 function exEnsureDefaultPeriod(){
   if(EX_PERIOD_INIT) return false;
   EX_PERIOD_INIT=true;
@@ -4727,11 +4736,12 @@ function buildComparisonPeriod(){
     var p0=new Date(a.getFullYear(),a.getMonth()-1,1);
     return {from:ymd(p0), to:ymd(new Date(p0.getFullYear(),p0.getMonth()+1,0)), label:'전월', long:'직전 달'};
   }
-  /* 월~금 = 주 단위 → 같은 주 수만큼 이전 */
-  if(a.getDay()===1 && b.getDay()===5 && (days-5)%7===0){
-    var w=(days-5)/7+1, sh=-7*w;
+  /* 월~토 = 주 단위 → 같은 주 수만큼 이전 */
+  if(a.getDay()===1 && b.getDay()===(1+WK_LAST) && (days-WK_LEN)%7===0){
+    var w=(days-WK_LEN)/7+1, sh=-7*w;
     return {from:ymd(addD(a,sh)), to:ymd(addD(b,sh)),
-            label: w===1?'전주':('이전 '+w+'주'), long:(w===1?'직전 주(월~금)':'직전 '+w+'주')};
+            label: w===1?'전주':('이전 '+w+'주'),
+            long:(w===1?('직전 주('+WK_DAYS_LABEL+')'):'직전 '+w+'주')};
   }
   var pt=addD(a,-1), pf=addD(pt,-(days-1));
   return {from:ymd(pf), to:ymd(pt), label:'이전 기간', long:'직전 '+days+'일'};
@@ -4811,13 +4821,13 @@ function exCountVocType_(rows, focus){
   return n;
 }
 /* 추이 구간 전체의 유형별 건수 — 생성 모달 드롭다운과 그래프가 같은 집계를 쓴다.
-   weekdayOnly 는 주간 추이(월~금만 집계)와 목록 건수를 어긋나지 않게 하기 위한 것이다. */
+   weekdayOnly 는 주간 추이(보고 요일만 집계)와 목록 건수를 어긋나지 않게 하기 위한 것이다. */
 function exTrendTypeCounts_(a, b, weekdayOnly){
   var end=new Date(b); end.setHours(23,59,59,999);
   var m={};
   exWindowRows(a, end).forEach(function(r){
     var d=rowDate(r); if(!d) return;
-    if(weekdayOnly){ var w=d.getDay(); if(w===0||w===6) return; }
+    if(weekdayOnly && !isReportDay_(d)) return;
     var v=exTrendVocType_(r); if(!v) return;
     m[v]=(m[v]||0)+1;
   });
@@ -4835,17 +4845,17 @@ function buildWeekTrend(focus, back){
   var shift=(back||0)*8;                              /* 8 = 직전 8주 구간(같은 주차끼리 맞춘다) */
   var out=[];
   for(var i=7;i>=0;i--){
-    var mo=addD(endMon,-7*(i+shift)), k=ymd(mo), fri=addD(mo,4);
+    var mo=addD(endMon,-7*(i+shift)), k=ymd(mo), wkEnd=weekEnd(mo);
     /* 마지막 주가 진행 중이거나 사용자 종료일이 월~목이면 그 날짜까지만 집계한다.
        선택 종료일 뒤의 목·금 기록이 최신 주 막대에 섞이지 않게 한다. */
-    var viewTo=(i===0&&!shift&&base<fri)?new Date(base):fri;
+    var viewTo=(i===0&&!shift&&base<wkEnd)?new Date(base):wkEnd;
     var viewEnd=new Date(viewTo); viewEnd.setHours(23,59,59,999);
     /* 노즐·숙련도 상태는 각 주의 기록만으로 다시 판정한다.
        뒤 주의 평가가 앞 주 막대의 병원 상태를 바꾸지 않아 주별 시점이 보존된다. */
     var n=0, as=0, insp=0, ty=0;
     exWindowRows(mo, viewEnd).forEach(function(r){
       var d=rowDate(r); if(!d) return;
-      var w=d.getDay(); if(w===0||w===6) return;       /* 보고 기준과 동일하게 월~금만 집계 */
+      if(!isReportDay_(d)) return;                     /* 보고 기준과 동일하게 월~토만 집계 */
       var g=String(r.gubun||'').trim();
       if(g==='A/S'){ as++; n++; }
       else if(g==='점검'){ insp++; n++; }
@@ -4853,7 +4863,7 @@ function buildWeekTrend(focus, back){
     });
     /* 선택 기간과 겹치는 주 강조 — 직전 구간에서는 쓰지 않는다 */
     var sel = !shift && !!(selA&&selB) && !(viewTo<selA || mo>selB);
-    out.push({key:k, mon:mo, to:viewTo, partial:viewTo<fri, n:n, as:as, insp:insp, ty:ty, sel:sel});
+    out.push({key:k, mon:mo, to:viewTo, partial:viewTo<wkEnd, n:n, as:as, insp:insp, ty:ty, sel:sel});
   }
   return out;
 }
@@ -5304,7 +5314,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     trend={
       kind:'week',
       title:(isVoc?('최근 8주 '+focus+' 발생 추이'):'최근 8주 서비스 추이')+' · 직전 8주 대비',
-      basis:'집계 대상 '+metricLb+' · 최근 8주 ↔ 직전 8주(같은 주차끼리) · 주 단위(월~금) · 처리일 기준',
+      basis:'집계 대상 '+metricLb+' · 최근 8주 ↔ 직전 8주(같은 주차끼리) · 주 단위('+WK_DAYS_LABEL+') · 처리일 기준',
       line: wLine,
       stats:[
         {label:'기준 주 '+metricLb, value:exNum(wLine.last?wLine.last.main:0)+'건',
@@ -6291,7 +6301,7 @@ function renderExecutiveSummary(x){
   var ts=buildTrendSummary_(tr);
   function trendDelta_(d){ return '<em class="'+(d>0?'ex-up':(d<0?'ex-down':''))+'">기준 주 '+(d>0?'+':'')+d+'%</em>'; }
   document.getElementById('exTrendCard').innerHTML=
-    exH3('최근 8주 서비스 추이', '선택 종료일 기준 · 주 단위(월~금) · 마지막 주는 기준일까지 · 기간 외 필터 반영')
+    exH3('최근 8주 서비스 추이', '선택 종료일 기준 · 주 단위('+WK_DAYS_LABEL+') · 마지막 주는 기준일까지 · 기간 외 필터 반영')
     +'<div class="ex-cbody"><div class="ex-trend-layout"><div class="ex-trend-chart">'
       +'<div class="ex-trend-legend"><span><i class="as"></i>A/S</span><span><i class="insp"></i>점검</span></div>'
       +'<div class="ex-vchart">'
@@ -6795,7 +6805,7 @@ function exShowLeakGroup(dim,value,skillValue){
      · 데모 운영 기록은 exWindowRows()의 scope:'customer' 로 이미 빠진다.
      · 기간(년·월·분기·직접 지정) 외의 고정 필터(담당자·병원·유형 등)는 그대로 반영한다.
        → 연도 비교가 목적이므로 화면 상단의 기간 선택은 "기준일"로만 쓰고 집계는 두 해 전체를 본다.
-     · 요일을 가리지 않는다(8주 카드는 월~금만 본다) — 토요일 당직 처리까지 연간 합계에 넣기 위해서다.
+     · 요일을 가리지 않는다(8주 카드는 일요일만 뺀다) — 일요일 기록까지 연간 합계에 넣기 위해서다.
    두 패널은 항상 같은 최대값으로 그려 막대 길이를 그대로 비교할 수 있다. */
 var EX_YC_LEFT=null, EX_YC_RIGHT=null;   /* 사용자가 고른 좌·우 연도 (null = 기준일로 자동) */
 var EX_YC_MODE='aligned';                /* aligned = 동월·동일일, custom = 좌우 독립 기간 */

@@ -42,7 +42,7 @@ function grabVar(decl) {
 }
 
 const FNS = [
-  'esc', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'ymd',
+  'esc', 'normD', 'costNum', 'nkey', 'rowDate', 'monday', 'addD', 'weekEnd', 'isReportDay_', 'ymd',
   'isDemoRecord', 'recScope', 'exToday', 'exBaseDate',
   'filteredRows_', 'hospStateFilter_', 'exWindowBaseRows_', 'exWindowRows',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
@@ -52,7 +52,8 @@ const FNS = [
 const src = [
   grabVar('var RAW=[];'),
   grabVar('var F={year:'),
-  grabVar('var DEMO_MARK='),
+  grabVar('var WK_LAST='), grabVar('var WK_LEN='), grabVar('var WK_DAYS_LABEL='),
+  grabVar('var WK_LAST='),grabVar('var WK_LEN='),grabVar('var WK_DAYS_LABEL='),grabVar('var DEMO_MARK='),
   grabVar('var EX_MONTH_TREND_N='),
   ...FNS.map(grab),
   'return {' + FNS.join(',') + ', setRAW:function(v){RAW=v;}, setF:function(v){F=v;}, getF:function(){return F;}};'
@@ -312,16 +313,16 @@ const noteFor = (cur, prev) => D.exMonthTrendNote_({
 {
   load([
     { date: '2026-08-05', hosp: 'A', gubun: 'A/S' },      /* 수요일 */
-    { date: '2026-08-08', hosp: 'A', gubun: '점검' },      /* 토요일 — 8주 추이는 월~금만 */
+    { date: '2026-08-08', hosp: 'A', gubun: '점검' },      /* 토요일 — 보고 주(월~토)에 들어간다 */
     { date: '2026-08-06', hosp: 'B', gubun: '점검' }
   ], base('2026-08-03', '2026-08-09'));
   const wt = D.buildWeekTrend();
-  ck('K1. 8주 서비스 추이 유지 (8주 · 월~금 · 처리일 기준)',
-    wt.length === 8 && wt[7].as === 1 && wt[7].insp === 1 && wt[7].n === 2);
+  ck('K1. 8주 서비스 추이 유지 (8주 · 월~토 · 처리일 기준)',
+    wt.length === 8 && wt[7].as === 1 && wt[7].insp === 2 && wt[7].n === 3);
   ck('K2. 8주 추이도 같은 기준일(F.to)을 쓴다', D.ymd(wt[7].mon) === '2026-08-03');
   /* 두 카드는 같은 처리 기록을 쓰지만 기간 단위가 다르다 —
-     8주 추이는 보고 기준과 같은 월~금만, 월별 추이는 그 달 전체(주말 포함)를 본다. */
-  ck('K3. 월별 추이는 8주 추이가 뺀 토요일 기록까지 포함해 3건',
+     8주 추이는 보고 기준과 같은 월~토(일요일 제외), 월별 추이는 그 달 전체를 본다. */
+  ck('K3. 월별 추이는 그 달 전체를 보므로 3건 그대로',
     monthOf(D.buildMonthTrend(), 8).n === 3);
 }
 {

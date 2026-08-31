@@ -65,7 +65,7 @@ await page.route('**://script.google.com/**', r => {
 });
 await page.goto(BASE + '/dashboard-pc.html', { waitUntil: 'domcontentloaded' });
 await page.waitForFunction(() => window.DATA_READY === true);
-await page.evaluate(() => { F.from = '2026-08-03'; F.to = '2026-08-07'; buildFilters(); apply(); openWeekly(); });
+await page.evaluate(() => { F.from = '2026-08-03'; F.to = '2026-08-08'; buildFilters(); apply(); openWeekly(); });
 await page.waitForSelector('#wkModal.show');
 
 const opts = await page.evaluate(() => [...document.querySelectorAll('#wkVocSel option')].map(o => o.value));

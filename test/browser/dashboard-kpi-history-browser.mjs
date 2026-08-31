@@ -52,7 +52,7 @@ await page.route('**://script.google.com/**',r=>{
 
 await page.goto(BASE+'/dashboard-pc.html',{waitUntil:'domcontentloaded'});
 await page.waitForFunction(()=>window.DATA_READY===true);
-await page.evaluate(()=>{F.from='2026-08-10';F.to='2026-08-14';buildFilters();apply();});
+await page.evaluate(()=>{F.from='2026-08-10';F.to='2026-08-15';buildFilters();apply();});  /* 보고 주 = 월~토 */
 
 const dims=await page.locator('#exKpis [data-hist-dim]').evaluateAll(els=>els.map(e=>e.dataset.histDim));
 ck('1. 주간 KPI는 N-Care 운영률·서비스 병원 수를 제외한 5개이며 모두 처리 이력 버튼',
