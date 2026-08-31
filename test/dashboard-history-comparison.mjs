@@ -6,7 +6,7 @@ import vm from 'node:vm';
 
 const SRC=fs.readFileSync(new URL('../dashboard-pc.html',import.meta.url),'utf8');
 function grab(name){
-  const at=SRC.search(new RegExp('\\bfunction\\s+'+name+'\\s*\\('));
+  const at=SRC.search(new RegExp('\\b(?:async\\s+)?function\\s+'+name+'\\s*\\('));
   assert.ok(at>=0,name);
   let depth=0;
   for(let i=SRC.indexOf('{',at);i<SRC.length;i++){
@@ -26,7 +26,9 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
   'exTypeExampleNorm_','exTypeExampleKey_','exHistoryTable_','exHistoryControls_',
   'exHistoryKpiRows_','exHistoryHospitalCount_','exHistoryKpiChip_','exHistoryResultHtml_',
   'exApplyHistoryFilters_','exResetHistoryFilters_','exShowHistory_',
-  'exApplyHistoryCountChip_','exToggleHistorySalesCounts_'];
+  'exApplyHistoryCountChip_','exToggleHistorySalesCounts_',
+  'exExcelDate_','exHistoryExportData_','exHistoryExcelLines_','exBuildHistoryComparisonWorkbook_',
+  'exportHistoryComparisonExcel_','exExcelDownload_'];
 const stubs=`
 var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=null;
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
@@ -184,6 +186,16 @@ ck('대시보드의 전체 인라인 스크립트 구문 검사',()=>{
   assert.ok(scripts.some(s=>s[1].includes('exShowHistory_')));
   scripts.forEach((s,i)=>new vm.Script(s[1],{filename:'dashboard-inline-'+i+'.js'}));
 });
+ck('현재 조회 병원·VOC의 선택/직전 양쪽 원본을 엑셀로 내보냄',()=>{
+  D.set(cur,raw,F);D.exShowHistory_('kpiTotal');
+  const state=D.state();state.filtered=[state.items.find(it=>it.r.id==='a1')];
+  const data=D.exHistoryExportData_(state);
+  assert.equal(data.records.length,4);assert.deepEqual(data.records.map(r=>r.period),['선택','선택','직전','직전']);
+  assert.deepEqual(data.records.slice(0,2).map(r=>r.days),[26,23]);
+  assert.equal(data.records[2].part,"Handpiece Ass'y");
+  assert.equal(data.records[0].date.toISOString(),'2026-08-15T00:00:00.000Z');
+  state.filtered=[];assert.equal(D.exHistoryExportData_(state).records.length,0);
+});
 console.log(`통과 ${count}/${count}`);
 
 const fixture=process.argv.find(a=>a.startsWith('--fixture='));
@@ -194,8 +206,11 @@ if(fixture){
   <p>합성 데이터로 검증하는 처리이력 조회 화면입니다.</p>${modal}
   <script>${stubs}\n${methods}\n${grab('openExList')}\n${grab('closeExList')}
   var EX_HISTORY_PHOTO_SEQ=0;
+  function toast(message){document.getElementById('fixtureNotice').textContent=message;}
+  function loadHpExcelLib_(){return Promise.resolve();}
   F=${JSON.stringify(F)};RAW=${JSON.stringify(raw.map(r=>({...r,type:D.vocTypeCanonical_(r.type)})))};EX_CACHE={rows:${JSON.stringify(cur)}};
   exShowHistory_('kpiTotal');
-  </script></body></html>`);
+  </script><div id="fixtureNotice" role="status"></div><script src="vendor/exceljs.min.js"></script></body></html>`);
   console.log('UI fixture: '+fixture.slice('--fixture='.length));
 }
+export {D,F,cur,raw,grab};

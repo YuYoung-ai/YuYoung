@@ -817,6 +817,7 @@ body.dark .yc-band{opacity:.26}
 .ex-list-box.history .ex-modal-body{max-height:none;min-height:0;flex:1;padding:0;overflow:hidden}
 .hst-view{height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .hst-summary{display:flex;gap:7px;padding:10px 11px 0;flex-wrap:wrap}
+.hst-summary .hst-export{margin-left:auto;height:30px;color:var(--teal);font-weight:700}
 .hst-compare-note{margin:8px 11px 0;color:var(--text-muted);font-size:11px;line-height:1.55}
 .hst-compare-note summary{cursor:pointer;color:var(--navy);font-weight:700}
 .hst-compare-note p{margin:4px 0}
@@ -5538,6 +5539,132 @@ function exHistoryElapsed_(it){
   var p=c.pairs[exHistoryPairKey_(it.r)], d=rowDate(it.r);
   return p&&p.date&&d&&d>=p.date?hpCleanDays_(p.date,d):null;
 }
+/* 현재 표시된 병원·VOC 조합의 양쪽 원본을 함께 내보낸다.
+   담당자/검색 조건으로 반대쪽 이력이 숨겨져 있어도 비교 근거를 잃지 않는다. */
+function exHistoryExportData_(state){
+  var keys=Object.create(null), shown=(state&&state.filtered)||[];
+  shown.forEach(function(it){var k=exHistoryPairKey_(it.r);if(k)keys[k]=true;});
+  var comparison=state&&state.comparison;
+  var items=((state&&state.items)||[]).filter(function(it){
+    var k=exHistoryPairKey_(it.r);return k?!!keys[k]:shown.indexOf(it)>=0;
+  }).slice().sort(function(a,b){
+    return skCmpKo_(nkey(a.r.hosp),nkey(b.r.hosp))
+      ||skCmpKo_(nkey(vocTypeCanonical_(a.r.type)),nkey(vocTypeCanonical_(b.r.type)))
+      ||(a.period===b.period?0:(a.period==='cur'?-1:1))
+      ||((rowDate(b.r)||0)-(rowDate(a.r)||0));
+  });
+  var records=items.map(function(it){
+    var r=it.r,k=exHistoryPairKey_(r),p=comparison&&comparison.pairs[k],d=rowDate(r),cur=it.period==='cur';
+    var previous=cur&&p&&p.date,days=previous&&d?hpCleanDays_(previous,d):null;
+    return {key:k,hosp:exHistoryVal_(r.hosp)||'미입력',type:exHistoryVal_(vocTypeCanonical_(r.type))||'미입력',
+      period:cur?'선택':'직전',date:exExcelDate_(d),previous:exExcelDate_(previous),days:days,
+      sn:exHistoryVal_(r.sn)||'미입력',gubun:exHistoryVal_(r.gubun),fse:exHistoryVal_(r.fse),part:exHistoryVal_(r.part),
+      cost:Number(r._cost)||0,detail:String(r.detail||''),
+      status:!cur?'비교 기준 이력':(!comparison||!comparison.start?'비교 기준일 없음':(!p?'병원명/VOC 누락':(p.date?'동일 병원·VOC 직전 이력 있음':'직전 이력 없음')))};
+  });
+  var opt=state&&state.filterOptions||{},labels={period:'화면 기간',gubun:'구분',type:'VOC',fse:'담당자',sales:'영업 담당자',q:'검색'};
+  var filters=Object.keys(labels).map(function(k){
+    var v=opt[k];if(!v||v==='all')return '';
+    if(k==='period')v=v==='cur'?'선택 기간':'비교 기간';
+    return labels[k]+': '+(v==='__missing__'?'미입력/미지정':v);
+  }).filter(Boolean).join(' · ');
+  return {name:state&&state.name||'처리 이력',period:state&&state.periodLabel||'',records:records,
+    start:comparison&&comparison.start?ymd(comparison.start):'없음',filters:filters||'없음',
+    globalFilters:state&&state.globalFilterText||'없음',created:new Date()};
+}
+/* 한글을 두 칸으로 계산해 Excel 열 너비에 맞는 줄을 만든다. 긴 내용은 계속 행으로 나눈다. */
+function exHistoryExcelLines_(text,width){
+  var lines=[];
+  String(text==null?'':text).replace(/\r\n?/g,'\n').split('\n').forEach(function(part){
+    var line='',used=0;
+    Array.from(part).forEach(function(ch){
+      var size=ch.charCodeAt(0)>255?2:1;
+      if(used+size>width&&line){lines.push(line);line='';used=0;}
+      line+=ch;used+=size;
+    });
+    lines.push(line);
+  });
+  return lines;
+}
+function exBuildHistoryComparisonWorkbook_(data,Excel){
+  if(!data.records||!data.records.length)throw new Error('내보낼 비교 이력이 없습니다.');
+  var wb=new Excel.Workbook();wb.creator='BAZ CS Dashboard';wb.created=data.created;wb.modified=data.created;
+  wb.calcProperties.fullCalcOnLoad=true;
+  var ws=wb.addWorksheet('병원별 비교',{views:[{state:'frozen',xSplit:2,ySplit:7,showGridLines:false}]});
+  var widths=[24,28,10,14,14,12,18,10,12,22,16,58,28];
+  ws.columns=widths.map(function(w){return {width:w};});
+  var navy='FF1B2F5E',teal='FFE8F4F5',line='FFDDE3EE',font='맑은 고딕';
+  function style(row,values,fill,top){
+    var height=30;
+    for(var col=1;col<=13;col++){
+      var cell=ws.getCell(row,col);cell.value=values[col-1]==null?null:values[col-1];
+      cell.font={name:font,size:10,color:{argb:navy}};
+      cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill||'FFFFFFFF'}};
+      cell.border={bottom:{style:'thin',color:{argb:line}}};
+      if(top)cell.border.top={style:'medium',color:{argb:'FF9BB4C9'}};
+      if(typeof cell.value==='string')height=Math.max(height,exHistoryExcelLines_(cell.value,Math.max(8,widths[col-1]-3)).length*15+12);
+    }
+    ws.getRow(row).height=Math.min(400,height);
+  }
+  function meta(row,value,height){
+    ws.mergeCells(row,1,row,13);var cell=ws.getCell(row,1);cell.value=value;
+    cell.font={name:font,size:10,color:{argb:navy}};
+    cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    var lines=exHistoryExcelLines_(typeof value==='string'?value:'',widths.reduce(function(a,b){return a+b;},0)-15).length;
+    ws.getRow(row).height=Math.min(400,Math.max(height||28,lines*15+12));
+  }
+  meta(1,'병원별 VOC 처리이력 비교 · '+data.name,36);
+  ws.getCell('A1').font={name:font,size:18,bold:true,color:{argb:'FFFFFFFF'}};
+  ws.getCell('A1').fill={type:'pattern',pattern:'solid',fgColor:{argb:navy}};
+  meta(2,'선택 기간: '+data.period+' · 직전 검색 기준: '+data.start+' 이전 · 생성일: '+ymd(data.created),26);
+  meta(3,'조회 결과 기준: '+data.filters+' / 상단 필터: '+data.globalFilters,36);
+  meta(4,'범위: 화면 결과에 포함된 병원·VOC 조합의 선택 + 직전 이력 전체. 반대 기간의 담당자·검색 조건과 다른 원본도 비교 근거로 포함합니다.',30);
+  meta(5,'',26);
+  meta(6,'경과일 = 선택 처리일 − 직전 처리일. 병원·VOC 기준으로 장비가 다를 수 있습니다. — 는 계산 대상 아님. 긴 처리 내용은 계속 행에 표시합니다.',30);
+  style(7,['병원명','VOC 유형','기간','처리일','직전 처리일','경과일','장비번호','구분','담당자','교체품','교체비용 (원)','처리 내용','비교 상태'],navy);
+  ws.getRow(7).height=34;ws.getRow(7).eachCell(function(c){c.font={name:font,size:10,bold:true,color:{argb:'FFFFFFFF'}};});
+  var row=8,lastKey=null,curCount=0,prevCount=0;
+  data.records.forEach(function(rec){
+    var details=exHistoryExcelLines_(rec.detail,widths[11]-4),first=true;
+    do{
+      var chunk=details.splice(0,20).join('\n'),r=row++;
+      var values=first?[rec.hosp,rec.type,rec.period,rec.date,rec.previous,
+        rec.days==null?'—':{formula:'IF(AND(ISNUMBER(D'+r+'),ISNUMBER(E'+r+')),D'+r+'-E'+r+',"")',result:rec.days},
+        rec.sn,rec.gubun,rec.fse,rec.part,rec.cost,chunk,rec.status]
+        :[rec.hosp,rec.type,rec.period+' 내용 계속',null,null,null,rec.sn,null,null,null,null,chunk,'위 원본의 처리 내용 계속'];
+      style(r,values,rec.period==='직전'?teal:'FFFFFFFF',first&&(!rec.key||rec.key!==lastKey));
+      [4,5].forEach(function(col){ws.getCell(r,col).numFmt='yyyy-mm-dd';});
+      ws.getCell(r,6).numFmt='0"일"';ws.getCell(r,11).numFmt='#,##0';
+      if(first){if(rec.period==='선택')curCount++;else prevCount++;}
+      first=false;lastKey=rec.key;
+    }while(details.length);
+  });
+  var end=row-1;
+  ws.getCell('A5').value={formula:'"선택 이력 "&COUNTIF(C8:C'+end+',"선택")&"건 · 직전 이력 "&COUNTIF(C8:C'+end+',"직전")&"건 · 계속 행은 건수에서 제외"',
+    result:'선택 이력 '+curCount+'건 · 직전 이력 '+prevCount+'건 · 계속 행은 건수에서 제외'};
+  ws.autoFilter={from:{row:7,column:1},to:{row:end,column:13}};
+  ws.pageSetup={paperSize:8,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,
+    printArea:'A1:M'+end,printTitlesRow:'7:7',horizontalCentered:true,
+    margins:{left:0.25,right:0.25,top:0.35,bottom:0.35,header:0.15,footer:0.15}};
+  ws.headerFooter.oddFooter='&C병원별 비교 내역 · &P / &N';
+  return wb;
+}
+async function exportHistoryComparisonExcel_(){
+  var state=EX_HISTORY_STATE;if(!state||state.exporting)return;
+  var data=exHistoryExportData_(state);
+  if(!data.records.length){toast('내보낼 비교 이력이 없습니다. 조회 조건을 확인해 주세요.');return;}
+  var btn=document.getElementById('hstExportExcel'),old=btn&&btn.textContent;
+  state.exporting=true;if(btn){btn.disabled=true;btn.textContent='생성 중…';}
+  try{
+    await loadHpExcelLib_();
+    var wb=exBuildHistoryComparisonWorkbook_(data,ExcelJS);
+    var period=data.period.replace(/[^0-9A-Za-z가-힣]+/g,'_')||'전체기간';
+    await exExcelDownload_(wb,'병원별_VOC_비교내역_'+period+'.xlsx');
+    toast('병원별 비교 내역 Excel 생성 완료');
+  }catch(e){toast('❌ '+(e&&e.message?e.message:e));}
+  finally{state.exporting=false;if(btn&&btn.isConnected){btn.disabled=false;btn.textContent=old;}}
+}
 function exHistoryField_(r,key){
   r=r||{};
   return key==='sales'?hospitalSales_(r.hosp):exHistoryVal_(r[key]);
@@ -6060,6 +6187,7 @@ function exApplyHistoryFilters_(){
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   if(opt.period==='all') filtered=exHistoryGrouped_(filtered);
   EX_HISTORY_STATE.period=opt.period;
+  EX_HISTORY_STATE.filterOptions=opt;
   EX_HISTORY_STATE.filtered=filtered;
   var count=document.getElementById('hstCount'), breakdown=document.getElementById('hstBreakdown'), host=document.getElementById('hstTableHost');
   /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
@@ -6174,11 +6302,15 @@ function exShowHistory_(dim, name){
   orderText+=' · 전체 기간: 병원·VOC별 선택 → 직전 순';
   var items=exHistoryDataset_(cur, prev, sort);
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
+    periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
+      .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
+        return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
     typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
   var html='<div class="hst-view">'
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · '+esc(curChip)+'</b></span>'
-    +'<span class="hst-chip">동일 병원·VOC 직전 이력 <b>'+esc(prevChip)+'</b></span></div>'
+    +'<span class="hst-chip">동일 병원·VOC 직전 이력 <b>'+esc(prevChip)+'</b></span>'
+    +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 결과의 병원·VOC별 선택 + 직전 이력 전체를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 내역 엑셀</button></div>'
     +exHistoryComparisonNote_(comparison)
     +'<p class="hst-compare-note">경과일 = 선택 처리일 − 직전 처리일 · 비교 이력 없음/비교 행은 — 표시</p>'
     +(dim==='kpiSaving'?exSavingEvidenceHtml_():'')
