@@ -25,6 +25,7 @@ const DATA=[
   {date:'2026-08-14',hosp:'D병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
   {date:'2026-08-04',hosp:'E병원',gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part:'내부 세척',fse:'김프로',ncare:'미가입'},
   {date:'2026-08-05',hosp:'F병원',gubun:'점검',cat:'장비',type:'이상 없음',part:'없음',fse:'이기사',ncare:'미가입'},
+  {date:'2026-07-20',hosp:'A병원',gubun:'A/S',cat:'핸드피스',type:'노즐누수(약액유입)',part:"Handpiece Ass'y",fse:'이전기사',sn:'HP-OLD',detail:'과거 누수 · 핸드피스 교체'},
   {date:'2025-03-10',hosp:'G병원',gubun:'A/S',cat:'장비',type:'풋스위치 불량',part:'Foot s/w',fse:'김프로',ncare:'미가입'},
   {date:'2025-07-11',hosp:'H병원',gubun:'점검',cat:'장비',type:' 풋 스위치 동작 불능 ',part:'없음',fse:'이기사',ncare:'미가입'},
   {date:'2026-01-12',hosp:'I병원',gubun:'A/S',cat:'장비',type:'풋스위치 작동 불량',part:'Foot s/w',fse:'김프로',ncare:'미가입'}
@@ -226,7 +227,17 @@ ck('15-c. 이력 유형 선택과 건수 칩도 표준 이름 하나로 표시',
   normalized.options.includes('노즐 누수(약액 유입)')&&!normalized.options.includes('노즐누수(약액유입)')&&
   normalized.breakdown.includes('노즐 누수(약액 유입) 3건'),JSON.stringify(normalized));
 await page.selectOption('#hstPeriod','prev');
-ck('15-d. 이전 기간 이력도 같은 이름으로 연결',await page.locator('#hstTableHost tbody tr').count()===1);
+ck('15-d. 전주에만 있는 E병원을 제외하고 A병원의 직전 이력을 같은 이름으로 연결',
+  await page.locator('#hstTableHost tbody tr').count()===1&&
+  (await page.textContent('#hstTableHost')).includes('2026-07-20')&&
+  (await page.textContent('#hstTableHost')).includes('A병원')&&
+  !(await page.textContent('#hstTableHost')).includes('E병원'));
+await page.selectOption('#hstPeriod','all');
+const paired=await page.locator('#hstTableHost tbody tr').allTextContents();
+ck('15-d2. 전체 기간은 같은 병원·VOC 선택 2건 아래 직전 1건을 중복 없이 표시',
+  paired.length===4&&paired[1].includes('A병원')&&paired[2].includes('A병원')&&paired[3].includes('2026-07-20'),JSON.stringify(paired));
+ck('15-d3. 선택 처리일별 직전 이력 대비 경과일 표시',
+  paired[1].includes('22일')&&paired[2].includes('21일')&&paired[0].includes('직전 이력 없음'));
 await page.evaluate(()=>closeExList());
 await page.evaluate(()=>{F.type=['노즐 누수(약액 유입)'];apply();});
 ck('15-e. 공통 유형 필터에서도 공백 변형 기록을 누락하지 않음',await page.evaluate(()=>EX_ROWS.length===3));
