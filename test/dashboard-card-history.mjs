@@ -8,8 +8,8 @@
  *
  * 핵심 확인
  *   · 이력 필터는 카드 집계(exDim)와 완전히 같은 기준을 쓴다
- *     → 카드의 cur/prev 수치와 이력 배열 길이가 항상 일치한다(중복 제거 없음)
- *   · 현재 기간(x.rows)·비교 기간(x.prev)을 분리해 보여준다
+ *     → 선택 기간 카드 수치와 이력 배열 길이가 일치한다(중복 제거 없음)
+ *   · 전주·전월 카드 집계는 유지한다. 직전 이력 비교는 dashboard-history-comparison.mjs에서 검증한다
  *   · 카드 클릭·모달 열기에는 fetch/GAS/loadData 가 없다
  *     (원본 행을 선택할 때만 정적 유형 예시 매니페스트를 최초 1회 읽는다)
  ************************************************************/
@@ -57,7 +57,7 @@ const FNS = [
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
   'exHistoryField_', 'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
-  'exHistoryTable_', 'exHistoryControls_', 'exCmpRangeText_',
+  'exHistoryTable_', 'exHistoryComparisonMeta_', 'exHistoryElapsed_', 'exHistoryControls_', 'exCmpRangeText_',
   'exHistoryKpiRows_', 'exHistoryHospitalCount_', 'exHistoryKpiChip_',
   'buildExecutiveVocChange'
 ];
@@ -147,7 +147,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   ck('4. VOC 변화 증가 유형 이력 조회', up.length > 0 &&
     up.every(t => curOf('type', t.k, false).length === t.cur), up.map(t => t.k).join(','));
   const zeroCur = down.filter(t => t.cur === 0);
-  ck('5. 감소 유형 중 현재 0건도 비교 기간 이력이 조회된다',
+  ck('5. 감소 유형 중 현재 0건인 항목의 전주·전월 카드 집계는 유지된다',
     zeroCur.length > 0 && zeroCur.every(t => curOf('type', t.k, false).length === 0
       && prevOf('type', t.k, false).length === t.prev),
     zeroCur.map(t => t.k + ' prev=' + t.prev).join(','));
