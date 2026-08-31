@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "updatedAt": "2026-08-28",
+  "updatedAt": "2026-08-31",
   "items": {
     "장비|풋스위치 작동 불량": {
       "symptom": {
-        "src": "assets/type-examples/equipment-foot-switch/symptom-f072e38111.webp",
+        "src": "assets/type-examples/media/1d14eda7e398.webp",
         "text": "케이블 단선에 의한 동작 불능 상태"
       },
       "after": {
