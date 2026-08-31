@@ -57,7 +57,7 @@ const FNS = [
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
   'exHistoryField_', 'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
-  'exHistoryTable_', 'exHistoryComparisonMeta_', 'exHistoryElapsed_', 'exHistoryControls_', 'exCmpRangeText_',
+  'exHistoryTable_', 'exHistoryValidDate_', 'exHistoryPeriodLabel_', 'exHistoryComparisonMeta_', 'exHistoryElapsed_', 'exHistoryControls_', 'exCmpRangeText_',
   'exHistoryKpiRows_', 'exHistoryHospitalCount_', 'exHistoryKpiChip_',
   'buildExecutiveVocChange'
 ];
