@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v169';
+const CACHE_VERSION = 'baz-cs-v170';
 
 // 프리캐시(설치 시 미리 받는 파일) — "셸 최소 구성"만 둔다.
 // ★ 여기에 큰 파일을 추가하지 마세요. 버전을 올릴 때마다 전 사용자가 전량 재다운로드합니다. ★
@@ -106,7 +106,14 @@ self.addEventListener('fetch', (event) => {
       .catch(() =>
         caches.match(req).then((cached) => {
           if (cached) return cached;
-          if (isNav) return caches.match('./index.html');
+          // 오프라인 내비게이션만: 쿼리스트링이 붙은 주소(hospital-pc.html?hosp=…)는
+          // 정확 일치 캐시가 없다. 같은 경로의 캐시가 있으면 그것을 돌려준다.
+          // ★ ignoreSearch 는 "네트워크 실패 후"에만 쓴다 — 온라인에서는 위의 네트워크
+          //   우선 경로가 항상 먼저 실행되므로 구버전 HTML 이 반환되지 않는다.
+          if (isNav) {
+            return caches.match(req, { ignoreSearch: true })
+              .then((samePath) => samePath || caches.match('./index.html'));
+          }
           // ★ 내비게이션이 아닌 요청(JSON·스크립트·이미지)에 HTML을 돌려주면
           //   파싱 오류·빈 화면 등 오작동을 유발하므로 그대로 실패시킨다.
           return Response.error();

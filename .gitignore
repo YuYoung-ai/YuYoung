@@ -6,3 +6,6 @@
 병원좌표_*.xlsx
 2025이력_*.xlsx
 2026이력_*.xlsx
+
+# 로컬 테스트 의존성(exceljs 등) — 배포 대상 아님
+node_modules/
