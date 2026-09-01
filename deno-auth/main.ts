@@ -23,6 +23,10 @@
  *   POST {action:'device_logout', device}       → {ok:true}
  *   POST {action:'devices',       token}        → {ok, devices:[…]}   (Lv.3 토큰 필요)
  *   POST {action:'device_revoke', token, did}   → {ok, revoked}       (Lv.3 토큰 필요)
+ *   ── VOC 유형별 예시자료 게시(선택 기능, GITHUB_TOKEN 필요) ──
+ *   POST {action:'te_blob',   token, path, data}        → {ok, path, sha}   (Lv.3 토큰 필요)
+ *   POST {action:'te_commit', token, files, manifest, summary?}
+ *                                              → {ok, commit, url, files}   (Lv.3 토큰 필요)
  *
  * 환경변수(Deno Deploy → 각 timeline → Environment Variables):
  *   TOKEN_SECRET     : 보안시트 Config 의 TOKEN_SECRET 과 '동일'(필수)
@@ -43,6 +47,12 @@
  *   GOOGLE_AUTH_ENABLED: Google 로그인 서버 스위치(기본 true, client id가 있어야 활성)
  *   GOOGLE_USERS     : 최초 1회 KV seed용 허용 사용자 JSON
  *       [{"email":"user@gmail.com","level":1,"name":"홍길동"}, ...]
+ *   ── 예시자료 게시(대시보드 "🚀 바로 게시" 버튼) ──
+ *   GITHUB_TOKEN     : GitHub fine-grained PAT. 이 저장소 하나에만, Contents: Read and write.
+ *                      비어 있으면 게시 기능 자체가 꺼진다(다른 기능은 그대로 동작).
+ *   GITHUB_REPO      : 커밋 대상(기본 "YuYoung-ai/YuYoung")
+ *   GITHUB_BRANCH    : 커밋 대상 브랜치(기본 "main" — Pages 배포 워크플로가 보는 브랜치)
+ *   TE_PUBLISH_ENABLED: 게시 기능 스위치(기본 "true"). false면 토큰이 있어도 거부
  *
  * ※ 기기 기능은 Deno KV 가 있어야 동작한다(Deploy 의 Databases 에서 KV 사용 설정).
  *   KV 가 없으면 device_* 는 kv_unavailable 을 반환할 뿐, 일반 로그인은 정상 동작한다.
@@ -475,6 +485,230 @@ async function requireAdmin(p: Record<string, unknown>) {
   return { ok: true as const, name: r.name || "Lv.3", level: r.level || 3 };
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   예시자료 게시 — VOC 유형별 예시 사진·영상을 저장소에 바로 커밋한다
+   ------------------------------------------------------------------
+   왜 여기인가:
+     등록 도구(dashboard-pc.html + js/type-example-manager.js)는 변환까지는
+     브라우저에서 끝내지만, 그 결과를 저장소에 넣는 일은 지금까지 사람이 했다
+     (폴더 저장 → git commit → push). 폰에는 저장소 작업본이 없어서 모바일에서는
+     등록을 끝낼 방법이 아예 없었다.
+     관리 화면은 이미 Lv.3 토큰으로 잠겨 있고 이 서버는 그 토큰을 네트워크 왕복
+     없이 검증한다(requireAdmin). GitHub 쓰기 토큰을 공개 페이지에 둘 수는 없으니,
+     검증을 통과한 요청만 이 서버가 대신 커밋한다.
+     커밋되면 .github/workflows/static.yml 이 Pages 를 자동 배포한다.
+
+   신뢰 경계 — 브라우저가 보낸 값은 하나도 그대로 믿지 않는다:
+     · 파일 경로는 내용 해시 규칙(media/<sha256 앞 12자리>.webp|mp4)이어야 하고,
+       업로드된 내용의 해시가 그 경로와 실제로 일치해야 한다.
+     · 매니페스트는 여기서 다시 파싱·검증한다(클라이언트 검증과 같은 규칙).
+     · 이 서버가 저장소에서 건드릴 수 있는 경로는 assets/type-examples/ 아래뿐이다.
+   ══════════════════════════════════════════════════════════════════ */
+const GH_TOKEN = (Deno.env.get("GITHUB_TOKEN") || "").trim();
+const GH_REPO = (Deno.env.get("GITHUB_REPO") || "YuYoung-ai/YuYoung").trim();
+const GH_BRANCH = (Deno.env.get("GITHUB_BRANCH") || "main").trim();
+const TE_PUBLISH_ENABLED = !!GH_TOKEN &&
+  !/^(0|false|off|no)$/i.test(Deno.env.get("TE_PUBLISH_ENABLED") || "true");
+
+const TE_MANIFEST_PATH = "assets/type-examples/index.json";
+/* 이 도구가 새로 쓰는 파일 — 내용 해시 12자리 WebP·MP4만 */
+const TE_MEDIA_RE = /^assets\/type-examples\/media\/([0-9a-f]{12})\.(webp|mp4)$/;
+/* 매니페스트가 참조할 수 있는 범위 — 예전 폴더 구조에 남은 파일도 포함(조회 쪽 isSafeSrc 와 같은 규칙) */
+const TE_SAFE_SRC_RE = /^assets\/type-examples\/[A-Za-z0-9_.\-\/]+\.(?:webp|jpe?g|png|mp4)$/;
+const TE_SLOTS = ["symptom", "after"];
+const TE_MAX_FILES = 8;
+const TE_MAX_IMAGE_BYTES = 1024 * 1024; /* 목표는 300KB — 여유를 둔 상한 */
+const TE_MAX_VIDEO_BYTES = 5 * 1024 * 1024;
+const TE_MAX_VIDEO_SECONDS = 15;
+const TE_MAX_MANIFEST_BYTES = 512 * 1024;
+
+function teNormB64(v: unknown): string {
+  const s = String(v ?? "").replace(/\s+/g, "");
+  if (!s || s.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(s)) throw new Error("bad_base64");
+  return s;
+}
+function teB64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+/** 경로에 박혀 오는 값과 같은 계산: SHA-256 앞 12자리(= 앞 6바이트) */
+async function teHash12(bytes: Uint8Array): Promise<string> {
+  const view = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  let out = "";
+  for (let i = 0; i < 6; i++) out += view[i].toString(16).padStart(2, "0");
+  return out;
+}
+
+type GhError = Error & { status?: number };
+async function ghFetch(path: string, init?: RequestInit): Promise<Record<string, any>> {
+  const headers: Record<string, string> = {
+    "Authorization": "Bearer " + GH_TOKEN,
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "baz-type-example-publisher",
+  };
+  if (init?.body) headers["Content-Type"] = "application/json";
+  const res = await fetch("https://api.github.com" + path, { ...init, headers });
+  const text = await res.text();
+  let body: Record<string, any> | null = null;
+  try { body = text ? JSON.parse(text) : null; } catch (_e) { body = null; }
+  if (!res.ok) {
+    const err = new Error(String(body?.message || "http_" + res.status)) as GhError;
+    err.status = res.status;
+    throw err;
+  }
+  return body || {};
+}
+
+/** 클라이언트의 validateManifest 와 같은 규칙 — 하나라도 걸리면 아무것도 커밋하지 않는다 */
+function teValidateManifest(text: string, newPaths: string[]): string[] {
+  const errors: string[] = [];
+  let m: Record<string, any>;
+  try { m = JSON.parse(text); } catch (_e) { return ["index.json 을 JSON 으로 읽을 수 없습니다"]; }
+  if (!m || typeof m !== "object" || Array.isArray(m)) return ["매니페스트가 객체가 아닙니다"];
+  if (m.schema !== 1) errors.push("schema 가 1이 아닙니다");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(m.updatedAt || ""))) errors.push("updatedAt 이 YYYY-MM-DD 형식이 아닙니다");
+  const items = m.items;
+  if (!items || typeof items !== "object" || Array.isArray(items)) return errors.concat(["items 가 객체가 아닙니다"]);
+
+  const keys = Object.keys(items);
+  if (!keys.length) errors.push("items 가 비어 있습니다");
+  const used = new Set<string>();
+  const seenLoose = new Map<string, string>();
+  for (const key of keys) {
+    const at = key.indexOf("|");
+    if (at < 0 || !key.slice(at + 1).trim()) { errors.push("유형 키 형식이 아닙니다: " + key); continue; }
+    const loose = key.replace(/\s+/g, "");
+    const dup = seenLoose.get(loose);
+    if (dup) { errors.push("공백만 다른 중복 키가 있습니다: " + dup + " / " + key); continue; }
+    seenLoose.set(loose, key);
+    const item = items[key];
+    if (!item || typeof item !== "object" || Array.isArray(item)) { errors.push("항목이 객체가 아닙니다: " + key); continue; }
+    let slots = 0;
+    for (const slot of TE_SLOTS) {
+      const photo = item[slot];
+      if (photo === undefined) continue;
+      slots++;
+      const where = key + " / " + slot;
+      if (!photo || typeof photo !== "object" || Array.isArray(photo)) { errors.push("예시 항목이 객체가 아닙니다: " + where); continue; }
+      const src = String(photo.src ?? "");
+      if (src.includes("..") || !TE_SAFE_SRC_RE.test(src)) { errors.push("허용되지 않는 경로입니다: " + where + " → " + src); continue; }
+      if (photo.text !== undefined && typeof photo.text !== "string") errors.push("예시 설명이 문자열이 아닙니다: " + where);
+      if (/\.mp4$/i.test(src)) {
+        if (photo.kind !== "video") errors.push("MP4 항목의 kind가 video가 아닙니다: " + where);
+        if (!(Number(photo.bytes) > 0 && Number(photo.bytes) <= TE_MAX_VIDEO_BYTES)) errors.push("영상 용량이 5MB 제한을 벗어났습니다: " + where);
+        if (!(Number(photo.duration) > 0 && Number(photo.duration) <= TE_MAX_VIDEO_SECONDS)) errors.push("영상 길이가 15초 제한을 벗어났습니다: " + where);
+      }
+      used.add(src);
+    }
+    if (!slots) errors.push("증상·처리 결과가 모두 비어 있습니다: " + key);
+  }
+  for (const p of newPaths) if (!used.has(p)) errors.push("매니페스트가 참조하지 않는 새 파일입니다: " + p);
+  return errors;
+}
+
+function teClean(v: unknown, max: number): string {
+  return String(v ?? "").replace(/[\u0000-\u001F\u007F]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+}
+function teCommitMessage(summary: unknown, actor: string, files: number): string {
+  const s = teClean(summary, 120);
+  return "예시자료 갱신" + (s ? " · " + s : "") +
+    "\n\n작업자: " + (teClean(actor, 60) || "Lv.3") +
+    "\n새 파일: " + files + "개\n";
+}
+
+/** 파일 1개 → GitHub blob. 커밋을 아직 만들지 않으므로 트리에 얹히기 전까지는 어디에도 보이지 않는다. */
+async function teBlob(p: Record<string, unknown>): Promise<Response> {
+  const path = String(p.path ?? "");
+  const mt = TE_MEDIA_RE.exec(path);
+  if (!mt) return json({ ok: false, error: "bad_path", detail: path }, 400);
+  let b64 = "", bytes: Uint8Array;
+  try { b64 = teNormB64(p.data); bytes = teB64ToBytes(b64); } catch (_e) { return json({ ok: false, error: "bad_base64" }, 400); }
+  const limit = mt[2] === "mp4" ? TE_MAX_VIDEO_BYTES : TE_MAX_IMAGE_BYTES;
+  if (!bytes.length || bytes.length > limit) return json({ ok: false, error: "too_large", limit, bytes: bytes.length }, 413);
+  if (await teHash12(bytes) !== mt[1]) return json({ ok: false, error: "hash_mismatch", detail: path }, 400);
+  const blob = await ghFetch(`/repos/${GH_REPO}/git/blobs`, {
+    method: "POST",
+    body: JSON.stringify({ content: b64, encoding: "base64" }),
+  });
+  return json({ ok: true, path, sha: String(blob.sha || ""), bytes: bytes.length });
+}
+
+/** 올려 둔 blob 들 + 검증을 통과한 index.json 을 커밋 하나로 묶어 브랜치를 옮긴다 */
+async function teCommit(p: Record<string, unknown>, actor: string, clientIp: string): Promise<Response> {
+  const rawFiles = Array.isArray(p.files) ? p.files : [];
+  if (rawFiles.length > TE_MAX_FILES) return json({ ok: false, error: "too_many_files", limit: TE_MAX_FILES }, 400);
+  const files: { path: string; sha: string }[] = [];
+  const seen = new Set<string>();
+  for (const raw of rawFiles) {
+    const f = (raw || {}) as Record<string, unknown>;
+    const path = String(f.path ?? ""), sha = String(f.sha ?? "");
+    if (!TE_MEDIA_RE.test(path)) return json({ ok: false, error: "bad_path", detail: path }, 400);
+    if (!/^[0-9a-f]{40}$/.test(sha)) return json({ ok: false, error: "bad_blob_sha", detail: path }, 400);
+    if (seen.has(path)) return json({ ok: false, error: "duplicate_path", detail: path }, 400);
+    seen.add(path);
+    files.push({ path, sha });
+  }
+  const manifest = String(p.manifest ?? "");
+  if (!manifest || manifest.length > TE_MAX_MANIFEST_BYTES) return json({ ok: false, error: "bad_manifest_size" }, 400);
+  const errors = teValidateManifest(manifest, files.map((f) => f.path));
+  if (errors.length) return json({ ok: false, error: "invalid_manifest", errors: errors.slice(0, 10) }, 400);
+
+  const message = teCommitMessage(p.summary, actor, files.length);
+  const branch = encodeURIComponent(GH_BRANCH);
+  let last: GhError | null = null;
+  /* 그 사이 다른 커밋이 올라오면 base 를 다시 읽고 한 번만 재시도한다 */
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ref = await ghFetch(`/repos/${GH_REPO}/git/ref/heads/${branch}`);
+    const baseSha = String(ref?.object?.sha || "");
+    if (!/^[0-9a-f]{40}$/.test(baseSha)) throw new Error("base_ref_unavailable");
+    const baseCommit = await ghFetch(`/repos/${GH_REPO}/git/commits/${baseSha}`);
+    const baseTree = String(baseCommit?.tree?.sha || "");
+    const tree = await ghFetch(`/repos/${GH_REPO}/git/trees`, {
+      method: "POST",
+      body: JSON.stringify({
+        base_tree: baseTree,
+        tree: [
+          ...files.map((f) => ({ path: f.path, mode: "100644", type: "blob", sha: f.sha })),
+          { path: TE_MANIFEST_PATH, mode: "100644", type: "blob", content: manifest },
+        ],
+      }),
+    });
+    /* 결과 트리가 그대로다 = 같은 요청이 한 번 더 왔다(자동 재시도 등) → 빈 커밋을 만들지 않는다 */
+    if (String(tree.sha) === baseTree) {
+      await writeAudit("te_publish", actor, GH_BRANCH, "unchanged", clientIp, { files: files.length });
+      return json({
+        ok: true, unchanged: true, files: 0, branch: GH_BRANCH,
+        commit: baseSha, url: `https://github.com/${GH_REPO}/commit/${baseSha}`,
+      });
+    }
+    const commit = await ghFetch(`/repos/${GH_REPO}/git/commits`, {
+      method: "POST",
+      body: JSON.stringify({ message, tree: String(tree.sha), parents: [baseSha] }),
+    });
+    try {
+      await ghFetch(`/repos/${GH_REPO}/git/refs/heads/${branch}`, {
+        method: "PATCH",
+        body: JSON.stringify({ sha: String(commit.sha) }),
+      });
+    } catch (e) {
+      last = e as GhError;
+      if (last.status === 409 || last.status === 422) continue; /* 브랜치가 그 사이 움직였다 */
+      throw e;
+    }
+    await writeAudit("te_publish", actor, GH_BRANCH, "ok", clientIp, {
+      files: files.length, commit: String(commit.sha).slice(0, 7),
+    });
+    return json({
+      ok: true, files: files.length, branch: GH_BRANCH,
+      commit: String(commit.sha), url: `https://github.com/${GH_REPO}/commit/${commit.sha}`,
+    });
+  }
+  throw last || new Error("ref_update_failed");
+}
+
 /* ── HTTP ── */
 function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), {
@@ -734,6 +968,24 @@ async function handleAction(
     return json({ ok: true, revoked: n });
   }
 
+  /* 예시자료 게시 — 파일 업로드(te_blob) → 커밋(te_commit) 2단계.
+     파일을 한 번에 한 개씩 보내 요청을 작게 유지하고, 실패하면 그 파일만 다시 보낸다.
+     blob 은 커밋에 얹히기 전까지 저장소 어디에도 나타나지 않으므로 중간에 끊겨도 남는 흔적이 없다. */
+  if (action === "te_blob" || action === "te_commit") {
+    const gate = await requireAdmin(p);
+    if (!gate.ok) return json(gate, gate.error === "forbidden" ? 403 : 401);
+    if (!TE_PUBLISH_ENABLED) return json({ ok: false, error: "publish_disabled" }, 503);
+    try {
+      return action === "te_blob" ? await teBlob(p) : await teCommit(p, gate.name, clientIp);
+    } catch (e) {
+      const err = e as GhError;
+      await writeAudit("te_publish", gate.name, action, "error", clientIp, {
+        message: String(err?.message || "unknown").slice(0, 200), status: err?.status || 0,
+      });
+      return json({ ok: false, error: "github_failed", detail: String(err?.message || "unknown").slice(0, 200) }, 502);
+    }
+  }
+
   if (action === "ping") {
     const fp = SECRET ? (await sha256B64u(SECRET)).slice(0, 8) : "";
     const kv = await getKv();
@@ -746,6 +998,7 @@ async function handleAction(
       kv: kv !== null,
       deviceAuth: DEVICE_AUTH_ENABLED,
       googleAuth: GOOGLE_AUTH_ENABLED,
+      tePublish: TE_PUBLISH_ENABLED,
       originPolicy: ALLOWED_ORIGINS.size > 0 ? "allowlist" : "deny_browser",
       pong: new Date().toISOString(),
     });
