@@ -127,7 +127,12 @@ try{
   ck('갱신된 DB의 미지정 최신 선택 건수가 즉시 재집계',await page.locator('#hstTableHost tbody tr').count()===3);
   await page.evaluate(()=>closeExList());
   await page.click('#exKpis [data-hist-dim="kpiAs"]');
-  ck('다른 처리이력을 새로 열면 기본 접힘 복귀',!await page.locator('#hstSalesCountsList').isVisible()&&await page.getAttribute('#hstSalesCountsToggle','aria-expanded')==='false');
+  ck('다른 처리이력을 새로 열어도 팩싯 펼침 상태는 이 탭 안에서 유지',
+    await page.locator('#hstSalesCountsList').isVisible()&&await page.getAttribute('#hstSalesCountsToggle','aria-expanded')==='true');
+  await page.evaluate(()=>{exToggleHistorySalesCounts_();closeExList();});
+  await page.click('#exKpis [data-hist-dim="kpiAs"]');
+  ck('접어 두면 다음 조회도 접힌 상태로 열린다',
+    !await page.locator('#hstSalesCountsList').isVisible()&&await page.getAttribute('#hstSalesCountsToggle','aria-expanded')==='false');
   await page.evaluate(()=>closeExList());
   ck('런타임 오류 없음',errors.length===0,errors);
   console.log(`\n통과 ${count}/${count}`);

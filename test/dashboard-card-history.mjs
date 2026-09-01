@@ -59,11 +59,34 @@ const FNS = [
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
   'exHistoryTable_', 'exHistoryValidDate_', 'exHistoryPeriodLabel_', 'exHistoryComparisonMeta_', 'exHistoryElapsed_', 'exHistoryControls_', 'exCmpRangeText_',
   'exHistoryKpiRows_', 'exHistoryHospitalCount_', 'exHistoryKpiChip_',
-  'buildExecutiveVocChange'
+  'buildExecutiveVocChange',
+  /* 처리이력 모달 개선(정렬·검색·통계·롤업·복사·상태 유지) */
+  'exHistoryGroupList_','exHistoryGroupRows_',
+  'exHistoryParseQuery_','exHistorySearchText_','exHistoryMatchToken_','exHistoryMatchQuery_',
+  'exHistoryComposeStart_','exHistoryComposeEnd_','exHistoryCancelSearch_','exHistoryFlushSearch_','exHistoryQueryInput_',
+  'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
+  'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
+  'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
+  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exHistoryRollupTable_','exHistoryRollupTsv_',
+  'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
+  'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
+  'exCopyHistoryTsv_','exOpenHospitalTimeline_',
+  'exCaptureHistoryUi_','exHistoryOptionExists_','exRestoreHistoryUi_','exCloseHistoryExample_','exHistoryRestoreSelection_',
+  'exHistoryMoreHtml_','exHistoryShowMore_','exHistoryFilterChanged_',
+  'exHistoryDimValue_','exHistoryToolbarHtml_','exHistorySyncToolbar_','exSetHistoryView_','exSwitchHistoryDim_',
+  'exRestoreHistoryModalUi_'
 ];
+/* 새로 추가된 모듈 수준 상태(EX_HISTORY_PAGE·정렬 기본 방향 등)를 원문 그대로 가져온다 */
+const RUNTIME=(()=>{const a=SRC.indexOf('EX_HISTORY_RUNTIME_BEGIN'),b=SRC.indexOf('EX_HISTORY_RUNTIME_END');
+  return SRC.slice(SRC.indexOf('*/',a)+2, SRC.lastIndexOf('/*',b));})();
 const src = [
   'var window={};',
-  'var EX_HISTORY_STATE=null;',
+  'var EX_HISTORY_STATE=null,EX_HISTORY_PHOTO_SEQ=0;',
+  'function toast(){}function vocTypeCanonical_(v){return String(v==null?"":v).trim();}',
+  'function exSyncHistoryTypeExample_(){}function exSetHistoryPhotoExpanded_(){}',
+  'function exLoadHistoryTypeExample_(){}function exSelectHistory_(){}function exHistoryRowKey_(){return true;}',
+  'function exHistoryPairKey_(r){var h=nkey(r&&r.hosp),t=nkey(r&&r.type);return h&&t?h+"|"+t:"";}',
+  RUNTIME,
   grabVar('var RAW=[];'), grabVar('var HOSPDB=[];'),
   grabVar('var EX_CMP=true;'), grabVar('var EX_CACHE=null;'),
   grabVar('var YC_CLEAN_SAVING_UNIT='),
@@ -396,7 +419,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     /\.ex-list-box\.history\{[^}]*max-width:1180px/.test(SRC) &&
     /@media\(max-width:820px\)/.test(SRC) && /\.hst-table td:before/.test(SRC));
   ck('43. 초기 표시와 필터 초기화 모두 선택 기간으로 돌아간다',
-    /openExList\(title, sub, html, true\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
+    /openExList\(title, sub, html, true\);\s*exRestoreHistoryModalUi_\(opt\);\s*exApplyHistoryFilters_\(\)/.test(SRC) &&
     /period\.value='cur'/.test(grab('exResetHistoryFilters_')) &&
     /period:val\('hstPeriod','cur'\)/.test(grab('exApplyHistoryFilters_')));
   ck('44. 처리 이력 모달은 PC에서 계산 가능한 고정 높이를 가진다',

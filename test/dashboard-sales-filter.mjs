@@ -17,16 +17,17 @@ const FNS=['nkey','hospitalSales_','salesFilterChips_','esc','escAttr','skCmpKo_
   'filteredRows_','hospStateFilter_','filtered','exWindowBaseRows_','exWindowRows','activeCnt',
   'exHistoryVal_','exHistoryField_','exHistoryUnique_','exHistoryCounts_','exHistoryBreakdownHtml_',
   'exHistoryFilter_','exHistoryOption_','exHistoryControls_','exApplyHistoryCountChip_',
-  'exNum','exBaseDate','ncareAsOf_','buildNcareStatus','applyHospDB_','enrichNcare'];
+  'exNum','exBaseDate','ncareAsOf_','buildNcareStatus','applyHospDB_','enrichNcare',
+  'exHistoryParseQuery_','exHistorySearchText_','exHistoryMatchToken_','exHistoryMatchQuery_'];
 const initialF=SRC.match(/var F=([^;]+);/)[1];
 const D=new Function(`
-  var F=${initialF},RAW=[],HOSPDB=[],DATA_READY=false;
+  var F=${initialF},RAW=[],HOSPDB=[],DATA_READY=false,EX_HISTORY_STATE=null;
   var DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
   var calls={filters:0,apply:0,history:0},elements={};
   var document={getElementById:id=>elements[id],querySelectorAll:()=>[]};
   function buildFilters(){calls.filters++;}
   function apply(){calls.apply++;}
-  function exRefreshHistoryForHospitalDB_(){calls.history++;}
+  function exRefreshHistoryForHospitalDB_(seq){calls.history++;calls.historySeq=seq;}
   function exApplyHistoryFilters_(){calls.history++;}
   function exToday(){return new Date('2026-08-26T00:00:00');}
   ${FNS.map(grab).join('\n')}
@@ -118,7 +119,9 @@ ck('영업담당자 건수만 기본 접힘, 접근 가능한 펼침 버튼 제�
 });
 ck('펼침 상태는 모달 내 재필터·DB 갱신 중 유지하고 새 모달에서는 접힘',()=>{
   assert.ok(grab('exApplyHistoryFilters_').includes('salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded'));
-  assert.ok(grab('exRefreshHistoryForHospitalDB_').includes('salesCountsExpanded=!!state.salesCountsExpanded'));
+  assert.ok(grab('exRefreshHistoryForHospitalDB_').includes('exCaptureHistoryUi_(state)'));
+  assert.ok(grab('exCaptureHistoryUi_').includes('out.salesExpanded=!!state.salesCountsExpanded'));
+  assert.ok(grab('exRestoreHistoryUi_').includes('state.salesCountsExpanded=!!prefs.salesExpanded'));
   assert.ok(grab('exShowHistory_').includes('salesCountsExpanded:false'));
   assert.ok(!/exApplyHistoryFilters_\(|fetch\(|gvRetry\(/.test(grab('exToggleHistorySalesCounts_')));
 });
