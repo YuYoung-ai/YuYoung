@@ -225,6 +225,25 @@ let normalized=await page.evaluate(()=>({
 ck('15-a. 원인 분석의 누수 항목을 표준 이름 3건으로 합산하고 누수 분석과 일치',
   normalized.cause.length===1&&normalized.cause[0].k==='노즐 누수(약액 유입)'&&
   normalized.cause[0].cur===3&&normalized.leak===3&&normalized.variants===0,JSON.stringify(normalized));
+let armCard=await page.evaluate(()=>(
+  {oldRepeat:!!document.getElementById('exRepeatCard'),oldNc:!!document.getElementById('exNcCmpCard'),
+   title:document.querySelector('#exCauseArmCard h3').textContent,text:document.getElementById('exCauseArmCard').textContent,
+   min:EX_CAUSE_ARM_STATE.repair.min,minCount:EX_CAUSE_ARM_STATE.repair.minCount}
+));
+ck('15-a2. 기존 두 카드 자리를 조치 방법별 재발 전폭 카드로 사용',
+  !armCard.oldRepeat&&!armCard.oldNc&&armCard.title.includes('조치 방법별 재발')&&
+  armCard.text.includes('내부수리')&&armCard.text.includes('Handpiece 교체'),JSON.stringify(armCard));
+ck('15-a3. 최단 경과일과 같은 건수를 함께 표시',armCard.min===1&&armCard.minCount===1&&armCard.text.includes('1일 · 1건'),JSON.stringify(armCard));
+await page.locator('.car-group.repair .car-metric').filter({hasText:'최단 경과 · 건수'}).click();
+await page.waitForSelector('#exListModal.show .car-history-table');
+armCard=await page.evaluate(()=>(
+  {title:document.getElementById('exListTitle').textContent,rows:document.querySelectorAll('.car-history-table tbody tr').length,
+   heads:[...document.querySelectorAll('.car-history-table th')].map(x=>x.textContent.trim()),text:document.getElementById('exListBody').textContent}
+));
+ck('15-a4. 최단 수치 클릭 시 해당 조치→첫 재발 이력만 표시',
+  armCard.rows===1&&armCard.title.includes('최단 경과')&&armCard.text.includes('1일')&&
+  ['조치일','병원','장비번호','첫 재발일','재발 처리 내용','판정 기준'].every(x=>armCard.heads.includes(x)),JSON.stringify(armCard));
+await page.evaluate(()=>closeExList());
 await page.click('#exTypeCard [data-hist-k="노즐 누수(약액 유입)"]');
 await page.waitForSelector('#exListModal.show');
 normalized=await page.evaluate(()=>({
