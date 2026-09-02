@@ -69,6 +69,63 @@ ck('실제 XLSX 저장/재열기 후 수식·정렬·날짜·필터 유지',()=>
   assert.equal(s.getCell('N8').alignment.horizontal,'center');assert.equal(s.getCell('N8').alignment.vertical,'middle');
   assert.ok(s.autoFilter);assert.equal(s.views[0].xSplit,2);
 });
+/* ── 조치 방법별 재발 근거 시트 (내부수리 vs Handpiece 교체) ── */
+{
+  const leak=(id,day,hosp,part,extra={})=>({id,date:day,_y:+day.slice(0,4),_m:+day.slice(5,7),_d:+day.slice(8,10),
+    _q:1,hosp,gubun:'A/S',cat:'핸드피스',type:'노즐 누수(약액 유입)',part,fse:'김프로',sn:extra.sn||'EQ-1',
+    detail:extra.detail||'조치',cost:'',_cost:0,hpIn:extra.hpIn||'',hpOut:extra.hpOut||''});
+  const cohort=[leak('c1','2026-06-01','가병원','내부 세척',{sn:'EQ-1'}),
+                leak('c2','2026-06-01','나병원',"Handpiece Ass'y",{sn:'EQ-2',hpIn:'HP-0417',hpOut:'HP-0902'}),
+                leak('c3','2026-08-01','다병원','내부 세척',{sn:'EQ-3'})];
+  const rawArm=cohort.concat([
+    leak('c1r','2026-06-21','가병원','내부 세척',{sn:'EQ-1',detail:'동일 증상 재발'}),
+    leak('c2r','2026-06-21','나병원',"Handpiece Ass'y",{sn:'EQ-2',hpIn:'HP-0902',hpOut:'HP-1130',detail:'교체 후 재발'})]);
+  D.set(cohort,rawArm,F);D.exShowHistory_('kpiTotal');
+  const armState=D.state();armState.filtered=armState.items;
+  const armData=D.exHistoryExportData_(armState);armData.name='조치 비교 검증';
+  const awb=D.exBuildHistoryComparisonWorkbook_(armData,Excel);
+  const aws=awb.getWorksheet('조치 방법별 재발');
+  ck('조치 방법별 재발 시트를 1번 시트와 별도로 만든다',()=>{
+    assert.ok(aws,'시트 존재');
+    assert.equal(awb.getWorksheet('병원별 비교').columnCount,15,'기존 시트 열 구성은 그대로');
+    assert.equal(aws.getCell('A8').value,'조치 방법');
+    assert.equal(aws.getCell('I8').value,'핸드피스 확정');
+  });
+  ck('두 조치군에 같은 지표를 나란히 싣고 재발률은 백분율 서식',()=>{
+    assert.equal(aws.getCell('A9').value,'내부수리');
+    assert.equal(aws.getCell('A10').value,'Handpiece 교체');
+    assert.equal(aws.getCell('B9').value,2);assert.equal(aws.getCell('C9').value,1);
+    assert.equal(aws.getCell('H9').value,1,'아직 재발 없는 건');
+    assert.equal(aws.getCell('B10').value,1);assert.equal(aws.getCell('C10').value,1);
+    assert.equal(aws.getCell('D9').numFmt,'0.0%');
+    assert.equal(aws.getCell('D10').value,1);
+    assert.equal(aws.getCell('G9').value,20);assert.equal(aws.getCell('G10').value,20);
+  });
+  ck('교체로 넣은 HP_SN(OUT)이 재발 행의 IN 으로 나오면 핸드피스 확정으로 남긴다',()=>{
+    assert.equal(aws.getCell('I10').value,1,'교체군 확정 1건');
+    const rows=[];aws.eachRow(r=>{if(r.number>=14)rows.push(r);});
+    const swapRow=rows.find(r=>r.getCell(4).value==='Handpiece 교체');
+    assert.equal(swapRow.getCell(10).value,'핸드피스 확정');
+    assert.equal(swapRow.getCell(12).value,'HP-0902');
+    assert.equal(swapRow.getCell(13).value,'HP-0902');
+    assert.equal(swapRow.getCell(8).value,20);
+  });
+  ck('근거 행은 조치 한 건이 한 행이며 무재발 건은 관찰일을 남긴다',()=>{
+    const rows=[];aws.eachRow(r=>{if(r.number>=14)rows.push(r);});
+    assert.equal(rows.length,3,'조치 3건');
+    const none=rows.find(r=>r.getCell(2).value==='다병원');
+    assert.equal(none.getCell(7).value,'—','재발 처리일 없음');
+    assert.equal(none.getCell(8).value,'—');
+    assert.ok(Number(none.getCell(11).value)>0,'무재발 관찰일');
+  });
+  ck('해석 범위를 시트 안에 못박는다 — 확정 표현을 쓰지 않는다',()=>{
+    const notes=[5,6,7].map(r=>String(aws.getCell(r,1).value||'')).join(' ');
+    assert.ok(notes.includes('우월하다는 근거가 확인되지 않았다'));
+    assert.ok(notes.includes('확정하지는 않습니다'));
+    assert.ok(notes.includes('매칭 조건으로 쓰지 않습니다'));
+  });
+}
+
 // 다운로드 진입점의 실패·연속 클릭·빈 결과를 검증한다. 운영 네트워크/다운로드는 호출하지 않는다.
 let loading=0,downloads=0,fail=false,notices=[];
 const btn={textContent:'비교 내역 엑셀',disabled:false,isConnected:true};
