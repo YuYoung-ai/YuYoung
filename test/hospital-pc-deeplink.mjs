@@ -32,8 +32,8 @@ function grab(name){
   }
   throw new Error(name);
 }
-const FNS=['normalize','pcDeepLinkName_','pcDeepLinkMatch_','pcDeepLinkResolve_',
-  'pcDeepLinkNoticeText_','pcDeepLinkNotice_','pcDeepLinkOpen_','pcRunDeepLink_'];
+const FNS=['normalize','pcDeepLinkName_','pcDeepLinkHistOnly_','pcSetHistOnly_','pcDeepLinkMatch_',
+  'pcDeepLinkResolve_','pcDeepLinkNoticeText_','pcDeepLinkNotice_','pcDeepLinkOpen_','pcRunDeepLink_'];
 
 /* 최소 DOM·모달 스텁 — 실제 페이지 부팅 없이 딥링크 경로만 실행한다 */
 function build(){
@@ -45,6 +45,10 @@ var body={appendChild:function(){}};
 var nodes={};
 function el(tag){return {tagName:tag,id:'',className:'',hidden:false,textContent:'',type:'',children:[],
   setAttribute:function(){},addEventListener:function(){},appendChild:function(c){this.children.push(c);}};}
+var bodyCls={};
+body.classList={add:function(c){bodyCls[c]=1;},remove:function(c){delete bodyCls[c];},
+  toggle:function(c,on){ if(on===undefined) on=!bodyCls[c]; if(on)bodyCls[c]=1; else delete bodyCls[c]; },
+  contains:function(c){return !!bodyCls[c];}};
 var document={body:body,getElementById:function(id){return nodes[id]||null;},createElement:el};
 var window={};
 var location={search:''};
@@ -63,7 +67,7 @@ function openHistPw(){ log.pw++; }
 return {
   set:function(list){HOSPITALS=list;},
   nodes:nodes, modalStack:modalStack,
-  loc:location, win:window,
+  loc:location, win:window, histOnly:function(){return body.classList.contains('hist-only');},
   reset:function(){PC_DEEPLINK_DONE=false;histCurName=null;modalStack.length=0;},
   done:function(){return PC_DEEPLINK_DONE;},
   histName:function(){return histCurName;},
@@ -227,25 +231,71 @@ ck('17. 페이지 로드 시 딥링크가 자동 실행되며 예외가 페이�
   assert.match(SRC,/try\{\s*pcRunDeepLink_\(\);\s*\}catch/);
 });
 
-/* ── 5. sw.js 배포 안전성 ── */
-ck('18. sw.js 캐시 버전이 v169 이후로 올라갔다',()=>{
+/* ── 5. 이력만 보는 창 (view=hist) ── */
+ck('22. view=hist 파라미터를 정확히 판별한다',()=>{
+  const D=build();
+  assert.equal(D.pcDeepLinkHistOnly_('?hosp=x&view=hist'),true);
+  assert.equal(D.pcDeepLinkHistOnly_('?view=hist&hosp=x'),true);
+  assert.equal(D.pcDeepLinkHistOnly_('?hosp=x'),false);
+  assert.equal(D.pcDeepLinkHistOnly_('?hosp=x&view=map'),false);
+  assert.equal(D.pcDeepLinkHistOnly_('?hosp=x&view=history'),false,'부분 일치로 켜지지 않는다');
+});
+await ckA('23. view=hist 는 병원 화면 전체 대신 이력만 보이는 모드로 연다',async()=>{
+  const D=build();
+  D.set(LIST.slice());
+  D.loc.search='?hosp='+encodeURIComponent('서울 성모 병원')+'&view=hist';
+  D.win.bazBootReady=Promise.resolve(true);
+  const res=await D.pcRunDeepLink_();
+  assert.equal(res.status,'ok');
+  assert.equal(res.histOnly,true);
+  assert.equal(D.histOnly(),true);
+  assert.deepEqual(D.log.opened,['서울 성모 병원']);
+});
+await ckA('24. view=hist 없이 들어오면 평소 병원 화면 그대로 연다',async()=>{
+  const D=build();
+  D.set(LIST.slice());
+  D.loc.search='?hosp='+encodeURIComponent('서울 성모 병원');
+  D.win.bazBootReady=Promise.resolve(true);
+  const res=await D.pcRunDeepLink_();
+  assert.equal(res.histOnly,false);
+  assert.equal(D.histOnly(),false);
+});
+await ckA('25. 병원을 찾지 못하면 이력 전용 화면에 갇히지 않는다',async()=>{
+  const D=build();
+  D.set(LIST.slice());
+  D.loc.search='?hosp='+encodeURIComponent('없는병원')+'&view=hist';
+  D.win.bazBootReady=Promise.resolve(true);
+  const res=await D.pcRunDeepLink_();
+  assert.equal(res.status,'none');
+  assert.equal(D.histOnly(),false,'빈 화면 대신 평소 병원 화면이 남는다');
+  assert.equal(D.log.announced.length,1);
+});
+ck('26. 이력 창을 닫으면 이력 전용 모드가 풀리고 전체 화면 보기 버튼이 있다',()=>{
+  assert.match(SRC,/onClose:function\(\)\{[\s\S]*?pcSetHistOnly_\(false\)/,'닫으면 hist-only 해제');
+  assert.match(SRC,/id="histOnlyFull"/);
+  assert.match(SRC,/getElementById\('histOnlyFull'\)[\s\S]{0,140}pcSetHistOnly_\(false\)/);
+  assert.match(SRC,/body\.hist-only \.wrap\{display:none;\}/,'이력만 보이도록 병원 화면을 감춘다');
+});
+
+/* ── 6. sw.js 배포 안전성 ── */
+ck('27. sw.js 캐시 버전이 v169 이후로 올라갔다',()=>{
   const m=/CACHE_VERSION = 'baz-cs-v(\d+)'/.exec(SW);
   assert.ok(m,'CACHE_VERSION');
   assert.ok(Number(m[1])>169,'v'+m[1]);
 });
-ck('19. ignoreSearch 는 오프라인 내비게이션 폴백에서만 쓴다(네트워크 우선 유지)',()=>{
+ck('28. ignoreSearch 는 오프라인 내비게이션 폴백에서만 쓴다(네트워크 우선 유지)',()=>{
   assert.ok(SW.indexOf('ignoreSearch')>SW.indexOf('.catch(() =>'),'네트워크 실패 이후 경로');
   const code=SW.split('\n').filter(l=>!/^\s*\/\//.test(l)).join('\n');
   assert.equal((code.match(/ignoreSearch/g)||[]).length,1,'실제 코드에서는 한 곳');
   assert.match(SW,/fetch\(req\)\s*\n\s*\.then\(\(res\) => putCache\(req, res\)\)/,'네트워크 우선 유지');
 });
-ck('20. 쿼리스트링 내비게이션은 같은 경로 캐시를 먼저 찾고 없을 때만 index.html',()=>{
+ck('29. 쿼리스트링 내비게이션은 같은 경로 캐시를 먼저 찾고 없을 때만 index.html',()=>{
   const at=SW.indexOf('if (isNav) {');
   assert.ok(at>0);
   const block=SW.slice(at,at+320);
   assert.ok(block.indexOf('ignoreSearch')>=0 && block.indexOf("caches.match('./index.html')")>block.indexOf('ignoreSearch'));
 });
-ck('21. 내비게이션이 아닌 요청에는 여전히 HTML을 돌려주지 않는다',()=>{
+ck('30. 내비게이션이 아닌 요청에는 여전히 HTML을 돌려주지 않는다',()=>{
   assert.match(SW,/return Response\.error\(\);/);
 });
 

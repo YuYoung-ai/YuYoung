@@ -730,6 +730,21 @@
   .pc-deeplink-note button{flex:0 0 auto;border:1px solid var(--line);border-radius:7px;background:transparent;
     color:inherit;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer}
   .pc-deeplink-note button:hover{background:var(--bg)}
+  /* 이력만 보는 딥링크 창(hospital-pc.html?hosp=…&view=hist) —
+     새 창에서 병원 화면 전체 대신 그 병원 이력만 크게 보여 준다.
+     이력 창을 닫으면 hist-only 를 벗겨 평소 병원 화면이 그대로 나온다(빈 화면에 갇히지 않는다). */
+  body.hist-only .wrap{display:none;}
+  body.hist-only #histModal{background:var(--bg);align-items:center;padding:12px;}
+  body.hist-only .hist-sheet{max-width:980px;max-height:none;height:100%;border-radius:14px;
+    border:1px solid var(--line);animation:none;}
+  body.hist-only .hist-body{flex:1 1 auto;}
+  .hist-only-bar{display:none;}
+  body.hist-only .hist-only-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:8px 18px;border-top:1px solid var(--gray-line);background:var(--bg);
+    font-size:11.5px;color:var(--text-muted);flex:0 0 auto;border-radius:0 0 14px 14px;}
+  .hist-only-bar button{border:1px solid var(--line);border-radius:7px;background:var(--surface);
+    color:var(--txt,#1B2F5E);padding:5px 10px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;}
+  .hist-only-bar button:hover{background:var(--gray-bg);}
 </style>
 <script src="auth.js"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 호스팅 그대로 동작 · sw.js 는 런타임 캐시)
@@ -841,6 +856,10 @@
       <button class="add" id="histAdd" type="button">＋ 기록 추가</button>
       <button class="cancel" id="histCancel" type="button">취소</button>
       <button class="save" id="histSave" type="button">저장</button>
+    </div>
+    <div class="hist-only-bar" id="histOnlyBar">
+      <span>이력만 보는 창입니다 · 대시보드에서 연결됨</span>
+      <button type="button" id="histOnlyFull">전체 병원 화면 보기</button>
     </div>
   </div>
 </div>
@@ -2158,6 +2177,8 @@ function openHist(name){
       var bar=document.getElementById('histEditBar'); if(bar) bar.style.display='none';
       var lock=document.getElementById('histLock');
       if(lock){ lock.classList.remove('on'); lock.textContent='🔒'; }
+      /* 이력만 보는 딥링크 창에서 이력을 닫으면 빈 화면이 남지 않도록 평소 병원 화면으로 되돌린다 */
+      if(typeof pcSetHistOnly_==='function') pcSetHistOnly_(false);
     }
   });
 }
@@ -5157,6 +5178,14 @@ function pcDeepLinkName_(search){
   try{ raw=decodeURIComponent(raw); }catch(e){}
   return String(raw).replace(/\s+/g,' ').trim();
 }
+/* view=hist 이면 병원 화면 전체 대신 그 병원 이력만 크게 보여 준다 */
+function pcDeepLinkHistOnly_(search){
+  return /[?&]view=hist(?:&|$)/.test(String(search||''));
+}
+function pcSetHistOnly_(on){
+  var b=document.body; if(!b||!b.classList) return;
+  b.classList.toggle('hist-only',!!on);
+}
 /* 병원 목록 정확 일치 — normalize() 는 이 페이지의 기존 병원명 정규화 규칙이다 */
 function pcDeepLinkMatch_(list,name){
   var k=normalize(name);
@@ -5203,12 +5232,16 @@ function pcDeepLinkNotice_(msg){
 }
 /* 열려 있는 모달 정리 — 같은 병원 이력이 이미 열려 있으면 다시 열지 않는다.
    다른 모달(비밀번호·상세 등)이 열려 있으면 안전하게 모두 닫고 이력만 연다. */
-function pcDeepLinkOpen_(name){
+function pcDeepLinkOpen_(name,histOnly){
   var modal=document.getElementById('histModal');
-  if(modal && typeof BazModal!=='undefined' && BazModal.isOpen(modal) && histCurName===name) return 'already';
+  if(modal && typeof BazModal!=='undefined' && BazModal.isOpen(modal) && histCurName===name){
+    if(histOnly) pcSetHistOnly_(true);
+    return 'already';
+  }
   if(typeof BazModal!=='undefined'){
     for(var i=0;i<8 && BazModal.openCount()>0;i++){ if(!BazModal.closeTop()) break; }
   }
+  if(histOnly) pcSetHistOnly_(true);
   openHist(name);
   return 'opened';
 }
@@ -5217,26 +5250,35 @@ function pcRunDeepLink_(){
   var query=pcDeepLinkName_(location.search);
   if(!query) return Promise.resolve(null);
   PC_DEEPLINK_DONE=true;
+  var histOnly=pcDeepLinkHistOnly_(location.search);
   var ready=(window.bazBootReady && typeof window.bazBootReady.then==='function')
     ? window.bazBootReady : Promise.resolve(true);
   /* boot 가 reject 되거나 false 를 돌려줘도 이미 캐시된 병원 목록으로 시도한다 */
   return Promise.resolve(ready).catch(function(){ return false; }).then(function(){
     var res=pcDeepLinkResolve_(HOSPITALS,query);
+    res.histOnly=histOnly;
     if(res.status==='ok'){
       try{
-        res.action=pcDeepLinkOpen_(res.name);
+        res.action=pcDeepLinkOpen_(res.name,histOnly);
       }catch(e){
         console.warn('[딥링크] 이력 창 열기 실패:',e);
+        pcSetHistOnly_(false);
         res.status='boot';
         pcDeepLinkNotice_(pcDeepLinkNoticeText_(res));
       }
       return res;
     }
+    /* 열지 못했으면 이력 전용 화면에 갇히지 않도록 평소 병원 화면으로 되돌린다 */
+    pcSetHistOnly_(false);
     if(!HOSPITALS.length) res.status='boot';
     pcDeepLinkNotice_(pcDeepLinkNoticeText_(res));
     return res;
   });
 }
+(function(){
+  var full=document.getElementById('histOnlyFull');
+  if(full) full.addEventListener('click',function(){ pcSetHistOnly_(false); });
+})();
 try{ pcRunDeepLink_(); }catch(e){ console.warn('[딥링크] 처리 실패:',e); }
 
 </script>
