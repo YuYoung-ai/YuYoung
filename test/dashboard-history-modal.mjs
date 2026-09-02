@@ -53,6 +53,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
   'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
   'exCopyHistoryTsv_','exOpenHospitalTimeline_','exHospitalHistoryUrl_',
+  'exHospHistoryRows_','exHospPanelShell_','exHospPanelHtml_','exRenderHospPanel_',
+  'exOpenHospPanel_','exCloseHospPanel_','exHospPanelMore_',
   'exCaptureHistoryUi_','exHistoryOptionExists_','exRestoreHistoryUi_','exCloseHistoryExample_','exHistoryRestoreSelection_',
   'exHistoryMoreHtml_','exHistoryShowMore_','exHistoryFilterChanged_','exHistoryTable_',
   'exHistoryDimValue_','exHistoryToolbarHtml_','exHistorySyncToolbar_','exSetHistoryView_','exSwitchHistoryDim_',
@@ -83,7 +85,14 @@ function makeDom(){
     el.removeAttribute=k=>{delete el._attrs[k];};
     el.appendChild=c=>{el.children.push(c); if(el.tagName==='SELECT') el.options.push(c); return c;};
     el.removeChild=c=>{el.children=el.children.filter(x=>x!==c); return c;};
-    el.focus=()=>{}; el.select=()=>{}; el.setSelectionRange=()=>{};
+    el.focus=()=>{el.focused=true;}; el.select=()=>{}; el.setSelectionRange=()=>{};
+    el.querySelector=sel=>{
+      if(el.id==='hstHospPanel'&&/hst-hosp-close/.test(sel)&&/hst-hosp-close/.test(el._html)){
+        if(!el._close) el._close=mk('button');
+        return el._close;
+      }
+      return null;
+    };
     el.style={};
     Object.defineProperty(el,'innerHTML',{
       get(){return el._html;},
@@ -131,7 +140,7 @@ function makeDom(){
     for(const k of Object.keys(els)) delete els[k];
     rowCache=Object.create(null);
     parseControls(html);
-    ['hstTableHost','hstCount','hstBreakdown','hstStats','hstToolbar','hstViewNote','hstCopyTsv',
+    ['hstTableHost','hstCount','hstBreakdown','hstStats','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
      'hstPhotoPanel','hstPhotoStrip','hstPhotoStatus','hstPhotoTitle','hstPhotoBody','hstPhotoToggle',
      'exListTitle','exListSub','exListBody','exListBox','exListModal','toast'].forEach(id=>ensure(id));
     els.hstPhotoPanel.hidden=true;
@@ -185,6 +194,7 @@ function build(){
 var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=null,HOSPDB=[];
 var EX_HISTORY_PHOTO_SEQ=0,SALES={};
 var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
+var EX_HOSP_PANEL_PAGE=40;
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
 function hospitalSales_(name){ return SALES[nkey(name)]||''; }
 function exSavingEvidenceHtml_(){return '';}
@@ -758,8 +768,10 @@ ck('45. 복사 버튼과 병원 링크는 부모 행 클릭으로 전파되지 �
   const e={stopPropagation:()=>{stopped++;},preventDefault:()=>{prevented++;},target:{}};
   D.exHistoryRowCopyClick_(e,{getAttribute:()=>D.state().items[0].id});
   assert.equal(stopped,1); assert.equal(prevented,1);
+  D.exOpenHospPanel_(e,{getAttribute:()=>'가병원'});
+  assert.equal(stopped,2,'병원 링크도 행 클릭으로 전파되지 않는다');
+  assert.equal(D.log.windows.length,0,'병원 링크는 새 창을 띄우지 않는다');
   D.exOpenHospitalTimeline_(e,{getAttribute:()=>'가 병원 (본원)'});
-  assert.equal(stopped,2);
   const opened=D.log.windows[0];
   assert.equal(opened.url,'hospital-pc.html?hosp='+encodeURIComponent('가 병원 (본원)')+'&view=hist');
   assert.ok(opened.url.includes('%20'),'공백 인코딩');
@@ -773,7 +785,7 @@ ck('46. 복사 버튼은 type=button 과 구체적인 aria-label 을 갖는다',
   const D=build(); open(D,CUR);
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/<button type="button" class="hst-copy"[^>]*aria-label="가병원 2026-08-31 처리 이력 한 줄로 복사"/);
-  assert.match(html,/class="hst-hosp-link"[^>]*aria-label="가병원 이력만 새 창으로 열기"/);
+  assert.match(html,/class="hst-hosp-link"[^>]*aria-label="가병원 처리 이력 오른쪽 패널로 열기"/);
   assert.ok(D.dom.els.hstToolbar.innerHTML.includes('aria-label="현재 필터 결과 전체를 헤더 포함 TSV로 복사"'));
 });
 
@@ -1001,6 +1013,8 @@ ck('66. 병원 링크는 병원 화면 전체가 아니라 이력만 여는 view
   assert.equal(D.exHospitalHistoryUrl_('가 병원 (본원)'),
     'hospital-pc.html?hosp='+encodeURIComponent('가 병원 (본원)')+'&view=hist');
   open(D,CUR);
+  assert.ok(grab('exHospPanelHtml_').includes('exOpenHospitalTimeline_(event,this)'),
+    '새 창은 패널 안 "전체 병원 화면 열기" 버튼에서만 연다');
   D.exOpenHospitalTimeline_(null,{getAttribute:()=>'가병원'});
   const w=D.log.windows[0];
   assert.ok(w.url.endsWith('&view=hist'));
@@ -1181,6 +1195,94 @@ ck('77-b. 교체품 표기가 비어도 HP_SN 이 있으면 교체로 보정한�
 ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않는다',()=>{
   const body=grab('exArmRecurrence_')+grab('exArmSummary_')+grab('exArmHtml_')+grab('exArmVerdict_');
   assert.ok(!/nozzleReuse|nsFill|nsAmt|\bjet\b|초기|중기|장기/.test(body));
+});
+
+/* ══════ 12. 병원 이력 우측 패널 ══════ */
+ck('78. 병원 링크는 새 창 대신 우측 패널을 연다',()=>{
+  const D=build(); open(D,CUR);
+  assert.equal(D.dom.els.hstHospPanel.hidden,true,'기본은 닫힘');
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  assert.equal(D.log.windows.length,0,'새 창 없음');
+  assert.equal(D.dom.els.hstHospPanel.hidden,false);
+  const html=D.dom.els.hstHospPanel.innerHTML;
+  assert.ok(html.includes('가병원'));
+  assert.ok(html.includes('전체 병원 화면 열기'),'필요하면 전체 화면으로 갈 수 있다');
+  assert.ok(html.includes('aria-label="병원 이력 패널 닫기"'));
+  assert.equal(D.state().hospPanel.name,'가병원');
+});
+ck('79. 표의 필터·정렬과 무관하게 그 병원의 전체 이력을 보여 준다',()=>{
+  const D=build(); open(D,CUR);
+  const rows=D.exHospHistoryRows_('가병원');
+  const inTable=D.state().filtered.filter(it=>D.nkey(it.r.hosp)==='가병원').length;
+  assert.ok(rows.length>inTable,'표에 보이는 행보다 많다 (비교 원본까지 포함)');
+  assert.ok(rows.every(r=>D.nkey(r.hosp)==='가병원'));
+  const dates=rows.map(r=>D.ymd(D.rowDate(r)));
+  assert.deepEqual(dates.slice().sort().reverse(),dates,'최신순 정렬');
+  assert.deepEqual(D.exHospHistoryRows_(''),[],'병원명이 없으면 빈 목록');
+  assert.deepEqual(D.exHospHistoryRows_('없는병원'),[]);
+});
+ck('80. 공백만 다른 병원명도 같은 병원으로 묶어 찾는다',()=>{
+  const D=build(); open(D,CUR);
+  assert.equal(D.exHospHistoryRows_(' 가 병원 ').length,D.exHospHistoryRows_('가병원').length);
+});
+ck('81. 같은 병원을 다시 누르면 닫히고, 다른 병원을 누르면 바뀐다',()=>{
+  const D=build(); open(D,CUR);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  assert.equal(D.state().hospPanel,null,'토글로 닫힘');
+  assert.equal(D.dom.els.hstHospPanel.hidden,true);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  D.exOpenHospPanel_(null,{getAttribute:()=>'나병원'});
+  assert.equal(D.state().hospPanel.name,'나병원');
+  assert.ok(D.dom.els.hstHospPanel.innerHTML.includes('나병원'));
+  D.exCloseHospPanel_();
+  assert.equal(D.dom.els.hstHospPanel.hidden,true);
+});
+ck('82. 필터·정렬을 바꿔도 열린 패널은 그대로 유지된다',()=>{
+  const D=build(); open(D,CUR);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  setVal(D,'hstQuery','나병원'); D.exApplyHistoryFilters_();
+  assert.equal(D.state().hospPanel.name,'가병원','표에서 사라져도 패널은 남는다');
+  assert.equal(D.dom.els.hstHospPanel.hidden,false);
+  D.exSortHistory_('hosp');
+  assert.equal(D.dom.els.hstHospPanel.hidden,false);
+});
+ck('83. 긴 이력은 40건씩 끊어 보여 주고 더 보기로 늘린다',()=>{
+  const many=[]; for(let i=0;i<95;i++) many.push(row('m'+i,'2026-08-'+String((i%28)+1).padStart(2,'0'),'큰병원',{type:'유형'+i}));
+  const D=build(); open(D,many,many);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'큰병원'});
+  const count1=(D.dom.els.hstHospPanel.innerHTML.match(/hst-hosp-item/g)||[]).length;
+  assert.equal(count1,40);
+  assert.ok(D.dom.els.hstHospPanel.innerHTML.includes('40 / 전체 95건'));
+  D.exHospPanelMore_();
+  assert.equal((D.dom.els.hstHospPanel.innerHTML.match(/hst-hosp-item/g)||[]).length,80);
+  D.exHospPanelMore_();
+  assert.equal((D.dom.els.hstHospPanel.innerHTML.match(/hst-hosp-item/g)||[]).length,95);
+  assert.ok(!D.dom.els.hstHospPanel.innerHTML.includes('건 더 보기'));
+});
+ck('84. 패널은 이미 받아 둔 RAW 만 읽고 추가 통신을 하지 않는다',()=>{
+  const body=grab('exHospHistoryRows_')+grab('exRenderHospPanel_')+grab('exOpenHospPanel_');
+  assert.ok(!/fetch\(|gvRetry\(|loadData\(|script\.google/.test(body));
+  assert.ok(grab('exHospHistoryRows_').includes('RAW'));
+  assert.ok(grab('exApplyHistoryFilters_').includes('exRenderHospPanel_()'));
+});
+ck('85. 모달을 닫았다 열면 패널은 유지되지 않는다',()=>{
+  const D=build(); open(D,CUR);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  D.closeExList();
+  open(D,CUR);
+  assert.equal(D.state().hospPanel,null);
+  assert.equal(D.dom.els.hstHospPanel.hidden,true);
+});
+ck('86. 표와 패널을 가로로 나누고 좁은 화면에서는 아래로 내린다',()=>{
+  assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto/);
+  assert.match(SRC,/\.hst-hosp-panel\{flex:0 0 clamp\(280px,30%,400px\)/);
+  assert.match(SRC,/\.hst-main\{flex-direction:column;border-top:0;min-height:0\}/,'모바일에서 세로 배치');
+  assert.ok(SRC.includes('<div class="hst-main">'));
+  /* 위쪽 블록이 표·패널 영역을 밀어내지 않게 분리한다 */
+  assert.match(SRC,/\.hst-top\{flex:0 1 auto;min-height:0;[^}]*overflow-y:auto/);
+  assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto;min-height:min\(300px,38vh\)/);
+  assert.ok(SRC.includes('<div class="hst-view"><div class="hst-top">'));
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
