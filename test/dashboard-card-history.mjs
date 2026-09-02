@@ -67,7 +67,7 @@ const FNS = [
   'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
-  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exHistoryRollupTable_','exHistoryRollupTsv_',
+  'exHistoryDayText_','exHistoryRollupTable_','exHistoryRollupTsv_',
   'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
   'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
   'exCopyHistoryTsv_','exOpenHospitalTimeline_',

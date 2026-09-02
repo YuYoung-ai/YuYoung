@@ -11,7 +11,7 @@
  *   · period all 그룹 정렬(내부 cur→prev→same 유지, 경과일 최솟값·비용 합계)
  *   · 정렬 후 행 선택·복사가 실제 클릭한 item 을 가리킴
  *   · 검색 AND/-제외/단독 -/IME 조합/디바운스 취소·flush
- *   · 경과일 요약 통계(모집단·중복 제거 단위·평균/중앙값/최단/30일)
+ *   · 병원 롤업용 경과일 계산(모집단·중복 제거 단위·평균/중앙값/최단/30일)
  *   · 병원별 롤업(정규화·누락 분리·동률 VOC·비용 0원과 미입력)
  *   · 필터 상태 유지(재오픈·dim 전환·병원DB 지연·정렬/보기 유지)
  *   · 대량 렌더 제한(200행)과 통계·복사의 독립
@@ -46,10 +46,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
-  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_','exHistoryFocus_',
-  'exHistorySplitLoad_','exHistorySplitStore_','exHistorySplitClamp_','exHistorySplitApply_','exHistorySplitSet_',
-  'exHistorySplitReset_','exHistorySplitTopH_','exHistorySplitStart_','exHistorySplitKey_','exHistorySplitBar_','exHistorySplitBind_',
-  'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
+  'exHistoryDayText_',
+  'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_',
   'exCauseArmMetric_','exCauseArmGroup_','exCauseArmRows_','exCauseArmTable_',
   'hpCleanVal_','hpCleanAsOf_','exToday',
   'exHistoryRollupTable_','exHistoryRollupTsv_',
@@ -104,8 +102,6 @@ function makeDom(){
         if(el.id==='hstTableHost') rowCache=Object.create(null);
         /* 도구 막대는 모달을 연 뒤 innerHTML 로 채워진다 — 그 안의 select 도 실제처럼 등록한다 */
         if(el.id==='hstToolbar') parseControls(el._html);
-        /* 경과일 분석 토글·본문도 innerHTML 로 만들어지므로 요소로 등록한다 */
-        if(el.id==='hstStats') parseStats(el._html);
       }
     });
     Object.defineProperty(el,'selectedOptions',{get(){return el.options.filter(o=>o.value===el.value);}});
@@ -131,25 +127,14 @@ function makeDom(){
     let im, ire=/<input id="([^"]+)"/g;
     while((im=ire.exec(html))) els[im[1]]=mk('input',im[1]);
   }
-  function parseStats(html){
-    const btn=mk('button','hstStatsToggle');
-    const m=/id="hstStatsToggle"[^>]*aria-expanded="(true|false)"[^>]*>([^<]*)</.exec(html);
-    if(m){ btn.setAttribute('aria-expanded',m[1]); btn.textContent=m[2]; els.hstStatsToggle=btn; }
-    const b=mk('div','hstStatsBody');
-    const bm=/id="hstStatsBody"( hidden)?>/.exec(html);
-    if(bm){ b.hidden=!!bm[1]; els.hstStatsBody=b; }
-  }
   function buildDom(html){
     for(const k of Object.keys(els)) delete els[k];
     rowCache=Object.create(null);
     parseControls(html);
-    ['hstView','hstTableHost','hstCount','hstBreakdown','hstStats','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
+    ['hstView','hstTableHost','hstCount','hstBreakdown','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
      'hstPhotoPanel','hstPhotoStrip','hstPhotoStatus','hstPhotoTitle','hstPhotoBody','hstPhotoToggle',
      'exListTitle','exListSub','exListBody','exListBox','exListModal','toast'].forEach(id=>ensure(id));
     els.hstPhotoPanel.hidden=true;
-    /* 실제 마크업의 주 영역 기본값을 그대로 옮긴다 */
-    const fm=/id="hstView" data-focus="([^"]+)"/.exec(html);
-    els.hstView.setAttribute('data-focus',fm?fm[1]:'table');
   }
   function rowEl(id){
     if(!rowCache[id]){ const el=mk('tr'); el.setAttribute('data-hst-id',id); rowCache[id]=el; }
@@ -201,7 +186,6 @@ var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=nul
 var EX_HISTORY_PHOTO_SEQ=0,SALES={};
 var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 var EX_HOSP_PANEL_PAGE=40;
-var EX_HIST_SPLIT_KEY='baz_hst_split',EX_HIST_SPLIT_MIN=120,EX_HIST_SPLIT_TAIL=150,EX_HIST_SPLIT_BOUND=false;
 var localStorage={_v:{},getItem:function(k){return (k in this._v)?this._v[k]:null;},
   setItem:function(k,v){this._v[k]=String(v);},removeItem:function(k){delete this._v[k];}};
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
@@ -230,8 +214,7 @@ return {${FNS.join(',')},
   prefs:()=>EX_HISTORY_PREFS, clearPrefs:()=>{EX_HISTORY_PREFS=null;},
   photoSeq:()=>EX_HISTORY_PHOTO_SEQ,
   searchPending:()=>!!EX_HISTORY_SEARCH_TIMER,
-  page:()=>EX_HISTORY_PAGE, store:()=>localStorage._v,
-  statsOpen:()=>EX_HISTORY_STATS_OPEN, setStatsOpen:v=>{EX_HISTORY_STATS_OPEN=v;},
+  page:()=>EX_HISTORY_PAGE,
   setSales:m=>{SALES=m;},
   set:(rows,raw,f)=>{RAW=raw;F=f||{};EX_CACHE={rows:rows,prev:[]};}};
 `;
@@ -594,7 +577,7 @@ ck('29. 비교 없음·교체품 없음은 0 이 아니라 —(null) 로 남는�
   assert.equal(a.general.avg,null); assert.equal(a.general.median,null);
   assert.equal(a.general.min,null); assert.equal(a.general.within30,null);
   assert.equal(a.same.cases,1); assert.equal(a.same.comparable,0);
-  assert.ok(D.exHistoryStatBlock_('t','n',a.general).includes('—'));
+  assert.ok(D.exHistoryDayText_(null,'일').includes('—'));
 });
 ck('30. 처리일 오류·병원명/VOC 누락 사례는 분석 대상에 세되 비교 가능에서는 빠진다',()=>{
   const rows=CUR.concat([row('bad','2026-02-31','가병원'),row('noh','2026-08-18',''),
@@ -615,23 +598,19 @@ ck('31. 유효 경과일은 1일 이상이며 1일·30일은 포함, 31일은 �
   assert.equal(s.cases,4); assert.equal(s.comparable,3);
   assert.equal(s.within30,2); assert.equal(s.min,1);
 });
-ck('32. 팩싯 행 건수와 분석 사례 수를 서로 다른 단위로 함께 표시한다',()=>{
+ck('32. 처리이력 모달에서는 일반·동일비교 경과일 요약 카드를 그리지 않는다',()=>{
   const D=build(); open(D,CUR);
-  setVal(D,'hstPeriod','all'); D.exApplyHistoryFilters_();
-  const html=D.dom.els.hstStats.innerHTML;
-  assert.match(html,/표시 결과 11행 · 분석 대상 최신 선택 6사례/);
-  assert.match(html,/원본 6건 → 최신 선택 6건 → 비교 가능 5건 → 현재 표시 11행/);
-  assert.ok(html.includes('최신 선택 기준'));
-  assert.ok(html.includes('단위: 병원 + VOC + 선택일'));
-  assert.ok(html.includes('단위: 병원 + VOC + 교체품 + 선택일'));
-  assert.ok(html.includes('비교 가능'));
+  assert.ok(!D.log.opened.html.includes('id="hstStats"'));
+  assert.ok(!D.log.opened.html.includes('일반 비교 경과일'));
+  assert.ok(!D.log.opened.html.includes('동일비교 경과일'));
+  assert.ok(!D.log.opened.html.includes('경과일 분석'));
 });
-ck('33. 30일 이내 재발률은 일반 비교 지표임을 명시하고 내부 세척 분석을 대체하지 않는다',()=>{
+ck('33. 개별 근거 조회용 비교·동일비교 경과일 열은 유지한다',()=>{
   const D=build(); open(D,CUR);
-  const html=D.dom.els.hstStats.innerHTML;
-  assert.ok(html.includes('일반 비교'));
-  assert.ok(html.includes('핸드피스 내부 세척 효과 분석'));
-  assert.ok(html.includes('최신 선택 비교'),'원본 전체 조회가 아님을 명시');
+  const html=D.dom.els.hstTableHost.innerHTML;
+  assert.ok(html.includes('비교 경과일'));
+  assert.ok(html.includes('동일비교 경과일'));
+  assert.ok(D.log.opened.html.includes('비교 근거 원본 Excel'));
 });
 
 /* ══════ 4. 병원별 롤업 ══════ */
@@ -971,49 +950,18 @@ ck('61. 정렬·필터 변경으로 선택 item 이 사라지면 예시 패널�
   assert.equal(D.dom.els.hstPhotoPanel.hidden,true);
 });
 
-/* ══════ 9. 경과일 분석 접기/펼치기 ══════ */
-ck('62. 경과일 분석은 기본 펼침이며 접근 가능한 토글을 제공한다',()=>{
-  const D=build(); D.setStatsOpen(true); open(D,CUR);
-  const html=D.dom.els.hstStats.innerHTML;
-  assert.ok(html.includes('id="hstStatsToggle"'));
-  assert.ok(html.includes('type="button"'));
-  assert.ok(html.includes('aria-controls="hstStatsBody"'));
-  assert.ok(html.includes('aria-expanded="true"'));
-  assert.ok(html.includes('경과일 분석 접기 ▴'));
-  assert.ok(!/id="hstStatsBody" hidden/.test(html));
-});
-ck('63. 접으면 상세만 숨고 범위 한 줄 요약은 계속 보인다',()=>{
-  const D=build(); D.setStatsOpen(true); open(D,CUR);
-  D.exToggleHistoryStats_();
-  assert.equal(D.statsOpen(),false);
-  assert.equal(D.dom.els.hstStatsBody.hidden,true);
-  assert.equal(D.dom.els.hstStatsToggle.getAttribute('aria-expanded'),'false');
-  assert.ok(D.dom.els.hstStatsToggle.textContent.includes('펼치기 ▾'));
-  /* 범위·단위 한 줄은 접어도 남는다 */
-  assert.ok(D.dom.els.hstStats.innerHTML.includes('원본 6건 → 최신 선택 6건'));
-});
-ck('64. 접힘 상태는 필터·정렬로 다시 그려도, 모달을 닫았다 열어도 유지된다',()=>{
-  const D=build(); D.setStatsOpen(true); open(D,CUR);
-  D.exToggleHistoryStats_();
-  setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
-  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML),'재렌더 후에도 접힘');
-  assert.ok(D.dom.els.hstStats.innerHTML.includes('aria-expanded="false"'));
-  D.exSortHistory_('hosp');
-  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML));
-  D.closeExList(); open(D,CUR);
-  assert.equal(D.statsOpen(),false,'탭이 살아 있는 동안 유지');
-  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML));
-  D.exToggleHistoryStats_();
-  assert.equal(D.statsOpen(),true,'다시 펼칠 수 있다');
-  assert.equal(D.dom.els.hstStatsBody.hidden,false);
-});
-ck('65. 토글은 표시 상태만 바꾼다 — 필터·통계 재계산이나 네트워크 요청이 없다',()=>{
-  const body=grab('exToggleHistoryStats_');
-  assert.ok(!/exApplyHistoryFilters_\(|exHistoryAnalyze_\(|fetch\(|gvRetry\(/.test(body));
+/* ══════ 9. 처리이력 분석 UI 제거 ══════ */
+ck('62. 경과일 분석 토글·본문·전용 상태를 제거한다',()=>{
   const D=build(); open(D,CUR);
-  const before=D.state().analysis;
-  D.exToggleHistoryStats_();
-  assert.equal(D.state().analysis,before,'같은 분석 결과 객체를 그대로 둔다');
+  assert.ok(!/hstStatsToggle|hstStatsBody|EX_HISTORY_STATS_OPEN/.test(SRC));
+  assert.equal(D.dom.document.getElementById('hstStats'),null);
+});
+ck('63. 필터·정렬 뒤에도 제거된 분석 카드가 다시 생기지 않는다',()=>{
+  const D=build(); open(D,CUR);
+  setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
+  D.exSortHistory_('hosp');
+  assert.ok(!D.log.opened.html.includes('일반 비교 경과일'));
+  assert.ok(!D.log.opened.html.includes('동일비교 경과일'));
 });
 
 /* ══════ 10. 병원 링크는 "이력만" 새 창 ══════ */
@@ -1146,29 +1094,21 @@ ck('74. 판정 문구는 안전한 범위까지만 말한다 — 확정 표현�
   assert.ok(v.includes('교체 후에도'));
   assert.ok(v.includes('내부수리를 원인으로 지목')&&v.includes('재발 방지를 이유로 교체를 우선'));
   assert.ok(!/차이가 없다|절대|입증|증명/.test(v),'확정 표현 없음');
-  const html=D.exArmHtml_(a);
-  assert.ok(html.includes('우월하다는 근거가 확인되지 않았다'));
-  assert.ok(html.includes('확정하지는 않습니다'));
-  assert.ok(!/차이가 전혀 없다고|원인이 아니라고 확정/.test(html.replace('차이가 전혀 없다거나','').replace('원인이 아니라고 확정하지는','')));
 });
-ck('75. 처리이력 모달에 두 조치군 표가 붙고, 계산은 조회당 한 번만 한다',()=>{
+ck('75. 처리이력 모달에서는 두 조치군 카드를 제거하되 Excel 계산 결과는 조회당 한 번 재사용한다',()=>{
   const rows=[act('p','2026-06-01','가병원','내부 세척',{sn:'H1'}),
               act('s','2026-06-01','나병원',"Handpiece Ass'y",{sn:'H2'})];
   const raw=rows.concat([act('pr','2026-06-21','가병원','내부 세척',{sn:'H1'})]);
   const D=build(); open(D,rows,raw);
-  const html=D.dom.els.hstStats.innerHTML;
-  assert.ok(html.includes('조치 방법별 재발 — 내부수리 vs Handpiece 교체'));
-  assert.ok(html.includes('내부수리')&&html.includes('Handpiece 교체'));
-  assert.ok(html.includes('전체 조치')&&html.includes('재발 확인')&&html.includes('재발률')&&html.includes('아직 재발 없음'));
+  assert.ok(!D.log.opened.html.includes('조치 방법별 재발 — 내부수리 vs Handpiece 교체'));
   const first=D.state().arm;
   setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
   assert.equal(D.state().arm,first,'필터를 바꿔도 같은 결과 객체를 재사용');
   assert.ok(grab('exApplyHistoryFilters_').includes('if(!EX_HISTORY_STATE.arm)'));
 });
-ck('76. 사례가 없으면 표를 그리지 않는다',()=>{
-  const D=build(); open(D,CUR);          /* CUR 은 교체품이 내부 세척이지만 VOC 가 대상이 아닌 행도 섞여 있다 */
+ck('76. 사례가 없으면 판정 문구는 자료 부족으로 표시한다',()=>{
+  const D=build(); open(D,CUR);
   const a=D.exArmRecurrence_([],RAW,'2026-08-31');
-  assert.equal(D.exArmHtml_(a),'');
   assert.match(D.exArmVerdict_(a),/사례가 아직 부족/);
 });
 ck('77-a. HP_SN 은 교체할 때만 적으므로 매칭 조건이 아니라 확정 표시로만 쓴다',()=>{
@@ -1202,7 +1142,7 @@ ck('77-b. 교체품 표기가 비어도 HP_SN 이 있으면 교체로 보정한�
   assert.equal(D.exArmOf_({part:'',hpIn:'',hpOut:''}),'other');
 });
 ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않는다',()=>{
-  const body=grab('exArmRecurrence_')+grab('exArmSummary_')+grab('exArmHtml_')+grab('exArmVerdict_');
+  const body=grab('exArmRecurrence_')+grab('exArmSummary_')+grab('exArmVerdict_')+grab('exCauseArmGroup_');
   assert.ok(!/nozzleReuse|nsFill|nsAmt|\bjet\b|초기|중기|장기/.test(body));
 });
 ck('77-c. 원인분석은 기존 두 카드 자리를 전폭 조치 방법별 재발 카드로 사용한다',()=>{
@@ -1319,104 +1259,17 @@ ck('85. 모달을 닫았다 열면 패널은 유지되지 않는다',()=>{
 ck('86. 표와 패널을 가로로 나누고 좁은 화면에서는 아래로 내린다',()=>{
   assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto/);
   assert.match(SRC,/\.hst-hosp-panel\{flex:0 0 clamp\(280px,30%,400px\)/);
-  assert.match(SRC,/\.hst-main,\.hst-view\[data-focus="stats"\] \.hst-main\{flex-direction:column;border-top:0/,'모바일에서 세로 배치');
+  assert.match(SRC,/\.hst-main\{flex-direction:column;border-top:0/,'모바일에서 세로 배치');
   assert.ok(SRC.includes('<div class="hst-main">'));
-  /* 위쪽 블록이 표·패널 영역을 밀어내지 않게 분리한다 */
-  assert.match(SRC,/\.hst-top\{flex:0 1 auto;min-height:0;[^}]*overflow-y:auto/);
+  /* 분석 카드가 없어 위쪽 조회 조건은 자연 높이, 표가 남은 영역을 쓴다 */
+  assert.match(SRC,/\.hst-top\{flex:0 0 auto;min-height:0/);
   assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto;min-height:136px/);
-  assert.ok(SRC.includes('<div class="hst-view" id="hstView" data-focus="table">'));
+  assert.ok(SRC.includes('<div class="hst-view" id="hstView">'));
 });
 
-ck('87. 보고 있는 쪽이 주 영역이 된다 — 기본은 표',()=>{
-  const D=build(); D.setStatsOpen(true); open(D,CUR);
-  const view=D.dom.els.hstView;
-  assert.equal(view.getAttribute('data-focus'),'table','열자마자는 표가 주 영역');
-  assert.equal(D.state().focusArea,'table');
-  D.exHistoryFocus_('stats');
-  assert.equal(view.getAttribute('data-focus'),'stats','분석을 펼치면 분석이 주 영역');
-  D.exHistoryFocus_('table');
-  assert.equal(view.getAttribute('data-focus'),'table','표를 누르면 다시 표가 주 영역');
-});
-ck('88. 분석이 접혀 있으면 언제나 표가 주 영역이다',()=>{
-  const D=build(); D.setStatsOpen(true); open(D,CUR);
-  D.exToggleHistoryStats_();                      /* 접기 */
-  assert.equal(D.statsOpen(),false);
-  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'table');
-  D.exHistoryFocus_('stats');
-  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'table','접힌 분석은 주 영역이 되지 않는다');
-  D.exToggleHistoryStats_();                      /* 펼치기 */
-  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'stats','펼치면 분석이 주 영역');
-});
-ck('89. 주 영역 전환은 표시 상태만 바꾼다 — 재계산·통신 없음',()=>{
-  const body=grab('exHistoryFocus_');
-  assert.ok(!/exApplyHistoryFilters_\(|exHistoryAnalyze_\(|fetch\(|gvRetry\(/.test(body));
-  assert.match(SRC,/\.hst-view\[data-focus="stats"\] \.hst-top\{flex:1 1 auto\}/);
-  assert.match(SRC,/\.hst-view\[data-focus="stats"\] #hstStatsBody\{max-height:none/);
-  assert.match(SRC,/\.hst-view\[data-focus="stats"\] \.hst-main\{flex:0 0 auto;height:clamp\(120px,20vh,210px\)/);
-  assert.match(SRC,/#hstStatsBody\{max-height:min\(220px,24vh\)/,'표를 볼 때 분석은 제 높이만 쓴다');
-  /* 클릭·스크롤만으로 크기가 바뀌면 쓰기 불편하다 — 전환은 펼치기/접기 버튼에서만 일어난다 */
-  assert.ok(!/onmousedown="exHistoryFocus_/.test(SRC));
-  assert.ok(!/onwheel="exHistoryFocus_/.test(SRC));
-  assert.ok(!/onfocusin="exHistoryFocus_/.test(SRC));
-  assert.ok(grab('exToggleHistoryStats_').includes('exHistoryFocus_('),'펼치기/접기에서만 전환');
-});
-
-/* ══════ 13. 분석 / 이력 영역 크기 수동 조절 ══════ */
-ck('90. 경계선으로 크기를 직접 정하고 고정한다',()=>{
-  const D=build(); open(D,CUR);
-  const view=D.dom.els.hstView;
-  assert.ok(D.exHistorySplitBar_().includes('role="separator"'));
-  assert.ok(D.exHistorySplitBar_().includes('aria-orientation="horizontal"'));
-  assert.ok(D.exHistorySplitBar_().includes('tabindex="0"'),'키보드로 접근 가능');
-  assert.equal(view.classList.contains('is-split'),false,'처음에는 자동 배분');
-  D.exHistorySplitSet_(320);
-  assert.equal(view.classList.contains('is-split'),true);
-  assert.equal(D.state().splitH,320);
-  assert.equal(D.store()['baz_hst_split'],'320','다음에 열 때도 쓰도록 저장');
-});
-ck('91. 화면을 벗어나지 않게 위아래로 제한한다',()=>{
-  const D=build(); open(D,CUR);
-  assert.equal(D.exHistorySplitClamp_(10,800),120,'최소 높이');
-  assert.equal(D.exHistorySplitClamp_(9999,800),650,'화면 높이 − 이력 영역 최소치');
-  assert.equal(D.exHistorySplitClamp_(300,800),300);
-});
-ck('92. "자동" 으로 되돌리면 고정이 풀리고 저장값도 지워진다',()=>{
-  const D=build(); open(D,CUR);
-  D.exHistorySplitSet_(300);
-  assert.ok(D.store()['baz_hst_split']);
-  D.exHistorySplitReset_();
-  assert.equal(D.dom.els.hstView.classList.contains('is-split'),false);
-  assert.equal(D.state().splitH,0);
-  assert.equal(D.store()['baz_hst_split'],undefined);
-});
-ck('93. 방향키로 조절하고 Home 으로 자동 배분으로 되돌린다',()=>{
-  const D=build(); open(D,CUR);
-  assert.equal(D.exHistorySplitKey_({key:'ArrowUp',preventDefault(){}}),false,'처리했으면 false');
-  assert.equal(D.exHistorySplitKey_({key:'a',preventDefault(){}}),true,'다른 키는 그대로 통과');
-  D.exHistorySplitSet_(300);
-  D.exHistorySplitKey_({key:'Home',preventDefault(){}});
-  assert.equal(D.state().splitH,0);
-});
-ck('94. 저장해 둔 크기는 모달을 다시 열 때 그대로 적용된다',()=>{
-  const D=build(); open(D,CUR);
-  D.exHistorySplitSet_(280);
-  D.closeExList();
-  open(D,CUR);
-  assert.equal(D.state().splitH,280);
-  assert.equal(D.dom.els.hstView.classList.contains('is-split'),true);
-  assert.ok(grab('exRestoreHistoryModalUi_').includes('exHistorySplitLoad_()'));
-});
-ck('95. 저장소를 쓸 수 없어도 조용히 자동 배분으로 동작한다',()=>{
-  const D=build();
-  assert.ok(/try\{/.test(grab('exHistorySplitLoad_'))&&/catch/.test(grab('exHistorySplitLoad_')));
-  assert.ok(/try\{/.test(grab('exHistorySplitStore_'))&&/catch/.test(grab('exHistorySplitStore_')));
-});
-ck('96. 고정 크기는 자동 배분보다 우선하고, 모바일에서는 크기 조절을 쓰지 않는다',()=>{
-  const at=t=>SRC.indexOf(t);
-  assert.ok(at('.hst-view.is-split .hst-top{')>at('.hst-view[data-focus="stats"] .hst-top{'),
-    'is-split 규칙이 뒤에 있어 같은 우선순위에서 이긴다');
-  assert.match(SRC,/\.hst-view\.is-split \.hst-top\{flex:0 0 auto;height:var\(--hst-top-h\)\}/);
-  assert.match(SRC,/\.hst-split\{display:none\}/,'모바일에서는 경계선을 숨긴다');
+ck('87. 제거된 분석 영역의 주 영역 전환·크기 조절 코드도 남기지 않는다',()=>{
+  assert.ok(!/exHistoryFocus_|exToggleHistoryStats_|exHistorySplit/.test(SRC));
+  assert.ok(!/data-focus="stats"|hst-split|is-split|--hst-top-h/.test(SRC));
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
