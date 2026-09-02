@@ -937,7 +937,28 @@ html.hst-evidence-open{overflow:hidden}
   color:var(--navy);padding:4px 9px;font:10px inherit;font-weight:800;cursor:pointer;white-space:nowrap}
 .hst-stats-toggle:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
 .hst-stats-toggle:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+/* 분석 상세가 길어져도 표·예시 패널의 세로 공간을 잠식하지 않게 스스로 스크롤한다 */
+#hstStatsBody{max-height:min(300px,36vh);overflow-y:auto}
 #hstStatsBody[hidden]{display:none}
+/* 패널이 눌리다 못해 머리글이 다른 요소에 덮이지 않도록 최소 높이를 보장한다 */
+.hst-photo-panel:not([hidden]){min-height:52px}
+/* 조치 방법별 재발 — 내부수리 vs Handpiece 교체 */
+.hst-arm{margin-top:8px;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:8px 10px}
+.hst-arm-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.hst-arm-head strong{color:var(--navy);font-size:11px}
+.hst-arm-head span{color:var(--text-muted);font-size:10px}
+.hst-arm-tablewrap{overflow-x:auto}
+.hst-arm-table{width:100%;min-width:560px;border-collapse:collapse;font-size:11.5px}
+.hst-arm-table th,.hst-arm-table td{padding:5px 8px;text-align:right;white-space:nowrap;
+  border-bottom:1px solid var(--gray-line);font-variant-numeric:tabular-nums}
+.hst-arm-table thead th{color:var(--text-muted);font-size:10px;font-weight:700;border-bottom:1px solid var(--navy)}
+.hst-arm-table th[scope="row"]{text-align:left;font-weight:800}
+.hst-arm-table tbody tr:last-child th,.hst-arm-table tbody tr:last-child td{border-bottom:0}
+.hst-arm-table .arm-repair{color:var(--teal)}
+.hst-arm-table .arm-swap{color:#8A6414}
+.hst-arm-verdict{margin:7px 0 0;color:var(--navy);font-size:11px;line-height:1.6}
+.hst-arm-note{margin:4px 0 0;color:var(--text-muted);font-size:10px;line-height:1.55}
+body.dark .hst-arm-table .arm-swap{color:#D9AE63}
 .hst-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
 .hst-stat-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
 .hst-stat-card>strong{display:block;color:var(--navy);font-size:10.5px}
@@ -1045,6 +1066,7 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-table td.acts:before{display:none}
   .hst-table .hst-copy{width:100%;padding:8px 10px;font-size:11px}
   .hst-stats{grid-template-columns:1fr}
+  #hstStatsBody{max-height:none;overflow-y:visible}
   .hst-stat-card dl{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-toolbar{align-items:stretch;flex-direction:column}
   .hst-toolbar .hst-copy-all{margin-left:0}
@@ -5669,8 +5691,9 @@ function exHistoryExportData_(state){
     if(k==='period')v=v==='cur'?'선택 기간':(v==='same'?'동일비교':'비교 기간');
     return labels[k]+': '+(v==='__missing__'?'미입력/미지정':v);
   }).filter(Boolean).join(' · ');
+  var arm=(state&&state.arm)||exArmRecurrence_(state&&state.sourceRows,RAW,null);
   return {name:state&&state.name||'처리 이력',period:state&&state.periodLabel||'',records:records,
-    filters:filters||'없음',
+    filters:filters||'없음',arm:arm,
     globalFilters:state&&state.globalFilterText||'없음',created:new Date()};
 }
 /* 한글을 두 칸으로 계산해 Excel 열 너비에 맞는 줄을 만든다. 긴 내용은 계속 행으로 나눈다. */
@@ -5753,7 +5776,78 @@ function exBuildHistoryComparisonWorkbook_(data,Excel){
     printArea:'A1:O'+end,printTitlesRow:'7:7',horizontalCentered:true,
     margins:{left:0.25,right:0.25,top:0.35,bottom:0.35,header:0.15,footer:0.15}};
   ws.headerFooter.oddFooter='&C병원별 비교 내역 · &P / &N';
+  exAddArmWorksheet_(wb,data,navy,teal,line,font);
   return wb;
+}
+/* 조치 방법별 재발 근거 시트 — 1번 시트(병원별 비교)는 손대지 않는다.
+   여기는 "내부수리와 교체 중 무엇을 했는가"만으로 재발을 설명할 수 있는지 보는 표다. */
+function exAddArmWorksheet_(wb,data,navy,teal,line,font){
+  var a=data&&data.arm;
+  if(!a||(!a.repair.total&&!a.swap.total)) return null;
+  var ws=wb.addWorksheet('조치 방법별 재발',{views:[{state:'frozen',ySplit:9,showGridLines:false}]});
+  var widths=[16,12,12,10,10,10,10,14,24,14,16,14,14,16,20];
+  ws.columns=widths.map(function(w){return {width:w};});
+  function meta(row,value,height,fill,size,bold){
+    ws.mergeCells(row,1,row,15);
+    var cell=ws.getCell(row,1);cell.value=value;
+    cell.font={name:font,size:size||10,bold:!!bold,color:{argb:bold&&fill?'FFFFFFFF':navy}};
+    cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+    if(fill)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill}};
+    var lines=exHistoryExcelLines_(String(value||''),widths.reduce(function(x,y){return x+y;},0)-15).length;
+    ws.getRow(row).height=Math.min(400,Math.max(height||26,lines*15+12));
+  }
+  function style(row,values,fill,bold){
+    for(var col=1;col<=15;col++){
+      var cell=ws.getCell(row,col);cell.value=values[col-1]==null?null:values[col-1];
+      cell.font={name:font,size:10,bold:!!bold,color:{argb:bold&&fill===navy?'FFFFFFFF':navy}};
+      cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:fill||'FFFFFFFF'}};
+      cell.border={bottom:{style:'thin',color:{argb:line}}};
+    }
+    ws.getRow(row).height=30;
+  }
+  meta(1,'조치 방법별 재발 · '+data.name,36,navy,16,true);
+  meta(2,'대상 VOC: 노즐 누수(약액 유입) · 선택 기간: '+data.period+' · 생성일: '+ymd(data.created),26);
+  meta(3,'재발 판정: 조치 다음 날 이후 같은 병원·같은 장비에서 처음 다시 접수된 동일 VOC. 같은 날 기록은 발생 순서를 알 수 없어 제외하고, 조치별 첫 재발만 사용합니다. 장비번호가 없으면 병원 단위 추정으로 표시합니다. 조치 갈래는 교체품 표기 기준입니다(내부세척=수리 · 부품 기재=교체).',38);
+  meta(7,'HP_SN(IN)·HP_SN(OUT)은 교체할 때만 기입하므로 재발 매칭 조건으로 쓰지 않습니다. 교체로 넣은 HP_SN(OUT)이 재발 행의 HP_SN(IN)으로 다시 나온 건만 "핸드피스 확정"으로 표시합니다.',30);
+  meta(4,'경과일 최단·평균·중앙값은 재발이 확인된 건만으로 계산하고, 아직 재발이 없는 건은 따로 셉니다. 재발한 건만 남겨 평균을 내면 숫자가 실제보다 나빠집니다.',30);
+  meta(5,exArmVerdict_(a),34);
+  meta(6,'이 표로 말할 수 있는 범위: 교체가 수리보다 재발 방지에 우월하다는 근거가 확인되지 않았다. 두 조치에 차이가 전혀 없다거나 내부수리가 재발 원인이 아니라고 확정하지는 않습니다.',30);
+  style(8,['조치 방법','전체 조치','재발 확인','재발률','최단','평균','중앙값','아직 재발 없음',
+    '핸드피스 확정','병원 단위 추정','','','','',''],navy,true);
+  [['repair',a.repair],['swap',a.swap]].forEach(function(p,i){
+    var s2=p[1],row=9+i;
+    style(row,[EX_ARM_LABEL[p[0]],s2.total,s2.recur,
+      s2.rate==null?'—':s2.rate/100,s2.min==null?'—':s2.min,s2.avg==null?'—':s2.avg,
+      s2.median==null?'—':s2.median,s2.none,s2.confirmed,s2.estimated,'','','','',''],i?'FFFFF4DF':teal);
+    ws.getCell(row,4).numFmt='0.0%';
+    [5,6,7].forEach(function(c){ws.getCell(row,c).numFmt='0.0"일"';});
+  });
+  meta(11,'',14);
+  meta(12,'근거 원본 — 조치 한 건이 한 행입니다. 재발 처리일이 비어 있으면 기준일까지 동일 증상 재접수가 없다는 뜻입니다.',26);
+  style(13,['조치일','병원','장비번호','조치 방법','교체품','담당자','재발 처리일','재발까지 경과일',
+    '재발 처리 내용','판정 신뢰도','무재발 관찰일','HP_SN(OUT) 조치','HP_SN(IN) 재발','',''],navy,true);
+  var row=14;
+  a.events.forEach(function(e){
+    style(row,[exExcelDate_(e.date),e.hosp,e.sn||'미입력',EX_ARM_LABEL[e.arm],e.part,e.fse,
+      e.recurrenceDate?exExcelDate_(e.recurrenceDate):'—',
+      e.days==null?'—':e.days,
+      e.recurrenceRow?String(e.recurrenceRow.detail||''):'—',
+      e.confidence, e.recurrence?'—':(e.watchDays==null?'—':e.watchDays),
+      e.hpOut||'—', e.hpIn||'—','',''],
+      e.arm==='swap'?'FFFFF4DF':'FFFFFFFF');
+    ws.getCell(row,1).numFmt='yyyy-mm-dd';
+    ws.getCell(row,7).numFmt='yyyy-mm-dd';
+    [8,11].forEach(function(c){ws.getCell(row,c).numFmt='0"일"';});
+    row++;
+  });
+  var end=row-1;
+  ws.autoFilter={from:{row:13,column:1},to:{row:end,column:13}};
+  ws.pageSetup={paperSize:8,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,
+    printArea:'A1:O'+end,printTitlesRow:'13:13',horizontalCentered:true,
+    margins:{left:0.25,right:0.25,top:0.35,bottom:0.35,header:0.15,footer:0.15}};
+  ws.headerFooter.oddFooter='&C조치 방법별 재발 근거 · &P / &N';
+  return ws;
 }
 async function exportHistoryComparisonExcel_(){
   if(!EX_HISTORY_STATE)return;
@@ -6195,6 +6289,7 @@ function exHistoryStatsHtml_(state,analysis,filtered){
     +exHistoryStatBlock_('일반 비교 경과일','단위: 병원 + VOC + 선택일 · 표의 기간 선택과 무관',analysis.general)
     +exHistoryStatBlock_('동일비교 경과일','단위: 병원 + VOC + 교체품 + 선택일',analysis.same)
     +'</div>'
+    +exArmHtml_(analysis.arm)
     +'<p class="hst-compare-note">30일 이내 재발률은 같은 병원·VOC 의 <b>일반 비교</b> 지표입니다 — 핸드피스 내부 세척 효과 분석 카드의 결과가 아니며 이를 대체하지 않습니다. 이 조회는 기간 전체 원본이 아니라 병원·VOC별 <b>최신 선택 비교</b>입니다.</p>'
     +'</div>';
 }
@@ -6208,6 +6303,137 @@ function exToggleHistoryStats_(){
     btn.setAttribute('aria-expanded',String(EX_HISTORY_STATS_OPEN));
     btn.textContent='경과일 분석 '+(EX_HISTORY_STATS_OPEN?'접기 ▴':'펼치기 ▾');
   }
+}
+
+/* ══════ 조치 방법별 재발 비교 — 내부수리군 vs Handpiece 교체군 ══════
+   목적은 하나다. "재발했다"는 사실만으로 내부수리를 원인으로 지목하거나,
+   재발 방지를 이유로 수리 가능한 Handpiece 를 선제 교체할 근거가 되는지 확인한다.
+   교육 상태·노즐 재사용·조기/중기/장기 구분은 여기에 넣지 않는다(별도 분석).
+
+   판정은 기존 핸드피스 내부 세척 효과 분석과 완전히 같은 규칙을 쓴다 —
+   조치 다음 날 이후 첫 동일 VOC, 장비번호가 있으면 장비 단위·없으면 병원 단위 추정,
+   같은 날 기록은 순서를 알 수 없어 제외. 기준을 새로 만들지 않는다. */
+var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
+/* 교체품 표기 그대로 나눈다 — 내부세척(내부수리)이면 수리, 부품명이 적혀 있으면 교체.
+   교체품이 비었거나 '없음'이면 어느 쪽도 아니므로 두 조치군에서 모두 제외한다. */
+function exArmOfPart_(part){
+  var k=hpCleanKey_(part);
+  if(!k||k==='없음') return 'other';
+  if(k==='내부세척'||k==='내부수리') return 'repair';
+  return 'swap';
+}
+/* HP_SN(IN)·HP_SN(OUT) 은 현재 운영에서 "교체할 때만" 적는다.
+   그래서 교체품 표기가 비어 있어도 이 값이 있으면 교체로 본다(표기 누락 보정).
+   표기가 내부세척이면 표기를 우선한다 — 갈래 기준은 교체품 표기다. */
+function exArmOf_(r){
+  var arm=exArmOfPart_(r&&r.part);
+  if(arm==='other'&&(hpCleanVal_(r&&r.hpIn)||hpCleanVal_(r&&r.hpOut))) return 'swap';
+  return arm;
+}
+/* 조치 한 건 = 사건 하나. 조치 이후 첫 동일 VOC 를 앞으로 찾는다(처리이력의 "직전 비교"와 방향이 반대다). */
+function exArmRecurrence_(cohortRows, allRows, asOf){
+  var cutoff=hpCleanAsOf_(asOf,null), events=[];
+  var universe=(allRows||[]).filter(function(r){
+    var d=rowDate(r);
+    return d&&d<=cutoff&&recScope(r)==='customer'&&hpIsLeakVoc_(r);
+  });
+  (cohortRows||[]).forEach(function(r){
+    var arm=exArmOf_(r);
+    if(arm==='other'||!hpIsLeakVoc_(r)) return;
+    var d=exHistoryValidDate_(r); if(!d||d>cutoff) return;
+    var hosp=hpCleanVal_(r.hosp); if(!hosp) return;      /* 병원명이 없으면 재발을 물을 수 없다 */
+    var hk=nkey(hosp), sk=nkey(hpCleanVal_(r.sn)), next=null, nextDate=null;
+    universe.forEach(function(v){
+      var vd=rowDate(v);
+      if(!vd||vd<=d||nkey(v.hosp)!==hk) return;          /* 같은 날은 순서를 몰라 재발로 보지 않는다 */
+      if(sk&&nkey(hpCleanVal_(v.sn))!==sk) return;       /* 장비번호가 있으면 장비 단위 */
+      if(!next||vd<nextDate){ next=v; nextDate=vd; }
+    });
+    /* 교체로 넣은 핸드피스(HP_SN(OUT))가 재발 행의 HP_SN(IN) 으로 다시 나오면
+       "그 핸드피스가 또 누수"가 일련번호로 확정된다.
+       ★ 확정 표시에만 쓰고 매칭 조건으로는 절대 쓰지 않는다 — HP_SN 은 교체할 때만 적으므로,
+         재발을 내부수리로 처리한 건은 IN 이 비어 있어 조건으로 걸면 통째로 놓친다. */
+    var outSn=nkey(hpCleanVal_(r.hpOut));
+    var confirmed=!!(outSn&&next&&nkey(hpCleanVal_(next.hpIn))===outSn);
+    events.push({row:r,arm:arm,date:d,hosp:hosp,sn:hpCleanVal_(r.sn),part:hpCleanVal_(r.part),
+      fse:hpCleanVal_(r.fse),detail:String(r.detail||''),
+      hpOut:hpCleanVal_(r.hpOut),hpIn:next?hpCleanVal_(next.hpIn):'',
+      recurrence:!!next,recurrenceRow:next,recurrenceDate:nextDate,confirmed:confirmed,
+      days:next?hpCleanDays_(d,nextDate):null,
+      watchDays:next?null:hpCleanDays_(d,cutoff),
+      confidence:confirmed?'핸드피스 확정':(sk?'장비 기준':'병원 단위 추정')});
+  });
+  events.sort(function(a,b){ return (b.date-a.date)||skCmpKo_(a.hosp,b.hosp); });
+  return {cutoff:cutoff,events:events,
+    repair:exArmSummary_(events.filter(function(e){return e.arm==='repair';})),
+    swap:exArmSummary_(events.filter(function(e){return e.arm==='swap';}))};
+}
+function exArmSummary_(events){
+  events=events||[];
+  var days=[], est=0, watch=0, i, sum=0, confirmed=0;
+  events.forEach(function(e){
+    if(e.confirmed) confirmed++;
+    if(e.confidence==='병원 단위 추정') est++;
+    if(e.recurrence&&e.days!=null&&e.days>=1) days.push(e.days);
+    else if(!e.recurrence) watch+=e.watchDays||0;
+  });
+  days.sort(function(a,b){return a-b;});
+  var n=days.length, total=events.length, mid=Math.floor(n/2), none=total-n;
+  for(i=0;i<n;i++) sum+=days[i];
+  return {total:total, recur:n, none:none, estimated:est, confirmed:confirmed,
+    rate: total?Math.round(n/total*1000)/10:null,
+    min: n?days[0]:null,
+    avg: n?Math.round(sum/n*10)/10:null,
+    median: n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
+    watchAvg: none?Math.round(watch/none*10)/10:null};
+}
+/* 두 조치군이 비슷한지에 대한 판정 — 데이터로 안전하게 말할 수 있는 범위만 문장으로 만든다.
+   "차이가 없다"·"절대 원인이 아니다" 로 확정하지 않는다. */
+function exArmVerdict_(a){
+  var r=a&&a.repair, s=a&&a.swap;
+  if(!r||!s||!r.total||!s.total) return '두 조치군을 함께 볼 수 있는 사례가 아직 부족합니다.';
+  if(r.recur===0&&s.recur===0) return '두 조치군 모두 아직 동일 증상 재발이 확인되지 않았습니다.';
+  var parts=[];
+  if(r.rate!=null&&s.rate!=null) parts.push('재발률 내부수리 '+r.rate.toFixed(1)+'% · 교체 '+s.rate.toFixed(1)+'%');
+  if(r.median!=null&&s.median!=null) parts.push('재발 중앙 경과일 '+exNum(r.median)+'일 · '+exNum(s.median)+'일');
+  return (parts.length?parts.join(' / ')+' — ':'')
+    +'Handpiece 교체 후에도 내부수리와 같은 방식으로 동일 증상이 다시 발생합니다. '
+    +'재발했다는 사실만으로 내부수리를 원인으로 지목하거나, 재발 방지를 이유로 교체를 우선할 근거로 삼기 어렵습니다.';
+}
+function exArmCell_(v,unit){
+  return v==null?'<span class="muted">—</span>':(exNum(v)+(unit||''));
+}
+function exArmRow_(key,s){
+  return '<tr><th scope="row" class="arm-'+key+'">'+esc(EX_ARM_LABEL[key])+'</th>'
+    +'<td>'+exNum(s.total)+'건</td>'
+    +'<td>'+exNum(s.recur)+'건</td>'
+    +'<td>'+(s.rate==null?'<span class="muted">—</span>':s.rate.toFixed(1)+'%')+'</td>'
+    +'<td>'+exArmCell_(s.min,'일')+'</td>'
+    +'<td>'+(s.avg==null?'<span class="muted">—</span>':s.avg.toFixed(1)+'일')+'</td>'
+    +'<td>'+exArmCell_(s.median,'일')+'</td>'
+    +'<td>'+exNum(s.none)+'건</td></tr>';
+}
+function exArmHtml_(a){
+  if(!a||(!a.repair.total&&!a.swap.total)) return '';
+  var est=a.repair.estimated+a.swap.estimated;
+  return '<section class="hst-arm" aria-label="조치 방법별 재발 비교">'
+    +'<div class="hst-arm-head"><strong>조치 방법별 재발 — 내부수리 vs Handpiece 교체</strong>'
+      +'<span>노즐 누수(약액 유입) · 교체품 표기 기준(내부세척=수리 · 부품 기재=교체) · 조치 다음 날 이후 첫 동일 증상 · 병원 + 장비번호</span></div>'
+    +'<div class="hst-arm-tablewrap"><table class="hst-arm-table"><thead><tr>'
+      +'<th scope="col">조치 방법</th><th scope="col">전체 조치</th><th scope="col">재발 확인</th>'
+      +'<th scope="col">재발률</th><th scope="col">최단</th><th scope="col">평균</th>'
+      +'<th scope="col" title="이상치에 흔들리지 않는 주 지표">중앙값</th>'
+      +'<th scope="col">아직 재발 없음</th></tr></thead><tbody>'
+      +exArmRow_('repair',a.repair)+exArmRow_('swap',a.swap)
+    +'</tbody></table></div>'
+    +'<p class="hst-arm-verdict">'+esc(exArmVerdict_(a))+'</p>'
+    +'<p class="hst-arm-note">경과일 평균·중앙값·최단값은 <b>재발이 확인된 건</b>만으로 계산하고, 아직 재발이 없는 건은 따로 셉니다 — 재발한 건만 남겨 평균을 내면 숫자가 실제보다 나빠집니다. '
+      +(a.repair.confirmed+a.swap.confirmed
+        ?('교체로 넣은 핸드피스가 재발 행의 HP_SN(IN)으로 다시 나와 같은 핸드피스임이 일련번호로 확정된 건이 '
+          +exNum(a.repair.confirmed+a.swap.confirmed)+'건 있습니다. '):'')
+      +(est?('장비번호가 없어 병원 단위로 추정한 건이 '+exNum(est)+'건 있습니다. '):'')
+      +'교체가 수리보다 재발 방지에 우월하다는 근거가 확인되지 않았다는 것까지가 이 표로 말할 수 있는 범위이며, 두 조치에 차이가 전혀 없다거나 내부수리가 재발 원인이 아니라고 확정하지는 않습니다.</p>'
+    +'</section>';
 }
 
 /* ── 복사(행 · 필터 결과 TSV) ─────────────────────────────────────────
@@ -7021,6 +7247,9 @@ function exApplyHistoryFilters_(){
   EX_HISTORY_STATE.filtered=filtered;
   /* 통계와 병원별 롤업은 하나의 공통 계산 결과만 쓴다 */
   var analysis=exHistoryAnalyze_(EX_HISTORY_STATE,opt);
+  /* 조치 방법별 재발은 모집단(원본 조치 행)이 필터와 무관하므로 조회당 한 번만 계산해 재사용한다 */
+  if(!EX_HISTORY_STATE.arm) EX_HISTORY_STATE.arm=exArmRecurrence_(EX_HISTORY_STATE.sourceRows,RAW,null);
+  analysis.arm=EX_HISTORY_STATE.arm;
   EX_HISTORY_STATE.analysis=analysis;
   EX_HISTORY_STATE.rollup=exHistoryRollup_(analysis);
   var limit=EX_HISTORY_STATE.renderLimit||EX_HISTORY_PAGE;
@@ -7133,6 +7362,7 @@ function exShowHistory_(dim, name, opt){
     orderText='처리일 최신순 · 행 선택 시 유형별 참고 예시';
   }
   var comparison=exHistoryPrevious_(cur,RAW);
+  var sourceRows=cur;                        /* 최신 선택으로 접기 전 원본 — 조치 방법별 재발 비교의 모집단 */
   cur=comparison.selected;
   curChip=isCost?exCostChip_(cur):(isKpi?exHistoryKpiChip_(cur,dim):exNum(cur.length)+'건');
   prev=comparison.rows;
@@ -7146,7 +7376,7 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,
+    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),

@@ -47,6 +47,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
   'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_',
+  'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
+  'hpCleanVal_','hpCleanAsOf_','exToday',
   'exHistoryRollupTable_','exHistoryRollupTsv_',
   'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
   'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
@@ -182,6 +184,7 @@ function build(){
   const stubs=`
 var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=null,HOSPDB=[];
 var EX_HISTORY_PHOTO_SEQ=0,SALES={};
+var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
 function hospitalSales_(name){ return SALES[nkey(name)]||''; }
 function exSavingEvidenceHtml_(){return '';}
@@ -1015,6 +1018,169 @@ ck('67. 병원명이 없으면 창을 열지 않고, 팝업이 막히면 안내�
   D.win.open=()=>null;
   D.exOpenHospitalTimeline_(null,{getAttribute:()=>'가병원'});
   assert.ok(D.log.toasts.some(t=>t.includes('팝업이 차단')));
+});
+
+/* ══════ 11. 조치 방법별 재발 — 내부수리 vs Handpiece 교체 ══════ */
+const LEAK='노즐 누수(약액 유입)';
+const act=(id,day,hosp,part,extra={})=>row(id,day,hosp,{type:LEAK,cat:'핸드피스',part,...extra});
+ck('68. 교체품 표기 그대로 나눈다 — 내부세척=수리, 부품 기재=교체, 미입력=제외',()=>{
+  const D=build();
+  assert.equal(D.exArmOfPart_('내부 세척'),'repair');
+  assert.equal(D.exArmOfPart_('내부세척'),'repair','공백 표기 차이를 흡수');
+  assert.equal(D.exArmOfPart_('내부 수리'),'repair');
+  assert.equal(D.exArmOfPart_("Handpiece Ass'y"),'swap');
+  assert.equal(D.exArmOfPart_("handpiece ass'y"),'swap','대소문자 차이를 흡수');
+  assert.equal(D.exArmOfPart_('노즐'),'swap','부품명이 적혀 있으면 교체');
+  assert.equal(D.exArmOfPart_(''),'other');
+  assert.equal(D.exArmOfPart_('없음'),'other');
+});
+ck('69. 조치 이후 첫 동일 증상만 재발로 세고, 같은 날은 재발이 아니다',()=>{
+  const D=build();
+  const rows=[act('r1','2026-06-01','가병원','내부 세척',{sn:'HP-1'})];
+  const raw=rows.concat([
+    act('same','2026-06-01','가병원','내부 세척',{sn:'HP-1'}),      /* 같은 날 — 제외 */
+    act('r1-a','2026-06-21','가병원','내부 세척',{sn:'HP-1'}),      /* 첫 재발 */
+    act('r1-b','2026-07-30','가병원','내부 세척',{sn:'HP-1'})       /* 두 번째 — 세지 않음 */
+  ]);
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  assert.equal(a.repair.total,1);
+  assert.equal(a.repair.recur,1);
+  assert.equal(a.repair.min,20,'6/1 → 6/21 = 20일');
+  assert.equal(a.events[0].days,20);
+  assert.equal(D.ymd(a.events[0].recurrenceDate),'2026-06-21');
+});
+ck('70. 장비번호가 있으면 장비 단위, 없으면 병원 단위 추정으로 표시한다',()=>{
+  const D=build();
+  const rows=[act('sn1','2026-06-01','가병원','내부 세척',{sn:'HP-1'}),
+              act('nosn','2026-06-01','나병원','내부 세척',{sn:''})];
+  const raw=rows.concat([
+    act('other-dev','2026-06-10','가병원','내부 세척',{sn:'HP-9'}),   /* 다른 장비 — 재발 아님 */
+    act('any-dev','2026-06-15','나병원','내부 세척',{sn:'HP-7'})      /* 장비번호 없어 병원 단위로 인정 */
+  ]);
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  const byHosp=n=>a.events.find(e=>e.hosp===n);
+  assert.equal(byHosp('가병원').recurrence,false,'다른 장비는 같은 장비의 재발이 아니다');
+  assert.equal(byHosp('가병원').confidence,'장비 기준');
+  assert.equal(byHosp('나병원').recurrence,true);
+  assert.equal(byHosp('나병원').confidence,'병원 단위 추정');
+  assert.equal(a.repair.estimated,1);
+});
+ck('71. 아직 재발 없는 건은 평균에서 빼되 건수와 관찰일로 남긴다',()=>{
+  const D=build();
+  const rows=[act('a','2026-06-01','가병원','내부 세척',{sn:'HP-1'}),
+              act('b','2026-06-01','나병원','내부 세척',{sn:'HP-2'}),
+              act('c','2026-08-01','다병원','내부 세척',{sn:'HP-3'})];
+  const raw=rows.concat([act('a-r','2026-06-11','가병원','내부 세척',{sn:'HP-1'})]);
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  assert.equal(a.repair.total,3);
+  assert.equal(a.repair.recur,1);
+  assert.equal(a.repair.none,2,'아직 재발 없는 건');
+  assert.equal(a.repair.avg,10,'재발한 건만으로 평균');
+  assert.equal(a.repair.rate,33.3);
+  assert.equal(a.repair.watchAvg,60.5,'무재발 관찰일 평균 — (91+30)/2');
+});
+ck('72. 두 조치군에 같은 지표를 적용하고 중앙값은 짝수 개면 가운데 두 값 평균',()=>{
+  const D=build();
+  const rows=[
+    act('p1','2026-01-01','가병원','내부 세척',{sn:'H1'}),
+    act('p2','2026-01-01','나병원','내부 세척',{sn:'H2'}),
+    act('s1','2026-01-01','다병원',"Handpiece Ass'y",{sn:'H3'}),
+    act('s2','2026-01-01','라병원',"Handpiece Ass'y",{sn:'H4'})];
+  const raw=rows.concat([
+    act('p1r','2026-01-11','가병원','내부 세척',{sn:'H1'}),   /* 10일 */
+    act('p2r','2026-01-31','나병원','내부 세척',{sn:'H2'}),   /* 30일 */
+    act('s1r','2026-01-13','다병원','내부 세척',{sn:'H3'}),   /* 12일 */
+    act('s2r','2026-02-02','라병원','내부 세척',{sn:'H4'})]); /* 32일 */
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  assert.deepEqual([a.repair.total,a.repair.recur,a.repair.rate],[2,2,100]);
+  assert.deepEqual([a.swap.total,a.swap.recur,a.swap.rate],[2,2,100]);
+  assert.equal(a.repair.median,20);   /* (10+30)/2 */
+  assert.equal(a.swap.median,22);     /* (12+32)/2 */
+  assert.equal(a.repair.min,10); assert.equal(a.swap.min,12);
+});
+ck('73. 대상 VOC·병원명·처리일이 유효한 조치만 모집단에 들어간다',()=>{
+  const D=build();
+  const rows=[
+    act('ok','2026-06-01','가병원','내부 세척',{sn:'H1'}),
+    act('voc','2026-06-01','나병원','내부 세척',{sn:'H2',type:'풋스위치 작동 불량'}),
+    act('nohosp','2026-06-01','','내부 세척',{sn:'H3'}),
+    act('bad','2026-02-31','다병원','내부 세척',{sn:'H4'}),
+    act('nopart','2026-06-01','라병원','',{sn:'H5'}),
+    act('none','2026-06-01','마병원','없음',{sn:'H6'})];
+  const a=D.exArmRecurrence_(rows,rows,'2026-08-31');
+  assert.equal(a.repair.total,1);
+  assert.equal(a.swap.total,0);
+  assert.deepEqual(a.events.map(e=>e.row.id),['ok'],'다른 VOC·병원명 없음·처리일 오류·교체품 미입력은 제외');
+});
+ck('74. 판정 문구는 안전한 범위까지만 말한다 — 확정 표현을 쓰지 않는다',()=>{
+  const D=build();
+  const rows=[act('p','2026-01-01','가병원','내부 세척',{sn:'H1'}),
+              act('s','2026-01-01','나병원',"Handpiece Ass'y",{sn:'H2'})];
+  const raw=rows.concat([act('pr','2026-01-21','가병원','내부 세척',{sn:'H1'}),
+                         act('sr','2026-01-21','나병원','내부 세척',{sn:'H2'})]);
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  const v=D.exArmVerdict_(a);
+  assert.ok(v.includes('교체 후에도'));
+  assert.ok(v.includes('내부수리를 원인으로 지목')&&v.includes('재발 방지를 이유로 교체를 우선'));
+  assert.ok(!/차이가 없다|절대|입증|증명/.test(v),'확정 표현 없음');
+  const html=D.exArmHtml_(a);
+  assert.ok(html.includes('우월하다는 근거가 확인되지 않았다'));
+  assert.ok(html.includes('확정하지는 않습니다'));
+  assert.ok(!/차이가 전혀 없다고|원인이 아니라고 확정/.test(html.replace('차이가 전혀 없다거나','').replace('원인이 아니라고 확정하지는','')));
+});
+ck('75. 처리이력 모달에 두 조치군 표가 붙고, 계산은 조회당 한 번만 한다',()=>{
+  const rows=[act('p','2026-06-01','가병원','내부 세척',{sn:'H1'}),
+              act('s','2026-06-01','나병원',"Handpiece Ass'y",{sn:'H2'})];
+  const raw=rows.concat([act('pr','2026-06-21','가병원','내부 세척',{sn:'H1'})]);
+  const D=build(); open(D,rows,raw);
+  const html=D.dom.els.hstStats.innerHTML;
+  assert.ok(html.includes('조치 방법별 재발 — 내부수리 vs Handpiece 교체'));
+  assert.ok(html.includes('내부수리')&&html.includes('Handpiece 교체'));
+  assert.ok(html.includes('전체 조치')&&html.includes('재발 확인')&&html.includes('재발률')&&html.includes('아직 재발 없음'));
+  const first=D.state().arm;
+  setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
+  assert.equal(D.state().arm,first,'필터를 바꿔도 같은 결과 객체를 재사용');
+  assert.ok(grab('exApplyHistoryFilters_').includes('if(!EX_HISTORY_STATE.arm)'));
+});
+ck('76. 사례가 없으면 표를 그리지 않는다',()=>{
+  const D=build(); open(D,CUR);          /* CUR 은 교체품이 내부 세척이지만 VOC 가 대상이 아닌 행도 섞여 있다 */
+  const a=D.exArmRecurrence_([],RAW,'2026-08-31');
+  assert.equal(D.exArmHtml_(a),'');
+  assert.match(D.exArmVerdict_(a),/사례가 아직 부족/);
+});
+ck('77-a. HP_SN 은 교체할 때만 적으므로 매칭 조건이 아니라 확정 표시로만 쓴다',()=>{
+  const D=build();
+  const swap=act('sw','2026-06-01','가병원',"Handpiece Ass'y",{sn:'EQ-1',hpIn:'HP-0417',hpOut:'HP-0902'});
+  /* 재발을 내부수리로 처리하면 HP_SN(IN) 이 비어 있다 — 조건으로 걸면 이 재발을 통째로 놓친다 */
+  const repairRecur=act('sw-r','2026-06-21','가병원','내부 세척',{sn:'EQ-1'});
+  let a=D.exArmRecurrence_([swap],[swap,repairRecur],'2026-08-31');
+  assert.equal(a.swap.recur,1,'IN 이 비어도 재발로 잡는다');
+  assert.equal(a.events[0].days,20);
+  assert.equal(a.events[0].confirmed,false);
+  assert.equal(a.events[0].confidence,'장비 기준');
+  /* 재발도 교체로 처리돼 IN 이 찍히면 같은 핸드피스임이 일련번호로 확정된다 */
+  const swapRecur=act('sw-r2','2026-06-21','가병원',"Handpiece Ass'y",{sn:'EQ-1',hpIn:'HP-0902',hpOut:'HP-1130'});
+  a=D.exArmRecurrence_([swap],[swap,swapRecur],'2026-08-31');
+  assert.equal(a.events[0].confirmed,true);
+  assert.equal(a.events[0].confidence,'핸드피스 확정');
+  assert.equal(a.swap.confirmed,1);
+  assert.equal(a.swap.estimated,0,'확정 건은 병원 단위 추정으로 세지 않는다');
+  /* 다른 핸드피스가 들어온 재발은 확정하지 않는다 */
+  const otherHp=act('sw-r3','2026-06-21','가병원',"Handpiece Ass'y",{sn:'EQ-1',hpIn:'HP-7777',hpOut:'HP-8888'});
+  a=D.exArmRecurrence_([swap],[swap,otherHp],'2026-08-31');
+  assert.equal(a.events[0].confirmed,false);
+  assert.equal(a.events[0].confidence,'장비 기준');
+});
+ck('77-b. 교체품 표기가 비어도 HP_SN 이 있으면 교체로 보정한다',()=>{
+  const D=build();
+  assert.equal(D.exArmOf_({part:'',hpOut:'HP-1'}),'swap');
+  assert.equal(D.exArmOf_({part:'없음',hpIn:'HP-1'}),'swap');
+  assert.equal(D.exArmOf_({part:'내부 세척',hpOut:'HP-1'}),'repair','교체품 표기를 우선한다');
+  assert.equal(D.exArmOf_({part:'',hpIn:'',hpOut:''}),'other');
+});
+ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않는다',()=>{
+  const body=grab('exArmRecurrence_')+grab('exArmSummary_')+grab('exArmHtml_')+grab('exArmVerdict_');
+  assert.ok(!/nozzleReuse|nsFill|nsAmt|\bjet\b|초기|중기|장기/.test(body));
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

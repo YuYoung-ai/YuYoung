@@ -28,7 +28,9 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
   'exApplyHistoryFilters_','exResetHistoryFilters_','exShowHistory_',
   'exApplyHistoryCountChip_','exToggleHistorySalesCounts_',
   'exExcelDate_','exHistoryExportData_','exHistoryExcelLines_','exBuildHistoryComparisonWorkbook_',
-  'exportHistoryComparisonExcel_','exExcelDownload_',
+  'exportHistoryComparisonExcel_','exExcelDownload_','exAddArmWorksheet_',
+  'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
+  'hpCleanVal_','hpCleanAsOf_','exToday',
   /* 처리이력 모달 개선(정렬·검색·통계·롤업·복사·상태 유지) */
   'exHistoryGroupList_','exHistoryGroupRows_',
   'exHistoryParseQuery_','exHistorySearchText_','exHistoryMatchToken_','exHistoryMatchQuery_',
@@ -61,6 +63,7 @@ function exSetHistoryPhotoExpanded_(){}
 function exLoadHistoryTypeExample_(){}
 function toast(){}
 var EX_HISTORY_PHOTO_SEQ=0;
+var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 function exBuild(){throw new Error('캐시 이외 집계 금지');}
 function buildNozzleLeakCurrent_(){return {};}
 function nlKpiData_(){return {label:'누수 대상',rows:EX_CACHE.rows};}
