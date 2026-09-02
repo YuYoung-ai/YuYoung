@@ -28,7 +28,26 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
   'exApplyHistoryFilters_','exResetHistoryFilters_','exShowHistory_',
   'exApplyHistoryCountChip_','exToggleHistorySalesCounts_',
   'exExcelDate_','exHistoryExportData_','exHistoryExcelLines_','exBuildHistoryComparisonWorkbook_',
-  'exportHistoryComparisonExcel_','exExcelDownload_'];
+  'exportHistoryComparisonExcel_','exExcelDownload_',
+  /* 처리이력 모달 개선(정렬·검색·통계·롤업·복사·상태 유지) */
+  'exHistoryGroupList_','exHistoryGroupRows_',
+  'exHistoryParseQuery_','exHistorySearchText_','exHistoryMatchToken_','exHistoryMatchQuery_',
+  'exHistoryComposeStart_','exHistoryComposeEnd_','exHistoryCancelSearch_','exHistoryFlushSearch_','exHistoryQueryInput_',
+  'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
+  'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
+  'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
+  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exHistoryRollupTable_','exHistoryRollupTsv_',
+  'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
+  'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
+  'exCopyHistoryTsv_','exOpenHospitalTimeline_',
+  'exCaptureHistoryUi_','exHistoryOptionExists_','exRestoreHistoryUi_','exCloseHistoryExample_','exHistoryRestoreSelection_',
+  'exHistoryMoreHtml_','exHistoryShowMore_','exHistoryFilterChanged_',
+  'exHistoryDimValue_','exHistoryToolbarHtml_','exHistorySyncToolbar_','exSetHistoryView_','exSwitchHistoryDim_',
+  'exRestoreHistoryModalUi_'];
+/* 새로 추가된 모듈 수준 상태(EX_HISTORY_PAGE·정렬 기본 방향 등)를 원문 그대로 가져온다 */
+const RUNTIME=(()=>{const a=SRC.indexOf('EX_HISTORY_RUNTIME_BEGIN'),b=SRC.indexOf('EX_HISTORY_RUNTIME_END');
+  return SRC.slice(SRC.indexOf('*/',a)+2, SRC.lastIndexOf('/*',b));})();
+
 const stubs=`
 var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=null;
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
@@ -38,11 +57,15 @@ function exHistoryPhotoPanel_(){return '';}
 function exSyncHistoryTypeExample_(){}
 function exSelectHistory_(){}
 function exHistoryRowKey_(){return true;}
+function exSetHistoryPhotoExpanded_(){}
+function exLoadHistoryTypeExample_(){}
+function toast(){}
+var EX_HISTORY_PHOTO_SEQ=0;
 function exBuild(){throw new Error('캐시 이외 집계 금지');}
 function buildNozzleLeakCurrent_(){return {};}
 function nlKpiData_(){return {label:'누수 대상',rows:EX_CACHE.rows};}
 `;
-const methods=FNS.map(grab).join('\n');
+const methods=RUNTIME+'\n'+FNS.map(grab).join('\n');
 const D=new Function(stubs+`
 var elements={},opened=null;
 var document={getElementById:id=>elements[id]||null};
@@ -76,7 +99,7 @@ const raw=[...cur,
   row('future','2026-09-01'),row('invalid','2026-02-31','다병원')];
 let count=0;
 const ck=(label,fn)=>{fn();count++;console.log('✅ '+label);};
-const ids=items=>items.map(x=>x.id||x.r.id);
+const ids=items=>items.map(x=>(x&&x.r)?x.r.id:x.id);
 const c=D.exHistoryPrevious_(cur,raw);
 const dataset=()=>D.exHistoryDataset_(c.selected,c.rows,null,c.sameRows);
 ck('병원·VOC별 선택 기간 내 최신 발생일만 선택, 과거 선택 후보 제거',()=>{

@@ -72,12 +72,12 @@ ck('실제 XLSX 저장/재열기 후 수식·정렬·날짜·필터 유지',()=>
 // 다운로드 진입점의 실패·연속 클릭·빈 결과를 검증한다. 운영 네트워크/다운로드는 호출하지 않는다.
 let loading=0,downloads=0,fail=false,notices=[];
 const btn={textContent:'비교 내역 엑셀',disabled:false,isConnected:true};
-const api=new Function('exHistoryExportData_','exBuildHistoryComparisonWorkbook_','ExcelJS','loadHpExcelLib_','exExcelDownload_','toast','document',`
+const api=new Function('exHistoryExportData_','exBuildHistoryComparisonWorkbook_','ExcelJS','loadHpExcelLib_','exExcelDownload_','toast','document','exHistoryFlushSearch_',`
 var EX_HISTORY_STATE=null;${grab('exportHistoryComparisonExcel_')}
 return {run:exportHistoryComparisonExcel_,set:s=>EX_HISTORY_STATE=s};
 `)(D.exHistoryExportData_,D.exBuildHistoryComparisonWorkbook_,Excel,
   async()=>{loading++;await Promise.resolve();if(fail)throw new Error('테스트 로딩 오류');},
-  async()=>{downloads++;},message=>notices.push(message),{getElementById:()=>btn});
+  async()=>{downloads++;},message=>notices.push(message),{getElementById:()=>btn},()=>false);
 api.set(state);await Promise.all([api.run(),api.run()]);
 ck('다운로드 중 중복 실행 방지 및 버튼 복구',()=>{assert.equal(loading,1);assert.equal(downloads,1);assert.equal(btn.disabled,false);assert.equal(btn.textContent,'비교 내역 엑셀');});
 fail=true;await api.run();

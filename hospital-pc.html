@@ -720,6 +720,16 @@
   body.dark{background:var(--bg);}
   /* 헤더는 짙은 네이비 유지 */
   body.dark header{background:#141E36;}
+  /* 대시보드 병원 딥링크 안내 — 이력 창을 열 수 없을 때만 나타나는 비차단 배너 */
+  .pc-deeplink-note{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:120;
+    display:flex;align-items:center;gap:10px;max-width:min(560px,calc(100vw - 24px));
+    padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card,#fff);
+    color:var(--txt,#1B2F5E);font-size:13px;line-height:1.45;box-shadow:0 10px 26px rgba(15,23,42,.18)}
+  .pc-deeplink-note[hidden]{display:none}
+  .pc-deeplink-note b{font-weight:800}
+  .pc-deeplink-note button{flex:0 0 auto;border:1px solid var(--line);border-radius:7px;background:transparent;
+    color:inherit;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer}
+  .pc-deeplink-note button:hover{background:var(--bg)}
 </style>
 <script src="auth.js"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 호스팅 그대로 동작 · sw.js 는 런타임 캐시)
@@ -5128,6 +5138,106 @@ window.addEventListener('load', pcSetHdrH);
     cur=btn.dataset.mode; localStorage.setItem(KEY, cur); apply(cur);
   });
 })();
+
+/* ══════ 대시보드 → 병원 딥링크 (hospital-pc.html?hosp=병원명) ══════
+   대시보드 처리이력 표의 병원 버튼이 이 페이지를 새 창으로 연다.
+   · 조회 전용이다 — 이력 "보기" 창만 열고 비밀번호 편집 화면은 절대 자동 실행하지 않는다.
+   · 병원명은 대시보드와 같은 규칙(공백 제거 + 소문자)으로 정확히 일치할 때만 연다.
+     부분 일치로 다른 지점을 추정하지 않는다. 정규화 후 2곳 이상이면 임의 선택하지 않고 알린다.
+   · bazBootReady 가 늦거나 실패해도 일반 병원 화면은 그대로 쓸 수 있어야 하므로
+     실패는 배너 안내로만 끝낸다(화면 차단·예외 전파 없음).
+   · 같은 쿼리로 새로고침해도 한 번만 실행된다(PC_DEEPLINK_DONE). */
+var PC_DEEPLINK_DONE=false;
+/* location.search 파싱 — 한글·공백·괄호가 encodeURIComponent 로 인코딩되어 온다.
+   application/x-www-form-urlencoded 관습의 '+' 도 공백으로 되돌린다. */
+function pcDeepLinkName_(search){
+  var m=/[?&]hosp=([^&]*)/.exec(String(search||''));
+  if(!m) return '';
+  var raw=m[1].replace(/\+/g,' ');
+  try{ raw=decodeURIComponent(raw); }catch(e){}
+  return String(raw).replace(/\s+/g,' ').trim();
+}
+/* 병원 목록 정확 일치 — normalize() 는 이 페이지의 기존 병원명 정규화 규칙이다 */
+function pcDeepLinkMatch_(list,name){
+  var k=normalize(name);
+  if(!k) return [];
+  return (list||[]).filter(function(h){ return h && normalize(h.n)===k; });
+}
+/* 판정만 하는 순수 함수 — 테스트가 DOM 없이 그대로 검증한다 */
+function pcDeepLinkResolve_(list,name){
+  name=String(name==null?'':name).replace(/\s+/g,' ').trim();
+  if(!name) return {status:'empty',query:name,names:[]};
+  var hits=pcDeepLinkMatch_(list,name);
+  var names=hits.map(function(h){ return h.n; });
+  if(!hits.length) return {status:'none',query:name,names:names};
+  if(hits.length>1) return {status:'duplicate',query:name,names:names};
+  return {status:'ok',query:name,name:hits[0].n,names:names};
+}
+function pcDeepLinkNoticeText_(res){
+  if(!res) return '';
+  if(res.status==='none') return '"'+res.query+'" 병원을 찾지 못했습니다 · 목록에서 직접 선택해 주세요';
+  if(res.status==='duplicate') return '"'+res.query+'" 이름의 병원이 '+res.names.length+'곳입니다 · 임의로 열지 않았습니다. 목록에서 선택해 주세요';
+  if(res.status==='boot') return '병원 정보를 불러오지 못해 이력 창을 열지 못했습니다 · 목록에서 직접 선택해 주세요';
+  return '';
+}
+function pcDeepLinkNotice_(msg){
+  if(!msg) return;
+  try{ bazAnnounce(msg); }catch(e){}
+  var el=document.getElementById('pcDeepLinkNote');
+  if(!el){
+    el=document.createElement('div');
+    el.id='pcDeepLinkNote';
+    el.className='pc-deeplink-note';
+    el.setAttribute('role','status');
+    document.body.appendChild(el);
+  }
+  el.textContent='';
+  var span=document.createElement('span');
+  span.textContent=msg;
+  var btn=document.createElement('button');
+  btn.type='button';
+  btn.textContent='닫기';
+  btn.addEventListener('click',function(){ el.hidden=true; });
+  el.appendChild(span); el.appendChild(btn);
+  el.hidden=false;
+}
+/* 열려 있는 모달 정리 — 같은 병원 이력이 이미 열려 있으면 다시 열지 않는다.
+   다른 모달(비밀번호·상세 등)이 열려 있으면 안전하게 모두 닫고 이력만 연다. */
+function pcDeepLinkOpen_(name){
+  var modal=document.getElementById('histModal');
+  if(modal && typeof BazModal!=='undefined' && BazModal.isOpen(modal) && histCurName===name) return 'already';
+  if(typeof BazModal!=='undefined'){
+    for(var i=0;i<8 && BazModal.openCount()>0;i++){ if(!BazModal.closeTop()) break; }
+  }
+  openHist(name);
+  return 'opened';
+}
+function pcRunDeepLink_(){
+  if(PC_DEEPLINK_DONE) return Promise.resolve(null);
+  var query=pcDeepLinkName_(location.search);
+  if(!query) return Promise.resolve(null);
+  PC_DEEPLINK_DONE=true;
+  var ready=(window.bazBootReady && typeof window.bazBootReady.then==='function')
+    ? window.bazBootReady : Promise.resolve(true);
+  /* boot 가 reject 되거나 false 를 돌려줘도 이미 캐시된 병원 목록으로 시도한다 */
+  return Promise.resolve(ready).catch(function(){ return false; }).then(function(){
+    var res=pcDeepLinkResolve_(HOSPITALS,query);
+    if(res.status==='ok'){
+      try{
+        res.action=pcDeepLinkOpen_(res.name);
+      }catch(e){
+        console.warn('[딥링크] 이력 창 열기 실패:',e);
+        res.status='boot';
+        pcDeepLinkNotice_(pcDeepLinkNoticeText_(res));
+      }
+      return res;
+    }
+    if(!HOSPITALS.length) res.status='boot';
+    pcDeepLinkNotice_(pcDeepLinkNoticeText_(res));
+    return res;
+  });
+}
+try{ pcRunDeepLink_(); }catch(e){ console.warn('[딥링크] 처리 실패:',e); }
 
 </script>
 </body>

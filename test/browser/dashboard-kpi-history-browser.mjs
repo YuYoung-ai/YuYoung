@@ -154,6 +154,16 @@ ck('4-e. 같은 버튼을 다시 누르면 예시 본문이 즉시 접힌다',
   modal.bodyHidden&&modal.expanded==='false'&&modal.label.includes('보기'),JSON.stringify(modal));
 await page.evaluate(()=>closeExList());
 
+/* 처리이력 모달은 이 탭이 살아 있는 동안 마지막 조회 설정을 기억한다(localStorage 저장 없음).
+   앞 단계에서 고른 VOC 유형이 새 모집단에도 있으면 그대로 복원되는지 먼저 확인한 뒤,
+   아래 카드별 검증은 초기화된 상태에서 진행한다. */
+await page.click('#exKpis [data-hist-dim="kpiAs"]');
+await page.waitForSelector('#exListModal.show');
+ck('4-f. 닫았다 다시 열면 마지막 조회 설정(VOC 유형)이 유지된다',
+  await page.inputValue('#hstType')==='케이블 불량'&&await page.locator('#hstTableHost tbody tr').count()===1,
+  await page.inputValue('#hstType'));
+await page.evaluate(()=>{exResetHistoryFilters_();closeExList();});
+
 async function openAndRead(dim){
   await page.click('#exKpis [data-hist-dim="'+dim+'"]');
   await page.waitForSelector('#exListModal.show');
@@ -163,7 +173,7 @@ async function openAndRead(dim){
     rows:document.querySelectorAll('#hstTableHost tbody tr').length,
     text:document.getElementById('exListBody').textContent
   }));
-  await page.evaluate(()=>closeExList()); return out;
+  await page.evaluate(()=>{exResetHistoryFilters_();closeExList();}); return out;
 }
 const asHist=await openAndRead('kpiAs'), inspHist=await openAndRead('kpiInsp'), savingHist=await openAndRead('kpiSaving');
 ck('5. A/S 카드 이력은 최신 A/S 2건으로 제한',asHist.rows===2&&asHist.text.includes('A/S 2건')&&!asHist.text.includes('점검 2건'),JSON.stringify(asHist));

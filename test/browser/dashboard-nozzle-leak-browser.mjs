@@ -133,6 +133,7 @@ await page.selectOption('#hstFse','처리나');
 ck('8-e. 처리 담당자 필터 적용',await page.locator('#hstTableHost tbody tr').count()===1);
 await page.getByRole('button',{name:'필터 초기화',exact:true}).click();
 await page.fill('#hstQuery','B병원');
+await page.waitForFunction(()=>document.querySelectorAll('#hstTableHost tbody tr').length===1);
 ck('8-f. 병원 검색으로 최신 선택 처리기록 조회',await page.locator('#hstTableHost tbody tr').count()===1);
 await page.selectOption('#hstSales','영업가');
 ck('8-g. 서로 교집합이 없는 조건은 0건 표시',await page.locator('#hstTableHost tbody tr').count()===0);
@@ -144,6 +145,7 @@ await page.evaluate(()=>applyHospDB_([{n:'A병원',sale:'영업가'},{n:'B병원
 ck('8-i. 병원DB 갱신 후에도 누수 카드 범위·필터·펼침 상태 유지',
   await page.inputValue('#hstSales')==='영업나'&&await page.locator('#hstTableHost tbody tr').count()===1
   &&await page.getAttribute('#hstSalesCountsToggle','aria-expanded')==='true');
+await page.evaluate(()=>exResetHistoryFilters_());
 await page.click('#exListModal .mbtn.cancel');
 await page.evaluate(()=>{F.type=['케이블 불량'];F.noz=['reuse'];F.skill=['need'];apply();});
 await page.click('#exLeakKpis [data-hist-dim="leak:total"]');
@@ -151,7 +153,7 @@ ck('8-j. 누수 탭에서 제외하는 상단 필터가 이력에도 잘못 적�
 await page.click('#exListModal .mbtn.cancel');
 await page.evaluate(()=>{F.type=[];F.noz=[];F.skill=[];F.gubun=['점검'];apply();});
 await page.click('#exLeakKpis [data-hist-dim="leak:reuse"]');
-ck('8-k. 0건 카드도 빈 이력 조회·필터 초기화 가능',await page.locator('#hstTableHost tbody tr').count()===0&&await page.locator('#exListModal .hst-reset').isVisible());
+ck('8-k. 0건 카드도 빈 이력 조회·필터 초기화 가능',await page.locator('#hstTableHost tbody tr').count()===0&&await page.locator('#exListModal .hst-reset:not(.hst-export)').isVisible());
 await page.click('#exListModal .mbtn.cancel');
 await page.evaluate(()=>{F.gubun=[];apply();});
 const fontBefore=await page.locator('#exLeakKpis .nl-kpi').first().evaluate(el=>({label:getComputedStyle(el.querySelector('.nl-label')).fontSize,value:getComputedStyle(el.querySelector('b')).fontSize}));
