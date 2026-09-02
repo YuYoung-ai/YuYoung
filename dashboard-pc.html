@@ -894,6 +894,23 @@ html.hst-evidence-open{overflow:hidden}
 .hst-view[data-focus="stats"] .hst-top{flex:1 1 auto}
 .hst-view[data-focus="stats"] #hstStatsBody{max-height:none;overflow-y:visible}
 .hst-view[data-focus="stats"] .hst-main{flex:0 0 auto;height:clamp(120px,20vh,210px);min-height:0}
+/* 경계선을 끌어 직접 맞춘 크기 — 자동 배분보다 우선한다(뒤에 두어 같은 우선순위에서 이긴다) */
+.hst-split{flex:0 0 auto;height:11px;display:flex;align-items:center;justify-content:center;position:relative;
+  background:var(--surface-2);border-top:1px solid var(--gray-line);border-bottom:1px solid var(--gray-line);
+  cursor:row-resize;touch-action:none}
+.hst-split:hover{background:var(--teal-soft)}
+.hst-split:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.hst-split .grip{width:48px;height:3px;border-radius:2px;background:var(--gray-line)}
+.hst-split:hover .grip,.hst-split:focus-visible .grip{background:var(--teal)}
+.hst-split .reset{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;
+  border:1px solid var(--gray-line);border-radius:5px;background:var(--surface);color:var(--text-muted);
+  padding:0 7px;height:15px;font:9.5px inherit;font-weight:800;line-height:13px}
+.hst-split .reset[hidden]{display:none}
+.hst-split .reset:hover{border-color:var(--teal);color:var(--teal)}
+body.hst-resizing{cursor:row-resize;user-select:none}
+.hst-view.is-split .hst-top{flex:0 0 auto;height:var(--hst-top-h)}
+.hst-view.is-split #hstStatsBody{max-height:none;overflow-y:visible}
+.hst-view.is-split .hst-main{flex:1 1 auto;height:auto;min-height:0}
 .hst-hosp-panel{flex:0 0 clamp(280px,30%,400px);min-width:0;display:flex;flex-direction:column;
   border-left:1px solid var(--gray-line);background:var(--surface-2);overflow:hidden}
 .hst-hosp-panel[hidden]{display:none}
@@ -1125,7 +1142,10 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-view{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
   .hst-view .hst-table-wrap{min-height:0;flex:0 0 auto;overflow-y:visible}
   /* 좁은 화면에서는 병원 이력을 표 아래로 내린다 */
-  /* 모바일은 화면 전체가 스크롤되므로 주 영역 전환 없이 자연 높이를 쓴다 */
+  /* 모바일은 화면 전체가 스크롤되므로 크기 조절·주 영역 전환 없이 자연 높이를 쓴다 */
+  .hst-split{display:none}
+  .hst-view.is-split .hst-top{height:auto;flex:0 0 auto}
+  .hst-view.is-split .hst-main{height:auto}
   .hst-top,.hst-view[data-focus="stats"] .hst-top{flex:0 0 auto;overflow:visible}
   .hst-main,.hst-view[data-focus="stats"] .hst-main{flex-direction:column;border-top:0;min-height:0;height:auto}
   .hst-hosp-panel{flex:0 0 auto;border-left:0;border-top:1px solid var(--gray-line);max-height:60vh}
@@ -6609,6 +6629,109 @@ function exCopyHistoryTsv_(){
       :'❌ 복사하지 못했습니다 · 내용을 직접 선택해 주세요');
   });
 }
+/* ══════ 분석 / 이력 영역 크기 수동 조절 ══════
+   경계선을 끌어 두 영역의 높이를 직접 정하고, 그 값을 고정한다.
+   한 번이라도 조절하면 자동 전환(data-focus)을 쓰지 않는다 — 클릭할 때마다 크기가
+   바뀌면 쓰기 불편하기 때문이다. "자동" 버튼으로 되돌릴 수 있다.
+   크기는 브라우저에 남겨 다음에 열 때도 그대로 쓴다(필터 조건과 달리 화면 설정이다). */
+var EX_HIST_SPLIT_KEY='baz_hst_split';
+var EX_HIST_SPLIT_MIN=120, EX_HIST_SPLIT_TAIL=150;
+function exHistorySplitLoad_(){
+  try{ var v=parseInt(localStorage.getItem(EX_HIST_SPLIT_KEY),10); return (v>0)?v:0; }
+  catch(e){ return 0; }
+}
+function exHistorySplitStore_(px){
+  try{
+    if(px>0) localStorage.setItem(EX_HIST_SPLIT_KEY,String(Math.round(px)));
+    else localStorage.removeItem(EX_HIST_SPLIT_KEY);
+  }catch(e){}
+}
+function exHistorySplitClamp_(px,viewH){
+  var h=viewH;
+  if(h==null){
+    var view=document.getElementById('hstView');
+    h=view&&view.getBoundingClientRect?view.getBoundingClientRect().height:0;
+  }
+  if(!h) return Math.max(EX_HIST_SPLIT_MIN,px);
+  return Math.max(EX_HIST_SPLIT_MIN,Math.min(px,h-EX_HIST_SPLIT_TAIL));
+}
+/* px 가 0 이면 고정을 풀고 자동 배분으로 돌아간다 */
+function exHistorySplitApply_(px){
+  var view=document.getElementById('hstView');
+  if(EX_HISTORY_STATE) EX_HISTORY_STATE.splitH=px>0?px:0;
+  if(!view) return;
+  if(px>0){
+    if(view.classList) view.classList.add('is-split');
+    if(view.style&&view.style.setProperty) view.style.setProperty('--hst-top-h',Math.round(px)+'px');
+  }else{
+    if(view.classList) view.classList.remove('is-split');
+    if(view.style&&view.style.removeProperty) view.style.removeProperty('--hst-top-h');
+  }
+  var btn=document.getElementById('hstSplitReset');
+  if(btn) btn.hidden=!(px>0);
+  var bar=document.getElementById('hstSplit');
+  if(bar) bar.setAttribute('aria-valuenow',String(Math.round(px>0?px:0)));
+}
+function exHistorySplitSet_(px,store){
+  px=exHistorySplitClamp_(px);
+  exHistorySplitApply_(px);
+  if(store!==false) exHistorySplitStore_(px);
+}
+function exHistorySplitReset_(){
+  exHistorySplitApply_(0);
+  exHistorySplitStore_(0);
+}
+function exHistorySplitTopH_(){
+  var top=document.querySelector&&document.querySelector('.hst-top');
+  return (top&&top.getBoundingClientRect)?top.getBoundingClientRect().height:0;
+}
+function exHistorySplitStart_(e){
+  if(!e||e.button>0) return;
+  if(e.preventDefault) e.preventDefault();
+  var startY=Number(e.clientY)||0, startH=exHistorySplitTopH_();
+  if(!startH) return;
+  function move(ev){ exHistorySplitSet_(startH+((Number(ev.clientY)||0)-startY),false); }
+  function up(){
+    document.removeEventListener('pointermove',move);
+    document.removeEventListener('pointerup',up);
+    if(document.body&&document.body.classList) document.body.classList.remove('hst-resizing');
+    exHistorySplitStore_((EX_HISTORY_STATE&&EX_HISTORY_STATE.splitH)||0);
+  }
+  if(document.body&&document.body.classList) document.body.classList.add('hst-resizing');
+  document.addEventListener('pointermove',move);
+  document.addEventListener('pointerup',up);
+}
+/* 키보드로도 조절한다 — 방향키 24px(Shift 72px), Home 은 자동으로 되돌리기 */
+function exHistorySplitKey_(e){
+  var k=e&&(e.key||'');
+  if(k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Home') return true;
+  if(e.preventDefault) e.preventDefault();
+  if(k==='Home'){ exHistorySplitReset_(); return false; }
+  var step=e.shiftKey?72:24, cur=exHistorySplitTopH_();
+  exHistorySplitSet_(cur+(k==='ArrowUp'?-step:step));
+  return false;
+}
+function exHistorySplitBar_(){
+  return '<div class="hst-split" id="hstSplit" role="separator" aria-orientation="horizontal" tabindex="0"'
+    +' aria-label="분석과 이력 영역 크기 조절 · 방향키로 조절, Home 으로 자동 배분"'
+    +' title="끌어서 크기 조절 · 두 번 누르면 자동 배분"'
+    +' onpointerdown="exHistorySplitStart_(event)" onkeydown="return exHistorySplitKey_(event)"'
+    +' ondblclick="exHistorySplitReset_()">'
+    +'<span class="grip" aria-hidden="true"></span>'
+    +'<button type="button" class="reset" id="hstSplitReset" hidden onpointerdown="event.stopPropagation()"'
+      +' onclick="exHistorySplitReset_()" title="자동 배분으로 되돌리기">자동</button>'
+    +'</div>';
+}
+/* 창 크기가 줄면 고정값도 화면 안으로 다시 맞춘다(저장값은 그대로 둔다) */
+var EX_HIST_SPLIT_BOUND=false;
+function exHistorySplitBind_(){
+  if(EX_HIST_SPLIT_BOUND||typeof window==='undefined'||!window.addEventListener) return;
+  EX_HIST_SPLIT_BOUND=true;
+  window.addEventListener('resize',function(){
+    if(EX_HISTORY_STATE&&EX_HISTORY_STATE.splitH>0) exHistorySplitApply_(exHistorySplitClamp_(EX_HISTORY_STATE.splitH));
+  });
+}
+
 /* ══════ 병원 이력 패널 — 처리이력 표 오른쪽에 붙는다 ══════
    병원명을 누르면 새 창을 띄우지 않고 이 패널만 연다. 이미 받아 둔 RAW 만 읽으므로
    추가 네트워크 요청이 없다. 표의 필터·정렬과 무관하게 그 병원의 전체 처리 이력을 보여 준다.
@@ -7529,7 +7652,7 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,focusArea:'table',
+    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,focusArea:'table',splitH:0,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
@@ -7545,12 +7668,13 @@ function exShowHistory_(dim, name, opt){
     +'<div class="hst-toolbar" id="hstToolbar"></div>'
     +exHistoryControls_(items, true)
     +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
-    +'<div class="hst-stats-wrap" id="hstStats" onmousedown="exHistoryFocus_(\'stats\')" onfocusin="exHistoryFocus_(\'stats\')"></div>'
+    +'<div class="hst-stats-wrap" id="hstStats"></div>'
     +'<div class="hst-result"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
       +'<span id="hstViewNote">'+esc(orderText)+'</span></div>'
     +exHistoryPhotoPanel_()
     +'</div>'
-    +'<div class="hst-main" onmousedown="exHistoryFocus_(\'table\')" onfocusin="exHistoryFocus_(\'table\')" onwheel="exHistoryFocus_(\'table\')">'
+    +exHistorySplitBar_()
+    +'<div class="hst-main">'
       +'<div class="hst-table-wrap" id="hstTableHost"></div>'
       +exHospPanelShell_()+'</div></div>';
   openExList(title, sub, html, true);
@@ -7564,6 +7688,9 @@ function exRestoreHistoryModalUi_(opt){
   if(host) host.innerHTML=exHistoryToolbarHtml_(EX_HISTORY_STATE);
   var prefs=(opt&&opt.prefs)||EX_HISTORY_PREFS;
   if(prefs) exRestoreHistoryUi_(prefs,(opt&&opt.restoreMode)||'dim',EX_HISTORY_STATE);
+  exHistorySplitBind_();
+  var split=exHistorySplitLoad_();
+  if(split>0) exHistorySplitSet_(split,false);   /* 지난번에 직접 맞춘 크기를 그대로 쓴다 */
   exHistorySyncToolbar_(EX_HISTORY_STATE);
 }
 /* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
