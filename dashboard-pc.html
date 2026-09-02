@@ -379,7 +379,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-pane{display:none;position:absolute;inset:0;gap:8px}
 .ex-pane.on{display:grid}
 #exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
-#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1.15fr)}
+#exCauseArmCard{grid-column:1/-1}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
 /* 카드/행이 늘면 글자를 축소하지 않고 패널의 최소 높이와 세로 스크롤을 유지한다. */
 #exPaneLeak{grid-template-rows:auto minmax(260px,.9fr) minmax(320px,1.1fr);overflow-y:auto;overflow-x:hidden;align-content:start}
@@ -416,6 +417,21 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
    긴 병원명이 잘리기만 하고 말줄임이 안 붙는 것을 막는다. */
 .ex-cbody>*{min-width:0}
 .ex-empty{color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0}
+
+/* 원인 분석 · 조치 방법별 재발 — 기존 처리이력의 exArmRecurrence_ 결과를 그대로 그린다. */
+.car-body{gap:7px;overflow:auto}.car-coverage{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--text-muted);font-size:10.5px}
+.car-coverage b{color:var(--navy)}.car-coverage span{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:2px 7px}
+.car-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.car-group{border:1px solid var(--gray-line);border-radius:9px;background:var(--surface-2);padding:7px 8px;min-width:0}
+.car-group.swap{border-color:#D9C495;background:#FFF9EC}body.dark .car-group.swap{background:#2B281F;border-color:#665A3D}
+.car-group h4{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin:0 0 6px;color:var(--navy);font-size:12px}.car-group h4 span{color:var(--text-muted);font-size:9.5px}
+.car-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.car-metric{min-width:0;margin:0;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);padding:5px 7px;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.car-metric:hover:not(:disabled){border-color:var(--teal);background:var(--teal-soft)}.car-metric:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}.car-metric:disabled{cursor:default;opacity:.55}
+.car-metric span{display:block;color:var(--text-muted);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.car-metric b{display:block;margin-top:1px;color:var(--navy);font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.car-metric.recur b{color:var(--red)}.car-metric.stable b{color:var(--green)}.car-foot{margin-top:5px;color:var(--text-muted);font-size:9.5px;line-height:1.35}
+.car-verdict{margin:0;border-left:3px solid var(--teal);border-radius:5px;background:var(--teal-soft);padding:6px 9px;color:var(--text);font-size:10.5px;font-weight:600;line-height:1.45}
+.car-history{height:100%;min-height:0;display:flex;flex-direction:column;padding:10px 11px 0;box-sizing:border-box}.car-history-summary{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:9px}.car-history-summary span{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:4px 8px;color:var(--text-muted);font-size:10px}.car-history-summary b{color:var(--navy)}
+.car-history-wrap{min-height:0;flex:1;overflow:auto;border:1px solid var(--gray-line);border-radius:8px;scrollbar-gutter:stable}.car-history-table{width:100%;min-width:1120px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:11px}.car-history-table th{position:sticky;top:0;z-index:1;background:#F1F4F9;color:var(--text-muted);padding:7px 6px;border-bottom:1px solid var(--gray-line);font-size:10px;text-align:left;white-space:nowrap}.car-history-table td{padding:7px 6px;border-bottom:1px solid #EEF1F6;color:var(--text);vertical-align:top;line-height:1.4;overflow-wrap:anywhere}body.dark .car-history-table th{background:#202C43}.car-history-table .date,.car-history-table .days{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700;color:var(--navy)}.car-history-table .detail{white-space:pre-line}.car-history-table .confidence{color:var(--text-muted)}
+@media(max-width:980px){.car-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* KPI */
 .ex-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
@@ -1629,8 +1645,8 @@ exApplyLevel3Tools_();
       <section class="ex-pane" id="exPaneCause">
         <div class="ex-card" id="exTypeCard"></div>
         <div class="ex-card" id="exPartCard"></div>
-        <div class="ex-card" id="exRepeatCard"></div>
-        <div class="ex-card" id="exNcCmpCard"></div>
+        <!-- 반복 발생 병원/N-Care 비교 두 자리를 조치 방법별 재발 비교 한 장으로 사용 -->
+        <div class="ex-card" id="exCauseArmCard"></div>
       </section>
       <!-- ③ 관리 대상 -->
       <section class="ex-pane" id="exPaneActions">
@@ -1848,6 +1864,7 @@ var EX_CACHE=null;        /* apply() 1회당 집계 캐시(메모이제이션) *
 var EX_DRAWN={};          /* 이번 apply()에서 이미 그린 탭 */
 var DETAIL_DIRTY=true;    /* 상세 분석 모드 재렌더 필요 여부 */
 var HP_CLEAN_STATE={asOf:'',status:'all',q:'',analysis:null,shown:null};
+var EX_CAUSE_ARM_STATE=null; /* 원인 분석 카드의 조치일→첫 재발 근거 */
 var EX_LEAK_STATE=null;   /* 노즐 누수 탭의 마지막 분석 결과 — 그래프 클릭 명단에서 재사용 */
 
 function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800);}
@@ -2594,7 +2611,7 @@ function apply(){
   var rows=filtered();
   CUR_ROWS=rows;
   EX_ROWS=filtered({scope:'customer'});
-  EX_CACHE=null; EX_DRAWN={}; EX_LEAK_STATE=null;
+  EX_CACHE=null; EX_DRAWN={}; EX_CAUSE_ARM_STATE=null; EX_LEAK_STATE=null;
   /* 필터 상태 (두 모드 공통) */
   var n=activeCnt();
   document.getElementById('fCnt').textContent=n?n+'개 적용 중 · '+rows.length+'건':'';
@@ -6468,6 +6485,7 @@ function exArmSummary_(events){
   return {total:total, recur:n, none:none, estimated:est, confirmed:confirmed,
     rate: total?Math.round(n/total*1000)/10:null,
     min: n?days[0]:null,
+    minCount:n?days.filter(function(v){return v===days[0];}).length:0,
     avg: n?Math.round(sum/n*10)/10:null,
     median: n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
     watchAvg: none?Math.round(watch/none*10)/10:null};
@@ -6519,6 +6537,55 @@ function exArmHtml_(a){
       +(est?('장비번호가 없어 병원 단위로 추정한 건이 '+exNum(est)+'건 있습니다. '):'')
       +'교체가 수리보다 재발 방지에 우월하다는 근거가 확인되지 않았다는 것까지가 이 표로 말할 수 있는 범위이며, 두 조치에 차이가 전혀 없다거나 내부수리가 재발 원인이 아니라고 확정하지는 않습니다.</p>'
     +'</section>';
+}
+
+/* 원인 분석 카드도 위의 단일 계산 결과를 사용한다. 수치별 버튼은 같은 events를 조건만 달리해 보여준다. */
+function exCauseArmMetric_(key,mode,label,value,tone,enabled,title){
+  return '<button type="button" class="car-metric '+(tone||'')+'" onclick="exShowCauseArm_(\''+key+'\',\''+mode+'\')"'
+    +(enabled?' title="'+escAttr(title||'해당 처리 이력 보기')+'"':' disabled')+'><span>'+esc(label)+'</span><b>'+esc(value)+'</b></button>';
+}
+function exCauseArmGroup_(key,s){
+  function day(v){return v==null?'—':Number(v).toFixed(1)+'일';}
+  var shortest=s.min==null?'—':exNum(s.min)+'일 · '+exNum(s.minCount)+'건';
+  return '<section class="car-group '+key+'"><h4>'+esc(EX_ARM_LABEL[key])
+    +'<span>'+(key==='repair'?'내부세척·내부수리 표기':'교체품·HP S/N 표기')+'</span></h4><div class="car-metrics">'
+    +exCauseArmMetric_(key,'all','전체 조치',exNum(s.total)+'건','',s.total>0)
+    +exCauseArmMetric_(key,'recur','재발 확인',exNum(s.recur)+'건','recur',s.recur>0)
+    +exCauseArmMetric_(key,'rate','재발률',s.rate==null?'—':s.rate.toFixed(1)+'%','recur',s.recur>0,'재발률 산정 이력 보기')
+    +exCauseArmMetric_(key,'shortest','최단 경과 · 건수',shortest,'recur',s.minCount>0,'최단 기간과 같은 사례 전체 보기')
+    +exCauseArmMetric_(key,'average','평균 경과',day(s.avg),'',s.recur>0,'평균 산정 재발 이력 보기')
+    +exCauseArmMetric_(key,'median','중앙값',day(s.median),'',s.recur>0,'중앙값 산정 재발 이력 보기')
+    +exCauseArmMetric_(key,'none','아직 재발 없음',exNum(s.none)+'건','stable',s.none>0,'무재발 관찰 이력 보기')
+    +'</div><div class="car-foot">핸드피스 S/N 확정 '+exNum(s.confirmed)+'건 · 병원 단위 추정 '+exNum(s.estimated)
+      +'건 · 평균·중앙값·최단은 재발 확인 건만 산정</div></section>';
+}
+function exCauseArmRows_(a,key,mode){
+  var rows=(a&&a.events||[]).filter(function(e){return e.arm===key;});
+  if(mode==='none') rows=rows.filter(function(e){return !e.recurrence;});
+  else if(mode==='shortest') rows=rows.filter(function(e){return e.recurrence&&e.days===a[key].min;});
+  else if(mode!=='all') rows=rows.filter(function(e){return e.recurrence;});
+  if(mode==='all') return rows.slice().sort(function(a,b){return b.date-a.date||skCmpKo_(a.hosp,b.hosp);});
+  if(mode==='none') return rows.slice().sort(function(a,b){return (b.watchDays||0)-(a.watchDays||0)||b.date-a.date;});
+  return rows.slice().sort(function(a,b){return a.days-b.days||b.date-a.date;});
+}
+function exCauseArmTable_(events){
+  if(!events.length) return '<div class="ex-empty">해당 조건의 처리 이력이 없습니다.</div>';
+  function cell(v,empty){v=hpCleanVal_(v);return v?esc(v):'<span class="muted">'+esc(empty||'—')+'</span>';}
+  return '<div class="car-history-wrap"><table class="car-history-table"><colgroup><col style="width:9%"><col style="width:8%"><col style="width:13%"><col style="width:10%"><col style="width:20%"><col style="width:9%"><col style="width:8%"><col style="width:16%"><col style="width:11%"></colgroup>'
+    +'<thead><tr><th>조치 방법</th><th>조치일</th><th>병원</th><th>장비번호</th><th>조치 내용</th><th>첫 재발일</th><th>경과일</th><th>재발 처리 내용</th><th>판정 기준</th></tr></thead><tbody>'
+    +events.map(function(e){var elapsed=e.recurrence?e.days:e.watchDays;return '<tr><td>'+esc(EX_ARM_LABEL[e.arm])+'</td><td class="date">'+ymd(e.date)+'</td><td>'+cell(e.hosp)+'</td><td>'+cell(e.sn,'미입력')+'</td><td class="detail">'+cell(e.detail,'처리 내용 없음')+'</td>'
+      +'<td class="date">'+(e.recurrenceDate?ymd(e.recurrenceDate):'—')+'</td><td class="days">'+exNum(elapsed)+'일</td><td class="detail">'
+      +(e.recurrence?cell(e.recurrenceRow&&e.recurrenceRow.detail,'재발 처리 내용 없음'):'기준일 현재 재발 없음')+'</td><td class="confidence">'+esc(e.confidence)+'</td></tr>';}).join('')+'</tbody></table></div>';
+}
+function exShowCauseArm_(key,mode){
+  var a=EX_CAUSE_ARM_STATE;if(!a||!a[key]) return;
+  var rows=exCauseArmRows_(a,key,mode),s=a[key];
+  var labels={all:'전체 조치',recur:'재발 확인',rate:'재발률 산정',shortest:'최단 경과',average:'평균 경과 산정',median:'중앙값 산정',none:'아직 재발 없음'};
+  if(EX_HISTORY_STATE){EX_HISTORY_PREFS=exCaptureHistoryUi_();exHistoryCancelSearch_();EX_HISTORY_STATE=null;}
+  var chips='<div class="car-history-summary"><span>전체 조치 <b>'+exNum(s.total)+'건</b></span><span>재발 확인 <b>'+exNum(s.recur)+'건</b></span><span>재발률 <b>'+(s.rate==null?'—':s.rate.toFixed(1)+'%')+'</b></span>'
+    +(mode==='shortest'&&s.min!=null?'<span>최단 <b>'+exNum(s.min)+'일 · '+exNum(s.minCount)+'건</b></span>':'')+'</div>';
+  openExList(EX_ARM_LABEL[key]+' · '+labels[mode]+' 처리 이력','조치 다음 날부터 첫 동일 VOC까지 · 같은 병원·같은 장비번호 기준(S/N 미입력은 병원 단위 추정) · 기준일 '+ymd(a.cutoff),
+    '<div class="car-history">'+chips+exCauseArmTable_(rows)+'</div>',true);
 }
 
 /* ── 복사(행 · 필터 결과 TSV) ─────────────────────────────────────────
@@ -8007,45 +8074,18 @@ function renderExecutiveCause(x){
     exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)
     +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음', histDim:'part'})+'</div>';
 
-  /* ── 반복 발생 병원 ── */
-  var rep=buildRepeatIssues(x.rows);
-  function repLi(r){
-    return '<div class="ex-li">'
-      +'<span class="nm" title="'+esc(r.hosp+' · '+r.type)+'">'+esc(r.hosp)+'<em>'+esc(r.type)+'</em></span>'
-      +'<span class="rt"><b>'+r.count+'회</b> · 최근 '+(r.last.getMonth()+1)+'/'+r.last.getDate()+'</span></div>';
-  }
-  document.getElementById('exRepeatCard').innerHTML=
-    exH3('반복 발생 병원', 'A/S · 동일 병원·유형이 다른 날 30일 이내 재발 · 같은 날 중복 기록은 1회')
-    +'<div class="ex-cbody">'
-      +(rep.length ? '<div class="ex-rows">'+rep.slice(0,5).map(repLi).join('')+'</div>'
-                   : '<div class="ex-empty">반복 발생 병원 없음</div>')
-      +(rep.length>5 ? '<button type="button" class="ex-more" onclick="exShowRepeat()">전체 명단 보기 ('+rep.length+')</button>' : '')
-    +'</div>';
-
-  /* ── N-Care 가입 / 미가입 비교 (총건수만이 아니라 병원당 수치도 함께) ── */
-  var G=x.cmpNc, ncH=G.nc.hosp, mgH=G.mg.hosp;
-  function per1(a,b){ return b? (a/b).toFixed(1) : '0.0'; }
-  function pctv(a,b){ return b? Math.round(a/b*100) : 0; }
-  var defs=[
-    ['병원 수',        exNum(ncH)+'<small>곳</small>',                 exNum(mgH)+'<small>곳</small>'],
-    ['A/S(VOC) 건수',  exNum(G.nc.voc)+'<small>건</small>',            exNum(G.mg.voc)+'<small>건</small>'],
-    ['점검 건수',      exNum(G.nc.insp)+'<small>건</small>',           exNum(G.mg.insp)+'<small>건</small>'],
-    ['병원당 A/S(VOC)',per1(G.nc.voc,ncH)+'<small>건/곳</small>',      per1(G.mg.voc,mgH)+'<small>건/곳</small>'],
-    ['병원당 점검',    per1(G.nc.insp,ncH)+'<small>건/곳</small>',     per1(G.mg.insp,mgH)+'<small>건/곳</small>'],
-    ['무상 처리 비율', pctv(G.nc.free,G.nc.tot)+'<small>%</small>',    pctv(G.mg.free,G.mg.tot)+'<small>%</small>']
-  ];
-  document.getElementById('exNcCmpCard').innerHTML=
-    exH3('N-Care 가입 / 미가입 비교', per+' · 병원당 수치 포함')
-    +'<div class="ex-cbody">'
-      +(x.rows.length
-        ? '<table class="ex-ctable"><thead><tr><th>지표</th><th>N-Care 가입</th><th>미가입</th></tr></thead><tbody>'
-          +defs.map(function(d){
-            return '<tr><td>'+d[0]+'</td><td class="ex-nc">'+d[1]+'</td><td class="ex-mg">'+d[2]+'</td></tr>';
-          }).join('')+'</tbody></table>'
-        : '<div class="ex-empty">표시할 데이터가 없습니다</div>')
-      /* 표에 "건"(처리 기록)과 "곳"(고유 병원)이 함께 나오므로 두 기준의 차이를 한 줄로 밝힌다 */
-      +exNote('<em>'+exCmpNoteNum(G)+'</em> — '+esc(EX_NOTE_CMP), exCmpNoteText(G))
-    +'</div>';
+  /* ── 조치 방법별 전방 재발 비교 ──
+     처리이력·근거 Excel과 같은 exArmRecurrence_ 결과를 사용해 숫자 기준이 갈라지지 않는다. */
+  var A=exArmRecurrence_(x.rows,RAW,null),target=x.rows.filter(function(r){
+    var d=exHistoryValidDate_(r);return d&&d<=A.cutoff&&hpIsLeakVoc_(r);
+  }).length,other=Math.max(0,target-A.events.length);
+  EX_CAUSE_ARM_STATE=A;
+  document.getElementById('exCauseArmCard').innerHTML=
+    exH3('조치 방법별 재발 — 내부수리 vs Handpiece 교체','노즐 누수(약액 유입) · 조치 다음 날→첫 동일 VOC · 기준일 '+ymd(A.cutoff))
+    +'<div class="ex-cbody car-body"><div class="car-coverage"><b>'+esc(per)+'</b><span>대상 VOC '+exNum(target)+'건</span>'
+      +'<span>조치 분류·판정 가능 '+exNum(A.events.length)+'건</span><span>기타·미입력·판정불가 '+exNum(other)+'건(비교 제외)</span></div>'
+      +'<div class="car-groups">'+exCauseArmGroup_('repair',A.repair)+exCauseArmGroup_('swap',A.swap)+'</div>'
+      +'<p class="car-verdict">'+esc(exArmVerdict_(A))+'</p></div>';
 }
 function exShowRepeat(){
   var rep=buildRepeatIssues(EX_ROWS);
@@ -9089,7 +9129,7 @@ function ycSetMetric(v){
 
 /* 집계 캐시를 버리고 보고 모드만 다시 그린다 (필터 변경이 아닌 데이터 보강용) */
 function exInvalidate(){
-  EX_CACHE=null; EX_DRAWN={}; EX_LEAK_STATE=null;
+  EX_CACHE=null; EX_DRAWN={}; EX_CAUSE_ARM_STATE=null; EX_LEAK_STATE=null;
   if(VIEW==='exec' && DATA_READY) renderExecutiveDashboard(EX_ROWS);
 }
 

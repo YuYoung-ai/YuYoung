@@ -50,6 +50,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySplitLoad_','exHistorySplitStore_','exHistorySplitClamp_','exHistorySplitApply_','exHistorySplitSet_',
   'exHistorySplitReset_','exHistorySplitTopH_','exHistorySplitStart_','exHistorySplitKey_','exHistorySplitBar_','exHistorySplitBind_',
   'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
+  'exCauseArmMetric_','exCauseArmGroup_','exCauseArmRows_','exCauseArmTable_',
   'hpCleanVal_','hpCleanAsOf_','exToday',
   'exHistoryRollupTable_','exHistoryRollupTsv_',
   'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
@@ -1203,6 +1204,39 @@ ck('77-b. 교체품 표기가 비어도 HP_SN 이 있으면 교체로 보정한�
 ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않는다',()=>{
   const body=grab('exArmRecurrence_')+grab('exArmSummary_')+grab('exArmHtml_')+grab('exArmVerdict_');
   assert.ok(!/nozzleReuse|nsFill|nsAmt|\bjet\b|초기|중기|장기/.test(body));
+});
+ck('77-c. 원인분석은 기존 두 카드 자리를 전폭 조치 방법별 재발 카드로 사용한다',()=>{
+  assert.ok(SRC.includes('id="exCauseArmCard"'));
+  assert.ok(!SRC.includes('id="exRepeatCard"')&&!SRC.includes('id="exNcCmpCard"'));
+  assert.match(SRC,/#exCauseArmCard\{grid-column:1\/-1\}/);
+  const body=grab('renderExecutiveCause');
+  assert.ok(body.includes('exArmRecurrence_(x.rows,RAW,null)'),'처리이력·Excel과 같은 계산 재사용');
+  assert.ok(body.includes("exCauseArmGroup_('repair'")&&body.includes("exCauseArmGroup_('swap'"));
+});
+ck('77-d. 최단 경과일과 같은 일수의 건수를 세고 해당 이력만 조회한다',()=>{
+  const D=build();
+  const rows=[act('s1','2026-01-01','가병원',"Handpiece Ass'y",{sn:'H1'}),
+              act('s2','2026-01-02','나병원',"Handpiece Ass'y",{sn:'H2'}),
+              act('s3','2026-01-03','다병원',"Handpiece Ass'y",{sn:'H3'})];
+  const raw=rows.concat([act('s1r','2026-01-11','가병원','내부 세척',{sn:'H1'}),
+                         act('s2r','2026-01-12','나병원','내부 세척',{sn:'H2'}),
+                         act('s3r','2026-01-23','다병원','내부 세척',{sn:'H3'})]);
+  const a=D.exArmRecurrence_(rows,raw,'2026-08-31');
+  assert.equal(a.swap.min,10);assert.equal(a.swap.minCount,2);
+  const shortest=D.exCauseArmRows_(a,'swap','shortest');
+  assert.equal(shortest.length,2);assert.ok(shortest.every(e=>e.days===10));
+});
+ck('77-e. 카드 모든 지표가 이력 버튼이며 평균·중앙값은 재발 전체, 무재발은 관찰 이력으로 연결된다',()=>{
+  const D=build();
+  const rows=[act('p','2026-01-01','가병원','내부 세척',{sn:'H1'}),act('n','2026-02-01','나병원','내부 세척',{sn:'H2'})];
+  const a=D.exArmRecurrence_(rows,rows.concat([act('pr','2026-01-11','가병원','내부 세척',{sn:'H1'})]),'2026-08-31');
+  const html=D.exCauseArmGroup_('repair',a.repair);
+  ['all','recur','rate','shortest','average','median','none'].forEach(m=>assert.ok(html.includes("'repair','"+m+"'"),m));
+  assert.equal(D.exCauseArmRows_(a,'repair','average').length,1);
+  assert.equal(D.exCauseArmRows_(a,'repair','median').length,1);
+  assert.equal(D.exCauseArmRows_(a,'repair','none')[0].row.id,'n');
+  const table=D.exCauseArmTable_(D.exCauseArmRows_(a,'repair','all'));
+  ['조치 방법','조치일','병원','장비번호','조치 내용','첫 재발일','경과일','재발 처리 내용','판정 기준'].forEach(x=>assert.ok(table.includes(x),x));
 });
 
 /* ══════ 12. 병원 이력 우측 패널 ══════ */
