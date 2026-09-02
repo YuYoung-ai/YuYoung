@@ -933,6 +933,11 @@ html.hst-evidence-open{overflow:hidden}
 .hst-stats-head b{color:var(--navy);font-size:11.5px;font-variant-numeric:tabular-nums}
 .hst-stat-kicker{flex:0 0 auto;border-radius:999px;padding:3px 8px;background:#DDF3F5;color:#12607F;font-size:9.5px;font-weight:800}
 .hst-stat-unit{color:var(--text-muted);font-size:10.5px}
+.hst-stats-toggle{margin-left:auto;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface-2);
+  color:var(--navy);padding:4px 9px;font:10px inherit;font-weight:800;cursor:pointer;white-space:nowrap}
+.hst-stats-toggle:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.hst-stats-toggle:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+#hstStatsBody[hidden]{display:none}
 .hst-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
 .hst-stat-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
 .hst-stat-card>strong{display:block;color:var(--navy);font-size:10.5px}
@@ -1043,6 +1048,7 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-stat-card dl{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-toolbar{align-items:stretch;flex-direction:column}
   .hst-toolbar .hst-copy-all{margin-left:0}
+  .hst-stats-toggle{margin-left:0;width:100%}
   .hst-table.rollup{min-width:0}
   /* 모바일은 한 열로 쌓고, 표와 패널이 좁은 화면을 나눠 갖는 대신 이력 화면 전체를 스크롤한다.
      사진 2장(각 1열)과 표를 한 화면에 동시에 넣으면 표가 사실상 사라진다. */
@@ -5903,6 +5909,7 @@ var EX_HISTORY_SEARCH_TIMER=null;
 var EX_HISTORY_SEARCH_SEQ=0;
 var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
+var EX_HISTORY_STATS_OPEN=true;          /* 경과일 분석 펼침 여부 — 탭이 살아 있는 동안 기억한다 */
 /* 열 헤더 첫 클릭 방향 — 이후 같은 헤더 재클릭은 asc/desc 전환 */
 var EX_HISTORY_SORT_DIR={date:'desc',hosp:'asc',elapsed:'asc',same:'asc',cost:'desc'};
 /* 모달 안에서 바꿀 수 있는 조회 대상 — 모든 VOC·교체품을 다시 나열하지 않는다 */
@@ -6175,14 +6182,32 @@ function exHistoryStatsHtml_(state,analysis,filtered){
   var unit=rollup
     ? '병원 '+exNum(total)+'곳 · 분석 대상 최신 선택 '+exNum(analysis.general.cases)+'사례'
     : '표시 결과 '+exNum(shown)+'행 · 분석 대상 최신 선택 '+exNum(analysis.general.cases)+'사례';
+  /* 범위 한 줄은 늘 보이고, 경과일 분석 상세는 접었다 폈다 할 수 있다 */
+  var open=EX_HISTORY_STATS_OPEN;
   return '<div class="hst-stats-head"><span class="hst-stat-kicker">최신 선택 기준</span>'
     +'<b>'+esc(funnel)+'</b><span class="hst-stat-unit">'+esc(unit)+'</span>'
-    +'<span class="hst-stat-unit">'+esc(exNum(rendered)+' / 전체 '+exNum(total)+(rollup?'곳':'행')+' 표시')+'</span></div>'
+    +'<span class="hst-stat-unit">'+esc(exNum(rendered)+' / 전체 '+exNum(total)+(rollup?'곳':'행')+' 표시')+'</span>'
+    +'<button type="button" class="hst-stats-toggle" id="hstStatsToggle" aria-controls="hstStatsBody"'
+      +' aria-expanded="'+(open?'true':'false')+'" onclick="exToggleHistoryStats_()">'
+      +'경과일 분석 '+(open?'접기 ▴':'펼치기 ▾')+'</button></div>'
+    +'<div id="hstStatsBody"'+(open?'':' hidden')+'>'
     +'<div class="hst-stats">'
     +exHistoryStatBlock_('일반 비교 경과일','단위: 병원 + VOC + 선택일 · 표의 기간 선택과 무관',analysis.general)
     +exHistoryStatBlock_('동일비교 경과일','단위: 병원 + VOC + 교체품 + 선택일',analysis.same)
     +'</div>'
-    +'<p class="hst-compare-note">30일 이내 재발률은 같은 병원·VOC 의 <b>일반 비교</b> 지표입니다 — 핸드피스 내부 세척 효과 분석 카드의 결과가 아니며 이를 대체하지 않습니다. 이 조회는 기간 전체 원본이 아니라 병원·VOC별 <b>최신 선택 비교</b>입니다.</p>';
+    +'<p class="hst-compare-note">30일 이내 재발률은 같은 병원·VOC 의 <b>일반 비교</b> 지표입니다 — 핸드피스 내부 세척 효과 분석 카드의 결과가 아니며 이를 대체하지 않습니다. 이 조회는 기간 전체 원본이 아니라 병원·VOC별 <b>최신 선택 비교</b>입니다.</p>'
+    +'</div>';
+}
+/* 표시 상태만 바꾼다 — 필터·통계 재계산이나 네트워크 요청은 하지 않는다.
+   (영업 담당자 건수 카드 토글과 같은 방식) */
+function exToggleHistoryStats_(){
+  var btn=document.getElementById('hstStatsToggle'), body=document.getElementById('hstStatsBody');
+  EX_HISTORY_STATS_OPEN=!EX_HISTORY_STATS_OPEN;
+  if(body) body.hidden=!EX_HISTORY_STATS_OPEN;
+  if(btn){
+    btn.setAttribute('aria-expanded',String(EX_HISTORY_STATS_OPEN));
+    btn.textContent='경과일 분석 '+(EX_HISTORY_STATS_OPEN?'접기 ▴':'펼치기 ▾');
+  }
 }
 
 /* ── 복사(행 · 필터 결과 TSV) ─────────────────────────────────────────
@@ -6293,13 +6318,24 @@ function exCopyHistoryTsv_(){
       :'❌ 복사하지 못했습니다 · 내용을 직접 선택해 주세요');
   });
 }
-/* 병원 딥링크 — 한글·공백·괄호를 encodeURIComponent 로 인코딩해 새 창으로 연다.
+/* 병원 딥링크 — 병원 화면 전체가 아니라 그 병원의 "이력만" 새 창으로 연다(view=hist).
+   한글·공백·괄호는 encodeURIComponent 로 인코딩한다.
    행의 나머지 영역(표준 예시자료 선택)으로 이벤트가 전파되면 안 된다. */
+function exHospitalHistoryUrl_(name){
+  return 'hospital-pc.html?hosp='+encodeURIComponent(name)+'&view=hist';
+}
 function exOpenHospitalTimeline_(e,btn){
   if(e){ if(e.stopPropagation)e.stopPropagation(); if(e.preventDefault)e.preventDefault(); }
   var name=(btn&&btn.getAttribute)?String(btn.getAttribute('data-hosp')||'').trim():'';
-  if(!name){ toast('병원명이 없어 타임라인을 열 수 없습니다'); return false; }
-  if(typeof window!=='undefined'&&window.open) window.open('hospital-pc.html?hosp='+encodeURIComponent(name),'_blank','noopener');
+  if(!name){ toast('병원명이 없어 이력을 열 수 없습니다'); return false; }
+  if(typeof window==='undefined'||!window.open) return false;
+  /* 이름을 가진 창으로 열어 여러 병원을 눌러도 창이 쌓이지 않고 같은 창이 바뀐다.
+     크기 지정을 적용하려면 noopener 를 쓸 수 없으므로(브라우저가 기능 문자열을 무시한다)
+     같은 출처인 점을 이용해 연 뒤 opener 를 끊는다. */
+  var w=window.open(exHospitalHistoryUrl_(name),'bazHospHistory',
+    'width=1000,height=880,menubar=no,toolbar=no,location=no,status=no,scrollbars=yes,resizable=yes');
+  if(w){ try{ w.opener=null; }catch(_e){} try{ w.focus(); }catch(_e){} }
+  else toast('팝업이 차단되어 이력 창을 열지 못했습니다 · 팝업 허용을 확인해 주세요');
   return false;
 }
 
@@ -6435,8 +6471,8 @@ function exHistoryTable_(items,limit){
         +'<td class="date" data-label="처리일">'+esc(d?ymd(d):'–')+exHistoryComparisonMeta_(it)+'</td>'
         +'<td class="hosp" data-label="병원">'
           +(hosp?'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(hosp)+'"'
-              +' onclick="exOpenHospitalTimeline_(event,this)" title="병원 타임라인을 새 창으로 엽니다"'
-              +' aria-label="'+escAttr(hosp+' 병원 타임라인 새 창으로 열기')+'">'+esc(hosp)+'</button>'
+              +' onclick="exOpenHospitalTimeline_(event,this)" title="이 병원의 이력만 새 창으로 엽니다"'
+              +' aria-label="'+escAttr(hosp+' 이력만 새 창으로 열기')+'">'+esc(hosp)+'</button>'
             :'<span class="muted">–</span>')
           +'<span class="hst-compare-meta">장비번호: '+esc(exHistoryVal_(r.sn)||'미입력')+'</span></td>'
         +'<td data-label="구분">'+exHistoryCell_(r.gubun)+'</td>'
@@ -6470,8 +6506,8 @@ function exHistoryRollupTable_(rows){
         +'<td class="hosp" data-label="병원">'
           +(row.error?'<span class="muted">병원명 미입력 · 데이터 오류</span>'
             :'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(row.hosp)+'"'
-              +' onclick="exOpenHospitalTimeline_(event,this)" title="병원 타임라인을 새 창으로 엽니다"'
-              +' aria-label="'+escAttr(row.hosp+' 병원 타임라인 새 창으로 열기')+'">'+esc(row.hosp)+'</button>')
+              +' onclick="exOpenHospitalTimeline_(event,this)" title="이 병원의 이력만 새 창으로 엽니다"'
+              +' aria-label="'+escAttr(row.hosp+' 이력만 새 창으로 열기')+'">'+esc(row.hosp)+'</button>')
         +'</td>'
         +'<td data-label="최신 선택 처리 건수">'+exNum(row.cases)+'건</td>'
         +'<td class="date" data-label="최근 처리일">'+(row.last?esc(ymd(row.last)):'<span class="muted">—</span>')+'</td>'

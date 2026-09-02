@@ -46,10 +46,11 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
-  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exHistoryRollupTable_','exHistoryRollupTsv_',
+  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_',
+  'exHistoryRollupTable_','exHistoryRollupTsv_',
   'exHistoryCopyValue_','exHistoryTsvCell_','exHistoryRowCopyText_','exHistoryRowsTsv_',
   'exClipboardFallback_','exClipboardWrite_','exHistoryItemById_','exCopyHistoryRow_','exHistoryRowCopyClick_',
-  'exCopyHistoryTsv_','exOpenHospitalTimeline_',
+  'exCopyHistoryTsv_','exOpenHospitalTimeline_','exHospitalHistoryUrl_',
   'exCaptureHistoryUi_','exHistoryOptionExists_','exRestoreHistoryUi_','exCloseHistoryExample_','exHistoryRestoreSelection_',
   'exHistoryMoreHtml_','exHistoryShowMore_','exHistoryFilterChanged_','exHistoryTable_',
   'exHistoryDimValue_','exHistoryToolbarHtml_','exHistorySyncToolbar_','exSetHistoryView_','exSwitchHistoryDim_',
@@ -89,6 +90,8 @@ function makeDom(){
         if(el.id==='hstTableHost') rowCache=Object.create(null);
         /* 도구 막대는 모달을 연 뒤 innerHTML 로 채워진다 — 그 안의 select 도 실제처럼 등록한다 */
         if(el.id==='hstToolbar') parseControls(el._html);
+        /* 경과일 분석 토글·본문도 innerHTML 로 만들어지므로 요소로 등록한다 */
+        if(el.id==='hstStats') parseStats(el._html);
       }
     });
     Object.defineProperty(el,'selectedOptions',{get(){return el.options.filter(o=>o.value===el.value);}});
@@ -113,6 +116,14 @@ function makeDom(){
     }
     let im, ire=/<input id="([^"]+)"/g;
     while((im=ire.exec(html))) els[im[1]]=mk('input',im[1]);
+  }
+  function parseStats(html){
+    const btn=mk('button','hstStatsToggle');
+    const m=/id="hstStatsToggle"[^>]*aria-expanded="(true|false)"[^>]*>([^<]*)</.exec(html);
+    if(m){ btn.setAttribute('aria-expanded',m[1]); btn.textContent=m[2]; els.hstStatsToggle=btn; }
+    const b=mk('div','hstStatsBody');
+    const bm=/id="hstStatsBody"( hidden)?>/.exec(html);
+    if(bm){ b.hidden=!!bm[1]; els.hstStatsBody=b; }
   }
   function buildDom(html){
     for(const k of Object.keys(els)) delete els[k];
@@ -163,7 +174,11 @@ function build(){
     if(clipboard.fail) return Promise.reject(new Error('denied'));
     clipboard.text=t; return Promise.resolve();
   }}};
-  const window={open:(u,t,f)=>{log.windows.push(u);return null;}};
+  const window={open:(u,t,f)=>{
+    const w={opener:{},focus(){w.focused=true;},focused:false};
+    log.windows.push({url:u,target:t,features:f,win:w});
+    return w;
+  }};
   const stubs=`
 var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=null,HOSPDB=[];
 var EX_HISTORY_PHOTO_SEQ=0,SALES={};
@@ -194,6 +209,7 @@ return {${FNS.join(',')},
   photoSeq:()=>EX_HISTORY_PHOTO_SEQ,
   searchPending:()=>!!EX_HISTORY_SEARCH_TIMER,
   page:()=>EX_HISTORY_PAGE,
+  statsOpen:()=>EX_HISTORY_STATS_OPEN, setStatsOpen:v=>{EX_HISTORY_STATS_OPEN=v;},
   setSales:m=>{SALES=m;},
   set:(rows,raw,f)=>{RAW=raw;F=f||{};EX_CACHE={rows:rows,prev:[]};}};
 `;
@@ -741,11 +757,11 @@ ck('45. 복사 버튼과 병원 링크는 부모 행 클릭으로 전파되지 �
   assert.equal(stopped,1); assert.equal(prevented,1);
   D.exOpenHospitalTimeline_(e,{getAttribute:()=>'가 병원 (본원)'});
   assert.equal(stopped,2);
-  assert.equal(D.win.open===undefined,false);
-  assert.equal(D.log.windows[0],'hospital-pc.html?hosp='+encodeURIComponent('가 병원 (본원)'));
-  assert.ok(D.log.windows[0].includes('%20'),'공백 인코딩');
-  assert.ok(/%E[0-9A-F]/i.test(D.log.windows[0]),'한글 인코딩');
-  assert.equal(decodeURIComponent(D.log.windows[0].split('hosp=')[1]),'가 병원 (본원)','괄호까지 원문 복원');
+  const opened=D.log.windows[0];
+  assert.equal(opened.url,'hospital-pc.html?hosp='+encodeURIComponent('가 병원 (본원)')+'&view=hist');
+  assert.ok(opened.url.includes('%20'),'공백 인코딩');
+  assert.ok(/%E[0-9A-F]/i.test(opened.url),'한글 인코딩');
+  assert.equal(decodeURIComponent(opened.url.split('hosp=')[1].split('&')[0]),'가 병원 (본원)','괄호까지 원문 복원');
   /* 행 안의 버튼에서 올라온 Enter/Space 는 행 선택으로 처리하지 않는다 */
   const tr=D.dom.rowEl('hr0');
   assert.equal(D.exHistoryRowKey_({keyCode:13,target:{}},'hr0',tr),true);
@@ -754,7 +770,7 @@ ck('46. 복사 버튼은 type=button 과 구체적인 aria-label 을 갖는다',
   const D=build(); open(D,CUR);
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/<button type="button" class="hst-copy"[^>]*aria-label="가병원 2026-08-31 처리 이력 한 줄로 복사"/);
-  assert.match(html,/class="hst-hosp-link"[^>]*aria-label="가병원 병원 타임라인 새 창으로 열기"/);
+  assert.match(html,/class="hst-hosp-link"[^>]*aria-label="가병원 이력만 새 창으로 열기"/);
   assert.ok(D.dom.els.hstToolbar.innerHTML.includes('aria-label="현재 필터 결과 전체를 헤더 포함 TSV로 복사"'));
 });
 
@@ -929,6 +945,76 @@ ck('61. 정렬·필터 변경으로 선택 item 이 사라지면 예시 패널�
   setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
   assert.equal(D.state().selectedItemId,'','결과에서 사라지면 예시 패널을 닫는다');
   assert.equal(D.dom.els.hstPhotoPanel.hidden,true);
+});
+
+/* ══════ 9. 경과일 분석 접기/펼치기 ══════ */
+ck('62. 경과일 분석은 기본 펼침이며 접근 가능한 토글을 제공한다',()=>{
+  const D=build(); D.setStatsOpen(true); open(D,CUR);
+  const html=D.dom.els.hstStats.innerHTML;
+  assert.ok(html.includes('id="hstStatsToggle"'));
+  assert.ok(html.includes('type="button"'));
+  assert.ok(html.includes('aria-controls="hstStatsBody"'));
+  assert.ok(html.includes('aria-expanded="true"'));
+  assert.ok(html.includes('경과일 분석 접기 ▴'));
+  assert.ok(!/id="hstStatsBody" hidden/.test(html));
+});
+ck('63. 접으면 상세만 숨고 범위 한 줄 요약은 계속 보인다',()=>{
+  const D=build(); D.setStatsOpen(true); open(D,CUR);
+  D.exToggleHistoryStats_();
+  assert.equal(D.statsOpen(),false);
+  assert.equal(D.dom.els.hstStatsBody.hidden,true);
+  assert.equal(D.dom.els.hstStatsToggle.getAttribute('aria-expanded'),'false');
+  assert.ok(D.dom.els.hstStatsToggle.textContent.includes('펼치기 ▾'));
+  /* 범위·단위 한 줄은 접어도 남는다 */
+  assert.ok(D.dom.els.hstStats.innerHTML.includes('원본 6건 → 최신 선택 6건'));
+});
+ck('64. 접힘 상태는 필터·정렬로 다시 그려도, 모달을 닫았다 열어도 유지된다',()=>{
+  const D=build(); D.setStatsOpen(true); open(D,CUR);
+  D.exToggleHistoryStats_();
+  setVal(D,'hstQuery','가병원'); D.exApplyHistoryFilters_();
+  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML),'재렌더 후에도 접힘');
+  assert.ok(D.dom.els.hstStats.innerHTML.includes('aria-expanded="false"'));
+  D.exSortHistory_('hosp');
+  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML));
+  D.closeExList(); open(D,CUR);
+  assert.equal(D.statsOpen(),false,'탭이 살아 있는 동안 유지');
+  assert.ok(/id="hstStatsBody" hidden/.test(D.dom.els.hstStats.innerHTML));
+  D.exToggleHistoryStats_();
+  assert.equal(D.statsOpen(),true,'다시 펼칠 수 있다');
+  assert.equal(D.dom.els.hstStatsBody.hidden,false);
+});
+ck('65. 토글은 표시 상태만 바꾼다 — 필터·통계 재계산이나 네트워크 요청이 없다',()=>{
+  const body=grab('exToggleHistoryStats_');
+  assert.ok(!/exApplyHistoryFilters_\(|exHistoryAnalyze_\(|fetch\(|gvRetry\(/.test(body));
+  const D=build(); open(D,CUR);
+  const before=D.state().analysis;
+  D.exToggleHistoryStats_();
+  assert.equal(D.state().analysis,before,'같은 분석 결과 객체를 그대로 둔다');
+});
+
+/* ══════ 10. 병원 링크는 "이력만" 새 창 ══════ */
+ck('66. 병원 링크는 병원 화면 전체가 아니라 이력만 여는 view=hist 주소를 쓴다',()=>{
+  const D=build();
+  assert.equal(D.exHospitalHistoryUrl_('가 병원 (본원)'),
+    'hospital-pc.html?hosp='+encodeURIComponent('가 병원 (본원)')+'&view=hist');
+  open(D,CUR);
+  D.exOpenHospitalTimeline_(null,{getAttribute:()=>'가병원'});
+  const w=D.log.windows[0];
+  assert.ok(w.url.endsWith('&view=hist'));
+  assert.equal(w.target,'bazHospHistory','이름 있는 창이라 여러 번 눌러도 창이 쌓이지 않는다');
+  assert.ok(/width=\d+/.test(w.features)&&/height=\d+/.test(w.features),'이력 창 크기 지정');
+  assert.ok(!/noopener/.test(w.features),'크기 지정이 무시되지 않도록 noopener 를 쓰지 않는다');
+  assert.equal(w.win.opener,null,'대신 연 뒤 opener 를 끊는다');
+  assert.equal(w.win.focused,true);
+});
+ck('67. 병원명이 없으면 창을 열지 않고, 팝업이 막히면 안내한다',()=>{
+  const D=build(); open(D,CUR);
+  D.exOpenHospitalTimeline_(null,{getAttribute:()=>'  '});
+  assert.equal(D.log.windows.length,0);
+  assert.ok(D.log.toasts.some(t=>t.includes('병원명이 없어')));
+  D.win.open=()=>null;
+  D.exOpenHospitalTimeline_(null,{getAttribute:()=>'가병원'});
+  assert.ok(D.log.toasts.some(t=>t.includes('팝업이 차단')));
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
