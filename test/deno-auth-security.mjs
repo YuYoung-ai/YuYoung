@@ -298,5 +298,13 @@ assert.match(SOURCE, /uid: user\.email/);
 assert.match(SOURCE, /user\.status !== "active"/);
 ok('와일드카드 CORS·오류 detail을 제거하고 연결 메타데이터 IP를 사용한다');
 
+/* Deno Deploy 빌드가 deno check 로 타입 검사를 한다. TypeScript 5.7 부터 Uint8Array 가
+   버퍼 종류로 제네릭해져, WebCrypto 에 넘기는 바이트 배열의 반환 타입을 좁혀 두지 않으면
+   Uint8Array<ArrayBufferLike> 가 BufferSource 에 맞지 않아 배포 빌드가 실패한다.
+   실제로 한 번 깨졌던 자리라 회귀로 고정한다(런타임 동작과는 무관한 타입 표기). */
+assert.match(SOURCE, /function b64urlDecode\(s: string\): Uint8Array<ArrayBuffer>/);
+assert.match(SOURCE, /crypto\.subtle\.verify\(\s*"RSASSA-PKCS1-v1_5",\s*key,\s*b64urlDecode\(parts\[2\]\)/);
+ok('WebCrypto 에 넘기는 b64urlDecode 는 ArrayBuffer 로 버퍼 종류를 좁혀 배포 타입 검사를 통과한다');
+
 console.log(`\n통과 ${passed}/${passed}`);
 console.log('Deno 인증 1차 보안 회귀 테스트 통과 ✅');

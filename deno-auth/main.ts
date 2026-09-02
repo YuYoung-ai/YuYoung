@@ -63,7 +63,13 @@ function b64urlStr(str: string): string {
 function b64urlDecodeToStr(s: string): string {
   return new TextDecoder().decode(b64urlDecode(s));
 }
-function b64urlDecode(s: string): Uint8Array {
+/* 반환 타입에 <ArrayBuffer> 를 붙여 둔다.
+   TypeScript 5.7 부터 Uint8Array 가 버퍼 종류로 제네릭해져서, 그냥 Uint8Array 라고 쓰면
+   SharedArrayBuffer 까지 포함하는 Uint8Array<ArrayBufferLike> 가 된다. 그러면 WebCrypto 의
+   BufferSource(= ArrayBufferView<ArrayBuffer> | ArrayBuffer)에 넘길 수 없어 타입 검사가 깨진다.
+   여기서 만드는 배열은 new Uint8Array(길이) 라 언제나 일반 ArrayBuffer 위에 있으므로
+   좁혀 적는 것이 실제 값과도 맞다. 런타임 동작은 그대로다. */
+function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
   let t = s.replace(/-/g, "+").replace(/_/g, "/");
   const pad = t.length % 4;
   if (pad) t += "=".repeat(4 - pad);
