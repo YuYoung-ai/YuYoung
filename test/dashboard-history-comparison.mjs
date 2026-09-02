@@ -30,6 +30,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
   'exExcelDate_','exHistoryExportData_','exHistoryExcelLines_','exBuildHistoryComparisonWorkbook_',
   'exportHistoryComparisonExcel_','exExcelDownload_','exAddArmWorksheet_',
   'exArmOfPart_','exArmOf_','exArmRecurrence_',
+  'exHistorySplitBar_','exHistorySplitLoad_','exHistorySplitSet_','exHistorySplitApply_','exHistorySplitClamp_',
+  'exHistorySplitStore_','exHistorySplitBind_','exHistoryFocus_',
   'exHospHistoryRows_','exHospPanelShell_','exHospPanelHtml_','exRenderHospPanel_',
   'exOpenHospPanel_','exCloseHospPanel_','exHospPanelMore_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
   'hpCleanVal_','hpCleanAsOf_','exToday',
@@ -67,6 +69,7 @@ function toast(){}
 var EX_HISTORY_PHOTO_SEQ=0;
 var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 var EX_HOSP_PANEL_PAGE=40;
+var EX_HIST_SPLIT_KEY='baz_hst_split',EX_HIST_SPLIT_MIN=120,EX_HIST_SPLIT_TAIL=150,EX_HIST_SPLIT_BOUND=false;
 function exBuild(){throw new Error('캐시 이외 집계 금지');}
 function buildNozzleLeakCurrent_(){return {};}
 function nlKpiData_(){return {label:'누수 대상',rows:EX_CACHE.rows};}

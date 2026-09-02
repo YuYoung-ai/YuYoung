@@ -47,6 +47,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
   'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_','exHistoryFocus_',
+  'exHistorySplitLoad_','exHistorySplitStore_','exHistorySplitClamp_','exHistorySplitApply_','exHistorySplitSet_',
+  'exHistorySplitReset_','exHistorySplitTopH_','exHistorySplitStart_','exHistorySplitKey_','exHistorySplitBar_','exHistorySplitBind_',
   'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
   'hpCleanVal_','hpCleanAsOf_','exToday',
   'exHistoryRollupTable_','exHistoryRollupTsv_',
@@ -198,6 +200,9 @@ var F={},RAW=[],EX_ROWS=[],EX_CACHE=null,EX_HISTORY_STATE=null,EX_LEAK_STATE=nul
 var EX_HISTORY_PHOTO_SEQ=0,SALES={};
 var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 var EX_HOSP_PANEL_PAGE=40;
+var EX_HIST_SPLIT_KEY='baz_hst_split',EX_HIST_SPLIT_MIN=120,EX_HIST_SPLIT_TAIL=150,EX_HIST_SPLIT_BOUND=false;
+var localStorage={_v:{},getItem:function(k){return (k in this._v)?this._v[k]:null;},
+  setItem:function(k,v){this._v[k]=String(v);},removeItem:function(k){delete this._v[k];}};
 var YC_CLEAN_SAVING_UNIT=281200,DEMO_MARK=/\\[\\s*데모\\s*장비\\s*\\]/;
 function hospitalSales_(name){ return SALES[nkey(name)]||''; }
 function exSavingEvidenceHtml_(){return '';}
@@ -224,7 +229,7 @@ return {${FNS.join(',')},
   prefs:()=>EX_HISTORY_PREFS, clearPrefs:()=>{EX_HISTORY_PREFS=null;},
   photoSeq:()=>EX_HISTORY_PHOTO_SEQ,
   searchPending:()=>!!EX_HISTORY_SEARCH_TIMER,
-  page:()=>EX_HISTORY_PAGE,
+  page:()=>EX_HISTORY_PAGE, store:()=>localStorage._v,
   statsOpen:()=>EX_HISTORY_STATS_OPEN, setStatsOpen:v=>{EX_HISTORY_STATS_OPEN=v;},
   setSales:m=>{SALES=m;},
   set:(rows,raw,f)=>{RAW=raw;F=f||{};EX_CACHE={rows:rows,prev:[]};}};
@@ -1281,7 +1286,7 @@ ck('86. 표와 패널을 가로로 나누고 좁은 화면에서는 아래로 �
   assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto/);
   assert.match(SRC,/\.hst-hosp-panel\{flex:0 0 clamp\(280px,30%,400px\)/);
   assert.match(SRC,/\.hst-main,\.hst-view\[data-focus="stats"\] \.hst-main\{flex-direction:column;border-top:0/,'모바일에서 세로 배치');
-  assert.ok(SRC.includes('<div class="hst-main" onmousedown='));
+  assert.ok(SRC.includes('<div class="hst-main">'));
   /* 위쪽 블록이 표·패널 영역을 밀어내지 않게 분리한다 */
   assert.match(SRC,/\.hst-top\{flex:0 1 auto;min-height:0;[^}]*overflow-y:auto/);
   assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto;min-height:136px/);
@@ -1294,7 +1299,7 @@ ck('87. 보고 있는 쪽이 주 영역이 된다 — 기본은 표',()=>{
   assert.equal(view.getAttribute('data-focus'),'table','열자마자는 표가 주 영역');
   assert.equal(D.state().focusArea,'table');
   D.exHistoryFocus_('stats');
-  assert.equal(view.getAttribute('data-focus'),'stats','분석 영역을 누르면 분석이 주 영역');
+  assert.equal(view.getAttribute('data-focus'),'stats','분석을 펼치면 분석이 주 영역');
   D.exHistoryFocus_('table');
   assert.equal(view.getAttribute('data-focus'),'table','표를 누르면 다시 표가 주 영역');
 });
@@ -1315,9 +1320,69 @@ ck('89. 주 영역 전환은 표시 상태만 바꾼다 — 재계산·통신 �
   assert.match(SRC,/\.hst-view\[data-focus="stats"\] #hstStatsBody\{max-height:none/);
   assert.match(SRC,/\.hst-view\[data-focus="stats"\] \.hst-main\{flex:0 0 auto;height:clamp\(120px,20vh,210px\)/);
   assert.match(SRC,/#hstStatsBody\{max-height:min\(220px,24vh\)/,'표를 볼 때 분석은 제 높이만 쓴다');
-  /* 표·분석 어디를 눌러도 전환되도록 마크업에 트리거가 붙어 있다 */
-  assert.match(SRC,/onmousedown="exHistoryFocus_\(\\?'stats\\?'\)"/);
-  assert.match(SRC,/onwheel="exHistoryFocus_\(\\?'table\\?'\)"/);
+  /* 클릭·스크롤만으로 크기가 바뀌면 쓰기 불편하다 — 전환은 펼치기/접기 버튼에서만 일어난다 */
+  assert.ok(!/onmousedown="exHistoryFocus_/.test(SRC));
+  assert.ok(!/onwheel="exHistoryFocus_/.test(SRC));
+  assert.ok(!/onfocusin="exHistoryFocus_/.test(SRC));
+  assert.ok(grab('exToggleHistoryStats_').includes('exHistoryFocus_('),'펼치기/접기에서만 전환');
+});
+
+/* ══════ 13. 분석 / 이력 영역 크기 수동 조절 ══════ */
+ck('90. 경계선으로 크기를 직접 정하고 고정한다',()=>{
+  const D=build(); open(D,CUR);
+  const view=D.dom.els.hstView;
+  assert.ok(D.exHistorySplitBar_().includes('role="separator"'));
+  assert.ok(D.exHistorySplitBar_().includes('aria-orientation="horizontal"'));
+  assert.ok(D.exHistorySplitBar_().includes('tabindex="0"'),'키보드로 접근 가능');
+  assert.equal(view.classList.contains('is-split'),false,'처음에는 자동 배분');
+  D.exHistorySplitSet_(320);
+  assert.equal(view.classList.contains('is-split'),true);
+  assert.equal(D.state().splitH,320);
+  assert.equal(D.store()['baz_hst_split'],'320','다음에 열 때도 쓰도록 저장');
+});
+ck('91. 화면을 벗어나지 않게 위아래로 제한한다',()=>{
+  const D=build(); open(D,CUR);
+  assert.equal(D.exHistorySplitClamp_(10,800),120,'최소 높이');
+  assert.equal(D.exHistorySplitClamp_(9999,800),650,'화면 높이 − 이력 영역 최소치');
+  assert.equal(D.exHistorySplitClamp_(300,800),300);
+});
+ck('92. "자동" 으로 되돌리면 고정이 풀리고 저장값도 지워진다',()=>{
+  const D=build(); open(D,CUR);
+  D.exHistorySplitSet_(300);
+  assert.ok(D.store()['baz_hst_split']);
+  D.exHistorySplitReset_();
+  assert.equal(D.dom.els.hstView.classList.contains('is-split'),false);
+  assert.equal(D.state().splitH,0);
+  assert.equal(D.store()['baz_hst_split'],undefined);
+});
+ck('93. 방향키로 조절하고 Home 으로 자동 배분으로 되돌린다',()=>{
+  const D=build(); open(D,CUR);
+  assert.equal(D.exHistorySplitKey_({key:'ArrowUp',preventDefault(){}}),false,'처리했으면 false');
+  assert.equal(D.exHistorySplitKey_({key:'a',preventDefault(){}}),true,'다른 키는 그대로 통과');
+  D.exHistorySplitSet_(300);
+  D.exHistorySplitKey_({key:'Home',preventDefault(){}});
+  assert.equal(D.state().splitH,0);
+});
+ck('94. 저장해 둔 크기는 모달을 다시 열 때 그대로 적용된다',()=>{
+  const D=build(); open(D,CUR);
+  D.exHistorySplitSet_(280);
+  D.closeExList();
+  open(D,CUR);
+  assert.equal(D.state().splitH,280);
+  assert.equal(D.dom.els.hstView.classList.contains('is-split'),true);
+  assert.ok(grab('exRestoreHistoryModalUi_').includes('exHistorySplitLoad_()'));
+});
+ck('95. 저장소를 쓸 수 없어도 조용히 자동 배분으로 동작한다',()=>{
+  const D=build();
+  assert.ok(/try\{/.test(grab('exHistorySplitLoad_'))&&/catch/.test(grab('exHistorySplitLoad_')));
+  assert.ok(/try\{/.test(grab('exHistorySplitStore_'))&&/catch/.test(grab('exHistorySplitStore_')));
+});
+ck('96. 고정 크기는 자동 배분보다 우선하고, 모바일에서는 크기 조절을 쓰지 않는다',()=>{
+  const at=t=>SRC.indexOf(t);
+  assert.ok(at('.hst-view.is-split .hst-top{')>at('.hst-view[data-focus="stats"] .hst-top{'),
+    'is-split 규칙이 뒤에 있어 같은 우선순위에서 이긴다');
+  assert.match(SRC,/\.hst-view\.is-split \.hst-top\{flex:0 0 auto;height:var\(--hst-top-h\)\}/);
+  assert.match(SRC,/\.hst-split\{display:none\}/,'모바일에서는 경계선을 숨긴다');
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
