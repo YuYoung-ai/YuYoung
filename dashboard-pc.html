@@ -898,35 +898,11 @@ html.hst-evidence-open{overflow:hidden}
 .hst-result{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 11px;
   border-top:1px solid var(--gray-line);background:var(--gray-bg);font-size:10.5px;color:var(--text-muted)}
 .hst-result b{color:var(--navy);font-size:11.5px}
-/* 위쪽(요약·필터·팩싯·분석)과 아래쪽(표 + 병원 이력)을 나누고,
-   "지금 보고 있는 쪽"이 주 영역이 되게 한다.
-   · 기본(data-focus="table") — 표가 주 영역. 분석을 펼쳐도 위쪽은 제 높이만 쓴다
-   · 분석을 펼치거나 분석 영역을 누르면(data-focus="stats") 분석이 주 영역이 되고
-     표는 아래에 얇게 남는다. 표를 누르거나 굴리면 다시 표가 주 영역이 된다 */
-.hst-top{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+/* 위쪽 조회 조건과 아래쪽(표 + 병원 이력)을 나눈다. */
+.hst-top{flex:0 0 auto;min-height:0;display:flex;flex-direction:column;overflow-x:hidden}
 .hst-top .hst-photo-panel{flex:0 0 auto}
 /* 표 + 병원 이력 패널을 가로로 나눈다. 패널이 닫혀 있으면 표가 전폭을 쓴다. */
 .hst-main{display:flex;flex:1 1 auto;min-height:136px;min-width:0;border-top:1px solid var(--gray-line)}
-.hst-view[data-focus="stats"] .hst-top{flex:1 1 auto}
-.hst-view[data-focus="stats"] #hstStatsBody{max-height:none;overflow-y:visible}
-.hst-view[data-focus="stats"] .hst-main{flex:0 0 auto;height:clamp(120px,20vh,210px);min-height:0}
-/* 경계선을 끌어 직접 맞춘 크기 — 자동 배분보다 우선한다(뒤에 두어 같은 우선순위에서 이긴다) */
-.hst-split{flex:0 0 auto;height:11px;display:flex;align-items:center;justify-content:center;position:relative;
-  background:var(--surface-2);border-top:1px solid var(--gray-line);border-bottom:1px solid var(--gray-line);
-  cursor:row-resize;touch-action:none}
-.hst-split:hover{background:var(--teal-soft)}
-.hst-split:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
-.hst-split .grip{width:48px;height:3px;border-radius:2px;background:var(--gray-line)}
-.hst-split:hover .grip,.hst-split:focus-visible .grip{background:var(--teal)}
-.hst-split .reset{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;
-  border:1px solid var(--gray-line);border-radius:5px;background:var(--surface);color:var(--text-muted);
-  padding:0 7px;height:15px;font:9.5px inherit;font-weight:800;line-height:13px}
-.hst-split .reset[hidden]{display:none}
-.hst-split .reset:hover{border-color:var(--teal);color:var(--teal)}
-body.hst-resizing{cursor:row-resize;user-select:none}
-.hst-view.is-split .hst-top{flex:0 0 auto;height:var(--hst-top-h)}
-.hst-view.is-split #hstStatsBody{max-height:none;overflow-y:visible}
-.hst-view.is-split .hst-main{flex:1 1 auto;height:auto;min-height:0}
 .hst-hosp-panel{flex:0 0 clamp(280px,30%,400px);min-width:0;display:flex;flex-direction:column;
   border-left:1px solid var(--gray-line);background:var(--surface-2);overflow:hidden}
 .hst-hosp-panel[hidden]{display:none}
@@ -1009,45 +985,8 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-copy-all:hover{border-color:var(--teal);background:var(--teal-soft)}
 .hst-copy-all:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 .hst-toolbar .hst-copy-all{margin-left:auto}
-.hst-stats-wrap{padding:8px 11px 0}
-.hst-stats-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted)}
-.hst-stats-head b{color:var(--navy);font-size:11.5px;font-variant-numeric:tabular-nums}
-.hst-stat-kicker{flex:0 0 auto;border-radius:999px;padding:3px 8px;background:#DDF3F5;color:#12607F;font-size:9.5px;font-weight:800}
-.hst-stat-unit{color:var(--text-muted);font-size:10.5px}
-.hst-stats-toggle{margin-left:auto;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface-2);
-  color:var(--navy);padding:4px 9px;font:10px inherit;font-weight:800;cursor:pointer;white-space:nowrap}
-.hst-stats-toggle:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
-.hst-stats-toggle:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
-/* 분석 상세가 길어져도 표·예시 패널의 세로 공간을 잠식하지 않게 스스로 스크롤한다 */
-#hstStatsBody{max-height:min(220px,24vh);overflow-y:auto}
-#hstStatsBody[hidden]{display:none}
 /* 패널이 눌리다 못해 머리글이 다른 요소에 덮이지 않도록 최소 높이를 보장한다 */
 .hst-photo-panel:not([hidden]){min-height:52px}
-/* 조치 방법별 재발 — 내부수리 vs Handpiece 교체 */
-.hst-arm{margin-top:8px;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:8px 10px}
-.hst-arm-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
-.hst-arm-head strong{color:var(--navy);font-size:11px}
-.hst-arm-head span{color:var(--text-muted);font-size:10px}
-.hst-arm-tablewrap{overflow-x:auto}
-.hst-arm-table{width:100%;min-width:560px;border-collapse:collapse;font-size:11.5px}
-.hst-arm-table th,.hst-arm-table td{padding:5px 8px;text-align:right;white-space:nowrap;
-  border-bottom:1px solid var(--gray-line);font-variant-numeric:tabular-nums}
-.hst-arm-table thead th{color:var(--text-muted);font-size:10px;font-weight:700;border-bottom:1px solid var(--navy)}
-.hst-arm-table th[scope="row"]{text-align:left;font-weight:800}
-.hst-arm-table tbody tr:last-child th,.hst-arm-table tbody tr:last-child td{border-bottom:0}
-.hst-arm-table .arm-repair{color:var(--teal)}
-.hst-arm-table .arm-swap{color:#8A6414}
-.hst-arm-verdict{margin:7px 0 0;color:var(--navy);font-size:11px;line-height:1.6}
-.hst-arm-note{margin:4px 0 0;color:var(--text-muted);font-size:10px;line-height:1.55}
-body.dark .hst-arm-table .arm-swap{color:#D9AE63}
-.hst-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:7px}
-.hst-stat-card{min-width:0;border:1px solid var(--gray-line);border-radius:8px;background:var(--surface-2);padding:7px 9px}
-.hst-stat-card>strong{display:block;color:var(--navy);font-size:10.5px}
-.hst-stat-card>.hst-stat-unit{display:block;margin:2px 0 5px}
-.hst-stat-card dl{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 7px;margin:0}
-.hst-stat-card dl>div{min-width:0}
-.hst-stat-card dt{color:var(--text-muted);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hst-stat-card dd{margin:1px 0 0;color:var(--navy);font-size:11.5px;font-weight:800;font-variant-numeric:tabular-nums}
 .hst-sort{display:inline-flex;align-items:center;gap:4px;width:100%;border:0;padding:0;background:transparent;
   color:inherit;font:inherit;font-weight:700;text-align:left;cursor:pointer}
 .hst-sort:hover{color:var(--teal)}
@@ -1146,24 +1085,17 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-table td.acts{grid-column:1/-1;padding-top:7px;text-align:left}
   .hst-table td.acts:before{display:none}
   .hst-table .hst-copy{width:100%;padding:8px 10px;font-size:11px}
-  .hst-stats{grid-template-columns:1fr}
-  #hstStatsBody,.hst-view[data-focus="stats"] #hstStatsBody{max-height:none;overflow-y:visible}
-  .hst-stat-card dl{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-toolbar{align-items:stretch;flex-direction:column}
   .hst-toolbar .hst-copy-all{margin-left:0}
-  .hst-stats-toggle{margin-left:0;width:100%}
   .hst-table.rollup{min-width:0}
   /* 모바일은 한 열로 쌓고, 표와 패널이 좁은 화면을 나눠 갖는 대신 이력 화면 전체를 스크롤한다.
      사진 2장(각 1열)과 표를 한 화면에 동시에 넣으면 표가 사실상 사라진다. */
   .hst-view{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
   .hst-view .hst-table-wrap{min-height:0;flex:0 0 auto;overflow-y:visible}
   /* 좁은 화면에서는 병원 이력을 표 아래로 내린다 */
-  /* 모바일은 화면 전체가 스크롤되므로 크기 조절·주 영역 전환 없이 자연 높이를 쓴다 */
-  .hst-split{display:none}
-  .hst-view.is-split .hst-top{height:auto;flex:0 0 auto}
-  .hst-view.is-split .hst-main{height:auto}
-  .hst-top,.hst-view[data-focus="stats"] .hst-top{flex:0 0 auto;overflow:visible}
-  .hst-main,.hst-view[data-focus="stats"] .hst-main{flex-direction:column;border-top:0;min-height:0;height:auto}
+  /* 모바일은 화면 전체가 스크롤되므로 자연 높이를 쓴다 */
+  .hst-top{flex:0 0 auto;overflow:visible}
+  .hst-main{flex-direction:column;border-top:0;min-height:0;height:auto}
   .hst-hosp-panel{flex:0 0 auto;border-left:0;border-top:1px solid var(--gray-line);max-height:60vh}
   .hst-photo-panel{flex:0 0 auto;overflow:hidden}
   .hst-photo-grid{grid-template-columns:1fr}.hst-photo-frame{height:min(210px,26vh)}
@@ -6093,7 +6025,6 @@ var EX_HISTORY_SEARCH_TIMER=null;
 var EX_HISTORY_SEARCH_SEQ=0;
 var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
-var EX_HISTORY_STATS_OPEN=true;          /* 경과일 분석 펼침 여부 — 탭이 살아 있는 동안 기억한다 */
 /* 열 헤더 첫 클릭 방향 — 이후 같은 헤더 재클릭은 asc/desc 전환 */
 var EX_HISTORY_SORT_DIR={date:'desc',hosp:'asc',elapsed:'asc',same:'asc',cost:'desc'};
 /* 모달 안에서 바꿀 수 있는 조회 대상 — 모든 VOC·교체품을 다시 나열하지 않는다 */
@@ -6341,71 +6272,6 @@ function exHistoryRollup_(analysis){
 function exHistoryDayText_(v,unit){
   return v==null?'<span class="muted">—</span>':(exNum(v)+(unit||''));
 }
-function exHistoryStatBlock_(title,note,s){
-  return '<div class="hst-stat-card"><strong>'+esc(title)+'</strong>'
-    +'<span class="hst-stat-unit">'+esc(note)+'</span><dl>'
-    +'<div><dt>분석 대상 사례</dt><dd>'+exNum(s.cases)+'건</dd></div>'
-    +'<div><dt title="비교 가능 / 분석 대상">비교 가능</dt><dd>'+exNum(s.comparable)+' / '+exNum(s.cases)+'</dd></div>'
-    +'<div><dt>평균 경과일</dt><dd>'+(s.avg==null?'<span class="muted">—</span>':(s.avg.toFixed(1)+'일'))+'</dd></div>'
-    +'<div><dt>중앙값</dt><dd>'+exHistoryDayText_(s.median,'일')+'</dd></div>'
-    +'<div><dt>최단 경과일</dt><dd>'+exHistoryDayText_(s.min,'일')+'</dd></div>'
-    +'<div><dt>30일 이내</dt><dd>'+exHistoryDayText_(s.within30,'건')+'</dd></div>'
-    +'<div><dt title="분모는 비교 가능한 사례">30일 이내 비율</dt><dd>'
-      +(s.within30Ratio==null?'<span class="muted">—</span>':(s.within30Ratio.toFixed(1)+'%'))+'</dd></div>'
-    +'</dl></div>';
-}
-function exHistoryStatsHtml_(state,analysis,filtered){
-  if(!state||!analysis) return '';
-  var c=state.comparison||{}, shown=(filtered||[]).length, rollup=state.view==='hosp';
-  var limit=state.renderLimit||EX_HISTORY_PAGE;
-  var total=rollup?((state.rollup||[]).length):shown;
-  var rendered=Math.min(total,rollup?total:limit);
-  var funnel='원본 '+exNum(c.sourceCount||0)+'건 → 최신 선택 '+exNum(analysis.general.cases)+'건'
-    +' → 비교 가능 '+exNum(analysis.general.comparable)+'건 → 현재 표시 '+exNum(shown)+'행';
-  /* 팩싯 건수는 "표시 행" 단위, 통계는 "최신 선택 사례" 단위 — 단위를 나눠 적는다 */
-  var unit=rollup
-    ? '병원 '+exNum(total)+'곳 · 분석 대상 최신 선택 '+exNum(analysis.general.cases)+'사례'
-    : '표시 결과 '+exNum(shown)+'행 · 분석 대상 최신 선택 '+exNum(analysis.general.cases)+'사례';
-  /* 범위 한 줄은 늘 보이고, 경과일 분석 상세는 접었다 폈다 할 수 있다 */
-  var open=EX_HISTORY_STATS_OPEN;
-  return '<div class="hst-stats-head"><span class="hst-stat-kicker">최신 선택 기준</span>'
-    +'<b>'+esc(funnel)+'</b><span class="hst-stat-unit">'+esc(unit)+'</span>'
-    +'<span class="hst-stat-unit">'+esc(exNum(rendered)+' / 전체 '+exNum(total)+(rollup?'곳':'행')+' 표시')+'</span>'
-    +'<button type="button" class="hst-stats-toggle" id="hstStatsToggle" aria-controls="hstStatsBody"'
-      +' aria-expanded="'+(open?'true':'false')+'" onclick="exToggleHistoryStats_()">'
-      +'경과일 분석 '+(open?'접기 ▴':'펼치기 ▾')+'</button></div>'
-    +'<div id="hstStatsBody"'+(open?'':' hidden')+'>'
-    +'<div class="hst-stats">'
-    +exHistoryStatBlock_('일반 비교 경과일','단위: 병원 + VOC + 선택일 · 표의 기간 선택과 무관',analysis.general)
-    +exHistoryStatBlock_('동일비교 경과일','단위: 병원 + VOC + 교체품 + 선택일',analysis.same)
-    +'</div>'
-    +exArmHtml_(analysis.arm)
-    +'<p class="hst-compare-note">30일 이내 재발률은 같은 병원·VOC 의 <b>일반 비교</b> 지표입니다 — 핸드피스 내부 세척 효과 분석 카드의 결과가 아니며 이를 대체하지 않습니다. 이 조회는 기간 전체 원본이 아니라 병원·VOC별 <b>최신 선택 비교</b>입니다.</p>'
-    +'</div>';
-}
-/* 표시 상태만 바꾼다 — 필터·통계 재계산이나 네트워크 요청은 하지 않는다.
-   (영업 담당자 건수 카드 토글과 같은 방식) */
-/* 지금 보고 있는 쪽을 주 영역으로 만든다. 표시 상태만 바꾸고 재계산은 하지 않는다.
-   분석이 접혀 있으면 언제나 표가 주 영역이다. */
-function exHistoryFocus_(which){
-  which=(which==='stats'&&EX_HISTORY_STATS_OPEN)?'stats':'table';
-  if(EX_HISTORY_STATE){
-    if(EX_HISTORY_STATE.focusArea===which) return;
-    EX_HISTORY_STATE.focusArea=which;
-  }
-  var view=document.getElementById('hstView');
-  if(view) view.setAttribute('data-focus',which);
-}
-function exToggleHistoryStats_(){
-  var btn=document.getElementById('hstStatsToggle'), body=document.getElementById('hstStatsBody');
-  EX_HISTORY_STATS_OPEN=!EX_HISTORY_STATS_OPEN;
-  exHistoryFocus_(EX_HISTORY_STATS_OPEN?'stats':'table');
-  if(body) body.hidden=!EX_HISTORY_STATS_OPEN;
-  if(btn){
-    btn.setAttribute('aria-expanded',String(EX_HISTORY_STATS_OPEN));
-    btn.textContent='경과일 분석 '+(EX_HISTORY_STATS_OPEN?'접기 ▴':'펼치기 ▾');
-  }
-}
 
 /* ══════ 조치 방법별 재발 비교 — 내부수리군 vs Handpiece 교체군 ══════
    목적은 하나다. "재발했다"는 사실만으로 내부수리를 원인으로 지목하거나,
@@ -6503,42 +6369,6 @@ function exArmVerdict_(a){
     +'Handpiece 교체 후에도 내부수리와 같은 방식으로 동일 증상이 다시 발생합니다. '
     +'재발했다는 사실만으로 내부수리를 원인으로 지목하거나, 재발 방지를 이유로 교체를 우선할 근거로 삼기 어렵습니다.';
 }
-function exArmCell_(v,unit){
-  return v==null?'<span class="muted">—</span>':(exNum(v)+(unit||''));
-}
-function exArmRow_(key,s){
-  return '<tr><th scope="row" class="arm-'+key+'">'+esc(EX_ARM_LABEL[key])+'</th>'
-    +'<td>'+exNum(s.total)+'건</td>'
-    +'<td>'+exNum(s.recur)+'건</td>'
-    +'<td>'+(s.rate==null?'<span class="muted">—</span>':s.rate.toFixed(1)+'%')+'</td>'
-    +'<td>'+exArmCell_(s.min,'일')+'</td>'
-    +'<td>'+(s.avg==null?'<span class="muted">—</span>':s.avg.toFixed(1)+'일')+'</td>'
-    +'<td>'+exArmCell_(s.median,'일')+'</td>'
-    +'<td>'+exNum(s.none)+'건</td></tr>';
-}
-function exArmHtml_(a){
-  if(!a||(!a.repair.total&&!a.swap.total)) return '';
-  var est=a.repair.estimated+a.swap.estimated;
-  return '<section class="hst-arm" aria-label="조치 방법별 재발 비교">'
-    +'<div class="hst-arm-head"><strong>조치 방법별 재발 — 내부수리 vs Handpiece 교체</strong>'
-      +'<span>노즐 누수(약액 유입) · 교체품 표기 기준(내부세척=수리 · 부품 기재=교체) · 조치 다음 날 이후 첫 동일 증상 · 병원 + 장비번호</span></div>'
-    +'<div class="hst-arm-tablewrap"><table class="hst-arm-table"><thead><tr>'
-      +'<th scope="col">조치 방법</th><th scope="col">전체 조치</th><th scope="col">재발 확인</th>'
-      +'<th scope="col">재발률</th><th scope="col">최단</th><th scope="col">평균</th>'
-      +'<th scope="col" title="이상치에 흔들리지 않는 주 지표">중앙값</th>'
-      +'<th scope="col">아직 재발 없음</th></tr></thead><tbody>'
-      +exArmRow_('repair',a.repair)+exArmRow_('swap',a.swap)
-    +'</tbody></table></div>'
-    +'<p class="hst-arm-verdict">'+esc(exArmVerdict_(a))+'</p>'
-    +'<p class="hst-arm-note">경과일 평균·중앙값·최단값은 <b>재발이 확인된 건</b>만으로 계산하고, 아직 재발이 없는 건은 따로 셉니다 — 재발한 건만 남겨 평균을 내면 숫자가 실제보다 나빠집니다. '
-      +(a.repair.confirmed+a.swap.confirmed
-        ?('교체로 넣은 핸드피스가 재발 행의 HP_SN(IN)으로 다시 나와 같은 핸드피스임이 일련번호로 확정된 건이 '
-          +exNum(a.repair.confirmed+a.swap.confirmed)+'건 있습니다. '):'')
-      +(est?('장비번호가 없어 병원 단위로 추정한 건이 '+exNum(est)+'건 있습니다. '):'')
-      +'교체가 수리보다 재발 방지에 우월하다는 근거가 확인되지 않았다는 것까지가 이 표로 말할 수 있는 범위이며, 두 조치에 차이가 전혀 없다거나 내부수리가 재발 원인이 아니라고 확정하지는 않습니다.</p>'
-    +'</section>';
-}
-
 /* 원인 분석 카드도 위의 단일 계산 결과를 사용한다. 수치별 버튼은 같은 events를 조건만 달리해 보여준다. */
 function exCauseArmMetric_(key,mode,label,value,tone,enabled,title){
   return '<button type="button" class="car-metric '+(tone||'')+'" onclick="exShowCauseArm_(\''+key+'\',\''+mode+'\')"'
@@ -6696,109 +6526,6 @@ function exCopyHistoryTsv_(){
       :'❌ 복사하지 못했습니다 · 내용을 직접 선택해 주세요');
   });
 }
-/* ══════ 분석 / 이력 영역 크기 수동 조절 ══════
-   경계선을 끌어 두 영역의 높이를 직접 정하고, 그 값을 고정한다.
-   한 번이라도 조절하면 자동 전환(data-focus)을 쓰지 않는다 — 클릭할 때마다 크기가
-   바뀌면 쓰기 불편하기 때문이다. "자동" 버튼으로 되돌릴 수 있다.
-   크기는 브라우저에 남겨 다음에 열 때도 그대로 쓴다(필터 조건과 달리 화면 설정이다). */
-var EX_HIST_SPLIT_KEY='baz_hst_split';
-var EX_HIST_SPLIT_MIN=120, EX_HIST_SPLIT_TAIL=150;
-function exHistorySplitLoad_(){
-  try{ var v=parseInt(localStorage.getItem(EX_HIST_SPLIT_KEY),10); return (v>0)?v:0; }
-  catch(e){ return 0; }
-}
-function exHistorySplitStore_(px){
-  try{
-    if(px>0) localStorage.setItem(EX_HIST_SPLIT_KEY,String(Math.round(px)));
-    else localStorage.removeItem(EX_HIST_SPLIT_KEY);
-  }catch(e){}
-}
-function exHistorySplitClamp_(px,viewH){
-  var h=viewH;
-  if(h==null){
-    var view=document.getElementById('hstView');
-    h=view&&view.getBoundingClientRect?view.getBoundingClientRect().height:0;
-  }
-  if(!h) return Math.max(EX_HIST_SPLIT_MIN,px);
-  return Math.max(EX_HIST_SPLIT_MIN,Math.min(px,h-EX_HIST_SPLIT_TAIL));
-}
-/* px 가 0 이면 고정을 풀고 자동 배분으로 돌아간다 */
-function exHistorySplitApply_(px){
-  var view=document.getElementById('hstView');
-  if(EX_HISTORY_STATE) EX_HISTORY_STATE.splitH=px>0?px:0;
-  if(!view) return;
-  if(px>0){
-    if(view.classList) view.classList.add('is-split');
-    if(view.style&&view.style.setProperty) view.style.setProperty('--hst-top-h',Math.round(px)+'px');
-  }else{
-    if(view.classList) view.classList.remove('is-split');
-    if(view.style&&view.style.removeProperty) view.style.removeProperty('--hst-top-h');
-  }
-  var btn=document.getElementById('hstSplitReset');
-  if(btn) btn.hidden=!(px>0);
-  var bar=document.getElementById('hstSplit');
-  if(bar) bar.setAttribute('aria-valuenow',String(Math.round(px>0?px:0)));
-}
-function exHistorySplitSet_(px,store){
-  px=exHistorySplitClamp_(px);
-  exHistorySplitApply_(px);
-  if(store!==false) exHistorySplitStore_(px);
-}
-function exHistorySplitReset_(){
-  exHistorySplitApply_(0);
-  exHistorySplitStore_(0);
-}
-function exHistorySplitTopH_(){
-  var top=document.querySelector&&document.querySelector('.hst-top');
-  return (top&&top.getBoundingClientRect)?top.getBoundingClientRect().height:0;
-}
-function exHistorySplitStart_(e){
-  if(!e||e.button>0) return;
-  if(e.preventDefault) e.preventDefault();
-  var startY=Number(e.clientY)||0, startH=exHistorySplitTopH_();
-  if(!startH) return;
-  function move(ev){ exHistorySplitSet_(startH+((Number(ev.clientY)||0)-startY),false); }
-  function up(){
-    document.removeEventListener('pointermove',move);
-    document.removeEventListener('pointerup',up);
-    if(document.body&&document.body.classList) document.body.classList.remove('hst-resizing');
-    exHistorySplitStore_((EX_HISTORY_STATE&&EX_HISTORY_STATE.splitH)||0);
-  }
-  if(document.body&&document.body.classList) document.body.classList.add('hst-resizing');
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',up);
-}
-/* 키보드로도 조절한다 — 방향키 24px(Shift 72px), Home 은 자동으로 되돌리기 */
-function exHistorySplitKey_(e){
-  var k=e&&(e.key||'');
-  if(k!=='ArrowUp'&&k!=='ArrowDown'&&k!=='Home') return true;
-  if(e.preventDefault) e.preventDefault();
-  if(k==='Home'){ exHistorySplitReset_(); return false; }
-  var step=e.shiftKey?72:24, cur=exHistorySplitTopH_();
-  exHistorySplitSet_(cur+(k==='ArrowUp'?-step:step));
-  return false;
-}
-function exHistorySplitBar_(){
-  return '<div class="hst-split" id="hstSplit" role="separator" aria-orientation="horizontal" tabindex="0"'
-    +' aria-label="분석과 이력 영역 크기 조절 · 방향키로 조절, Home 으로 자동 배분"'
-    +' title="끌어서 크기 조절 · 두 번 누르면 자동 배분"'
-    +' onpointerdown="exHistorySplitStart_(event)" onkeydown="return exHistorySplitKey_(event)"'
-    +' ondblclick="exHistorySplitReset_()">'
-    +'<span class="grip" aria-hidden="true"></span>'
-    +'<button type="button" class="reset" id="hstSplitReset" hidden onpointerdown="event.stopPropagation()"'
-      +' onclick="exHistorySplitReset_()" title="자동 배분으로 되돌리기">자동</button>'
-    +'</div>';
-}
-/* 창 크기가 줄면 고정값도 화면 안으로 다시 맞춘다(저장값은 그대로 둔다) */
-var EX_HIST_SPLIT_BOUND=false;
-function exHistorySplitBind_(){
-  if(EX_HIST_SPLIT_BOUND||typeof window==='undefined'||!window.addEventListener) return;
-  EX_HIST_SPLIT_BOUND=true;
-  window.addEventListener('resize',function(){
-    if(EX_HISTORY_STATE&&EX_HISTORY_STATE.splitH>0) exHistorySplitApply_(exHistorySplitClamp_(EX_HISTORY_STATE.splitH));
-  });
-}
-
 /* ══════ 병원 이력 패널 — 처리이력 표 오른쪽에 붙는다 ══════
    병원명을 누르면 새 창을 띄우지 않고 이 패널만 연다. 이미 받아 둔 RAW 만 읽으므로
    추가 네트워크 요청이 없다. 표의 필터·정렬과 무관하게 그 병원의 전체 처리 이력을 보여 준다.
@@ -7566,7 +7293,7 @@ function exHistoryFilterChanged_(before,after){
 }
 /* 파생 순서를 한 곳에 고정한다:
    검색 대기값 flush → 필터 적용 → 분석용 최신 선택 모집단 → 전체 결과 정렬
-   → EX_HISTORY_STATE.filtered 저장 → 통계 → 병원 롤업 → renderLimit → 렌더
+   → EX_HISTORY_STATE.filtered 저장 → 병원 롤업 → renderLimit → 렌더
    → 팩싯·결과 건수 → 선택 item 복원 또는 예시 패널 닫기 */
 function exApplyHistoryFilters_(){
   if(!EX_HISTORY_STATE) return;
@@ -7596,11 +7323,9 @@ function exApplyHistoryFilters_(){
   EX_HISTORY_STATE.rollup=exHistoryRollup_(analysis);
   var limit=EX_HISTORY_STATE.renderLimit||EX_HISTORY_PAGE;
   var count=document.getElementById('hstCount'), breakdown=document.getElementById('hstBreakdown'), host=document.getElementById('hstTableHost');
-  var stats=document.getElementById('hstStats');
   /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
   if(count) count.innerHTML=exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
-  if(stats) stats.innerHTML=exHistoryStatsHtml_(EX_HISTORY_STATE,analysis,filtered);
   exHistorySyncToolbar_(EX_HISTORY_STATE);
   if(host) host.innerHTML=rollup?exHistoryRollupTable_(EX_HISTORY_STATE.rollup):exHistoryTable_(filtered,limit);
   exSyncHistoryTypeExample_(opt.type,filtered);
@@ -7719,13 +7444,13 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,focusArea:'table',splitH:0,
+    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
     typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
-  var html='<div class="hst-view" id="hstView" data-focus="table"><div class="hst-top">'
+  var html='<div class="hst-view" id="hstView"><div class="hst-top">'
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · 원본 '+exNum(comparison.sourceCount)+'건 · 최신 선택 '+esc(curChip)+'</b></span>'
     +'<span class="hst-chip">비교 <b>'+esc(prevChip)+'</b> · 동일비교 <b>'+exNum(comparison.sameRows.length)+'건</b></span>'
     +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 병원·VOC의 최신 선택 + 비교 + 동일비교를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 근거 원본 Excel</button></div>'
@@ -7735,12 +7460,10 @@ function exShowHistory_(dim, name, opt){
     +'<div class="hst-toolbar" id="hstToolbar"></div>'
     +exHistoryControls_(items, true)
     +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
-    +'<div class="hst-stats-wrap" id="hstStats"></div>'
     +'<div class="hst-result"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
       +'<span id="hstViewNote">'+esc(orderText)+'</span></div>'
     +exHistoryPhotoPanel_()
     +'</div>'
-    +exHistorySplitBar_()
     +'<div class="hst-main">'
       +'<div class="hst-table-wrap" id="hstTableHost"></div>'
       +exHospPanelShell_()+'</div></div>';
@@ -7755,9 +7478,6 @@ function exRestoreHistoryModalUi_(opt){
   if(host) host.innerHTML=exHistoryToolbarHtml_(EX_HISTORY_STATE);
   var prefs=(opt&&opt.prefs)||EX_HISTORY_PREFS;
   if(prefs) exRestoreHistoryUi_(prefs,(opt&&opt.restoreMode)||'dim',EX_HISTORY_STATE);
-  exHistorySplitBind_();
-  var split=exHistorySplitLoad_();
-  if(split>0) exHistorySplitSet_(split,false);   /* 지난번에 직접 맞춘 크기를 그대로 쓴다 */
   exHistorySyncToolbar_(EX_HISTORY_STATE);
 }
 /* 이벤트 위임 — 카드가 다시 그려져도 리스너가 중복 등록되지 않는다.
