@@ -46,7 +46,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistorySortValue_','exHistoryGroupSortValue_','exHistoryCmp_','exHistoryTieCmp_',
   'exHistorySortItems_','exHistorySortGroups_','exSortHistory_','exHistorySortTh_',
   'exHistoryAnalysisFilter_','exHistoryValidDays_','exHistoryStatSummary_','exHistoryAnalyze_','exHistoryRollup_',
-  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_',
+  'exHistoryDayText_','exHistoryStatBlock_','exHistoryStatsHtml_','exToggleHistoryStats_','exHistoryFocus_',
   'exArmOfPart_','exArmOf_','exArmRecurrence_','exArmSummary_','exArmVerdict_','exArmCell_','exArmRow_','exArmHtml_',
   'hpCleanVal_','hpCleanAsOf_','exToday',
   'exHistoryRollupTable_','exHistoryRollupTsv_',
@@ -140,10 +140,13 @@ function makeDom(){
     for(const k of Object.keys(els)) delete els[k];
     rowCache=Object.create(null);
     parseControls(html);
-    ['hstTableHost','hstCount','hstBreakdown','hstStats','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
+    ['hstView','hstTableHost','hstCount','hstBreakdown','hstStats','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
      'hstPhotoPanel','hstPhotoStrip','hstPhotoStatus','hstPhotoTitle','hstPhotoBody','hstPhotoToggle',
      'exListTitle','exListSub','exListBody','exListBox','exListModal','toast'].forEach(id=>ensure(id));
     els.hstPhotoPanel.hidden=true;
+    /* 실제 마크업의 주 영역 기본값을 그대로 옮긴다 */
+    const fm=/id="hstView" data-focus="([^"]+)"/.exec(html);
+    els.hstView.setAttribute('data-focus',fm?fm[1]:'table');
   }
   function rowEl(id){
     if(!rowCache[id]){ const el=mk('tr'); el.setAttribute('data-hst-id',id); rowCache[id]=el; }
@@ -1277,12 +1280,44 @@ ck('85. 모달을 닫았다 열면 패널은 유지되지 않는다',()=>{
 ck('86. 표와 패널을 가로로 나누고 좁은 화면에서는 아래로 내린다',()=>{
   assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto/);
   assert.match(SRC,/\.hst-hosp-panel\{flex:0 0 clamp\(280px,30%,400px\)/);
-  assert.match(SRC,/\.hst-main\{flex-direction:column;border-top:0;min-height:0\}/,'모바일에서 세로 배치');
-  assert.ok(SRC.includes('<div class="hst-main">'));
+  assert.match(SRC,/\.hst-main,\.hst-view\[data-focus="stats"\] \.hst-main\{flex-direction:column;border-top:0/,'모바일에서 세로 배치');
+  assert.ok(SRC.includes('<div class="hst-main" onmousedown='));
   /* 위쪽 블록이 표·패널 영역을 밀어내지 않게 분리한다 */
   assert.match(SRC,/\.hst-top\{flex:0 1 auto;min-height:0;[^}]*overflow-y:auto/);
-  assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto;min-height:min\(300px,38vh\)/);
-  assert.ok(SRC.includes('<div class="hst-view"><div class="hst-top">'));
+  assert.match(SRC,/\.hst-main\{display:flex;flex:1 1 auto;min-height:136px/);
+  assert.ok(SRC.includes('<div class="hst-view" id="hstView" data-focus="table">'));
+});
+
+ck('87. 보고 있는 쪽이 주 영역이 된다 — 기본은 표',()=>{
+  const D=build(); D.setStatsOpen(true); open(D,CUR);
+  const view=D.dom.els.hstView;
+  assert.equal(view.getAttribute('data-focus'),'table','열자마자는 표가 주 영역');
+  assert.equal(D.state().focusArea,'table');
+  D.exHistoryFocus_('stats');
+  assert.equal(view.getAttribute('data-focus'),'stats','분석 영역을 누르면 분석이 주 영역');
+  D.exHistoryFocus_('table');
+  assert.equal(view.getAttribute('data-focus'),'table','표를 누르면 다시 표가 주 영역');
+});
+ck('88. 분석이 접혀 있으면 언제나 표가 주 영역이다',()=>{
+  const D=build(); D.setStatsOpen(true); open(D,CUR);
+  D.exToggleHistoryStats_();                      /* 접기 */
+  assert.equal(D.statsOpen(),false);
+  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'table');
+  D.exHistoryFocus_('stats');
+  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'table','접힌 분석은 주 영역이 되지 않는다');
+  D.exToggleHistoryStats_();                      /* 펼치기 */
+  assert.equal(D.dom.els.hstView.getAttribute('data-focus'),'stats','펼치면 분석이 주 영역');
+});
+ck('89. 주 영역 전환은 표시 상태만 바꾼다 — 재계산·통신 없음',()=>{
+  const body=grab('exHistoryFocus_');
+  assert.ok(!/exApplyHistoryFilters_\(|exHistoryAnalyze_\(|fetch\(|gvRetry\(/.test(body));
+  assert.match(SRC,/\.hst-view\[data-focus="stats"\] \.hst-top\{flex:1 1 auto\}/);
+  assert.match(SRC,/\.hst-view\[data-focus="stats"\] #hstStatsBody\{max-height:none/);
+  assert.match(SRC,/\.hst-view\[data-focus="stats"\] \.hst-main\{flex:0 0 auto;height:clamp\(120px,20vh,210px\)/);
+  assert.match(SRC,/#hstStatsBody\{max-height:min\(220px,24vh\)/,'표를 볼 때 분석은 제 높이만 쓴다');
+  /* 표·분석 어디를 눌러도 전환되도록 마크업에 트리거가 붙어 있다 */
+  assert.match(SRC,/onmousedown="exHistoryFocus_\(\\?'stats\\?'\)"/);
+  assert.match(SRC,/onwheel="exHistoryFocus_\(\\?'table\\?'\)"/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

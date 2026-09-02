@@ -882,13 +882,18 @@ html.hst-evidence-open{overflow:hidden}
 .hst-result{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 11px;
   border-top:1px solid var(--gray-line);background:var(--gray-bg);font-size:10.5px;color:var(--text-muted)}
 .hst-result b{color:var(--navy);font-size:11.5px}
-/* 위쪽(요약·필터·팩싯·분석)과 아래쪽(표 + 병원 이력)을 분리한다.
-   위쪽이 길어져도 스스로 스크롤하고, 표·패널 영역은 최소 높이를 보장받는다.
-   예전에는 분석을 펼치면 표가 88px 까지 눌려 목록을 쓸 수 없었다. */
+/* 위쪽(요약·필터·팩싯·분석)과 아래쪽(표 + 병원 이력)을 나누고,
+   "지금 보고 있는 쪽"이 주 영역이 되게 한다.
+   · 기본(data-focus="table") — 표가 주 영역. 분석을 펼쳐도 위쪽은 제 높이만 쓴다
+   · 분석을 펼치거나 분석 영역을 누르면(data-focus="stats") 분석이 주 영역이 되고
+     표는 아래에 얇게 남는다. 표를 누르거나 굴리면 다시 표가 주 영역이 된다 */
 .hst-top{flex:0 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
 .hst-top .hst-photo-panel{flex:0 0 auto}
 /* 표 + 병원 이력 패널을 가로로 나눈다. 패널이 닫혀 있으면 표가 전폭을 쓴다. */
-.hst-main{display:flex;flex:1 1 auto;min-height:min(300px,38vh);min-width:0;border-top:1px solid var(--gray-line)}
+.hst-main{display:flex;flex:1 1 auto;min-height:136px;min-width:0;border-top:1px solid var(--gray-line)}
+.hst-view[data-focus="stats"] .hst-top{flex:1 1 auto}
+.hst-view[data-focus="stats"] #hstStatsBody{max-height:none;overflow-y:visible}
+.hst-view[data-focus="stats"] .hst-main{flex:0 0 auto;height:clamp(120px,20vh,210px);min-height:0}
 .hst-hosp-panel{flex:0 0 clamp(280px,30%,400px);min-width:0;display:flex;flex-direction:column;
   border-left:1px solid var(--gray-line);background:var(--surface-2);overflow:hidden}
 .hst-hosp-panel[hidden]{display:none}
@@ -981,7 +986,7 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-stats-toggle:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
 .hst-stats-toggle:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
 /* 분석 상세가 길어져도 표·예시 패널의 세로 공간을 잠식하지 않게 스스로 스크롤한다 */
-#hstStatsBody{max-height:min(300px,32vh);overflow-y:auto}
+#hstStatsBody{max-height:min(220px,24vh);overflow-y:auto}
 #hstStatsBody[hidden]{display:none}
 /* 패널이 눌리다 못해 머리글이 다른 요소에 덮이지 않도록 최소 높이를 보장한다 */
 .hst-photo-panel:not([hidden]){min-height:52px}
@@ -1109,7 +1114,7 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-table td.acts:before{display:none}
   .hst-table .hst-copy{width:100%;padding:8px 10px;font-size:11px}
   .hst-stats{grid-template-columns:1fr}
-  #hstStatsBody{max-height:none;overflow-y:visible}
+  #hstStatsBody,.hst-view[data-focus="stats"] #hstStatsBody{max-height:none;overflow-y:visible}
   .hst-stat-card dl{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-toolbar{align-items:stretch;flex-direction:column}
   .hst-toolbar .hst-copy-all{margin-left:0}
@@ -1120,8 +1125,9 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-view{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
   .hst-view .hst-table-wrap{min-height:0;flex:0 0 auto;overflow-y:visible}
   /* 좁은 화면에서는 병원 이력을 표 아래로 내린다 */
-  .hst-top{flex:0 0 auto;overflow:visible}
-  .hst-main{flex-direction:column;border-top:0;min-height:0}
+  /* 모바일은 화면 전체가 스크롤되므로 주 영역 전환 없이 자연 높이를 쓴다 */
+  .hst-top,.hst-view[data-focus="stats"] .hst-top{flex:0 0 auto;overflow:visible}
+  .hst-main,.hst-view[data-focus="stats"] .hst-main{flex-direction:column;border-top:0;min-height:0;height:auto}
   .hst-hosp-panel{flex:0 0 auto;border-left:0;border-top:1px solid var(--gray-line);max-height:60vh}
   .hst-photo-panel{flex:0 0 auto;overflow:hidden}
   .hst-photo-grid{grid-template-columns:1fr}.hst-photo-frame{height:min(210px,26vh)}
@@ -6342,9 +6348,21 @@ function exHistoryStatsHtml_(state,analysis,filtered){
 }
 /* 표시 상태만 바꾼다 — 필터·통계 재계산이나 네트워크 요청은 하지 않는다.
    (영업 담당자 건수 카드 토글과 같은 방식) */
+/* 지금 보고 있는 쪽을 주 영역으로 만든다. 표시 상태만 바꾸고 재계산은 하지 않는다.
+   분석이 접혀 있으면 언제나 표가 주 영역이다. */
+function exHistoryFocus_(which){
+  which=(which==='stats'&&EX_HISTORY_STATS_OPEN)?'stats':'table';
+  if(EX_HISTORY_STATE){
+    if(EX_HISTORY_STATE.focusArea===which) return;
+    EX_HISTORY_STATE.focusArea=which;
+  }
+  var view=document.getElementById('hstView');
+  if(view) view.setAttribute('data-focus',which);
+}
 function exToggleHistoryStats_(){
   var btn=document.getElementById('hstStatsToggle'), body=document.getElementById('hstStatsBody');
   EX_HISTORY_STATS_OPEN=!EX_HISTORY_STATS_OPEN;
+  exHistoryFocus_(EX_HISTORY_STATS_OPEN?'stats':'table');
   if(body) body.hidden=!EX_HISTORY_STATS_OPEN;
   if(btn){
     btn.setAttribute('aria-expanded',String(EX_HISTORY_STATS_OPEN));
@@ -7511,13 +7529,13 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
+    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,focusArea:'table',
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
     hospitalMetric:dim==='kpiHosp',savingMetric:dim==='kpiSaving',
     typeExampleDocs:[],typeExampleReady:false,selectedKey:'',selectedExampleItem:null,typeExampleExpanded:false};
-  var html='<div class="hst-view"><div class="hst-top">'
+  var html='<div class="hst-view" id="hstView" data-focus="table"><div class="hst-top">'
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · 원본 '+exNum(comparison.sourceCount)+'건 · 최신 선택 '+esc(curChip)+'</b></span>'
     +'<span class="hst-chip">비교 <b>'+esc(prevChip)+'</b> · 동일비교 <b>'+exNum(comparison.sameRows.length)+'건</b></span>'
     +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 병원·VOC의 최신 선택 + 비교 + 동일비교를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 근거 원본 Excel</button></div>'
@@ -7527,12 +7545,13 @@ function exShowHistory_(dim, name, opt){
     +'<div class="hst-toolbar" id="hstToolbar"></div>'
     +exHistoryControls_(items, true)
     +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
-    +'<div class="hst-stats-wrap" id="hstStats"></div>'
+    +'<div class="hst-stats-wrap" id="hstStats" onmousedown="exHistoryFocus_(\'stats\')" onfocusin="exHistoryFocus_(\'stats\')"></div>'
     +'<div class="hst-result"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
       +'<span id="hstViewNote">'+esc(orderText)+'</span></div>'
     +exHistoryPhotoPanel_()
     +'</div>'
-    +'<div class="hst-main"><div class="hst-table-wrap" id="hstTableHost"></div>'
+    +'<div class="hst-main" onmousedown="exHistoryFocus_(\'table\')" onfocusin="exHistoryFocus_(\'table\')" onwheel="exHistoryFocus_(\'table\')">'
+      +'<div class="hst-table-wrap" id="hstTableHost"></div>'
       +exHospPanelShell_()+'</div></div>';
   openExList(title, sub, html, true);
   exRestoreHistoryModalUi_(opt);
