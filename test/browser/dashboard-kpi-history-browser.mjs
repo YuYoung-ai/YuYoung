@@ -260,6 +260,28 @@ ck('15-c. 이력 유형 선택과 건수 칩도 표준 이름 하나로 표시',
 ck('15-c2. 처리이력의 경과일 분석 카드는 제거하고 개별 비교 열은 유지',
   !normalized.stats&&!normalized.split&&normalized.heads.some(x=>x.includes('비교 경과일'))&&
   normalized.heads.some(x=>x.includes('동일비교 경과일')),JSON.stringify(normalized));
+await page.locator('#hstTableHost .hst-hosp-link').first().click();
+await page.click('#exListFullscreen');
+let fullHistory=await page.evaluate(()=>({
+  full:document.getElementById('exListBox').classList.contains('is-fullscreen'),
+  pressed:document.getElementById('exListFullscreen').getAttribute('aria-pressed'),
+  modal:document.getElementById('exListModal').classList.contains('show'),
+  hospital:!document.getElementById('hstHospPanel').hidden,
+  width:document.getElementById('exListBox').getBoundingClientRect().width,
+  viewport:innerWidth,type:document.getElementById('hstType').value
+}));
+ck('15-c3. 전체화면에서도 처리이력·병원 이력과 조회 상태를 함께 유지',
+  fullHistory.full&&fullHistory.pressed==='true'&&fullHistory.modal&&fullHistory.hospital&&
+  fullHistory.width>=fullHistory.viewport-20&&fullHistory.type==='all',JSON.stringify(fullHistory));
+await page.keyboard.press('Escape');
+fullHistory=await page.evaluate(()=>({
+  full:document.getElementById('exListBox').classList.contains('is-fullscreen'),
+  pressed:document.getElementById('exListFullscreen').getAttribute('aria-pressed'),
+  modal:document.getElementById('exListModal').classList.contains('show'),
+  hospital:!document.getElementById('hstHospPanel').hidden
+}));
+ck('15-c4. Escape는 모달을 닫지 않고 원래 크기로만 복귀',
+  !fullHistory.full&&fullHistory.pressed==='false'&&fullHistory.modal&&fullHistory.hospital,JSON.stringify(fullHistory));
 await page.selectOption('#hstPeriod','prev');
 ck('15-d. E병원을 제외하고 A병원의 선택 기간 안 직전 이력을 연결',
   await page.locator('#hstTableHost tbody tr').count()===1&&
