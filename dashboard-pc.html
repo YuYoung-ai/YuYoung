@@ -1085,6 +1085,9 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-gap.is-last{font-weight:800;color:var(--navy)}
 .hst-gap-sep{margin:0 4px;color:var(--text-muted)}
 .hst-gap-unit{margin-left:3px;color:var(--text-muted)}
+/* 아직 끝나지 않은 간격 — 점선 테두리로 "진행 중"임을 드러낸다 */
+.hst-gap-open{display:inline-block;margin-left:6px;border:1px dashed var(--gray-line);border-radius:999px;
+  padding:1px 6px;color:var(--teal);font-weight:700;font-variant-numeric:tabular-nums}
 .hst-trend{display:inline-block;border-radius:999px;padding:3px 8px;background:var(--track);
   color:var(--text-muted);font-size:10.5px;font-weight:700;white-space:nowrap}
 .hst-trend b{font-variant-numeric:tabular-nums}
@@ -6428,8 +6431,11 @@ function exHistoryCycleTrend_(gaps){
   var diff=Math.round((late-early)*10)/10;
   return {dir:diff>=1?'up':(diff<=-1?'down':'flat'),diff:diff,early:early,late:late};
 }
-function exHistoryCycles_(rows,opt){
+function exHistoryCycles_(rows,opt,asOf){
   opt=opt||{};
+  /* 진행 중인 간격의 기준일 — 오늘과 선택 기간 종료일 중 이른 날.
+     기간이 과거로 끝나면 그 뒤의 발생을 모르므로 오늘까지 세면 안 된다. */
+  var base=asOf?new Date(asOf):exBaseDate(); base.setHours(0,0,0,0);
   var groups=Object.create(null), out=[];
   var items=(rows||[]).map(function(r){return {r:r,period:'cur'};});
   exHistoryFilter_(items,{period:'cur',gubun:opt.gubun,type:opt.type,fse:opt.fse,sales:opt.sales,q:opt.q})
@@ -6459,6 +6465,11 @@ function exHistoryCycles_(rows,opt){
     g.lastGap=g.gaps.length?g.gaps[g.gaps.length-1]:null;
     g.span=(g.first&&g.last)?hpCleanDays_(g.first,g.last):null;
     g.trend=exHistoryCycleTrend_(g.gaps);
+    /* 마지막 발생 이후 아직 끝나지 않은 간격 — "지금 며칠째 조용한가".
+       완료된 간격이 아니므로 평균·중앙값·추세에는 넣지 않고 따로 읽는다. */
+    g.base=base;
+    g.openGap=g.last?hpCleanDays_(g.last,base):null;
+    g.openRatio=(g.median&&g.openGap!=null)?Math.round(g.openGap/g.median*10)/10:null;
     delete g.seen;
   });
   /* 한 번만 발생한 조합은 간격이 없어 주기를 말할 수 없다 — 목록에서 뺀다(요약에 개수만 남긴다) */
@@ -6483,7 +6494,8 @@ function exHistoryCycleSummary_(rows){
     all=all.concat(g.gaps);
   });
   var stat=exHistoryStatSummary_(all);
-  return {groups:rows.length,up:up,down:down,flat:flat,none:none,
+  var quiet=rows.filter(function(g){return g.openRatio!=null&&g.openRatio>1;}).length;
+  return {groups:rows.length,up:up,down:down,flat:flat,none:none,quiet:quiet,
     gaps:all.length,median:stat.median,avg:stat.avg,
     earlyAvg:exHistoryCycleAvg_(early),lateAvg:exHistoryCycleAvg_(late),
     single:rows.singleCount||0};
@@ -6682,8 +6694,8 @@ function exHistoryRollupTsv_(rows){
 /* 재발 주기 TSV — 화면과 같은 순서·같은 값. 간격은 " 3 · 5 · 10 " 대신 계산에 쓰기 좋게 콤마로 잇는다. */
 function exHistoryCycleTsv_(rows){
   var head=['병원','VOC 유형','장비번호','발생 횟수','첫 발생','최근 발생','관찰 기간(일)',
-    '재발 간격(일, 오래된→최근)','평균','중앙값','최단','최장','최근 간격',
-    '추세','앞 절반 평균','뒤 절반 평균','차이(일)'];
+    '재발 간격(일, 오래된→최근)','평균','중앙값','최단','최장','마지막 간격',
+    '현재 진행(일)','중앙값 대비','기준일','추세','앞 절반 평균','뒤 절반 평균','차이(일)'];
   var lines=[head.join('\t')];
   var label={up:'간격 길어짐(빈도 감소)',down:'간격 짧아짐(빈도 증가)',flat:'비슷',none:'판단 불가'};
   (rows||[]).forEach(function(g){
@@ -6691,6 +6703,7 @@ function exHistoryCycleTsv_(rows){
       String(g.count),ymd(g.first),ymd(g.last),String(g.span==null?'':g.span),
       g.gaps.join(', '),String(g.avg==null?'':g.avg),String(g.median==null?'':g.median),
       String(g.min==null?'':g.min),String(g.max==null?'':g.max),String(g.lastGap==null?'':g.lastGap),
+      String(g.openGap==null?'':g.openGap),String(g.openRatio==null?'':g.openRatio),ymd(g.base),
       label[g.trend.dir]||'',String(g.trend.early==null?'':g.trend.early),
       String(g.trend.late==null?'':g.trend.late),String(g.trend.diff==null?'':g.trend.diff)].join('\t'));
   });
@@ -6869,7 +6882,9 @@ function exHospTrend_(name,type,asOf){
   var recent6=dates.filter(function(d){return d>exTrendShift_(today,6);}).length;
   var gaps=[];
   for(i=1;i<dates.length;i++) gaps.push(hpCleanDays_(dates[i-1],dates[i]));
+  var gapStat=exHistoryStatSummary_(gaps);
   return {hosp:name,type:type||'',first:first,last:last,days:days,spanText:exTrendSpanText_(days),
+    medianGap:gapStat.median,
     total:dates.length,years:years,calendar:calendar,
     recent12:recent12,recent12Rate:exTrendRate_(recent12,12),
     prev12:hasPrev?prev12:null,prev12Rate:hasPrev?exTrendRate_(prev12,12):null,
@@ -6910,8 +6925,9 @@ function exHospTrendHtml_(t){
             '이전 '+t.breakPoint.before+'/월 → 이후 '+t.breakPoint.after+'/월 · '+t.breakPoint.dropPct+'% 감소')
         : exTrendRow_('전환 시점','<span class="muted">뚜렷한 감소 시점 없음</span>'))
       +exTrendRow_('현재 빈도','<b>최근 6개월 '+exNum(t.recent6)+'회</b> '+t.recent6Rate+'/월',
-        '최근 발생 '+esc(ymd(t.last))+' · '+exNum(t.sinceLast)+'일 경과'
-        +(t.lastGap==null?'':' · 마지막 간격 '+exNum(t.lastGap)+'일'))
+        '최근 발생 '+esc(ymd(t.last))+' · <b>무발생 '+exNum(t.sinceLast)+'일째</b>'
+        +(t.lastGap==null?'':' · 마지막 간격 '+exNum(t.lastGap)+'일')
+        +(t.medianGap==null?'':' · 간격 중앙값 '+exNum(t.medianGap)+'일'))
     +'</ul>'
     +'<p class="hst-trend-note">발생일 기준(같은 날 여러 건은 1회) · 고객 서비스 전체 기록 · 상단 기간 필터와 무관</p>'
     +'</section>';
@@ -7198,7 +7214,24 @@ function exHistoryCycleGapsHtml_(g){
   var gaps=g.gaps||[], head=gaps.length>12?('<span class="muted">… </span>'):'';
   return head+gaps.slice(-12).map(function(v,i,arr){
     return '<span class="hst-gap'+(i===arr.length-1?' is-last':'')+'">'+exNum(v)+'</span>';
-  }).join('<span class="hst-gap-sep">·</span>')+'<span class="hst-gap-unit">일</span>';
+  }).join('<span class="hst-gap-sep">·</span>')+'<span class="hst-gap-unit">일</span>'
+    /* 마지막 칸은 아직 끝나지 않은 간격이다 — 완료된 간격과 구분해 점선으로 붙인다 */
+    +(g.openGap==null?'':'<span class="hst-gap-open" title="'
+      +escAttr('마지막 발생 '+ymd(g.last)+' 이후 '+g.base.getFullYear()+'-'
+        +String(g.base.getMonth()+1).padStart(2,'0')+'-'+String(g.base.getDate()).padStart(2,'0')+' 까지 아직 재발 없음')
+      +'">+'+exNum(g.openGap)+'일째</span>');
+}
+/* 진행 중인 간격이 그 조합의 평소 주기를 넘었는지 — 넘었다면 그만큼 잠잠하다는 뜻이다 */
+function exHistoryCycleOpenHtml_(g){
+  if(g.openGap==null) return '<span class="muted">—</span>';
+  var badge='';
+  if(g.openRatio!=null){
+    var kind=g.openRatio>=1.5?'good':(g.openRatio<=0.5?'':'');
+    badge=' <span class="hst-freq '+kind+'" title="'+escAttr('중앙값 '+g.median+'일 대비')+'">'
+      +(g.openRatio>=1.5?('중앙값의 '+g.openRatio+'배'):(g.openRatio<=0.5?'주기 이내':('중앙값의 '+g.openRatio+'배')))
+      +'</span>';
+  }
+  return '<b>'+exNum(g.openGap)+'일째</b>'+badge;
 }
 function exHistoryCycleTrendHtml_(t){
   if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 불가</span>';
@@ -7218,6 +7251,8 @@ function exHistoryCycleSummaryHtml_(sum){
       ? '<span class="hst-chip" title="추세를 판단할 수 있는 조합의 앞 절반·뒤 절반 평균 간격입니다">'
         +'전반 평균 <b>'+exNum(sum.earlyAvg)+'일</b> → 후반 평균 <b>'+exNum(sum.lateAvg)+'일</b></span>' : '')
     +'<span class="hst-chip">간격 중앙값 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b></span>'
+    +(sum.quiet?'<span class="hst-chip" title="마지막 발생 이후 지난 날이 그 조합의 간격 중앙값을 넘었습니다">'
+      +'현재 진행이 중앙값 초과 <b>'+exNum(sum.quiet)+'개</b></span>':'')
     +(sum.single?'<span class="hst-chip muted">1회만 발생 '+exNum(sum.single)+'개 조합은 제외</span>':'')
     +'</div>';
 }
@@ -7228,14 +7263,16 @@ function exHistoryCycleTable_(rows){
   var sum=exHistoryCycleSummary_(rows);
   return exHistoryCycleSummaryHtml_(sum)
     +'<table class="hst-table cycle"><colgroup>'
-    +['13%','11%','9%','11%','20%','6%','6%','8%','6%','10%']
+    +['12%','10%','8%','10%','18%','5%','5%','7%','6%','9%','10%']
       .map(function(w){return '<col style="width:'+w+'">';}).join('')
     +'</colgroup><thead><tr>'
     +'<th>병원</th><th>VOC 유형</th><th>장비번호</th>'
     +'<th title="선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다">발생</th>'
     +'<th title="연속 발생 사이의 간격을 오래된 것부터 최근 순으로 적습니다">재발 간격 (오래된 → 최근)</th>'
     +'<th>평균</th><th title="평균은 이상치에 휘둘립니다 — 주 지표는 중앙값입니다">중앙값</th>'
-    +'<th>최단 · 최장</th><th>최근 간격</th>'
+    +'<th>최단 · 최장</th>'
+    +'<th title="마지막으로 끝난 간격 — 끝에서 두 번째 발생과 마지막 발생 사이">마지막 간격</th>'
+    +'<th title="마지막 발생 이후 아직 재발이 없는 일수 · 기준일은 오늘(선택 기간이 과거면 그 종료일)">현재 진행</th>'
     +'<th title="앞 절반 평균과 뒤 절반 평균의 차이 · 간격이 길어졌다면 발생 빈도가 준 것입니다">추세</th>'
     +'</tr></thead><tbody>'
     +rows.map(function(g){
@@ -7249,12 +7286,15 @@ function exHistoryCycleTable_(rows){
         +'<td data-label="장비번호">'+(g.sn?esc(g.sn)
           :'<span class="muted" title="장비번호가 없어 이 병원 · VOC 를 한 묶음으로 봅니다">S/N 미입력 · 병원 단위</span>')+'</td>'
         +'<td class="days" data-label="발생">'+exNum(g.count)+'회'
-          +'<br><span class="muted">'+esc(ymd(g.first))+' ~ '+esc(ymd(g.last))+' · '+exNum(g.span)+'일</span></td>'
+          +'<br><span class="muted">'+esc(ymd(g.first))+' ~ '
+          +esc(g.first.getFullYear()===g.last.getFullYear()?ymd(g.last).slice(5):ymd(g.last))
+          +' · '+exNum(g.span)+'일</span></td>'
         +'<td class="hst-gaps" data-label="재발 간격">'+exHistoryCycleGapsHtml_(g)+'</td>'
         +'<td class="days" data-label="평균">'+exHistoryDayText_(g.avg,'일')+'</td>'
         +'<td class="days" data-label="중앙값">'+exHistoryDayText_(g.median,'일')+'</td>'
         +'<td class="days" data-label="최단 · 최장">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
-        +'<td class="days" data-label="최근 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
+        +'<td class="days" data-label="마지막 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
+        +'<td class="days" data-label="현재 진행">'+exHistoryCycleOpenHtml_(g)+'</td>'
         +'<td data-label="추세">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
         +'</tr>';
     }).join('')
