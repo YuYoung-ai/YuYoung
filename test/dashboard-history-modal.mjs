@@ -1329,5 +1329,24 @@ ck('91. 조회 조건은 맨 위에서 높이를 적게 쓰고 표·병원 이�
   /* 전체화면에서는 병원 이력 패널을 넓게 쓴다 */
   assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen \.hst-hosp-panel\{flex:0 0 clamp\(300px,30%,560px\)\}/);
 });
+ck('92. 전체화면은 요약·안내를 감추고 건수·비교 근거 Excel 은 조회 조건 줄에 남긴다',()=>{
+  const D=build(); open(D,CUR);
+  const html=D.log.opened.html;
+  /* 건수와 Excel 버튼은 조회 조건(.hst-ctlzone) 안, 요약 칩보다 위에 있다 */
+  const zone=html.indexOf('<div class="hst-ctlzone">'), summary=html.indexOf('class="hst-summary"');
+  assert.ok(html.indexOf('id="hstCount"')>zone&&html.indexOf('id="hstCount"')<summary);
+  assert.ok(html.indexOf('id="hstExportExcel"')>zone&&html.indexOf('id="hstExportExcel"')<summary);
+  /* 요약 줄에는 칩만 남고, 결과 줄에는 정렬 설명만 남는다 */
+  assert.ok(html.indexOf('id="hstExportExcel"')<html.indexOf('선택 기간 <b>'),'Excel 버튼은 요약 칩보다 앞');
+  assert.match(SRC,/<div class="hst-result"><span id="hstViewNote">/);
+  /* 필터를 바꿔도 옮긴 건수 표시가 갱신된다(요소는 id 로 찾는다) */
+  D.dom.els.hstQuery.value='없는키워드'; D.exApplyHistoryFilters_();
+  assert.match(D.dom.els.hstCount.innerHTML,/0건/);
+  /* PC 전체화면에서만 요약·비교 안내·결과 줄을 감춘다(좁은 화면은 그대로 둔다) */
+  assert.match(SRC,/@media\(min-width:821px\)\{[\s\S]{0,600}?\.ex-list-box\.history\.is-fullscreen \.hst-summary,\s*\.ex-list-box\.history\.is-fullscreen \.hst-compare-note,\s*\.ex-list-box\.history\.is-fullscreen \.hst-result\{display:none\}/);
+  /* 예시자료 패널은 감추지 않는다 — 행을 선택했을 때만 열린다 */
+  assert.ok(!/is-fullscreen \.hst-photo-panel\{display:none\}/.test(SRC));
+  assert.match(SRC,/<section class="hst-photo-panel" id="hstPhotoPanel" hidden/);
+});
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

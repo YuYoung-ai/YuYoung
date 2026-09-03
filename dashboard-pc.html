@@ -912,7 +912,13 @@ html.hst-evidence-open{overflow:hidden}
    이 영역 안에서만 스크롤한다(최대 15vh). 나머지 높이는 처리 이력 표와 병원 이력이 쓴다. */
 .hst-ctlzone{flex:0 0 auto;min-height:0;max-height:max(140px,15vh);overflow-y:auto;overflow-x:hidden;
   border-bottom:1px solid var(--gray-line);scrollbar-width:thin}
-.hst-ctlzone .hst-toolbar{gap:6px;padding:6px 11px 0}
+.hst-ctltop{display:flex;align-items:center;gap:8px}
+.hst-ctlzone .hst-toolbar{flex:1 1 auto;min-width:0;gap:6px;padding:6px 11px 0}
+/* 건수와 비교 근거 Excel — 요약 줄을 감추는 전체화면에서도 쓸 수 있게 조회 조건 줄에 둔다 */
+.hst-ctlacts{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 11px 0 0;
+  color:var(--text-muted);font-size:10.5px}
+.hst-ctlacts b{color:var(--navy);font-size:11.5px}
+.hst-ctlacts .hst-export{height:30px;color:var(--teal);font-weight:700}
 .hst-ctlzone .hst-controls{gap:6px;padding:6px 11px}
 .hst-ctlzone .hst-breakdown{gap:6px;padding:0 11px 6px}
 .hst-ctlzone .hst-field label{margin-bottom:2px}
@@ -936,6 +942,12 @@ html.hst-evidence-open{overflow:hidden}
    좁은 화면은 패널이 표 아래로 내려가므로 세로 배치 규칙(자연 높이)을 그대로 둔다. */
 @media(min-width:821px){
   .ex-list-box.history.is-fullscreen .hst-hosp-panel{flex:0 0 clamp(300px,30%,560px)}
+  /* 요약 칩·비교 안내·정렬 설명은 전체화면에서 감춘다 — 건수와 비교 근거 Excel 은 위 조회 조건
+     줄에 있고, 남는 높이는 표와 병원 이력이 쓴다. 예시자료 패널은 행을 선택했을 때만 나타난다.
+     좁은 화면은 화면 전체가 스크롤되므로 요약·안내를 그대로 둔다. */
+  .ex-list-box.history.is-fullscreen .hst-summary,
+  .ex-list-box.history.is-fullscreen .hst-compare-note,
+  .ex-list-box.history.is-fullscreen .hst-result{display:none}
 }
 .hst-hosp-panel{flex:0 0 clamp(280px,30%,400px);min-width:0;display:flex;flex-direction:column;
   border-left:1px solid var(--gray-line);background:var(--surface-2);overflow:hidden}
@@ -1102,6 +1114,8 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .ex-list-box.history{height:calc(100vh - 20px);max-height:none;padding:14px}
   .ex-list-box.history.is-fullscreen{padding:10px}
   .hst-ctlzone{max-height:none;overflow:visible}
+  .hst-ctltop{flex-direction:column;align-items:stretch}
+  .hst-ctlacts{padding:6px 11px 0;justify-content:space-between}
   .hst-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hst-breakdown{grid-template-columns:1fr}
   .hst-evidence-strip{display:flex;overflow-x:auto}.hst-evidence-thumb{flex:0 0 210px}
@@ -7520,19 +7534,19 @@ function exShowHistory_(dim, name, opt){
      화면의 대부분은 처리 이력 표와 병원 이력 패널이 쓴다. */
   var html='<div class="hst-view" id="hstView">'
     +'<div class="hst-ctlzone">'
-      +'<div class="hst-toolbar" id="hstToolbar"></div>'
+      +'<div class="hst-ctltop"><div class="hst-toolbar" id="hstToolbar"></div>'
+        +'<div class="hst-ctlacts"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
+        +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 병원·VOC의 최신 선택 + 비교 + 동일비교를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 근거 원본 Excel</button></div></div>'
       +exHistoryControls_(items, true)
       +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
     +'</div>'
     +'<div class="hst-top">'
     +'<div class="hst-summary"><span class="hst-chip">선택 기간 <b>'+esc(per)+' · 원본 '+exNum(comparison.sourceCount)+'건 · 최신 선택 '+esc(curChip)+'</b></span>'
-    +'<span class="hst-chip">비교 <b>'+esc(prevChip)+'</b> · 동일비교 <b>'+exNum(comparison.sameRows.length)+'건</b></span>'
-    +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 병원·VOC의 최신 선택 + 비교 + 동일비교를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 근거 원본 Excel</button></div>'
+    +'<span class="hst-chip">비교 <b>'+esc(prevChip)+'</b> · 동일비교 <b>'+exNum(comparison.sameRows.length)+'건</b></span></div>'
     +exHistoryComparisonNote_(comparison)
     +'<p class="hst-compare-note">두 경과일 모두 최신 선택일 기준: 비교 경과일 / 동일 교체품 비교 경과일 · 비교 대상 없음은 — · 같은 원본의 두 비교 역할은 한 행에 표시</p>'
     +(dim==='kpiSaving'?exSavingEvidenceHtml_():'')
-    +'<div class="hst-result"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
-      +'<span id="hstViewNote">'+esc(orderText)+'</span></div>'
+    +'<div class="hst-result"><span id="hstViewNote">'+esc(orderText)+'</span></div>'
     +exHistoryPhotoPanel_()
     +'</div>'
     +'<div class="hst-main">'
