@@ -1272,18 +1272,33 @@ ck('87. 제거된 분석 영역의 주 영역 전환·크기 조절 코드도 �
   assert.ok(!/exHistoryFocus_|exToggleHistoryStats_|exHistorySplit/.test(SRC));
   assert.ok(!/data-focus="stats"|hst-split|is-split|--hst-top-h/.test(SRC));
 });
-ck('88. 처리이력 전체화면 버튼은 모달 상태를 유지한 채 크기만 전환한다',()=>{
+ck('88. 처리이력은 전체화면으로 열리고 버튼은 모달 상태를 유지한 채 크기만 전환한다',()=>{
   const D=build(); open(D,CUR);
   D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
   const state=D.state(),filtered=state.filtered,panel=state.hospPanel;
   const btn=D.dom.els.exListFullscreen,box=D.dom.els.exListBox;
-  assert.equal(btn.hidden,false);assert.equal(btn.getAttribute('aria-pressed'),'false');
-  assert.equal(D.toggleExListFullscreen_(),true);
+  /* 기본값이 전체화면 — 표와 병원 이력을 함께 보려면 카드 크기로는 둘 다 잘린다 */
+  assert.equal(btn.hidden,false);assert.equal(btn.getAttribute('aria-pressed'),'true');
   assert.equal(box.classList.contains('is-fullscreen'),true);
-  assert.equal(btn.getAttribute('aria-pressed'),'true');assert.ok(btn.textContent.includes('원래 크기'));
-  assert.equal(D.state(),state);assert.equal(D.state().filtered,filtered);assert.equal(D.state().hospPanel,panel);
-  assert.equal(D.toggleExListFullscreen_(false),false);
+  assert.ok(btn.textContent.includes('원래 크기'));
+  assert.equal(D.toggleExListFullscreen_(),false);
   assert.equal(box.classList.contains('is-fullscreen'),false);
+  assert.equal(btn.getAttribute('aria-pressed'),'false');assert.ok(btn.textContent.includes('전체화면'));
+  assert.equal(D.state(),state);assert.equal(D.state().filtered,filtered);assert.equal(D.state().hospPanel,panel);
+  assert.equal(D.toggleExListFullscreen_(true),true);
+  assert.equal(box.classList.contains('is-fullscreen'),true);
+});
+ck('88-1. 고른 창 크기는 다시 그려도(조회 대상 전환·재오픈) 유지된다',()=>{
+  const D=build(); open(D,CUR);
+  /* 스텁 DOM 은 모달을 열 때마다 요소를 다시 만든다 — 열고 난 뒤의 요소를 본다 */
+  D.toggleExListFullscreen_(false);        /* 원래 크기를 고르면 */
+  open(D,CUR);                             /* 다시 열어도 카드 크기 */
+  assert.equal(D.dom.els.exListBox.classList.contains('is-fullscreen'),false);
+  assert.equal(D.dom.els.exListFullscreen.getAttribute('aria-pressed'),'false');
+  D.toggleExListFullscreen_(true);
+  open(D,CUR);
+  assert.equal(D.dom.els.exListBox.classList.contains('is-fullscreen'),true);
+  assert.equal(D.dom.els.exListFullscreen.getAttribute('aria-pressed'),'true');
 });
 ck('89. 일반 명단에는 전체화면 버튼을 숨기고 닫을 때 확대 상태를 정리한다',()=>{
   const D=build(); open(D,CUR);
@@ -1294,10 +1309,25 @@ ck('89. 일반 명단에는 전체화면 버튼을 숨기고 닫을 때 확대 �
   assert.equal(D.dom.els.exListFullscreen.hidden,true);
   assert.equal(D.toggleExListFullscreen_(),false);
 });
-ck('90. 전체화면은 PC 화면을 채우고 모바일에서는 여백 없이 표시하며 Esc로 복귀한다',()=>{
-  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{position:fixed;inset:8px/);
-  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{inset:0;border-radius:0;height:auto\}/);
+ck('90. 전체화면은 여백 없이 화면 전체를 채우고 Esc로 복귀한다',()=>{
+  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{position:fixed;inset:0;/);
+  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{padding:10px\}/,'좁은 화면 여백');
+  assert.ok(!/inset:8px/.test(SRC),'전체화면에 가장자리 여백을 남기지 않는다');
   assert.match(SRC,/if\(box&&box\.classList\.contains\('is-fullscreen'\)\) toggleExListFullscreen_\(false\)/);
+});
+ck('91. 조회 조건은 맨 위에서 높이를 적게 쓰고 표·병원 이력이 화면을 차지한다',()=>{
+  const D=build(); open(D,CUR);
+  const html=D.log.opened.html;
+  /* 조회 조건(보기 전환·필터·건수 카드)이 요약·안내보다 먼저 나온다 */
+  assert.ok(html.indexOf('<div class="hst-ctlzone">')<html.indexOf('class="hst-summary"'));
+  assert.ok(html.indexOf('hstToolbar')<html.indexOf('class="hst-summary"'));
+  assert.ok(html.indexOf('id="hstBreakdown"')<html.indexOf('class="hst-summary"'));
+  assert.ok(html.indexOf('<div class="hst-ctlzone">')<html.indexOf('<div class="hst-top">'));
+  /* 높이 비중을 묶고 넘치면 이 영역 안에서만 스크롤한다 */
+  assert.match(SRC,/\.hst-ctlzone\{flex:0 0 auto;min-height:0;max-height:max\(140px,15vh\);overflow-y:auto/);
+  assert.match(SRC,/\.hst-ctlzone\{max-height:none;overflow:visible\}/,'좁은 화면은 자연 높이');
+  /* 전체화면에서는 병원 이력 패널을 넓게 쓴다 */
+  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen \.hst-hosp-panel\{flex:0 0 clamp\(300px,30%,560px\)\}/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
