@@ -1055,6 +1055,24 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-more button:hover{background:var(--teal-soft)}
 .hst-more span{color:var(--text-muted);font-size:10.5px;font-variant-numeric:tabular-nums}
 .hst-table.rollup{min-width:920px}
+/* ── 재발 주기 보기 ──
+   간격 나열은 자릿수를 맞춰 읽고 마지막(가장 최근) 간격만 굵게 둔다.
+   추세 배지는 "간격이 길어짐 = 발생 빈도 감소" 를 좋은 방향(teal)으로 칠한다. */
+.hst-table.cycle{min-width:1120px}
+.hst-cycle-sum{display:flex;flex-wrap:wrap;gap:7px;padding:9px 11px;background:var(--surface);
+  border-bottom:1px solid var(--gray-line)}
+.hst-cycle-sum .hst-chip.muted{color:var(--text-muted)}
+.hst-gaps{font-variant-numeric:tabular-nums;line-height:1.75}
+.hst-gap.is-last{font-weight:800;color:var(--navy)}
+.hst-gap-sep{margin:0 4px;color:var(--text-muted)}
+.hst-gap-unit{margin-left:3px;color:var(--text-muted)}
+.hst-trend{display:inline-block;border-radius:999px;padding:3px 8px;background:var(--track);
+  color:var(--text-muted);font-size:10.5px;font-weight:700;white-space:nowrap}
+.hst-trend b{font-variant-numeric:tabular-nums}
+.hst-trend.up{background:var(--teal-soft);color:#12607F}
+.hst-trend.down{background:#FBEAE8;color:var(--red)}
+body.dark .hst-trend.up{color:var(--teal)}
+body.dark .hst-trend.down{background:#3A2023}
 .hst-table tbody tr.hst-rollup-row:hover{background:var(--surface-2)}
 .hst-table tbody tr.hst-rollup-row.is-error{background:rgba(184,134,11,.10)}
 body.dark .hst-stat-kicker{background:var(--teal-soft);color:var(--teal)}
@@ -1140,6 +1158,10 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-toolbar{align-items:stretch;flex-direction:column}
   .hst-toolbar .hst-copy-all{margin-left:0}
   .hst-table.rollup{min-width:0}
+  /* 재발 주기는 카드 배치에서 병원·간격을 각각 한 줄로 편다 */
+  .hst-table.cycle{min-width:0}
+  .hst-table.cycle tr{grid-template-columns:1fr 1fr}
+  .hst-table.cycle td.hosp,.hst-table.cycle td.hst-gaps{grid-column:1/-1;grid-row:auto}
   /* 모바일은 한 열로 쌓고, 표와 패널이 좁은 화면을 나눠 갖는 대신 이력 화면 전체를 스크롤한다.
      사진 2장(각 1열)과 표를 한 화면에 동시에 넣으면 표가 사실상 사라진다. */
   .hst-view{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
@@ -6105,6 +6127,12 @@ var EX_HISTORY_SEARCH_TIMER=null;
 var EX_HISTORY_SEARCH_SEQ=0;
 var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
+/* 보기별 안내 문구 — 도구 막대 동기화가 이 표 하나만 읽는다 */
+var EX_HISTORY_VIEW_NOTE={
+  rows:'행 보기 · 행을 누르면 VOC 유형별 표준 참고 예시가 열립니다',
+  hosp:'병원별 보기 · 최신 선택 기준(기간 선택 없음) · 행 클릭으로 예시자료를 열지 않습니다',
+  cycle:'재발 주기 · 선택 기간 안의 발생만 · 병원 · VOC · 장비번호(S/N) 단위 · 같은 날 여러 건은 1회'
+};
 /* 열 헤더 첫 클릭 방향 — 이후 같은 헤더 재클릭은 asc/desc 전환 */
 var EX_HISTORY_SORT_DIR={date:'desc',hosp:'asc',elapsed:'asc',same:'asc',cost:'desc'};
 /* 모달 안에서 바꿀 수 있는 조회 대상 — 모든 VOC·교체품을 다시 나열하지 않는다 */
@@ -6353,6 +6381,94 @@ function exHistoryDayText_(v,unit){
   return v==null?'<span class="muted">—</span>':(exNum(v)+(unit||''));
 }
 
+/* ══════ 재발 주기 — 병원 · VOC 유형 · 장비번호(S/N) ══════
+   묻는 것은 하나다. "이 병원의 이 VOC 가 몇 일 간격으로 다시 나오는가."
+   · 모집단은 선택 기간 원본(state.sourceRows)이다 — 최신 선택으로 접은 목록은 조합마다
+     간격이 하나뿐이라 주기를 말할 수 없다. 상단 조회 조건(구분·VOC·담당자·영업·검색)은 그대로 적용한다.
+   · 같은 날 여러 건(장비 여러 대·행을 나눠 적은 기록)은 1회 발생으로 접는다. 같은 날은 순서를
+     알 수 없어 간격 0 이 아무 뜻도 없기 때문이다.
+   · 장비번호가 있으면 장비 단위, 없으면 그 병원·VOC 의 "S/N 미입력" 묶음으로 함께 본다(병원 단위 추정).
+   · 추세는 간격을 앞 절반과 뒤 절반으로 나눠 평균을 견준다. 간격이 길어졌다면 그만큼 발생 빈도가
+     줄어든 것이다(사용 기간이 쌓이고 익숙해지며 줄어드는 흐름). 간격이 2개 미만이면 판단하지 않는다. */
+function exHistoryCycleKey_(hosp,type,sn){
+  return JSON.stringify([nkey(hosp),nkey(vocTypeCanonical_(type)),sn?nkey(sn):'']);
+}
+function exHistoryCycleAvg_(list){
+  if(!list||!list.length) return null;
+  var sum=0; for(var i=0;i<list.length;i++) sum+=list[i];
+  return Math.round(sum/list.length*10)/10;
+}
+/* 간격 2개 미만은 추세를 말하지 않는다. 홀수면 가운데 간격은 어느 쪽에도 넣지 않는다. */
+function exHistoryCycleTrend_(gaps){
+  gaps=gaps||[];
+  if(gaps.length<2) return {dir:'none',diff:null,early:null,late:null};
+  var half=Math.floor(gaps.length/2);
+  var early=exHistoryCycleAvg_(gaps.slice(0,half));
+  var late=exHistoryCycleAvg_(gaps.slice(gaps.length-half));
+  var diff=Math.round((late-early)*10)/10;
+  return {dir:diff>=1?'up':(diff<=-1?'down':'flat'),diff:diff,early:early,late:late};
+}
+function exHistoryCycles_(rows,opt){
+  opt=opt||{};
+  var groups=Object.create(null), out=[];
+  var items=(rows||[]).map(function(r){return {r:r,period:'cur'};});
+  exHistoryFilter_(items,{period:'cur',gubun:opt.gubun,type:opt.type,fse:opt.fse,sales:opt.sales,q:opt.q})
+    .forEach(function(it){
+      var r=it.r||{}, d=exHistoryValidDate_(r);
+      var hosp=exHistoryVal_(r.hosp), type=exHistoryVal_(r.type);
+      if(!d||!hosp||!type) return;            /* 병원명·VOC·처리일이 없으면 주기를 물을 수 없다 */
+      var sn=exHistoryVal_(r.sn), key=exHistoryCycleKey_(hosp,type,sn);
+      var g=groups[key];
+      if(!g){
+        g=groups[key]={key:key,hosp:hosp,type:type,sn:sn||'',dates:[],seen:Object.create(null),order:out.length};
+        out.push(g);
+      }
+      var dk=ymd(d);
+      if(g.seen[dk]) return;                  /* 같은 날 여러 건은 1회 발생 */
+      g.seen[dk]=1; g.dates.push(d);
+    });
+  out.forEach(function(g){
+    g.dates.sort(function(a,b){return a-b;});
+    g.count=g.dates.length;
+    g.first=g.dates[0]||null; g.last=g.dates[g.count-1]||null;
+    g.gaps=[];
+    for(var i=1;i<g.count;i++) g.gaps.push(hpCleanDays_(g.dates[i-1],g.dates[i]));
+    var stat=exHistoryStatSummary_(g.gaps);
+    g.avg=stat.avg; g.median=stat.median; g.min=stat.min;
+    g.max=g.gaps.length?Math.max.apply(null,g.gaps):null;
+    g.lastGap=g.gaps.length?g.gaps[g.gaps.length-1]:null;
+    g.span=(g.first&&g.last)?hpCleanDays_(g.first,g.last):null;
+    g.trend=exHistoryCycleTrend_(g.gaps);
+    delete g.seen;
+  });
+  /* 한 번만 발생한 조합은 간격이 없어 주기를 말할 수 없다 — 목록에서 뺀다(요약에 개수만 남긴다) */
+  var single=out.filter(function(g){return !g.gaps.length;}).length;
+  out=out.filter(function(g){return g.gaps.length>0;});
+  out.sort(function(a,b){
+    return (b.count-a.count)||((a.lastGap==null?1e9:a.lastGap)-(b.lastGap==null?1e9:b.lastGap))
+      ||skCmpKo_(a.hosp||'',b.hosp||'')||(a.order-b.order);
+  });
+  out.singleCount=single;
+  return out;
+}
+/* 화면 위쪽 한 줄 요약 — "간격이 길어진 조합이 몇 개인가"가 빈도 감소의 근거다. */
+function exHistoryCycleSummary_(rows){
+  rows=rows||[];
+  var up=0,down=0,flat=0,none=0,early=[],late=[],all=[];
+  rows.forEach(function(g){
+    if(g.trend.dir==='up') up++; else if(g.trend.dir==='down') down++;
+    else if(g.trend.dir==='flat') flat++; else none++;
+    if(g.trend.early!=null) early.push(g.trend.early);
+    if(g.trend.late!=null) late.push(g.trend.late);
+    all=all.concat(g.gaps);
+  });
+  var stat=exHistoryStatSummary_(all);
+  return {groups:rows.length,up:up,down:down,flat:flat,none:none,
+    gaps:all.length,median:stat.median,avg:stat.avg,
+    earlyAvg:exHistoryCycleAvg_(early),lateAvg:exHistoryCycleAvg_(late),
+    single:rows.singleCount||0};
+}
+
 /* ══════ 조치 방법별 재발 비교 — 내부수리군 vs Handpiece 교체군 ══════
    목적은 하나다. "재발했다"는 사실만으로 내부수리를 원인으로 지목하거나,
    재발 방지를 이유로 수리 가능한 Handpiece 를 선제 교체할 근거가 되는지 확인한다.
@@ -6543,6 +6659,23 @@ function exHistoryRollupTsv_(rows){
   return lines.join('\n');
 }
 /* navigator.clipboard 가 없거나 실패하면 textarea + execCommand('copy') 로 되돌아간다 */
+/* 재발 주기 TSV — 화면과 같은 순서·같은 값. 간격은 " 3 · 5 · 10 " 대신 계산에 쓰기 좋게 콤마로 잇는다. */
+function exHistoryCycleTsv_(rows){
+  var head=['병원','VOC 유형','장비번호','발생 횟수','첫 발생','최근 발생','관찰 기간(일)',
+    '재발 간격(일, 오래된→최근)','평균','중앙값','최단','최장','최근 간격',
+    '추세','앞 절반 평균','뒤 절반 평균','차이(일)'];
+  var lines=[head.join('\t')];
+  var label={up:'간격 길어짐(빈도 감소)',down:'간격 짧아짐(빈도 증가)',flat:'비슷',none:'판단 불가'};
+  (rows||[]).forEach(function(g){
+    lines.push([exHistoryTsvCell_(g.hosp),exHistoryTsvCell_(g.type),g.sn?exHistoryTsvCell_(g.sn):'S/N 미입력',
+      String(g.count),ymd(g.first),ymd(g.last),String(g.span==null?'':g.span),
+      g.gaps.join(', '),String(g.avg==null?'':g.avg),String(g.median==null?'':g.median),
+      String(g.min==null?'':g.min),String(g.max==null?'':g.max),String(g.lastGap==null?'':g.lastGap),
+      label[g.trend.dir]||'',String(g.trend.early==null?'':g.trend.early),
+      String(g.trend.late==null?'':g.trend.late),String(g.trend.diff==null?'':g.trend.diff)].join('\t'));
+  });
+  return lines.join('\n');
+}
 function exClipboardFallback_(text){
   try{
     if(typeof document==='undefined'||!document.createElement||!document.body) return false;
@@ -6597,12 +6730,15 @@ function exCopyHistoryTsv_(){
   if(!EX_HISTORY_STATE) return;
   exHistoryFlushSearch_();                     /* 대기 중인 검색을 즉시 반영한 뒤 복사 */
   var state=EX_HISTORY_STATE; if(!state) return;
-  var rollup=state.view==='hosp';
-  var text=rollup?exHistoryRollupTsv_(state.rollup)
-    :exHistoryRowsTsv_(state.filtered,state.showCost,state.comparison);
-  var n=rollup?((state.rollup||[]).length):((state.filtered||[]).length);
+  var view=exHistoryViewOf_(state.view);
+  var text=view==='hosp'?exHistoryRollupTsv_(state.rollup)
+    :(view==='cycle'?exHistoryCycleTsv_(state.cycles)
+    :exHistoryRowsTsv_(state.filtered,state.showCost,state.comparison));
+  var n=view==='hosp'?((state.rollup||[]).length)
+    :(view==='cycle'?((state.cycles||[]).length):((state.filtered||[]).length));
+  var what={hosp:'병원별 집계 ',cycle:'재발 주기 ',rows:'필터 결과 '}[view];
   exClipboardWrite_(text).then(function(ok){
-    toast(ok?((rollup?'병원별 집계 ':'필터 결과 ')+exNum(n)+'행을 헤더와 함께 복사했습니다')
+    toast(ok?(what+exNum(n)+'행을 헤더와 함께 복사했습니다')
       :'❌ 복사하지 못했습니다 · 내용을 직접 선택해 주세요');
   });
 }
@@ -6723,10 +6859,10 @@ function exCaptureHistoryUi_(state){
   });
   if(state){
     out.sort=state.sort&&state.sort.key?{key:state.sort.key,dir:state.sort.dir}:null;
-    out.view=state.view==='hosp'?'hosp':'rows';
+    out.view=exHistoryViewOf_(state.view);
     out.rowsPeriod=state.rowsPeriod||out.values.hstPeriod||'cur';
     out.salesExpanded=!!state.salesCountsExpanded;
-    if(out.view==='hosp') out.values.hstPeriod=out.rowsPeriod;   /* 행 보기로 돌아갈 때 복원할 기간 */
+    if(out.view!=='rows') out.values.hstPeriod=out.rowsPeriod;   /* 행 보기로 돌아갈 때 복원할 기간 */
   }
   return out;
 }
@@ -6760,7 +6896,7 @@ function exRestoreHistoryUi_(prefs,mode,state){
     var sort=prefs.sort;
     var usable=!!(sort&&sort.key&&EX_HISTORY_SORT_DIR[sort.key]&&(sort.key!=='cost'||state.showCost));
     state.sort=usable?{key:sort.key,dir:sort.dir==='desc'?'desc':'asc'}:null;
-    state.view=prefs.view==='hosp'?'hosp':'rows';
+    state.view=exHistoryViewOf_(prefs.view);
     state.rowsPeriod=prefs.rowsPeriod||'cur';
     state.salesCountsExpanded=!!prefs.salesExpanded;
     state.renderLimit=EX_HISTORY_PAGE;            /* 렌더된 더 보기 개수는 유지하지 않는다 */
@@ -6893,6 +7029,72 @@ function exHistoryRollupTable_(rows){
     }).join('')+'</tbody></table>';
 }
 /* 비교 기간 표기 — 대시보드가 이미 계산해 둔 x.cmp 를 그대로 쓴다 */
+/* 재발 주기 표 — 한 줄이 병원 · VOC · 장비 한 조합이고, 간격을 오래된 것부터 최근 순으로 늘어놓는다. */
+function exHistoryCycleGapsHtml_(g){
+  var gaps=g.gaps||[], head=gaps.length>12?('<span class="muted">… </span>'):'';
+  return head+gaps.slice(-12).map(function(v,i,arr){
+    return '<span class="hst-gap'+(i===arr.length-1?' is-last':'')+'">'+exNum(v)+'</span>';
+  }).join('<span class="hst-gap-sep">·</span>')+'<span class="hst-gap-unit">일</span>';
+}
+function exHistoryCycleTrendHtml_(t){
+  if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 불가</span>';
+  var sign=t.diff>0?'+':'';
+  var label={up:'길어짐 ▲',down:'짧아짐 ▼',flat:'비슷 ─'}[t.dir];
+  var title='앞 절반 평균 '+exNum(t.early)+'일 → 뒤 절반 평균 '+exNum(t.late)+'일'
+    +(t.dir==='up'?' · 간격이 길어졌으니 발생 빈도는 줄었습니다':(t.dir==='down'?' · 간격이 짧아졌으니 발생 빈도는 늘었습니다':''));
+  return '<span class="hst-trend '+t.dir+'" title="'+escAttr(title)+'">'+label
+    +' <b>'+sign+exNum(t.diff)+'일</b></span>';
+}
+function exHistoryCycleSummaryHtml_(sum){
+  return '<div class="hst-cycle-sum">'
+    +'<span class="hst-chip">조합 <b>'+exNum(sum.groups)+'개</b> · 간격 '+exNum(sum.gaps)+'개</span>'
+    +'<span class="hst-chip">간격 길어짐(빈도 감소) <b>'+exNum(sum.up)+'</b> · 짧아짐 <b>'+exNum(sum.down)+'</b>'
+      +' · 비슷 <b>'+exNum(sum.flat)+'</b> · 판단 불가 <b>'+exNum(sum.none)+'</b></span>'
+    +(sum.earlyAvg!=null&&sum.lateAvg!=null
+      ? '<span class="hst-chip" title="추세를 판단할 수 있는 조합의 앞 절반·뒤 절반 평균 간격입니다">'
+        +'전반 평균 <b>'+exNum(sum.earlyAvg)+'일</b> → 후반 평균 <b>'+exNum(sum.lateAvg)+'일</b></span>' : '')
+    +'<span class="hst-chip">간격 중앙값 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b></span>'
+    +(sum.single?'<span class="hst-chip muted">1회만 발생 '+exNum(sum.single)+'개 조합은 제외</span>':'')
+    +'</div>';
+}
+function exHistoryCycleTable_(rows){
+  if(!rows||!rows.length)
+    return '<div class="hst-empty">선택한 기간·필터에서 두 번 이상 발생한 병원 · VOC · 장비 조합이 없습니다.<br>'
+      +'상단 기간을 넓히면 더 많은 재발 간격이 보입니다.</div>';
+  var sum=exHistoryCycleSummary_(rows);
+  return exHistoryCycleSummaryHtml_(sum)
+    +'<table class="hst-table cycle"><colgroup>'
+    +['13%','11%','9%','11%','20%','6%','6%','8%','6%','10%']
+      .map(function(w){return '<col style="width:'+w+'">';}).join('')
+    +'</colgroup><thead><tr>'
+    +'<th>병원</th><th>VOC 유형</th><th>장비번호</th>'
+    +'<th title="선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다">발생</th>'
+    +'<th title="연속 발생 사이의 간격을 오래된 것부터 최근 순으로 적습니다">재발 간격 (오래된 → 최근)</th>'
+    +'<th>평균</th><th title="평균은 이상치에 휘둘립니다 — 주 지표는 중앙값입니다">중앙값</th>'
+    +'<th>최단 · 최장</th><th>최근 간격</th>'
+    +'<th title="앞 절반 평균과 뒤 절반 평균의 차이 · 간격이 길어졌다면 발생 빈도가 준 것입니다">추세</th>'
+    +'</tr></thead><tbody>'
+    +rows.map(function(g){
+      return '<tr class="hst-cycle-row">'
+        +'<td class="hosp" data-label="병원">'
+          +'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(g.hosp)+'"'
+          +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력을 오른쪽에 엽니다"'
+          +' aria-label="'+escAttr(g.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(g.hosp)+'</button></td>'
+        +'<td data-label="VOC 유형">'+esc(g.type)+'</td>'
+        +'<td data-label="장비번호">'+(g.sn?esc(g.sn)
+          :'<span class="muted" title="장비번호가 없어 이 병원 · VOC 를 한 묶음으로 봅니다">S/N 미입력 · 병원 단위</span>')+'</td>'
+        +'<td class="days" data-label="발생">'+exNum(g.count)+'회'
+          +'<br><span class="muted">'+esc(ymd(g.first))+' ~ '+esc(ymd(g.last))+' · '+exNum(g.span)+'일</span></td>'
+        +'<td class="hst-gaps" data-label="재발 간격">'+exHistoryCycleGapsHtml_(g)+'</td>'
+        +'<td class="days" data-label="평균">'+exHistoryDayText_(g.avg,'일')+'</td>'
+        +'<td class="days" data-label="중앙값">'+exHistoryDayText_(g.median,'일')+'</td>'
+        +'<td class="days" data-label="최단 · 최장">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
+        +'<td class="days" data-label="최근 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
+        +'<td data-label="추세">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table>';
+}
 function exCmpRangeText_(cmp){
   if(!cmp) return '';
   return cmp.from.replace(/-/g,'.')+'~'+cmp.to.slice(5).replace(/-/g,'.');
@@ -7262,14 +7464,20 @@ function exHistoryDimValue_(state){
   for(var i=0;i<EX_HISTORY_DIMS.length;i++) if(EX_HISTORY_DIMS[i][0]===state.dim) return state.dim;
   return '__current__';
 }
+/* 보기는 세 가지다 — 행 / 병원별 / 재발 주기. 버튼 하나를 만드는 규칙을 한 곳에 둔다. */
+function exHistoryViewBtn_(view,label,current,title){
+  var on=current===view;
+  return '<button type="button" data-hst-view="'+view+'" class="'+(on?'is-active':'')+'"'
+    +' aria-pressed="'+(on?'true':'false')+'" title="'+escAttr(title)+'"'
+    +' onclick="exSetHistoryView_(\''+view+'\')">'+esc(label)+'</button>';
+}
 function exHistoryToolbarHtml_(state){
-  var rollup=state&&state.view==='hosp', value=exHistoryDimValue_(state);
+  var view=exHistoryViewOf_(state&&state.view), value=exHistoryDimValue_(state);
   var current=(state&&state.originName)?('현재 조회 · '+state.originName):'현재 조회';
   return '<div class="hst-viewtoggle" role="group" aria-label="처리이력 보기 전환">'
-      +'<button type="button" data-hst-view="rows" class="'+(rollup?'':'is-active')+'"'
-        +' aria-pressed="'+(rollup?'false':'true')+'" onclick="exSetHistoryView_(\'rows\')">행 보기</button>'
-      +'<button type="button" data-hst-view="hosp" class="'+(rollup?'is-active':'')+'"'
-        +' aria-pressed="'+(rollup?'true':'false')+'" onclick="exSetHistoryView_(\'hosp\')">병원별 보기</button>'
+      +exHistoryViewBtn_('rows','행 보기',view,'처리 이력을 한 건씩 봅니다')
+      +exHistoryViewBtn_('hosp','병원별 보기',view,'병원 단위로 접어 봅니다')
+      +exHistoryViewBtn_('cycle','재발 주기',view,'병원 · VOC · 장비별로 몇 일 간격으로 다시 나오는지 봅니다')
     +'</div>'
     +'<div class="hst-field"><label for="hstDim">조회 대상</label>'
       +'<select id="hstDim" title="대시보드 상단 필터는 그대로 두고 모집단만 바꿉니다" onchange="exSwitchHistoryDim_(this.value)">'
@@ -7278,38 +7486,43 @@ function exHistoryToolbarHtml_(state){
       +'</select></div>'
     +'<button type="button" class="hst-copy-all" id="hstCopyTsv" onclick="exCopyHistoryTsv_()"'
       +' aria-label="현재 필터 결과 전체를 헤더 포함 TSV로 복사">'
-      +(rollup?'병원별 결과 TSV 복사':'필터 결과 TSV 복사')+'</button>';
+      +exHistoryCopyLabel_(view)+'</button>';
+}
+function exHistoryViewOf_(view){
+  return (view==='hosp'||view==='cycle')?view:'rows';
+}
+function exHistoryCopyLabel_(view){
+  return view==='hosp'?'병원별 결과 TSV 복사':(view==='cycle'?'재발 주기 TSV 복사':'필터 결과 TSV 복사');
 }
 /* 표시 상태만 맞춘다 — 도구 막대를 매번 다시 그리면 포커스가 사라진다 */
 function exHistorySyncToolbar_(state){
   state=state||EX_HISTORY_STATE;
-  var rollup=!!(state&&state.view==='hosp');
+  var view=exHistoryViewOf_(state&&state.view);
   if(document.querySelectorAll){
     var btns=document.querySelectorAll('#hstToolbar [data-hst-view]');
     for(var i=0;i<btns.length;i++){
-      var on=btns[i].getAttribute('data-hst-view')===(rollup?'hosp':'rows');
+      var on=btns[i].getAttribute('data-hst-view')===view;
       if(btns[i].classList) btns[i].classList.toggle('is-active',on);
       btns[i].setAttribute('aria-pressed',on?'true':'false');
     }
   }
   var copy=document.getElementById('hstCopyTsv');
-  if(copy) copy.textContent=rollup?'병원별 결과 TSV 복사':'필터 결과 TSV 복사';
-  /* 병원별 보기에서 기간 select 는 비활성화하고 최신 선택 기준으로 고정한다 */
+  if(copy) copy.textContent=exHistoryCopyLabel_(view);
+  /* 행 보기가 아니면 기간 select 는 비활성화하고 최신 선택 기준으로 고정한다
+     (병원별 보기는 최신 선택, 재발 주기는 선택 기간 원본을 직접 읽는다) */
   var period=document.getElementById('hstPeriod');
-  if(period){ period.disabled=rollup; if(rollup) period.value='cur'; }
+  if(period){ period.disabled=(view!=='rows'); if(view!=='rows') period.value='cur'; }
   var note=document.getElementById('hstViewNote');
-  if(note) note.textContent=rollup
-    ?'병원별 보기 · 최신 선택 기준(기간 선택 없음) · 행 클릭으로 예시자료를 열지 않습니다'
-    :'행 보기 · 행을 누르면 VOC 유형별 표준 참고 예시가 열립니다';
+  if(note) note.textContent=EX_HISTORY_VIEW_NOTE[view]||EX_HISTORY_VIEW_NOTE.rows;
 }
 function exSetHistoryView_(view){
   var state=EX_HISTORY_STATE; if(!state) return;
-  view=view==='hosp'?'hosp':'rows';
+  view=exHistoryViewOf_(view);
   if(state.view===view) return;
   exHistoryFlushSearch_();
   state=EX_HISTORY_STATE; if(!state) return;
   var period=document.getElementById('hstPeriod');
-  if(view==='hosp'){
+  if(view!=='rows'){
     state.rowsPeriod=period?period.value:(state.period||'cur');
     /* 예시자료 패널을 숨기고 진행 중인 표준 예시자료 비동기 요청을 무효화한다 */
     exCloseHistoryExample_();
@@ -7378,13 +7591,13 @@ function exHistoryFilterChanged_(before,after){
 function exApplyHistoryFilters_(){
   if(!EX_HISTORY_STATE) return;
   function val(id, fallback){ var el=document.getElementById(id); return el?el.value:fallback; }
-  var state=EX_HISTORY_STATE, rollup=state.view==='hosp';
+  var state=EX_HISTORY_STATE, view=exHistoryViewOf_(state.view), rollup=view==='hosp';
   var opt={
     period:val('hstPeriod','cur'), gubun:val('hstGubun','all'), type:val('hstType','all'),
     fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery',''),
     salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded
   };
-  if(rollup) opt.period='cur';            /* 병원별 보기는 언제나 최신 선택 기준이다 */
+  if(view!=='rows') opt.period='cur';     /* 행 보기가 아니면 언제나 최신 선택 기준이다 */
   if(exHistoryFilterChanged_(state.filterOptions,opt)) state.renderLimit=EX_HISTORY_PAGE;
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   /* 정렬은 렌더 전에 전체 필터 결과에 적용한다 — 200행 제한은 그린 뒤가 아니라 그릴 때만 쓴다 */
@@ -7401,13 +7614,18 @@ function exApplyHistoryFilters_(){
   analysis.arm=EX_HISTORY_STATE.arm;
   EX_HISTORY_STATE.analysis=analysis;
   EX_HISTORY_STATE.rollup=exHistoryRollup_(analysis);
+  /* 재발 주기는 최신 선택으로 접기 전 원본을 읽는다 — 보고 있을 때만 계산한다 */
+  EX_HISTORY_STATE.cycles=(view==='cycle')?exHistoryCycles_(EX_HISTORY_STATE.sourceRows,opt):[];
   var limit=EX_HISTORY_STATE.renderLimit||EX_HISTORY_PAGE;
   var count=document.getElementById('hstCount'), breakdown=document.getElementById('hstBreakdown'), host=document.getElementById('hstTableHost');
   /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
-  if(count) count.innerHTML=exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
+  if(count) count.innerHTML=(view==='cycle')
+    ? ('<b>'+exNum(EX_HISTORY_STATE.cycles.length)+'개</b> 조합 · 두 번 이상 발생한 병원 · VOC · 장비')
+    : exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
   exHistorySyncToolbar_(EX_HISTORY_STATE);
-  if(host) host.innerHTML=rollup?exHistoryRollupTable_(EX_HISTORY_STATE.rollup):exHistoryTable_(filtered,limit);
+  if(host) host.innerHTML=(view==='cycle')?exHistoryCycleTable_(EX_HISTORY_STATE.cycles)
+    :(rollup?exHistoryRollupTable_(EX_HISTORY_STATE.rollup):exHistoryTable_(filtered,limit));
   exSyncHistoryTypeExample_(opt.type,filtered);
   exRenderHospPanel_();
   exHistoryRestoreSelection_(EX_HISTORY_STATE);
@@ -7524,7 +7742,7 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
+    analysis:null,rollup:[],cycles:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
