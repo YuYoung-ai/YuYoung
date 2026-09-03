@@ -38,6 +38,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_',
   'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
+  'exBaseDate','exHistoryCycleOpenHtml_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
   'exHistoryCycleKey_','exHistoryCycleAvg_','exHistoryCycleTrend_','exHistoryCycles_',
@@ -1449,7 +1450,10 @@ ck('98. 재발 주기 TSV 는 화면과 같은 순서로 간격·추세까지 �
   const first=lines[1].split('\t');
   assert.equal(first[0],'가병원');assert.equal(first[2],'HP-001');
   assert.equal(first[3],'4');assert.equal(first[7],'3, 5, 10');
-  assert.equal(first[13],'간격 길어짐(빈도 감소)');
+  assert.equal(first[12],'10','마지막으로 끝난 간격');
+  assert.equal(first[13],'12','기준일 2026-08-31 − 마지막 발생 08-19');
+  assert.equal(first[15],'2026-08-31','기준일');
+  assert.equal(first[16],'간격 길어짐(빈도 감소)');
   assert.equal(lines[2].split('\t')[2],'S/N 미입력');
 });
 
@@ -1525,6 +1529,29 @@ ck('102. 병원 링크가 VOC 를 넘겨 패널이 그 VOC 기준 추이를 그�
   assert.equal(D.state().hospPanel.type,'풋스위치 작동 불량');
   /* 표의 병원 버튼에도 VOC 가 실린다 */
   assert.match(D.dom.els.hstTableHost.innerHTML,/data-type="노즐 누수\(약액 유입\)"/);
+});
+
+ck('103. 진행 중인 간격은 마지막 발생 이후 기준일까지를 따로 센다',()=>{
+  const D=build(); open(D,CYC);
+  /* 기준일을 직접 주면 오늘과 무관하게 같은 값이 나온다 */
+  const rows=D.exHistoryCycles_(D.state().sourceRows,{},'2026-09-30');
+  const g=rows.find(r=>r.sn==='HP-001');
+  assert.equal(g.lastGap,10,'끝난 간격은 그대로');
+  assert.equal(g.openGap,42,'2026-08-19 → 09-30');
+  assert.equal(g.openRatio,8.4,'중앙값 5일의 8.4배');
+  /* 기준일을 주지 않으면 오늘과 선택 기간 종료일 중 이른 날(F.to=2026-08-31)을 쓴다 */
+  const base=D.exHistoryCycles_(D.state().sourceRows,{})[0];
+  assert.equal(ymdOf(base.base),'2026-08-31');
+  /* 진행 중인 간격은 평균·중앙값·추세에 섞이지 않는다 */
+  assert.deepEqual(g.gaps,[3,5,10]);
+  assert.equal(g.median,5);assert.equal(g.trend.dir,'up');
+  /* 화면에서도 끝난 간격과 구분해 붙이고, 중앙값을 넘으면 표시한다 */
+  D.exSetHistoryView_('cycle');
+  const html=D.dom.els.hstTableHost.innerHTML;
+  assert.match(html,/hst-gap-open/);
+  assert.match(html,/일째/);
+  assert.match(html,/현재 진행이 중앙값 초과/);
+  assert.match(html,/마지막 간격/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
