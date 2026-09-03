@@ -428,6 +428,8 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .car-metric:hover:not(:disabled){border-color:var(--teal);background:var(--teal-soft)}.car-metric:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}.car-metric:disabled{cursor:default;opacity:.55}
 .car-metric span{display:block;color:var(--text-muted);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.car-metric b{display:block;margin-top:1px;color:var(--navy);font-size:14px;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .car-metric.recur b{color:var(--red)}.car-metric.stable b{color:var(--green)}.car-foot{margin-top:5px;color:var(--text-muted);font-size:9.5px;line-height:1.35}
+.car-parts{margin-top:3px;color:var(--text-muted);font-size:9.5px;line-height:1.35;overflow-wrap:anywhere}
+.car-parts b{color:var(--navy);font-variant-numeric:tabular-nums}
 .car-verdict{margin:0;border-left:3px solid var(--teal);border-radius:5px;background:var(--teal-soft);padding:6px 9px;color:var(--text);font-size:10.5px;font-weight:600;line-height:1.45}
 .car-history{height:100%;min-height:0;display:flex;flex-direction:column;padding:10px 11px 0;box-sizing:border-box}.car-history-summary{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:9px}.car-history-summary span{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:4px 8px;color:var(--text-muted);font-size:10px}.car-history-summary b{color:var(--navy)}
 .car-history-wrap{min-height:0;flex:1;overflow:auto;border:1px solid var(--gray-line);border-radius:8px;scrollbar-gutter:stable}.car-history-table{width:100%;min-width:1120px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:11px}.car-history-table th{position:sticky;top:0;z-index:1;background:#F1F4F9;color:var(--text-muted);padding:7px 6px;border-bottom:1px solid var(--gray-line);font-size:10px;text-align:left;white-space:nowrap}.car-history-table td{padding:7px 6px;border-bottom:1px solid #EEF1F6;color:var(--text);vertical-align:top;line-height:1.4;overflow-wrap:anywhere}body.dark .car-history-table th{background:#202C43}.car-history-table .date,.car-history-table .days{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700;color:var(--navy)}.car-history-table .detail{white-space:pre-line}.car-history-table .confidence{color:var(--text-muted)}
@@ -6512,15 +6514,22 @@ function exHistoryCycleSummary_(rows){
 var EX_ARM_LABEL={repair:'내부수리',swap:'Handpiece 교체'};
 /* 교체품 표기 그대로 나눈다 — 내부세척(내부수리)이면 수리, 부품명이 적혀 있으면 교체.
    교체품이 비었거나 '없음'이면 어느 쪽도 아니므로 두 조치군에서 모두 제외한다. */
+/* 교체군은 "핸드피스 교체"만 담는다. 스프링·풋스위치처럼 다른 부품을 갈아 끼운 기록은
+   이 카드가 묻는 것(핸드피스를 선제 교체할 근거가 되는가)과 다른 사건이라 기타로 뺀다.
+   교체품 TOP 5 의 Handpiece 계열 합계와 이 카드의 교체군 건수가 어긋나지 않게 하는 기준이기도 하다. */
+function exArmIsHandpiecePart_(part){
+  var k=hpCleanKey_(part);
+  return k.indexOf('handpiece')>=0||k.indexOf('핸드피스')>=0||k.indexOf("hpass")>=0||k==='hp';
+}
 function exArmOfPart_(part){
   var k=hpCleanKey_(part);
   if(!k||k==='없음') return 'other';
   if(k==='내부세척'||k==='내부수리') return 'repair';
-  return 'swap';
+  return exArmIsHandpiecePart_(part)?'swap':'other';
 }
-/* HP_SN(IN)·HP_SN(OUT) 은 현재 운영에서 "교체할 때만" 적는다.
-   그래서 교체품 표기가 비어 있어도 이 값이 있으면 교체로 본다(표기 누락 보정).
-   표기가 내부세척이면 표기를 우선한다 — 갈래 기준은 교체품 표기다. */
+/* HP_SN(IN)·HP_SN(OUT) 은 현재 운영에서 "핸드피스를 교체할 때만" 적는다.
+   그래서 교체품 표기가 비어 있거나 다른 부품으로 적혀 있어도 이 값이 있으면 핸드피스 교체로 본다
+   (표기 누락 보정). 표기가 내부세척이면 표기를 우선한다 — 갈래 기준은 교체품 표기다. */
 function exArmOf_(r){
   var arm=exArmOfPart_(r&&r.part);
   if(arm==='other'&&(hpCleanVal_(r&&r.hpIn)||hpCleanVal_(r&&r.hpOut))) return 'swap';
@@ -6566,8 +6575,11 @@ function exArmRecurrence_(cohortRows, allRows, asOf){
 }
 function exArmSummary_(events){
   events=events||[];
-  var days=[], est=0, watch=0, i, sum=0, confirmed=0;
+  var days=[], est=0, watch=0, i, sum=0, confirmed=0, parts=Object.create(null);
   events.forEach(function(e){
+    /* 어떤 교체품 표기가 이 갈래에 들어왔는지 남긴다 — 교체품 TOP 5 와 숫자를 맞춰 볼 근거다 */
+    var pl=hpCleanVal_(e.part)||'표기 없음 · HP S/N 보정';
+    parts[pl]=(parts[pl]||0)+1;
     if(e.confirmed) confirmed++;
     if(e.confidence==='병원 단위 추정') est++;
     if(e.recurrence&&e.days!=null&&e.days>=1) days.push(e.days);
@@ -6576,7 +6588,9 @@ function exArmSummary_(events){
   days.sort(function(a,b){return a-b;});
   var n=days.length, total=events.length, mid=Math.floor(n/2), none=total-n;
   for(i=0;i<n;i++) sum+=days[i];
-  return {total:total, recur:n, none:none, estimated:est, confirmed:confirmed,
+  var partList=Object.keys(parts).map(function(k){return {label:k,n:parts[k]};})
+    .sort(function(a,b){return b.n-a.n||skCmpKo_(a.label,b.label);});
+  return {total:total, recur:n, none:none, estimated:est, confirmed:confirmed, parts:partList,
     rate: total?Math.round(n/total*1000)/10:null,
     min: n?days[0]:null,
     minCount:n?days.filter(function(v){return v===days[0];}).length:0,
@@ -6602,6 +6616,16 @@ function exCauseArmMetric_(key,mode,label,value,tone,enabled,title){
   return '<button type="button" class="car-metric '+(tone||'')+'" onclick="exShowCauseArm_(\''+key+'\',\''+mode+'\')"'
     +(enabled?' title="'+escAttr(title||'해당 처리 이력 보기')+'"':' disabled')+'><span>'+esc(label)+'</span><b>'+esc(value)+'</b></button>';
 }
+/* 이 갈래에 들어온 교체품 표기와 건수 — 교체품 TOP 5 와 대조할 수 있어야 숫자를 믿는다.
+   표기가 많으면 상위 5개만 적고 나머지는 개수로 접는다. */
+function exCauseArmPartsHtml_(s){
+  var list=(s&&s.parts)||[];
+  if(!list.length) return '';
+  var head=list.slice(0,5).map(function(p){return esc(p.label)+' <b>'+exNum(p.n)+'</b>';}).join(' · ');
+  var rest=list.length-5;
+  return '<div class="car-parts" title="'+escAttr(list.map(function(p){return p.label+' '+p.n+'건';}).join(' · '))+'">'
+    +'표기 내역 · '+head+(rest>0?(' 외 '+exNum(rest)+'개'):'')+'</div>';
+}
 function exCauseArmGroup_(key,s){
   function day(v){return v==null?'—':Number(v).toFixed(1)+'일';}
   var shortest=s.min==null?'—':exNum(s.min)+'일 · '+exNum(s.minCount)+'건';
@@ -6615,7 +6639,8 @@ function exCauseArmGroup_(key,s){
     +exCauseArmMetric_(key,'median','중앙값',day(s.median),'',s.recur>0,'중앙값 산정 재발 이력 보기')
     +exCauseArmMetric_(key,'none','아직 재발 없음',exNum(s.none)+'건','stable',s.none>0,'무재발 관찰 이력 보기')
     +'</div><div class="car-foot">핸드피스 S/N 확정 '+exNum(s.confirmed)+'건 · 병원 단위 추정 '+exNum(s.estimated)
-      +'건 · 평균·중앙값·최단은 재발 확인 건만 산정</div></section>';
+      +'건 · 평균·중앙값·최단은 재발 확인 건만 산정</div>'
+    +exCauseArmPartsHtml_(s)+'</section>';
 }
 function exCauseArmRows_(a,key,mode){
   var rows=(a&&a.events||[]).filter(function(e){return e.arm===key;});

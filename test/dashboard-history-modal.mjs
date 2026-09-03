@@ -38,7 +38,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_',
   'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
-  'exBaseDate','exHistoryCycleOpenHtml_',
+  'exBaseDate','exHistoryCycleOpenHtml_','exArmIsHandpiecePart_',
+  'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
   'exHistoryCycleKey_','exHistoryCycleAvg_','exHistoryCycleTrend_','exHistoryCycles_',
@@ -1003,16 +1004,25 @@ ck('67. 병원명이 없으면 창을 열지 않고, 팝업이 막히면 안내�
 /* ══════ 11. 조치 방법별 재발 — 내부수리 vs Handpiece 교체 ══════ */
 const LEAK='노즐 누수(약액 유입)';
 const act=(id,day,hosp,part,extra={})=>row(id,day,hosp,{type:LEAK,cat:'핸드피스',part,...extra});
-ck('68. 교체품 표기 그대로 나눈다 — 내부세척=수리, 부품 기재=교체, 미입력=제외',()=>{
+ck('68. 교체품 표기로 나눈다 — 내부세척=수리, 핸드피스 표기=교체, 다른 부품·미입력=제외',()=>{
   const D=build();
   assert.equal(D.exArmOfPart_('내부 세척'),'repair');
   assert.equal(D.exArmOfPart_('내부세척'),'repair','공백 표기 차이를 흡수');
   assert.equal(D.exArmOfPart_('내부 수리'),'repair');
   assert.equal(D.exArmOfPart_("Handpiece Ass'y"),'swap');
   assert.equal(D.exArmOfPart_("handpiece ass'y"),'swap','대소문자 차이를 흡수');
-  assert.equal(D.exArmOfPart_('노즐'),'swap','부품명이 적혀 있으면 교체');
+  assert.equal(D.exArmOfPart_("Handpiece Ass'y.1"),'swap','표기 변형도 핸드피스');
+  assert.equal(D.exArmOfPart_("HP Ass'y"),'swap');
+  /* 핸드피스가 아닌 부품 교체는 이 비교의 대상이 아니다 — 교체품 TOP 5 와 어긋나던 원인 */
+  assert.equal(D.exArmOfPart_('Spring(1.0)'),'other');
+  assert.equal(D.exArmOfPart_('풋스위치'),'other');
+  assert.equal(D.exArmOfPart_('노즐'),'other');
   assert.equal(D.exArmOfPart_(''),'other');
   assert.equal(D.exArmOfPart_('없음'),'other');
+  /* 표기가 다른 부품이어도 HP S/N 이 적혀 있으면 핸드피스를 갈아 끼운 것이다 */
+  assert.equal(D.exArmOf_({part:'Spring(1.0)',hpOut:'HP-77'}),'swap');
+  assert.equal(D.exArmOf_({part:'Spring(1.0)'}),'other');
+  assert.equal(D.exArmOf_({part:'내부 세척',hpOut:'HP-77'}),'repair','표기 우선');
 });
 ck('69. 조치 이후 첫 동일 증상만 재발로 세고, 같은 날은 재발이 아니다',()=>{
   const D=build();
@@ -1552,6 +1562,30 @@ ck('103. 진행 중인 간격은 마지막 발생 이후 기준일까지를 따�
   assert.match(html,/일째/);
   assert.match(html,/현재 진행이 중앙값 초과/);
   assert.match(html,/마지막 간격/);
+});
+
+ck('104. 교체군은 핸드피스 표기만 세고, 카드에 표기 내역을 적어 교체품 TOP 5 와 맞춘다',()=>{
+  const D=build();
+  /* 노즐 누수 조치 6건 — 핸드피스 4 · 내부세척 1 · 스프링 1 */
+  const rows=[
+    act('s1','2026-06-01','가병원',"Handpiece Ass'y",{sn:'HP-1'}),
+    act('s2','2026-06-02','나병원',"Handpiece Ass'y",{sn:'HP-2'}),
+    act('s3','2026-06-03','다병원',"Handpiece Ass'y.1",{sn:'HP-3'}),
+    act('s4','2026-06-04','라병원','Spring(1.0)',{sn:'HP-4',hpOut:'HP-OUT'}),  /* S/N 보정으로 교체 */
+    act('o1','2026-06-05','마병원','Spring(1.0)',{sn:'HP-5'}),                 /* 다른 부품 → 기타 */
+    act('c1','2026-06-06','바병원','내부 세척',{sn:'HP-6'})
+  ];
+  const a=D.exArmRecurrence_(rows,rows,'2026-08-31');
+  assert.equal(a.swap.total,4,'핸드피스 3 + S/N 보정 1');
+  assert.equal(a.repair.total,1);
+  assert.equal(a.events.length,5,'스프링 1건은 분류에서 빠져 기타로 남는다');
+  /* 표기 내역이 교체품 TOP 5 와 대조할 수 있게 나온다 */
+  assert.deepEqual(a.swap.parts.map(p=>p.label+':'+p.n),
+    ["Handpiece Ass'y:2","Handpiece Ass'y.1:1","Spring(1.0):1"]);
+  const html=D.exCauseArmGroup_('swap',a.swap);
+  assert.match(html,/표기 내역/);
+  assert.match(html,/Handpiece Ass'y <b>2<\/b>/);
+  assert.equal(D.exCauseArmGroup_('repair',a.repair).includes('내부 세척'),true);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
