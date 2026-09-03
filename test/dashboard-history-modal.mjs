@@ -37,6 +37,10 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'hpCleanKey_','hpIsLeakVoc_','hpCleanDays_','isHandpieceCleaning_','vocTypeCanonical_',
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_',
+  'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
+  'exHistoryCycleKey_','exHistoryCycleAvg_','exHistoryCycleTrend_','exHistoryCycles_',
+  'exHistoryCycleSummary_','exHistoryCycleGapsHtml_','exHistoryCycleTrendHtml_',
+  'exHistoryCycleSummaryHtml_','exHistoryCycleTable_','exHistoryCycleTsv_',
   'exHistoryComparisonMeta_','exHistoryElapsed_','exHistorySort_','exHistoryCostSort_',
   'exHistoryDataset_','exHistoryGroupList_','exHistoryGroupRows_','exHistoryGrouped_',
   'exHistoryRows_','exHistoryCostRows_','exCostSum_','exCostChip_',
@@ -1347,6 +1351,103 @@ ck('92. 전체화면은 요약·안내를 감추고 건수·비교 근거 Excel 
   /* 예시자료 패널은 감추지 않는다 — 행을 선택했을 때만 열린다 */
   assert.ok(!/is-fullscreen \.hst-photo-panel\{display:none\}/.test(SRC));
   assert.match(SRC,/<section class="hst-photo-panel" id="hstPhotoPanel" hidden/);
+});
+
+/* ══════ 재발 주기 (병원 · VOC · 장비번호) ══════ */
+/* 가병원 HP-001: 08-01 → 04 → 09(같은 날 2건) → 19  = 간격 3 · 5 · 10
+   가병원 HP-002: 08-02 → 22                          = 간격 20
+   나병원 S/N 미입력: 08-03 → 13                      = 간격 10
+   다병원 · 가병원 풋스위치: 1회뿐이라 주기 없음 */
+const CYC=[
+  row('c1','2026-08-01','가병원'),
+  row('c2','2026-08-04','가병원'),
+  row('c3','2026-08-09','가병원'),
+  row('c4','2026-08-09','가병원',{fse:'박프로'}),
+  row('c5','2026-08-19','가병원'),
+  row('c6','2026-08-02','가병원',{sn:'HP-002'}),
+  row('c7','2026-08-22','가병원',{sn:'HP-002'}),
+  row('c8','2026-08-03','나병원',{sn:''}),
+  row('c9','2026-08-13','나병원',{sn:''}),
+  row('c10','2026-08-05','다병원'),
+  row('c11','2026-08-06','가병원',{type:'풋스위치 작동 불량',part:'Foot s/w'})
+];
+const cyc=(D,opt)=>D.exHistoryCycles_(D.state().sourceRows,opt||{});
+
+ck('93. 재발 간격은 연속 발생 사이를 오래된 것부터 재고 같은 날 여러 건은 1회로 접는다',()=>{
+  const D=build(); open(D,CYC);
+  const rows=cyc(D);
+  const g=rows.find(r=>r.sn==='HP-001'&&r.hosp==='가병원');
+  assert.deepEqual(g.gaps,[3,5,10]);
+  assert.equal(g.count,4,'08-09 두 건은 1회 발생');
+  assert.equal(g.avg,6);assert.equal(g.median,5);
+  assert.equal(g.min,3);assert.equal(g.max,10);
+  assert.equal(g.lastGap,10);assert.equal(g.span,18);
+});
+ck('94. 장비번호가 다르면 다른 주기, S/N 미입력은 병원 단위 한 묶음',()=>{
+  const D=build(); open(D,CYC);
+  const rows=cyc(D);
+  const hp2=rows.find(r=>r.sn==='HP-002');
+  assert.deepEqual(hp2.gaps,[20]);
+  const none=rows.find(r=>r.hosp==='나병원');
+  assert.equal(none.sn,'');assert.deepEqual(none.gaps,[10]);
+  /* 1회만 발생한 조합은 목록에서 빠지고 개수만 요약에 남는다 */
+  assert.ok(!rows.some(r=>r.hosp==='다병원'));
+  assert.ok(!rows.some(r=>r.type==='풋스위치 작동 불량'));
+  assert.equal(rows.length,3);
+  assert.equal(D.exHistoryCycleSummary_(rows).single,2);
+  /* 발생 많은 순 → 최근 간격 짧은 순 */
+  assert.deepEqual(rows.map(r=>r.hosp+'/'+(r.sn||'—')),['가병원/HP-001','나병원/—','가병원/HP-002']);
+});
+ck('95. 추세는 앞 절반·뒤 절반 평균을 견주고 간격 2개 미만은 판단하지 않는다',()=>{
+  const D=build();
+  assert.deepEqual(D.exHistoryCycleTrend_([3,5,10]),{dir:'up',diff:7,early:3,late:10});
+  assert.deepEqual(D.exHistoryCycleTrend_([10,3]),{dir:'down',diff:-7,early:10,late:3});
+  assert.equal(D.exHistoryCycleTrend_([5,5]).dir,'flat');
+  assert.equal(D.exHistoryCycleTrend_([20]).dir,'none');
+  assert.equal(D.exHistoryCycleTrend_([]).dir,'none');
+  /* 홀수면 가운데 간격은 어느 쪽에도 넣지 않는다 */
+  assert.deepEqual(D.exHistoryCycleTrend_([2,100,8]),{dir:'up',diff:6,early:2,late:8});
+});
+ck('96. 주기 모집단은 선택 기간 원본이고 상단 조회 조건을 그대로 따른다',()=>{
+  const D=build(); open(D,CYC);
+  /* PREV 는 RAW 에만 있고 선택 기간 원본이 아니다 — 주기에 섞이지 않는다 */
+  assert.ok(!cyc(D).some(r=>r.hosp==='바병원'));
+  /* VOC 유형 필터를 걸면 그 유형만 남는다(풋스위치는 1회뿐이라 결과 없음) */
+  assert.equal(cyc(D,{type:'풋스위치 작동 불량'}).length,0);
+  assert.equal(cyc(D,{type:'노즐 누수(약액 유입)'}).length,3);
+  /* 검색어도 같은 규칙으로 적용된다 */
+  assert.equal(cyc(D,{q:'나병원'}).length,1);
+});
+ck('97. 재발 주기 보기로 바꾸면 표·복사·기간 선택이 함께 바뀐다',()=>{
+  const D=build(); open(D,CYC);
+  D.exSetHistoryView_('cycle');
+  assert.equal(D.state().view,'cycle');
+  assert.equal(D.state().cycles.length,3);
+  const html=D.dom.els.hstTableHost.innerHTML;
+  assert.match(html,/hst-table cycle/);
+  assert.match(html,/재발 간격 \(오래된 → 최근\)/);
+  assert.match(html,/hst-trend up/,'간격이 길어진 조합은 추세 배지로 표시');
+  assert.match(D.dom.els.hstCount.innerHTML,/3개<\/b> 조합/);
+  assert.equal(D.dom.els.hstPeriod.disabled,true,'주기 보기는 기간 선택을 잠근다');
+  assert.equal(D.dom.els.hstCopyTsv.textContent,'재발 주기 TSV 복사');
+  assert.match(D.dom.els.hstViewNote.textContent,/재발 주기/);
+  /* 행 보기로 돌아오면 원래 상태가 복원된다 */
+  D.exSetHistoryView_('rows');
+  assert.equal(D.dom.els.hstPeriod.disabled,false);
+  assert.equal(D.dom.els.hstCopyTsv.textContent,'필터 결과 TSV 복사');
+  assert.match(D.dom.els.hstTableHost.innerHTML,/data-hst-id=/);
+});
+ck('98. 재발 주기 TSV 는 화면과 같은 순서로 간격·추세까지 담는다',()=>{
+  const D=build(); open(D,CYC);
+  D.exSetHistoryView_('cycle');
+  const lines=D.exHistoryCycleTsv_(D.state().cycles).split('\n');
+  assert.equal(lines.length,4);
+  assert.match(lines[0],/^병원\tVOC 유형\t장비번호\t발생 횟수/);
+  const first=lines[1].split('\t');
+  assert.equal(first[0],'가병원');assert.equal(first[2],'HP-001');
+  assert.equal(first[3],'4');assert.equal(first[7],'3, 5, 10');
+  assert.equal(first[13],'간격 길어짐(빈도 감소)');
+  assert.equal(lines[2].split('\t')[2],'S/N 미입력');
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
