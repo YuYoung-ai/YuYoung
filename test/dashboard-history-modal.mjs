@@ -63,7 +63,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistoryControls_','exHistoryKpiRows_','exHistoryHospitalCount_','exHistoryKpiChip_','exHistoryResultHtml_',
   'exApplyHistoryFilters_','exResetHistoryFilters_','exRestoreHistoryModalUi_','exShowHistory_',
   'exRefreshHistoryForHospitalDB_','exSelectHistory_','exHistoryRowKey_','exSyncHistoryTypeExample_',
-  'exHistoryExportData_','exExcelDate_','exHistoryPhotoPanel_','openExList','closeExList'];
+  'exHistoryExportData_','exExcelDate_','exHistoryPhotoPanel_','openExList','toggleExListFullscreen_','closeExList'];
 
 /* ── 최소 DOM ── */
 function decode(s){
@@ -77,7 +77,7 @@ function makeDom(){
     const el={tagName:String(tag).toUpperCase(),id:id||'',textContent:'',value:'',hidden:false,disabled:false,
       _attrs:Object.create(null),_cls:Object.create(null),options:[],children:[],_html:''};
     el.classList={
-      add:c=>{el._cls[c]=1;}, remove:c=>{delete el._cls[c];},
+      add:(...cs)=>{cs.forEach(c=>{el._cls[c]=1;});}, remove:(...cs)=>{cs.forEach(c=>{delete el._cls[c];});},
       toggle:(c,on)=>{ if(on===undefined) on=!el._cls[c]; if(on) el._cls[c]=1; else delete el._cls[c]; },
       contains:c=>!!el._cls[c]
     };
@@ -134,6 +134,7 @@ function makeDom(){
     ['hstView','hstTableHost','hstCount','hstBreakdown','hstToolbar','hstViewNote','hstCopyTsv','hstHospPanel',
      'hstPhotoPanel','hstPhotoStrip','hstPhotoStatus','hstPhotoTitle','hstPhotoBody','hstPhotoToggle',
      'exListTitle','exListSub','exListBody','exListBox','exListModal','toast'].forEach(id=>ensure(id));
+    ensure('exListFullscreen','button');
     els.hstPhotoPanel.hidden=true;
   }
   function rowEl(id){
@@ -1270,6 +1271,33 @@ ck('86. 표와 패널을 가로로 나누고 좁은 화면에서는 아래로 �
 ck('87. 제거된 분석 영역의 주 영역 전환·크기 조절 코드도 남기지 않는다',()=>{
   assert.ok(!/exHistoryFocus_|exToggleHistoryStats_|exHistorySplit/.test(SRC));
   assert.ok(!/data-focus="stats"|hst-split|is-split|--hst-top-h/.test(SRC));
+});
+ck('88. 처리이력 전체화면 버튼은 모달 상태를 유지한 채 크기만 전환한다',()=>{
+  const D=build(); open(D,CUR);
+  D.exOpenHospPanel_(null,{getAttribute:()=>'가병원'});
+  const state=D.state(),filtered=state.filtered,panel=state.hospPanel;
+  const btn=D.dom.els.exListFullscreen,box=D.dom.els.exListBox;
+  assert.equal(btn.hidden,false);assert.equal(btn.getAttribute('aria-pressed'),'false');
+  assert.equal(D.toggleExListFullscreen_(),true);
+  assert.equal(box.classList.contains('is-fullscreen'),true);
+  assert.equal(btn.getAttribute('aria-pressed'),'true');assert.ok(btn.textContent.includes('원래 크기'));
+  assert.equal(D.state(),state);assert.equal(D.state().filtered,filtered);assert.equal(D.state().hospPanel,panel);
+  assert.equal(D.toggleExListFullscreen_(false),false);
+  assert.equal(box.classList.contains('is-fullscreen'),false);
+});
+ck('89. 일반 명단에는 전체화면 버튼을 숨기고 닫을 때 확대 상태를 정리한다',()=>{
+  const D=build(); open(D,CUR);
+  D.toggleExListFullscreen_(true);D.closeExList();
+  assert.equal(D.dom.els.exListBox.classList.contains('is-fullscreen'),false);
+  assert.equal(D.dom.els.exListFullscreen.hidden,true);
+  D.openExList('일반 명단','', '<div>목록</div>',false);
+  assert.equal(D.dom.els.exListFullscreen.hidden,true);
+  assert.equal(D.toggleExListFullscreen_(),false);
+});
+ck('90. 전체화면은 PC 화면을 채우고 모바일에서는 여백 없이 표시하며 Esc로 복귀한다',()=>{
+  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{position:fixed;inset:8px/);
+  assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{inset:0;border-radius:0;height:auto\}/);
+  assert.match(SRC,/if\(box&&box\.classList\.contains\('is-fullscreen'\)\) toggleExListFullscreen_\(false\)/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
