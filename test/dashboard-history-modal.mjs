@@ -38,6 +38,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_',
   'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
+  'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
+  'exHospTrend_','exTrendRow_','exHospTrendHtml_',
   'exHistoryCycleKey_','exHistoryCycleAvg_','exHistoryCycleTrend_','exHistoryCycles_',
   'exHistoryCycleSummary_','exHistoryCycleGapsHtml_','exHistoryCycleTrendHtml_',
   'exHistoryCycleSummaryHtml_','exHistoryCycleTable_','exHistoryCycleTsv_',
@@ -269,6 +271,7 @@ function renderedIds(D){
 }
 function rowIds(D){ return (D.state().filtered||[]).map(it=>it.r.id); }
 function setVal(D,id,v){ const el=D.dom.els[id]; if(el) el.value=v; }
+const ymdOf=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 
 let count=0;
 const ck=(label,fn)=>{fn();count++;console.log('✅ '+label);};
@@ -1448,6 +1451,80 @@ ck('98. 재발 주기 TSV 는 화면과 같은 순서로 간격·추세까지 �
   assert.equal(first[3],'4');assert.equal(first[7],'3, 5, 10');
   assert.equal(first[13],'간격 길어짐(빈도 감소)');
   assert.equal(lines[2].split('\t')[2],'S/N 미입력');
+});
+
+/* ══════ 병원 · VOC 발생 빈도 추이 ══════ */
+/* 가병원 노즐 누수: 첫 발생 2023-09-05
+   1년차 6회 · 2년차 3회 · 3년차(6개월 진행) 1회 — 쓸수록 줄어드는 흐름 */
+const TREND=[
+  row('t1','2023-09-05','가병원'), row('t2','2023-10-01','가병원'), row('t3','2023-11-02','가병원'),
+  row('t4','2024-01-10','가병원'), row('t5','2024-03-03','가병원'), row('t6','2024-06-20','가병원'),
+  row('t7','2024-10-10','가병원'), row('t8','2025-02-02','가병원'), row('t9','2025-04-15','가병원'),
+  row('t10','2026-01-20','가병원'),
+  row('t10b','2026-01-20','가병원',{fse:'박프로'}),          /* 같은 날 두 번째 기록 */
+  row('t11','2024-05-05','가병원',{type:'풋스위치 작동 불량'}),/* 다른 VOC — 섞이면 안 된다 */
+  row('t12','2025-05-05','나병원')                            /* 다른 병원 */
+];
+const AS_OF='2026-03-05';
+
+ck('99. 추이는 그 VOC 최초 발생일부터 연차·연도별로 세고 같은 날 여러 건은 1회로 본다',()=>{
+  const D=build(); open(D,CUR,TREND);
+  const t=D.exHospTrend_('가병원',LEAK,AS_OF);
+  assert.equal(t.total,10,'같은 날 2건은 1회 · 다른 VOC·다른 병원 제외');
+  assert.equal(ymdOf(t.first),'2023-09-05');
+  assert.equal(ymdOf(t.last),'2026-01-20');
+  assert.equal(t.spanText,'2년 6개월');
+  assert.deepEqual(t.years.map(y=>y.n+':'+y.count),['1:6','2:3','3:1']);
+  assert.equal(t.years[2].partial,true,'진행 중인 연차');
+  assert.equal(t.years[0].rate,0.5,'1년차 6회 → 0.5회/월');
+  assert.deepEqual(t.calendar,[{year:2023,count:3},{year:2024,count:4},{year:2025,count:2},{year:2026,count:1}]);
+  /* VOC 를 주지 않으면 그 병원의 전체 VOC 기준 */
+  assert.equal(D.exHospTrend_('가병원','',AS_OF).total,11);
+});
+ck('100. 최근 12개월과 직전 12개월을 견줘 감소율과 현재 빈도를 낸다',()=>{
+  const D=build(); open(D,CUR,TREND);
+  const t=D.exHospTrend_('가병원',LEAK,AS_OF);
+  assert.equal(t.recent12,2);assert.equal(t.prev12,3);
+  assert.equal(t.changePct,33,'2회 / 3회 → 33% 감소');
+  assert.equal(t.recent6,1);
+  assert.equal(t.lastGap,280,'2025-04-15 → 2026-01-20');
+  assert.equal(t.sinceLast,44,'2026-01-20 이후 경과');
+  /* 직전 12개월 구간이 통째로 첫 발생 이전이면 비교하지 않는다 */
+  const young=D.exHospTrend_('나병원','',AS_OF);
+  assert.equal(young.prev12,null);assert.equal(young.changePct,null);
+});
+ck('101. 전환 시점은 앞뒤 구간이 충분하고 앞 구간에 3회 이상 있을 때만 말한다',()=>{
+  const D=build();
+  const b=D.exHospTrend_.length&&null;    /* 계산 함수만 단독으로 확인한다 */
+  const dates=['2023-09-05','2023-10-01','2023-11-02','2024-01-10','2024-03-03','2024-06-20',
+    '2024-10-10','2025-02-02','2025-04-15','2026-01-20'].map(v=>new Date(v));
+  const br=D.exTrendBreak_(dates,dates[0],new Date(AS_OF));
+  assert.ok(br,'줄어드는 흐름에서는 전환 시점을 찾는다');
+  assert.match(br.key,/^\d{4}-\d{2}$/);
+  assert.ok(br.before>br.after&&br.dropPct>=40);
+  /* 기록이 적거나(구간 미달) 줄지 않으면 전환 시점을 말하지 않는다 */
+  assert.equal(D.exTrendBreak_([new Date('2026-01-01')],new Date('2026-01-01'),new Date(AS_OF)),null);
+  const flat=[];
+  for(let i=0;i<12;i++) flat.push(new Date(2025,i,10));
+  assert.equal(D.exTrendBreak_(flat,flat[0],new Date(2025,11,31)),null,'꾸준하면 전환 없음');
+});
+ck('102. 병원 링크가 VOC 를 넘겨 패널이 그 VOC 기준 추이를 그린다',()=>{
+  const D=build(); open(D,CUR,TREND);
+  const btn=k=>({getAttribute:key=>key==='data-hosp'?'가병원':(key==='data-type'?k:'')});
+  D.exOpenHospPanel_(null,btn(LEAK));
+  assert.equal(D.state().hospPanel.type,LEAK);
+  const html=D.dom.els.hstHospPanel.innerHTML;
+  assert.match(html,/발생 빈도 추이/);
+  assert.match(html,/연차별/);assert.match(html,/연도별/);assert.match(html,/전환 시점/);assert.match(html,/현재 빈도/);
+  assert.match(html,/첫 발생 2023-09-05/);
+  /* 같은 병원·같은 VOC 를 다시 누르면 닫히고, 다른 VOC 면 그 VOC 로 다시 연다 */
+  D.exOpenHospPanel_(null,btn(LEAK));
+  assert.equal(D.state().hospPanel,null);
+  D.exOpenHospPanel_(null,btn(LEAK));
+  D.exOpenHospPanel_(null,btn('풋스위치 작동 불량'));
+  assert.equal(D.state().hospPanel.type,'풋스위치 작동 불량');
+  /* 표의 병원 버튼에도 VOC 가 실린다 */
+  assert.match(D.dom.els.hstTableHost.innerHTML,/data-type="노즐 누수\(약액 유입\)"/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

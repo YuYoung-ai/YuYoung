@@ -964,6 +964,25 @@ html.hst-evidence-open{overflow:hidden}
 .hst-hosp-close:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 .hst-hosp-meta{padding:7px 11px;color:var(--text-muted);font-size:10.5px;
   border-bottom:1px solid var(--gray-line);font-variant-numeric:tabular-nums}
+/* ── 병원 · VOC 발생 빈도 추이 ──
+   패널이 좁으므로 표가 아니라 "이름표 : 값" 줄로 읽는다. 값은 굵게, 근거는 흐리게. */
+.hst-hosp-trend{flex:0 0 auto;margin:0 11px 8px;border:1px solid var(--gray-line);border-radius:9px;
+  background:var(--surface);padding:8px 10px}
+.hst-trend-head{color:var(--navy);font-size:11px;font-weight:700;line-height:1.5}
+.hst-trend-head b{color:var(--teal)}
+.hst-trend-head span{display:block;margin-top:1px;color:var(--text-muted);font-size:9.5px;font-weight:400}
+.hst-hosp-trend ul{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.hst-hosp-trend li{display:flex;gap:7px;align-items:baseline;font-size:10.5px;line-height:1.5}
+.hst-trend-k{flex:0 0 58px;color:var(--text-muted);font-size:9.5px;font-weight:700}
+.hst-trend-v{flex:1 1 auto;min-width:0;color:var(--text);overflow-wrap:anywhere}
+.hst-trend-v b{color:var(--navy);font-variant-numeric:tabular-nums}
+.hst-freq{display:inline-block;border-radius:999px;padding:1px 6px;background:var(--track);
+  color:var(--text-muted);font-size:9.5px;font-weight:700}
+.hst-freq.good{background:var(--teal-soft);color:#12607F}   /* 발생이 줄었다 */
+.hst-freq.bad{background:#FBEAE8;color:var(--red)}
+body.dark .hst-freq.good{color:var(--teal)}
+body.dark .hst-freq.bad{background:#3A2023}
+.hst-trend-note{margin:7px 0 0;color:var(--text-muted);font-size:9px;line-height:1.45}
 .hst-hosp-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:4px 0}
 .hst-hosp-item{padding:8px 11px;border-bottom:1px solid #EEF1F6}
 .hst-hosp-item.is-insp{background:rgba(18,96,127,.05)}
@@ -6127,6 +6146,7 @@ var EX_HISTORY_SEARCH_TIMER=null;
 var EX_HISTORY_SEARCH_SEQ=0;
 var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
+var EX_TREND_MONTH=30.4375;              /* 월평균 환산 기준(365.25 / 12) */
 /* 보기별 안내 문구 — 도구 막대 동기화가 이 표 하나만 읽는다 */
 var EX_HISTORY_VIEW_NOTE={
   rows:'행 보기 · 행을 누르면 VOC 유형별 표준 참고 예시가 열립니다',
@@ -6757,10 +6777,149 @@ function exHospHistoryRows_(name){
     return d||skCmpKo_(exHistoryVal_(a.type),exHistoryVal_(b.type));
   });
 }
+/* ══════ 병원 · VOC 발생 빈도 추이 ══════
+   "이 병원에서 이 VOC 가 처음 난 뒤로, 발생이 줄고 있는가"를 한눈에 답한다.
+   · 시작점은 그 병원 · 그 VOC 의 최초 발생일이다. 장비 설치일 데이터가 없으므로
+     "쓰기 시작한 뒤"의 대용으로 최초 발생일을 쓰고, 화면에도 그렇게 적는다.
+   · 발생 횟수는 발생일 기준이다(같은 날 여러 건은 1회) — 한 번 방문해 장비 두 대를
+     고친 기록이 두 번 발생으로 잡히면 빈도가 부풀려진다.
+   · 연차는 최초 발생일 기준 1년 단위다. 마지막 연차는 진행 중이므로 경과 개월로 나눈 월평균만 쓴다.
+   · 전환 시점은 월별 발생을 앞뒤로 갈라 월평균이 40% 이상 떨어지는 지점 중 낙차가 가장 큰 달이다.
+     앞뒤 구간은 각각 전체의 20%(최소 3개월) 이상이고 앞 구간에 3회 이상 있을 때만 말한다
+     (적은 기록이나 초반에 몰린 몇 건으로 추세를 단정하지 않는다). */
+function exTrendRate_(count,months){
+  months=Math.max(0.5,months||0);
+  return Math.round(count/months*100)/100;
+}
+function exTrendSpanText_(days){
+  var y=Math.floor(days/365.25), m=Math.round((days-y*365.25)/EX_TREND_MONTH);
+  if(m>=12){ y++; m=0; }
+  return y?(y+'년'+(m?' '+m+'개월':'')):(m+'개월');
+}
+function exTrendMonthKey_(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function exTrendShift_(d,months){
+  var out=new Date(d.getFullYear(),d.getMonth()-months,d.getDate());
+  out.setHours(0,0,0,0); return out;
+}
+/* 월별 발생 → 전환 시점(빈도가 뚜렷이 낮아진 달) */
+function exTrendBreak_(dates,first,today){
+  var months=[], cur=new Date(first.getFullYear(),first.getMonth(),1), end=new Date(today.getFullYear(),today.getMonth(),1);
+  while(cur<=end){ months.push({key:exTrendMonthKey_(cur),count:0}); cur=new Date(cur.getFullYear(),cur.getMonth()+1,1); }
+  if(months.length<6) return null;
+  var index=Object.create(null);
+  months.forEach(function(m,i){ index[m.key]=i; });
+  dates.forEach(function(d){ var i=index[exTrendMonthKey_(d)]; if(i!=null) months[i].count++; });
+  /* 앞뒤 구간은 각각 전체의 20%(최소 3개월) 이상이라야 한다 — 두세 달만 보고
+     "이때부터 줄었다"고 말하면 초반이 우연히 몰린 것까지 전환으로 잡힌다. */
+  var side=Math.max(3,Math.round(months.length*0.2));
+  if(months.length<side*2) return null;
+  var best=null, i, j, before, after;
+  for(i=side;i<=months.length-side;i++){
+    before=0; for(j=0;j<i;j++) before+=months[j].count;
+    if(before<3) continue;
+    after=0; for(j=i;j<months.length;j++) after+=months[j].count;
+    var b=before/i, a=after/(months.length-i);
+    if(a>b*0.6) continue;                 /* 40% 이상 떨어진 지점만 전환으로 본다 */
+    var drop=b-a;
+    if(!best||drop>best.drop) best={key:months[i].key,before:Math.round(b*100)/100,after:Math.round(a*100)/100,
+      drop:drop,dropPct:b?Math.round((1-a/b)*100):0};
+  }
+  return best;
+}
+function exHospTrend_(name,type,asOf){
+  var k=nkey(name); if(!k) return null;
+  var tk=type?nkey(vocTypeCanonical_(type)):'';
+  var seen=Object.create(null), dates=[];
+  (RAW||[]).forEach(function(r){
+    if(recScope(r)!=='customer'||nkey(r.hosp)!==k) return;
+    var d=exHistoryValidDate_(r); if(!d) return;
+    if(tk&&nkey(vocTypeCanonical_(exHistoryVal_(r.type)))!==tk) return;
+    var key=ymd(d);
+    if(seen[key]) return;                 /* 같은 날 여러 건은 1회 발생 */
+    seen[key]=1; dates.push(d);
+  });
+  if(!dates.length) return null;
+  dates.sort(function(a,b){return a-b;});
+  var today=asOf?new Date(asOf):exToday(); today.setHours(0,0,0,0);
+  var first=dates[0], last=dates[dates.length-1];
+  var days=Math.max(0,Math.round((today-first)/86400000));
+  /* 연차 — 최초 발생일 기준 1년 단위. 마지막 연차는 진행 중이다. */
+  var years=[], i=0;
+  while(i<20){
+    var from=new Date(first.getFullYear()+i,first.getMonth(),first.getDate());
+    if(from>today) break;
+    var to=new Date(first.getFullYear()+i+1,first.getMonth(),first.getDate());
+    var end=to>today?today:to;
+    var cnt=dates.filter(function(d){return d>=from&&d<to;}).length;
+    var mo=Math.max(0.5,(end-from)/86400000/EX_TREND_MONTH);
+    years.push({n:i+1,from:from,to:to,partial:to>today,months:Math.round(mo*10)/10,
+      count:cnt,rate:exTrendRate_(cnt,mo)});
+    i++;
+  }
+  /* 연도별(달력 연도) */
+  var byYear=Object.create(null);
+  dates.forEach(function(d){ var y=d.getFullYear(); byYear[y]=(byYear[y]||0)+1; });
+  var calendar=Object.keys(byYear).map(Number).sort(function(a,b){return a-b;})
+    .map(function(y){ return {year:y,count:byYear[y]}; });
+  /* 최근 12개월 · 직전 12개월 */
+  var y1=exTrendShift_(today,12), y2=exTrendShift_(today,24);
+  var recent12=dates.filter(function(d){return d>y1;}).length;
+  var prev12=dates.filter(function(d){return d>y2&&d<=y1;}).length;
+  var hasPrev=first<=y1;
+  var recent6=dates.filter(function(d){return d>exTrendShift_(today,6);}).length;
+  var gaps=[];
+  for(i=1;i<dates.length;i++) gaps.push(hpCleanDays_(dates[i-1],dates[i]));
+  return {hosp:name,type:type||'',first:first,last:last,days:days,spanText:exTrendSpanText_(days),
+    total:dates.length,years:years,calendar:calendar,
+    recent12:recent12,recent12Rate:exTrendRate_(recent12,12),
+    prev12:hasPrev?prev12:null,prev12Rate:hasPrev?exTrendRate_(prev12,12):null,
+    changePct:(hasPrev&&prev12)?Math.round((1-recent12/prev12)*100):null,
+    recent6:recent6,recent6Rate:exTrendRate_(recent6,6),
+    lastGap:gaps.length?gaps[gaps.length-1]:null,
+    sinceLast:Math.max(0,Math.round((today-last)/86400000)),
+    breakPoint:exTrendBreak_(dates,first,today)};
+}
+function exTrendRow_(label,value,note){
+  return '<li><span class="hst-trend-k">'+esc(label)+'</span><span class="hst-trend-v">'+value
+    +(note?' <span class="muted">'+note+'</span>':'')+'</span></li>';
+}
+function exHospTrendHtml_(t){
+  if(!t) return '';
+  var yearText=t.years.map(function(y){
+    return '<b>'+y.n+'년차</b> '+exNum(y.count)+'회('+y.rate+'/월'+(y.partial?(' · '+y.months+'개월 진행'):'')+')';
+  }).join(' · ');
+  var calText=t.calendar.map(function(c){ return c.year+'년 <b>'+exNum(c.count)+'회</b>'; }).join(' · ');
+  var change='';
+  if(t.prev12!=null){
+    var dir=t.changePct==null?'':(t.changePct>0?'good':(t.changePct<0?'bad':''));
+    change=(t.changePct==null?'':'<span class="hst-freq '+dir+'">'
+      +(t.changePct>0?exNum(t.changePct)+'% 감소':(t.changePct<0?exNum(-t.changePct)+'% 증가':'변화 없음'))+'</span> ');
+  }
+  return '<section class="hst-hosp-trend">'
+    +'<div class="hst-trend-head"><b>'+esc(t.type||'전체 VOC')+'</b> 발생 빈도 추이'
+      +'<span title="장비 설치일 자료가 없어 이 VOC 의 최초 발생일을 시작점으로 씁니다">첫 발생 '
+      +esc(ymd(t.first))+' · '+esc(t.spanText)+' · 발생 '+exNum(t.total)+'회</span></div>'
+    +'<ul>'
+      +exTrendRow_('연차별',yearText)
+      +exTrendRow_('연도별',calText)
+      +exTrendRow_('최근 12개월','<b>'+exNum(t.recent12)+'회</b> '+t.recent12Rate+'/월',
+        t.prev12==null?'직전 12개월 자료 없음'
+          :(change+'직전 12개월 '+exNum(t.prev12)+'회 '+t.prev12Rate+'/월'))
+      +(t.breakPoint
+        ? exTrendRow_('전환 시점','<b>'+esc(t.breakPoint.key)+'</b> 이후 감소',
+            '이전 '+t.breakPoint.before+'/월 → 이후 '+t.breakPoint.after+'/월 · '+t.breakPoint.dropPct+'% 감소')
+        : exTrendRow_('전환 시점','<span class="muted">뚜렷한 감소 시점 없음</span>'))
+      +exTrendRow_('현재 빈도','<b>최근 6개월 '+exNum(t.recent6)+'회</b> '+t.recent6Rate+'/월',
+        '최근 발생 '+esc(ymd(t.last))+' · '+exNum(t.sinceLast)+'일 경과'
+        +(t.lastGap==null?'':' · 마지막 간격 '+exNum(t.lastGap)+'일'))
+    +'</ul>'
+    +'<p class="hst-trend-note">발생일 기준(같은 날 여러 건은 1회) · 고객 서비스 전체 기록 · 상단 기간 필터와 무관</p>'
+    +'</section>';
+}
 function exHospPanelShell_(){
   return '<aside class="hst-hosp-panel" id="hstHospPanel" hidden aria-live="polite" aria-label="병원 처리 이력"></aside>';
 }
-function exHospPanelHtml_(name,rows,limit){
+function exHospPanelHtml_(name,rows,limit,type){
   var shown=rows.slice(0,limit), as=0, insp=0, last=rows.length?exHistoryValidDate_(rows[0]):null;
   rows.forEach(function(r){ if(exHistoryVal_(r.gubun)==='점검') insp++; else as++; });
   return '<div class="hst-hosp-head">'
@@ -6769,6 +6928,7 @@ function exHospPanelHtml_(name,rows,limit){
     +'</div>'
     +'<div class="hst-hosp-meta">전체 '+exNum(rows.length)+'건 · A/S '+exNum(as)+' · 점검 '+exNum(insp)
       +(last?(' · 최근 '+esc(ymd(last))):'')+'</div>'
+    +exHospTrendHtml_(exHospTrend_(name,type))
     +'<div class="hst-hosp-list">'
       +(shown.length?shown.map(function(r){
         var d=exHistoryValidDate_(r), insp2=exHistoryVal_(r.gubun)==='점검';
@@ -6796,7 +6956,8 @@ function exRenderHospPanel_(){
   if(!state||!state.hospPanel){ el.hidden=true; el.innerHTML=''; return; }
   var rows=exHospHistoryRows_(state.hospPanel.name);
   el.hidden=false;
-  el.innerHTML=exHospPanelHtml_(state.hospPanel.name,rows,state.hospPanel.limit||EX_HOSP_PANEL_PAGE);
+  el.innerHTML=exHospPanelHtml_(state.hospPanel.name,rows,state.hospPanel.limit||EX_HOSP_PANEL_PAGE,
+    state.hospPanel.type||'');
 }
 /* 병원 셀 클릭 — 새 창을 띄우지 않는다. 행의 나머지 영역(표준 예시자료 선택)으로 전파되면 안 된다. */
 function exOpenHospPanel_(e,btn){
@@ -6804,9 +6965,10 @@ function exOpenHospPanel_(e,btn){
   var state=EX_HISTORY_STATE; if(!state) return false;
   var name=(btn&&btn.getAttribute)?String(btn.getAttribute('data-hosp')||'').trim():'';
   if(!name){ toast('병원명이 없어 이력을 열 수 없습니다'); return false; }
-  /* 같은 병원을 다시 누르면 닫는다(토글) */
-  if(state.hospPanel&&state.hospPanel.name===name){ exCloseHospPanel_(); return false; }
-  state.hospPanel={name:name,limit:EX_HOSP_PANEL_PAGE};
+  var type=(btn&&btn.getAttribute)?String(btn.getAttribute('data-type')||'').trim():'';
+  /* 같은 병원·같은 VOC 를 다시 누르면 닫는다(토글). VOC 가 다르면 그 VOC 기준으로 다시 본다. */
+  if(state.hospPanel&&state.hospPanel.name===name&&(state.hospPanel.type||'')===type){ exCloseHospPanel_(); return false; }
+  state.hospPanel={name:name,type:type,limit:EX_HOSP_PANEL_PAGE};
   exRenderHospPanel_();
   var close=document.getElementById('hstHospPanel');
   if(close&&close.querySelector){
@@ -6979,7 +7141,8 @@ function exHistoryTable_(items,limit){
         +'<td class="date" data-label="처리일">'+esc(d?ymd(d):'–')+exHistoryComparisonMeta_(it)+'</td>'
         +'<td class="hosp" data-label="병원">'
           +(hosp?'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(hosp)+'"'
-              +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력을 오른쪽에 엽니다"'
+              +' data-type="'+escAttr(exHistoryVal_(r.type)||'')+'"'
+              +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력과 이 VOC 의 발생 빈도 추이를 오른쪽에 엽니다"'
               +' aria-label="'+escAttr(hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(hosp)+'</button>'
             :'<span class="muted">–</span>')
           +'<span class="hst-compare-meta">장비번호: '+esc(exHistoryVal_(r.sn)||'미입력')+'</span></td>'
@@ -7014,6 +7177,7 @@ function exHistoryRollupTable_(rows){
         +'<td class="hosp" data-label="병원">'
           +(row.error?'<span class="muted">병원명 미입력 · 데이터 오류</span>'
             :'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(row.hosp)+'"'
+              +' data-type="'+escAttr(row.topTypes.length===1?row.topTypes[0]:'')+'"'
               +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력을 오른쪽에 엽니다"'
               +' aria-label="'+escAttr(row.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(row.hosp)+'</button>')
         +'</td>'
@@ -7078,7 +7242,8 @@ function exHistoryCycleTable_(rows){
       return '<tr class="hst-cycle-row">'
         +'<td class="hosp" data-label="병원">'
           +'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(g.hosp)+'"'
-          +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력을 오른쪽에 엽니다"'
+          +' data-type="'+escAttr(g.type)+'"'
+          +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 '+escAttr(g.type)+' 발생 빈도 추이를 오른쪽에 엽니다"'
           +' aria-label="'+escAttr(g.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(g.hosp)+'</button></td>'
         +'<td data-label="VOC 유형">'+esc(g.type)+'</td>'
         +'<td data-label="장비번호">'+(g.sn?esc(g.sn)
