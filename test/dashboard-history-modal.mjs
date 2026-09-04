@@ -45,7 +45,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_','exRiskSummary_',
   'exRiskHold_','exRiskGapText_',
   'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_',
-  'exChangePoint_','exChangeSide_','exBuildLeakChange_','exChangeKeyDate_','exChangeGainText_','exArmIsHandpiecePart_',
+  'exChangePoint_','exChangeSide_','exBuildLeakChange_','exChangeKeyDate_','exChangeGainText_',
+  'exCardFullBtn_','exToggleCardFull_','exCloseCardFull_','exArmIsHandpiecePart_',
   'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
@@ -1342,7 +1343,8 @@ ck('90. 전체화면은 여백 없이 화면 전체를 채우고 Esc로 복귀�
   assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{position:fixed;inset:0;/);
   assert.match(SRC,/\.ex-list-box\.history\.is-fullscreen\{padding:10px\}/,'좁은 화면 여백');
   assert.ok(!/inset:8px/.test(SRC),'전체화면에 가장자리 여백을 남기지 않는다');
-  assert.match(SRC,/if\(box&&box\.classList\.contains\('is-fullscreen'\)\) toggleExListFullscreen_\(false\)/);
+  assert.match(SRC,/if\(box&&box\.classList\.contains\('is-fullscreen'\)\)\{ toggleExListFullscreen_\(false\); return; \}/);
+  assert.match(SRC,/exCloseCardFull_\(\);/,'Esc 는 카드 전체화면도 닫는다');
 });
 ck('91. 조회 조건은 맨 위에서 높이를 적게 쓰고 표·병원 이력이 화면을 차지한다',()=>{
   const D=build(); open(D,CUR);
@@ -1808,6 +1810,25 @@ ck('116. 개선 후 재발이 없으면 중앙값 대신 관찰 중으로 적는
   assert.equal(r.gain,null,'중앙값이 없으면 증감을 숫자로 말하지 않는다');
   assert.match(D.exChangeGainText_(r),/개선 후 무재발/);
   assert.equal(C.summary.noRecurAfter,1);
+});
+
+ck('117. 카드 단위 전체화면은 그 카드만 덮고 Esc 로 되돌아온다',()=>{
+  const D=build();
+  /* 스텁 DOM 에 카드 하나를 만들어 토글만 확인한다 */
+  const card=D.dom.ensure('exLeakRiskCard'), btn=D.dom.ensure('exLeakRiskCardFull','button');
+  assert.match(D.exCardFullBtn_('exLeakRiskCard'),/id="exLeakRiskCardFull"/);
+  assert.equal(D.exToggleCardFull_('exLeakRiskCard'),true);
+  assert.equal(card.classList.contains('is-full'),true);
+  assert.equal(btn.getAttribute('aria-pressed'),'true');
+  assert.ok(btn.textContent.includes('원래 크기'));
+  assert.equal(D.exToggleCardFull_('exLeakRiskCard',false),false);
+  assert.equal(card.classList.contains('is-full'),false);
+  assert.ok(btn.textContent.includes('전체화면'));
+  /* 원인 분석 탭의 다섯 카드가 모두 버튼을 갖는다 */
+  ['exTypeCard','exPartCard','exCauseArmCard','exLeakRiskCard','exLeakChangeCard'].forEach(id=>{
+    assert.match(SRC,new RegExp("exCardFullBtn_\\('"+id+"'\\)"),id+' 전체화면 버튼');
+  });
+  assert.match(SRC,/\.ex-card\.is-full\{position:fixed;inset:0/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
