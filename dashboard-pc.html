@@ -1082,6 +1082,13 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-table.cycle{min-width:1120px}
 .hst-cycle-sum{display:flex;flex-wrap:wrap;gap:7px;padding:9px 11px;background:var(--surface);
   border-bottom:1px solid var(--gray-line)}
+.hst-table.cycle th{vertical-align:bottom}
+.hst-th-sub{display:block;margin-top:1px;color:var(--text-muted);font-size:9px;font-weight:600;opacity:.85}
+.hst-cycle-guide{padding:0 11px 9px;background:var(--surface);border-bottom:1px solid var(--gray-line);
+  color:var(--text-muted);font-size:10.5px;line-height:1.6}
+.hst-cycle-guide summary{cursor:pointer;color:var(--navy);font-size:10.5px;font-weight:700;padding:2px 0}
+.hst-cycle-guide p{margin:3px 0 0}
+.hst-cycle-guide b{color:var(--navy)}
 /* 짧은 주기 병원 vs 그 밖의 병원 — 노즐·교육 상태를 나란히 두고 견준다 */
 .hst-cycle-state{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:0 11px 9px;
   background:var(--surface);border-bottom:1px solid var(--gray-line)}
@@ -6179,6 +6186,12 @@ var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
 var EX_TREND_MONTH=30.4375;              /* 월평균 환산 기준(365.25 / 12) */
 var EX_CYCLE_SHORT_DAYS=30;              /* "재발 주기가 짧다"의 기준 — 간격 중앙값 30일 미만 */
+/* 두 줄 헤더 — 큰 글씨는 사람 말, 작은 글씨는 원래 통계 용어.
+   매일 보는 사람은 부제로 지표를 확인하고, 처음 보는 사람은 큰 글씨만 읽어도 뜻이 통한다. */
+function exCycleTh_(label,sub,tip){
+  return '<th'+(tip?(' title="'+escAttr(tip)+'"'):'')+'>'+esc(label)
+    +(sub?('<span class="hst-th-sub">'+esc(sub)+'</span>'):'')+'</th>';
+}
 /* 병원 상태 배지 — 재사용·교육 미흡은 눈에 걸리게, 미평가는 흐리게 */
 var EX_CYCLE_NOZZLE_BADGE={reuse:['노즐 재사용','bad'],single:['노즐 1회 사용','good'],unknown:['노즐 미평가','']};
 var EX_CYCLE_SKILL_BADGE={need:['교육 미흡','bad'],good:['교육 양호','good'],none:['교육 미평가','']};
@@ -7347,36 +7360,51 @@ function exHistoryCycleOpenHtml_(g){
   return '<b>'+exNum(g.openGap)+'일째</b>'+badge;
 }
 function exHistoryCycleTrendHtml_(t){
-  if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 불가</span>';
+  if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 보류</span>';
   var sign=t.diff>0?'+':'';
-  var label={up:'길어짐 ▲',down:'짧아짐 ▼',flat:'비슷 ─'}[t.dir];
+  var label={up:'덜 남 ▲',down:'더 자주 남 ▼',flat:'비슷 ─'}[t.dir];
   var title='앞 절반 평균 '+exNum(t.early)+'일 → 뒤 절반 평균 '+exNum(t.late)+'일'
     +(t.dir==='up'?' · 간격이 길어졌으니 발생 빈도는 줄었습니다':(t.dir==='down'?' · 간격이 짧아졌으니 발생 빈도는 늘었습니다':''));
   return '<span class="hst-trend '+t.dir+'" title="'+escAttr(title)+'">'+label
     +' <b>'+sign+exNum(t.diff)+'일</b></span>';
 }
+/* 처음 보는 사람을 위한 안내 — 접혀 있고, 펼치면 이 표를 읽는 법이 세 줄로 나온다. */
+function exCycleGuideHtml_(){
+  return '<details class="hst-cycle-guide"><summary>이 표 읽는 법</summary>'
+    +'<p><b>한 줄 = 한 병원의 한 VOC, 한 장비.</b> 그 장비에서 같은 문제가 다시 난 날짜 사이의 간격을'
+      +' 오래된 것부터 늘어놓았습니다.</p>'
+    +'<p><b>보통 이 정도</b>는 간격의 한가운데 값입니다. 절반은 이보다 빨리, 절반은 이보다 늦게 재발했습니다.'
+      +' 평균은 한 번의 긴 공백에 끌려가므로 아래 작은 글씨로만 둡니다.</p>'
+    +'<p><b>마지막 발생 후</b>는 아직 끝나지 않은 기간입니다. 평소 간격보다 길어졌다면 그만큼 잠잠하다는 뜻이고,'
+      +' 이 값은 평균·중앙값 계산에는 넣지 않습니다.</p>'
+    +'<p><b>흐름</b>은 간격을 처음 절반과 나중 절반으로 갈라 견준 것입니다. 간격이 길어졌으면 덜 나고 있는 것입니다.'
+      +' 간격이 2개보다 적으면 판단하지 않습니다.</p>'
+    +'</details>';
+}
 function exHistoryCycleSummaryHtml_(sum,shortOnly){
   return '<div class="hst-cycle-sum">'
-    +'<span class="hst-chip">조합 <b>'+exNum(sum.groups)+'개</b> · 간격 '+exNum(sum.gaps)+'개</span>'
-    +'<span class="hst-chip">간격 길어짐(빈도 감소) <b>'+exNum(sum.up)+'</b> · 짧아짐 <b>'+exNum(sum.down)+'</b>'
-      +' · 비슷 <b>'+exNum(sum.flat)+'</b> · 판단 불가 <b>'+exNum(sum.none)+'</b></span>'
+    +'<span class="hst-chip">병원 · 장비 조합 <b>'+exNum(sum.groups)+'개</b> · 재발 '+exNum(sum.gaps)+'번</span>'
+    +'<span class="hst-chip" title="간격이 길어졌으면 덜 나고 있다는 뜻입니다">덜 나는 중 <b>'+exNum(sum.up)+'</b>'
+      +' · 더 자주 나는 중 <b>'+exNum(sum.down)+'</b> · 비슷 <b>'+exNum(sum.flat)+'</b>'
+      +' · 판단 보류 <b>'+exNum(sum.none)+'</b></span>'
     +(sum.earlyAvg!=null&&sum.lateAvg!=null
-      ? '<span class="hst-chip" title="추세를 판단할 수 있는 조합의 앞 절반·뒤 절반 평균 간격입니다">'
-        +'전반 평균 <b>'+exNum(sum.earlyAvg)+'일</b> → 후반 평균 <b>'+exNum(sum.lateAvg)+'일</b></span>' : '')
-    +'<span class="hst-chip">간격 중앙값 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b></span>'
-    +(sum.quiet?'<span class="hst-chip" title="마지막 발생 이후 지난 날이 그 조합의 간격 중앙값을 넘었습니다">'
-      +'현재 진행이 중앙값 초과 <b>'+exNum(sum.quiet)+'개</b></span>':'')
-    +(sum.single?'<span class="hst-chip muted">1회만 발생 '+exNum(sum.single)+'개 조합은 제외</span>':'')
+      ? '<span class="hst-chip" title="흐름을 판단할 수 있는 조합의 처음 절반·나중 절반 평균 간격입니다">'
+        +'처음엔 <b>'+exNum(sum.earlyAvg)+'일</b>마다 → 요즘은 <b>'+exNum(sum.lateAvg)+'일</b>마다</span>' : '')
+    +'<span class="hst-chip">보통 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b>마다 재발</span>'
+    +(sum.quiet?'<span class="hst-chip" title="마지막 발생 이후 지난 날이 그 조합의 평소 간격(중앙값)을 넘었습니다">'
+      +'평소보다 오래 조용한 조합 <b>'+exNum(sum.quiet)+'개</b></span>':'')
+    +(sum.single?'<span class="hst-chip muted">한 번만 난 '+exNum(sum.single)+'개 조합은 제외</span>':'')
     +'</div>'
-    +exCycleStateChips_(sum,shortOnly);
+    +exCycleStateChips_(sum,shortOnly)
+    +exCycleGuideHtml_();
 }
 /* 노즐·교육 상태 대비 줄 — "재발 주기가 짧은 병원이 노즐을 재사용하고 교육이 미흡한가"에
    숫자로 답한다. 비율은 평가된 병원만으로 낸다(미평가를 분모에 넣으면 비율이 희석된다). */
 function exCycleSideText_(x){
-  return '병원 <b>'+exNum(x.hospitals)+'곳</b>'
-    +' · 노즐 재사용 <b>'+exNum(x.reuse)+'</b>'+(x.reuseRate==null?'':'('+x.reuseRate+'%)')
-    +' · 교육 미흡 <b>'+exNum(x.need)+'</b>'+(x.needRate==null?'':'('+x.needRate+'%)')
-    +'<span class="muted"> · 미평가 노즐 '+exNum(x.nozzleUnknown)+' · 교육 '+exNum(x.skillNone)+'</span>';
+  return '<b>'+exNum(x.hospitals)+'곳</b>'
+    +' 중 노즐 재사용 <b>'+exNum(x.reuse)+'곳</b>'+(x.reuseRate==null?'':' ('+x.reuseRate+'%)')
+    +' · 교육 미흡 <b>'+exNum(x.need)+'곳</b>'+(x.needRate==null?'':' ('+x.needRate+'%)')
+    +'<span class="muted"> · 조사 기록 없음 노즐 '+exNum(x.nozzleUnknown)+' · 교육 '+exNum(x.skillNone)+'</span>';
 }
 function exCycleStateChips_(sum,shortOnly){
   if(!sum.short.hospitals&&!sum.long.hospitals) return '';
@@ -7384,9 +7412,9 @@ function exCycleStateChips_(sum,shortOnly){
     +'<button type="button" class="hst-state-box is-short'+(shortOnly?' is-on':'')+'"'
       +' aria-pressed="'+(shortOnly?'true':'false')+'" onclick="exToggleCycleShort_()"'
       +' title="'+escAttr('간격 중앙값 '+EX_CYCLE_SHORT_DAYS+'일 미만인 조합만 보기 · 다시 누르면 전체')+'">'
-      +'<span class="hst-state-k">주기 '+EX_CYCLE_SHORT_DAYS+'일 미만</span>'+exCycleSideText_(sum.short)
+      +'<span class="hst-state-k">'+EX_CYCLE_SHORT_DAYS+'일 안에 또 나는 병원</span>'+exCycleSideText_(sum.short)
       +'<span class="hst-state-act">'+(shortOnly?'전체 보기 ↺':'이 병원만 보기 →')+'</span></button>'
-    +'<div class="hst-state-box"><span class="hst-state-k">'+EX_CYCLE_SHORT_DAYS+'일 이상</span>'
+    +'<div class="hst-state-box"><span class="hst-state-k">그 밖의 병원</span>'
       +exCycleSideText_(sum.long)+'</div>'
     +'</div>';
 }
@@ -7424,17 +7452,18 @@ function exHistoryCycleTable_(rows,shortOnly){
   rows=shown;
   return exHistoryCycleSummaryHtml_(sum,shortOnly)
     +'<table class="hst-table cycle"><colgroup>'
-    +['12%','10%','8%','10%','18%','5%','5%','7%','6%','9%','10%']
+    +['13%','10%','8%','10%','19%','8%','7%','7%','9%','9%']
       .map(function(w){return '<col style="width:'+w+'">';}).join('')
     +'</colgroup><thead><tr>'
-    +'<th>병원</th><th>VOC 유형</th><th>장비번호</th>'
-    +'<th title="선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다">발생</th>'
-    +'<th title="연속 발생 사이의 간격을 오래된 것부터 최근 순으로 적습니다">재발 간격 (오래된 → 최근)</th>'
-    +'<th>평균</th><th title="평균은 이상치에 휘둘립니다 — 주 지표는 중앙값입니다">중앙값</th>'
-    +'<th>최단 · 최장</th>'
-    +'<th title="마지막으로 끝난 간격 — 끝에서 두 번째 발생과 마지막 발생 사이">마지막 간격</th>'
-    +'<th title="마지막 발생 이후 아직 재발이 없는 일수 · 기준일은 오늘(선택 기간이 과거면 그 종료일)">현재 진행</th>'
-    +'<th title="앞 절반 평균과 뒤 절반 평균의 차이 · 간격이 길어졌다면 발생 빈도가 준 것입니다">추세</th>'
+    +exCycleTh_('병원','노즐·교육 상태')
+    +exCycleTh_('VOC 유형','')+exCycleTh_('장비번호','')
+    +exCycleTh_('몇 번 났나','같은 날은 1회','선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다')
+    +exCycleTh_('며칠 만에 다시 났나','오래된 것 → 최근','연속 발생 사이의 간격입니다. 마지막 점선 칸은 아직 끝나지 않은 기간입니다')
+    +exCycleTh_('보통 이 정도','중앙값 · 평균','절반은 이보다 빨리, 절반은 이보다 늦게 재발했습니다. 평균은 한 번의 긴 공백에 끌려가므로 중앙값을 먼저 봅니다')
+    +exCycleTh_('가장 빨랐을 때','최단 · 최장','가장 짧았던 간격과 가장 길었던 간격')
+    +exCycleTh_('직전 재발까지','마지막으로 끝난 간격','끝에서 두 번째 발생과 마지막 발생 사이')
+    +exCycleTh_('마지막 발생 후','지금까지 조용한 날','마지막 발생 이후 아직 재발이 없는 일수 · 기준일은 오늘(선택 기간이 과거면 그 종료일)')
+    +exCycleTh_('흐름','처음 절반 → 나중 절반','간격이 길어졌다면 그만큼 덜 나고 있다는 뜻입니다')
     +'</tr></thead><tbody>'
     +rows.map(function(g){
       return '<tr class="hst-cycle-row'+(g.shortCycle?' is-short':'')+'">'
@@ -7447,17 +7476,17 @@ function exHistoryCycleTable_(rows,shortOnly){
         +'<td data-label="VOC 유형">'+esc(g.type)+'</td>'
         +'<td data-label="장비번호">'+(g.sn?esc(g.sn)
           :'<span class="muted" title="장비번호가 없어 이 병원 · VOC 를 한 묶음으로 봅니다">S/N 미입력 · 병원 단위</span>')+'</td>'
-        +'<td class="days" data-label="발생">'+exNum(g.count)+'회'
+        +'<td class="days" data-label="몇 번 났나">'+exNum(g.count)+'회'
           +'<br><span class="muted">'+esc(ymd(g.first))+' ~ '
           +esc(g.first.getFullYear()===g.last.getFullYear()?ymd(g.last).slice(5):ymd(g.last))
           +' · '+exNum(g.span)+'일</span></td>'
-        +'<td class="hst-gaps" data-label="재발 간격">'+exHistoryCycleGapsHtml_(g)+'</td>'
-        +'<td class="days" data-label="평균">'+exHistoryDayText_(g.avg,'일')+'</td>'
-        +'<td class="days" data-label="중앙값">'+exHistoryDayText_(g.median,'일')+'</td>'
-        +'<td class="days" data-label="최단 · 최장">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
-        +'<td class="days" data-label="마지막 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
-        +'<td class="days" data-label="현재 진행">'+exHistoryCycleOpenHtml_(g)+'</td>'
-        +'<td data-label="추세">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
+        +'<td class="hst-gaps" data-label="며칠 만에 다시 났나">'+exHistoryCycleGapsHtml_(g)+'</td>'
+        +'<td class="days" data-label="보통 이 정도">'+exHistoryDayText_(g.median,'일')
+          +'<br><span class="muted">평균 '+(g.avg==null?'—':exNum(g.avg)+'일')+'</span></td>'
+        +'<td class="days" data-label="가장 빨랐을 때">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
+        +'<td class="days" data-label="직전 재발까지">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
+        +'<td class="days" data-label="마지막 발생 후">'+exHistoryCycleOpenHtml_(g)+'</td>'
+        +'<td data-label="흐름">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
         +'</tr>';
     }).join('')
     +'</tbody></table>';
@@ -7988,8 +8017,8 @@ function exApplyHistoryFilters_(){
   /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
   if(count) count.innerHTML=(view==='cycle')
     ? ('<b>'+exNum(exHistoryCyclesShown_(EX_HISTORY_STATE).length)+'개</b> 조합'
-      +(EX_HISTORY_STATE.cycleShortOnly?(' · 주기 '+EX_CYCLE_SHORT_DAYS+'일 미만만')
-        :' · 두 번 이상 발생한 병원 · VOC · 장비'))
+      +(EX_HISTORY_STATE.cycleShortOnly?(' · '+EX_CYCLE_SHORT_DAYS+'일 안에 또 난 곳만')
+        :' · 같은 문제가 두 번 이상 난 병원 · 장비'))
     : exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
   exHistorySyncToolbar_(EX_HISTORY_STATE);

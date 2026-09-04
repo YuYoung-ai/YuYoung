@@ -40,7 +40,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
   'skNorm_','nlDateLabel_','exBaseDate','exHistoryCycleOpenHtml_','exCycleAttachStates_','exCycleStateSplit_',
   'exToggleCycleShort_',
-  'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_','exArmIsHandpiecePart_',
+  'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_',
+  'exCycleTh_','exCycleGuideHtml_','exArmIsHandpiecePart_',
   'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
@@ -1445,8 +1446,10 @@ ck('97. 재발 주기 보기로 바꾸면 표·복사·기간 선택이 함께 �
   assert.equal(D.state().cycles.length,3);
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/hst-table cycle/);
-  assert.match(html,/재발 간격 \(오래된 → 최근\)/);
-  assert.match(html,/hst-trend up/,'간격이 길어진 조합은 추세 배지로 표시');
+  assert.match(html,/hst-th-sub">중앙값 · 평균/,'통계 용어는 부제로 남긴다');
+  assert.match(html,/며칠 만에 다시 났나/);
+  assert.match(html,/이 표 읽는 법/,'처음 보는 사람을 위한 안내');
+  assert.match(html,/hst-trend up[^>]*>덜 남 ▲/,'간격이 길어진 조합은 흐름 배지로 표시');
   assert.match(D.dom.els.hstCount.innerHTML,/3개<\/b> 조합/);
   assert.equal(D.dom.els.hstPeriod.disabled,true,'주기 보기는 기간 선택을 잠근다');
   assert.equal(D.dom.els.hstCopyTsv.textContent,'재발 주기 TSV 복사');
@@ -1568,8 +1571,9 @@ ck('103. 진행 중인 간격은 마지막 발생 이후 기준일까지를 따�
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/hst-gap-open/);
   assert.match(html,/일째/);
-  assert.match(html,/현재 진행이 중앙값 초과/);
-  assert.match(html,/마지막 간격/);
+  assert.match(html,/평소보다 오래 조용한 조합/);
+  assert.match(html,/직전 재발까지/);
+  assert.match(html,/마지막 발생 후/);
 });
 
 ck('104. 교체군은 핸드피스 표기만 세고, 카드에 표기 내역을 적어 교체품 TOP 5 와 맞춘다',()=>{
@@ -1637,13 +1641,13 @@ ck('107. 짧은 주기만 보기 토글이 표·건수·복사를 함께 바꾼�
   const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
   D.exSetHistoryView_('cycle');
   assert.equal(D.state().cycles.length,2);
-  assert.match(D.dom.els.hstTableHost.innerHTML,/주기 30일 미만/);
+  assert.match(D.dom.els.hstTableHost.innerHTML,/30일 안에 또 나는 병원/);
   assert.match(D.dom.els.hstTableHost.innerHTML,/사병원/);
   D.exToggleCycleShort_();
   assert.equal(D.state().cycleShortOnly,true);
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.ok(html.includes('가병원')&&!html.includes('사병원'),'짧은 주기 조합만 남는다');
-  assert.match(D.dom.els.hstCount.innerHTML,/1개<\/b> 조합 · 주기 30일 미만만/);
+  assert.match(D.dom.els.hstCount.innerHTML,/1개<\/b> 조합 · 30일 안에 또 난 곳만/);
   assert.equal(D.exHistoryCyclesShown_(D.state()).length,1,'복사도 화면과 같은 목록');
   D.exToggleCycleShort_();
   assert.equal(D.state().cycleShortOnly,false);
