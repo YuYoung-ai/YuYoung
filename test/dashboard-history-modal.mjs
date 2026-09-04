@@ -1179,7 +1179,7 @@ ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않�
 ck('77-c. 원인분석은 기존 두 카드 자리를 전폭 조치 방법별 재발 카드로 사용한다',()=>{
   assert.ok(SRC.includes('id="exCauseArmCard"'));
   assert.ok(!SRC.includes('id="exRepeatCard"')&&!SRC.includes('id="exNcCmpCard"'));
-  assert.match(SRC,/#exCauseArmCard,#exLeakRiskCard,#exLeakChangeCard\{grid-column:1\/-1\}/);
+  assert.match(SRC,/#exCauseArmCard\{grid-column:1\/-1\}/);
   const body=grab('renderExecutiveCause');
   assert.ok(body.includes('exArmRecurrence_(x.rows,RAW,null)'),'처리이력·Excel과 같은 계산 재사용');
   assert.ok(body.includes("exCauseArmGroup_('repair'")&&body.includes("exCauseArmGroup_('swap'"));
@@ -1824,11 +1824,25 @@ ck('117. 카드 단위 전체화면은 그 카드만 덮고 Esc 로 되돌아온
   assert.equal(D.exToggleCardFull_('exLeakRiskCard',false),false);
   assert.equal(card.classList.contains('is-full'),false);
   assert.ok(btn.textContent.includes('전체화면'));
-  /* 원인 분석 탭의 다섯 카드가 모두 버튼을 갖는다 */
+  /* 원인 분석 3장 + 재발 원인 2장이 모두 버튼을 갖는다 */
   ['exTypeCard','exPartCard','exCauseArmCard','exLeakRiskCard','exLeakChangeCard'].forEach(id=>{
     assert.match(SRC,new RegExp("exCardFullBtn_\\('"+id+"'\\)"),id+' 전체화면 버튼');
   });
   assert.match(SRC,/\.ex-card\.is-full\{position:fixed;inset:0/);
+});
+ck('118. 재발 원인은 별도 탭이고 원인 분석 탭 배치는 그대로 둔다',()=>{
+  /* 두 분석 카드는 새 탭(exPaneRisk)에만 있다 */
+  assert.match(SRC,/<section class="ex-pane" id="exPaneRisk">\s*<div class="ex-card" id="exLeakRiskCard"><\/div>\s*<div class="ex-card" id="exLeakChangeCard"><\/div>/);
+  assert.match(SRC,/data-tab="risk">⑤ 재발 원인</);
+  assert.match(SRC,/data-tab="year">⑥ 연간 비교분석</);
+  /* 원인 분석 탭은 예전 두 줄 배치 그대로 — 카드가 0 높이로 눌리지 않는다 */
+  assert.match(SRC,/#exPaneCause\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\);grid-template-rows:minmax\(0,1fr\) minmax\(0,1\.15fr\)\}/);
+  assert.ok(!/id="exPaneCause"[\s\S]{0,400}exLeakRiskCard/.test(SRC),'원인 분석 탭에는 재발 요인 카드가 없다');
+  /* 탭 전환·렌더 분기에 risk 가 등록돼 있다 */
+  assert.match(SRC,/\['summary','cause','actions','leak','risk','year'\]/);
+  assert.match(SRC,/risk:'exPaneRisk'/);
+  assert.match(SRC,/EX_TAB==='risk'\)  renderExecutiveRisk\(x\)/);
+  assert.match(SRC,/#exPaneRisk\{grid-template-columns:1fr;grid-auto-rows:auto;align-content:start;overflow-y:auto\}/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

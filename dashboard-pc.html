@@ -379,12 +379,13 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-pane{display:none;position:absolute;inset:0;gap:8px}
 .ex-pane.on{display:grid}
 #exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
-/* 원인 분석 탭 — 위 두 줄(TOP 5 · 조치 방법별)은 지금 배치를 그대로 두고,
-   아래 두 장(재발 요인 · 개선 전후)은 내용 높이만큼 쓰며 탭 전체가 세로로 스크롤된다. */
-#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));
-  grid-template-rows:minmax(0,1fr) minmax(0,1.15fr) auto auto;overflow-y:auto}
+#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1.15fr)}
+#exCauseArmCard{grid-column:1/-1}
+/* ⑤ 재발 원인 — 표가 길어 한 화면에 안 들어간다. 카드는 내용 높이만큼 쓰고 탭이 세로로 스크롤된다. */
+#exPaneRisk{grid-template-columns:1fr;grid-auto-rows:auto;align-content:start;overflow-y:auto}
+/* 이 두 카드는 표 길이만큼 자란다 — 카드 본문이 줄어들며 잘리지 않게 한다(탭이 대신 스크롤한다) */
 #exLeakRiskCard,#exLeakChangeCard{overflow:visible}
-#exCauseArmCard,#exLeakRiskCard,#exLeakChangeCard{grid-column:1/-1}
+#exLeakRiskCard .ex-cbody,#exLeakChangeCard .ex-cbody{flex:0 0 auto;overflow:visible}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
 /* 카드/행이 늘면 글자를 축소하지 않고 패널의 최소 높이와 세로 스크롤을 유지한다. */
 #exPaneLeak{grid-template-rows:auto minmax(260px,.9fr) minmax(320px,1.1fr);overflow-y:auto;overflow-x:hidden;align-content:start}
@@ -1745,7 +1746,8 @@ exApplyLevel3Tools_();
       <button type="button" class="ex-tab" data-tab="cause">② 원인 분석</button>
       <button type="button" class="ex-tab" data-tab="actions">③ 관리 대상</button>
       <button type="button" class="ex-tab" data-tab="leak">④ 누수 분석</button>
-      <button type="button" class="ex-tab" data-tab="year">⑤ 연간 비교분석</button>
+      <button type="button" class="ex-tab" data-tab="risk">⑤ 재발 원인</button>
+      <button type="button" class="ex-tab" data-tab="year">⑥ 연간 비교분석</button>
     </div>
 
     <div class="ex-body">
@@ -1770,8 +1772,6 @@ exApplyLevel3Tools_();
         <div class="ex-card" id="exPartCard"></div>
         <!-- 반복 발생 병원/N-Care 비교 두 자리를 조치 방법별 재발 비교 한 장으로 사용 -->
         <div class="ex-card" id="exCauseArmCard"></div>
-        <div class="ex-card" id="exLeakRiskCard"></div>
-        <div class="ex-card" id="exLeakChangeCard"></div>
       </section>
       <!-- ③ 관리 대상 -->
       <section class="ex-pane" id="exPaneActions">
@@ -1792,6 +1792,11 @@ exApplyLevel3Tools_();
         </div>
       </section>
       <!-- ⑤ 연간 비교분석 — 두 해를 좌·우로 나란히 놓고 같은 눈금으로 본다 -->
+      <!-- ⑤ 재발 원인 — 교육 × 노즐 재사용, 개선 전후. 표가 길어 탭을 따로 쓴다 -->
+      <section class="ex-pane" id="exPaneRisk">
+        <div class="ex-card" id="exLeakRiskCard"></div>
+        <div class="ex-card" id="exLeakChangeCard"></div>
+      </section>
       <section class="ex-pane" id="exPaneYear">
         <div class="yc-bar" id="exYcBar"></div>
         <div class="ex-card" id="exYcWeekCard"></div>
@@ -1982,7 +1987,7 @@ var EX_BASIS='보고 대상: 고객 서비스 기준 · 데모 관련 데이터 
 /* ── 화면 모드 상태 (보고 모드 / 상세 분석 모드는 RAW·F·filtered()를 공유한다) ── */
 var VIEW_KEY='baz_dash_view';
 var VIEW='exec';          /* 'exec'(보고) | 'detail'(상세 분석) */
-var EX_TAB='summary';     /* 'summary' | 'cause' | 'actions' | 'leak' | 'year' */
+var EX_TAB='summary';     /* 'summary' | 'cause' | 'actions' | 'leak' | 'risk' | 'year' */
 var EX_CMP=true;          /* 이전 동일 기간 비교 표시 여부 */
 var DATA_READY=false;
 var CUR_ROWS=[];          /* 마지막 filtered() 결과(상세 분석 모집단) — 모드·탭 전환 시 재필터 방지 */
@@ -5136,12 +5141,13 @@ function setView(v){
   renderActiveView();
 }
 function setExecTab(t){
-  if(['summary','cause','actions','leak','year'].indexOf(t)<0) return;
+  if(['summary','cause','actions','leak','risk','year'].indexOf(t)<0) return;
   if(typeof closeYcFull==='function') closeYcFull();   /* 탭을 옮기면 전체화면은 닫는다 */
   EX_TAB=t;
   var tabs=document.getElementById('exTabs');
   if(tabs) tabs.querySelectorAll('.ex-tab').forEach(function(b){ b.classList.toggle('on', b.dataset.tab===t); });
-  var map={summary:'exPaneSummary', cause:'exPaneCause', actions:'exPaneActions', leak:'exPaneLeak', year:'exPaneYear'};
+  var map={summary:'exPaneSummary', cause:'exPaneCause', actions:'exPaneActions',
+    leak:'exPaneLeak', risk:'exPaneRisk', year:'exPaneYear'};
   Object.keys(map).forEach(function(k){
     document.getElementById(map[k]).classList.toggle('on', k===t);
   });
@@ -8939,6 +8945,9 @@ function renderExecutiveCause(x){
       +'<span>조치 분류·판정 가능 '+exNum(A.events.length)+'건</span><span>기타·미입력·판정불가 '+exNum(other)+'건(비교 제외)</span></div>'
       +'<div class="car-groups">'+exCauseArmGroup_('repair',A.repair)+exCauseArmGroup_('swap',A.swap)+'</div>'
       +'<p class="car-verdict">'+esc(exArmVerdict_(A))+'</p></div>';
+}
+/* ── 탭 ⑤ 재발 원인 — 교육 × 노즐 재사용, 개선 전후 ── */
+function renderExecutiveRisk(x){
   exRenderLeakRisk_(exBuildLeakRisk_(x.rows,RAW,null));
   exRenderLeakChange_(exBuildLeakChange_(x.rows,RAW,null));
 }
@@ -10003,6 +10012,7 @@ function renderExecutiveDashboard(rows){
       var x=exBuild(rows);
       if(EX_TAB==='summary')    renderExecutiveSummary(x);
       else if(EX_TAB==='cause') renderExecutiveCause(x);
+      else if(EX_TAB==='risk')  renderExecutiveRisk(x);
       else                      renderExecutiveActions(x);
     }
     EX_DRAWN[EX_TAB]=true;
