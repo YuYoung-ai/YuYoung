@@ -38,7 +38,9 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_',
   'exHistoryViewOf_','exHistoryCopyLabel_','exHistoryViewBtn_',
-  'exBaseDate','exHistoryCycleOpenHtml_','exArmIsHandpiecePart_',
+  'skNorm_','nlDateLabel_','exBaseDate','exHistoryCycleOpenHtml_','exCycleAttachStates_','exCycleStateSplit_',
+  'exToggleCycleShort_',
+  'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_','exArmIsHandpiecePart_',
   'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
@@ -216,6 +218,9 @@ function exLoadHistoryTypeExample_(it){
   log.photo.push(EX_HISTORY_STATE.selectedItemId);
 }
 function toast(m){ log.toasts.push(m); }
+/* 노즐·교육 상태 조회는 RAW 전체를 훑는 누수 분석 함수라 여기서는 주입해 쓴다 */
+var EX_TEST_STATES={nozzle:{},skill:{}};
+function exCycleHospStates_(){ return EX_TEST_STATES; }
 `;
   const body=stubs+'\n'+RUNTIME+'\n'+FNS.map(grab).join('\n')+`
 return {${FNS.join(',')},
@@ -225,6 +230,7 @@ return {${FNS.join(',')},
   searchPending:()=>!!EX_HISTORY_SEARCH_TIMER,
   page:()=>EX_HISTORY_PAGE,
   setSales:m=>{SALES=m;},
+  setStates:v=>{EX_TEST_STATES=v;},
   set:(rows,raw,f)=>{RAW=raw;F=f||{};EX_CACHE={rows:rows,prev:[]};}};
 `;
   const D=new Function('document','window','navigator','log','openExListHook',body.replace(
@@ -1456,15 +1462,17 @@ ck('98. 재발 주기 TSV 는 화면과 같은 순서로 간격·추세까지 �
   D.exSetHistoryView_('cycle');
   const lines=D.exHistoryCycleTsv_(D.state().cycles).split('\n');
   assert.equal(lines.length,4);
-  assert.match(lines[0],/^병원\tVOC 유형\t장비번호\t발생 횟수/);
+  assert.match(lines[0],/^병원\t노즐 상태\t노즐 평가일\t교육 상태\t교육 평가일\tVOC 유형\t장비번호\t발생 횟수/);
   const first=lines[1].split('\t');
-  assert.equal(first[0],'가병원');assert.equal(first[2],'HP-001');
-  assert.equal(first[3],'4');assert.equal(first[7],'3, 5, 10');
-  assert.equal(first[12],'10','마지막으로 끝난 간격');
-  assert.equal(first[13],'12','기준일 2026-08-31 − 마지막 발생 08-19');
-  assert.equal(first[15],'2026-08-31','기준일');
-  assert.equal(first[16],'간격 길어짐(빈도 감소)');
-  assert.equal(lines[2].split('\t')[2],'S/N 미입력');
+  assert.equal(first[0],'가병원');assert.equal(first[6],'HP-001');
+  assert.equal(first[1],'노즐 미평가');assert.equal(first[2],'','평가가 없으면 평가일도 빈칸');
+  assert.equal(first[3],'교육 미평가');
+  assert.equal(first[7],'4');assert.equal(first[11],'3, 5, 10');
+  assert.equal(first[16],'10','마지막으로 끝난 간격');
+  assert.equal(first[17],'12','기준일 2026-08-31 − 마지막 발생 08-19');
+  assert.equal(first[19],'2026-08-31','기준일');
+  assert.equal(first[20],'간격 길어짐(빈도 감소)');
+  assert.equal(lines[2].split('\t')[6],'S/N 미입력');
 });
 
 /* ══════ 병원 · VOC 발생 빈도 추이 ══════ */
@@ -1586,6 +1594,74 @@ ck('104. 교체군은 핸드피스 표기만 세고, 카드에 표기 내역을 
   assert.match(html,/표기 내역/);
   assert.match(html,/Handpiece Ass'y <b>2<\/b>/);
   assert.equal(D.exCauseArmGroup_('repair',a.repair).includes('내부 세척'),true);
+});
+
+/* 짧은 주기 × 노즐·교육 상태
+   가병원 간격 5·10 (중앙값 7.5 → 짧음) · 사병원 간격 60·90 (중앙값 75 → 김) */
+const STATE_ROWS=[
+  row('n1','2026-06-01','가병원'), row('n2','2026-06-06','가병원'), row('n3','2026-06-16','가병원'),
+  row('n4','2026-01-05','사병원'), row('n5','2026-03-06','사병원'), row('n6','2026-06-04','사병원')
+];
+const STATES={nozzle:{'가병원':{state:'reuse',key:20260502},'사병원':{state:'single',key:20260410}},
+              skill:{'가병원':{state:'need',key:20260502},'사병원':{state:'good',key:20260410}}};
+
+ck('105. 조합에 병원 노즐·교육 상태를 붙이고 간격 중앙값으로 짧은 주기를 가른다',()=>{
+  const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
+  const rows=cyc(D);
+  const a=rows.find(r=>r.hosp==='가병원'), b=rows.find(r=>r.hosp==='사병원');
+  assert.deepEqual(a.gaps,[5,10]);assert.equal(a.median,7.5);
+  assert.equal(a.nozzle,'reuse');assert.equal(a.skill,'need');
+  assert.equal(a.shortCycle,true,'중앙값 7.5일 < 30일');
+  assert.deepEqual(b.gaps,[60,90]);assert.equal(b.median,75);
+  assert.equal(b.nozzle,'single');assert.equal(b.skill,'good');
+  assert.equal(b.shortCycle,false);
+  /* 평가가 없는 병원은 미평가로 남는다 — 없는 상태를 좋은 쪽으로 넘겨 짚지 않는다 */
+  D.setStates({nozzle:{},skill:{}});
+  const none=cyc(D)[0];
+  assert.equal(none.nozzle,'unknown');assert.equal(none.skill,'none');
+});
+ck('106. 짧은 주기 병원과 그 밖의 병원을 노즐·교육으로 나눠 세고 비율은 평가된 병원만 쓴다',()=>{
+  const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
+  const sum=D.exHistoryCycleSummary_(cyc(D));
+  assert.equal(sum.short.hospitals,1);assert.equal(sum.short.reuse,1);assert.equal(sum.short.need,1);
+  assert.equal(sum.short.reuseRate,100);assert.equal(sum.short.needRate,100);
+  assert.equal(sum.long.hospitals,1);assert.equal(sum.long.reuse,0);assert.equal(sum.long.need,0);
+  assert.equal(sum.long.reuseRate,0);assert.equal(sum.long.needRate,0);
+  /* 미평가는 분모에서 빠진다 — 비율이 희석되지 않는다 */
+  D.setStates({nozzle:{'가병원':{state:'reuse'}},skill:{}});
+  const s2=D.exHistoryCycleSummary_(cyc(D));
+  assert.equal(s2.short.reuseRate,100);assert.equal(s2.short.needRate,null,'교육 평가가 없으면 비율 없음');
+  assert.equal(s2.long.nozzleUnknown,1);
+});
+ck('107. 짧은 주기만 보기 토글이 표·건수·복사를 함께 바꾼다',()=>{
+  const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
+  D.exSetHistoryView_('cycle');
+  assert.equal(D.state().cycles.length,2);
+  assert.match(D.dom.els.hstTableHost.innerHTML,/주기 30일 미만/);
+  assert.match(D.dom.els.hstTableHost.innerHTML,/사병원/);
+  D.exToggleCycleShort_();
+  assert.equal(D.state().cycleShortOnly,true);
+  const html=D.dom.els.hstTableHost.innerHTML;
+  assert.ok(html.includes('가병원')&&!html.includes('사병원'),'짧은 주기 조합만 남는다');
+  assert.match(D.dom.els.hstCount.innerHTML,/1개<\/b> 조합 · 주기 30일 미만만/);
+  assert.equal(D.exHistoryCyclesShown_(D.state()).length,1,'복사도 화면과 같은 목록');
+  D.exToggleCycleShort_();
+  assert.equal(D.state().cycleShortOnly,false);
+  assert.match(D.dom.els.hstTableHost.innerHTML,/사병원/);
+});
+ck('108. 행에는 노즐·교육 배지를 병원 아래 붙이고 짧은 주기 행을 표시한다',()=>{
+  const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
+  D.exSetHistoryView_('cycle');
+  const html=D.dom.els.hstTableHost.innerHTML;
+  assert.match(html,/hst-state bad" title="노즐 재사용 · 2026.05.02 평가/);
+  assert.match(html,/노즐 재사용<i>26.05.02<\/i>/,'배지에 평가일을 짧게 붙인다');
+  assert.match(html,/hst-state bad" title="교육 미흡 · 2026.05.02 평가/);
+  assert.match(html,/hst-state good" title="노즐 1회 사용 · 2026.04.10 평가/);
+  assert.match(html,/hst-cycle-row is-short/);
+  /* TSV 에도 상태가 실린다 */
+  const first=D.exHistoryCycleTsv_(cyc(D)).split('\n')[1].split('\t');
+  assert.equal(first[0],'가병원');assert.equal(first[1],'노즐 재사용');assert.equal(first[3],'교육 미흡');
+  assert.equal(first[2],'2026.05.02','handover 에 O/X 를 적은 날');
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
