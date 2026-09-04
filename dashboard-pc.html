@@ -379,8 +379,12 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-pane{display:none;position:absolute;inset:0;gap:8px}
 .ex-pane.on{display:grid}
 #exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
-#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1.15fr)}
-#exCauseArmCard,#exLeakRiskCard{grid-column:1/-1}
+/* 원인 분석 탭 — 위 두 줄(TOP 5 · 조치 방법별)은 지금 배치를 그대로 두고,
+   아래 두 장(재발 요인 · 개선 전후)은 내용 높이만큼 쓰며 탭 전체가 세로로 스크롤된다. */
+#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-rows:minmax(0,1fr) minmax(0,1.15fr) auto auto;overflow-y:auto}
+#exLeakRiskCard,#exLeakChangeCard{overflow:visible}
+#exCauseArmCard,#exLeakRiskCard,#exLeakChangeCard{grid-column:1/-1}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
 /* 카드/행이 늘면 글자를 축소하지 않고 패널의 최소 높이와 세로 스크롤을 유지한다. */
 #exPaneLeak{grid-template-rows:auto minmax(260px,.9fr) minmax(320px,1.1fr);overflow-y:auto;overflow-x:hidden;align-content:start}
@@ -448,6 +452,19 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .risk-th-sub{display:block;color:var(--text-muted);font-size:9px;font-weight:600}
 .risk-table td.risk-h{font-size:12.5px}
 .risk-hold{color:var(--teal)}
+/* 개선 전후 카드 */
+.chg-head{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.chg-kpi{flex:1 1 150px;min-width:0;border:1px solid var(--gray-line);border-radius:9px;
+  background:var(--surface-2);padding:8px 11px}
+.chg-kpi span{display:block;color:var(--text-muted);font-size:10px;font-weight:700}
+.chg-kpi b{display:block;margin-top:2px;color:var(--navy);font-size:20px;line-height:1.2;
+  font-variant-numeric:tabular-nums}
+.chg-kpi em{display:block;margin-top:2px;color:var(--teal);font-size:10px;font-style:normal;font-weight:700}
+.chg-kpi.is-after{border-color:var(--teal);background:var(--teal-soft)}
+.chg-arrow{display:flex;align-items:center;color:var(--text-muted);font-size:18px}
+.chg-good{color:var(--teal);font-weight:800}.chg-bad{color:var(--red);font-weight:800}
+.chg-table td.chg-what{color:var(--text-muted);font-weight:600}
+.chg-table td{white-space:nowrap}
 .risk-tag{margin-left:6px;border-radius:999px;background:var(--track);padding:1px 6px;
   color:var(--text-muted);font-size:9px;font-weight:700}
 .risk-row.is-base td{background:var(--teal-soft)}
@@ -1741,6 +1758,7 @@ exApplyLevel3Tools_();
         <!-- 반복 발생 병원/N-Care 비교 두 자리를 조치 방법별 재발 비교 한 장으로 사용 -->
         <div class="ex-card" id="exCauseArmCard"></div>
         <div class="ex-card" id="exLeakRiskCard"></div>
+        <div class="ex-card" id="exLeakChangeCard"></div>
       </section>
       <!-- ③ 관리 대상 -->
       <section class="ex-pane" id="exPaneActions">
@@ -3574,11 +3592,14 @@ function exRiskSummary_(list){
     hospitals:Object.keys(list.reduce(function(m,x){m[x.hospKey]=1;return m;},{})).length,
     median:n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
     avg:n?Math.round(sum/n*10)/10:null, rates:{}};
-  EX_RISK_HORIZONS.forEach(function(h){
+  EX_RISK_HORIZONS.forEach(function(h,i){
     /* 분모: 그 기간을 다 관찰한 구간(재발했든, h일 넘게 관찰 중이든) */
     var denom=list.filter(function(x){return (x.recurred&&x.days<=h)||x.days>=h;});
     var hit=denom.filter(function(x){return x.recurred&&x.days<=h;});
-    out.rates[h]={denom:denom.length,hit:hit.length,
+    /* 누적이 원칙이되, 그 칸에서 새로 늘어난 건수(앞 기준일 다음 날 ~ 이 기준일)도 함께 센다 */
+    var from=i?EX_RISK_HORIZONS[i-1]+1:1;
+    var bucket=list.filter(function(x){return x.recurred&&x.days>=from&&x.days<=h;});
+    out.rates[h]={denom:denom.length,hit:hit.length,from:from,bucket:bucket.length,
       rate:denom.length?Math.round(hit.length/denom.length*1000)/10:null};
   });
   return out;
@@ -3607,6 +3628,78 @@ function exBuildLeakRisk_(rows,allRows,asOf){
   return {asOfKey:asOfKey,cutoff:base,intervals:intervals,groups:groups,
     unknown:exRiskSummary_(unknown),total:exRiskSummary_(intervals)};
 }
+/* ══════ 개선 조치 전후 비교 ══════
+   병원끼리 견주면 시술량·사용 습관 차이가 섞인다. 같은 병원이 행동을 바꾸기 전과 후를 견주면
+   그 차이가 상당 부분 상쇄되므로, 근거로는 이쪽이 더 강하다.
+   · 개선 시점 = 교육 미흡 → 양호, 또는 노즐 재사용 → 1회 사용으로 처음 바뀐 조사일.
+     둘 다 바뀌었으면 나중 날짜를 쓴다(두 조건이 모두 갖춰진 시점).
+   · 전/후는 구간이 "시작된 날"로 가른다. 개선 이후에 시작된 구간만 개선 후로 센다.
+   · 아직 재발이 없는 구간은 중앙값 계산에서 빼되 "관찰 중"으로 건수와 최장 관찰일을 남긴다.
+     개선 후에 재발이 아예 없으면 중앙값이 안 나오므로, 그 경우 관찰일로 말한다. */
+function exChangePoint_(list,badState){
+  /* 마지막으로 나쁜 상태였던 조사 뒤, 처음으로 좋은 상태가 된 조사일 */
+  var lastBad=null, i;
+  for(i=0;i<(list||[]).length;i++) if(list[i].state===badState) lastBad=i;
+  if(lastBad==null) return null;
+  for(i=lastBad+1;i<list.length;i++) if(list[i].state!==badState) return list[i].key;
+  return null;
+}
+function exChangeSide_(list){
+  var done=list.filter(function(x){return x.recurred;});
+  var days=done.map(function(x){return x.days;}).sort(function(a,b){return a-b;});
+  var n=days.length, mid=Math.floor(n/2);
+  var watching=list.filter(function(x){return !x.recurred;});
+  return {intervals:list.length,recurred:n,watching:watching.length,
+    median:n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
+    maxWatch:watching.length?Math.max.apply(null,watching.map(function(x){return x.days;})):null};
+}
+function exBuildLeakChange_(rows,allRows,asOf){
+  var A=exBuildLeakRisk_(rows,allRows,asOf);
+  var t=exRiskTimelines_((allRows||RAW||[]).filter(function(r){
+    return recScope(r)==='customer'&&nlDateKey_(r)&&nlDateKey_(r)<=A.asOfKey;
+  }));
+  var byHosp=Object.create(null);
+  A.intervals.forEach(function(x){ (byHosp[x.hospKey]=byHosp[x.hospKey]||[]).push(x); });
+  var out=[];
+  Object.keys(byHosp).forEach(function(k){
+    var skillAt=exChangePoint_(t.skill[k],'need'), nozAt=exChangePoint_(t.nozzle[k],'reuse');
+    if(skillAt==null&&nozAt==null) return;                 /* 개선 이력이 없는 병원 */
+    var at=(skillAt!=null&&nozAt!=null)?Math.max(skillAt,nozAt):(skillAt!=null?skillAt:nozAt);
+    var label=(skillAt!=null&&nozAt!=null)?'교육 개선 + 재사용 중단'
+      :(skillAt!=null?'교육 개선':'노즐 재사용 중단');
+    var list=byHosp[k];
+    /* 완료된 구간은 시작일로 가른다. 개선일에 걸친 완료 구간은 개선 전에 넣는다 —
+       긴 간격이 개선 전으로 잡혀 개선 폭이 작아 보이는 쪽이라 결론이 부풀지 않는다.
+       아직 끝나지 않은 구간이 개선일에 걸쳐 있으면 개선 이후 경과분만 개선 후로 센다.
+       그렇게 하지 않으면 개선한 뒤로 한 번도 재발하지 않은 병원이 통째로 빠진다. */
+    var beforeList=[], afterList=[];
+    list.forEach(function(x){
+      if(x.start>=at){ afterList.push(x); return; }
+      if(x.recurred){ beforeList.push(x); return; }
+      afterList.push({recurred:false,days:exKeyDiff_(at,A.asOfKey),sinceChange:true});
+    });
+    var before=exChangeSide_(beforeList), after=exChangeSide_(afterList);
+    if(!before.intervals||!after.intervals) return;        /* 한쪽이 비면 견줄 수 없다 */
+    var gain=(before.median!=null&&after.median!=null)?Math.round((after.median-before.median)*10)/10:null;
+    out.push({hospKey:k,hosp:list[0].hosp,at:at,label:label,skillAt:skillAt,nozAt:nozAt,
+      before:before,after:after,gain:gain,
+      ratio:(gain!=null&&before.median>0)?Math.round(after.median/before.median*10)/10:null});
+  });
+  /* 개선 폭이 큰 순 — 중앙값이 없는(개선 후 무재발) 병원은 관찰일로 뒤에 붙인다 */
+  out.sort(function(a,b){
+    if((a.gain==null)!==(b.gain==null)) return a.gain==null?1:-1;
+    return (b.gain||0)-(a.gain||0)||skCmpKo_(a.hosp,b.hosp);
+  });
+  var withBoth=out.filter(function(x){return x.gain!=null;});
+  var med=function(arr){ arr=arr.slice().sort(function(a,b){return a-b;});
+    var n=arr.length,m=Math.floor(n/2);
+    return n?(n%2?arr[m]:Math.round((arr[m-1]+arr[m])/2*10)/10):null; };
+  return {asOfKey:A.asOfKey,cutoff:A.cutoff,rows:out,
+    summary:{hospitals:out.length,measured:withBoth.length,
+      before:med(withBoth.map(function(x){return x.before.median;})),
+      after:med(withBoth.map(function(x){return x.after.median;})),
+      noRecurAfter:out.filter(function(x){return x.after.recurred===0;}).length}};
+}
 /* 임원 보고용 표 — 숫자는 크게, 기준군 대비 배수는 한눈에, 판정은 조심스럽게. */
 function exRiskPct_(v){ return v==null?'—':v.toFixed(1)+'%'; }
 function exRiskDay_(v){ return v==null?'—':exNum(v)+'일'; }
@@ -3630,7 +3723,8 @@ function exRiskRow_(g,isBase){
     +EX_RISK_HORIZONS.map(function(h){
       var r=g.rates[h]||{};
       return '<td class="risk-h'+(h===EX_RISK_MAIN?' risk-key':'')+'">'+exRiskPct_(r.rate)
-        +'<span class="risk-sub">'+exNum(r.hit)+' / '+exNum(r.denom)+'</span></td>';
+        +'<span class="risk-sub">'+exNum(r.hit)+' / '+exNum(r.denom)
+        +(r.bucket?(' · 이 구간 '+exNum(r.bucket)+'건'):'')+'</span></td>';
     }).join('')
     +'<td>'+exRiskDay_(g.median)+'<span class="risk-sub">평균 '+exRiskDay_(g.avg)+'</span></td>'
     +'<td class="risk-hold">'+exRiskHold_(g)+'</td>'
@@ -3654,6 +3748,68 @@ function exRiskVerdict_(A){
   return '네 집단의 '+EX_RISK_MAIN+'일 내 재발률 차이가 뚜렷하지 않습니다('+exRiskPct_(bR.rate)+' ~ '+exRiskPct_(wR.rate)
     +'). 교육·노즐 재사용만으로 재발을 설명하기 어려우므로 다른 요인을 함께 봐야 합니다.';
 }
+/* 개선 조치 전후 표 — 한 줄이 한 병원이고, 왼쪽이 개선 전, 오른쪽이 개선 후다. */
+function exChangeKeyDate_(k){ k=String(k); return k.slice(0,4)+'-'+k.slice(4,6)+'-'+k.slice(6,8); }
+function exChangeSideText_(x){
+  return (x.median==null?'—':exNum(x.median)+'일')
+    +'<span class="risk-sub">'+exNum(x.intervals)+'구간 · 재발 '+exNum(x.recurred)
+    +(x.watching?(' · 관찰 중 '+exNum(x.watching)+(x.maxWatch!=null?(' (최장 '+exNum(x.maxWatch)+'일)'):'')):'')
+    +'</span>';
+}
+function exChangeGainText_(r){
+  if(r.gain==null)
+    return r.after.recurred===0
+      ? '<span class="chg-good">개선 후 무재발</span><span class="risk-sub">'
+        +(r.after.maxWatch!=null?(exNum(r.after.maxWatch)+'일 관찰 중'):'관찰 중')+'</span>'
+      : '<span class="muted">—</span>';
+  var tone=r.gain>0?'chg-good':(r.gain<0?'chg-bad':'');
+  return '<span class="'+tone+'">'+(r.gain>0?'+':'')+exNum(r.gain)+'일</span>'
+    +(r.ratio!=null?('<span class="risk-sub">'+r.ratio.toFixed(1)+'배</span>'):'');
+}
+function exRenderLeakChange_(C){
+  var box=document.getElementById('exLeakChangeCard'); if(!box) return;
+  var sm=C.summary, rows=C.rows.slice(0,12);
+  var head='<div class="chg-head">';
+  if(sm.measured&&sm.before!=null&&sm.after!=null){
+    var gap=Math.round((sm.after-sm.before)*10)/10;
+    head+='<div class="chg-kpi"><span>개선 전 재발 간격 중앙값</span><b>'+exNum(sm.before)+'일</b></div>'
+      +'<div class="chg-arrow">→</div>'
+      +'<div class="chg-kpi is-after"><span>개선 후</span><b>'+exNum(sm.after)+'일</b></div>'
+      +'<div class="chg-kpi"><span>변화</span><b class="'+(gap>0?'chg-good':'chg-bad')+'">'
+      +(gap>0?'+':'')+exNum(gap)+'일'+(sm.before>0?(' · '+(Math.round(sm.after/sm.before*10)/10).toFixed(1)+'배'):'')+'</b></div>';
+  }else{
+    head+='<div class="chg-kpi"><span>비교 가능 병원</span><b>'+exNum(sm.measured)+'곳</b></div>';
+  }
+  head+='<div class="chg-kpi"><span>대상 병원</span><b>'+exNum(sm.hospitals)+'곳</b>'
+    +(sm.noRecurAfter?('<em>개선 후 무재발 '+exNum(sm.noRecurAfter)+'곳</em>'):'')+'</div></div>';
+  box.innerHTML=exH3('개선 조치 전후 재발 간격 변화',
+      '같은 병원의 교육 개선 · 노즐 재사용 중단 전후 비교 · 기준일 '+ymd(C.cutoff))
+    +'<div class="ex-cbody risk-body">'
+    +'<div class="risk-lead">병원마다 시술량과 사용 습관이 다르므로, 병원끼리 견주는 대신 '
+      +'<b>같은 병원의 조치 전후</b>를 견줍니다. 구간은 시작일 기준으로 전 · 후를 가릅니다.</div>'
+    +head
+    +(rows.length
+      ? '<table class="risk-table chg-table"><thead><tr>'
+        +'<th>병원</th><th>개선 내용</th><th>개선 시점</th>'
+        +'<th>개선 전 재발 간격</th><th>개선 후 재발 간격</th><th>변화</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return '<tr class="risk-row'+(r.gain!=null&&r.gain>0?' is-base':'')+'">'
+            +'<td class="risk-name">'+esc(r.hosp)+'</td>'
+            +'<td class="risk-name chg-what">'+esc(r.label)+'</td>'
+            +'<td>'+esc(exChangeKeyDate_(r.at))+'</td>'
+            +'<td>'+exChangeSideText_(r.before)+'</td>'
+            +'<td>'+exChangeSideText_(r.after)+'</td>'
+            +'<td class="risk-ratio">'+exChangeGainText_(r)+'</td></tr>';
+        }).join('')
+        +'</tbody></table>'
+        +(C.rows.length>rows.length?('<p class="risk-note">개선 폭이 큰 '+exNum(rows.length)
+          +'곳만 표시했습니다 · 전체 '+exNum(C.rows.length)+'곳</p>'):'')
+      : '<div class="hst-empty">교육 상태나 노즐 재사용이 개선된 뒤에도 재발 구간이 남아 있는 병원이 아직 없습니다.<br>'
+        +'조사 기록이 더 쌓이면 이 표에 나타납니다.</div>')
+    +'<p class="risk-note">해석 시 유의 — 누수가 발생한 뒤에 교육·노즐 조치를 시행하므로, 개선 후 재발이 줄어든 것에는 '
+      +'조치 효과 외에 사용자 경각심 변화, 핸드피스 교체·수리 등 다른 요인이 함께 작용했을 수 있습니다.</p>'
+    +'</div>';
+}
 function exRenderLeakRisk_(A){
   var box=document.getElementById('exLeakRiskCard'); if(!box) return;
   var u=A.unknown;
@@ -3662,16 +3818,22 @@ function exRenderLeakRisk_(A){
     +'<div class="ex-cbody risk-body">'
     +'<div class="risk-lead">발생 건수가 아니라 <b>다음 누수까지 버틴 기간</b>으로 봅니다. '
       +'한 구간은 발생일에서 다음 발생일까지이며, 아직 재발이 없는 구간도 <b>관찰 중</b>으로 함께 셉니다. '
-      +'누적 재발률은 <b>3 · 5 · 10 · 20 · 30일</b> 시점에서 끊어 봅니다.</div>'
+      +'누적 재발률은 <b>3 · 5 · 10 · 20 · 30일</b> 시점에서 끊어 보며, 각 칸은 앞 기준을 포함한 누적값입니다'
+      +'(5일 칸 = 1~5일 전체). 칸 아래 작은 글씨에 그 구간에서 새로 발생한 건수를 함께 적습니다.</div>'
     +'<table class="risk-table"><thead>'
       +'<tr><th rowspan="2">구분</th><th rowspan="2">대상 병원</th>'
         +'<th colspan="'+EX_RISK_HORIZONS.length+'" class="risk-grp"'
-        +' title="구간이 시작된 뒤 그 날까지 다시 누수가 난 비율입니다. 해당 기간을 다 관찰한 구간만 분모에 넣습니다">'
-        +'경과일별 누적 재발률</th>'
+        +' title="구간이 시작된 뒤 그 날까지 다시 누수가 난 비율입니다(누적). 예: 5일 칸은 1~5일 전체를 포함하며,'
+        +' 아래 작은 글씨의 \'이 구간\'은 4~5일 사이에 새로 발생한 건수입니다. 해당 기간을 다 관찰한 구간만 분모에 넣습니다">'
+        +'경과일별 누적 재발률 <span class="risk-th-sub">앞 기준을 포함한 누적</span></th>'
         +'<th rowspan="2">보통 며칠 만에<br>재발</th>'
         +'<th rowspan="2">'+EX_RISK_MAIN+'일 이상<br>무재발 유지</th>'
         +'<th rowspan="2">기준군 대비<br><span class="risk-th-sub">'+EX_RISK_MAIN+'일 기준</span></th></tr>'
-      +'<tr>'+EX_RISK_HORIZONS.map(function(h){return '<th class="risk-h">'+h+'일</th>';}).join('')+'</tr>'
+      +'<tr>'+EX_RISK_HORIZONS.map(function(h,i){
+        var from=i?EX_RISK_HORIZONS[i-1]+1:1;
+        return '<th class="risk-h">'+h+'일<span class="risk-th-sub">'
+          +(from===h?('~'+h+'일'):(from+'~'+h+'일'))+'</span></th>';
+      }).join('')+'</tr>'
       +'</thead><tbody>'
       +A.groups.map(function(g,i){return exRiskRow_(g,i===0);}).join('')
       +(u.intervals?'<tr class="risk-row is-unknown"><td class="risk-name">조사 기록 없음</td>'
@@ -8739,6 +8901,7 @@ function renderExecutiveCause(x){
       +'<div class="car-groups">'+exCauseArmGroup_('repair',A.repair)+exCauseArmGroup_('swap',A.swap)+'</div>'
       +'<p class="car-verdict">'+esc(exArmVerdict_(A))+'</p></div>';
   exRenderLeakRisk_(exBuildLeakRisk_(x.rows,RAW,null));
+  exRenderLeakChange_(exBuildLeakChange_(x.rows,RAW,null));
 }
 function exShowRepeat(){
   var rep=buildRepeatIssues(EX_ROWS);

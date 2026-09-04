@@ -44,7 +44,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exCycleTh_','exCycleGuideHtml_',
   'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_','exRiskSummary_',
   'exRiskHold_','exRiskGapText_',
-  'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_','exArmIsHandpiecePart_',
+  'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_',
+  'exChangePoint_','exChangeSide_','exBuildLeakChange_','exChangeKeyDate_','exChangeGainText_','exArmIsHandpiecePart_',
   'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
@@ -1177,7 +1178,7 @@ ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않�
 ck('77-c. 원인분석은 기존 두 카드 자리를 전폭 조치 방법별 재발 카드로 사용한다',()=>{
   assert.ok(SRC.includes('id="exCauseArmCard"'));
   assert.ok(!SRC.includes('id="exRepeatCard"')&&!SRC.includes('id="exNcCmpCard"'));
-  assert.match(SRC,/#exCauseArmCard,#exLeakRiskCard\{grid-column:1\/-1\}/);
+  assert.match(SRC,/#exCauseArmCard,#exLeakRiskCard,#exLeakChangeCard\{grid-column:1\/-1\}/);
   const body=grab('renderExecutiveCause');
   assert.ok(body.includes('exArmRecurrence_(x.rows,RAW,null)'),'처리이력·Excel과 같은 계산 재사용');
   assert.ok(body.includes("exCauseArmGroup_('repair'")&&body.includes("exCauseArmGroup_('swap'"));
@@ -1735,6 +1736,78 @@ ck('112. 기준군 대비 배수와 판정 문장은 표본이 얇으면 단정�
   const g=A.groups.find(x=>x.key==='need_reuse');
   assert.equal(A.groups[0].base,true);
   assert.equal(g.ratio,null,'기준군 재발률이 없으면 배수도 없다');
+});
+
+ck('113. 누적 재발률은 앞 기준을 포함하고, 그 구간에서 새로 난 건수도 함께 센다',()=>{
+  const D=build();
+  /* 2일·4일·8일 만에 재발한 세 구간 */
+  const rows=[leak('p1','2026-01-01','가병원'),leak('p2','2026-01-03','가병원'),
+              leak('p3','2026-02-01','나병원'),leak('p4','2026-02-05','나병원'),
+              leak('p5','2026-03-01','다병원'),leak('p6','2026-03-09','다병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-09-01');
+  const r=A.total.rates;
+  assert.equal(r[3].hit,1,'3일 칸 = 1~3일 → 2일 재발 1건');
+  assert.equal(r[5].hit,2,'5일 칸은 누적 — 2일과 4일');
+  assert.equal(r[5].bucket,1,'그 구간(4~5일) 신규는 1건');
+  assert.equal(r[10].hit,3,'10일 칸은 2·4·8일 모두 포함');
+  assert.equal(r[10].bucket,1,'그 구간(6~10일) 신규는 8일 1건');
+  assert.equal(r[3].from,1);assert.equal(r[5].from,4);assert.equal(r[10].from,6);
+  assert.equal(r[20].bucket,0,'11~20일 사이 재발은 없다');
+});
+ck('114. 개선 시점은 나쁜 상태 뒤 처음 좋아진 조사일이고, 전후는 구간 시작일로 가른다',()=>{
+  const D=build();
+  const rows=[
+    survey('v1','2026-01-05','가병원','O',true),     /* 재사용 · 교육 미흡 */
+    leak('q1','2026-01-10','가병원'),
+    leak('q2','2026-01-22','가병원'),                /* 개선 전 간격 12일 */
+    leak('q3','2026-02-03','가병원'),                /* 개선 전 간격 12일 */
+    survey('v2','2026-02-10','가병원','X',false),    /* 개선 */
+    leak('q4','2026-04-15','가병원'),                /* 개선 후 시작 구간 */
+    leak('q5','2026-07-20','가병원')                 /* 96일 만에 재발 */
+  ];
+  const C=D.exBuildLeakChange_(rows,rows,'2026-09-01');
+  assert.equal(C.rows.length,1);
+  const r=C.rows[0];
+  assert.equal(r.hosp,'가병원');
+  assert.equal(D.exChangeKeyDate_(r.at),'2026-02-10');
+  assert.equal(r.label,'교육 개선 + 재사용 중단');
+  /* 개선일에 걸친 구간(2/3 시작 → 4/15 종료)은 시작일이 개선 전이므로 "개선 전"에 넣는다.
+     긴 간격이 개선 전으로 잡혀 개선 폭을 작게 보이게 하는 쪽이라 결론이 부풀지 않는다. */
+  assert.equal(r.before.intervals,3,'1/10 · 1/22 · 2/3 시작 구간');
+  assert.deepEqual([r.before.median,r.before.recurred],[12,3]);
+  assert.equal(r.after.intervals,2,'4/15 재발 구간 + 7/20 이후 관찰 중');
+  assert.equal(r.after.maxWatch,43,'7/20 → 9/1 · 개선 후 시작이라 그대로 센다');
+  assert.equal(r.after.recurred,1);
+  assert.equal(r.after.watching,1);
+  assert.equal(r.after.median,96,'4/15 → 7/20');
+  assert.equal(r.gain,84);assert.equal(r.ratio,8);
+  assert.equal(C.summary.before,12);assert.equal(C.summary.after,96);
+});
+ck('115. 개선 이력이 없거나 한쪽 구간이 비면 전후 비교에서 뺀다',()=>{
+  const D=build();
+  /* 계속 미흡·재사용 — 개선 시점 없음 */
+  const a=[survey('w1','2026-01-01','나병원','O',true),
+           leak('r1','2026-02-01','나병원'),leak('r2','2026-02-20','나병원')];
+  assert.equal(D.exBuildLeakChange_(a,a,'2026-09-01').rows.length,0);
+  /* 개선은 했지만 그 전에 구간이 없다 */
+  const b=[survey('w2','2026-01-01','다병원','O',true),
+           survey('w3','2026-01-20','다병원','X',false),
+           leak('r3','2026-02-01','다병원'),leak('r4','2026-03-01','다병원')];
+  assert.equal(D.exBuildLeakChange_(b,b,'2026-09-01').rows.length,0);
+});
+ck('116. 개선 후 재발이 없으면 중앙값 대신 관찰 중으로 적는다',()=>{
+  const D=build();
+  const rows=[survey('u1','2026-01-05','라병원','O',true),
+              leak('t1','2026-01-10','라병원'),leak('t2','2026-01-25','라병원'),
+              survey('u2','2026-02-01','라병원','X',false)];
+  const C=D.exBuildLeakChange_(rows,rows,'2026-09-01');
+  const r=C.rows[0];
+  assert.equal(r.after.intervals,1);assert.equal(r.after.recurred,0);
+  assert.equal(r.after.median,null);
+  assert.equal(r.after.maxWatch,212,'개선일 2/1 → 기준일 9/1 · 개선 이후 경과분만 센다');
+  assert.equal(r.gain,null,'중앙값이 없으면 증감을 숫자로 말하지 않는다');
+  assert.match(D.exChangeGainText_(r),/개선 후 무재발/);
+  assert.equal(C.summary.noRecurAfter,1);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
