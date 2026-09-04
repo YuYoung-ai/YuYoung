@@ -43,8 +43,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_',
   'exCycleTh_','exCycleGuideHtml_',
   'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_',
-  'exRiskCurve_','exRiskCurveAt_','exRiskSummary_',
-  'exRiskHold_','exRiskGapText_',
+  'exRiskPeriodIntervals_','exRiskSummary_',
   'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_',
   'exChangePoint_','exChangeSide_','exBuildLeakChange_','exChangeKeyDate_','exChangeGainText_',
   'exCardFullBtn_','exToggleCardFull_','exCloseCardFull_','exArmIsHandpiecePart_',
@@ -1693,23 +1692,20 @@ ck('109. 재발 구간은 발생일 사이로 끊고 같은 날은 1회, 마지�
   assert.deepEqual(iv.map(x=>x.recurred),[true,true,false]);
   assert.equal(A.total.recurred,2);assert.equal(A.total.watching,1);
 });
-ck('110. 30일 재발률의 분모는 30일을 다 관찰한 구간만이다',()=>{
+ck('110. 30일 이내 재발은 상호배타적 구간에 배분하고 31일 이상·관찰 중은 분리한다',()=>{
   const D=build();
-  /* 20일 만에 재발(포함) · 40일 관찰 중(포함) · 10일밖에 관찰 못 한 구간(제외) */
+  /* 20일 만에 재발 1건 · 나머지 세 구간은 관찰 중 */
   const rows=[leak('b1','2026-06-01','가병원'),leak('b2','2026-06-21','가병원'),
               leak('c1','2026-05-01','나병원'),
               leak('d1','2026-07-22','다병원')];
   const A=D.exBuildLeakRisk_(rows,rows,'2026-08-01');
-  const r30=A.total.rates[30];
-  /* 10일에 관찰이 끝난 구간이 하나 빠지고, 20일 시점에 남아 있던 3구간 중 1건 재발 → 33.3% */
-  assert.equal(r30.hit,1,'30일까지 누적 재발 1건');
-  assert.equal(r30.n,4,'전체 구간 수는 그대로 보여 준다');
-  assert.equal(r30.atRisk,2,'30일 넘게 관찰이 이어진 구간');
-  assert.equal(r30.rate,33.3);
-  /* 기준일은 3·5·10·20·30일 다섯 개다 */
-  assert.deepEqual(Object.keys(A.total.rates).map(Number).sort((a,b)=>a-b),[3,5,10,20,30]);
-  assert.equal(A.total.rates[10].hit,0,'10일 안에 재발한 구간은 없다');
-  assert.equal(A.total.rates[20].hit,1,'20일 만의 재발은 20일 기준에 포함');
+  assert.equal(A.total.recur30,1);
+  assert.equal(A.total.over30,0);
+  assert.equal(A.total.watching,3);
+  assert.deepEqual(Object.keys(A.total.buckets).map(Number).sort((a,b)=>a-b),[3,5,10,20,30]);
+  assert.equal(A.total.buckets[20].count,1);
+  assert.equal(A.total.buckets[20].pct,100);
+  assert.equal(Object.values(A.total.buckets).reduce((n,b)=>n+b.count,0),A.total.recur30);
 });
 ck('111. 구간의 교육·노즐 상태는 구간 시작일 기준이고 이후 조사는 소급되지 않는다',()=>{
   const D=build();
@@ -1726,38 +1722,60 @@ ck('111. 구간의 교육·노즐 상태는 구간 시작일 기준이고 이후
   assert.equal(g('need_reuse').intervals,2);
   assert.equal(g('good_single').intervals,1);
   /* 조사 이력이 없는 병원은 4집단에서 빼고 따로 센다 */
-  const A2=D.exBuildLeakRisk_([leak('f1','2026-06-01','바병원'),leak('f2','2026-06-10','바병원')],
-                              [leak('f1','2026-06-01','바병원')],'2026-09-01');
+  const noSurvey=[leak('f1','2026-06-01','바병원'),leak('f2','2026-06-10','바병원')];
+  const A2=D.exBuildLeakRisk_(noSurvey,noSurvey,'2026-09-01');
   assert.equal(A2.unknown.intervals,2);
   assert.equal(A2.groups.reduce((a,x)=>a+x.intervals,0),0);
 });
-ck('112. 기준군 대비 배수와 판정 문장은 표본이 얇으면 단정하지 않는다',()=>{
+ck('112. 판정 문장은 위험도 배수 대신 실제 재발 소요일 분포만 요약한다',()=>{
   const D=build();
   const rows=[survey('s1','2026-01-01','가병원','O',true),
               leak('g1','2026-02-01','가병원'),leak('g2','2026-02-11','가병원')];
   const A=D.exBuildLeakRisk_(rows,rows,'2026-09-01');
-  assert.match(D.exRiskVerdict_(A),/표본이 아직 얇습니다/);
-  /* 기준군 대비 배수는 30일 재발률의 비다 */
   const g=A.groups.find(x=>x.key==='need_reuse');
   assert.equal(A.groups[0].base,true);
-  assert.equal(g.ratio,null,'기준군 재발률이 없으면 배수도 없다');
+  assert.equal(g.recur30,1);
+  assert.match(D.exRiskVerdict_(A),/30일 이내 재발 1건/);
+  assert.doesNotMatch(D.exRiskVerdict_(A),/\d+(?:\.\d+)?배|높게 나타/);
 });
 
-ck('113. 누적 재발률은 앞 기준을 포함하고, 그 구간에서 새로 난 건수도 함께 센다',()=>{
+ck('113. 다섯 소요일 구간은 서로 겹치지 않고 건수·비율 합계가 맞는다',()=>{
   const D=build();
   /* 2일·4일·8일 만에 재발한 세 구간 */
   const rows=[leak('p1','2026-01-01','가병원'),leak('p2','2026-01-03','가병원'),
               leak('p3','2026-02-01','나병원'),leak('p4','2026-02-05','나병원'),
               leak('p5','2026-03-01','다병원'),leak('p6','2026-03-09','다병원')];
   const A=D.exBuildLeakRisk_(rows,rows,'2026-09-01');
-  const r=A.total.rates;
-  assert.equal(r[3].hit,1,'3일 칸 = 1~3일 → 2일 재발 1건');
-  assert.equal(r[5].hit,2,'5일 칸은 누적 — 2일과 4일');
-  assert.equal(r[5].bucket,1,'그 구간(4~5일) 신규는 1건');
-  assert.equal(r[10].hit,3,'10일 칸은 2·4·8일 모두 포함');
-  assert.equal(r[10].bucket,1,'그 구간(6~10일) 신규는 8일 1건');
+  const r=A.total.buckets;
+  assert.equal(r[3].count,1,'1~3일 → 2일 재발 1건');
+  assert.equal(r[5].count,1,'4~5일 → 4일 재발 1건');
+  assert.equal(r[10].count,1,'6~10일 → 8일 재발 1건');
   assert.equal(r[3].from,1);assert.equal(r[5].from,4);assert.equal(r[10].from,6);
-  assert.equal(r[20].bucket,0,'11~20일 사이 재발은 없다');
+  assert.equal(r[20].count,0,'11~20일 사이 재발은 없다');
+  assert.equal(A.total.recur30,3);
+  assert.equal(Object.values(r).reduce((n,b)=>n+b.count,0),3);
+  assert.ok(Math.abs(Object.values(r).reduce((n,b)=>n+(b.pct||0),0)-99.9)<1e-9,'33.3% 세 칸의 반올림 합');
+});
+ck('113-a. 30일은 마지막 분포 구간, 31일 이상은 별도 재발로 센다',()=>{
+  const D=build();
+  const rows=[leak('o1','2026-01-01','가병원'),leak('o2','2026-02-01','가병원'),
+              leak('i1','2026-04-01','나병원'),leak('i2','2026-05-01','나병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-06-01');
+  assert.equal(A.total.recurred,2);
+  assert.equal(A.total.recur30,1);
+  assert.equal(A.total.buckets[30].count,1);
+  assert.equal(A.total.buckets[30].pct,100);
+  assert.equal(A.total.over30,1);
+  assert.equal(A.total.over30Pct,50);
+});
+ck('113-b. 보고 기간 첫 재발도 전체 이력의 직전 발생과 연결해 한 번 센다',()=>{
+  const D=build();
+  const prior=leak('w1','2026-07-29','가병원');
+  const inPeriod=leak('w2','2026-08-03','가병원');
+  const A=D.exBuildLeakRisk_([inPeriod],[prior,inPeriod],'2026-08-31');
+  assert.equal(A.total.recur30,1,'7월 발생 뒤 8월 재발을 5일 구간에 귀속');
+  assert.equal(A.total.buckets[5].count,1);
+  assert.equal(A.total.intervals,2,'8월 재발 완료 구간과 그 뒤 관찰 중 구간');
 });
 ck('114. 개선 시점은 나쁜 상태 뒤 처음 좋아진 조사일이고, 전후는 구간 시작일로 가른다',()=>{
   const D=build();
@@ -1845,7 +1863,8 @@ ck('118. 재발 원인은 별도 탭이고 원인 분석 탭 배치는 그대로
   assert.match(SRC,/\['summary','cause','actions','leak','risk','year'\]/);
   assert.match(SRC,/risk:'exPaneRisk'/);
   assert.match(SRC,/EX_TAB==='risk'\)  renderExecutiveRisk\(x\)/);
-  assert.match(SRC,/#exPaneRisk\{grid-template-columns:1fr;grid-auto-rows:auto;align-content:start;overflow-y:auto\}/);
+  assert.match(SRC,/#exPaneRisk\{grid-template-columns:1fr;grid-template-rows:max-content max-content;align-content:start;/);
+  assert.match(SRC,/\.risk-table-wrap\{[^}]*overflow-x:auto/);
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);

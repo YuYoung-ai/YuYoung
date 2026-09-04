@@ -99,9 +99,11 @@ ck('7. 비교 토글을 끄면 월별 전월 비교·특이사항도 중지',
   /mc=EX_CMP\?buildMonthTrendCompare\(mt\):null/.test(grab('renderExecutiveSummary'))&&
   /mNote=EX_CMP\?exMonthTrendNote_\(mc\):null/.test(grab('renderExecutiveSummary')));
 ck('8. 역전된 직접 기간은 적용 전에 차단',/from&&to&&from>to/.test(grab('setRange')));
-ck('9. 누수·연간 탭의 필터 예외를 상단에 표시',
-  /누수 분석: 유형·노즐·교육 상태 필터 제외/.test(SRC)&&/연간 비교: 연·월·분기는 제외/.test(SRC));
-ck('10. 배포 캐시 버전 증가',Number((SW.match(/baz-cs-v(\d+)/)||[])[1]||0)>=156);
+ck('9. 누수·재발 원인·연간 탭의 필터 예외를 상단에 표시',
+  /누수 분석: 유형·노즐·교육 상태 필터 제외/.test(SRC)&&
+  /재발 원인: 유형·노즐·교육 상태 필터 제외/.test(SRC)&&
+  /연간 비교: 연·월·분기는 제외/.test(SRC));
+ck('10. 배포 캐시 버전 증가',Number((SW.match(/baz-cs-v(\d+)/)||[])[1]||0)>=181);
 
 console.log('\n──────────────────────────────');
 console.log(`통과 ${pass}/${total}`);
