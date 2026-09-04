@@ -379,8 +379,12 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .ex-pane{display:none;position:absolute;inset:0;gap:8px}
 .ex-pane.on{display:grid}
 #exPaneSummary{grid-template-rows:auto minmax(0,1fr)}
-#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1.15fr)}
-#exCauseArmCard{grid-column:1/-1}
+/* 원인 분석 탭 — 위 두 줄(TOP 5 · 조치 방법별)은 지금 배치를 그대로 두고,
+   아래 두 장(재발 요인 · 개선 전후)은 내용 높이만큼 쓰며 탭 전체가 세로로 스크롤된다. */
+#exPaneCause{grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-rows:minmax(0,1fr) minmax(0,1.15fr) auto auto;overflow-y:auto}
+#exLeakRiskCard,#exLeakChangeCard{overflow:visible}
+#exCauseArmCard,#exLeakRiskCard,#exLeakChangeCard{grid-column:1/-1}
 #exPaneActions{grid-template-columns:repeat(3,minmax(0,1fr))}
 /* 카드/행이 늘면 글자를 축소하지 않고 패널의 최소 높이와 세로 스크롤을 유지한다. */
 #exPaneLeak{grid-template-rows:auto minmax(260px,.9fr) minmax(320px,1.1fr);overflow-y:auto;overflow-x:hidden;align-content:start}
@@ -430,6 +434,62 @@ body.view-exec .wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:colu
 .car-metric.recur b{color:var(--red)}.car-metric.stable b{color:var(--green)}.car-foot{margin-top:5px;color:var(--text-muted);font-size:9.5px;line-height:1.35}
 .car-parts{margin-top:3px;color:var(--text-muted);font-size:9.5px;line-height:1.35;overflow-wrap:anywhere}
 .car-parts b{color:var(--navy);font-variant-numeric:tabular-nums}
+/* 카드 단위 전체화면 — 카드만 화면을 덮고, 그 안은 스크롤한다 */
+.ex-card-full{flex:0 0 auto;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface-2);
+  color:var(--navy);padding:3px 9px;font:10px inherit;font-weight:800;cursor:pointer;white-space:nowrap}
+.ex-card-full:hover{border-color:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.ex-card-full:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+.ex-card.is-full{position:fixed;inset:0;z-index:45;border-radius:0;overflow:auto;padding:14px 18px}
+.ex-card.is-full .ex-cbody{overflow:visible}
+body.ex-card-full-on{overflow:hidden}
+/* 전체화면에서는 다시 크게 읽는다 */
+.ex-card.is-full .risk-table td{padding:10px}
+.ex-card.is-full .risk-key{font-size:20px}
+.ex-card.is-full .chg-kpi b{font-size:24px}
+.ex-card.is-full .risk-verdict{font-size:13px}
+/* ── 재발 요인 분석(임원 보고) ── 숫자를 크게, 근거는 작게. */
+.risk-body{display:flex;flex-direction:column;gap:7px}
+.risk-lead{color:var(--text-muted);font-size:10px;line-height:1.5}.risk-lead b{color:var(--navy)}
+.risk-table{width:100%;border-collapse:separate;border-spacing:0;font-size:11.5px}
+.risk-table th{padding:5px 8px;border-bottom:1px solid var(--gray-line);background:var(--gray-bg);
+  color:var(--text-muted);font-size:10.5px;font-weight:700;text-align:right;white-space:nowrap}
+.risk-table th:first-child{text-align:left}
+.risk-table td{padding:6px 8px;border-bottom:1px solid var(--li-line);text-align:right;
+  color:var(--navy);font-weight:700;font-variant-numeric:tabular-nums;vertical-align:top}
+.risk-table td.risk-name{text-align:left;color:var(--text);font-weight:600;white-space:nowrap}
+.risk-sub{display:block;margin-top:1px;color:var(--text-muted);font-size:9.5px;font-weight:500}
+.risk-key{font-size:15px;line-height:1.2}
+.risk-ratio{font-size:12.5px}
+.risk-table th.risk-grp{text-align:center;border-bottom:1px solid var(--gray-line)}
+.risk-table th.risk-h{text-align:right}
+.risk-th-sub{display:block;color:var(--text-muted);font-size:9px;font-weight:600}
+.risk-table td.risk-h{font-size:12.5px}
+.risk-hold{color:var(--teal)}
+/* 개선 전후 카드 */
+.chg-head{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.chg-kpi{flex:1 1 140px;min-width:0;border:1px solid var(--gray-line);border-radius:9px;
+  background:var(--surface-2);padding:6px 10px}
+.chg-kpi span{display:block;color:var(--text-muted);font-size:10px;font-weight:700}
+.chg-kpi b{display:block;margin-top:1px;color:var(--navy);font-size:17px;line-height:1.2;
+  font-variant-numeric:tabular-nums}
+.chg-kpi em{display:block;margin-top:2px;color:var(--teal);font-size:10px;font-style:normal;font-weight:700}
+.chg-kpi.is-after{border-color:var(--teal);background:var(--teal-soft)}
+.chg-arrow{display:flex;align-items:center;color:var(--text-muted);font-size:18px}
+.chg-good{color:var(--teal);font-weight:800}.chg-bad{color:var(--red);font-weight:800}
+.chg-table td.chg-what{color:var(--text-muted);font-weight:600}
+.chg-table td{white-space:nowrap}
+.risk-tag{margin-left:6px;border-radius:999px;background:var(--track);padding:1px 6px;
+  color:var(--text-muted);font-size:9px;font-weight:700}
+.risk-row.is-base td{background:var(--teal-soft)}
+.risk-row.is-high td{background:#FBEAE8}.risk-row.is-high td.risk-key,.risk-row.is-high td.risk-ratio{color:var(--red)}
+body.dark .risk-row.is-high td{background:#3A2023}
+.risk-row.is-unknown td{color:var(--text-muted);font-weight:600}
+.risk-verdict{margin:0;border-left:3px solid var(--teal);border-radius:5px;background:var(--teal-soft);
+  padding:6px 10px;color:var(--text);font-size:11.5px;font-weight:600;line-height:1.5}
+.risk-note{margin:0;color:var(--text-muted);font-size:10px;line-height:1.55}
+@media(max-width:820px){
+  .risk-table{display:block;overflow-x:auto}.risk-table thead th{white-space:nowrap}
+}
 .car-verdict{margin:0;border-left:3px solid var(--teal);border-radius:5px;background:var(--teal-soft);padding:6px 9px;color:var(--text);font-size:10.5px;font-weight:600;line-height:1.45}
 .car-history{height:100%;min-height:0;display:flex;flex-direction:column;padding:10px 11px 0;box-sizing:border-box}.car-history-summary{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:9px}.car-history-summary span{border:1px solid var(--gray-line);border-radius:999px;background:var(--surface-2);padding:4px 8px;color:var(--text-muted);font-size:10px}.car-history-summary b{color:var(--navy)}
 .car-history-wrap{min-height:0;flex:1;overflow:auto;border:1px solid var(--gray-line);border-radius:8px;scrollbar-gutter:stable}.car-history-table{width:100%;min-width:1120px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:11px}.car-history-table th{position:sticky;top:0;z-index:1;background:#F1F4F9;color:var(--text-muted);padding:7px 6px;border-bottom:1px solid var(--gray-line);font-size:10px;text-align:left;white-space:nowrap}.car-history-table td{padding:7px 6px;border-bottom:1px solid #EEF1F6;color:var(--text);vertical-align:top;line-height:1.4;overflow-wrap:anywhere}body.dark .car-history-table th{background:#202C43}.car-history-table .date,.car-history-table .days{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700;color:var(--navy)}.car-history-table .detail{white-space:pre-line}.car-history-table .confidence{color:var(--text-muted)}
@@ -1082,6 +1142,38 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
 .hst-table.cycle{min-width:1120px}
 .hst-cycle-sum{display:flex;flex-wrap:wrap;gap:7px;padding:9px 11px;background:var(--surface);
   border-bottom:1px solid var(--gray-line)}
+.hst-table.cycle th{vertical-align:bottom}
+.hst-th-sub{display:block;margin-top:1px;color:var(--text-muted);font-size:9px;font-weight:600;opacity:.85}
+.hst-cycle-guide{padding:0 11px 9px;background:var(--surface);border-bottom:1px solid var(--gray-line);
+  color:var(--text-muted);font-size:10.5px;line-height:1.6}
+.hst-cycle-guide summary{cursor:pointer;color:var(--navy);font-size:10.5px;font-weight:700;padding:2px 0}
+.hst-cycle-guide p{margin:3px 0 0}
+.hst-cycle-guide b{color:var(--navy)}
+/* 짧은 주기 병원 vs 그 밖의 병원 — 노즐·교육 상태를 나란히 두고 견준다 */
+.hst-cycle-state{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:0 11px 9px;
+  background:var(--surface);border-bottom:1px solid var(--gray-line)}
+.hst-state-box{display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:100%;text-align:left;
+  border:1px solid var(--gray-line);border-radius:9px;background:var(--surface-2);padding:7px 10px;
+  color:var(--text-muted);font:11px inherit;line-height:1.5}
+.hst-state-box b{color:var(--navy);font-variant-numeric:tabular-nums}
+.hst-state-box.is-short{cursor:pointer;border-color:#D9C495;background:#FFF9EC}
+body.dark .hst-state-box.is-short{background:#2B281F;border-color:#665A3D}
+.hst-state-box.is-short:hover{border-color:var(--amber)}
+.hst-state-box.is-short.is-on{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal)}
+.hst-state-box:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+.hst-state-k{flex:0 0 auto;border-radius:999px;background:var(--track);padding:2px 8px;
+  color:var(--navy);font-size:10px;font-weight:800}
+.hst-state-act{margin-left:auto;color:var(--teal);font-size:10px;font-weight:800;white-space:nowrap}
+/* 행 안의 상태 배지 — 병원명 아래 한 줄 */
+.hst-states{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.hst-state{border-radius:999px;padding:1px 6px;background:var(--track);color:var(--text-muted);
+  font-size:9.5px;font-weight:700;white-space:nowrap}
+.hst-state i{margin-left:4px;font-style:normal;font-weight:600;opacity:.75;font-variant-numeric:tabular-nums}
+.hst-state.bad{background:#FBEAE8;color:var(--red)}
+.hst-state.good{background:var(--teal-soft);color:#12607F}
+body.dark .hst-state.bad{background:#3A2023}body.dark .hst-state.good{color:var(--teal)}
+.hst-table tbody tr.hst-cycle-row.is-short td{box-shadow:inset 0 1px 0 rgba(184,134,11,.25)}
+.hst-table tbody tr.hst-cycle-row.is-short td:first-child{box-shadow:inset 3px 0 var(--amber),inset 0 1px 0 rgba(184,134,11,.25)}
 .hst-cycle-sum .hst-chip.muted{color:var(--text-muted)}
 .hst-gaps{font-variant-numeric:tabular-nums;line-height:1.75}
 .hst-gap.is-last{font-weight:800;color:var(--navy)}
@@ -1184,6 +1276,7 @@ body.dark .hst-table-wrap::-webkit-scrollbar-thumb:hover{background:#5F7290}
   .hst-table.rollup{min-width:0}
   /* 재발 주기는 카드 배치에서 병원·간격을 각각 한 줄로 편다 */
   .hst-table.cycle{min-width:0}
+  .hst-cycle-state{grid-template-columns:1fr}
   .hst-table.cycle tr{grid-template-columns:1fr 1fr}
   .hst-table.cycle td.hosp,.hst-table.cycle td.hst-gaps{grid-column:1/-1;grid-row:auto}
   /* 모바일은 한 열로 쌓고, 표와 패널이 좁은 화면을 나눠 갖는 대신 이력 화면 전체를 스크롤한다.
@@ -1677,6 +1770,8 @@ exApplyLevel3Tools_();
         <div class="ex-card" id="exPartCard"></div>
         <!-- 반복 발생 병원/N-Care 비교 두 자리를 조치 방법별 재발 비교 한 장으로 사용 -->
         <div class="ex-card" id="exCauseArmCard"></div>
+        <div class="ex-card" id="exLeakRiskCard"></div>
+        <div class="ex-card" id="exLeakChangeCard"></div>
       </section>
       <!-- ③ 관리 대상 -->
       <section class="ex-pane" id="exPaneActions">
@@ -3435,6 +3530,341 @@ function buildSkillData(rows){
           rate: evaluated>0 ? Math.round(needCount/evaluated*1000)/10 : null};
 }
 
+/* ══════ 재발 요인 분석 — 사용자 교육 × 노즐 재사용 ══════
+   묻는 것: "교육 상태와 노즐 재사용 여부에 따라 다음 누수까지 얼마나 버티는가."
+   · 분석 단위는 병원의 발생 건수가 아니라 "재발 구간"이다. 발생 A → 다음 발생 B 가 한 구간이고,
+     구간의 길이가 곧 버틴 기간이다. 같은 날 여러 건은 1회 발생으로 접는다.
+   · 마지막 발생 이후 아직 재발이 없는 구간도 버린다 — 가 아니라 "관찰 중"으로 남긴다.
+     그 기간 자체가 "버티고 있다"는 정보라서, 빼면 재발률이 부풀려진다.
+   · 30일 재발률의 분모는 "30일을 다 관찰한 구간"만이다. 관찰이 20일밖에 안 된 구간을
+     분모에 넣으면 최근 발생일수록 무조건 유리해진다.
+   · 각 구간의 교육·노즐 상태는 그 구간이 시작되는 날 기준이다(그 날 이전 마지막 조사).
+     조치 뒤에 교육을 하는 운영 특성상, 구간이 끝난 뒤의 조사를 그 구간에 적용하면 인과가 뒤집힌다. */
+/* 병원별 상태 변경 이력 — 방문(조사)마다 한 점을 찍고, 구간 시작일에 유효한 값을 찾아 쓴다. */
+function exRiskTimelines_(rows){
+  var noz=Object.create(null), skill=Object.create(null);
+  (rows||[]).forEach(function(r){
+    var k=skNorm_(r.hosp); if(!k) return;
+    var day=nlDateKey_(r); if(!day) return;
+    var v=String(r.nozzleReuse||'').trim().toUpperCase();
+    if(v==='O'||v==='X') (noz[k]=noz[k]||[]).push({key:day,state:v==='O'?'reuse':'single'});
+    var f=String(r.nsFill||'').trim(), a=String(r.nsAmt||'').trim(), t=String(r.jet||'').trim();
+    if(f||a||t){
+      var bad=(f.toUpperCase()==='X')||(a==='부족')||/교육/.test(t);
+      (skill[k]=skill[k]||[]).push({key:day,state:bad?'need':'good'});
+    }
+  });
+  function sort(m){ Object.keys(m).forEach(function(k){ m[k].sort(function(a,b){return a.key-b.key;}); }); }
+  sort(noz); sort(skill);
+  return {nozzle:noz,skill:skill};
+}
+/* 그 날짜에 유효한 마지막 조사값 — 없으면 null(미조사) */
+function exRiskStateAt_(list,dayKey){
+  var out=null;
+  for(var i=0;i<(list||[]).length;i++){
+    if(list[i].key>dayKey) break;
+    out=list[i].state;
+  }
+  return out;
+}
+function exRiskIntervals_(rows,timelines,asOfKey){
+  var byHosp=Object.create(null);
+  (rows||[]).forEach(function(r){
+    if(!hpIsLeakVoc_(r)) return;
+    var k=skNorm_(r.hosp); if(!k) return;
+    var day=nlDateKey_(r); if(!day||day>asOfKey) return;
+    var rec=byHosp[k]||(byHosp[k]={hosp:String(r.hosp||'').trim(),days:Object.create(null)});
+    rec.days[day]=1;                       /* 같은 날 여러 건은 1회 발생 */
+  });
+  var out=[];
+  Object.keys(byHosp).forEach(function(k){
+    var rec=byHosp[k];
+    var days=Object.keys(rec.days).map(Number).sort(function(a,b){return a-b;});
+    for(var i=0;i<days.length;i++){
+      var start=days[i], end=(i+1<days.length)?days[i+1]:null;
+      out.push({hospKey:k,hosp:rec.hosp,start:start,end:end,
+        recurred:end!=null,
+        days:exKeyDiff_(start,end==null?asOfKey:end),
+        skill:exRiskStateAt_(timelines.skill[k],start),
+        nozzle:exRiskStateAt_(timelines.nozzle[k],start)});
+    }
+  });
+  return out;
+}
+/* YYYYMMDD 두 개의 날짜 차 — 키를 날짜로 되돌려 계산한다 */
+function exKeyDiff_(a,b){
+  function d(k){ k=Number(k)||0; return new Date(Math.floor(k/10000),Math.floor(k/100)%100-1,k%100); }
+  return Math.max(0,Math.round((d(b)-d(a))/86400000));
+}
+function exRiskSummary_(list){
+  var recur=list.filter(function(x){return x.recurred;});
+  var days=recur.map(function(x){return x.days;}).sort(function(a,b){return a-b;});
+  var n=days.length, mid=Math.floor(n/2), sum=0, i;
+  for(i=0;i<n;i++) sum+=days[i];
+  var out={intervals:list.length,recurred:n,watching:list.length-n,
+    hospitals:Object.keys(list.reduce(function(m,x){m[x.hospKey]=1;return m;},{})).length,
+    median:n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
+    avg:n?Math.round(sum/n*10)/10:null, rates:{}};
+  EX_RISK_HORIZONS.forEach(function(h,i){
+    /* 분모: 그 기간을 다 관찰한 구간(재발했든, h일 넘게 관찰 중이든) */
+    var denom=list.filter(function(x){return (x.recurred&&x.days<=h)||x.days>=h;});
+    var hit=denom.filter(function(x){return x.recurred&&x.days<=h;});
+    /* 누적이 원칙이되, 그 칸에서 새로 늘어난 건수(앞 기준일 다음 날 ~ 이 기준일)도 함께 센다 */
+    var from=i?EX_RISK_HORIZONS[i-1]+1:1;
+    var bucket=list.filter(function(x){return x.recurred&&x.days>=from&&x.days<=h;});
+    out.rates[h]={denom:denom.length,hit:hit.length,from:from,bucket:bucket.length,
+      rate:denom.length?Math.round(hit.length/denom.length*1000)/10:null};
+  });
+  return out;
+}
+function exBuildLeakRisk_(rows,allRows,asOf){
+  var base=asOf?new Date(asOf):exBaseDate();
+  var asOfKey=base.getFullYear()*10000+(base.getMonth()+1)*100+base.getDate();
+  var timelines=exRiskTimelines_((allRows||RAW||[]).filter(function(r){
+    return recScope(r)==='customer'&&nlDateKey_(r)&&nlDateKey_(r)<=asOfKey;
+  }));
+  var intervals=exRiskIntervals_(rows,timelines,asOfKey);
+  var groups=EX_RISK_GROUPS.map(function(g){
+    var list=intervals.filter(function(x){return x.skill===g.skill&&x.nozzle===g.nozzle;});
+    var sum=exRiskSummary_(list);
+    sum.key=g.key; sum.label=g.label; sum.base=!!g.base; sum.list=list;
+    return sum;
+  });
+  var unknown=intervals.filter(function(x){return !x.skill||!x.nozzle;});
+  var baseRate=(groups[0].rates[EX_RISK_MAIN]||{}).rate;
+  groups.forEach(function(g){
+    var r=(g.rates[EX_RISK_MAIN]||{}).rate;
+    g.ratio=(baseRate!=null&&baseRate>0&&r!=null)?Math.round(r/baseRate*10)/10:null;
+    /* 기준군이 0% 면 배수를 낼 수 없다 — 그때는 몇 %포인트 높은지로 적는다 */
+    g.diff=(baseRate!=null&&r!=null)?Math.round((r-baseRate)*10)/10:null;
+  });
+  return {asOfKey:asOfKey,cutoff:base,intervals:intervals,groups:groups,
+    unknown:exRiskSummary_(unknown),total:exRiskSummary_(intervals)};
+}
+/* ══════ 개선 조치 전후 비교 ══════
+   병원끼리 견주면 시술량·사용 습관 차이가 섞인다. 같은 병원이 행동을 바꾸기 전과 후를 견주면
+   그 차이가 상당 부분 상쇄되므로, 근거로는 이쪽이 더 강하다.
+   · 개선 시점 = 교육 미흡 → 양호, 또는 노즐 재사용 → 1회 사용으로 처음 바뀐 조사일.
+     둘 다 바뀌었으면 나중 날짜를 쓴다(두 조건이 모두 갖춰진 시점).
+   · 전/후는 구간이 "시작된 날"로 가른다. 개선 이후에 시작된 구간만 개선 후로 센다.
+   · 아직 재발이 없는 구간은 중앙값 계산에서 빼되 "관찰 중"으로 건수와 최장 관찰일을 남긴다.
+     개선 후에 재발이 아예 없으면 중앙값이 안 나오므로, 그 경우 관찰일로 말한다. */
+function exChangePoint_(list,badState){
+  /* 마지막으로 나쁜 상태였던 조사 뒤, 처음으로 좋은 상태가 된 조사일 */
+  var lastBad=null, i;
+  for(i=0;i<(list||[]).length;i++) if(list[i].state===badState) lastBad=i;
+  if(lastBad==null) return null;
+  for(i=lastBad+1;i<list.length;i++) if(list[i].state!==badState) return list[i].key;
+  return null;
+}
+function exChangeSide_(list){
+  var done=list.filter(function(x){return x.recurred;});
+  var days=done.map(function(x){return x.days;}).sort(function(a,b){return a-b;});
+  var n=days.length, mid=Math.floor(n/2);
+  var watching=list.filter(function(x){return !x.recurred;});
+  return {intervals:list.length,recurred:n,watching:watching.length,
+    median:n?(n%2?days[mid]:Math.round((days[mid-1]+days[mid])/2*10)/10):null,
+    maxWatch:watching.length?Math.max.apply(null,watching.map(function(x){return x.days;})):null};
+}
+function exBuildLeakChange_(rows,allRows,asOf){
+  var A=exBuildLeakRisk_(rows,allRows,asOf);
+  var t=exRiskTimelines_((allRows||RAW||[]).filter(function(r){
+    return recScope(r)==='customer'&&nlDateKey_(r)&&nlDateKey_(r)<=A.asOfKey;
+  }));
+  var byHosp=Object.create(null);
+  A.intervals.forEach(function(x){ (byHosp[x.hospKey]=byHosp[x.hospKey]||[]).push(x); });
+  var out=[];
+  Object.keys(byHosp).forEach(function(k){
+    var skillAt=exChangePoint_(t.skill[k],'need'), nozAt=exChangePoint_(t.nozzle[k],'reuse');
+    if(skillAt==null&&nozAt==null) return;                 /* 개선 이력이 없는 병원 */
+    var at=(skillAt!=null&&nozAt!=null)?Math.max(skillAt,nozAt):(skillAt!=null?skillAt:nozAt);
+    var label=(skillAt!=null&&nozAt!=null)?'교육 개선 + 재사용 중단'
+      :(skillAt!=null?'교육 개선':'노즐 재사용 중단');
+    var list=byHosp[k];
+    /* 완료된 구간은 시작일로 가른다. 개선일에 걸친 완료 구간은 개선 전에 넣는다 —
+       긴 간격이 개선 전으로 잡혀 개선 폭이 작아 보이는 쪽이라 결론이 부풀지 않는다.
+       아직 끝나지 않은 구간이 개선일에 걸쳐 있으면 개선 이후 경과분만 개선 후로 센다.
+       그렇게 하지 않으면 개선한 뒤로 한 번도 재발하지 않은 병원이 통째로 빠진다. */
+    var beforeList=[], afterList=[];
+    list.forEach(function(x){
+      if(x.start>=at){ afterList.push(x); return; }
+      if(x.recurred){ beforeList.push(x); return; }
+      afterList.push({recurred:false,days:exKeyDiff_(at,A.asOfKey),sinceChange:true});
+    });
+    var before=exChangeSide_(beforeList), after=exChangeSide_(afterList);
+    if(!before.intervals||!after.intervals) return;        /* 한쪽이 비면 견줄 수 없다 */
+    var gain=(before.median!=null&&after.median!=null)?Math.round((after.median-before.median)*10)/10:null;
+    out.push({hospKey:k,hosp:list[0].hosp,at:at,label:label,skillAt:skillAt,nozAt:nozAt,
+      before:before,after:after,gain:gain,
+      ratio:(gain!=null&&before.median>0)?Math.round(after.median/before.median*10)/10:null});
+  });
+  /* 개선 폭이 큰 순 — 중앙값이 없는(개선 후 무재발) 병원은 관찰일로 뒤에 붙인다 */
+  out.sort(function(a,b){
+    if((a.gain==null)!==(b.gain==null)) return a.gain==null?1:-1;
+    return (b.gain||0)-(a.gain||0)||skCmpKo_(a.hosp,b.hosp);
+  });
+  var withBoth=out.filter(function(x){return x.gain!=null;});
+  var med=function(arr){ arr=arr.slice().sort(function(a,b){return a-b;});
+    var n=arr.length,m=Math.floor(n/2);
+    return n?(n%2?arr[m]:Math.round((arr[m-1]+arr[m])/2*10)/10):null; };
+  return {asOfKey:A.asOfKey,cutoff:A.cutoff,rows:out,
+    summary:{hospitals:out.length,measured:withBoth.length,
+      before:med(withBoth.map(function(x){return x.before.median;})),
+      after:med(withBoth.map(function(x){return x.after.median;})),
+      noRecurAfter:out.filter(function(x){return x.after.recurred===0;}).length}};
+}
+/* 임원 보고용 표 — 숫자는 크게, 기준군 대비 배수는 한눈에, 판정은 조심스럽게. */
+function exRiskPct_(v){ return v==null?'—':v.toFixed(1)+'%'; }
+function exRiskDay_(v){ return v==null?'—':exNum(v)+'일'; }
+/* 무재발 유지 = 그 기준일을 넘긴 비율(누적 재발률의 반대쪽) — 임원 보고에서는 이쪽이 더 잘 읽힌다 */
+function exRiskHold_(g){
+  var r=(g.rates[EX_RISK_MAIN]||{}).rate;
+  return r==null?'—':(Math.round((100-r)*10)/10).toFixed(1)+'%';
+}
+/* 기준군 대비 — 배수가 원칙, 기준군이 0% 라 배수를 낼 수 없으면 %포인트 차이로 적는다 */
+function exRiskGapText_(g){
+  if(g.ratio!=null) return g.ratio.toFixed(1)+'배';
+  if(g.diff==null) return '—';
+  return (g.diff>0?'+':'')+g.diff.toFixed(1)+'%p';
+}
+function exRiskRow_(g,isBase){
+  var tone=(g.ratio!=null&&g.ratio>=2)?' is-high':(isBase?' is-base':'');
+  return '<tr class="risk-row'+tone+'">'
+    +'<td class="risk-name">'+esc(g.label)+(isBase?'<span class="risk-tag">기준군</span>':'')+'</td>'
+    +'<td>'+exNum(g.hospitals)+'곳<span class="risk-sub">'+exNum(g.intervals)+'구간 · 재발 '
+      +exNum(g.recurred)+' · 관찰 중 '+exNum(g.watching)+'</span></td>'
+    +EX_RISK_HORIZONS.map(function(h){
+      var r=g.rates[h]||{};
+      return '<td class="risk-h'+(h===EX_RISK_MAIN?' risk-key':'')+'">'+exRiskPct_(r.rate)
+        +'<span class="risk-sub">'+exNum(r.hit)+' / '+exNum(r.denom)
+        +(r.bucket?(' · 이 구간 '+exNum(r.bucket)+'건'):'')+'</span></td>';
+    }).join('')
+    +'<td>'+exRiskDay_(g.median)+'<span class="risk-sub">평균 '+exRiskDay_(g.avg)+'</span></td>'
+    +'<td class="risk-hold">'+exRiskHold_(g)+'</td>'
+    +'<td class="risk-ratio">'+(isBase?'기준':exRiskGapText_(g))+'</td>'
+    +'</tr>';
+}
+/* 판정 문장 — 데이터로 말할 수 있는 범위만 적는다. 표본이 얇으면 단정하지 않는다. */
+function exRiskVerdict_(A){
+  var g=A.groups, base=g[0], worst=g[3];
+  var bR=(base.rates[EX_RISK_MAIN]||{}), wR=(worst.rates[EX_RISK_MAIN]||{});
+  if(bR.denom<10||wR.denom<10)
+    return '표본이 아직 얇습니다(기준군 '+exNum(bR.denom||0)+'구간 · 교육 미흡·재사용 '+exNum(wR.denom||0)
+      +'구간). 기간을 넓히거나 조사 기록을 더 쌓은 뒤 판단해 주십시오.';
+  if(wR.rate==null||bR.rate==null) return '30일 재발률을 낼 수 있는 구간이 부족합니다.';
+  /* 기준군이 0% 면 배수가 나오지 않는다 — 그때는 %포인트 차이로 판단한다 */
+  var strong=(worst.ratio!=null&&worst.ratio>=1.5)||(worst.diff!=null&&worst.diff>=15);
+  if(strong)
+    return '사용자 교육 미흡과 노즐 재사용이 함께 확인된 구간의 '+EX_RISK_MAIN+'일 내 재발률은 '+exRiskPct_(wR.rate)
+      +'로, 교육 양호·1회 사용 구간('+exRiskPct_(bR.rate)+') 대비 '+exRiskGapText_(worst)
+      +' 높게 나타납니다. 재발 간격 중앙값도 '+exRiskDay_(base.median)+' → '+exRiskDay_(worst.median)+'로 짧아집니다.';
+  return '네 집단의 '+EX_RISK_MAIN+'일 내 재발률 차이가 뚜렷하지 않습니다('+exRiskPct_(bR.rate)+' ~ '+exRiskPct_(wR.rate)
+    +'). 교육·노즐 재사용만으로 재발을 설명하기 어려우므로 다른 요인을 함께 봐야 합니다.';
+}
+/* 개선 조치 전후 표 — 한 줄이 한 병원이고, 왼쪽이 개선 전, 오른쪽이 개선 후다. */
+function exChangeKeyDate_(k){ k=String(k); return k.slice(0,4)+'-'+k.slice(4,6)+'-'+k.slice(6,8); }
+function exChangeSideText_(x){
+  return (x.median==null?'—':exNum(x.median)+'일')
+    +'<span class="risk-sub">'+exNum(x.intervals)+'구간 · 재발 '+exNum(x.recurred)
+    +(x.watching?(' · 관찰 중 '+exNum(x.watching)+(x.maxWatch!=null?(' (최장 '+exNum(x.maxWatch)+'일)'):'')):'')
+    +'</span>';
+}
+function exChangeGainText_(r){
+  if(r.gain==null)
+    return r.after.recurred===0
+      ? '<span class="chg-good">개선 후 무재발</span><span class="risk-sub">'
+        +(r.after.maxWatch!=null?(exNum(r.after.maxWatch)+'일 관찰 중'):'관찰 중')+'</span>'
+      : '<span class="muted">—</span>';
+  var tone=r.gain>0?'chg-good':(r.gain<0?'chg-bad':'');
+  return '<span class="'+tone+'">'+(r.gain>0?'+':'')+exNum(r.gain)+'일</span>'
+    +(r.ratio!=null?('<span class="risk-sub">'+r.ratio.toFixed(1)+'배</span>'):'');
+}
+function exRenderLeakChange_(C){
+  var box=document.getElementById('exLeakChangeCard'); if(!box) return;
+  var sm=C.summary, rows=C.rows.slice(0,12);
+  var head='<div class="chg-head">';
+  if(sm.measured&&sm.before!=null&&sm.after!=null){
+    var gap=Math.round((sm.after-sm.before)*10)/10;
+    head+='<div class="chg-kpi"><span>개선 전 재발 간격 중앙값</span><b>'+exNum(sm.before)+'일</b></div>'
+      +'<div class="chg-arrow">→</div>'
+      +'<div class="chg-kpi is-after"><span>개선 후</span><b>'+exNum(sm.after)+'일</b></div>'
+      +'<div class="chg-kpi"><span>변화</span><b class="'+(gap>0?'chg-good':'chg-bad')+'">'
+      +(gap>0?'+':'')+exNum(gap)+'일'+(sm.before>0?(' · '+(Math.round(sm.after/sm.before*10)/10).toFixed(1)+'배'):'')+'</b></div>';
+  }else{
+    head+='<div class="chg-kpi"><span>비교 가능 병원</span><b>'+exNum(sm.measured)+'곳</b></div>';
+  }
+  head+='<div class="chg-kpi"><span>대상 병원</span><b>'+exNum(sm.hospitals)+'곳</b>'
+    +(sm.noRecurAfter?('<em>개선 후 무재발 '+exNum(sm.noRecurAfter)+'곳</em>'):'')+'</div></div>';
+  box.innerHTML=exH3('개선 조치 전후 재발 간격 변화',
+      '같은 병원의 교육 개선 · 노즐 재사용 중단 전후 비교 · 기준일 '+ymd(C.cutoff),
+      false,exCardFullBtn_('exLeakChangeCard'))
+    +'<div class="ex-cbody risk-body">'
+    +'<div class="risk-lead">병원마다 시술량과 사용 습관이 다르므로, 병원끼리 견주는 대신 '
+      +'<b>같은 병원의 조치 전후</b>를 견줍니다. 구간은 시작일 기준으로 전 · 후를 가릅니다.</div>'
+    +head
+    +(rows.length
+      ? '<table class="risk-table chg-table"><thead><tr>'
+        +'<th>병원</th><th>개선 내용</th><th>개선 시점</th>'
+        +'<th>개선 전 재발 간격</th><th>개선 후 재발 간격</th><th>변화</th></tr></thead><tbody>'
+        +rows.map(function(r){
+          return '<tr class="risk-row'+(r.gain!=null&&r.gain>0?' is-base':'')+'">'
+            +'<td class="risk-name">'+esc(r.hosp)+'</td>'
+            +'<td class="risk-name chg-what">'+esc(r.label)+'</td>'
+            +'<td>'+esc(exChangeKeyDate_(r.at))+'</td>'
+            +'<td>'+exChangeSideText_(r.before)+'</td>'
+            +'<td>'+exChangeSideText_(r.after)+'</td>'
+            +'<td class="risk-ratio">'+exChangeGainText_(r)+'</td></tr>';
+        }).join('')
+        +'</tbody></table>'
+        +(C.rows.length>rows.length?('<p class="risk-note">개선 폭이 큰 '+exNum(rows.length)
+          +'곳만 표시했습니다 · 전체 '+exNum(C.rows.length)+'곳</p>'):'')
+      : '<div class="hst-empty">교육 상태나 노즐 재사용이 개선된 뒤에도 재발 구간이 남아 있는 병원이 아직 없습니다.<br>'
+        +'조사 기록이 더 쌓이면 이 표에 나타납니다.</div>')
+    +'<p class="risk-note">해석 시 유의 — 누수가 발생한 뒤에 교육·노즐 조치를 시행하므로, 개선 후 재발이 줄어든 것에는 '
+      +'조치 효과 외에 사용자 경각심 변화, 핸드피스 교체·수리 등 다른 요인이 함께 작용했을 수 있습니다.</p>'
+    +'</div>';
+}
+function exRenderLeakRisk_(A){
+  var box=document.getElementById('exLeakRiskCard'); if(!box) return;
+  var u=A.unknown;
+  box.innerHTML=exH3('재발 요인 분석 — 사용자 교육 × 노즐 재사용',
+      '노즐 누수(약액 유입) · 재발 구간 기준 · 상태는 구간 시작일 기준 · 기준일 '+ymd(A.cutoff),
+      false,exCardFullBtn_('exLeakRiskCard'))
+    +'<div class="ex-cbody risk-body">'
+    +'<div class="risk-lead">발생 건수가 아니라 <b>다음 누수까지 버틴 기간</b>으로 봅니다. '
+      +'한 구간은 발생일에서 다음 발생일까지이며, 아직 재발이 없는 구간도 <b>관찰 중</b>으로 함께 셉니다. '
+      +'누적 재발률은 <b>3 · 5 · 10 · 20 · 30일</b> 시점에서 끊어 보며, 각 칸은 앞 기준을 포함한 누적값입니다'
+      +'(5일 칸 = 1~5일 전체). 칸 아래 작은 글씨에 그 구간에서 새로 발생한 건수를 함께 적습니다.</div>'
+    +'<table class="risk-table"><thead>'
+      +'<tr><th rowspan="2">구분</th><th rowspan="2">대상 병원</th>'
+        +'<th colspan="'+EX_RISK_HORIZONS.length+'" class="risk-grp"'
+        +' title="구간이 시작된 뒤 그 날까지 다시 누수가 난 비율입니다(누적). 예: 5일 칸은 1~5일 전체를 포함하며,'
+        +' 아래 작은 글씨의 \'이 구간\'은 4~5일 사이에 새로 발생한 건수입니다. 해당 기간을 다 관찰한 구간만 분모에 넣습니다">'
+        +'경과일별 누적 재발률 <span class="risk-th-sub">앞 기준을 포함한 누적</span></th>'
+        +'<th rowspan="2">보통 며칠 만에<br>재발</th>'
+        +'<th rowspan="2">'+EX_RISK_MAIN+'일 이상<br>무재발 유지</th>'
+        +'<th rowspan="2">기준군 대비<br><span class="risk-th-sub">'+EX_RISK_MAIN+'일 기준</span></th></tr>'
+      +'<tr>'+EX_RISK_HORIZONS.map(function(h,i){
+        var from=i?EX_RISK_HORIZONS[i-1]+1:1;
+        return '<th class="risk-h">'+h+'일<span class="risk-th-sub">'
+          +(from===h?('~'+h+'일'):(from+'~'+h+'일'))+'</span></th>';
+      }).join('')+'</tr>'
+      +'</thead><tbody>'
+      +A.groups.map(function(g,i){return exRiskRow_(g,i===0);}).join('')
+      +(u.intervals?'<tr class="risk-row is-unknown"><td class="risk-name">조사 기록 없음</td>'
+        +'<td>'+exNum(u.hospitals)+'곳<span class="risk-sub">'+exNum(u.intervals)+'구간 · 재발 '
+        +exNum(u.recurred)+' · 관찰 중 '+exNum(u.watching)+'</span></td>'
+        +EX_RISK_HORIZONS.map(function(h){
+          return '<td class="risk-h">'+exRiskPct_((u.rates[h]||{}).rate)+'</td>';}).join('')
+        +'<td>'+exRiskDay_(u.median)+'</td><td class="risk-hold">'+exRiskHold_(u)+'</td>'
+        +'<td class="risk-ratio">—</td></tr>':'')
+      +'</tbody></table>'
+    +'<p class="risk-verdict">'+esc(exRiskVerdict_(A))+'</p>'
+    +'<p class="risk-note">해석 시 유의 — 누수가 발생한 뒤에 교육을 시행하므로, 교육 상태가 좋아진 것이 '
+      +'재발 감소의 원인인지 결과인지 이 자료만으로는 단정할 수 없습니다. 시술량·노즐 사용량이 병원마다 다른 점도 '
+      +'보정되어 있지 않습니다.</p>'
+    +'</div>';
+}
 /* ══════ 노즐 누수 연관 분석 ══════
    · 모집단: 선택 기간에 방문한 고객 병원(유형·노즐·교육 상태 필터는 비교군 보존을 위해 제외)
    · 상태: 분석 종료일 이전의 마지막 유효 평가값
@@ -5260,6 +5690,27 @@ function exH3(title, basis, today, actionHtml){
       +(basis?'<span class="ex-basis'+(today?' today':'')+'">'+esc(basis)+'</span>':'')
       +(actionHtml||'')+'</span>':'')+'</h3>';
 }
+/* 카드 하나만 화면 전체로 — 임원 보고 때 이 표만 크게 띄운다. Esc 로 돌아온다.
+   탭 전체를 키우지 않고 카드만 띄우므로 다른 카드의 배치는 건드리지 않는다. */
+function exCardFullBtn_(id){
+  return '<button type="button" class="ex-card-full" id="'+id+'Full" aria-pressed="false"'
+    +' onclick="exToggleCardFull_(\''+id+'\')" title="이 카드만 화면 전체로 봅니다 (Esc 로 복귀)">전체화면 ⛶</button>';
+}
+function exToggleCardFull_(id,force){
+  var el=document.getElementById(id); if(!el) return false;
+  var on=(force==null)?!el.classList.contains('is-full'):!!force;
+  el.classList.toggle('is-full',on);
+  if(document.body) document.body.classList.toggle('ex-card-full-on',on);
+  var btn=document.getElementById(id+'Full');
+  if(btn){ btn.textContent=on?'원래 크기 ↙':'전체화면 ⛶'; btn.setAttribute('aria-pressed',String(on)); }
+  return on;
+}
+function exCloseCardFull_(){
+  if(!document.querySelectorAll) return false;
+  var list=document.querySelectorAll('.ex-card.is-full'), i;
+  for(i=0;i<list.length;i++) exToggleCardFull_(list[i].id,false);
+  return list.length>0;
+}
 function exNm(s){ return '<span class="nm" title="'+esc(s)+'">'+esc(s)+'</span>'; }
 function exPeriodLabel(){
   if(!F.from&&!F.to) return '전체 기간';
@@ -6152,6 +6603,26 @@ var EX_HISTORY_SEARCH_SEQ=0;
 var EX_HISTORY_COMPOSING=false;          /* 한글 IME 조합 중 여부 */
 var EX_HISTORY_UI_IDS=['hstPeriod','hstGubun','hstType','hstFse','hstSales','hstQuery'];
 var EX_TREND_MONTH=30.4375;              /* 월평균 환산 기준(365.25 / 12) */
+var EX_CYCLE_SHORT_DAYS=30;              /* "재발 주기가 짧다"의 기준 — 간격 중앙값 30일 미만 */
+var EX_RISK_HORIZONS=[3,5,10,20,30];     /* 누적 재발률 기준일 — 30일이 최대치 */
+var EX_RISK_MAIN=30;                     /* 기준군 대비·판정에 쓰는 대표 기준 */
+var EX_RISK_GROUPS=[
+  {key:'good_single',skill:'good',nozzle:'single',label:'교육 양호 · 노즐 1회 사용',base:true},
+  {key:'good_reuse', skill:'good',nozzle:'reuse', label:'교육 양호 · 노즐 재사용'},
+  {key:'need_single',skill:'need',nozzle:'single',label:'교육 미흡 · 노즐 1회 사용'},
+  {key:'need_reuse', skill:'need',nozzle:'reuse', label:'교육 미흡 · 노즐 재사용'}
+];
+
+/* 두 줄 헤더 — 큰 글씨는 사람 말, 작은 글씨는 원래 통계 용어.
+   매일 보는 사람은 부제로 지표를 확인하고, 처음 보는 사람은 큰 글씨만 읽어도 뜻이 통한다. */
+function exCycleTh_(label,sub,tip){
+  return '<th'+(tip?(' title="'+escAttr(tip)+'"'):'')+'>'+esc(label)
+    +(sub?('<span class="hst-th-sub">'+esc(sub)+'</span>'):'')+'</th>';
+}
+/* 병원 상태 배지 — 재사용·교육 미흡은 눈에 걸리게, 미평가는 흐리게 */
+var EX_CYCLE_NOZZLE_BADGE={reuse:['노즐 재사용','bad'],single:['노즐 1회 사용','good'],unknown:['노즐 미평가','']};
+var EX_CYCLE_SKILL_BADGE={need:['교육 미흡','bad'],good:['교육 양호','good'],none:['교육 미평가','']};
+var EX_CYCLE_STATES=null;                /* 노즐·교육 상태 캐시(RAW·기준일이 같으면 재사용) */
 /* 보기별 안내 문구 — 도구 막대 동기화가 이 표 하나만 읽는다 */
 var EX_HISTORY_VIEW_NOTE={
   rows:'행 보기 · 행을 누르면 VOC 유형별 표준 참고 예시가 열립니다',
@@ -6433,6 +6904,36 @@ function exHistoryCycleTrend_(gaps){
   var diff=Math.round((late-early)*10)/10;
   return {dir:diff>=1?'up':(diff<=-1?'down':'flat'),diff:diff,early:early,late:late};
 }
+/* 재발 주기 조합에 붙일 병원 상태(노즐 재사용 · 교육) — 누수 분석 탭과 같은 함수를 쓴다.
+   기준일 이전 마지막 유효 평가만 보므로 "그 뒤에 교육을 받았다"가 과거 상태를 바꾸지 않는다.
+   필터를 한 글자 바꿀 때마다 RAW 전체를 다시 훑지 않도록 기준일·RAW 가 같으면 그대로 쓴다. */
+function exCycleHospStates_(asOfKey){
+  if(EX_CYCLE_STATES&&EX_CYCLE_STATES.rows===RAW&&EX_CYCLE_STATES.key===asOfKey) return EX_CYCLE_STATES.states;
+  var hosp=Object.create(null), history=[];
+  (RAW||[]).forEach(function(r){
+    if(recScope(r)!=='customer') return;
+    var day=nlDateKey_(r); if(!day||day>asOfKey) return;
+    history.push(r);
+    var k=skNorm_(r.hosp); if(k) hosp[k]=String(r.hosp||'').trim();
+  });
+  var states=nlLatestStates_(history,hosp,asOfKey);
+  EX_CYCLE_STATES={rows:RAW,key:asOfKey,states:states};
+  return states;
+}
+/* 조합마다 병원 상태와 "짧은 주기" 여부를 붙인다. 짧은 주기 판정은 간격 중앙값 기준이다
+   — 평균은 한 번의 긴 공백에 끌려가 짧은 주기를 놓친다. */
+function exCycleAttachStates_(rows,states){
+  var nz=(states&&states.nozzle)||{}, sk=(states&&states.skill)||{};
+  (rows||[]).forEach(function(g){
+    var k=skNorm_(g.hosp);
+    g.nozzle=nz[k]?nz[k].state:'unknown';       /* reuse · single · unknown */
+    g.skill=sk[k]?sk[k].state:'none';           /* good · need · none */
+    g.nozzleDate=nz[k]?nlDateLabel_(nz[k]):'';  /* handover 에 O/X 를 적은 날 */
+    g.skillDate=sk[k]?nlDateLabel_(sk[k]):'';
+    g.shortCycle=(g.median!=null&&g.median<EX_CYCLE_SHORT_DAYS);
+  });
+  return rows;
+}
 function exHistoryCycles_(rows,opt,asOf){
   opt=opt||{};
   /* 진행 중인 간격의 기준일 — 오늘과 선택 기간 종료일 중 이른 날.
@@ -6482,7 +6983,29 @@ function exHistoryCycles_(rows,opt,asOf){
       ||skCmpKo_(a.hosp||'',b.hosp||'')||(a.order-b.order);
   });
   out.singleCount=single;
-  return out;
+  var asOfKey=base.getFullYear()*10000+(base.getMonth()+1)*100+base.getDate();
+  return exCycleAttachStates_(out,exCycleHospStates_(asOfKey));
+}
+/* 짧은 주기 병원 vs 그 밖의 병원을 노즐·교육 상태로 나눠 센다.
+   병원 하나가 조합을 여럿 가질 수 있으므로 병원 단위로 접고, 조합 중 가장 짧은 중앙값으로 분류한다
+   — 묻는 것이 "이 병원이 자주 재발하는가"이기 때문이다. */
+function exCycleStateSplit_(rows,shortSide){
+  var byHosp=Object.create(null);
+  (rows||[]).forEach(function(g){
+    var k=skNorm_(g.hosp); if(!k) return;
+    var cur=byHosp[k];
+    if(!cur||(g.median!=null&&(cur.median==null||g.median<cur.median)))
+      byHosp[k]={hosp:g.hosp,median:g.median,nozzle:g.nozzle,skill:g.skill,shortCycle:!!g.shortCycle};
+  });
+  var list=Object.keys(byHosp).map(function(k){return byHosp[k];})
+    .filter(function(h){return !!h.shortCycle===!!shortSide;});
+  function n(f,v){ return list.filter(function(h){return h[f]===v;}).length; }
+  var reuse=n('nozzle','reuse'), need=n('skill','need');
+  var nozKnown=reuse+n('nozzle','single'), skKnown=need+n('skill','good');
+  return {hospitals:list.length,reuse:reuse,single:n('nozzle','single'),nozzleUnknown:n('nozzle','unknown'),
+    need:need,good:n('skill','good'),skillNone:n('skill','none'),
+    reuseRate:nozKnown?Math.round(reuse/nozKnown*1000)/10:null,
+    needRate:skKnown?Math.round(need/skKnown*1000)/10:null,list:list};
 }
 /* 화면 위쪽 한 줄 요약 — "간격이 길어진 조합이 몇 개인가"가 빈도 감소의 근거다. */
 function exHistoryCycleSummary_(rows){
@@ -6498,6 +7021,7 @@ function exHistoryCycleSummary_(rows){
   var stat=exHistoryStatSummary_(all);
   var quiet=rows.filter(function(g){return g.openRatio!=null&&g.openRatio>1;}).length;
   return {groups:rows.length,up:up,down:down,flat:flat,none:none,quiet:quiet,
+    short:exCycleStateSplit_(rows,true),long:exCycleStateSplit_(rows,false),
     gaps:all.length,median:stat.median,avg:stat.avg,
     earlyAvg:exHistoryCycleAvg_(early),lateAvg:exHistoryCycleAvg_(late),
     single:rows.singleCount||0};
@@ -6718,13 +7242,16 @@ function exHistoryRollupTsv_(rows){
 /* navigator.clipboard 가 없거나 실패하면 textarea + execCommand('copy') 로 되돌아간다 */
 /* 재발 주기 TSV — 화면과 같은 순서·같은 값. 간격은 " 3 · 5 · 10 " 대신 계산에 쓰기 좋게 콤마로 잇는다. */
 function exHistoryCycleTsv_(rows){
-  var head=['병원','VOC 유형','장비번호','발생 횟수','첫 발생','최근 발생','관찰 기간(일)',
+  var head=['병원','노즐 상태','노즐 평가일','교육 상태','교육 평가일','VOC 유형','장비번호','발생 횟수','첫 발생','최근 발생','관찰 기간(일)',
     '재발 간격(일, 오래된→최근)','평균','중앙값','최단','최장','마지막 간격',
     '현재 진행(일)','중앙값 대비','기준일','추세','앞 절반 평균','뒤 절반 평균','차이(일)'];
   var lines=[head.join('\t')];
   var label={up:'간격 길어짐(빈도 감소)',down:'간격 짧아짐(빈도 증가)',flat:'비슷',none:'판단 불가'};
   (rows||[]).forEach(function(g){
-    lines.push([exHistoryTsvCell_(g.hosp),exHistoryTsvCell_(g.type),g.sn?exHistoryTsvCell_(g.sn):'S/N 미입력',
+    lines.push([exHistoryTsvCell_(g.hosp),
+      (EX_CYCLE_NOZZLE_BADGE[g.nozzle||'unknown']||EX_CYCLE_NOZZLE_BADGE.unknown)[0],g.nozzleDate||'',
+      (EX_CYCLE_SKILL_BADGE[g.skill||'none']||EX_CYCLE_SKILL_BADGE.none)[0],g.skillDate||'',
+      exHistoryTsvCell_(g.type),g.sn?exHistoryTsvCell_(g.sn):'S/N 미입력',
       String(g.count),ymd(g.first),ymd(g.last),String(g.span==null?'':g.span),
       g.gaps.join(', '),String(g.avg==null?'':g.avg),String(g.median==null?'':g.median),
       String(g.min==null?'':g.min),String(g.max==null?'':g.max),String(g.lastGap==null?'':g.lastGap),
@@ -6789,11 +7316,12 @@ function exCopyHistoryTsv_(){
   exHistoryFlushSearch_();                     /* 대기 중인 검색을 즉시 반영한 뒤 복사 */
   var state=EX_HISTORY_STATE; if(!state) return;
   var view=exHistoryViewOf_(state.view);
+  var shown=exHistoryCyclesShown_(state);
   var text=view==='hosp'?exHistoryRollupTsv_(state.rollup)
-    :(view==='cycle'?exHistoryCycleTsv_(state.cycles)
+    :(view==='cycle'?exHistoryCycleTsv_(shown)
     :exHistoryRowsTsv_(state.filtered,state.showCost,state.comparison));
   var n=view==='hosp'?((state.rollup||[]).length)
-    :(view==='cycle'?((state.cycles||[]).length):((state.filtered||[]).length));
+    :(view==='cycle'?shown.length:((state.filtered||[]).length));
   var what={hosp:'병원별 집계 ',cycle:'재발 주기 ',rows:'필터 결과 '}[view];
   exClipboardWrite_(text).then(function(ok){
     toast(ok?(what+exNum(n)+'행을 헤더와 함께 복사했습니다')
@@ -6950,7 +7478,7 @@ function exHospTrendHtml_(t){
             '이전 '+t.breakPoint.before+'/월 → 이후 '+t.breakPoint.after+'/월 · '+t.breakPoint.dropPct+'% 감소')
         : exTrendRow_('전환 시점','<span class="muted">뚜렷한 감소 시점 없음</span>'))
       +exTrendRow_('현재 빈도','<b>최근 6개월 '+exNum(t.recent6)+'회</b> '+t.recent6Rate+'/월',
-        '최근 발생 '+esc(ymd(t.last))+' · <b>무발생 '+exNum(t.sinceLast)+'일째</b>'
+        '최근 발생 '+esc(ymd(t.last))+' · <b>무재발 '+exNum(t.sinceLast)+'일 경과</b>'
         +(t.lastGap==null?'':' · 마지막 간격 '+exNum(t.lastGap)+'일')
         +(t.medianGap==null?'':' · 간격 중앙값 '+exNum(t.medianGap)+'일'))
     +'</ul>'
@@ -7253,74 +7781,140 @@ function exHistoryCycleOpenHtml_(g){
   if(g.openRatio!=null){
     var kind=g.openRatio>=1.5?'good':(g.openRatio<=0.5?'':'');
     badge=' <span class="hst-freq '+kind+'" title="'+escAttr('중앙값 '+g.median+'일 대비')+'">'
-      +(g.openRatio>=1.5?('중앙값의 '+g.openRatio+'배'):(g.openRatio<=0.5?'주기 이내':('중앙값의 '+g.openRatio+'배')))
+      +(g.openRatio<=0.5?'평소 주기 이내':('평소의 '+g.openRatio+'배'))
       +'</span>';
   }
-  return '<b>'+exNum(g.openGap)+'일째</b>'+badge;
+  return '<b>'+exNum(g.openGap)+'일</b>'+badge;
 }
 function exHistoryCycleTrendHtml_(t){
-  if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 불가</span>';
+  if(!t||t.dir==='none') return '<span class="muted" title="간격이 2개 이상이라야 앞뒤를 견줄 수 있습니다">판단 보류</span>';
   var sign=t.diff>0?'+':'';
-  var label={up:'길어짐 ▲',down:'짧아짐 ▼',flat:'비슷 ─'}[t.dir];
+  var label={up:'개선 ▲',down:'악화 ▼',flat:'유지 ─'}[t.dir];
   var title='앞 절반 평균 '+exNum(t.early)+'일 → 뒤 절반 평균 '+exNum(t.late)+'일'
-    +(t.dir==='up'?' · 간격이 길어졌으니 발생 빈도는 줄었습니다':(t.dir==='down'?' · 간격이 짧아졌으니 발생 빈도는 늘었습니다':''));
+    +(t.dir==='up'?' · 재발 간격이 늘어 발생 빈도가 감소했습니다':(t.dir==='down'?' · 재발 간격이 줄어 발생 빈도가 증가했습니다':''));
   return '<span class="hst-trend '+t.dir+'" title="'+escAttr(title)+'">'+label
     +' <b>'+sign+exNum(t.diff)+'일</b></span>';
 }
-function exHistoryCycleSummaryHtml_(sum){
+/* 처음 보는 사람을 위한 안내 — 접혀 있고, 펼치면 이 표를 읽는 법이 세 줄로 나온다. */
+function exCycleGuideHtml_(){
+  return '<details class="hst-cycle-guide"><summary>지표 정의</summary>'
+    +'<p><b>1행</b> — 병원 · VOC 유형 · 장비 단위의 재발 이력입니다. 같은 문제가 다시 발생한 날짜 사이의'
+      +' 간격을 오래된 순으로 표기합니다.</p>'
+    +'<p><b>재발 간격</b> — 중앙값입니다. 절반은 이보다 짧게, 절반은 이보다 길게 재발했습니다.'
+      +' 평균은 한 번의 긴 공백에 크게 영향을 받으므로 참고값으로만 병기합니다.</p>'
+    +'<p><b>최종 발생 후 경과</b> — 아직 종료되지 않은 구간입니다. 평소 간격을 넘겼다면 그만큼 안정된 상태이며,'
+      +' 완료된 구간이 아니므로 평균·중앙값 산정에는 포함하지 않습니다.</p>'
+    +'<p><b>추이</b> — 재발 간격을 초기 절반과 최근 절반으로 나눠 비교한 값입니다. 간격이 늘어나면 개선,'
+      +' 줄어들면 악화로 표기하며, 간격이 2개 미만이면 판단하지 않습니다.</p>'
+    +'</details>';
+}
+function exHistoryCycleSummaryHtml_(sum,shortOnly){
   return '<div class="hst-cycle-sum">'
-    +'<span class="hst-chip">조합 <b>'+exNum(sum.groups)+'개</b> · 간격 '+exNum(sum.gaps)+'개</span>'
-    +'<span class="hst-chip">간격 길어짐(빈도 감소) <b>'+exNum(sum.up)+'</b> · 짧아짐 <b>'+exNum(sum.down)+'</b>'
-      +' · 비슷 <b>'+exNum(sum.flat)+'</b> · 판단 불가 <b>'+exNum(sum.none)+'</b></span>'
+    +'<span class="hst-chip">분석 대상 <b>'+exNum(sum.groups)+'개 조합</b> · 재발 '+exNum(sum.gaps)+'건</span>'
+    +'<span class="hst-chip" title="재발 간격이 늘었으면 개선, 줄었으면 악화입니다">개선 <b>'+exNum(sum.up)+'</b>'
+      +' · 악화 <b>'+exNum(sum.down)+'</b> · 유지 <b>'+exNum(sum.flat)+'</b>'
+      +' · 판단 보류 <b>'+exNum(sum.none)+'</b></span>'
     +(sum.earlyAvg!=null&&sum.lateAvg!=null
-      ? '<span class="hst-chip" title="추세를 판단할 수 있는 조합의 앞 절반·뒤 절반 평균 간격입니다">'
-        +'전반 평균 <b>'+exNum(sum.earlyAvg)+'일</b> → 후반 평균 <b>'+exNum(sum.lateAvg)+'일</b></span>' : '')
-    +'<span class="hst-chip">간격 중앙값 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b></span>'
-    +(sum.quiet?'<span class="hst-chip" title="마지막 발생 이후 지난 날이 그 조합의 간격 중앙값을 넘었습니다">'
-      +'현재 진행이 중앙값 초과 <b>'+exNum(sum.quiet)+'개</b></span>':'')
-    +(sum.single?'<span class="hst-chip muted">1회만 발생 '+exNum(sum.single)+'개 조합은 제외</span>':'')
+      ? '<span class="hst-chip" title="흐름을 판단할 수 있는 조합의 처음 절반·나중 절반 평균 간격입니다">'
+        +'평균 재발 간격 <b>'+exNum(sum.earlyAvg)+'일</b> → <b>'+exNum(sum.lateAvg)+'일</b>'
+        +'<span class="muted"> (초기 대비 최근)</span></span>' : '')
+    +'<span class="hst-chip">재발 간격 중앙값 <b>'+(sum.median==null?'—':exNum(sum.median)+'일')+'</b></span>'
+    +(sum.quiet?'<span class="hst-chip" title="마지막 발생 이후 지난 날이 그 조합의 평소 간격(중앙값)을 넘었습니다">'
+      +'평소 주기 초과 무재발 <b>'+exNum(sum.quiet)+'개</b></span>':'')
+    +(sum.single?'<span class="hst-chip muted">1회 발생 '+exNum(sum.single)+'개 조합 제외</span>':'')
+    +'</div>'
+    +exCycleStateChips_(sum,shortOnly)
+    +exCycleGuideHtml_();
+}
+/* 노즐·교육 상태 대비 줄 — "재발 주기가 짧은 병원이 노즐을 재사용하고 교육이 미흡한가"에
+   숫자로 답한다. 비율은 평가된 병원만으로 낸다(미평가를 분모에 넣으면 비율이 희석된다). */
+function exCycleSideText_(x){
+  return '<b>'+exNum(x.hospitals)+'곳</b>'
+    +' 중 노즐 재사용 <b>'+exNum(x.reuse)+'곳</b>'+(x.reuseRate==null?'':' ('+x.reuseRate+'%)')
+    +' · 교육 미흡 <b>'+exNum(x.need)+'곳</b>'+(x.needRate==null?'':' ('+x.needRate+'%)')
+    +'<span class="muted"> · 미조사 노즐 '+exNum(x.nozzleUnknown)+' · 교육 '+exNum(x.skillNone)+'</span>';
+}
+function exCycleStateChips_(sum,shortOnly){
+  if(!sum.short.hospitals&&!sum.long.hospitals) return '';
+  return '<div class="hst-cycle-state">'
+    +'<button type="button" class="hst-state-box is-short'+(shortOnly?' is-on':'')+'"'
+      +' aria-pressed="'+(shortOnly?'true':'false')+'" onclick="exToggleCycleShort_()"'
+      +' title="'+escAttr('간격 중앙값 '+EX_CYCLE_SHORT_DAYS+'일 미만인 조합만 보기 · 다시 누르면 전체')+'">'
+      +'<span class="hst-state-k">재발 간격 '+EX_CYCLE_SHORT_DAYS+'일 미만</span>'+exCycleSideText_(sum.short)
+      +'<span class="hst-state-act">'+(shortOnly?'전체 보기 ↺':'해당 병원만 보기 →')+'</span></button>'
+    +'<div class="hst-state-box"><span class="hst-state-k">'+EX_CYCLE_SHORT_DAYS+'일 이상</span>'
+      +exCycleSideText_(sum.long)+'</div>'
     +'</div>';
 }
-function exHistoryCycleTable_(rows){
+function exHistoryCyclesShown_(state){
+  var rows=(state&&state.cycles)||[];
+  return (state&&state.cycleShortOnly)?rows.filter(function(g){return g.shortCycle;}):rows;
+}
+function exToggleCycleShort_(){
+  var state=EX_HISTORY_STATE; if(!state) return;
+  state.cycleShortOnly=!state.cycleShortOnly;
+  state.renderLimit=EX_HISTORY_PAGE;
+  exApplyHistoryFilters_();
+}
+function exCycleStateBadges_(g){
+  var nz=EX_CYCLE_NOZZLE_BADGE[g.nozzle||'unknown']||EX_CYCLE_NOZZLE_BADGE.unknown;
+  var sk=EX_CYCLE_SKILL_BADGE[g.skill||'none']||EX_CYCLE_SKILL_BADGE.none;
+  function tip(label,date){
+    return escAttr(label+(date?(' · '+date+' 평가'):' · 평가 기록 없음')
+      +' · 기준일 이전 마지막 handover 표기');
+  }
+  return '<span class="hst-state '+nz[1]+'" title="'+tip(nz[0],g.nozzleDate)+'">'+esc(nz[0])
+      +(g.nozzleDate?('<i>'+esc(g.nozzleDate.slice(2))+'</i>'):'')+'</span>'
+    +'<span class="hst-state '+sk[1]+'" title="'+tip(sk[0],g.skillDate)+'">'+esc(sk[0])
+      +(g.skillDate?('<i>'+esc(g.skillDate.slice(2))+'</i>'):'')+'</span>';
+}
+function exHistoryCycleTable_(rows,shortOnly){
   if(!rows||!rows.length)
     return '<div class="hst-empty">선택한 기간·필터에서 두 번 이상 발생한 병원 · VOC · 장비 조합이 없습니다.<br>'
       +'상단 기간을 넓히면 더 많은 재발 간격이 보입니다.</div>';
   var sum=exHistoryCycleSummary_(rows);
-  return exHistoryCycleSummaryHtml_(sum)
+  var shown=shortOnly?rows.filter(function(g){return g.shortCycle;}):rows;
+  if(!shown.length)
+    return exHistoryCycleSummaryHtml_(sum,shortOnly)
+      +'<div class="hst-empty">재발 간격 중앙값 '+EX_CYCLE_SHORT_DAYS+'일 미만인 조합이 없습니다.</div>';
+  rows=shown;
+  return exHistoryCycleSummaryHtml_(sum,shortOnly)
     +'<table class="hst-table cycle"><colgroup>'
-    +['12%','10%','8%','10%','18%','5%','5%','7%','6%','9%','10%']
+    +['13%','10%','8%','10%','19%','8%','7%','7%','9%','9%']
       .map(function(w){return '<col style="width:'+w+'">';}).join('')
     +'</colgroup><thead><tr>'
-    +'<th>병원</th><th>VOC 유형</th><th>장비번호</th>'
-    +'<th title="선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다">발생</th>'
-    +'<th title="연속 발생 사이의 간격을 오래된 것부터 최근 순으로 적습니다">재발 간격 (오래된 → 최근)</th>'
-    +'<th>평균</th><th title="평균은 이상치에 휘둘립니다 — 주 지표는 중앙값입니다">중앙값</th>'
-    +'<th>최단 · 최장</th>'
-    +'<th title="마지막으로 끝난 간격 — 끝에서 두 번째 발생과 마지막 발생 사이">마지막 간격</th>'
-    +'<th title="마지막 발생 이후 아직 재발이 없는 일수 · 기준일은 오늘(선택 기간이 과거면 그 종료일)">현재 진행</th>'
-    +'<th title="앞 절반 평균과 뒤 절반 평균의 차이 · 간격이 길어졌다면 발생 빈도가 준 것입니다">추세</th>'
+    +exCycleTh_('병원','노즐·교육 상태')
+    +exCycleTh_('VOC 유형','')+exCycleTh_('장비번호','')
+    +exCycleTh_('발생 횟수','같은 날은 1회','선택 기간 안의 발생 횟수 · 같은 날 여러 건은 1회로 봅니다')
+    +exCycleTh_('재발 간격 추이','오래된 순 → 최근','연속 발생 사이의 간격입니다. 마지막 점선 칸은 아직 끝나지 않은 기간입니다')
+    +exCycleTh_('재발 간격','중앙값 · 평균','절반은 이보다 빨리, 절반은 이보다 늦게 재발했습니다. 평균은 한 번의 긴 공백에 끌려가므로 중앙값을 먼저 봅니다')
+    +exCycleTh_('최단 · 최장 간격','','가장 짧았던 간격과 가장 길었던 간격')
+    +exCycleTh_('최근 재발 간격','마지막으로 끝난 구간','끝에서 두 번째 발생과 마지막 발생 사이')
+    +exCycleTh_('최종 발생 후 경과','무재발 지속','마지막 발생 이후 아직 재발이 없는 일수 · 기준일은 오늘(선택 기간이 과거면 그 종료일)')
+    +exCycleTh_('추이','초기 대비 최근','간격이 길어졌다면 그만큼 덜 나고 있다는 뜻입니다')
     +'</tr></thead><tbody>'
     +rows.map(function(g){
-      return '<tr class="hst-cycle-row">'
+      return '<tr class="hst-cycle-row'+(g.shortCycle?' is-short':'')+'">'
         +'<td class="hosp" data-label="병원">'
           +'<button type="button" class="hst-hosp-link" data-hosp="'+escAttr(g.hosp)+'"'
           +' data-type="'+escAttr(g.type)+'"'
           +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 '+escAttr(g.type)+' 발생 빈도 추이를 오른쪽에 엽니다"'
-          +' aria-label="'+escAttr(g.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(g.hosp)+'</button></td>'
+          +' aria-label="'+escAttr(g.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(g.hosp)+'</button>'
+          +'<div class="hst-states">'+exCycleStateBadges_(g)+'</div></td>'
         +'<td data-label="VOC 유형">'+esc(g.type)+'</td>'
         +'<td data-label="장비번호">'+(g.sn?esc(g.sn)
           :'<span class="muted" title="장비번호가 없어 이 병원 · VOC 를 한 묶음으로 봅니다">S/N 미입력 · 병원 단위</span>')+'</td>'
-        +'<td class="days" data-label="발생">'+exNum(g.count)+'회'
+        +'<td class="days" data-label="발생 횟수">'+exNum(g.count)+'회'
           +'<br><span class="muted">'+esc(ymd(g.first))+' ~ '
           +esc(g.first.getFullYear()===g.last.getFullYear()?ymd(g.last).slice(5):ymd(g.last))
           +' · '+exNum(g.span)+'일</span></td>'
-        +'<td class="hst-gaps" data-label="재발 간격">'+exHistoryCycleGapsHtml_(g)+'</td>'
-        +'<td class="days" data-label="평균">'+exHistoryDayText_(g.avg,'일')+'</td>'
-        +'<td class="days" data-label="중앙값">'+exHistoryDayText_(g.median,'일')+'</td>'
-        +'<td class="days" data-label="최단 · 최장">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
-        +'<td class="days" data-label="마지막 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
-        +'<td class="days" data-label="현재 진행">'+exHistoryCycleOpenHtml_(g)+'</td>'
-        +'<td data-label="추세">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
+        +'<td class="hst-gaps" data-label="재발 간격 추이">'+exHistoryCycleGapsHtml_(g)+'</td>'
+        +'<td class="days" data-label="재발 간격">'+exHistoryDayText_(g.median,'일')
+          +'<br><span class="muted">평균 '+(g.avg==null?'—':exNum(g.avg)+'일')+'</span></td>'
+        +'<td class="days" data-label="최단 · 최장 간격">'+exHistoryDayText_(g.min,'일')+' · '+exHistoryDayText_(g.max,'일')+'</td>'
+        +'<td class="days" data-label="최근 재발 간격">'+exHistoryDayText_(g.lastGap,'일')+'</td>'
+        +'<td class="days" data-label="최종 발생 후 경과">'+exHistoryCycleOpenHtml_(g)+'</td>'
+        +'<td data-label="추이">'+exHistoryCycleTrendHtml_(g.trend)+'</td>'
         +'</tr>';
     }).join('')
     +'</tbody></table>';
@@ -7850,11 +8444,14 @@ function exApplyHistoryFilters_(){
   var count=document.getElementById('hstCount'), breakdown=document.getElementById('hstBreakdown'), host=document.getElementById('hstTableHost');
   /* 교체비용 조회창은 걸러낸 만큼의 금액 합계도 함께 보여 준다 — 필터를 바꿔 가며 금액을 확인한다 */
   if(count) count.innerHTML=(view==='cycle')
-    ? ('<b>'+exNum(EX_HISTORY_STATE.cycles.length)+'개</b> 조합 · 두 번 이상 발생한 병원 · VOC · 장비')
+    ? ('<b>'+exNum(exHistoryCyclesShown_(EX_HISTORY_STATE).length)+'개</b> 조합'
+      +(EX_HISTORY_STATE.cycleShortOnly?(' · 재발 간격 '+EX_CYCLE_SHORT_DAYS+'일 미만')
+        :' · 2회 이상 발생'))
     : exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
   if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
   exHistorySyncToolbar_(EX_HISTORY_STATE);
-  if(host) host.innerHTML=(view==='cycle')?exHistoryCycleTable_(EX_HISTORY_STATE.cycles)
+  if(host) host.innerHTML=(view==='cycle')
+    ? exHistoryCycleTable_(EX_HISTORY_STATE.cycles,EX_HISTORY_STATE.cycleShortOnly)
     :(rollup?exHistoryRollupTable_(EX_HISTORY_STATE.rollup):exHistoryTable_(filtered,limit));
   exSyncHistoryTypeExample_(opt.type,filtered);
   exRenderHospPanel_();
@@ -7972,7 +8569,7 @@ function exShowHistory_(dim, name, opt){
   EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],cycles:[],selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
+    analysis:null,rollup:[],cycles:[],cycleShortOnly:false,selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
@@ -8317,14 +8914,16 @@ function renderExecutiveCause(x){
   var types=exVocTypeCompare_(x.rows, x.prev)
     .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exTypeCard').innerHTML=
-    exH3('VOC 유형 TOP 5', 'A/S·점검 통합 · 이상 없음 제외 · '+per+' · '+cmpTxt)
+    exH3('VOC 유형 TOP 5', 'A/S·점검 통합 · 이상 없음 제외 · '+per+' · '+cmpTxt,
+      false,exCardFullBtn_('exTypeCard'))
     +'<div class="ex-cbody">'+exBars(types,{empty:'VOC 유형 기록 없음', histDim:'typeAll'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
   var parts=exDimCompare(x.rows, x.prev, 'part', false)
     .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exPartCard').innerHTML=
-    exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)
+    exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt,
+      false,exCardFullBtn_('exPartCard'))
     +'<div class="ex-cbody">'+exBars(parts,{empty:'교체품 기록 없음', histDim:'part'})+'</div>';
 
   /* ── 조치 방법별 전방 재발 비교 ──
@@ -8334,11 +8933,14 @@ function renderExecutiveCause(x){
   }).length,other=Math.max(0,target-A.events.length);
   EX_CAUSE_ARM_STATE=A;
   document.getElementById('exCauseArmCard').innerHTML=
-    exH3('조치 방법별 재발 — 내부수리 vs Handpiece 교체','노즐 누수(약액 유입) · 조치 다음 날→첫 동일 VOC · 기준일 '+ymd(A.cutoff))
+    exH3('조치 방법별 재발 — 내부수리 vs Handpiece 교체','노즐 누수(약액 유입) · 조치 다음 날→첫 동일 VOC · 기준일 '+ymd(A.cutoff),
+      false,exCardFullBtn_('exCauseArmCard'))
     +'<div class="ex-cbody car-body"><div class="car-coverage"><b>'+esc(per)+'</b><span>대상 VOC '+exNum(target)+'건</span>'
       +'<span>조치 분류·판정 가능 '+exNum(A.events.length)+'건</span><span>기타·미입력·판정불가 '+exNum(other)+'건(비교 제외)</span></div>'
       +'<div class="car-groups">'+exCauseArmGroup_('repair',A.repair)+exCauseArmGroup_('swap',A.swap)+'</div>'
       +'<p class="car-verdict">'+esc(exArmVerdict_(A))+'</p></div>';
+  exRenderLeakRisk_(exBuildLeakRisk_(x.rows,RAW,null));
+  exRenderLeakChange_(exBuildLeakChange_(x.rows,RAW,null));
 }
 function exShowRepeat(){
   var rep=buildRepeatIssues(EX_ROWS);
@@ -9337,7 +9939,8 @@ document.addEventListener('keydown', function(e){
   if(e.key!=='Escape') return;
   if(EX_YC_FS){closeYcFull();return;}
   var box=document.getElementById('exListBox');
-  if(box&&box.classList.contains('is-fullscreen')) toggleExListFullscreen_(false);
+  if(box&&box.classList.contains('is-fullscreen')){ toggleExListFullscreen_(false); return; }
+  exCloseCardFull_();
 });
 /* 연도·구간 조작 — 다시 그리기만 하고 데이터는 다시 불러오지 않는다 */
 function ycRedraw_(){ EX_DRAWN.year=false; renderExecutiveDashboard(EX_ROWS); }
