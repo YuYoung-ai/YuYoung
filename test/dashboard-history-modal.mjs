@@ -42,7 +42,8 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exToggleCycleShort_',
   'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_',
   'exCycleTh_','exCycleGuideHtml_',
-  'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_','exRiskSummary_',
+  'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_',
+  'exRiskCurve_','exRiskCurveAt_','exRiskSummary_',
   'exRiskHold_','exRiskGapText_',
   'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_',
   'exChangePoint_','exChangeSide_','exBuildLeakChange_','exChangeKeyDate_','exChangeGainText_',
@@ -1700,8 +1701,10 @@ ck('110. 30일 재발률의 분모는 30일을 다 관찰한 구간만이다',()
               leak('d1','2026-07-22','다병원')];
   const A=D.exBuildLeakRisk_(rows,rows,'2026-08-01');
   const r30=A.total.rates[30];
-  assert.equal(r30.denom,3,'20일 재발 + 나병원 92일 관찰 + 가병원 41일 관찰');
-  assert.equal(r30.hit,1);
+  /* 10일에 관찰이 끝난 구간이 하나 빠지고, 20일 시점에 남아 있던 3구간 중 1건 재발 → 33.3% */
+  assert.equal(r30.hit,1,'30일까지 누적 재발 1건');
+  assert.equal(r30.n,4,'전체 구간 수는 그대로 보여 준다');
+  assert.equal(r30.atRisk,2,'30일 넘게 관찰이 이어진 구간');
   assert.equal(r30.rate,33.3);
   /* 기준일은 3·5·10·20·30일 다섯 개다 */
   assert.deepEqual(Object.keys(A.total.rates).map(Number).sort((a,b)=>a-b),[3,5,10,20,30]);
