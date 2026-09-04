@@ -41,7 +41,10 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'skNorm_','nlDateLabel_','exBaseDate','exHistoryCycleOpenHtml_','exCycleAttachStates_','exCycleStateSplit_',
   'exToggleCycleShort_',
   'exCycleStateBadges_','exCycleSideText_','exCycleStateChips_','exHistoryCyclesShown_',
-  'exCycleTh_','exCycleGuideHtml_','exArmIsHandpiecePart_',
+  'exCycleTh_','exCycleGuideHtml_',
+  'nlDateKey_','exKeyDiff_','exRiskStateAt_','exRiskTimelines_','exRiskIntervals_','exRiskSummary_',
+  'exRiskHold_','exRiskGapText_',
+  'exBuildLeakRisk_','exRiskVerdict_','exRiskPct_','exRiskDay_','exRiskRow_','exArmIsHandpiecePart_',
   'exCauseArmPartsHtml_','exCauseArmGroup_','exCauseArmMetric_',
   'exTrendRate_','exTrendSpanText_','exTrendMonthKey_','exTrendShift_','exTrendBreak_',
   'exHospTrend_','exTrendRow_','exHospTrendHtml_',
@@ -1174,7 +1177,7 @@ ck('77. 이번 범위에 교육·노즐 재사용·구간 분류를 넣지 않�
 ck('77-c. 원인분석은 기존 두 카드 자리를 전폭 조치 방법별 재발 카드로 사용한다',()=>{
   assert.ok(SRC.includes('id="exCauseArmCard"'));
   assert.ok(!SRC.includes('id="exRepeatCard"')&&!SRC.includes('id="exNcCmpCard"'));
-  assert.match(SRC,/#exCauseArmCard\{grid-column:1\/-1\}/);
+  assert.match(SRC,/#exCauseArmCard,#exLeakRiskCard\{grid-column:1\/-1\}/);
   const body=grab('renderExecutiveCause');
   assert.ok(body.includes('exArmRecurrence_(x.rows,RAW,null)'),'처리이력·Excel과 같은 계산 재사용');
   assert.ok(body.includes("exCauseArmGroup_('repair'")&&body.includes("exCauseArmGroup_('swap'"));
@@ -1447,9 +1450,10 @@ ck('97. 재발 주기 보기로 바꾸면 표·복사·기간 선택이 함께 �
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/hst-table cycle/);
   assert.match(html,/hst-th-sub">중앙값 · 평균/,'통계 용어는 부제로 남긴다');
-  assert.match(html,/며칠 만에 다시 났나/);
-  assert.match(html,/이 표 읽는 법/,'처음 보는 사람을 위한 안내');
-  assert.match(html,/hst-trend up[^>]*>덜 남 ▲/,'간격이 길어진 조합은 흐름 배지로 표시');
+  assert.match(html,/<th[^>]*>재발 간격<span/,'지표명은 보고서 표기로');
+  assert.match(html,/재발 간격 추이/);
+  assert.match(html,/지표 정의/,'처음 보는 사람을 위한 안내');
+  assert.match(html,/hst-trend up[^>]*>개선 ▲/,'재발 간격이 늘어난 조합은 추이 배지로 표시');
   assert.match(D.dom.els.hstCount.innerHTML,/3개<\/b> 조합/);
   assert.equal(D.dom.els.hstPeriod.disabled,true,'주기 보기는 기간 선택을 잠근다');
   assert.equal(D.dom.els.hstCopyTsv.textContent,'재발 주기 TSV 복사');
@@ -1570,10 +1574,10 @@ ck('103. 진행 중인 간격은 마지막 발생 이후 기준일까지를 따�
   D.exSetHistoryView_('cycle');
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.match(html,/hst-gap-open/);
-  assert.match(html,/일째/);
-  assert.match(html,/평소보다 오래 조용한 조합/);
-  assert.match(html,/직전 재발까지/);
-  assert.match(html,/마지막 발생 후/);
+  assert.match(html,/일<\/b>/);
+  assert.match(html,/평소 주기 초과 무재발/);
+  assert.match(html,/최근 재발 간격/);
+  assert.match(html,/최종 발생 후 경과/);
 });
 
 ck('104. 교체군은 핸드피스 표기만 세고, 카드에 표기 내역을 적어 교체품 TOP 5 와 맞춘다',()=>{
@@ -1641,13 +1645,13 @@ ck('107. 짧은 주기만 보기 토글이 표·건수·복사를 함께 바꾼�
   const D=build(); D.setStates(STATES); open(D,STATE_ROWS);
   D.exSetHistoryView_('cycle');
   assert.equal(D.state().cycles.length,2);
-  assert.match(D.dom.els.hstTableHost.innerHTML,/30일 안에 또 나는 병원/);
+  assert.match(D.dom.els.hstTableHost.innerHTML,/재발 간격 30일 미만/);
   assert.match(D.dom.els.hstTableHost.innerHTML,/사병원/);
   D.exToggleCycleShort_();
   assert.equal(D.state().cycleShortOnly,true);
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.ok(html.includes('가병원')&&!html.includes('사병원'),'짧은 주기 조합만 남는다');
-  assert.match(D.dom.els.hstCount.innerHTML,/1개<\/b> 조합 · 30일 안에 또 난 곳만/);
+  assert.match(D.dom.els.hstCount.innerHTML,/1개<\/b> 조합 · 재발 간격 30일 미만/);
   assert.equal(D.exHistoryCyclesShown_(D.state()).length,1,'복사도 화면과 같은 목록');
   D.exToggleCycleShort_();
   assert.equal(D.state().cycleShortOnly,false);
@@ -1666,6 +1670,71 @@ ck('108. 행에는 노즐·교육 배지를 병원 아래 붙이고 짧은 주�
   const first=D.exHistoryCycleTsv_(cyc(D)).split('\n')[1].split('\t');
   assert.equal(first[0],'가병원');assert.equal(first[1],'노즐 재사용');assert.equal(first[3],'교육 미흡');
   assert.equal(first[2],'2026.05.02','handover 에 O/X 를 적은 날');
+});
+
+/* ══════ 재발 요인 분석 (교육 × 노즐 재사용) ══════ */
+const leak=(id,day,hosp,extra={})=>row(id,day,hosp,{type:LEAK,cat:'핸드피스',...extra});
+/* 조사 기록 — 방문일에 노즐 O/X 와 숙련도 3항목을 적는다 */
+const survey=(id,day,hosp,reuse,bad)=>row(id,day,hosp,{type:'점검',gubun:'점검',
+  nozzleReuse:reuse, nsFill:bad?'X':'O', nsAmt:'적정', jet:'양호'});
+
+ck('109. 재발 구간은 발생일 사이로 끊고 같은 날은 1회, 마지막 구간은 관찰 중으로 남긴다',()=>{
+  const D=build();
+  const rows=[leak('a1','2026-06-01','가병원'),leak('a2','2026-06-01','가병원'),
+              leak('a3','2026-06-11','가병원'),leak('a4','2026-07-01','가병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-08-01');
+  const iv=A.intervals.filter(x=>x.hosp==='가병원');
+  assert.equal(iv.length,3,'발생 3일 → 구간 3개(마지막은 관찰 중)');
+  assert.deepEqual(iv.map(x=>x.days),[10,20,31]);
+  assert.deepEqual(iv.map(x=>x.recurred),[true,true,false]);
+  assert.equal(A.total.recurred,2);assert.equal(A.total.watching,1);
+});
+ck('110. 30일 재발률의 분모는 30일을 다 관찰한 구간만이다',()=>{
+  const D=build();
+  /* 20일 만에 재발(포함) · 40일 관찰 중(포함) · 10일밖에 관찰 못 한 구간(제외) */
+  const rows=[leak('b1','2026-06-01','가병원'),leak('b2','2026-06-21','가병원'),
+              leak('c1','2026-05-01','나병원'),
+              leak('d1','2026-07-22','다병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-08-01');
+  const r30=A.total.rates[30];
+  assert.equal(r30.denom,3,'20일 재발 + 나병원 92일 관찰 + 가병원 41일 관찰');
+  assert.equal(r30.hit,1);
+  assert.equal(r30.rate,33.3);
+  /* 기준일은 3·5·10·20·30일 다섯 개다 */
+  assert.deepEqual(Object.keys(A.total.rates).map(Number).sort((a,b)=>a-b),[3,5,10,20,30]);
+  assert.equal(A.total.rates[10].hit,0,'10일 안에 재발한 구간은 없다');
+  assert.equal(A.total.rates[20].hit,1,'20일 만의 재발은 20일 기준에 포함');
+});
+ck('111. 구간의 교육·노즐 상태는 구간 시작일 기준이고 이후 조사는 소급되지 않는다',()=>{
+  const D=build();
+  const rows=[survey('s1','2026-05-01','가병원','O',true),      /* 재사용 · 교육 미흡 */
+              leak('e1','2026-06-01','가병원'),
+              leak('e2','2026-06-15','가병원'),
+              survey('s2','2026-06-20','가병원','X',false),     /* 이후 개선 */
+              leak('e3','2026-07-20','가병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-09-01');
+  const iv=A.intervals;
+  assert.deepEqual(iv.map(x=>x.skill+'/'+x.nozzle),
+    ['need/reuse','need/reuse','good/single'],'6/20 조사는 그 뒤 구간부터');
+  const g=k=>A.groups.find(x=>x.key===k);
+  assert.equal(g('need_reuse').intervals,2);
+  assert.equal(g('good_single').intervals,1);
+  /* 조사 이력이 없는 병원은 4집단에서 빼고 따로 센다 */
+  const A2=D.exBuildLeakRisk_([leak('f1','2026-06-01','바병원'),leak('f2','2026-06-10','바병원')],
+                              [leak('f1','2026-06-01','바병원')],'2026-09-01');
+  assert.equal(A2.unknown.intervals,2);
+  assert.equal(A2.groups.reduce((a,x)=>a+x.intervals,0),0);
+});
+ck('112. 기준군 대비 배수와 판정 문장은 표본이 얇으면 단정하지 않는다',()=>{
+  const D=build();
+  const rows=[survey('s1','2026-01-01','가병원','O',true),
+              leak('g1','2026-02-01','가병원'),leak('g2','2026-02-11','가병원')];
+  const A=D.exBuildLeakRisk_(rows,rows,'2026-09-01');
+  assert.match(D.exRiskVerdict_(A),/표본이 아직 얇습니다/);
+  /* 기준군 대비 배수는 30일 재발률의 비다 */
+  const g=A.groups.find(x=>x.key==='need_reuse');
+  assert.equal(A.groups[0].base,true);
+  assert.equal(g.ratio,null,'기준군 재발률이 없으면 배수도 없다');
 });
 
 console.log('처리이력 모달 검증 통과 '+count+'/'+count);
