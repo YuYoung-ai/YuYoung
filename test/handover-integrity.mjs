@@ -134,7 +134,7 @@ ck('GAS 버전으로 사진 저장을 추측하던 코드가 사라졌다',
 /* 성공이 아닌 상태에서 해서는 안 되는 동작 */
 const applySaveResult = grab(JS, 'applySaveResult');
 const successBranch = applySaveResult.slice(0, applySaveResult.indexOf('}else if'));
-['clearSnPhoto({keepServer:true})', 'enableCopy(!hasUnsaved)', 'rememberRecentHandover_(sent)', 'clearDraft'].forEach(function (frag) {
+['enableCopy(!hasUnsaved)', 'rememberRecentHandover_(sent)', 'clearDraft'].forEach(function (frag) {
   ck('성공 분기에서만 실행: ' + frag, successBranch.includes(frag));
 });
 const restBranches = applySaveResult.slice(applySaveResult.indexOf('}else if'));
@@ -368,7 +368,7 @@ ck('dirty 상태를 화면에 표시한다', /is-dirty/.test(refreshDirty) && /d
 ck('새 기록 흐름을 제공한다', /function startNewRecord/.test(JS) && /새 기록 시작/.test(JS));
 const saveFn = grab(JS, 'saveToSheet');
 ck('동일 내용 재저장 시 중복 행을 만들지 않는다',
-  /isSameAsSaved\(SAVED_SNAPSHOT, form\) && !UNSAVED_PHOTO/.test(saveFn));
+  /isSameAsSaved\(SAVED_SNAPSHOT, form\)/.test(saveFn));
 ck('결과 불명 재시도는 최초 payload와 reqId를 재사용한다',
   /SAVE_STATE===BazHandover\.SAVE\.UNKNOWN && LAST_SAVE_PAYLOAD/.test(saveFn) &&
   /submitSavePayload\(LAST_SAVE_PAYLOAD\)/.test(saveFn) && /LAST_SAVE_PAYLOAD=payload/.test(saveFn));
@@ -381,33 +381,18 @@ ck('응답 대기 중 변경이 있으면 초안을 보존하고 후속 기능�
   /enableCopy\(!hasUnsaved\)/.test(applySaveResult));
 
 /* ════════════════════════════════════════════════════════════════════
-   10. 사진 A→B 교체 경합
+   10. 장비 S/N 사진 업로드 제거
    ════════════════════════════════════════════════════════════════════ */
-section('10. 사진 교체 경합');
+section('10. 장비 S/N 사진 업로드 제거');
 
-const photoSeq = H.createSeq();
-const pa = photoSeq.next('photo');   // A 변환 시작
-const pb = photoSeq.next('photo');   // B 변환 시작(A 진행 중)
-ck('A 변환 결과는 폐기된다', photoSeq.isCurrent(pa) === false);
-ck('B 변환 결과만 반영된다', photoSeq.isCurrent(pb) === true);
-
-const onSnPhoto = grab(JS, 'onSnPhoto');
-ck('사진 변환에 세대 번호를 쓴다', /snPhotoSeq\.next\('photo'\)/.test(onSnPhoto) && /snPhotoSeq\.isCurrent\(id\)/.test(onSnPhoto));
-ck('변환 중 저장 버튼을 잠근다', /snPhotoBusy\(true\)/.test(onSnPhoto) && /b\.disabled=!!on/.test(JS));
-ck('처리 중임을 접근 가능한 상태 메시지로 알린다',
-  /snPhotoSay\(/.test(onSnPhoto) && /id="snPhotoState"[^>]*aria-live="polite"/.test(HTML));
-ck('사진 삭제가 진행 중 변환을 취소한다', /snPhotoSeq\.cancel\(\)/.test(grab(JS, 'clearSnPhoto')));
-ck('변환 중에는 저장이 막힌다', /photoBusy:SN_PHOTO_BUSY/.test(saveFn));
-ck('저장·결과 확인·결과 불명 중에는 사진 교체·삭제 컨트롤을 잠근다',
-  /function photoControlsLocked/.test(JS) && /SAVE_STATE===BazHandover\.SAVE\.UNKNOWN/.test(JS) &&
-  /f\.disabled=locked/.test(JS) && /rm\.disabled=locked/.test(JS));
-ck('늦은 저장 확인이 새로 교체한 사진을 지우지 않는다',
-  /SN_PHOTO!==LAST_SENT_PHOTO/.test(applySaveResult) && /현재 변경은 미기록/.test(applySaveResult));
-ck('저장 뒤 새 사진은 dirty가 되고 동일 텍스트여도 다시 저장할 수 있다',
-  /UNSAVED_PHOTO=true/.test(onSnPhoto) && /\|\| UNSAVED_PHOTO/.test(refreshDirty) &&
-  /&& !UNSAVED_PHOTO/.test(saveFn));
-const vBusy = H.validate(form(), { hasPhoto: true, photoBusy: true });
-ck('검증도 사진 처리 중 저장을 막는다', !vBusy.ok && vBusy.errors.some(e => e.field === 'snPhoto'));
+ck('장비 S/N 입력은 유지한다', /id="sn"/.test(HTML) && /id="snCustom"/.test(HTML));
+ck('장비 S/N 사진 선택 UI를 제거한다',
+  !/id="snPhotoFile"/.test(HTML) && !/id="snPhotoZone"/.test(HTML) && !/snphoto-zone/.test(HTML));
+ck('사진 압축·업로드 모듈과 이벤트를 제거한다',
+  !/baz-photo\.js/.test(HTML) && !/function onSnPhoto/.test(JS) && !/photo_add/.test(JS));
+ck('최종 저장은 사진 데이터나 참조를 구성하지 않는다',
+  /buildPayload\(form, \{reqId:reqId, token:token\}\)/.test(saveFn) &&
+  !/snPhotoRef/.test(saveFn) && !/SN_PHOTO/.test(saveFn));
 
 /* ════════════════════════════════════════════════════════════════════
    11. 입력 검증
@@ -427,18 +412,13 @@ ck('NaN 이 payload 로 가지 않는다', (function () {
   return String(q.cost).indexOf('NaN') < 0;
 })());
 
-const vEmpty = H.validate(form({ hosp: '', fse: '', sn: '', snCustom: '' }), { photoRequired: true, hasPhoto: false });
+const vEmpty = H.validate(form({ hosp: '', fse: '', sn: '', snCustom: '' }));
 ck('필수값을 필드 단위로 표시한다',
-  !vEmpty.ok && ['hosp', 'fse', 'sn', 'snPhoto'].every(f => vEmpty.errors.some(e => e.field === f)));
+  !vEmpty.ok && ['hosp', 'fse', 'sn'].every(f => vEmpty.errors.some(e => e.field === f)));
 const vNoPhoto = H.validate(form(), { hasPhoto: false });
 ck('사진을 안 붙여도 저장을 막지 않는다(선택 항목)', vNoPhoto.ok === true);
-ck('화면은 사진을 필수로 요구하지 않는다', /photoRequired:false/.test(saveFn));
-/* 붙였는데 업로드가 끝나지 않은 사진은 '사진 없음'과 다르다 — 조용히 빠지면 안 된다 */
-const vPending = H.validate(form(), { hasPhoto: false, photoPending: true });
-ck('업로드하지 못한 사진이 있으면 저장을 막는다',
-  !vPending.ok && vPending.errors.some(e => e.field === 'snPhoto' && /업로드하지 못한/.test(e.msg)));
-ck('화면이 업로드 미완료 사진을 검증에 넘긴다',
-  /photoPending:!!SN_PHOTO && SN_PHOTO_UPLOAD_STATE!=='ok'/.test(saveFn));
+ck('화면 저장 검증에 사진 조건이 없다',
+  /BazHandover\.validate\(form\)/.test(saveFn) && !/photoRequired|photoPending|photoBusy/.test(saveFn));
 ck('첫 오류 필드를 알려 준다', vEmpty.first && vEmpty.first.field === 'hosp');
 ck('첫 오류로 포커스·스크롤한다', /function focusField/.test(JS) && /scrollIntoView/.test(grab(JS, 'focusField')));
 ck('오류 요약을 제공한다', /function showErrors/.test(JS) && /errorSummary/.test(HTML));
@@ -536,8 +516,8 @@ ck('펼침 상태·선택 항목을 ARIA 로 전달한다',
 ck('방향키·Enter·Escape 로 조작할 수 있다',
   /ArrowDown/.test(JS) && /e\.key==='Enter'/.test(JS) && /e\.key==='Escape'/.test(JS));
 ck('병원 지우기 버튼에 접근성 이름이 있다', /id="hospClear"[^>]*aria-label="병원명 지우기"/.test(HTML));
-ck('토스트·저장 상태·사진 상태에 aria-live 가 있다',
-  (HTML.match(/aria-live="polite"/g) || []).length >= 4);
+ck('토스트·저장 상태에 aria-live 가 있다',
+  (HTML.match(/aria-live="polite"/g) || []).length >= 3);
 ck('양식 탭에 aria-pressed 가 있다', /data-tpl="basic"[^>]*aria-pressed/.test(HTML));
 ck('숙련도 세그먼트에 aria-pressed 가 있다', /data-skill="nsFill"[^>]*aria-pressed/.test(HTML));
 ck('label 이 for/id 로 연결된다', (HTML.match(/<label for="/g) || []).length >= 15);
