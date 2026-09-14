@@ -340,8 +340,10 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
     &&chipSrc.includes('exApplyHistoryFilters_()'));
   ck('26-n. 같은 칩 재클릭은 전체로 해제하고 다른 칩은 즉시 전환',
     chipSrc.includes('select.value===value')&&chipSrc.includes("select.value=selected?'all':value"));
-  ck('26-o. 요약 버튼은 필터 결과가 아니라 원본 목록으로 계속 렌더링',
-    grab('exApplyHistoryFilters_').includes('exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt)'));
+  const applySrc=grab('exApplyHistoryFilters_');
+  ck('26-o. 요약 버튼은 행 보기의 비교 목록, 병원별 보기의 기간 원본 목록을 각각 사용',
+    applySrc.includes("rollup?(EX_HISTORY_STATE.sourceItems||[]):EX_HISTORY_STATE.items")
+    &&applySrc.includes('rollup?sourceOpt:opt'));
 }
 
 /* ══════ 7. 특수문자·따옴표 안전 ══════ */
