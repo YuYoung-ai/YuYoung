@@ -12,7 +12,7 @@
  *   · 정렬 후 행 선택·복사가 실제 클릭한 item 을 가리킴
  *   · 검색 AND/-제외/단독 -/IME 조합/디바운스 취소·flush
  *   · 병원 롤업용 경과일 계산(모집단·중복 제거 단위·평균/중앙값/최단/30일)
- *   · 병원별 롤업(정규화·누락 분리·동률 VOC·비용 0원과 미입력)
+ *   · 병원별 롤업(기간 원본 건수·최신 비교 지표 분리·정규화·누락·VOC·비용)
  *   · 필터 상태 유지(재오픈·dim 전환·병원DB 지연·정렬/보기 유지)
  *   · 대량 렌더 제한(200행)과 통계·복사의 독립
  ************************************************************/
@@ -636,7 +636,7 @@ ck('33. 개별 근거 조회용 비교·동일비교 경과일 열은 유지한�
 });
 
 /* ══════ 4. 병원별 롤업 ══════ */
-ck('34. 병원별 보기는 통계와 같은 분석 결과를 쓰고 병원명은 기존 정규화 규칙을 따른다',()=>{
+ck('34. 병원별 기본 건수는 기간 원본을 쓰고 병원명은 기존 정규화 규칙을 따른다',()=>{
   const rows=[row('h1','2026-08-31',' 가 병원 '),row('h2','2026-08-20','가병원',{type:'풋스위치 작동 불량'}),
               row('h3','2026-08-10','나병원')];
   const raw=rows.concat([row('h1-p','2026-08-25','가병원'),row('h3-p','2026-08-05','나병원')]);
@@ -648,8 +648,7 @@ ck('34. 병원별 보기는 통계와 같은 분석 결과를 쓰고 병원명�
   assert.equal(ga.cases,2);
   assert.equal(D.ymd(ga.last),'2026-08-31','최근 처리일');
   assert.equal(ga.comparable,1); assert.equal(ga.median,6); assert.equal(ga.within30,1);
-  const total=D.state().analysis.general.cases;
-  assert.equal(rollup.reduce((a,r)=>a+r.cases,0),total,'롤업 합계 = 분석 사례 수');
+  assert.equal(rollup.reduce((a,r)=>a+r.cases,0),rows.length,'롤업 합계 = 필터된 기간 원본 처리 건수');
 });
 ck('35. 병원명 누락 행은 하나의 가짜 병원으로 합치지 않고 데이터 오류로 분리한다',()=>{
   const rows=[row('n1','2026-08-31',''),row('n2','2026-08-30',''),row('ok','2026-08-20','가병원')];
@@ -695,7 +694,7 @@ ck('38. 비용 원본이 빈값이면 —, 실제 0원이면 ₩0 으로 구분�
   const html=D.dom.els.hstTableHost.innerHTML;
   assert.ok(html.includes('₩0')&&html.includes('₩100,000')&&html.includes('—'));
   const visible=html.replace(/title="[^"]*"/g,'');
-  assert.ok(visible.includes('>최신 선택 비용 합계<'));
+  assert.ok(visible.includes('>기간 내 비용 합계<'));
   assert.ok(!visible.includes('누적비용'),'화면 표기에 누적비용을 쓰지 않는다');
 });
 ck('39. 병원별 보기 진입은 예시 패널을 숨기고 진행 중인 비동기 요청을 무효화한다',()=>{
@@ -717,7 +716,7 @@ ck('40. 병원별 보기에서 period select 는 비활성화되고 행 보기�
   assert.equal(D.dom.els.hstPeriod.disabled,true);
   assert.equal(D.dom.els.hstPeriod.value,'cur');
   assert.equal(D.state().period,'cur');
-  assert.ok(D.dom.els.hstViewNote.textContent.includes('최신 선택 기준'));
+  assert.ok(D.dom.els.hstViewNote.textContent.includes('기간 내 원본 처리 건수 기준'));
   D.exSetHistoryView_('rows');
   assert.equal(D.dom.els.hstPeriod.disabled,false);
   assert.equal(D.dom.els.hstPeriod.value,'all','행 보기로 돌아갈 때 기존 period 복원');
@@ -728,12 +727,38 @@ ck('41. 롤업 TSV 와 비교 근거 원본 Excel 의 범위는 서로 독립이
   D.exSetHistoryView_('hosp');
   const tsv=D.exHistoryRollupTsv_(D.state().rollup).split('\n');
   assert.equal(tsv[0].split('\t')[0],'병원');
-  assert.equal(tsv[0].split('\t').length,8);
+  assert.equal(tsv[0].split('\t').length,9);
   assert.equal(tsv.length-1,D.state().rollup.length);
   assert.notEqual(tsv.length-1,excelRows,'Excel 은 비교·동일비교 원본까지 보존');
   const after=D.exHistoryExportData_(D.state()).records.length;
   assert.ok(after>0,'Excel 은 롤업 보기에서도 비교 근거 원본을 유지');
   assert.ok(SRC.includes('비교 근거 원본 Excel'));
+});
+ck('41-a. 같은 병원·VOC의 기간 원본을 모두 세고 건수 클릭은 현재 조건 행만 연다',()=>{
+  const rows=[
+    row('o1','2026-08-31','가병원'),
+    row('o2','2026-08-20','가병원',{fse:'이프로'}),
+    row('o3','2026-08-10','가병원',{type:'풋스위치 작동 불량'})
+  ];
+  const D=build(); open(D,rows,rows);
+  D.exSetHistoryView_('hosp');
+  let ga=D.state().rollup[0];
+  assert.equal(ga.cases,3,'기간 원본 세 행을 모두 센다');
+  assert.equal(ga.latestCases,2,'재발 비교 분모는 VOC별 최신 선택 두 사례다');
+  assert.equal(ga.comparable,1,'직전 이력이 있는 최신 사례만 비교 가능하다');
+  assert.match(D.dom.els.hstTableHost.innerHTML,/class="hst-count-link"/);
+  setVal(D,'hstType','노즐 누수(약액 유입)'); D.exApplyHistoryFilters_();
+  ga=D.state().rollup[0];
+  assert.equal(ga.cases,2,'상세 필터는 기간 원본에도 적용한다');
+  assert.equal(ga.latestCases,1);
+  const btn={getAttribute:key=>key==='data-hosp'?'가병원':''};
+  D.exOpenHospPanel_(null,btn,'filtered');
+  assert.equal(D.state().hospPanel.scope,'filtered');
+  const html=D.dom.els.hstHospPanel.innerHTML;
+  assert.ok(html.includes('현재 조건 처리 이력'));
+  assert.ok(html.includes('현재 기간·필터 2건'));
+  assert.equal((html.match(/hst-hosp-item/g)||[]).length,2);
+  assert.ok(!html.includes('발생 빈도 추이'),'현재 조건 패널에 전체 기간 추이를 섞지 않는다');
 });
 
 /* ══════ 5. 복사 ══════ */
@@ -913,7 +938,7 @@ await ckA('55. 정렬은 전체 결과에 먼저 적용하고, 통계·팩싯·�
   assert.equal(D.state().filtered[0].r.hosp,'병원499','정렬은 전체 필터 결과 기준');
   assert.equal(D.state().analysis.general.cases,500,'통계는 전체 기준');
   assert.equal(D.state().rollup.length,500,'롤업도 전체 기준으로 계산해 둔다');
-  assert.ok(!D.dom.els.hstTableHost.innerHTML.includes('최신 선택 비용 합계'),'행 보기에서는 롤업 표를 그리지 않는다');
+  assert.ok(!D.dom.els.hstTableHost.innerHTML.includes('기간 내 비용 합계'),'행 보기에서는 롤업 표를 그리지 않는다');
   D.exCopyHistoryTsv_();
   await new Promise(r=>setTimeout(r,0));
   assert.equal(D.clipboard.text.split('\n').length,501,'복사는 전체 기준');
@@ -935,7 +960,7 @@ ck('57. 기존 exHistoryPrevious_ 의 선택·비교·동일비교 판정과 기
   assert.deepEqual(c.rows.map(r=>r.id).sort(),['a-p','b-p','d-p','e-p','f-p']);
   assert.deepEqual(D.exHistorySort_(CUR).map(r=>r.id),['a','d','b','c','e','f']);
 });
-ck('58. 집계 기준을 두 곳에서 만들지 않는다 — 롤업은 통계 units 만 사용한다',()=>{
+ck('58. 롤업은 기간 원본과 기존 통계 units를 결합하되 재발 판정을 다시 만들지 않는다',()=>{
   const rollup=grab('exHistoryRollup_');
   assert.ok(rollup.includes('analysis&&analysis.units'));
   assert.ok(!/exHistoryPrevious_|hpCleanDays_|exHistoryFilter_/.test(rollup),'재발 기준을 다시 만들지 않는다');

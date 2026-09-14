@@ -1136,6 +1136,10 @@ body.dark .hst-hosp-item{border-color:var(--li-line)}
   text-align:left;text-decoration:underline;text-underline-offset:2px;cursor:pointer;overflow-wrap:anywhere}
 .hst-hosp-link:hover{color:var(--teal)}
 .hst-hosp-link:focus-visible{outline:2px solid var(--navy);outline-offset:1px;border-radius:3px}
+.hst-count-link{border:1px solid var(--gray-line);border-radius:999px;padding:3px 8px;background:var(--surface);
+  color:var(--teal);font:inherit;font-weight:800;white-space:nowrap;cursor:pointer}
+.hst-count-link:hover{border-color:var(--teal);background:var(--teal-soft)}
+.hst-count-link:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 .hst-more{display:flex;align-items:center;gap:9px;padding:9px 11px 14px}
 .hst-more button{border:1px solid var(--teal);border-radius:7px;background:var(--surface);color:var(--teal);
   padding:6px 12px;font:11px inherit;font-weight:800;cursor:pointer}
@@ -6637,7 +6641,7 @@ var EX_CYCLE_STATES=null;                /* 노즐·교육 상태 캐시(RAW·�
 /* 보기별 안내 문구 — 도구 막대 동기화가 이 표 하나만 읽는다 */
 var EX_HISTORY_VIEW_NOTE={
   rows:'행 보기 · 행을 누르면 VOC 유형별 표준 참고 예시가 열립니다',
-  hosp:'병원별 보기 · 최신 선택 기준(기간 선택 없음) · 행 클릭으로 예시자료를 열지 않습니다',
+  hosp:'병원별 보기 · 기간 내 원본 처리 건수 기준 · 건수를 누르면 현재 조건의 처리 이력이 열립니다',
   cycle:'재발 주기 · 선택 기간 안의 발생만 · 병원 · VOC · 장비번호(S/N) 단위 · 같은 날 여러 건은 1회'
 };
 /* 열 헤더 첫 클릭 방향 — 이후 같은 헤더 재클릭은 asc/desc 전환 */
@@ -6838,30 +6842,39 @@ function exHistoryAnalyze_(state,opt){
     general:exHistoryStatSummary_(units.map(function(u){return u.days;})),
     same:exHistoryStatSummary_(sameUnits.map(function(u){return u.days;}))};
 }
-/* 병원별 롤업 — 위 분석 결과(units)만 재사용한다. 검색도 집계 후 문자열 검색이 아니라
-   cur 원본을 먼저 거른 뒤 병원별로 묶는다(모집단이 통계와 완전히 같다). */
-function exHistoryRollup_(analysis){
-  var map=Object.create(null), out=[];
+/* 병원별 롤업 — 건수·최근일·VOC·비용은 선택 기간 원본(sourceItems), 재발 지표만
+   병원·VOC별 최신 선택 사례(analysis.units)를 쓴다. 두 모집단을 섞어 건수를 줄이지 않는다. */
+function exHistoryRollup_(analysis,sourceItems){
+  var map=Object.create(null), stats=Object.create(null), out=[];
+  /* 최신 선택 사례의 비교 지표를 병원별로 먼저 모은다. 분모 역시 최신 선택 사례 수다. */
   ((analysis&&analysis.units)||[]).forEach(function(u){
-    /* 병원명 누락 행은 하나의 가짜 병원으로 합치지 않고 사례별 데이터 오류 행으로 분리한다 */
-    var key=u.hospKey?('h:'+u.hospKey):('err:'+u.key);
+    if(!u.hospKey) return;
+    var s=stats[u.hospKey];
+    if(!s) s=stats[u.hospKey]={cases:0,days:[]};
+    s.cases++;
+    if(u.days!=null) s.days.push(u.days);
+  });
+  /* 직접 호출 호환: sourceItems를 생략하면 분석에 사용된 최신 선택 행으로 집계한다. */
+  var source=Array.isArray(sourceItems)?sourceItems:((analysis&&analysis.rows)||[]);
+  source.forEach(function(it){
+    var r=it.r||{}, hosp=exHistoryVal_(r.hosp), hospKey=nkey(hosp);
+    /* 병원명 누락 행은 하나의 가짜 병원으로 합치지 않고 원본 행별 데이터 오류로 분리한다. */
+    var key=hospKey?('h:'+hospKey):('err:'+(it.id||out.length));
     var row=map[key];
     if(!row){
-      row=map[key]={key:key,hosp:u.hosp,hospKey:u.hospKey,error:!u.hospKey,cases:0,last:null,
-        types:Object.create(null),days:[],cost:0,costFilled:0,order:out.length};
+      row=map[key]={key:key,hosp:hosp,hospKey:hospKey,error:!hospKey,cases:0,last:null,
+        types:Object.create(null),cost:0,costFilled:0,order:out.length};
       out.push(row);
     }
     row.cases++;
-    if(u.date&&(!row.last||u.date>row.last)) row.last=u.date;
-    var t=u.type||'미입력';
+    var d=exHistoryValidDate_(r);
+    if(d&&(!row.last||d>row.last)) row.last=d;
+    var t=exHistoryVal_(vocTypeCanonical_(r.type))||'미입력';
     row.types[t]=(row.types[t]||0)+1;
-    if(u.days!=null) row.days.push(u.days);
-    u.rows.forEach(function(it){
-      var r=it.r||{}, raw=String(r.cost==null?'':r.cost).trim(), n=Number(r._cost||0);
-      /* 비용 원본이 빈값인지 실제 0원인지 구분한다 — "—" 와 "₩0" 을 분리해 표시하기 위함 */
-      if(raw!==''||n>0) row.costFilled++;
-      if(!isNaN(n)) row.cost+=n;
-    });
+    var raw=String(r.cost==null?'':r.cost).trim(), n=Number(r._cost||0);
+    /* 비용 원본이 빈값인지 실제 0원인지 구분한다 — "—" 와 "₩0" 을 분리해 표시하기 위함 */
+    if(raw!==''||n>0) row.costFilled++;
+    if(!isNaN(n)) row.cost+=n;
   });
   out.forEach(function(row){
     var top=Object.keys(row.types).map(function(k){return {k:k,n:row.types[k]};})
@@ -6872,7 +6885,8 @@ function exHistoryRollup_(analysis){
     /* 최다 VOC 동률은 축약 표시하고 전체는 tooltip 으로 보여 준다 */
     row.topLabel=!row.topTypes.length?'—'
       :(row.topTypes.length>1?('공동 '+row.topTypes.length+'개'):row.topTypes[0]);
-    var s=exHistoryStatSummary_(row.days);
+    var latest=row.hospKey&&stats[row.hospKey], s=exHistoryStatSummary_(latest?latest.days:[]);
+    row.latestCases=latest?latest.cases:0;
     row.comparable=s.comparable;
     /* 평균만 보면 이상치에 휘둘리므로 롤업 주 지표는 중앙값이다. 비교 가능 사례가 없으면 — */
     row.median=s.comparable?s.median:null;
@@ -7239,13 +7253,13 @@ function exHistoryRowsTsv_(items,showCost,comparison){
   return lines.join('\n');
 }
 function exHistoryRollupTsv_(rows){
-  var head=['병원','최신 선택 처리 건수','최근 처리일','최다 VOC','재발 간격 중앙값',
-    '비교 가능 사례 수','30일 내 재발 건수','최신 선택 비용 합계'];
+  var head=['병원','기간 내 처리 건수','최근 처리일','최다 VOC','재발 간격 중앙값',
+    '비교 가능 최신 사례 수','최신 사례 수','30일 내 재발 건수','기간 내 비용 합계'];
   var lines=[head.join('\t')];
   (rows||[]).forEach(function(row){
     lines.push([row.error?'병원명 미입력(데이터 오류)':exHistoryTsvCell_(row.hosp),
       String(row.cases), row.last?ymd(row.last):'', exHistoryTsvCell_(row.topTitle),
-      row.median==null?'':String(row.median), String(row.comparable), String(row.within30),
+      row.median==null?'':String(row.median), String(row.comparable), String(row.latestCases||0), String(row.within30),
       row.costFilled?String(row.cost):''].join('\t'));
   });
   return lines.join('\n');
@@ -7340,9 +7354,8 @@ function exCopyHistoryTsv_(){
   });
 }
 /* ══════ 병원 이력 패널 — 처리이력 표 오른쪽에 붙는다 ══════
-   병원명을 누르면 새 창을 띄우지 않고 이 패널만 연다. 이미 받아 둔 RAW 만 읽으므로
-   추가 네트워크 요청이 없다. 표의 필터·정렬과 무관하게 그 병원의 전체 처리 이력을 보여 준다.
-   전체 병원 화면이 필요하면 패널 안의 버튼으로 hospital-pc 를 따로 연다. */
+   병원명은 RAW의 전체 병원 이력을, 병원별 건수는 기간·상세 필터에 맞는 sourceItems만 연다.
+   둘 다 이미 받은 데이터만 써서 추가 통신하지 않으며, 전체 병원 화면은 패널 버튼으로 연다. */
 var EX_HOSP_PANEL_PAGE=40;
 function exHospHistoryRows_(name){
   var k=nkey(name);
@@ -7499,16 +7512,17 @@ function exHospTrendHtml_(t){
 function exHospPanelShell_(){
   return '<aside class="hst-hosp-panel" id="hstHospPanel" hidden aria-live="polite" aria-label="병원 처리 이력"></aside>';
 }
-function exHospPanelHtml_(name,rows,limit,type){
+function exHospPanelHtml_(name,rows,limit,type,scope){
   var shown=rows.slice(0,limit), as=0, insp=0, last=rows.length?exHistoryValidDate_(rows[0]):null;
   rows.forEach(function(r){ if(exHistoryVal_(r.gubun)==='점검') insp++; else as++; });
+  var filtered=scope==='filtered';
   return '<div class="hst-hosp-head">'
-      +'<div><span class="hst-hosp-kicker">병원 이력</span><b>'+esc(name)+'</b></div>'
+      +'<div><span class="hst-hosp-kicker">'+(filtered?'현재 조건 처리 이력':'병원 이력')+'</span><b>'+esc(name)+'</b></div>'
       +'<button type="button" class="hst-hosp-close" onclick="exCloseHospPanel_()" aria-label="병원 이력 패널 닫기" title="닫기">✕</button>'
     +'</div>'
-    +'<div class="hst-hosp-meta">전체 '+exNum(rows.length)+'건 · A/S '+exNum(as)+' · 점검 '+exNum(insp)
+    +'<div class="hst-hosp-meta">'+(filtered?'현재 기간·필터 ':'전체 ')+exNum(rows.length)+'건 · A/S '+exNum(as)+' · 점검 '+exNum(insp)
       +(last?(' · 최근 '+esc(ymd(last))):'')+'</div>'
-    +exHospTrendHtml_(exHospTrend_(name,type))
+    +(filtered?'':exHospTrendHtml_(exHospTrend_(name,type)))
     +'<div class="hst-hosp-list">'
       +(shown.length?shown.map(function(r){
         var d=exHistoryValidDate_(r), insp2=exHistoryVal_(r.gubun)==='점검';
@@ -7521,7 +7535,7 @@ function exHospPanelHtml_(name,rows,limit,type){
             +' · 장비 '+esc(exHistoryVal_(r.sn)||'미입력')+'</div>'
           +(String(r.detail||'').trim()?'<p class="hst-hosp-detail">'+exHistoryDetail_(r.detail)+'</p>':'')
           +'</article>';
-      }).join(''):'<div class="hst-hosp-empty">이 병원의 처리 이력이 없습니다.</div>')
+      }).join(''):'<div class="hst-hosp-empty">'+(filtered?'현재 조건에 해당하는 처리 이력이 없습니다.':'이 병원의 처리 이력이 없습니다.')+'</div>')
     +'</div>'
     +(rows.length>shown.length
       ? '<div class="hst-hosp-more"><button type="button" onclick="exHospPanelMore_()">'
@@ -7534,21 +7548,30 @@ function exRenderHospPanel_(){
   var state=EX_HISTORY_STATE, el=document.getElementById('hstHospPanel');
   if(!el) return;
   if(!state||!state.hospPanel){ el.hidden=true; el.innerHTML=''; return; }
-  var rows=exHospHistoryRows_(state.hospPanel.name);
+  var filtered=state.hospPanel.scope==='filtered', key=nkey(state.hospPanel.name), rows;
+  if(filtered){
+    rows=((state.rollupSourceFiltered)||[]).filter(function(it){return nkey(it.r&&it.r.hosp)===key;})
+      .map(function(it){return it.r;}).slice().sort(function(a,b){
+        var ad=exHistoryValidDate_(a),bd=exHistoryValidDate_(b);
+        return (bd?bd.getTime():-Infinity)-(ad?ad.getTime():-Infinity);
+      });
+  }else rows=exHospHistoryRows_(state.hospPanel.name);
   el.hidden=false;
   el.innerHTML=exHospPanelHtml_(state.hospPanel.name,rows,state.hospPanel.limit||EX_HOSP_PANEL_PAGE,
-    state.hospPanel.type||'');
+    state.hospPanel.type||'',state.hospPanel.scope||'all');
 }
 /* 병원 셀 클릭 — 새 창을 띄우지 않는다. 행의 나머지 영역(표준 예시자료 선택)으로 전파되면 안 된다. */
-function exOpenHospPanel_(e,btn){
+function exOpenHospPanel_(e,btn,scope){
   if(e){ if(e.stopPropagation)e.stopPropagation(); if(e.preventDefault)e.preventDefault(); }
   var state=EX_HISTORY_STATE; if(!state) return false;
   var name=(btn&&btn.getAttribute)?String(btn.getAttribute('data-hosp')||'').trim():'';
   if(!name){ toast('병원명이 없어 이력을 열 수 없습니다'); return false; }
   var type=(btn&&btn.getAttribute)?String(btn.getAttribute('data-type')||'').trim():'';
-  /* 같은 병원·같은 VOC 를 다시 누르면 닫는다(토글). VOC 가 다르면 그 VOC 기준으로 다시 본다. */
-  if(state.hospPanel&&state.hospPanel.name===name&&(state.hospPanel.type||'')===type){ exCloseHospPanel_(); return false; }
-  state.hospPanel={name:name,type:type,limit:EX_HOSP_PANEL_PAGE};
+  scope=scope==='filtered'?'filtered':'all';
+  /* 같은 병원·같은 VOC·같은 범위를 다시 누르면 닫는다. 건수는 현재 조건, 병원명은 전체 이력이다. */
+  if(state.hospPanel&&state.hospPanel.name===name&&(state.hospPanel.type||'')===type
+    &&(state.hospPanel.scope||'all')===scope){ exCloseHospPanel_(); return false; }
+  state.hospPanel={name:name,type:type,scope:scope,limit:EX_HOSP_PANEL_PAGE};
   exRenderHospPanel_();
   var close=document.getElementById('hstHospPanel');
   if(close&&close.querySelector){
@@ -7742,15 +7765,15 @@ function exHistoryTable_(items,limit){
     }).join('')+'</tbody></table>'
     +exHistoryMoreHtml_(rows.length,total);
 }
-/* 병원별 롤업 — 통계와 같은 분석 결과를 쓴다. cur 만 합산하므로 "누적비용"이 아니라
-   "최신 선택 비용 합계"다. 롤업 행 클릭으로는 표준 예시자료를 열지 않는다. */
+/* 병원별 롤업 — 원본 처리 건수와 최신 선택 재발 지표를 열 이름부터 분리한다.
+   병원명은 전체 이력, 건수는 현재 기간·필터에 맞는 원본 이력을 오른쪽에 연다. */
 function exHistoryRollupTable_(rows){
-  if(!rows||!rows.length) return '<div class="hst-empty">선택한 필터에 해당하는 최신 선택 사례가 없습니다.</div>';
+  if(!rows||!rows.length) return '<div class="hst-empty">선택한 기간·필터에 해당하는 처리 이력이 없습니다.</div>';
   return '<table class="hst-table rollup"><thead><tr>'
-    +'<th>병원</th><th>최신 선택 처리 건수</th><th>최근 처리일</th><th>최다 VOC</th>'
+    +'<th>병원</th><th title="선택 기간 안에서 현재 상세 필터와 일치하는 원본 처리 행 수">기간 내 처리 건수</th><th>최근 처리일</th><th>최다 VOC</th>'
     +'<th title="비교 가능한 사례의 재발 간격 중앙값 — 평균은 이상치에 휘둘린다">재발 간격 중앙값</th>'
-    +'<th>비교 가능 사례 수</th><th title="선택일 − 직전 동일 병원·VOC 처리일이 1~30일">30일 내 재발 건수</th>'
-    +'<th class="cost" title="최신 선택 행의 교체비용 합계입니다 — 누적비용이 아닙니다">최신 선택 비용 합계</th>'
+    +'<th title="비교 가능 최신 사례 / 병원·VOC별 최신 사례">비교 가능 최신 사례</th><th title="선택일 − 직전 동일 병원·VOC 처리일이 1~30일">30일 내 재발 건수</th>'
+    +'<th class="cost" title="선택 기간 안에서 현재 상세 필터와 일치하는 원본 처리 행의 비용 합계">기간 내 비용 합계</th>'
     +'</tr></thead><tbody>'
     +rows.map(function(row){
       return '<tr class="hst-rollup-row'+(row.error?' is-error':'')+'">'
@@ -7761,13 +7784,18 @@ function exHistoryRollupTable_(rows){
               +' onclick="exOpenHospPanel_(event,this)" title="이 병원의 처리 이력을 오른쪽에 엽니다"'
               +' aria-label="'+escAttr(row.hosp+' 처리 이력 오른쪽 패널로 열기')+'">'+esc(row.hosp)+'</button>')
         +'</td>'
-        +'<td data-label="최신 선택 처리 건수">'+exNum(row.cases)+'건</td>'
+        +'<td data-label="기간 내 처리 건수">'
+          +(row.error?exNum(row.cases)+'건'
+            :'<button type="button" class="hst-count-link" data-hosp="'+escAttr(row.hosp)+'"'
+              +' onclick="exOpenHospPanel_(event,this,\'filtered\')" title="현재 기간·필터에 해당하는 '+exNum(row.cases)+'건을 오른쪽에 엽니다"'
+              +' aria-label="'+escAttr(row.hosp+' 현재 조건 처리 이력 '+row.cases+'건 열기')+'">'+exNum(row.cases)+'건</button>')+'</td>'
         +'<td class="date" data-label="최근 처리일">'+(row.last?esc(ymd(row.last)):'<span class="muted">—</span>')+'</td>'
         +'<td data-label="최다 VOC" title="'+escAttr(row.topTitle)+'">'+esc(row.topLabel)+'</td>'
         +'<td data-label="재발 간격 중앙값">'+exHistoryDayText_(row.median,'일')+'</td>'
-        +'<td data-label="비교 가능 사례 수">'+exNum(row.comparable)+' / '+exNum(row.cases)+'</td>'
+        +'<td data-label="비교 가능 최신 사례">'+(row.latestCases
+          ?(exNum(row.comparable)+' / '+exNum(row.latestCases)):'<span class="muted">—</span>')+'</td>'
         +'<td data-label="30일 내 재발 건수">'+exNum(row.within30)+'건</td>'
-        +'<td class="cost" data-label="최신 선택 비용 합계">'
+        +'<td class="cost" data-label="기간 내 비용 합계">'
           +(row.costFilled?('₩'+exNum(row.cost)):'<span class="muted">—</span>')+'</td>'
         +'</tr>';
     }).join('')+'</tbody></table>';
@@ -8343,8 +8371,8 @@ function exHistorySyncToolbar_(state){
   }
   var copy=document.getElementById('hstCopyTsv');
   if(copy) copy.textContent=exHistoryCopyLabel_(view);
-  /* 행 보기가 아니면 기간 select 는 비활성화하고 최신 선택 기준으로 고정한다
-     (병원별 보기는 최신 선택, 재발 주기는 선택 기간 원본을 직접 읽는다) */
+  /* 행 보기가 아니면 비교 역할 기간 선택은 비활성화한다.
+     병원별 기본 건수와 재발 주기는 선택 기간 원본을 직접 읽고, 병원별 재발 지표만 최신 선택을 쓴다. */
   var period=document.getElementById('hstPeriod');
   if(period){ period.disabled=(view!=='rows'); if(view!=='rows') period.value='cur'; }
   var note=document.getElementById('hstViewNote');
@@ -8432,7 +8460,7 @@ function exApplyHistoryFilters_(){
     fse:val('hstFse','all'), sales:val('hstSales','all'), q:val('hstQuery',''),
     salesExpanded:!!EX_HISTORY_STATE.salesCountsExpanded
   };
-  if(view!=='rows') opt.period='cur';     /* 행 보기가 아니면 언제나 최신 선택 기준이다 */
+  if(view!=='rows') opt.period='cur';     /* 비교 분석용 역할은 최신 선택으로 고정한다 */
   if(exHistoryFilterChanged_(state.filterOptions,opt)) state.renderLimit=EX_HISTORY_PAGE;
   var filtered=exHistoryFilter_(EX_HISTORY_STATE.items,opt);
   /* 정렬은 렌더 전에 전체 필터 결과에 적용한다 — 200행 제한은 그린 뒤가 아니라 그릴 때만 쓴다 */
@@ -8442,13 +8470,17 @@ function exApplyHistoryFilters_(){
   EX_HISTORY_STATE.period=opt.period;
   EX_HISTORY_STATE.filterOptions=opt;
   EX_HISTORY_STATE.filtered=filtered;
-  /* 통계와 병원별 롤업은 하나의 공통 계산 결과만 쓴다 */
+  /* 재발 통계는 최신 선택, 병원별 기본 건수는 같은 팝업 조건을 적용한 기간 원본을 쓴다. */
   var analysis=exHistoryAnalyze_(EX_HISTORY_STATE,opt);
+  var sourceOpt={period:'source',gubun:opt.gubun,type:opt.type,fse:opt.fse,sales:opt.sales,q:opt.q,
+    salesExpanded:opt.salesExpanded};
+  var rollupSource=exHistoryFilter_(EX_HISTORY_STATE.sourceItems||[],sourceOpt);
   /* 조치 방법별 재발은 모집단(원본 조치 행)이 필터와 무관하므로 조회당 한 번만 계산해 재사용한다 */
   if(!EX_HISTORY_STATE.arm) EX_HISTORY_STATE.arm=exArmRecurrence_(EX_HISTORY_STATE.sourceRows,RAW,null);
   analysis.arm=EX_HISTORY_STATE.arm;
   EX_HISTORY_STATE.analysis=analysis;
-  EX_HISTORY_STATE.rollup=exHistoryRollup_(analysis);
+  EX_HISTORY_STATE.rollupSourceFiltered=rollupSource;
+  EX_HISTORY_STATE.rollup=exHistoryRollup_(analysis,rollupSource);
   /* 재발 주기는 최신 선택으로 접기 전 원본을 읽는다 — 보고 있을 때만 계산한다 */
   EX_HISTORY_STATE.cycles=(view==='cycle')?exHistoryCycles_(EX_HISTORY_STATE.sourceRows,opt):[];
   var limit=EX_HISTORY_STATE.renderLimit||EX_HISTORY_PAGE;
@@ -8458,8 +8490,11 @@ function exApplyHistoryFilters_(){
     ? ('<b>'+exNum(exHistoryCyclesShown_(EX_HISTORY_STATE).length)+'개</b> 조합'
       +(EX_HISTORY_STATE.cycleShortOnly?(' · 재발 간격 '+EX_CYCLE_SHORT_DAYS+'일 미만')
         :' · 2회 이상 발생'))
-    : exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items);
-  if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(EX_HISTORY_STATE.items,opt);
+    : (rollup?('<b>'+exNum(rollupSource.length)+'건</b> 기간 원본 · '+exNum(EX_HISTORY_STATE.rollup.filter(function(r){return !r.error;}).length)+'개 병원'
+        +(EX_HISTORY_STATE.showCost?' · 비용 합계 <b>₩'+exNum(exCostSum_(rollupSource.map(function(it){return it.r;})))+'</b>':''))
+      : exHistoryResultHtml_(filtered,EX_HISTORY_STATE.items));
+  if(breakdown) breakdown.innerHTML=exHistoryBreakdownHtml_(rollup?(EX_HISTORY_STATE.sourceItems||[]):EX_HISTORY_STATE.items,
+    rollup?sourceOpt:opt);
   exHistorySyncToolbar_(EX_HISTORY_STATE);
   if(host) host.innerHTML=(view==='cycle')
     ? exHistoryCycleTable_(EX_HISTORY_STATE.cycles,EX_HISTORY_STATE.cycleShortOnly)
@@ -8567,6 +8602,7 @@ function exShowHistory_(dim, name, opt){
   }
   var comparison=exHistoryPrevious_(cur,RAW);
   var sourceRows=cur;                        /* 최신 선택으로 접기 전 원본 — 조치 방법별 재발 비교의 모집단 */
+  var sourceItems=(sort(sourceRows)||[]).map(function(r,i){return {period:'source',r:r,id:'src'+i,order:i};});
   cur=comparison.selected;
   curChip=isCost?exCostChip_(cur):(isKpi?exHistoryKpiChip_(cur,dim):exNum(cur.length)+'건');
   prev=comparison.rows;
@@ -8577,10 +8613,10 @@ function exShowHistory_(dim, name, opt){
   var items=exHistoryDataset_(cur, prev, sort, comparison.sameRows);
   var origin=(opt&&opt.origin&&opt.origin.dim)?opt.origin:{dim:dim,name:name||''};
   EX_HISTORY_PHOTO_SEQ++;                    /* 이전 조회의 예시자료 응답이 새 모집단을 덮지 않게 한다 */
-  EX_HISTORY_STATE={dim:dim,name:title,items:items,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
+  EX_HISTORY_STATE={dim:dim,name:title,items:items,sourceItems:sourceItems,comparison:comparison,showCost:isCost,salesCountsExpanded:false,
     seq:++EX_HISTORY_SEQ,originDim:origin.dim,originName:origin.name||'',
     sort:null,view:'rows',rowsPeriod:'cur',renderLimit:EX_HISTORY_PAGE,
-    analysis:null,rollup:[],cycles:[],cycleShortOnly:false,selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
+    analysis:null,rollup:[],rollupSourceFiltered:[],cycles:[],cycleShortOnly:false,selectedItemId:'',itemById:null,itemByIdSource:null,sourceRows:sourceRows,hospPanel:null,
     periodLabel:per,globalFilterText:Object.keys(F).filter(function(k){return k!=='from'&&k!=='to'&&F[k]&&(Array.isArray(F[k])?F[k].length:true);})
       .map(function(k){var labels={year:'연도',month:'월',quarter:'분기',gubun:'구분',paid:'유무상',ncare:'N-Care',cat:'대분류',fse:'담당자',sales:'영업',type:'VOC',part:'교체품',hosp:'병원',noz:'노즐',skill:'숙련도',scope:'범위',hospQ:'병원 검색'};
         return (labels[k]||k)+': '+(Array.isArray(F[k])?F[k].join(', '):F[k]);}).join(' · '),
@@ -8593,7 +8629,7 @@ function exShowHistory_(dim, name, opt){
       +'<div class="hst-ctltop"><div class="hst-toolbar" id="hstToolbar"></div>'
         +'<div class="hst-ctlacts"><span id="hstCount">'+exHistoryResultHtml_(items,items)+'</span>'
         +'<button type="button" class="hst-reset hst-export" id="hstExportExcel" title="현재 병원·VOC의 최신 선택 + 비교 + 동일비교를 내보냅니다" onclick="exportHistoryComparisonExcel_()">비교 근거 원본 Excel</button></div></div>'
-      +exHistoryControls_(items, true)
+      +exHistoryControls_(sourceItems.concat(items), true)
       +'<div class="hst-breakdown" id="hstBreakdown">'+exHistoryBreakdownHtml_(items)+'</div>'
     +'</div>'
     +'<div class="hst-top">'

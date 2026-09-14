@@ -260,6 +260,26 @@ ck('15-c. 이력 유형 선택과 건수 칩도 표준 이름 하나로 표시',
 ck('15-c2. 처리이력의 경과일 분석 카드는 제거하고 개별 비교 열은 유지',
   !normalized.stats&&!normalized.split&&normalized.heads.some(x=>x.includes('비교 경과일'))&&
   normalized.heads.some(x=>x.includes('동일비교 경과일')),JSON.stringify(normalized));
+await page.click('[data-hst-view="hosp"]');
+const aRollup=page.locator('#hstTableHost tbody tr').filter({hasText:'A병원'});
+const rollupCheck=await aRollup.evaluate(tr=>({
+  heads:[...document.querySelectorAll('#hstTableHost thead th')].map(x=>x.textContent.trim()),
+  count:tr.querySelector('.hst-count-link')?.textContent.trim(),
+  comparison:tr.querySelector('[data-label="비교 가능 최신 사례"]')?.textContent.trim()
+}));
+await aRollup.locator('.hst-count-link').click();
+const scopedPanel=await page.evaluate(()=>(
+  {text:document.getElementById('hstHospPanel').textContent,
+   rows:document.querySelectorAll('#hstHospPanel .hst-hosp-item').length,
+   trend:!!document.querySelector('#hstHospPanel .hst-hosp-trend'),
+   scope:EX_HISTORY_STATE.hospPanel&&EX_HISTORY_STATE.hospPanel.scope}
+));
+ck('15-c2-a. 병원별 건수는 기간 원본이고 클릭하면 현재 조건 처리 이력만 표시',
+  rollupCheck.heads.includes('기간 내 처리 건수')&&rollupCheck.count==='2건'&&
+  rollupCheck.comparison==='1 / 1'&&scopedPanel.scope==='filtered'&&scopedPanel.rows===2&&
+  scopedPanel.text.includes('현재 기간·필터 2건')&&!scopedPanel.trend,
+  JSON.stringify({rollupCheck,scopedPanel}));
+await page.click('[data-hst-view="rows"]');
 await page.locator('#hstTableHost .hst-hosp-link').first().click();
 await page.click('#exListFullscreen');
 let fullHistory=await page.evaluate(()=>({
