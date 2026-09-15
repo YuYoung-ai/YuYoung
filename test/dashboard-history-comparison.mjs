@@ -19,7 +19,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
   'hpCleanKey_','hpIsLeakVoc_','hpCleanDays_','isHandpieceCleaning_','vocTypeCanonical_',
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_','exHistoryComparisonMeta_',
-  'exHistoryElapsed_','exHistorySort_','exHistoryDataset_','exHistoryGrouped_',
+  'exHistoryElapsed_','exHistorySort_','exHistoryDataset_','exHistoryIsLatest_','exHistoryGrouped_',
   'exHistoryRows_','exHistoryCostRows_','exCostSum_','exCostChip_','exHistoryCostSort_',
   'exHistoryField_','exHistoryUnique_','exHistoryCounts_','exHistoryBreakdownHtml_',
   'exHistoryFilter_','exHistoryOption_','exHistoryCell_','exHistoryDetail_',
@@ -217,19 +217,21 @@ ck('미일치 안내와 HTML 이스케이프, 두 경과일 머리글·강조 �
 });
 ck('실제 모달에서 원본 건수와 최신 선택 건수를 구분, 동일비교 옵션 제공',()=>{
   D.set(cur,raw,F);D.exShowHistory_('kpiTotal');
-  assert.deepEqual(ids(D.state().items.filter(it=>it.period==='cur')),ids(D.exHistorySort_(c.selected)));
+  assert.deepEqual(ids(D.state().items.filter(it=>it.period==='cur')),ids(D.exHistorySort_(cur)));
+  assert.deepEqual(ids(D.state().items.filter(D.exHistoryIsLatest_)),ids(D.exHistorySort_(c.selected)));
   assert.ok(D.opened().html.includes('>동일비교</option>'));
   assert.ok(D.opened().sub.includes('최신 선택 5건'));assert.ok(D.opened().html.includes('원본 9건'));
 });
-ck('전체 기간 필터는 두 비교를 최신 선택 밑에 표시, 초기화 시 최신만 복구',()=>{
+ck('전체 기간 필터는 원본과 두 비교를 함께 표시하고 초기화 시 기간 원본을 복구',()=>{
   D.elements.hstPeriod={value:'all'};D.elements.hstTableHost={};D.exApplyHistoryFilters_();
-  assert.deepEqual(ids(D.state().filtered),['a1','a2','b1','b2','b3','c1','other','other-prev','missing']);
+  assert.deepEqual(ids(D.state().filtered),['a1','a2','a3','a2','b1','b2','b3','b2','b3','c1','other','other-prev','missing']);
   assert.ok(D.elements.hstTableHost.innerHTML.includes('17일'));
-  D.exResetHistoryFilters_();assert.equal(D.elements.hstPeriod.value,'cur');assert.equal(D.state().filtered.length,5);
+  D.exResetHistoryFilters_();assert.equal(D.elements.hstPeriod.value,'cur');assert.equal(D.state().filtered.length,9);
 });
 ck('절감액은 최신 선택 세척만 합산하고 두 비교 이력은 합산 제외',()=>{
   D.set(cur,raw,F);D.exShowHistory_('kpiSaving');const all=D.state().items;
-  assert.equal(all.filter(it=>it.period==='cur').length,4);
+  assert.equal(all.filter(it=>it.period==='cur').length,6,'기간 원본 세척 행은 모두 보존');
+  assert.equal(all.filter(D.exHistoryIsLatest_).length,4,'절감액 환산은 최신 선택만 사용');
   assert.ok(D.exHistoryResultHtml_(all,all).includes((4*281200).toLocaleString()));
   assert.ok(D.exHistoryResultHtml_(all.filter(it=>it.period!=='cur'),all).includes('₩0'));
 });

@@ -98,19 +98,6 @@ textarea{resize:vertical;min-height:56px}
 .seg-btn.on.warn{border-color:var(--red);background:#FBEAE8;color:var(--red)}
 .sec-title{font-size:12px;font-weight:700;color:var(--teal);letter-spacing:.5px;
   text-transform:uppercase;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--gray-line)}
-/* 장비 S/N 사진 첨부 (선택) */
-.snphoto-zone{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
-  min-height:64px;padding:12px;border:1.5px dashed var(--gray-line);border-radius:9px;
-  background:#fff;color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;text-align:center}
-.snphoto-zone:active{border-color:var(--teal);background:var(--teal-soft)}
-.snphoto-zone.miss{animation:snShake .4s;border-color:var(--red);background:#FBEAE8}
-@keyframes snShake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
-.snphoto-zone input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
-.snphoto-prev{display:none;position:relative;margin-top:8px;border:1px solid var(--gray-line);
-  border-radius:9px;overflow:hidden;background:#F0F2F6}
-.snphoto-prev img{display:block;width:100%;max-height:220px;object-fit:contain}
-.snphoto-prev .rm{position:absolute;top:6px;right:6px;width:28px;height:28px;border:none;border-radius:50%;
-  background:rgba(0,0,0,.6);color:#fff;font-size:15px;line-height:28px;padding:0;cursor:pointer;font-family:inherit}
 /* 미리보기 (카톡 말풍선 느낌) */
 .preview-card{background:var(--teal-soft);border:1px solid #CBE3EE}
 .bubble{background:#fff;border-radius:4px 14px 14px 14px;padding:14px 15px;
@@ -170,8 +157,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 #errorSummary ul{margin:6px 0 0;padding-left:18px;font-weight:400}
 #errorSummary button{display:block;margin-top:4px;background:none;border:none;color:var(--red);
   font-family:inherit;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:0}
-.field.invalid input,.field.invalid select,.field.invalid textarea,
-.snphoto-zone.invalid{border-color:var(--red);background:#FFFBFB}
+.field.invalid input,.field.invalid select,.field.invalid textarea{border-color:var(--red);background:#FFFBFB}
 .field-err{font-size:11.5px;color:var(--red);margin-top:4px;font-weight:600}
 /* 라이브 DB 상태 배지 */
 .db-badge{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:6px}
@@ -192,7 +178,6 @@ body.is-dirty .dirty-badge{display:inline-block}
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js"></script>
-<script src="js/baz-photo.js"></script>
 </head>
 <body>
 <header>
@@ -245,20 +230,6 @@ body.is-dirty .dirty-badge{display:inline-block}
         <label for="sn">S/N (장비)</label>
         <select id="sn"></select>
         <input id="snCustom" style="display:none;margin-top:6px" placeholder="직접입력" aria-label="장비 S/N 직접입력">
-      </div>
-      <div class="field full">
-        <label for="snPhotoFile">장비 S/N 사진 <span class="opt">· 선택 · 시트 사진 열에 기록</span></label>
-        <div class="snphoto-zone" id="snPhotoZone">
-          <span id="snPhotoLabel">📷 S/N 라벨 촬영 · 사진 선택</span>
-          <input type="file" accept="image/*" id="snPhotoFile" aria-describedby="snPhotoState">
-        </div>
-        <div class="hint" id="snPhotoState" role="status" aria-live="polite"></div>
-        <button type="button" class="btn-muted btn-sm" id="snPhotoRetry" style="display:none">사진 업로드 재시도</button>
-        <div class="snphoto-prev" id="snPhotoPrev">
-          <img id="snPhotoImg" src="" alt="첨부한 장비 S/N 사진 미리보기">
-          <button type="button" class="rm" id="snPhotoRemove" aria-label="첨부한 사진 삭제">✕</button>
-        </div>
-        <div class="hint" id="photoTransferState">사진을 붙이면 선택 즉시 압축·업로드되어, 마지막 시트 기록 때 다시 전송하지 않습니다.</div>
       </div>
       <div class="field">
         <label for="verUI">UI / HP 버전 <span class="opt">· 병원 선택 시 자동</span></label>
@@ -484,7 +455,7 @@ function buildTextSheet(){
   t+='병원명 : '+val('hosp')+'\n';
   t+='담당 FSE : '+val('fse')+'\n';
   t+='구분 : '+val('gubun')+(val('eqKind')==='데모 장비'?' · 데모장비':'')+'\n';
-  t+='장비 S/N : '+snVal()+(SN_PHOTO?' · 📷 사진 첨부':'')+'\n';
+  t+='장비 S/N : '+snVal()+'\n';
   t+='UI/HP Ver : '+[val('verUI'),val('verHP')].filter(Boolean).join(' / ')+'\n';
   t+='대분류/유형 : '+itemText()+(itemCode()?' ('+itemCode()+')':'')+'\n';
   /* [수정] Number('1,650,000') → NaN 이라 미리보기에 'NaN원'이 찍혔다 — 쉼표를 읽는 파서를 쓴다 */
@@ -510,310 +481,14 @@ function render(){
   scheduleDraftSave();
 }
 
-/* ── 장비 S/N 사진 첨부 (시트 U열 '장비 S/N 사진'에 기록) ──────────────── */
-var SN_PHOTO=null;                       /* 압축된 dataURL · 미첨부면 null */
-var SNP_MAX_DIM=1600, SNP_QUALITY=0.82;  /* index.html 사진 슬롯과 같은 기준 */
-var SNP_MAX_BYTES=4*1024*1024;           /* 압축 후에도 이보다 크면 거절 */
-
-/* 촬영본을 긴 변 1600px JPEG으로 줄인다 — 원본을 그대로 올리면 전송이 실패한다 */
-function snPhotoToJpeg(file){
-  return new Promise(function(resolve,reject){
-    var url=URL.createObjectURL(file);
-    var img=new Image();
-    img.onload=function(){
-      var w=img.width,h=img.height;
-      if(Math.max(w,h)>SNP_MAX_DIM){ var r=SNP_MAX_DIM/Math.max(w,h); w=Math.round(w*r); h=Math.round(h*r); }
-      var canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
-      var ctx=canvas.getContext('2d');
-      ctx.fillStyle='#FFFFFF'; ctx.fillRect(0,0,w,h);
-      ctx.drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      try{ resolve(canvas.toDataURL('image/jpeg',SNP_QUALITY)); }catch(e){ reject(e); }
-    };
-    img.onerror=function(){ URL.revokeObjectURL(url);
-      reject(new Error('이미지를 불러올 수 없습니다 (HEIC면 "가장 호환성 높게" 촬영 권장)')); };
-    img.src=url;
-  });
-}
-
-/* ── [v3.4] 사진 사전 업로드 ───────────────────────────────────────────────
-   기록 1건 = recordId 하나. 사진은 저장 버튼을 누르기 전에 photo_add 로 미리
-   올리고, 최종 저장에는 참조(clientPhotoId)만 보낸다. Drive 파일 ID 는
-   클라이언트가 만들지도, 보내지도 않는다 — 서버가 시트에서 직접 결정한다.
-
-   [v3.9] '현장 사진(증상·해결 후)'은 화면에서 삭제했다 — 전송 데이터 문제로
-   쓰지 않기로 했다. 서버·리포트의 CAUSE/AFTER 계약은 이미 쌓인 기록을 위해
-   그대로 두고, 이 화면은 장비 S/N 사진 한 장만 다룬다. */
-var RECORD_ID = '';          /* 기록 1건의 수명 동안 유지되는 조인 키 */
-var SN_PHOTO_ID = '';        /* 신규 경로의 clientPhotoId */
-var SN_PHOTO_FILE_ID = '';   /* 화면 상태 확인용 — 최종 payload 에는 싣지 않는다 */
-var SN_PHOTO_UPLOAD_STATE = 'idle';  /* idle|compress|upload|ok|err */
-var SN_PHOTO_UPLOAD_ERR = '';
-var SN_PHOTO_BYTES = 0, SN_PHOTO_UPLOAD_MS = 0;
-
-/* 교체 촬영이 빠르게 이어져도 모바일 회선과 GAS 실행 슬롯을 한꺼번에 점유하지
-   않게 사진 업로드 동시 실행을 2개로 제한한다. */
-var PHOTO_UPLOAD_LIMIT=2, PHOTO_UPLOAD_ACTIVE=0, PHOTO_UPLOAD_WAIT=[];
-function queuePhotoUpload(run){
-  return new Promise(function(resolve,reject){
-    PHOTO_UPLOAD_WAIT.push({run:run,resolve:resolve,reject:reject});
-    drainPhotoUploads();
-  });
-}
-function drainPhotoUploads(){
-  while(PHOTO_UPLOAD_ACTIVE<PHOTO_UPLOAD_LIMIT && PHOTO_UPLOAD_WAIT.length){
-    (function(job){
-      PHOTO_UPLOAD_ACTIVE++;
-      Promise.resolve().then(job.run).then(job.resolve,job.reject).then(function(){
-        PHOTO_UPLOAD_ACTIVE--; drainPhotoUploads();
-      });
-    })(PHOTO_UPLOAD_WAIT.shift());
-  }
-}
-
-function updatePhotoTransferState(){
-  var box=el('photoTransferState'); if(!box) return;
-  if(!SN_PHOTO_ID){
-    box.textContent='사진을 붙이면 선택 즉시 압축·업로드되어, 마지막 시트 기록 때 다시 전송하지 않습니다.';
-    return;
-  }
-  var size=SN_PHOTO_BYTES ? (' · 압축 후 '+(SN_PHOTO_BYTES/1024/1024).toFixed(1)+'MB') : '';
-  var timing=SN_PHOTO_UPLOAD_MS ? (' · '+(SN_PHOTO_UPLOAD_MS/1000).toFixed(1)+'초') : '';
-  box.textContent=SN_PHOTO_UPLOAD_STATE==='err' ? ('사진 업로드 실패'+size)
-    : (SN_PHOTO_UPLOAD_STATE==='ok'
-        ? ('사진 사전 업로드 완료'+size+timing+' · 시트 기록에는 사진을 다시 보내지 않습니다.')
-        : ('사진 압축·업로드 중'+size));
-}
-
 /* recordId 는 저장 성공 후 새 기록을 시작할 때만 새로 만든다.
-   savecheck·재전송까지 같은 값을 유지해야 서버가 같은 사진을 다시 찾을 수 있다. */
+   savecheck·재전송까지 같은 값을 유지해 중복 기록을 막는다. */
+var RECORD_ID = '';
 function recordId(){
-  if(!RECORD_ID) RECORD_ID = (window.BazPhoto ? BazPhoto.newRecordId() : newReqId());
+  if(!RECORD_ID) RECORD_ID = newReqId();
   return RECORD_ID;
 }
 function resetRecordId(){ RECORD_ID = ''; }
-
-/* 결과 불명에서도 사진 변경을 잠근다. 저장이 이미 끝났을 수 있는 recordId에
-   새 사진을 올리면 재확인 성공 뒤 그 사진이 다른 기록과 섞이거나 유실될 수 있다. */
-function photoControlsLocked(){
-  return SAVE_STATE===BazHandover.SAVE.SAVING ||
-         SAVE_STATE===BazHandover.SAVE.CHECKING ||
-         SAVE_STATE===BazHandover.SAVE.UNKNOWN;
-}
-
-/** 사진 1장 사전 업로드. 최종 저장에는 fileId가 아니라 clientPhotoId만 보낸다. */
-function uploadPhotoSlot(slot, kind){
-  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  var form=readForm();
-  var body={ action:'photo_add', recordId:recordId(), clientPhotoId:slot.id,
-             uploadReqId:(window.BazPhoto?BazPhoto.newUploadReqId():slot.id),
-             kind:kind, seq:slot.seq||1, hosp:form.hosp, sn:form.sn, date:form.date,
-             desc:slot.desc||'', dataUrl:slot.dataUrl, token:token };
-  slot.bytes=slot.bytes||(window.BazPhoto&&BazPhoto.dataUrlBytes?BazPhoto.dataUrlBytes(slot.dataUrl):0);
-  return queuePhotoUpload(function(){
-    var started=Date.now();
-    var ctl=('AbortController' in window)?new AbortController():null;
-    var timer=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, 30000):null;
-    return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify(body), signal:ctl?ctl.signal:undefined})
-      .then(function(r){ if(timer){clearTimeout(timer);timer=null;} return r.text(); })
-      .then(function(txt){
-        if(/^\s*</.test(txt)) throw new Error('서버가 데이터 대신 페이지를 보냈습니다 (잠시 후 재시도)');
-        var d; try{ d=JSON.parse(txt); }catch(e){ throw new Error('응답을 해석하지 못했습니다'); }
-        if(!d || d.success!==true) throw new Error((d&&d.error)||'업로드 실패');
-        slot.uploadMs=Date.now()-started;
-        return d.fileId||'';
-      })
-      .catch(function(e){ if(timer){clearTimeout(timer);timer=null;} throw e; });
-  });
-}
-
-/** 아직 기록에 연결되지 않은 사진은 서버에서도 폐기한다 */
-function abandonPhoto(photoId){
-  if(!photoId || !RECORD_ID) return Promise.resolve();
-  var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  try{
-    return fetch(postUrl(), {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({action:'photo_abandon', recordId:RECORD_ID, clientPhotoId:photoId, token:token})})
-      .then(function(r){ return r.text(); })
-      .then(function(txt){
-        var d; try{ d=JSON.parse(txt); }catch(e){ return; }
-        if(d && d.success===false) console.warn('[photo] 폐기 보류:', d.error||'알 수 없음');
-      }).catch(function(){});
-  }catch(e){ return Promise.resolve(); }
-}
-
-/* [경합] 사진 A 가 붙은 상태에서 B 로 교체하는 도중 저장하면 A 가 전송되거나,
-   B 변환이 끝난 뒤 저장 응답이 B 를 지울 수 있었다.
-   → 변환마다 세대 번호를 발급하고, 최신 세대의 결과만 SN_PHOTO 에 반영한다.
-     변환 중에는 저장 버튼을 잠근다(처리 중임을 aria-live 로도 알린다). */
-var snPhotoSeq=BazHandover.createSeq();
-var SN_PHOTO_BUSY=false;
-var LAST_SENT_PHOTO=null;       /* 응답 유실 뒤 재확인할 때도 어떤 사진을 보냈는지 유지 */
-
-function snPhotoSay(msg){
-  var st=el('snPhotoState'); if(st) st.textContent=msg||'';
-}
-function snPhotoBusy(on){
-  SN_PHOTO_BUSY=!!on;
-  var b=el('btnSave');
-  var stateLocked=(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING);
-  if(b){ b.disabled=!!on || stateLocked; if(on) b.textContent='⏳ 사진 처리 중…'; else if(!stateLocked) b.textContent='📥 시트 기록'; }
-  var z=el('snPhotoZone'); if(z) z.setAttribute('aria-busy', on?'true':'false');
-}
-
-/* 저장·결과 확인·결과 불명 중에는 서버로 보낸 사진을 교체하거나 지울 수 없게 한다.
-   결과 불명은 재확인 또는 동일 요청 재전송으로 먼저 해소해야 한다. */
-function syncPhotoControls(){
-  var locked=photoControlsLocked();
-  var f=el('snPhotoFile'), rm=el('snPhotoRemove'), rt=el('snPhotoRetry');
-  if(f) f.disabled=locked;
-  if(rm) rm.disabled=locked;
-  if(rt) rt.disabled=locked || SN_PHOTO_BUSY;
-  snPhotoBusy(SN_PHOTO_BUSY);
-}
-
-/* [v3.4] 저장이 끝나기 전에 창을 닫으면 올린 사진이 기록에 연결되지 않은 채 남는다.
-   업로드·저장 진행 중이거나 아직 연결되지 않은 사진이 있을 때만 경고한다
-   (평소에도 뜨면 사용자가 무시하게 된다). */
-function hasUnfinishedPhotoWork(){
-  if(SAVE_STATE===BazHandover.SAVE.SAVING || SAVE_STATE===BazHandover.SAVE.CHECKING) return true;
-  if(SN_PHOTO_BUSY) return true;
-  return !!SN_PHOTO;
-}
-window.addEventListener('beforeunload', function(e){
-  if(!hasUnfinishedPhotoWork()) return;
-  e.preventDefault();
-  e.returnValue='';       /* 문구는 브라우저가 정한다 */
-  return '';
-});
-
-function snPhotoRef(){
-  return (SN_PHOTO_UPLOAD_STATE==='ok' && SN_PHOTO_ID)
-    ? {clientPhotoId:SN_PHOTO_ID, kind:'SN', seq:1, desc:''} : null;
-}
-
-function uploadSnPhoto(photoId, generation){
-  if(!SN_PHOTO || !photoId) return Promise.reject(new Error('업로드할 S/N 사진이 없습니다'));
-  SN_PHOTO_UPLOAD_STATE='upload'; SN_PHOTO_UPLOAD_ERR='';
-  el('snPhotoLabel').textContent='⏳ S/N 사진 업로드 중…';
-  el('snPhotoRetry').style.display='none';
-  snPhotoSay('압축이 끝났습니다. 사진을 업로드하고 있습니다.');
-  snPhotoBusy(true);
-  var uploadSlot={id:photoId,seq:1,desc:'',dataUrl:SN_PHOTO,bytes:SN_PHOTO_BYTES,uploadMs:0};
-  return uploadPhotoSlot(uploadSlot, 'SN')
-    .then(function(fileId){
-      if(SN_PHOTO_ID!==photoId || (generation && !snPhotoSeq.isCurrent(generation))){
-        abandonPhoto(photoId); return;
-      }
-      SN_PHOTO_FILE_ID=fileId; SN_PHOTO_UPLOAD_STATE='ok'; SN_PHOTO_UPLOAD_MS=uploadSlot.uploadMs||0;
-      el('snPhotoLabel').textContent='✅ 업로드 완료 · 다시 누르면 교체';
-      snPhotoSay('S/N 사진 업로드가 완료되었습니다.');
-      clearFieldError('snPhoto'); snPhotoZoneState(); render();
-      updatePhotoTransferState();
-    })
-    .catch(function(e){
-      if(SN_PHOTO_ID!==photoId) return;
-      SN_PHOTO_UPLOAD_STATE='err'; SN_PHOTO_UPLOAD_ERR=String(e&&e.message||e);
-      el('snPhotoLabel').textContent='⚠️ S/N 사진 업로드 실패';
-      el('snPhotoRetry').style.display='inline-flex';
-      snPhotoSay('업로드에 실패했습니다: '+SN_PHOTO_UPLOAD_ERR);
-      toast('S/N 사진 업로드 실패 — 재시도해 주세요');
-      updatePhotoTransferState();
-    })
-    .finally(function(){ if(SN_PHOTO_ID===photoId) snPhotoBusy(false); });
-}
-
-function retrySnPhoto(){
-  if(!SN_PHOTO || !SN_PHOTO_ID || SN_PHOTO_BUSY) return;
-  uploadSnPhoto(SN_PHOTO_ID, null);
-}
-
-async function onSnPhoto(evt){
-  if(photoControlsLocked()){
-    evt.target.value='';
-    toast('기록 결과를 확인한 뒤 사진을 교체해 주세요');
-    return;
-  }
-  var file=evt.target.files&&evt.target.files[0];
-  evt.target.value='';                   /* 같은 파일 재선택도 동작하도록 초기화 */
-  if(!file) return;
-  var oldPhotoId=SN_PHOTO_ID, oldState=SN_PHOTO_UPLOAD_STATE;
-  var id=snPhotoSeq.next('photo');
-  var photoId=(window.BazPhoto?BazPhoto.newPhotoId():('sn_'+Date.now()));
-  SN_PHOTO_ID=photoId; SN_PHOTO_FILE_ID=''; SN_PHOTO_UPLOAD_STATE='compress'; SN_PHOTO_UPLOAD_ERR='';
-  var lab=el('snPhotoLabel');
-  lab.textContent='⏳ 사진 처리 중…';
-  snPhotoSay('사진을 처리하고 있습니다. 잠시만 기다려 주세요.');
-  snPhotoBusy(true);
-  try{
-    var packed=window.BazPhoto ? await BazPhoto.compress(file,{kind:'SN'}) : {dataUrl:await snPhotoToJpeg(file)};
-    var jpeg=packed.dataUrl;
-    if(!snPhotoSeq.isCurrent(id)) return;      /* 그 사이 다른 사진으로 바뀜 → 옛 결과 폐기 */
-    if(jpeg.length*3/4 > SNP_MAX_BYTES){
-      toast('사진 용량이 큽니다 — 조금 더 멀리서 다시 촬영해 주세요');
-      lab.textContent='📷 S/N 라벨 촬영 · 사진 선택';
-      snPhotoSay('사진이 너무 큽니다 — 다시 촬영해 주세요.');
-      return;
-    }
-    SN_PHOTO=jpeg;
-    SN_PHOTO_BYTES=packed.bytes||(window.BazPhoto&&BazPhoto.dataUrlBytes?BazPhoto.dataUrlBytes(jpeg):Math.floor(jpeg.length*3/4));
-    if(SAVED_SNAPSHOT) UNSAVED_PHOTO=true;
-    el('snPhotoImg').src=jpeg;
-    el('snPhotoPrev').style.display='block';
-    lab.textContent='⏳ S/N 사진 업로드 중…';
-    snPhotoSay('사진 압축이 끝났습니다. 업로드를 시작합니다.');
-    snPhotoZoneState();
-    render();
-    await uploadSnPhoto(photoId, id);
-    if(SN_PHOTO_UPLOAD_STATE==='ok' && oldPhotoId && oldState==='ok') abandonPhoto(oldPhotoId);
-  }catch(e){
-    if(!snPhotoSeq.isCurrent(id)) return;
-    SN_PHOTO_UPLOAD_STATE='err'; SN_PHOTO_UPLOAD_ERR=String(e&&e.message||e);
-    toast('사진 처리 실패 — '+e.message);
-    lab.textContent='📷 S/N 라벨 촬영 · 사진 선택';
-    snPhotoSay('사진 처리에 실패했습니다: '+e.message);
-  }finally{
-    if(snPhotoSeq.isCurrent(id) && SN_PHOTO_UPLOAD_STATE!=='upload') snPhotoBusy(false);
-  }
-}
-
-function clearSnPhoto(opts){
-  var keepServer=!!(opts && opts.keepServer);
-  var oldId=SN_PHOTO_ID, oldState=SN_PHOTO_UPLOAD_STATE;
-  snPhotoSeq.cancel();                 /* 진행 중이던 변환 결과가 되살아나지 않게 */
-  SN_PHOTO=null;
-  SN_PHOTO_ID=''; SN_PHOTO_FILE_ID=''; SN_PHOTO_UPLOAD_STATE='idle'; SN_PHOTO_UPLOAD_ERR='';
-  SN_PHOTO_BYTES=0; SN_PHOTO_UPLOAD_MS=0;
-  UNSAVED_PHOTO=false;
-  el('snPhotoImg').src='';
-  el('snPhotoPrev').style.display='none';
-  el('snPhotoLabel').textContent='📷 S/N 라벨 촬영 · 사진 선택';
-  el('snPhotoRetry').style.display='none';
-  snPhotoSay('');
-  snPhotoBusy(false);
-  snPhotoZoneState();
-  updatePhotoTransferState();
-  render();
-  if(!keepServer && oldId && oldState==='ok') abandonPhoto(oldId);
-}
-
-/* [v3.9] 사진은 선택 항목이라 '아직 안 붙였음'을 붉게 표시하지 않는다.
-   남은 것은 오류 강조(miss)를 걷어 내는 일뿐이다. */
-function snPhotoZoneState(){
-  var z=document.getElementById('snPhotoZone');
-  if(!z) return;
-  z.classList.remove('miss');
-}
-
-/* 사진 처리가 끝나기 전에 [시트 기록]을 누른 경우 — 해당 칸으로 데려가서 흔들어 알린다 */
-function flagMissingPhoto(){
-  var z=document.getElementById('snPhotoZone');
-  if(!z) return;
-  z.classList.add('miss');
-  try{ z.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){ z.scrollIntoView(); }
-  setTimeout(function(){ z.classList.remove('miss'); }, 1200);
-}
 
 /* 병원정보DB (index.html 임베드본 재사용: n=병원명 s=장비S/N c=N-Care sa=영업담당 r=지역) */
 var HOSPITAL_DB = [{"n": "아산본내과", "s": "BV2039", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "레픽의원", "s": "BWB055", "c": "Standard", "sa": "유비야", "r": "서울 / 경기"}, {"n": "루비의원", "s": "BW3011", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "메이저피부과의원 성신여대", "s": "BX7004", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "스노우의원 천안", "s": "BV4004", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "예젤의원", "s": "BW7003", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "셀린의원 하남미사", "s": "BWA038", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "스킨다피부과의원 본점", "s": "BYB016/NV46", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "포시즌의원", "s": "BWC013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "잇츠미의원 평택고덕점", "s": "BV5022", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "오가나셀피부과_동대문점", "s": "BW3007,BX4007", "c": "Premium", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터알의원", "s": "BWA005", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "르네의원", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "오아로피부과 성남", "s": "BX4016", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "에이포의원", "s": "BVB003", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "오체안피부과의원 신사", "s": "BV1007", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "뷰티온의원 인하대점", "s": "BW7002", "c": "미가입", "sa": "유비야", "r": "인천"}, {"n": "다태나의원", "s": "BXA007", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "임이석테마피부과의원", "s": "BX4030", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스누성형외과의원", "s": "BYA008", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "랑뜨산부인과의원", "s": "BV7010", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "모디헤어플란트의원", "s": "NV59", "c": "Premium", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오가나셀 피부과의원 본점 (청담)", "s": "BW4003/BX8014", "c": "Premium", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더셀피부과의원 강남본점", "s": "BX7018", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미세성형외과의원", "s": "BV5005", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "하오덤의원", "s": "", "c": "Basic", "sa": "한송이", "r": "서울 / 경기"}, {"n": "오운의원 구리", "s": "BW3014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더차오름의원", "s": "BX3017", "c": "Basic", "sa": "차성민", "r": "경상"}, {"n": "힐하우스피부과의원 대구", "s": "BVB040", "c": "미가입", "sa": "김한림", "r": "대구"}, {"n": "세예의원 강남", "s": "BW8050", "c": "Standard", "sa": "김민주", "r": "서울 / 경기"}, {"n": "벧엘피부과의원", "s": "BX8010", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "맑고고운라벨라의원", "s": "BX4026,BYB002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "봄여름가을겨울피부과의원", "s": "BYB015", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "프로젝트유의원", "s": "BW1013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "더힐피부과의원 마포공덕", "s": "BV5027", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "셀린의원 분당", "s": "BW3001", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "리더스피부과의원 압구정", "s": "BYB007", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스페이스피부과의원", "s": "BY8003", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "이오의원", "s": "BW1002", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "고운몸의원", "s": "BW1001", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "헤브피부과의원", "s": "BY8005", "c": "Basic", "sa": "차성민", "r": "인천"}, {"n": "오라클피부과의원 인천아라", "s": "BX8008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "신세계안피부과", "s": "BW7038", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "아름다운피부과의원 수원", "s": "BX8003", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "샤인빔의원 강서", "s": "BW7039", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "진스킨의원", "s": "BW1011", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "디오디피부과의원 용산", "s": "BX7005", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "고은미래의원 평택점", "s": "BW3006", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "디렉터피부과의원", "s": "BX3003", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 성북", "s": "BW9023", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 광교", "s": "BXA014", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "갤러리아피부과의원 개포도곡", "s": "BW9021", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "스노우의원 파주운정", "s": "BV5004", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "차오르다의원", "s": "BW9031", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "피에이치디피부과의원", "s": "BWB002", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오운의원 삼성", "s": "BW9026", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "뷰티스톤의원 합정", "s": "BWA091", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오마스의원", "s": "BWC005", "c": "Basic", "sa": "김민주", "r": "서울 / 경기"}, {"n": "톤즈의원 인천본점", "s": "BWB009", "c": "미가입", "sa": "손지윤", "r": "인천"}, {"n": "뮤즈의원 강남", "s": "BV1002", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "닥터송포유의원", "s": "BV2004", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "클럽미즈라미체의원 잠실", "s": "BW8045", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "이을성형외과의원", "s": "BW4012", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "오아로피부과의원 청량리", "s": "BW7026", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "바노바기피부과", "s": "BX3007", "c": "Standard", "sa": "유비야", "r": "서울 / 경기"}, {"n": "뷰커스의원 강서", "s": "BV9001", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "에이탑성형외과", "s": "BW8043", "c": "Basic", "sa": "유비야", "r": "서울 / 경기"}, {"n": "하늘호수피부과의원", "s": "BX4006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 신도림", "s": "BW9036", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "셀린의원 청주", "s": "BW9027", "c": "Basic", "sa": "유비야", "r": "대전 / 충청"}, {"n": "뉘앙스성형외과의원", "s": "BWA037", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "늘샤인의원", "s": "BVB002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 은평", "s": "BW9039", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아름다운피부과의원 부산", "s": "BW9015", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "리진의원", "s": "BV4005", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "그리니피부과의원", "s": "BWB033", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "강남뷰베스트의원", "s": "BX4020", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "제이에프셀피부과의원", "s": "BXC003", "c": "Basic", "sa": "이정국", "r": "서울 / 경기"}, {"n": "델타피부과의원", "s": "BW1017", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "바른빛피부과의원 오송", "s": "BW9024", "c": "미가입", "sa": "차성민", "r": "대전 / 충청"}, {"n": "청담리즈피부과의원", "s": "BX4001", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "김종서성형외과의원", "s": "BX3014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "비아이오성형외과", "s": "BXC009", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "휴먼피부과 평택", "s": "BYA003", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "제이뉴피부과의원", "s": "BWB026", "c": "미가입", "sa": "손지윤", "r": "제주"}, {"n": "더웰니스의원", "s": "BWB012 / BV9008", "c": "Cure pass", "sa": "차성민", "r": "서울 / 경기"}, {"n": "디파인피부과의원", "s": "BW7036", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미모드림의원", "s": "BYB014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "오수진피부과의원", "s": "BWA010", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "미뉴얼의원 천안아산본점", "s": "BWA011", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "올리본의원", "s": "BV4013", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "소사벌휴먼피부과의원", "s": "BW7001,BYA007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "에르네의원", "s": "BV2038", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "벤자민의원 명동", "s": "BXC014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "청담이엘피부과의원", "s": "BW3028", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "휴먼피부과 강서", "s": "BYB018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "오라클피부과의원 산본", "s": "BW8031", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "밴스의원 수원망포", "s": "BV2033", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "메이린의원 더현대서울", "s": "BX3012", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "성재영이즈피부과의원 부산서면", "s": "BXC013", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "강남오앤의원", "s": "BYA001", "c": "Basic", "sa": "이정국", "r": "서울 / 경기"}, {"n": "단아한미인의원", "s": "BX3005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "광혜원한방병원", "s": "BW3010", "c": "Basic", "sa": "차성민", "r": "인천"}, {"n": "루미나피부과의원", "s": "BW3029", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "성피부과의원", "s": "BYB026", "c": "미가입", "sa": "유비야", "r": "경상"}, {"n": "리멤버피부과의원 김포본점", "s": "BV1016", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "다빈치의원 구미", "s": "BWB066", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "노아피부과의원", "s": "BWA015", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "뮤즈의원 안산", "s": "BW8019", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "디렉터의원 대전", "s": "BWB062", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "킴벨피부과병원", "s": "BX4014", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "연세에이앤비피부과의원", "s": "BX7007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "첫번째의원", "s": "BWA012", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "가산연합의원", "s": "BX7002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "뷰티온의원 수원망포", "s": "BYA002", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "연세다안피부과의원", "s": "BXC016", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "연세캔버스피부과의원", "s": "BW8038", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울톤피부과의원 강남본점", "s": "BWB008", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 신사", "s": "BWC014", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "에피소드의원 잠실", "s": "BWA041", "c": "Basic", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미래피부과의원", "s": "BV5014", "c": "미가입", "sa": "김민주", "r": "전라"}, {"n": "유앤아이의원 천호", "s": "BV2036", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더힐피부과의원 신사본점", "s": "BXA012", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "다담한의원", "s": "01108(NV)", "c": "Basic", "sa": "김한림", "r": "전라"}, {"n": "서울원피부과의원 반포", "s": "BX7017", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 영등포", "s": "BWA051", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "에센셜의원", "s": "BVB036", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "광교 퍼스트피부과의원", "s": "BWA019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 위례", "s": "BW9016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "이상피부과의원", "s": "BX7003", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "비바덤의원", "s": "BV2201", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "아티움의원 청주", "s": "BW8051/BWC030", "c": "Basic", "sa": "유비야", "r": "충북"}, {"n": "닥터제이앤비의원", "s": "BV5006", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오킴스피부과의원 일산", "s": "BWA016", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "미지예피부과의원", "s": "BW9022", "c": "미가입", "sa": "김민주", "r": "전라"}, {"n": "닥터스피부과의원 광주상무", "s": "BXA020", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "맑은미피부과의원", "s": "BWA032", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "에이비피부과", "s": "BW8052", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "피어봄의원 강남", "s": "BY8003", "c": "미가입", "sa": "차성민", "r": "인천"}, {"n": "고운미피부과의원", "s": "BYA018", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "디렉터의원 울산", "s": "BWB047", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "제이유의원", "s": "BXA001", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "서울스마트피부과의원", "s": "BWB069", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "스키니크의원", "s": "BX8002", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "에젤피부과의원", "s": "BX4013", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더리턴피부과의원 서울마곡", "s": "BX7008", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "더바른피부과", "s": "BX4029", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "애플산부인과의원 성신여대", "s": "BV2003", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "시스템피부과의원", "s": "BW9030", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "닥터스피부과의원 잠실송파", "s": "BX7020", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "쏘울성형외과의원 의정부", "s": "BW8048", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "디렉터의원 강남", "s": "BVB039", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오가나셀피부과의원 마곡", "s": "BWC003", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "타임리스피부과 마포본점", "s": "BXC005", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "오블리브의원 송도본점", "s": "BW8044", "c": "Basic", "sa": "김한림", "r": "인천"}, {"n": "루아베피부과의원", "s": "BV4008", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "레지움피부과의원", "s": "BWB065", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울더맑은피부과", "s": "BW8023", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 강북본점", "s": "BXA002", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "더왈츠의원", "s": "BW8021", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 청주", "s": "BW3016", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "휴먼피부과의원 청라", "s": "BYB020", "c": "미가입", "sa": "유비야", "r": "인천"}, {"n": "해피부과의원", "s": "BV9005", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 광명철산", "s": "BWA018", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "베러스킨의원", "s": "BVC002", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 일산", "s": "BW4015", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "리더스피부과의원 청담", "s": "BYB008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "G5연합의원", "s": "BWA009", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더라움의원", "s": "BWB023", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 하남미사", "s": "BW4020", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "웰라스피부과의원", "s": "BW1016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 천안시청", "s": "BX3011", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "맑고고운시그니처의원", "s": "BW7025", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "더리즈의원 강남", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "에비뉴의원", "s": "BX7001", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "디오디피부과의원 청담본점", "s": "BW1003", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "클림의원 명동", "s": "BWC023", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 과천", "s": "BWB014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 노원", "s": "BW8013", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "메이린청담의원", "s": "BY8002", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "청담글래시피부과의원", "s": "BX3019", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "원클리닉의원", "s": "BW9029", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "아르네의원", "s": "BXA009", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "셀린의원 용인수지", "s": "BXC002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 다산", "s": "BW9019", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "데이뷰의원 인천구월", "s": "BWC008", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "아이디피부과의원", "s": "BW6001", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "리쥬의원", "s": "BYB006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "차앤박피부과의원 도곡양재", "s": "BWA007", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "서울뷰의원 평택", "s": "BW8042", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "이지함피부과의원 분당", "s": "BX7006", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "미애로여성의원 부천", "s": "BYB022", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "퓨어린의원 춘천", "s": "BV5002", "c": "Basic", "sa": "손지윤", "r": "강원"}, {"n": "스노우의원 글로벌", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "보스피부과", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "소유의원", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "닥터스피부과 영종도점", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "더원의원 여의도역점", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "후한의원 천안", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "해율한의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "스노우의원 일산", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "셀리데이의원", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "리움의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이룬의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "리드성형외과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "셀라성형외과의원", "s": "BV7035", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "그날성형외과의원", "s": "BV9014", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "해맑은피부과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "경남"}, {"n": "청담디어의원", "s": "BV4019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "파인트리피부과의원", "s": "BW8026", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "이승철피부과의원", "s": "", "c": "미가입", "sa": "김한림", "r": "전라"}, {"n": "하얀J피부과의원", "s": "BX4008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "봄눈피우다의원", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스킨피부과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "강원"}, {"n": "조아성형외과의원", "s": "BW3013", "c": "Basic", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "마곡튼튼소아청소년과의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "일치성형외과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "우아한피부과의원", "s": "BX4011", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "톤즈의원 용인", "s": "", "c": "Basic", "sa": "손지윤", "r": ""}, {"n": "연세마이미의원", "s": "BV2037", "c": "미가입", "sa": "이정국", "r": "인천"}, {"n": "글로리의원 강남", "s": "BXC007", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "뷰티온의원 강서", "s": "BX8009", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더원의원 서여의도", "s": "BWC019", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "서울미즈병원", "s": "", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "숲피부과의원", "s": "BW3012", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "파크뷰의원 청라", "s": "BV1013", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리베리의원 영종도", "s": "BWB016", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "르샤인의원 서초", "s": "", "c": "Basic", "sa": "손지윤", "r": ""}, {"n": "제이디의원 명동", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "오체안피부과의원 양주", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "더동안의원", "s": "BW9028", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "송도비앤미의원", "s": "BWC026", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "온오프피부과의원", "s": "BWC102", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "연세애드미피부과의원", "s": "BWC029", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "스노우의원 마곡", "s": "BWC103", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리멤버피부과의원 별내", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "아리엘의원", "s": "BX7009", "c": "미가입", "sa": "이정국", "r": "인천"}, {"n": "은평우태하피부과의원", "s": "BWC015", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "영종센트럴피부과의원", "s": "", "c": "미가입", "sa": "한송이", "r": "인천"}, {"n": "삼성필의원", "s": "BY3018", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "튠앤톤의원", "s": "BWC012", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "리베리의원 화성병점", "s": "BXC008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터쁘띠의원 명동", "s": "BYA011", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더신사의원", "s": "BX3018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아이원의원 범계", "s": "BWB024", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서울하나치과의원", "s": "S/N 없음", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오라클피부과의원 구월", "s": "BYB021", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "데이뷰의원 분당", "s": "BWB030", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "브라이트피부과의원", "s": "", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "노바피부과의원", "s": "BWB007", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "이지함피부과의원 이대", "s": "BWB004", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "신사인피부과의원", "s": "BWA039", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "파랑새피부과의원", "s": "BX4028", "c": "Standard", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "청담제이의원", "s": "BWA034", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "서울에스의원 서초교대역", "s": "BWA035", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "탑메디피부과", "s": "BX3016", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "뷰티젠의원", "s": "BWA012", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "엘레브의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "리뉴미피부과의원 화곡", "s": "BWB038", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "패러다임피부과의원", "s": "BW8013", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "닥터정리반의원", "s": "BX3017", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "선사은피부과의원", "s": "BWA026", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "트로피피부과의원", "s": "BWA022", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "리윤피부과의원", "s": "BWA024", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "엠공일의원", "s": "BYA014", "c": "미가입", "sa": "장비OUT", "r": "인천"}, {"n": "데이샤인의원", "s": "BWA020", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "힐하우스피부과의원 건대점", "s": "BX3006", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "다시온의원", "s": "BWA014", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "다이아몬드의원 인천부평", "s": "BX8001", "c": "미가입", "sa": "장비OUT", "r": "인천"}, {"n": "한나이브성형외과의원", "s": "BWA013", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "BR피부과의원", "s": "BWA008", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "청담플렉스피부과", "s": "BX3010", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "플러스피부과의원", "s": "BW3018", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "뷰티라운지의원 천안", "s": "BXA015", "c": "미가입", "sa": "", "r": "대전 / 충청"}, {"n": "멜로우피부과의원 천호", "s": "BWA006", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리퓨어피부과의원", "s": "BX3008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "휴먼피부과의원 청주", "s": "BW9035", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "더베이지의원", "s": "BW9002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "신상성형외과의원", "s": "BW9005", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "리슈어스의원", "s": "", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "엘앤비의원", "s": "", "c": "미가입", "sa": "", "r": "경상"}, {"n": "어울림피부과의원", "s": "BW9009", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이가인의원", "s": "BW9007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "타임의원", "s": "", "c": "미가입", "sa": "김민주", "r": "인천"}, {"n": "휴먼피부과의원 천안", "s": "BW9004", "c": "미가입", "sa": "유비야", "r": "대전 / 충청"}, {"n": "미포인트의원", "s": "BW9003", "c": "미가입", "sa": "김민주", "r": "경상"}, {"n": "휴먼피부과의원 광장", "s": "BYB024", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "아트인휴먼피부과의원", "s": "BW8046", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "리즈온의원 홍대점피부과", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "청담오케이성형외과의원", "s": "BW3008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "쁘띠365의원", "s": "", "c": "미가입", "sa": "", "r": "강원"}, {"n": "유앤아이의원 여의도", "s": "BW8029", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "쁘띠라인의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "라라피부과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "미래로피부과의원", "s": "BW8041", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "아이린피부과의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "박성현피부과", "s": "", "c": "미가입", "sa": "", "r": "전라"}, {"n": "로하스의원", "s": "BXA011", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 삼성점", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "닉스의원 대전", "s": "BW8012", "c": "미가입", "sa": "장비OUT", "r": "대전 / 충청"}, {"n": "최우식노즈립성형외과", "s": "BYB011", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "기분좋은피부과의원", "s": "BW7035", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "타임뷰의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 청담", "s": "BW7012", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 하남감일", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "바노바기의원 대전", "s": "BX4022", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "화이트피부과의원", "s": "BW4004", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "노블클래식의원 동탄", "s": "BW7004", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "오가예의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "한양마취통증의학과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "대전 / 충청"}, {"n": "아이니의원", "s": "BX4019", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "서울미라클피부과의원", "s": "BW7001", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "CNP차앤박피부과의원 성신여대", "s": "BX7015", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 청담", "s": "", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 대구범어", "s": "BW4013", "c": "미가입", "sa": "김한림", "r": "경상"}, {"n": "연세팜스의원 은평본점", "s": "BYB004", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 인천청라", "s": "BW4018", "c": "미가입", "sa": "김한림", "r": "인천"}, {"n": "CU클린업피부과의원 영등포", "s": "BW4016", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 삼성", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 노원", "s": "BW4017", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "CU클린업피부과의원 강남", "s": "BW4014", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "제이제이피부과", "s": "BW4011", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "잇츠미의원 안산", "s": "BW3030", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "모아트의원", "s": "75", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에버피부과의원", "s": "BV4017", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에미뜨의원 동탄", "s": "BW3008", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "더올의원", "s": "BW3009", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "범어로제피부과의원", "s": "BW3012", "c": "미가입", "sa": "장비OUT", "r": "경상"}, {"n": "셀린의원 다산점", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "시흥휴먼피부과의원", "s": "BYA016", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "노블피부과의원", "s": "", "c": "미가입", "sa": "", "r": "서울 / 경기"}, {"n": "새하얀피부과의원 은평", "s": "BW4005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "한사랑마취통증의학과의원", "s": "", "c": "미가입", "sa": "손지윤", "r": "강원"}, {"n": "아침정원의원", "s": "BW3004", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "닉스의원 천안", "s": "BW3002", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "닥터베이직의원", "s": "BYB001", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "닉스의원 수원", "s": "BW3003", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "피부사랑피부과의원 마포", "s": "", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "기쁨병원", "s": "BW8044", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "후즈후피부과의원 천호", "s": "BW1019", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "리베리의원 청주오창", "s": "BXC015", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "휴먼피부과의원 용산", "s": "BYB025", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "제이앤제이의원", "s": "", "c": "미가입", "sa": "김민주", "r": "대전 / 충청"}, {"n": "닥터스피부과의원 은평점", "s": "BXA019", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "뉴브의원", "s": "BW1017", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "오가나셀피부과의원 잠실점", "s": "BW1012", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "빛채운피부과의원", "s": "BW1005", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "강남닥터우성형외과의원", "s": "NV20", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "미소안의원", "s": "BX7012", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "바라봄의원", "s": "BX4012", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "셀피부과의원", "s": "BX7014", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "바른 피부과의원", "s": "BX4024", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "레브의원", "s": "BX4005", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "오라클피부과의원 천안신부", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "CNP차앤박피부과의원 천안아산", "s": "BYA009", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "이정헌피부과의원", "s": "", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "얼라이브피부과의원 반포본점", "s": "BXC004", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "닥터스피부과의원 이천", "s": "BW1004", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "더차오름의원 부산점", "s": "", "c": "미가입", "sa": "차성민", "r": "경상"}, {"n": "송도오라클피부과의원", "s": "BX8011", "c": "Basic", "sa": "김한림", "r": "인천"}, {"n": "리타임성형외과", "s": "", "c": "미가입", "sa": "손지윤", "r": ""}, {"n": "골든디아망성형외과의원", "s": "BWA036", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "오라클피부과의원", "s": "BYB003", "c": "미가입", "sa": "이정국", "r": "대전 / 충청"}, {"n": "예미원피부과의원", "s": "", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "동안중심의원", "s": "BX3002", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "피어봄의원 잠실", "s": "BYA012", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "뉴스타의원", "s": "", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "포레스트의원", "s": "BXC001", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "에이엘의원", "s": "BYA013", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "에스에이치성형외과의원", "s": "BXA013", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "장성형외과의원", "s": "BX8016", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "광피부과의원 청담", "s": "BX8017", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "미소가인피부과의원 김포", "s": "BX8018", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "빌라드스킨피부과의원", "s": "BX8015", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "더서울피부과의원", "s": "BX8013", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "리멤버피부과의원 이천", "s": "BX8007", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "나음피부과", "s": "BYA002", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "미모던피부과의원", "s": "BX7019", "c": "미가입", "sa": "장비OUT", "r": "서울 / 경기"}, {"n": "메이린의원 판교", "s": "BYB010", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "서아송피부과의원", "s": "BY8001", "c": "미가입", "sa": "이정국", "r": "서울 / 경기"}, {"n": "강남피어리의원", "s": "BX7013", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "베스탑비뇨기과의원 수원", "s": "BX7011", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "강동오아로피부과의원", "s": "BX7010", "c": "미가입", "sa": "유비야", "r": "서울 / 경기"}, {"n": "디의원", "s": "BYB029", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "아이오르의원", "s": "BW8014", "c": "Basic", "sa": "김한림", "r": "서울 / 경기"}, {"n": "청담엔케이피부과의원", "s": "BX4025", "c": "미가입", "sa": "김한림", "r": "서울 / 경기"}, {"n": "닥터손유나의원", "s": "BX4021", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "메이린의원 압구정점", "s": "NV13", "c": "미가입", "sa": "김민주", "r": "서울 / 경기"}, {"n": "힐링의원", "s": "BX4018", "c": "미가입", "sa": "손지윤", "r": "서울 / 경기"}, {"n": "조선대학교병원", "s": "", "c": "미가입", "sa": "손지윤", "r": "전라"}, {"n": "스킨딥의원", "s": "BX4015", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}, {"n": "룬피부과의원", "s": "BW4008", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "멜로우피부과의원 공덕", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "포커스성형외과의원", "s": "", "c": "미가입", "sa": "차성민", "r": "서울 / 경기"}, {"n": "미뉴얼의원 동탄", "s": "BWB018", "c": "미가입", "sa": "한송이", "r": "서울 / 경기"}];
@@ -1163,11 +838,7 @@ function rememberRecentHandover_(saved){
     localStorage.setItem('baz_recent_handover', JSON.stringify(out.slice(0,30)));
   }catch(e){}
 }
-/* ── 시트 웹앱 버전 확인 (진단 표시용) ────────────────────────────────
-   [수정] 예전에는 이 버전만 보고 "사진이 저장됐다"를 추측했다.
-   추측이 틀리면 사용자는 저장된 줄 알고 사진을 잃는다.
-   → 사진 저장 여부는 오직 서버 응답(photo.saved)으로만 판정한다.
-     버전은 배포 안내 문구에만 쓴다. */
+/* ── 시트 웹앱 버전 확인 (진단 표시용) ──────────────────────────────── */
 var GAS_VER='';
 function gasPing(){
   return bazGetJson(postUrl()+'?action=ping', 8000).then(function(res){
@@ -1185,19 +856,17 @@ function newReqId(){
 /* ═══ 저장 상태 기계 ═══════════════════════════════════════════════════════
    성공 / 실패 / 확인 중 / 결과 불명 을 명확히 구분한다.
    ★ "확인되지 않은 상태"에서는 다음을 절대 하지 않는다:
-       사진 삭제 · 복사/이어쓰기 활성화 · 최근 완료 로컬 기록 · 저장 완료 메시지 */
+       복사/이어쓰기 활성화 · 최근 완료 로컬 기록 · 저장 완료 메시지 */
 var FIELD_LABEL={eqKind:'장비 구분', verUI:'UI 버전', verHP:'HP 버전', nozzleDate:'노즐 제조일자',
                  result:'A/S 결과', remark:'비고', code:'유형 코드'};
 var SAVE_STATE=BazHandover.SAVE.IDLE;
 var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
-var UNSAVED_PHOTO=false;      /* 저장 뒤 새로 붙인 사진도 미저장 변경으로 취급 */
 var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
-var LAST_SAVE_PAYLOAD=null;   /* 결과 불명 재전송은 반드시 같은 reqId·사진을 재사용 */
+var LAST_SAVE_PAYLOAD=null;   /* 결과 불명 재전송은 반드시 같은 reqId를 재사용 */
 var LAST_SENT_SNAPSHOT=null;  /* 서버가 실제로 받은 업무 필드 — 응답 대기 중 편집과 분리 */
 
 function setSaveState(state, info){
   SAVE_STATE=state;
-  syncPhotoControls();
   var card=el('saveStatusCard'), box=el('saveStatus'), acts=el('saveActions');
   if(!card||!box||!acts) return;
   info=info||{};
@@ -1209,9 +878,9 @@ function setSaveState(state, info){
   else if(state===S.CHECKING){ title='기록 여부를 확인하는 중…'; sub='응답을 받지 못해 서버에 결과를 다시 물어보고 있습니다.'; }
   else if(state===S.SUCCESS){ cls='ok'; ic='✅'; title='시트에 기록되었습니다'+(info.row?' (행 '+info.row+')':'');
     sub=(info.warnings&&info.warnings.length) ? info.warnings.join('\n')
-      : (info.photoSaved ? '사진까지 저장을 확인했습니다.' : '사진 없이 기록했습니다.'); }
+      : '서버 저장을 확인했습니다.'; }
   else if(state===S.FAILED){ cls='err'; ic='❌'; title='기록되지 않았습니다';
-    sub=(info.error||'')+'\n입력한 내용과 사진은 그대로 남아 있습니다 — 원인을 확인한 뒤 다시 [시트 기록]을 눌러 주세요.'; }
+    sub=(info.error||'')+'\n입력한 내용은 그대로 남아 있습니다 — 원인을 확인한 뒤 다시 [시트 기록]을 눌러 주세요.'; }
   else { cls='unknown'; ic='⚠️'; title='기록 여부를 확인하지 못했습니다';
     sub=(info.error||'')+'\n시트에 저장됐는지 알 수 없어 성공으로 처리하지 않았습니다.'; }
   box.className='sv '+cls;
@@ -1242,7 +911,7 @@ function enableCopy(on){
 /* 저장 후 업무 필드가 바뀌면 "저장 후 변경됨" — 복사·이어쓰기를 다시 잠근다 */
 function refreshDirty(){
   if(!SAVED_SNAPSHOT){ document.body.classList.remove('is-dirty'); return false; }
-  var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm()) || UNSAVED_PHOTO;
+  var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm());
   document.body.classList.toggle('is-dirty', dirty);
   if(dirty){
     enableCopy(false);
@@ -1255,37 +924,23 @@ function refreshDirty(){
   return dirty;
 }
 
-/* 저장 결과 반영 — 성공일 때만 사진 삭제·복사 활성화·로컬 기록 */
+/* 저장 결과 반영 — 성공일 때만 복사 활성화·로컬 기록 */
 function applySaveResult(res){
   var S=BazHandover.SAVE;
   if(res.state===S.SUCCESS){
-    setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings, photoSaved:res.photoSaved});
+    setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings});
     var current=readForm();
     var sent=LAST_SENT_SNAPSHOT||BazHandover.snapshot(current);
     SAVED_SNAPSHOT=sent;
     LAST_REQ_ID='';
-    /* 결과 불명 상태에서 사용자가 새 사진을 붙인 뒤 수동 재확인할 수 있다.
-       서버가 저장한 옛 사진과 현재 사진이 다르면 현재 사진은 지우지 않고
-       '미저장 변경'으로 남긴다. */
-    var replacement=!!SN_PHOTO && !!LAST_SENT_PHOTO && SN_PHOTO!==LAST_SENT_PHOTO;
     var textChanged=BazHandover.isDirty(sent, current);
-    if(!replacement){
-      if(SN_PHOTO===LAST_SENT_PHOTO){
-        clearSnPhoto({keepServer:true});
-        /* 사진이 기록에 연결됐으므로 이 recordId 의 수명은 끝났다.
-           다음 기록은 새 recordId 로 시작해야 사진이 섞이지 않는다. */
-        resetRecordId();
-      }
-    }else{
-      UNSAVED_PHOTO=true;
-    }
-    var hasUnsaved=textChanged||replacement;
+    resetRecordId();
+    var hasUnsaved=textChanged;
     document.body.classList.toggle('is-dirty', hasUnsaved);
     enableCopy(!hasUnsaved);
     rememberRecentHandover_(sent);
-    if(hasUnsaved) BazHandover.saveDraft(localStorage, current, {hadPhoto:!!SN_PHOTO});
+    if(hasUnsaved) BazHandover.saveDraft(localStorage, current);
     else BazHandover.clearDraft(localStorage); /* 전송 뒤 바뀐 내용이 없을 때만 초안 정리 */
-    LAST_SENT_PHOTO=null;
     LAST_SAVE_PAYLOAD=null;
     LAST_SENT_SNAPSHOT=null;
     var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
@@ -1303,7 +958,6 @@ function applySaveResult(res){
       if(notSaved.length) toast('⚠️ 시트에 열이 없어 저장되지 않은 항목: '+notSaved.join(', '));
     }
   }else if(res.state===S.FAILED){
-    LAST_SENT_PHOTO=null;
     LAST_SAVE_PAYLOAD=null;
     LAST_SENT_SNAPSHOT=null;
     setSaveState(S.FAILED, {error:res.error});
@@ -1316,13 +970,6 @@ function applySaveResult(res){
   }
 }
 
-/** 이 payload 가 사진을 실었는가 — 서버 응답에서 사진 확인을 요구할지 정한다 */
-function payloadHasPhoto(p){
-  if(!p) return false;
-  if(p.snPhoto) return true;
-  return (p.photos||[]).some(function(x){ return String((x&&x.kind)||'').toUpperCase()==='SN'; });
-}
-
 /* 응답을 못 받은 요청이 실제로 기록됐는지 서버에 묻는다(인증된 조회) */
 function recheckSave(){
   if(!LAST_REQ_ID){ toast('확인할 요청이 없습니다'); return Promise.resolve(); }
@@ -1330,7 +977,7 @@ function recheckSave(){
   return bazGetJson(_tk(postUrl()+'?action=savecheck&reqId='+encodeURIComponent(LAST_REQ_ID)), 15000)
     .then(function(r){
       if(r.kind!=='json'){ setSaveState(BazHandover.SAVE.UNKNOWN, {error:'확인 요청이 실패했습니다'}); return; }
-      var v=BazHandover.classifySaveCheck(r.data, {photoSent:payloadHasPhoto(LAST_SAVE_PAYLOAD)});
+      var v=BazHandover.classifySaveCheck(r.data, {photoSent:false});
       if(v.notFound){
         setSaveState(BazHandover.SAVE.UNKNOWN, {error:'서버에 이 요청 기록이 없습니다 — 저장되지 않았을 가능성이 큽니다. 다시 [시트 기록]을 눌러 주세요.'});
         return;
@@ -1349,10 +996,9 @@ function startNewRecord(){
   SKILL={nsFill:'',nsAmt:'',jet:''};
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('on','warn'); b.setAttribute('aria-pressed','false'); });
   setHospSelection(null);
-  clearSnPhoto();
   resetRecordId();
   SAVED_SNAPSHOT=null; LAST_REQ_ID='';
-  UNSAVED_PHOTO=false; LAST_SENT_PHOTO=null; LAST_SAVE_PAYLOAD=null; LAST_SENT_SNAPSHOT=null;
+  LAST_SAVE_PAYLOAD=null; LAST_SENT_SNAPSHOT=null;
   document.body.classList.remove('is-dirty');
   enableCopy(false);
   setSaveState(BazHandover.SAVE.IDLE);
@@ -1365,12 +1011,11 @@ function startNewRecord(){
 }
 
 /* ── 검증 표시 ────────────────────────────────────────────────────────── */
-var FIELD_OF={ hosp:'hosp', fse:'fse', sn:'sn', cost:'cost', date:'date', snPhoto:'snPhotoZone',
+var FIELD_OF={ hosp:'hosp', fse:'fse', sn:'sn', cost:'cost', date:'date',
                detail:'detail', remark:'remark' };
 function clearFieldErrors(){
   document.querySelectorAll('.field.invalid').forEach(function(f){ f.classList.remove('invalid'); });
   document.querySelectorAll('.field-err').forEach(function(e){ e.remove(); });
-  var z=el('snPhotoZone'); if(z) z.classList.remove('invalid');
   var c=el('errorCard'); if(c) c.style.display='none';
 }
 function clearFieldError(name){
@@ -1378,7 +1023,6 @@ function clearFieldError(name){
   var node=el(id); if(!node) return;
   var f=node.closest ? node.closest('.field') : null;
   if(f){ f.classList.remove('invalid'); var e=f.querySelector('.field-err'); if(e) e.remove(); }
-  if(id==='snPhotoZone') node.classList.remove('invalid');
 }
 function showErrors(errors){
   clearFieldErrors();
@@ -1386,7 +1030,6 @@ function showErrors(errors){
   errors.forEach(function(er){
     var id=FIELD_OF[er.field]; if(!id) return;
     var node=el(id); if(!node) return;
-    if(id==='snPhotoZone') node.classList.add('invalid');
     var f=node.closest ? node.closest('.field') : null;
     if(!f) return;
     f.classList.add('invalid');
@@ -1410,7 +1053,6 @@ function focusField(name){
   var id=FIELD_OF[name]; if(!id) return;
   var node=el(id); if(!node) return;
   try{ node.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ node.scrollIntoView(); }
-  if(id==='snPhotoZone'){ flagMissingPhoto(); return; }
   try{ node.focus({preventScroll:true}); }catch(e){ try{ node.focus(); }catch(_){} }
 }
 
@@ -1429,16 +1071,12 @@ async function saveToSheet(){
   }
 
   var form=readForm();
-  /* [v3.9] 장비 S/N 사진은 선택 — 붙이지 않아도 저장할 수 있다.
-     붙이는 중(압축·업로드)일 때만 저장을 막는다. */
-  var v=BazHandover.validate(form, {photoRequired:false,
-    hasPhoto:SN_PHOTO_UPLOAD_STATE==='ok', photoBusy:SN_PHOTO_BUSY,
-    photoPending:!!SN_PHOTO && SN_PHOTO_UPLOAD_STATE!=='ok'});
+  var v=BazHandover.validate(form);
   if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
   clearFieldErrors();
 
   /* 같은 내용을 다시 저장해 중복 행을 만들지 않는다 */
-  if(BazHandover.isSameAsSaved(SAVED_SNAPSHOT, form) && !UNSAVED_PHOTO){
+  if(BazHandover.isSameAsSaved(SAVED_SNAPSHOT, form)){
     toast('이미 시트에 기록된 내용입니다.\n내용을 바꾸거나 [새 기록 시작]을 눌러 주세요');
     return;
   }
@@ -1449,19 +1087,11 @@ async function saveToSheet(){
     if(!window.confirm('로그인 사용자('+me+')와 담당 FSE('+form.fse+')가 다릅니다.\n다른 담당자 이름으로 기록할까요?\n(로그인 계정은 감사용으로 함께 기록됩니다)')) return;
   }
 
-  /* [v3.4] 최종 저장의 reqId 는 recordId 와 같은 값이다 — 사진이 이 키로 이미
-     올라가 있으므로 다른 값을 쓰면 서버가 사진을 찾지 못한다. */
+  /* 최종 저장과 결과 확인은 같은 reqId를 사용한다. */
   var reqId=recordId();
   LAST_REQ_ID=reqId;
   var token=''; try{ token=(window.BazAuth&&BazAuth.token)?BazAuth.token():''; }catch(e){}
-  /* [v3.4.1] S/N 사진은 photo_add 로 미리 올렸으므로 최종 저장에는 clientPhotoId
-     참조만 보낸다. 기존 snPhoto Base64 수신은 서버 하위 호환으로만 남긴다.
-     [v3.9] photoRequired 는 "이 요청에 사진을 실었다"는 선언이다 — 붙였는데
-     payload 에서 빠진 사고를 서버가 잡아내되, 안 붙인 기록은 그대로 통과한다. */
-  var snRef=snPhotoRef();
-  var payload=BazHandover.buildPayload(form, {photo:'', photoRequired:!!snRef,
-    reqId:reqId, token:token, photos:(snRef?[snRef]:[])});
-  LAST_SENT_PHOTO=SN_PHOTO;
+  var payload=BazHandover.buildPayload(form, {reqId:reqId, token:token});
   LAST_SENT_SNAPSHOT=BazHandover.snapshot(form);
   LAST_SAVE_PAYLOAD=payload;
 
@@ -1490,13 +1120,12 @@ async function submitSavePayload(payload){
     setSaveState(BazHandover.SAVE.UNKNOWN, {error:String(e&&e.message||e)});
   }finally{
     btn.disabled=false; btn.textContent='📥 시트 기록';
-    syncPhotoControls();
   }
 }
 
 /* POST 1회 — 타임아웃 포함. 응답을 해석해 저장 상태로 돌려준다. */
 function postSave(payload, ms){
-  var opts={photoSent:payloadHasPhoto(payload)};
+  var opts={photoSent:false};
   var ctl=('AbortController' in window)?new AbortController():null;
   var t=ctl?setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, ms||25000):null;
   var opt={method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload)};
@@ -1516,17 +1145,16 @@ function postSave(payload, ms){
 
 /* ── 초안(로컬 임시저장) ───────────────────────────────────────────────
    공용 PC 를 고려하지 않으므로 적극적으로 남긴다. 새로고침·실수로 메뉴 이동 후
-   돌아와도 작성 중이던 내용을 잃지 않는다. 사진 원문은 담지 않는다(용량). */
+   돌아와도 작성 중이던 내용을 잃지 않는다. */
 var draftTimer=null;
 function scheduleDraftSave(){
   if(draftTimer) clearTimeout(draftTimer);
   draftTimer=setTimeout(function(){
     draftTimer=null;
-    /* 시트에 기록이 끝났고 그 뒤로 바뀐 게 없다면 초안을 다시 만들지 않는다.
-       (저장 성공 → clearSnPhoto → render 경로가 방금 지운 초안을 되살리던 문제) */
+    /* 시트에 기록이 끝났고 그 뒤로 바뀐 게 없다면 초안을 다시 만들지 않는다. */
     var form=readForm();
     if(SAVED_SNAPSHOT && !BazHandover.isDirty(SAVED_SNAPSHOT, form)) return;
-    BazHandover.saveDraft(localStorage, form, {hadPhoto:!!SN_PHOTO});
+    BazHandover.saveDraft(localStorage, form);
   }, 600);
 }
 function offerDraftRestore(){
@@ -1536,7 +1164,6 @@ function offerDraftRestore(){
   var when='';
   try{ when=new Date(d.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){}
   bar.innerHTML='💾 작성 중이던 내용이 있습니다'+(when?' ('+escH(when)+')':'')+
-    (d.hadPhoto?'<br>※ 사진은 저장되지 않습니다 — 필요하면 복원 후 다시 첨부해 주세요.':'')+
     '<div class="acts"><button type="button" id="draftRestore">이어서 작성</button>'+
     '<button type="button" id="draftDiscard">새로 작성</button></div>';
   bar.style.display='block';
@@ -1566,8 +1193,6 @@ function restoreDraft(d){
   if(f.snCustom) setVal('snCustom', f.snCustom);
   SKILL={nsFill:f.nsFill||'', nsAmt:f.nsAmt||'', jet:f.jet||''};
   syncSkillButtons();
-  /* 사진은 초안에 담지 않는다(용량) — 복원되지 않는다는 것만 알린다(첨부는 선택) */
-  snPhotoSay('사진은 복원되지 않습니다 — 필요하면 장비 S/N 사진을 다시 첨부해 주세요.');
   updClear(); render();
   toast('작성 중이던 내용을 복원했습니다');
 }
@@ -1861,12 +1486,6 @@ function bindAll(){
     }
     if(e.key==='Escape'){ if(hospDropOpen()){ e.preventDefault(); closeHospDrop(); } }
   });
-
-  /* 사진 */
-  el('snPhotoFile').addEventListener('change', onSnPhoto);
-  el('snPhotoRemove').addEventListener('click', clearSnPhoto);
-  el('snPhotoRetry').addEventListener('click', retrySnPhoto);
-  updatePhotoTransferState();
 
   /* 숙련도 세그먼트 */
   document.querySelectorAll('.seg-btn[data-skill]').forEach(function(b){

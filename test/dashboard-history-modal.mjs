@@ -54,7 +54,7 @@ const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','cos
   'exHistoryCycleSummary_','exHistoryCycleGapsHtml_','exHistoryCycleTrendHtml_',
   'exHistoryCycleSummaryHtml_','exHistoryCycleTable_','exHistoryCycleTsv_',
   'exHistoryComparisonMeta_','exHistoryElapsed_','exHistorySort_','exHistoryCostSort_',
-  'exHistoryDataset_','exHistoryGroupList_','exHistoryGroupRows_','exHistoryGrouped_',
+  'exHistoryDataset_','exHistoryIsLatest_','exHistoryGroupList_','exHistoryGroupRows_','exHistoryGrouped_',
   'exHistoryRows_','exHistoryCostRows_','exCostSum_','exCostChip_',
   'exHistoryField_','exHistoryUnique_','exHistoryCounts_','exHistoryBreakdownHtml_',
   'exHistoryParseQuery_','exHistorySearchText_','exHistoryMatchToken_','exHistoryMatchQuery_','exHistoryFilter_',
@@ -714,8 +714,8 @@ ck('40. 병원별 보기에서 period select 는 비활성화되고 행 보기�
   setVal(D,'hstPeriod','all'); D.exApplyHistoryFilters_();
   D.exSetHistoryView_('hosp');
   assert.equal(D.dom.els.hstPeriod.disabled,true);
-  assert.equal(D.dom.els.hstPeriod.value,'cur');
-  assert.equal(D.state().period,'cur');
+  assert.equal(D.dom.els.hstPeriod.value,'latest');
+  assert.equal(D.state().period,'latest');
   assert.ok(D.dom.els.hstViewNote.textContent.includes('기간 내 원본 처리 건수 기준'));
   D.exSetHistoryView_('rows');
   assert.equal(D.dom.els.hstPeriod.disabled,false);
@@ -1858,7 +1858,7 @@ ck('116. 개선 후 재발이 없으면 중앙값 대신 관찰 중으로 적는
   assert.equal(C.summary.noRecurAfter,1);
 });
 
-ck('117. 카드 단위 전체화면은 그 카드만 덮고 Esc 로 되돌아온다',()=>{
+ck('117. 재발 원인 카드 전체화면은 유지하고 원인 분석 3개 카드에서는 제거한다',()=>{
   const D=build();
   /* 스텁 DOM 에 카드 하나를 만들어 토글만 확인한다 */
   const card=D.dom.ensure('exLeakRiskCard'), btn=D.dom.ensure('exLeakRiskCardFull','button');
@@ -1870,9 +1870,12 @@ ck('117. 카드 단위 전체화면은 그 카드만 덮고 Esc 로 되돌아온
   assert.equal(D.exToggleCardFull_('exLeakRiskCard',false),false);
   assert.equal(card.classList.contains('is-full'),false);
   assert.ok(btn.textContent.includes('전체화면'));
-  /* 원인 분석 3장 + 재발 원인 2장이 모두 버튼을 갖는다 */
-  ['exTypeCard','exPartCard','exCauseArmCard','exLeakRiskCard','exLeakChangeCard'].forEach(id=>{
+  /* 재발 원인 2장은 유지하고 원격 main에서 제거된 원인 분석 3장은 되살리지 않는다. */
+  ['exLeakRiskCard','exLeakChangeCard'].forEach(id=>{
     assert.match(SRC,new RegExp("exCardFullBtn_\\('"+id+"'\\)"),id+' 전체화면 버튼');
+  });
+  ['exTypeCard','exPartCard','exCauseArmCard'].forEach(id=>{
+    assert.doesNotMatch(SRC,new RegExp("exCardFullBtn_\\('"+id+"'\\)"),id+' 전체화면 버튼 제거');
   });
   assert.match(SRC,/\.ex-card\.is-full\{position:fixed;inset:0/);
 });

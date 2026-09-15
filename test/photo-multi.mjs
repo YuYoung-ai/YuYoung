@@ -219,8 +219,9 @@ ck('사진 3장 상태는 사진별 쓰기가 아니라 한 범위 setValues 로
 ck('행 확정 전 실패는 같은 recordId의 재시도를 막는 캐시에 저장하지 않는다',
   (doPost.match(/reqPut_\(reqId/g)||[]).length === 1 &&
   doPost.indexOf('reqPut_(reqId') > doPost.indexOf('var out ='));
-ck('클라이언트는 S/N 사진 참조만 보내고 base64는 최종 payload에서 제외한다',
-  /photo:''/.test(H) && /photos:\(snRef\?\[snRef\]:\[\]\)/.test(H));
+ck('handover 클라이언트는 S/N 사진 데이터와 참조를 보내지 않는다',
+  /buildPayload\(form, \{reqId:reqId, token:token\}\)/.test(H) &&
+  !/snPhotoRef/.test(H) && !/photo_add/.test(H));
 ck('최종 저장 실패 시 사진을 즉시 삭제하지 않는다(ORPHAN 유지 → 재시도 가능)',
   !/photoDiscard_\(linkPhotos/.test(doPost) && /photo-ref-invalid/.test(doPost));
 ck('클라이언트는 저장 실패 후에도 같은 recordId 를 유지한다',
@@ -235,11 +236,9 @@ ck('photo_abandon 이 존재하고 knownActions 에 등록돼 있다',
   /function photoAbandon_/.test(G) && /'photo_add','photo_abandon'/.test(G));
 ck('연결 완료(OK)된 사진은 abandon 으로 지울 수 없다',
   /if\(hit\.status === SNAP\.ST_OK\)\{[\s\S]{0,120}이미 기록에 연결된 사진은 폐기할 수 없습니다/.test(grab(G, 'photoAbandon_')));
-ck('사진 삭제 시 클라이언트가 abandon 을 호출한다',
-  /action:'photo_abandon'/.test(H) && /function clearSnPhoto/.test(H) &&
-  /abandonPhoto\(oldId\)/.test(grab(H, 'clearSnPhoto')));
-ck('교체는 삭제 후 새 clientPhotoId 를 발급한다',
-  /BazPhoto\.newPhotoId\(\)/.test(H));
+ck('handover 클라이언트의 사진 삭제·교체 동작을 제거한다',
+  !/action:'photo_abandon'/.test(H) && !/function clearSnPhoto/.test(H) &&
+  !/BazPhoto\.newPhotoId\(\)/.test(H));
 ck('cleanupOrphanPhotos 가 오래된 ORPHAN 만 정리한다',
   /function cleanupOrphanPhotos\(maxAgeHours\)/.test(G) &&
   /if\(r\.status === SNAP\.ST_OK\)\{ kept\+\+; return; \}/.test(grab(G, 'cleanupOrphanPhotos')));
@@ -671,20 +670,8 @@ ck('목표 용량: S/N 600~900KB · 원인 400~700KB',
   ck('풀 실행: 재시도는 실패분만 다시 실행한다(성공분 재전송 없음)',
     r2.ran.join() === 'c' && Object.keys(r2.results).sort().join() === 'a,b,c,d,e');
 }
-{
-  const queuePhotoUpload = new Function(
-    'var PHOTO_UPLOAD_LIMIT=2, PHOTO_UPLOAD_ACTIVE=0, PHOTO_UPLOAD_WAIT=[];\n' +
-    grab(H, 'queuePhotoUpload') + '\n' + grab(H, 'drainPhotoUploads') +
-    '; return queuePhotoUpload;')();
-  let live=0, peak=0;
-  const jobs=[1,2,3,4,5].map(i => queuePhotoUpload(() => {
-    live++; peak=Math.max(peak,live);
-    return new Promise(resolve => setTimeout(() => { live--; resolve(i); }, 5));
-  }));
-  const out=await Promise.all(jobs);
-  ck('화면 전체 업로드 큐 실행: S/N·증상·해결 후를 합쳐 동시 2개 이하',
-    peak===2 && out.join(',')==='1,2,3,4,5');
-}
+ck('handover 화면에 사진 업로드 큐가 남아 있지 않다',
+  !/function queuePhotoUpload/.test(H) && !/function uploadPhotoSlot/.test(H));
 
 /* ══════════ 9. 기존 계약 보존 ══════════ */
 section('기존 기능 보존');
@@ -692,29 +679,23 @@ section('기존 기능 보존');
 ck('기존 snPhoto(base64) payload 호환을 유지한다',
   /snPhoto: opts\.photo \|\| '',/.test(read('js/baz-handover-core.js')) &&
   /payload\.snPhoto/.test(doPost));
-ck('[v3.9] S/N 사진 없이도 저장할 수 있다(선택 항목)',
+ck('S/N 사진 없이 저장할 수 있다',
   BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: false }).ok === true &&
-  /photoRequired:false/.test(H));
+  /BazHandover\.validate\(form\)/.test(H));
 ck('원인 사진 최대 5장을 클라이언트·서버가 같은 값으로 강제한다',
   BazHandover.MAX_CAUSE_PHOTOS === 5 && /MAX_CAUSE : 5/.test(G) &&
   BazPhoto.MAX_CAUSE === 5);
 ck('사진을 처리하는 중에는 저장을 막는다',
   BazHandover.validate({ hosp: 'A', fse: 'B', sn: 'C' }, { hasPhoto: false, photoBusy: true })
     .errors.some(e => e.field === 'snPhoto'));
-ck('저장 완료 전 화면을 닫으면 경고한다',
-  /beforeunload/.test(H) && /function hasUnfinishedPhotoWork/.test(H) &&
-  /return !!SN_PHOTO;/.test(H));
-ck('S/N 사진도 개별 압축·업로드 후 참조로 최종 저장한다',
-  /BazPhoto\.compress\(file,\{kind:'SN'\}\)/.test(H) &&
-  /uploadPhotoSlot\([^\n]+, 'SN'\)/.test(H) && /function snPhotoRef/.test(H));
+ck('handover의 사진 업로드 종료 경고를 제거한다',
+  !/function hasUnfinishedPhotoWork/.test(H) && !/SN_PHOTO/.test(H));
+ck('handover에서 S/N 사진 압축·업로드·참조 생성을 제거한다',
+  !/BazPhoto\.compress/.test(H) && !/uploadPhotoSlot/.test(H) && !/function snPhotoRef/.test(H));
 ck('브라우저 압축은 실제 canvas.toBlob 경로를 사용한다',
   /canvas\.toBlob\(/.test(PHOTO_SRC) && /function blobDataUrl/.test(PHOTO_SRC));
-ck('S/N 사진 칸이 압축·업로드·완료·실패·재시도 상태를 알린다',
-  /사진 처리 중…/.test(H) && /S\/N 사진 업로드 중…/.test(H) &&
-  /업로드 완료/.test(H) && /사진 업로드 재시도/.test(H));
-ck('실제 업로드 동시 실행은 2개로 제한한다',
-  /PHOTO_UPLOAD_LIMIT=2/.test(H) && /function queuePhotoUpload/.test(H) &&
-  /return queuePhotoUpload\(function\(\)/.test(grab(H, 'uploadPhotoSlot')));
+ck('handover에서 S/N 사진 UI와 상태 문구를 제거한다',
+  !/id="snPhotoFile"/.test(H) && !/사진 업로드 재시도/.test(H) && !/업로드 완료/.test(H));
 ck('[v3.9] 현장 사진 촬영 화면이 남김없이 사라졌다',
   !/cause-grid/.test(H) && !/CAUSE_KINDS/.test(H) && !/causeFile_/.test(H) &&
   !/capture="environment"/.test(H) && !/CAUSE_SLOTS/.test(H));

@@ -141,14 +141,6 @@ async function fillForm(hosp = '테스트병원') {
   await page.fill('#cost', '1,650,000');
   await page.waitForTimeout(200);
 }
-async function attachPhoto() {
-  await page.setInputFiles('#snPhotoFile', {
-    name: 'sn.png', mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
-  });
-  await page.waitForTimeout(600);
-}
-
 /* 1. 부트스트랩 1콜 · 토큰 · DB 배지 */
 const boot = await page.evaluate(() => ({
   badge: document.getElementById('dbBadge').textContent,
@@ -161,12 +153,9 @@ ck('현장 사진·문구 UI 가 화면에 남아 있지 않다', await page.eva
   !document.getElementById('causeGrid') && !document.getElementById('phraseBox') &&
   !document.getElementById('phraseAdminBtn') && !document.getElementById('pmModal') &&
   !document.querySelector('input[capture]')));
-ck('장비 S/N 사진 칸은 필수 배지 없이 선택으로 안내한다', await page.evaluate(() => {
-  const lab = document.querySelector('label[for="snPhotoFile"]');
-  const zone = document.getElementById('snPhotoZone');
-  return !!lab && lab.textContent.includes('선택') && !lab.querySelector('.req') &&
-         !!zone && !zone.classList.contains('need');
-}));
+ck('장비 S/N 입력은 유지하고 사진 업로드 UI는 제거한다', await page.evaluate(() =>
+  !!document.getElementById('sn') && !!document.getElementById('snCustom') &&
+  !document.getElementById('snPhotoFile') && !document.getElementById('snPhotoZone')));
 
 /* 2. 병원 선택 → 종속 필드 채워짐 → 이름 수정 시 초기화 */
 await fillForm();
@@ -198,7 +187,7 @@ const preview = await page.evaluate(() => {
 ck('쉼표 비용이 NaN 없이 표시된다', preview.includes('1,650,000원') && !preview.includes('NaN'));
 await page.evaluate(() => document.getElementById('tplA').click());
 
-/* 4. 사진 없이 저장 → [v3.9] 사진은 선택이므로 그대로 기록된다 */
+/* 4. 사진 기능 없이 저장 */
 const before = postCount;
 await page.click('#btnSave');
 await page.waitForTimeout(1500);
@@ -206,99 +195,22 @@ const noPhoto = await page.evaluate(() => ({
   state: document.getElementById('saveStatus').className,
   text: document.getElementById('saveStatus').textContent,
   errShown: document.getElementById('errorCard').style.display,
-  zoneInvalid: document.getElementById('snPhotoZone').classList.contains('invalid'),
   copyDisabled: document.getElementById('btnCopy').disabled
 }));
-ck('사진 없이도 기록되고 복사·이어쓰기가 열린다',
+ck('기록되고 복사·이어쓰기가 열린다',
   postCount === before + 1 && noPhoto.state.includes('ok') &&
-  noPhoto.errShown === 'none' && !noPhoto.zoneInvalid && !noPhoto.copyDisabled,
+  noPhoto.errShown === 'none' && !noPhoto.copyDisabled,
   JSON.stringify(noPhoto));
-ck('사진 없이 기록했음을 상태에 밝힌다', noPhoto.text.includes('사진 없이 기록했습니다'), noPhoto.text);
+ck('저장 확인 상태를 표시한다', noPhoto.text.includes('서버 저장을 확인했습니다'), noPhoto.text);
 const noPhotoPayload = finalSaveRequests.at(-1) || {};
-ck('사진 없는 요청은 사진 첨부를 선언하지 않는다',
+ck('요청은 사진 첨부를 선언하지 않는다',
   noPhotoPayload.photoRequired === false && Array.isArray(noPhotoPayload.photos) &&
   noPhotoPayload.photos.length === 0 && noPhotoPayload.snPhoto === '',
   JSON.stringify({ r: noPhotoPayload.photoRequired, n: (noPhotoPayload.photos || []).length }));
 
-/* 5. 사진 첨부 → 사진 실패 시 사진 유지 · 복사/이어쓰기 비활성 */
+/* 5. 응답 유실 → 결과 불명 (성공으로 처리하지 않음) */
 await page.evaluate(() => startNewRecord());
 await fillForm();
-await attachPhoto();
-
-const uploadedKinds = photoAddRequests.slice(-1).map(p => p.kind);
-ck('S/N 사진은 photo_add 로 먼저 업로드한다', uploadedKinds.join(',') === 'SN', JSON.stringify(uploadedKinds));
-ck('사진은 최종 기록 전에 사전 업로드 완료로 표시된다',
-  (await page.textContent('#photoTransferState')).includes('사전 업로드 완료'),
-  await page.textContent('#photoTransferState'));
-
-/* 앞의 '사진 없이 저장' 성공이 남긴 기록과 구분하기 위해 실패 직전 값을 잡아 둔다 */
-const recentBeforeFail = await page.evaluate(() => localStorage.getItem('baz_recent_handover'));
-scenario = 'photofail';
-await page.click('#btnSave');
-await page.waitForTimeout(1200);
-const firstFinalPayload = finalSaveRequests.at(-1) || {};
-ck('최종 저장에는 Base64 없이 S/N 사진 참조만 보낸다',
-  firstFinalPayload.snPhoto === '' && Array.isArray(firstFinalPayload.photos) &&
-  firstFinalPayload.photos.length === 1 &&
-  firstFinalPayload.photos[0].kind === 'SN' && firstFinalPayload.photoRequired === true &&
-  firstFinalPayload.photos.every(p => !Object.prototype.hasOwnProperty.call(p, 'fileId')),
-  JSON.stringify(firstFinalPayload.photos));
-const photoFail = await page.evaluate(() => ({
-  state: document.getElementById('saveStatus').className,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
-  copyDisabled: document.getElementById('btnCopy').disabled,
-  contDisabled: document.getElementById('btnCont').disabled,
-  recent: localStorage.getItem('baz_recent_handover')
-}));
-ck('사진 저장 실패 시 사진 미리보기가 유지된다', photoFail.photoShown === 'block', JSON.stringify(photoFail));
-ck('사진 실패 시 복사·이어쓰기가 활성화되지 않는다', photoFail.copyDisabled && photoFail.contDisabled);
-ck('사진 실패 시 실패 상태로 표시된다', photoFail.state.includes('err'));
-ck('사진 실패 시 최근 완료를 로컬에 남기지 않는다', photoFail.recent === recentBeforeFail,
-  String(photoFail.recent).slice(0, 60));
-
-/* 6. success:true 인데 사진 미저장 → 실패로 판정 */
-scenario = 'photolie';
-await page.click('#btnSave');
-await page.waitForTimeout(1200);
-const lie = await page.evaluate(() => ({
-  state: document.getElementById('saveStatus').className,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
-  copyDisabled: document.getElementById('btnCopy').disabled
-}));
-ck('success:true 라도 사진 미저장이면 성공으로 표시하지 않는다',
-  lie.state.includes('err') && lie.photoShown === 'block' && lie.copyDisabled, JSON.stringify(lie));
-
-/* 6-b. 구버전 GAS가 photo 블록 없이 success:true → 실패 */
-scenario = 'legacyphoto';
-await page.click('#btnSave');
-await page.waitForTimeout(1200);
-const legacy = await page.evaluate(() => ({
-  state: document.getElementById('saveStatus').className,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
-  copyDisabled: document.getElementById('btnCopy').disabled
-}));
-ck('photo 확인 블록 없는 구버전 성공 응답을 거부한다',
-  legacy.state.includes('err') && legacy.photoShown === 'block' && legacy.copyDisabled,
-  JSON.stringify(legacy));
-
-/* 6-c. 저장 진행 중 사진 교체·삭제 잠금 */
-scenario = 'slowok';
-const slowSave = page.click('#btnSave');
-await page.waitForFunction(() => document.getElementById('saveStatus').classList.contains('wait'));
-const lockedPhoto = await page.evaluate(() => ({
-  file: document.getElementById('snPhotoFile').disabled,
-  remove: document.getElementById('snPhotoRemove').disabled,
-  save: document.getElementById('btnSave').disabled
-}));
-ck('저장 진행 중 사진 입력·삭제·저장 버튼이 잠긴다',
-  lockedPhoto.file && lockedPhoto.remove && lockedPhoto.save, JSON.stringify(lockedPhoto));
-await slowSave;
-await page.waitForTimeout(1000);
-await page.evaluate(() => startNewRecord());
-await fillForm();
-await attachPhoto();
-
-/* 7. 응답 유실 → 결과 불명 (성공으로 처리하지 않음) */
 scenario = 'lostresponse';
 await page.click('#btnSave');
 await page.waitForTimeout(3500);
@@ -306,22 +218,16 @@ const unknown = await page.evaluate(() => ({
   state: document.getElementById('saveStatus').className,
   text: document.getElementById('saveStatus').textContent,
   copyDisabled: document.getElementById('btnCopy').disabled,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
-  snFileDisabled: document.getElementById('snPhotoFile').disabled,
-  snRemoveDisabled: document.getElementById('snPhotoRemove').disabled,
   acts: [...document.querySelectorAll('#saveActions button')].map(b => b.textContent)
 }));
 ck('응답을 확인할 수 없으면 성공으로 처리하지 않는다',
-  unknown.state.includes('unknown') && unknown.copyDisabled && unknown.photoShown === 'block',
+  unknown.state.includes('unknown') && unknown.copyDisabled,
   JSON.stringify({ s: unknown.state, c: unknown.copyDisabled }));
 ck('결과 불명이면 재확인·미기록 복사를 제공한다',
   unknown.acts.some(t => t.includes('다시 확인')) && unknown.acts.some(t => t.includes('미기록')),
   unknown.acts.join(' | '));
-ck('결과 불명 중에는 사진 교체·삭제를 잠근다',
-  unknown.snFileDisabled && unknown.snRemoveDisabled,
-  JSON.stringify(unknown));
 
-/* 8. 정상 저장 → 성공 · 사진 정리 · 복사 활성 · dirty 전환 */
+/* 6. 정상 재전송 → 성공 · 복사 활성 · dirty 전환 */
 scenario = 'ok';
 await page.click('#btnSave');
 await page.waitForTimeout(1500);
@@ -329,16 +235,15 @@ const ok = await page.evaluate(() => ({
   state: document.getElementById('saveStatus').className,
   copyDisabled: document.getElementById('btnCopy').disabled,
   contDisabled: document.getElementById('btnCont').disabled,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
   recent: !!localStorage.getItem('baz_recent_handover'),
   draft: !!localStorage.getItem('baz_handover_draft_v1')
 }));
 ck('확인된 성공에서만 복사·이어쓰기가 열린다',
   ok.state.includes('ok') && !ok.copyDisabled && !ok.contDisabled, JSON.stringify(ok));
-ck('성공 후 사진이 정리되고 최근 완료가 기록된다', ok.photoShown === 'none' && ok.recent);
+ck('성공 후 최근 완료가 기록된다', ok.recent);
 ck('성공 후 초안이 정리된다', !ok.draft);
 
-/* 9. 저장 후 내용 변경 → dirty */
+/* 7. 저장 후 내용 변경 → dirty */
 await page.fill('#detail', '내용 수정함');
 await page.waitForTimeout(400);
 const dirty = await page.evaluate(() => ({
@@ -349,41 +254,17 @@ const dirty = await page.evaluate(() => ({
 ck('저장 후 입력을 바꾸면 dirty 로 전환된다',
   dirty.isDirty && dirty.copyDisabled && dirty.badge !== 'none', JSON.stringify(dirty));
 
-/* 10. 사진 A→B 교체 경합 */
-await attachPhoto();
-await page.waitForTimeout(300);
-const twoPhotos = await page.evaluate(async () => {
-  const f = document.getElementById('snPhotoFile');
-  const mk = (c) => { const cv = document.createElement('canvas'); cv.width = cv.height = 8;
-    const x = cv.getContext('2d'); x.fillStyle = c; x.fillRect(0, 0, 8, 8); return cv.toDataURL('image/png'); };
-  const toFile = async (d, n) => new File([await (await fetch(d)).blob()], n, { type: 'image/png' });
-  const dt = new DataTransfer(); dt.items.add(await toFile(mk('#ff0000'), 'A.png'));
-  f.files = dt.files; f.dispatchEvent(new Event('change'));
-  const dt2 = new DataTransfer(); dt2.items.add(await toFile(mk('#0000ff'), 'B.png'));
-  f.files = dt2.files; f.dispatchEvent(new Event('change'));
-  await new Promise(r => setTimeout(r, 900));
-  const img = document.getElementById('snPhotoImg');
-  const cv = document.createElement('canvas'); cv.width = cv.height = 8;
-  cv.getContext('2d').drawImage(img, 0, 0, 8, 8);
-  const px = cv.getContext('2d').getImageData(1, 1, 1, 1).data;
-  return { r: px[0], b: px[2], busy: document.getElementById('btnSave').disabled };
-});
-ck('사진 A→B 교체 경합에서 B 만 최신으로 남는다',
-  twoPhotos.b > twoPhotos.r, JSON.stringify(twoPhotos));
-ck('사진 처리가 끝나면 저장 버튼이 다시 열린다', twoPhotos.busy === false);
-
 /* 11. 새 기록 흐름 */
 await page.evaluate(() => startNewRecord());
 await page.waitForTimeout(400);
 const fresh = await page.evaluate(() => ({
   hosp: document.getElementById('hosp').value,
   detail: document.getElementById('detail').value,
-  photoShown: document.getElementById('snPhotoPrev').style.display,
   copyDisabled: document.getElementById('btnCopy').disabled,
   dirty: document.body.classList.contains('is-dirty')
 }));
 ck('새 기록 시작이 양식을 비우고 잠금을 되돌린다',
-  !fresh.hosp && !fresh.detail && fresh.photoShown === 'none' && fresh.copyDisabled && !fresh.dirty,
+  !fresh.hosp && !fresh.detail && fresh.copyDisabled && !fresh.dirty,
   JSON.stringify(fresh));
 
 /* 12. 자동완성 키보드 · ARIA */
@@ -439,12 +320,10 @@ await page.click('#draftRestore');
 await page.waitForTimeout(500);
 const restored = await page.evaluate(() => ({
   hosp: document.getElementById('hosp').value,
-  detail: document.getElementById('detail').value,
-  note: document.getElementById('snPhotoState').textContent
+  detail: document.getElementById('detail').value
 }));
 ck('초안을 복원하면 작성 중이던 내용이 돌아온다',
   restored.hosp === '초안병원' && restored.detail === '초안 내용입니다', JSON.stringify(restored));
-ck('사진은 재첨부가 필요함을 알린다', restored.note.includes('다시 첨부'));
 
 /* 15. 여러 폭에서 오류 없음 */
 for (const [w, h] of [[320, 640], [390, 844], [430, 932], [768, 1024]]) {

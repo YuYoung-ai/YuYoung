@@ -96,18 +96,18 @@ modal=await page.evaluate(()=>({
   hasType:!!document.getElementById('hstType'),
   evidence:document.querySelectorAll('.hst-evidence-thumb').length
 }));
-ck('3. 전체 서비스 이력은 최신 선택 4건과 구분·VOC 유형 건수를 표시',
-  modal.title==='전체 서비스 건수'&&modal.count.startsWith('4건')&&modal.breakdown.includes('A/S 2건')
+ck('3. 전체 서비스 이력은 기간 원본 5건과 최신 선택 4건을 함께 표시',
+  modal.title==='전체 서비스 건수'&&modal.count.startsWith('5건')&&modal.count.includes('최신 선택 4건')&&modal.breakdown.includes('A/S 3건')
   &&modal.breakdown.includes('점검 2건')&&modal.breakdown.includes('VOC 유형별 건수')&&modal.hasType&&modal.evidence===0,JSON.stringify(modal));
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
 modal=await page.evaluate(()=>({count:document.getElementById('hstCount').textContent,gubun:document.getElementById('hstGubun').value,
   rows:document.querySelectorAll('#hstTableHost tbody tr').length,other:!!document.querySelector('#hstBreakdown [data-hst-count-value="점검"]'),
   active:document.querySelector('#hstBreakdown [data-hst-count-value="A/S"]').getAttribute('aria-pressed')}));
-ck('3-b. 구분 건수 칩 클릭 시 해당 구분 처리 이력만 표시',modal.gubun==='A/S'&&modal.rows===2&&modal.count.startsWith('2건'),JSON.stringify(modal));
+ck('3-b. 구분 건수 칩 클릭 시 해당 구분의 기간 원본 처리 이력만 표시',modal.gubun==='A/S'&&modal.rows===3&&modal.count.startsWith('3건'),JSON.stringify(modal));
 ck('3-c. 선택 후에도 다른 구분 버튼이 유지되고 선택 상태가 강조',modal.other&&modal.active==='true',JSON.stringify(modal));
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
 modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
-ck('3-d. 같은 구분 칩을 다시 누르면 해당 필터만 해제',modal.gubun==='all'&&modal.rows===4,JSON.stringify(modal));
+ck('3-d. 같은 구분 칩을 다시 누르면 해당 필터만 해제',modal.gubun==='all'&&modal.rows===5,JSON.stringify(modal));
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="A/S"]');
 await page.click('#hstBreakdown [data-hst-count-key="gubun"][data-hst-count-value="점검"]');
 modal=await page.evaluate(()=>({gubun:document.getElementById('hstGubun').value,rows:document.querySelectorAll('#hstTableHost tbody tr').length}));
@@ -176,10 +176,10 @@ async function openAndRead(dim){
   await page.evaluate(()=>{exResetHistoryFilters_();closeExList();}); return out;
 }
 const asHist=await openAndRead('kpiAs'), inspHist=await openAndRead('kpiInsp'), savingHist=await openAndRead('kpiSaving');
-ck('5. A/S 카드 이력은 최신 A/S 2건으로 제한',asHist.rows===2&&asHist.text.includes('A/S 2건')&&!asHist.text.includes('점검 2건'),JSON.stringify(asHist));
+ck('5. A/S 카드 이력은 기간 원본 3건과 최신 선택 2건을 구분',asHist.rows===3&&asHist.count.includes('최신 선택 2건')&&asHist.text.includes('A/S 3건')&&!asHist.text.includes('점검 2건'),JSON.stringify(asHist));
 ck('6. 점검 카드 이력은 점검 2건으로 제한',inspHist.rows===2&&inspHist.text.includes('점검 2건')&&!inspHist.text.includes('A/S 3건'),JSON.stringify(inspHist));
 ck('8. 절감액 이력은 최신 내부 세척 1건과 281,200원 표시',
-  savingHist.rows===1&&savingHist.count.includes('₩281,200')&&savingHist.count.includes('내부 세척 1건'),JSON.stringify(savingHist));
+  savingHist.rows===2&&savingHist.count.includes('₩281,200')&&savingHist.count.includes('내부 세척 1건'),JSON.stringify(savingHist));
 await page.click('#exKpis [data-hist-dim="kpiSaving"]');
 await page.waitForSelector('#exListModal.show');
 ck('9. 절감액 이력 상단에 근거자료 미리보기 4장을 표시',
@@ -253,10 +253,10 @@ normalized=await page.evaluate(()=>({
   stats:!!document.getElementById('hstStats'),split:!!document.querySelector('.hst-split'),
   heads:[...document.querySelectorAll('#hstTableHost thead th')].map(x=>x.textContent.trim())
 }));
-ck('15-b. 원인 분석 카드 원본 3건에서 최신 선택 2건 표시',normalized.rows===2,JSON.stringify(normalized));
+ck('15-b. 원인 분석 카드 원본 3건을 기본 표시하고 최신 선택은 별도 유지',normalized.rows===3,JSON.stringify(normalized));
 ck('15-c. 이력 유형 선택과 건수 칩도 표준 이름 하나로 표시',
   normalized.options.includes('노즐 누수(약액 유입)')&&!normalized.options.includes('노즐누수(약액유입)')&&
-  normalized.breakdown.includes('노즐 누수(약액 유입) 2건'),JSON.stringify(normalized));
+  normalized.breakdown.includes('노즐 누수(약액 유입) 3건'),JSON.stringify(normalized));
 ck('15-c2. 처리이력의 경과일 분석 카드는 제거하고 개별 비교 열은 유지',
   !normalized.stats&&!normalized.split&&normalized.heads.some(x=>x.includes('비교 경과일'))&&
   normalized.heads.some(x=>x.includes('동일비교 경과일')),JSON.stringify(normalized));
@@ -310,8 +310,9 @@ ck('15-d. E병원을 제외하고 A병원의 선택 기간 안 직전 이력을 
   !(await page.textContent('#hstTableHost')).includes('E병원'));
 await page.selectOption('#hstPeriod','all');
 const paired=await page.locator('#hstTableHost tbody tr').allTextContents();
-ck('15-d2. 전체 기간은 최신 선택 1건 아래 공유 비교행 1건을 표시',
-  paired.length===3&&paired[1].includes('2026-08-11')&&paired[2].includes('2026-08-10')&&paired[2].includes('비교 · 동일비교'),JSON.stringify(paired));
+ck('15-d2. 전체 기간은 기간 원본과 공유 비교행을 역할별로 표시',
+  paired.length===4&&paired[1].includes('2026-08-11')&&paired[2].includes('2026-08-10')&&paired[2].includes('원본')
+  &&paired[3].includes('2026-08-10')&&paired[3].includes('비교 · 동일비교'),JSON.stringify(paired));
 ck('15-d3. 최신 선택일 기준 두 경과일 모두 1일 표시',
   (paired[1].match(/1일/g)||[]).length===2&&paired[0].includes('비교 이력 없음'));
 await page.evaluate(()=>closeExList());

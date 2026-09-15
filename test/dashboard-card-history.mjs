@@ -54,7 +54,7 @@ const FNS = [
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
   'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
-  'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryVal_',
+  'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryIsLatest_', 'exHistoryVal_',
   'exHistoryField_', 'exHistoryUnique_', 'exHistoryCounts_', 'exHistoryBreakdownHtml_', 'exHistoryFilter_', 'exHistoryOption_', 'exHistoryCell_',
   'exHistoryDetail_', 'exTypeExampleNorm_', 'exTypeExampleKey_',
   'exHistoryTable_', 'exHistoryValidDate_', 'exHistoryPeriodLabel_', 'exHistoryComparisonMeta_', 'exHistoryElapsed_', 'exHistoryControls_', 'exCmpRangeText_',
