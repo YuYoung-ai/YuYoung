@@ -939,7 +939,7 @@ if (false) {
   ck('V11-b. 노즐 누수 감소일 때만 요청한 판단 근거를 표시한다', (() => {
     const downItems=itemsOf(leakDown), cableItems=itemsOf(cable);
     return leakDown.trend.line.cmp.dir==='down' &&
-      downItems.some(o=>o.trendReason&&o.t==='사용자 교육 개선 · 노즐 재사용 감소') &&
+      downItems.some(o=>o.trendReason&&o.t==='지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소') &&
       downItems.some(o=>o.trendReasonLabel&&o.t==='판단 근거') &&
       !cableItems.some(o=>o.trendReason);
   })());
@@ -1074,7 +1074,7 @@ if (false) {
     fi.filter(o=>o.trendAverage).length===1 && fi.find(o=>o.trendAverage).dash===true);
   ck('V9-c. 점선이 주간 평균 기준선임을 그래프 좌측 상단에 밝힌다',
     fi.filter(o=>o.trendAverageLegend).length===2 &&
-    fi.some(o=>o.trendAverageLegend&&o.t==='점선: 주간 평균'));
+    fi.some(o=>o.trendAverageLegend&&o.t==='주간 평균 건 수'));
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&
@@ -1087,7 +1087,7 @@ if (false) {
     fi.some(o=>o.trendNarrative==='deltaPercent'&&/% (?:감소|증가)했습니다$/.test(o.t)));
   ck('V11-b. 노즐 누수 감소 판단 근거는 그래프 하단에만 표시한다',
     leakDown.trend.line.cmp.dir==='down' &&
-    itemsOf(leakDown).some(o=>o.trendReason&&o.t==='사용자 교육 개선 · 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&
+    itemsOf(leakDown).some(o=>o.trendReason&&o.t==='지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&
     !itemsOf(cable).some(o=>o.trendReason));
   ck('V12. 최근 흐름 카드 글자는 가운데 정렬한다',
     fi.some(o=>o.trendFlow&&o.align==='center'));

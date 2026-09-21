@@ -4491,7 +4491,7 @@ function buildExecutivePptDeck(snap){
     var d=ln.sum-ln.prevSum;
     var deltaText=d===0?'변화 없음':exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
     var reason=(dir==='down' && /노즐\s*누수/.test(ln.metricLabel))
-      ? '사용자 교육 개선 · 노즐 재사용 감소' : '';
+      ? '지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소' : '';
 
     /* 카드와 좌측 판정 패널 */
     rect({x:T.x, y:T.y, w:T.w, h:T.h, r:0.05, card:true,
@@ -4567,7 +4567,7 @@ function buildExecutivePptDeck(snap){
     line({x:G.plotL+0.05, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
           trendAverageLegend:true});
     text({x:G.plotL+0.34, y:legendY-0.08, w:0.88, h:0.16,
-          t:'점선: '+refCaption, size:6.6, bold:true, color:C.red,
+          t:refCaption+' 건 수', size:6.6, bold:true, color:C.red,
           trendAverageLegend:true});
 
     /* 눈금선은 판단 근거 구분선의 끝까지 잇고, 첫·마지막 주차는 양 끝에서 여백을 둔다.
