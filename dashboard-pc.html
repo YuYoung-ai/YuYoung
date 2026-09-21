@@ -787,8 +787,6 @@ body.dark .yc-band{opacity:.26}
 .ex-change-group h4{margin:0 0 4px;font-size:11.5px;color:var(--red);font-weight:700}
 .ex-change-group.down h4{color:var(--green)}
 .ex-change-group .ex-li{padding:4px 0;font-size:11.5px}
-.ex-change-new{font-size:9.5px;font-weight:700;color:#8A6100;background:#FBF3E3;border:1px solid #EBD9B4;
-  border-radius:8px;padding:0 5px;margin-left:4px}
 
 /* 가로 막대 · 목록 */
 .ex-rows{flex:1 1 auto;min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
@@ -1599,12 +1597,12 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>보고 주차 (월~토)</label>
       <select id="wkSel" onchange="exOnReportPeriodChange_('week')"></select>
-      <div class="mhint">시트 처리일 기준 최근 8주 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
+      <div class="mhint">전월 전체 주차부터 현재 주차까지 · 월평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">고른 대상을 최근 8주 ↔ 직전 8주로 겹쳐 그려 늘었는지 줄었는지를 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상의 전월·당월 주차를 꺾은선으로 이어 그리고, 현재 주차를 월평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
     <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
     <details class="voc-desc-editor" id="wkVocDescBox">
@@ -1648,14 +1646,14 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>보고 월</label>
       <select id="mnSel" onchange="exOnReportPeriodChange_('month')"></select>
-      <div class="mhint">시트 처리일 기준 최근 12개월 · 전체 1페이지 · 처리일 기준 · 고객 서비스 · 데모 운영 제외</div>
+      <div class="mhint">해당 연도 1월부터 현재 월까지 · 월평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="mnVocSel" onchange="exOnReportVocChange_('month')"></select>
-      <div class="mhint">고른 대상을 최근 6개월 ↔ 직전 6개월로 겹쳐 그려 늘었는지 줄었는지를 싣습니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상의 1월부터 현재 월까지를 꺾은선으로 이어 그리고, 현재 월을 월평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
-    <div class="mhint">주간업무보고와 같은 배치이며, 최근 8주 추이 대신 최근 6개월 월별 A/S·점검 처리 추이를 싣습니다.</div>
+    <div class="mhint">주간업무보고와 같은 배치이며, 해당 연도 1월부터 현재 월까지의 월별 추이를 싣습니다.</div>
     <details class="voc-desc-editor" id="mnVocDescBox">
       <summary>VOC 유형 설명 확인·수정 (현재 TOP5)</summary>
       <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
@@ -2602,7 +2600,7 @@ function activeCnt(){
 
 /* ── 필터 적용 ──
    opt.noPeriod=true 이면 "기간을 좁히는 필터 전부"(from/to · 연 · 월 · 분기)를 빼고
-   나머지 필터만 적용한다. 보고 모드의 이전 동일 기간 비교 · 최근 8주 추이 ·
+   나머지 필터만 적용한다. 보고 모드의 이전 동일 기간 비교 · 전월~현재 주 추이 ·
    반복 발생 30일 조회가 선택 기간 밖(전월·전주)까지 볼 수 있어야 하기 때문이다.
    연/월/분기를 빼지 않으면 8월 칩이 켜진 상태에서 7월 비교 데이터가 통째로 사라진다. */
 function filtered(opt){
@@ -2649,7 +2647,7 @@ function filteredRows_(opt){
   return base;
 }
 /* ── 집계 대상 기간을 직접 지정한 보고 모드 모집단 ──
-   이전 동일 기간 · 최근 8주 추이 · 반복 발생처럼 선택 기간 밖을 봐야 하는 계산은
+   이전 동일 기간 · 전월~현재 주 추이 · 반복 발생처럼 선택 기간 밖을 봐야 하는 계산은
    "그 계산이 실제로 보는 구간"으로만 잘라서 쓴다. 자른 뒤에 병원 상태(노즐 재사용·
    사용자 숙련도)를 판정하므로 아직 오지 않은 미래 기록이 과거 구간의 병원 상태를
    바꾸지 못한다(예: 다음 달 노즐 "O" 기록으로 지난달이 재사용 병원이 되는 문제). */
@@ -4188,34 +4186,34 @@ var L=(function(){
           valDY:0.27, valH:0.36, subDY:0.64, subH:0.24 },
     /* 카드 공통 — 제목 줄(제목 좌 · 기준 우), 좁은 카드는 기준을 둘째 줄에 둔다 */
     card:{ pad:0.14, titleDY:0.07, titleH:0.26, basisDY:0.30, basisH:0.20, minInlineBasis:1.6 },
-    /* 추이 카드 — 판정 요약(좌) + 직전/최근 구간을 시간순으로 잇는 단일 그래프(우).
+    /* 추이 카드 — 월평균 판정 요약(좌) + 전월부터 현재까지 잇는 단일 꺾은선(우).
        주간·월간 PPT가 같은 좌표를 쓰며, 미리보기와 실제 PPT도 같은 표시 목록을 그린다. */
     trend:{ x:page.left, y:rowA.y, w:trendW, h:rowA.h,
             inset:0.04, leftW:2.52, splitGap:0.06,
             titleX:page.left+0.18, titleY:rowA.y+0.08, titleW:2.20, titleH:0.32,
             gauge:{cx:page.left+0.70, cy:rowA.y+0.92, outerR:0.39, innerR:0.305,
                    pctY:rowA.y+0.66, pctH:0.39, subY:rowA.y+1.04, subH:0.20,
-                   arcSegs:24, arcW:5.0},
+                   arcSegs:40, arcW:4.0, baseW:2.7, arcStart:135, arcSpan:270},
             status:{x:page.left+1.28, y:rowA.y+0.47, w:0.94, h:0.27,
                     descX:page.left+1.28, descY:rowA.y+0.78, descW:1.08, lineH:0.25},
             leftRule:{x:page.left+0.18, y:rowA.y+1.43, w:2.18},
             summary:{labelY:rowA.y+1.51, labelH:0.20, valueY:rowA.y+1.72, valueH:0.31,
                      prevX:page.left+0.18, prevW:0.66, arrowX:page.left+0.84, arrowW:0.25,
-                     curX:page.left+1.08, curW:0.66, ruleX:page.left+1.79,
-                     deltaX:page.left+1.87, deltaW:0.49},
+                     curX:page.left+1.08, curW:0.66, ruleX:page.left+1.76,
+                     deltaX:page.left+1.82, deltaW:0.56},
             reason:{ruleY:rowA.y+2.08, y:rowA.y+2.14, h:0.18,
                     labelX:page.left+0.18, labelW:0.49,
                     textX:page.left+0.70, textW:1.66},
             graphX:page.left+2.58, graphY:rowA.y+0.04,
             graphW:trendW-2.62, graphH:rowA.h-0.08,
-            graph:{headY:rowA.y+0.13, headH:0.26,
+            graph:{headY:rowA.y+0.12, headH:0.22, avgY:rowA.y+0.34, avgH:0.18,
                    chipW:0.90, chipH:0.52, chipTop:rowA.y+0.10,
                    plotL:page.left+2.88, plotR:page.left+trendW-0.16,
-                   plotTop:rowA.y+0.58, plotBot:rowA.y+2.16,
+                   plotTop:rowA.y+0.68, plotBot:rowA.y+1.91,
                    axisW:0.27, axisH:0.16, ticks:3,
-                   dotR:0.052, lineW:1.90, refW:1.55,
-                   avgW:1.15, avgLabelH:0.20, avgLabelDY:0.10,
-                   dividerW:0.75} },
+                   valueH:0.18, valueDY:0.04, labelY:rowA.y+1.94, labelH:0.15,
+                   avgLabelH:0.20, deltaW:0.72,
+                   reasonRuleY:rowA.y+2.12, reasonY:rowA.y+2.17, reasonH:0.17} },
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
              rowPitch:0.24, rowH:0.22, rightW:1.55 },
@@ -4468,9 +4466,9 @@ function buildExecutivePptDeck(snap){
     text({x:T.x+CD.pad, y:y, w:T.w-CD.pad*2, h:0.3, t:msg, size:FT.empty, color:C.mut, align:'center'});
   }
 
-  /* ── ③ 대상 발생 추이 (주간=직전 8주→최근 8주 · 월간=직전 6개월→최근 6개월) ──
-     두 기간을 같은 x좌표에 겹치지 않고 실제 시간순으로 이어 그린다.
-     좌측은 판정·합계, 우측은 근거 그래프만 맡아 보고자가 결론→근거 순서로 읽는다. */
+  /* ── ③ 대상 발생 추이 ──
+     주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지 한 선으로 잇는다.
+     현재값은 월평균과 비교하고, 그래프 안의 점선도 같은 월평균을 뜻한다. */
   (function(){
     var T=L.trend, G=T.graph, tr=snap.trend, ln=tr.line, pts=ln.pts;
     var isVoc=exTrendIsVocType_(ln.focus), isAs=ln.focus===EX_TREND_METRIC_AS;
@@ -4479,14 +4477,14 @@ function buildExecutivePptDeck(snap){
     var stateColor=dir==='down'?C.green:(dir==='up'?C.red:C.mut);
     var soft=dir==='down'?C.mintBg:(dir==='up'?C.redSoft:C.grayBg);
     var title=isVoc ? ln.metricLabel+' 발생 추이' : ln.metricLabel+' 추이';
-    var noun=isOccurrence?'발생 빈도가':(ln.focus===EX_TREND_METRIC_INSP?'점검 건수가':'처리 건수가');
-    var verb=dir==='down'?(isOccurrence?'낮아지고 있습니다':'줄고 있습니다')
-            :dir==='up'?(isOccurrence?'높아지고 있습니다':'늘고 있습니다'):'유지되고 있습니다';
+    var noun='월평균 대비 현재';
+    var verb=dir==='down'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 감소했습니다'
+            :dir==='up'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 증가했습니다':'차이가 없습니다';
     var pct=ln.cmp.pct==null?null:Math.abs(ln.cmp.pct);
     var pctText=pct==null?'—':exNum(pct)+'%';
     var d=ln.sum-ln.prevSum;
     var deltaText=d===0?'변화 없음':exNum(Math.abs(d))+'건 '+(d>0?'증가':'감소');
-    var refCaption=ln.refPeriod||ln.refName, mainCaption=ln.mainPeriod||ln.mainName;
+    var refCaption=ln.baselineLabel||ln.refName, mainCaption=ln.currentLabel||ln.mainName;
     var reason=(dir==='down' && /노즐\s*누수/.test(ln.metricLabel))
       ? '사용자 교육 개선 · 노즐 재사용 감소' : '';
 
@@ -4499,22 +4497,24 @@ function buildExecutivePptDeck(snap){
     text({x:T.titleX, y:T.titleY, w:T.titleW, h:T.titleH,
           t:exFitTxt_(title,T.titleW,titleSize), size:titleSize, bold:true, color:C.navy});
 
-    /* 원형 판정 — 채움 비율은 직전 구간 대비 절대 증감률(최대 100%)이다. */
+    /* 원형 판정 — 열린 270도 트랙으로 증감률을 표시해 꽉 찬 도넛의 무거움을 줄인다. */
     var GA=T.gauge;
-    dot({cx:GA.cx, cy:GA.cy, r:GA.outerR, fill:dir==='down'?C.mintRing:(dir==='up'?'F3C9C4':C.line), gauge:true});
-    dot({cx:GA.cx, cy:GA.cy, r:GA.innerR, fill:soft, gauge:true});
     var arcPct=pct==null?0:Math.min(100,pct), arcN=Math.max(0,Math.round(GA.arcSegs*arcPct/100));
-    for(var ai=0;ai<arcN;ai++){
-      var a1=(-90+ai*(360/GA.arcSegs))*Math.PI/180;
-      var a2=(-90+(ai+1)*(360/GA.arcSegs))*Math.PI/180;
+    for(var ai=0;ai<GA.arcSegs;ai++){
+      var a1=(GA.arcStart+ai*(GA.arcSpan/GA.arcSegs))*Math.PI/180;
+      var a2=(GA.arcStart+(ai+0.72)*(GA.arcSpan/GA.arcSegs))*Math.PI/180;
       seg({x1:GA.cx+Math.cos(a1)*GA.outerR, y1:GA.cy+Math.sin(a1)*GA.outerR,
            x2:GA.cx+Math.cos(a2)*GA.outerR, y2:GA.cy+Math.sin(a2)*GA.outerR,
-           color:stateColor, width:GA.arcW, gauge:true});
+           color:C.line, width:GA.baseW, gauge:true});
+      if(ai<arcN) seg({x1:GA.cx+Math.cos(a1)*GA.outerR, y1:GA.cy+Math.sin(a1)*GA.outerR,
+           x2:GA.cx+Math.cos(a2)*GA.outerR, y2:GA.cy+Math.sin(a2)*GA.outerR,
+           color:stateColor, width:GA.arcW, gauge:true, gaugeActive:true});
     }
+    var pctSize=exFitSize_(pctText,GA.outerR*2,[18,16,14,12,10]);
     text({x:GA.cx-GA.outerR, y:GA.pctY, w:GA.outerR*2, h:GA.pctH,
-          t:pctText, size:18, bold:true, color:stateColor, align:'center', trendPercent:true});
+          t:pctText, size:pctSize, bold:true, color:stateColor, align:'center', trendPercent:true});
     text({x:GA.cx-GA.outerR, y:GA.subY, w:GA.outerR*2, h:GA.subH,
-          t:refCaption+' 대비', size:6.8, bold:true, color:C.mut, align:'center'});
+          t:'월평균 대비', size:6.8, bold:true, color:C.mut, align:'center'});
 
     var ST=T.status;
     rect({x:ST.x, y:ST.y, w:ST.w, h:ST.h, r:0.10,
@@ -4523,109 +4523,101 @@ function buildExecutivePptDeck(snap){
           color:stateColor, align:'center', trendState:true});
     text({x:ST.descX, y:ST.descY, w:ST.descW, h:ST.lineH,
           t:noun, size:9.3, bold:true, color:stateColor});
+    var verbSize=exFitSize_(verb,ST.descW,[9.3,8.8,8.3,7.8,7.3]);
     text({x:ST.descX, y:ST.descY+ST.lineH, w:ST.descW, h:ST.lineH,
-          t:verb, size:9.3, bold:true, color:stateColor});
+          t:verb, size:verbSize, bold:true, color:stateColor});
     line({x:T.leftRule.x, y:T.leftRule.y, w:T.leftRule.w, color:C.kpiLine, width:0.75});
 
     var SM=T.summary;
     text({x:SM.prevX, y:SM.labelY, w:SM.prevW, h:SM.labelH,
           t:refCaption, size:6.7, bold:true, color:C.mut});
     text({x:SM.prevX, y:SM.valueY, w:SM.prevW, h:SM.valueH,
-          t:exNum(ln.prevSum)+'건', size:15, bold:true, color:C.navy,
+          t:exTrendCountText_(ln.prevSum),
+          size:exFitSize_(exTrendCountText_(ln.prevSum),SM.prevW,[15,14,13,12,11]), bold:true, color:C.navy,
           trendSummary:'previous'});
     text({x:SM.arrowX, y:SM.valueY, w:SM.arrowW, h:SM.valueH,
           t:'→', size:13, color:C.mut, align:'center'});
     text({x:SM.curX, y:SM.labelY, w:SM.curW, h:SM.labelH,
           t:mainCaption, size:6.7, bold:true, color:C.mut});
     text({x:SM.curX, y:SM.valueY, w:SM.curW, h:SM.valueH,
-          t:exNum(ln.sum)+'건', size:15, bold:true, color:C.navy,
+          t:exTrendCountText_(ln.sum),
+          size:exFitSize_(exTrendCountText_(ln.sum),SM.curW,[15,14,13,12,11]), bold:true, color:C.navy,
           trendSummary:'recent'});
     rect({x:SM.ruleX, y:SM.labelY, w:0.01, h:SM.valueY+SM.valueH-SM.labelY, fill:C.kpiLine});
     text({x:SM.deltaX, y:SM.valueY-0.02, w:SM.deltaW, h:SM.valueH,
-          t:exFitTxt_(deltaText,SM.deltaW,8), size:8, bold:true, color:stateColor,
+          t:exFitTxt_(deltaText,SM.deltaW,exFitSize_(deltaText,SM.deltaW,[10,9.5,9,8.5])),
+          size:exFitSize_(deltaText,SM.deltaW,[10,9.5,9,8.5]), bold:true, color:stateColor,
           align:'center', trendSummary:'delta'});
 
-    /* 감소 원인을 해석할 수 있을 때만 판단 근거를 붙인다.
-       노즐 누수 외의 추이 대상에 특정 원인을 잘못 귀속하지 않는다. */
-    if(reason){
-      var RS=T.reason;
-      line({x:T.leftRule.x, y:RS.ruleY, w:T.leftRule.w, color:C.kpiLine, width:0.75});
-      text({x:RS.labelX, y:RS.y, w:RS.labelW, h:RS.h,
-            t:'판단 근거', size:6.7, bold:true, color:C.mut, trendReasonLabel:true});
-      text({x:RS.textX, y:RS.y, w:RS.textW, h:RS.h,
-            t:reason, size:6.9, bold:true, color:stateColor, trendReason:true});
-    }
-
-    /* 우측 그래프 판 — 최근 구간만 아주 옅게 칠하되, 선은 중앙에서 끊지 않고 잇는다. */
+    /* 우측 그래프 판 — 기간 전체를 끊김 없는 꺾은선으로 표시한다. */
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
-    var n=pts.length||1, total=n*2;
-    var cx=function(i){ return G.plotL+(G.plotR-G.plotL)*(total<=1?0:i/(total-1)); };
-    var divider=(cx(n-1)+cx(n))/2;
-    rect({x:divider, y:T.graphY, w:T.graphX+T.graphW-divider, h:T.graphH,
-          fill:C.recentBg});
-    text({x:G.plotL, y:G.headY, w:divider-G.plotL, h:G.headH,
-          t:refCaption, size:8.5, bold:true, color:C.mut, align:'center'});
-    text({x:divider, y:G.headY, w:G.plotR-divider, h:G.headH,
-          t:mainCaption, size:8.5, bold:true, color:C.navy, align:'center'});
+    var chipX=T.graphX+T.graphW-G.chipW-0.10;
+    var headW=chipX-G.plotL-0.08;
+    text({x:G.plotL, y:G.headY, w:headW, h:G.headH,
+          t:ln.periodLabel, size:8.5, bold:true, color:C.navy, align:'center', trendPeriod:true});
+    text({x:G.plotL, y:G.avgY, w:headW, h:G.avgH,
+          t:'월평균 '+exTrendCountText_(ln.prevSum), size:7.5, bold:true, color:C.mut,
+          align:'center', trendAverageLabel:true});
 
-    var vals=[];
-    pts.forEach(function(p){ vals.push(p.ref==null?0:p.ref); });
-    pts.forEach(function(p){ vals.push(p.main||0); });
-    var maxV=0; vals.forEach(function(v){ maxV=Math.max(maxV,v||0); });
+    var n=pts.length||1, dataR=G.plotR-G.deltaW, plotW=dataR-G.plotL;
+    var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?G.plotL+step*i:G.plotL+plotW/2;};
+    var maxV=Math.max(ln.prevSum||0,1);
+    pts.forEach(function(p){ maxV=Math.max(maxV,p.main||0); });
     var ny=ycNice_(maxV,G.ticks), sy=function(v){ return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop); };
     for(var gi=0;gi<=G.ticks;gi++){
       var gv=ny.step*gi, gy=sy(gv);
-      line({x:G.plotL, y:gy, w:G.plotR-G.plotL, color:C.line, width:gi?0.5:0.75});
+      line({x:G.plotL, y:gy, w:dataR-G.plotL, color:C.line, width:gi?0.5:0.75});
       text({x:G.plotL-G.axisW-0.04, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
             t:exNum(gv), size:FT.legend, color:C.mut, align:'right'});
     }
-    seg({x1:divider, y1:T.graphY+0.25, x2:divider, y2:G.plotBot,
-         color:C.kpiLine, width:G.dividerW, dash:true, trendDivider:true});
-
-    /* 평균선은 각 구간의 수준을 바로 읽게 하고, 주/월 단위는 데이터 길이로 구분한다. */
-    var unit=tr.kind==='month'?'월평균':'주평균';
-    var prevAvg=ln.prevAvg||0, curAvg=ln.avg||0;
-    seg({x1:cx(0), y1:sy(prevAvg), x2:cx(n-1), y2:sy(prevAvg),
-         color:C.mut, width:G.avgW, dash:true, trendAverage:'previous'});
-    seg({x1:cx(n), y1:sy(curAvg), x2:cx(total-1), y2:sy(curAvg),
-         color:C.teal, width:G.avgW, dash:true, trendAverage:'recent'});
-    text({x:cx(1), y:Math.max(G.plotTop,sy(prevAvg)-G.avgLabelDY-G.avgLabelH),
-          w:Math.max(0.9,cx(n-1)-cx(1)), h:G.avgLabelH,
-          t:unit+' '+prevAvg.toFixed(1)+'건', size:7.7, bold:true, color:C.mut,
-          align:'center', trendAverageLabel:'previous'});
-    text({x:cx(n+1), y:Math.max(G.plotTop,sy(curAvg)-G.avgLabelDY-G.avgLabelH),
-          w:Math.max(0.9,cx(total-1)-cx(n+1)), h:G.avgLabelH,
-          t:unit+' '+curAvg.toFixed(1)+'건', size:7.7, bold:true, color:C.navy,
-          align:'center', trendAverageLabel:'recent'});
-
-    /* 직전 구간(회색) → 최근 구간(네이비)을 시간순 단일선으로 연결한다. */
-    for(var pi=1;pi<n;pi++)
-      seg({x1:cx(pi-1), y1:sy(vals[pi-1]), x2:cx(pi), y2:sy(vals[pi]),
-           color:C.mut, width:G.refW, trendSeries:'previous'});
-    seg({x1:cx(n-1), y1:sy(vals[n-1]), x2:cx(n), y2:sy(vals[n]),
-         color:C.mut, width:G.refW, trendSeries:'bridge'});
-    for(var ci=n+1;ci<total;ci++)
-      seg({x1:cx(ci-1), y1:sy(vals[ci-1]), x2:cx(ci), y2:sy(vals[ci]),
-           color:C.navy, width:G.lineW, trendSeries:'recent'});
-    for(var di=0;di<total;di++)
-      dot({cx:cx(di), cy:sy(vals[di]), r:G.dotR, fill:di<n?C.mut:C.navy,
-           trendPoint:true, trendSeries:di<n?'previous':'recent', trendIdx:di});
+    /* 월평균 기준선과 실제 꺾은선. 마지막 점은 현재 주·월이므로 한 번 더 강조한다. */
+    var avgY=sy(ln.prevSum||0);
+    line({x:G.plotL, y:avgY, w:dataR-G.plotL, color:C.blue2, width:1, dash:true,
+          trendAverage:true, trendValue:ln.prevSum});
+    for(var si=1;si<n;si++){
+      seg({x1:cx(si-1), y1:sy(pts[si-1].main||0), x2:cx(si), y2:sy(pts[si].main||0),
+           color:C.navy, width:1.6, trendSeries:'main', trendSegment:true, trendIdx:si});
+    }
+    for(var pi=0;pi<n;pi++){
+      var py=sy(pts[pi].main||0), last=pi===n-1;
+      if(last) dot({cx:cx(pi),cy:py,r:0.085,fill:C.mintRing,trendCurrentHalo:true});
+      dot({cx:cx(pi),cy:py,r:last?0.047:0.036,fill:C.navy,trendPoint:true,
+           trendSeries:'main',trendIdx:pi,trendCurrent:last});
+      text({x:cx(pi)-Math.max(0.22,step/2), y:Math.max(G.plotTop,py-G.valueH-G.valueDY),
+            w:Math.max(0.44,step), h:G.valueH, t:exNum(pts[pi].main||0), size:7.0,
+            bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi});
+      text({x:cx(pi)-Math.max(0.22,step/2), y:G.labelY,
+            w:Math.max(0.44,step), h:G.labelH, t:pts[pi].label||'', size:6.2,
+            bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
+    }
+    var deltaY=Math.max(G.plotTop,Math.min(G.plotBot-G.valueH,sy(ln.sum)-G.valueH/2));
+    text({x:dataR+0.04, y:deltaY, w:G.deltaW-0.02, h:G.valueH,
+          t:(d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소')),
+          size:7.2, bold:true, color:stateColor, align:'center', trendDeltaLabel:true});
 
     var mo=ln.momentum||{dir:'flat'};
     var flow=mo.dir==='down'?(dir==='down'?'감소 지속':'최근 감소')
             :mo.dir==='up'?(dir==='up'?'증가 지속':'최근 증가'):'유지';
-    var chipX=T.graphX+T.graphW-G.chipW-0.10;
     rect({x:chipX, y:G.chipTop, w:G.chipW, h:G.chipH, r:0.06,
           fill:C.kpiBg, line:{color:C.kpiLine, width:0.75}});
-    text({x:chipX+0.08, y:G.chipTop+0.05, w:G.chipW-0.16, h:0.17,
-          t:'최근 흐름', size:7, bold:true, color:C.mut});
-    text({x:chipX+0.08, y:G.chipTop+0.22, w:G.chipW-0.16, h:0.20,
-          t:flow, size:9, bold:true,
+    text({x:chipX+0.05, y:G.chipTop+0.05, w:G.chipW-0.10, h:0.17,
+          t:'최근 흐름', size:7, bold:true, color:C.mut, align:'center'});
+    text({x:chipX+0.05, y:G.chipTop+0.22, w:G.chipW-0.10, h:0.20,
+          t:flow, size:9, bold:true, align:'center',
           color:mo.dir==='down'?C.green:(mo.dir==='up'?C.red:C.navy), trendFlow:true});
+
+    /* 판단 근거는 그래프 하단에 두어 추이와 바로 연결한다. */
+    if(reason){
+      line({x:G.plotL, y:G.reasonRuleY, w:G.plotR-G.plotL, color:C.kpiLine, width:0.75});
+      text({x:G.plotL, y:G.reasonY, w:0.52, h:G.reasonH,
+            t:'판단 근거', size:6.7, bold:true, color:C.mut, trendReasonLabel:true});
+      text({x:G.plotL+0.55, y:G.reasonY, w:G.plotR-G.plotL-0.55, h:G.reasonH,
+            t:reason, size:7.1, bold:true, color:stateColor, trendReason:true});
+    }
   })();
 
-  /* ── ④ VOC 유형 변화 (증가 TOP3 · 감소 TOP3 · 신규 표시) ── */
+  /* ── ④ VOC 유형 변화 (증가 TOP3 · 감소 TOP3) ── */
   (function(){
     var T=L.change, ch=snap.change;
     cardShell(T, ch.title, ch.basis);
@@ -4645,10 +4637,8 @@ function buildExecutivePptDeck(snap){
       g.items.forEach(function(t,i){
         var y=y0+i*T.rowPitch;
         var nw=iw-0.16-T.rightW-0.06;
-        var newW=t.isNew?exTxtW_(' 신규', FT.rowDelta):0;
-        var runs=[{text:exFitTxt_(t.k, nw-newW, FT.rowName), size:FT.rowName, color:C.text}];
-        if(t.isNew) runs.push({text:' 신규', size:FT.rowDelta, bold:true, color:C.amber});
-        text({x:T.x+CD.pad+0.08, y:y, w:nw, h:T.rowH, runs:runs});
+        text({x:T.x+CD.pad+0.08, y:y, w:nw, h:T.rowH,
+              t:exFitTxt_(t.k, nw, FT.rowName), size:FT.rowName, color:C.text});
         text({x:T.x+T.w-CD.pad-0.08-T.rightW, y:y, w:T.rightW, h:T.rowH, align:'right',
               runs:[{text:t.prev+' → ', size:FT.rowDelta, color:C.mut},
                     {text:String(t.cur), size:FT.rowVal, bold:true, color:C.navy},
@@ -4814,7 +4804,9 @@ function exPptRenderHtml_(items){
         +(o.line?';border:'+Math.max(1,o.line.width)+'px solid '+pvHex(o.line.color):'')
         +(o.r?';border-radius:'+pvIn(o.r)+'px':''));
     }else if(o.k==='line'){
-      el(o.x,o.y,o.w,0.012,'background:'+pvHex(o.color));
+      el(o.x,o.y,o.w,0.012,o.dash
+        ?('border-top:'+Math.max(1,(o.width||1))+'px dashed '+pvHex(o.color))
+        :('background:'+pvHex(o.color)));
     }else if(o.k==='seg'){
       /* 미리보기도 같은 두 점을 잇는다 — 길이만큼의 선을 시작점에서 회전시킨다 */
       var dx=pvIn(o.x2-o.x1), dy=pvIn(o.y2-o.y1), len=Math.sqrt(dx*dx+dy*dy);
@@ -4948,7 +4940,7 @@ function exRefreshVocFocusSelect_(type){
   if(exTrendIsVocType_(cur) && !opts.some(function(o){ return o.k===cur; })){
     cur=''; EX_PPT_VOC_FOCUS[type]='';
   }
-  var span=(type==='month')?('최근 '+EX_MONTH_TREND_N+'개월'):'최근 8주';
+  var span=snap.trend&&snap.trend.line?snap.trend.line.periodLabel:'';
   /* 앞의 셋은 구분(전체·A/S·점검), 그 뒤가 VOC 유형별 — 연간 비교분석 탭의 지표 선택과 같은 갈래다 */
   sel.innerHTML='<option value="">전체 (A/S·점검)</option>'
     +'<option value="'+EX_TREND_METRIC_AS+'"'+(cur===EX_TREND_METRIC_AS?' selected':'')+'>A/S(VOC) 전체</option>'
@@ -5508,6 +5500,30 @@ function exDimCompare(rows, prev, key, onlyAS){
     return {k:k, cur:c[k]||0, prev:p?(p[k]||0):null, d:p?((c[k]||0)-(p[k]||0)):null};
   }).sort(function(a,b){ return b.cur-a.cur || (b.d||0)-(a.d||0); });
 }
+/* 교체품 TOP5에서는 비용이 기록된 Handpiece Ass'y를 유상 판매 건으로 분리한다.
+   같은 원본 행을 쓰므로 수량 합계는 유지되고, 유상/그 외가 한 항목으로 섞이지 않는다. */
+function exPartTopLabel_(r){
+  var v=String((r&&r.part)||'').trim();
+  if(/^handpiece\s*ass[’']?y$/i.test(v) && Number((r&&r._cost)||costNum(r&&r.cost))>0)
+    return "Handpiece Ass'y(유상 판매)";
+  return v;
+}
+function exPartDim_(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    var v=exPartTopLabel_(r); if(!v||v==='없음') return;
+    m[v]=(m[v]||0)+1;
+  });
+  return m;
+}
+function exPartCompare_(rows, prev){
+  var c=exPartDim_(rows), p=prev?exPartDim_(prev):null, keys={};
+  Object.keys(c).forEach(function(k){keys[k]=1;});
+  if(p) Object.keys(p).forEach(function(k){keys[k]=1;});
+  return Object.keys(keys).map(function(k){
+    return {k:k,cur:c[k]||0,prev:p?(p[k]||0):null,d:p?((c[k]||0)-(p[k]||0)):null};
+  }).sort(function(a,b){return b.cur-a.cur||(b.d||0)-(a.d||0);});
+}
 /* VOC TOP5는 구분(A/S·점검)이 아니라 실제 VOC 유형 입력을 기준으로 본다.
    점검 중 발견된 고장 유형도 포함하되 정상·정기점검 표기는 원인 유형에서 제외한다. */
 function exVocTypeCompare_(rows, prev){
@@ -5594,11 +5610,12 @@ function buildWeekTrend(focus, back){
    ※ 원본 데이터에 고객센터 접수일이 없어 이 카드도 8주 추이와 같은 처리일(date)을 쓴다. */
 var EX_MONTH_TREND_N=6;                 /* 표시할 개월 수 */
 /* 지정 구간의 처리 건수 — 8주 추이와 같은 판정(구분 문자열 trim 후 A/S · 점검) */
-function exCountRange_(a, b, focus){
+function exCountRange_(a, b, focus, weekdayOnly){
   var end=new Date(b); end.setHours(23,59,59,999);
   var n=0, as=0, insp=0, ty=0;
   exWindowRows(a, end).forEach(function(r){
-    if(!rowDate(r)) return;
+    var rd=rowDate(r); if(!rd) return;
+    if(weekdayOnly && !isReportDay_(rd)) return;
     var g=String(r.gubun||'').trim();
     /* 카드 제목 그대로 A/S·점검만 합계에 포함해 막대 합과 총 처리가 항상 일치하게 한다. */
     if(g==='A/S'){ as++; n++; }
@@ -5922,14 +5939,12 @@ function exTrendPeriod_(from,to,monthOnly){
     : String(a.getFullYear()).slice(-2)+'.'+md(a)+'~'+String(b.getFullYear()).slice(-2)+'.'+md(b);
 }
 
-/* ══════ 보고서 추이 카드의 선 그래프 자료 ══════
-   연간 비교분석 탭 "기간별 서비스 추이"와 같은 방식이다 —
-   한 좌표축에 두 기간을 선으로 겹치고, 아래에 같은 구간끼리의 차이를 막대로 붙인다.
-   다른 점은 겹치는 두 기간이 "두 해"가 아니라 "이번 구간 ↔ 바로 앞 구간"이라는 것뿐이다.
-     · 주간 → 최근 8주(실선) ↔ 직전 8주(파선) · 1주차끼리, 2주차끼리 나란히
-     · 월간 → 최근 6개월(실선) ↔ 직전 6개월(파선)
+/* ══════ 보고서 추이 카드의 기간별 그래프 자료 ══════
+   하나의 좌표축에 실제 시간 순서대로 꺾은선을 그린다.
+     · 주간 → 전월의 모든 보고 주차부터 현재 주차까지
+     · 월간 → 해당 연도 1월부터 현재 월까지
    무엇을 셀지는 생성 모달의 드롭다운이 정한다(전체 처리 · A/S · 점검 · VOC 유형 하나).
-   진행 중인 마지막 구간은 기간이 덜 차 견줄 수 없으므로 차이 막대를 내지 않는다. */
+   마지막 구간이 끝나지 않았으면 기간 표기에 '진행 중'을 붙인다. */
 var EX_TREND_METRIC_AS='__as__', EX_TREND_METRIC_INSP='__insp__';
 /* 드롭다운 값 → 구간에서 읽을 값 · 표시 이름. 유형명은 그대로 쓰고 앞의 둘만 예약어다. */
 function exTrendMetricVal_(b, focus){
@@ -5945,45 +5960,72 @@ function exTrendMetricLabel_(focus){
 function exTrendIsVocType_(focus){
   return !!focus && focus!==EX_TREND_METRIC_AS && focus!==EX_TREND_METRIC_INSP;
 }
-function exTrendLineSpec_(cur, prev, focus, names){
+/* 주간 보고용: 전월의 첫 월요일부터 기준 주까지 모든 주차를 잇는다. */
+function exReportWeekTrend_(focus){
+  var base=exBaseDate(), first=new Date(base.getFullYear(),base.getMonth()-1,1);
+  var start=monday(first); if(start<first) start=addD(start,7);
+  var endMon=monday(base), out=[];
+  for(var mo=new Date(start);mo<=endMon;mo=addD(mo,7)){
+    var wkEnd=weekEnd(mo), cur=ymd(mo)===ymd(endMon);
+    var to=cur&&base<wkEnd?new Date(base):wkEnd, end=new Date(to); end.setHours(23,59,59,999);
+    var n=0,as=0,insp=0,ty=0;
+    exWindowRows(mo,end).forEach(function(r){
+      var d=rowDate(r); if(!d||!isReportDay_(d)) return;
+      var g=String(r.gubun||'').trim();
+      if(g==='A/S'){as++;n++;} else if(g==='점검'){insp++;n++;}
+      if(focus&&exTrendVocType_(r)===focus) ty++;
+    });
+    out.push({label:(mo.getMonth()+1)+'월'+wkNo(mo)+'주', mon:new Date(mo), to:to,
+              n:n,as:as,insp:insp,ty:ty,sel:cur,ongoing:cur&&to<wkEnd});
+  }
+  return out;
+}
+/* 월간 보고용: 기준 연도의 1월부터 기준 월까지를 잇는다. */
+function exReportMonthTrend_(focus){
+  var base=exBaseDate(), out=[];
+  for(var m=0;m<=base.getMonth();m++){
+    var from=new Date(base.getFullYear(),m,1), monthEnd=new Date(base.getFullYear(),m+1,0);
+    var cur=m===base.getMonth(), to=cur?new Date(base):monthEnd, c=exCountRange_(from,to,focus);
+    out.push({label:(m+1)+'월',from:from,to:to,n:c.n,as:c.as,insp:c.insp,ty:c.ty,
+              sel:cur,ongoing:cur&&to<monthEnd});
+  }
+  return out;
+}
+function exTrendPeriodLabel_(kind, buckets){
+  if(!buckets||!buckets.length) return '';
+  var first=buckets[0], last=buckets[buckets.length-1], end=last.to;
+  var ym=function(d){return d.getFullYear()+'.'+String(d.getMonth()+1).padStart(2,'0');};
+  var s=kind==='month'
+    ? first.from.getFullYear()+'.01~'+ym(end)
+    : ym(first.mon)+'~'+ym(end)+'.'+String(end.getDate()).padStart(2,'0');
+  return s+(last.ongoing?' (진행 중)':'');
+}
+function exTrendCountText_(n){
+  var v=Math.round(Number(n||0)*10)/10;
+  return (Math.abs(v-Math.round(v))<0.001?exNum(Math.round(v)):v.toFixed(1))+'건';
+}
+/* 단일 시계열과 월평균 기준으로 현재 주·월의 증가/감소를 판정한다. */
+function exTrendLineSpec_(series, focus, opt){
+  opt=opt||{};
   var val=function(b){ return exTrendMetricVal_(b, focus); };
-  var pts=cur.map(function(b,i){
-    var pb=prev[i];
-    return {label:b.label, sel:!!b.sel, ongoing:!!b.ongoing,
-            main: val(b), ref: pb?val(pb):null};
+  var pts=(series||[]).map(function(b){
+    return {label:b.label,sel:!!b.sel,ongoing:!!b.ongoing,main:val(b)};
   });
-  /* 차이 — 같은 구간끼리(최근 − 직전). 진행 중 구간은 아직 견줄 수 없다. */
-  var deltas=pts.map(function(p){
-    return (p.ref==null || p.ongoing) ? null : p.main-p.ref;
-  });
-  var sum=function(a){ return a.reduce(function(x,b){ return x+val(b); },0); };
-  var sCur=sum(cur), sPrev=sum(prev);
-  var d=sCur-sPrev, pct=sPrev>0?Math.round(d/sPrev*100):null;
-  /* 최근 구간 안에서도 앞·뒤 절반을 비교한다.
-     주간 8주는 앞 4주 ↔ 최근 4주, 월간 6개월은 앞 3개월 ↔ 최근 3개월이다.
-     카드 우측 "최근 흐름"은 이 값만 읽어 장기 수준과 단기 방향을 섞지 않는다. */
-  var half=Math.max(1,Math.floor(cur.length/2));
-  var early=cur.slice(0,half), late=cur.slice(half);
-  var sEarly=sum(early), sLate=sum(late);
-  var earlyAvg=early.length?sEarly/early.length:0, lateAvg=late.length?sLate/late.length:0;
-  var md=sLate-sEarly, mp=sEarly>0?Math.round(md/sEarly*100):null;
-  var momentum={dir:md>0?'up':(md<0?'down':'flat'), d:md, pct:mp,
-                earlySum:sEarly, lateSum:sLate, earlyAvg:earlyAvg, lateAvg:lateAvg,
-                n:late.length};
-  /* 진행 중 구간이 있으면 합계 비교가 불리하게 나오므로 그 사실을 밝힌다 */
-  var ongoing=pts.some(function(p){ return p.ongoing; });
+  var baseline=Number(opt.baseline||0), current=pts.length?pts[pts.length-1].main:0;
+  var d=current-baseline, pct=baseline>0?Math.round(d/baseline*100):null;
+  var recent=pts.slice(Math.max(0,pts.length-3)), first=recent.length?recent[0].main:0;
+  var md=current-first, mp=first>0?Math.round(md/first*100):null;
+  var momentum={dir:md>0?'up':(md<0?'down':'flat'),d:md,pct:mp,n:recent.length};
   var cmp={dir:d>0?'up':(d<0?'down':'flat'), pct:pct, tone:d>0?'up':(d<0?'down':'flat'),
-           label: d===0 ? '±0건'
-                : (d>0?'▲ ':'▼ ')+exNum(Math.abs(d))+'건'+(pct==null?'':' ('+(d>0?'+':'−')+Math.abs(pct)+'%)'),
-           foot: sPrev>0 ? (ongoing?'마지막 구간 진행 중':'') : '직전 구간 0건'};
-  return {pts:pts, deltas:deltas, cmp:cmp, momentum:momentum, focus:focus||'',
-          sum:sCur, prevSum:sPrev, avg:pts.length?sCur/pts.length:0,
-          prevAvg:pts.length?sPrev/pts.length:0,
+           label:d===0?'±0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d)),
+           foot:baseline>0?'월평균 대비':'월평균 0건'};
+  return {pts:pts,cmp:cmp,momentum:momentum,focus:focus||'',
+          sum:current,prevSum:baseline,avg:baseline,prevAvg:baseline,
+          periodLabel:opt.periodLabel||'',baselineLabel:'월평균',
+          currentLabel:opt.currentLabel||'현재',ongoing:pts.length&&pts[pts.length-1].ongoing,
           last:pts.length?pts[pts.length-1]:null,
           metricLabel:exTrendMetricLabel_(focus),
-          mainName:(names&&names.main)||'이번 구간', refName:(names&&names.ref)||'직전 구간',
-          mainPeriod:(names&&names.mainPeriod)||'', refPeriod:(names&&names.refPeriod)||'',
-          refMuted:true};
+          mainName:opt.currentLabel||'현재',refName:'월평균'};
 }
 
 function buildExecutiveReportSnapshot(opt){
@@ -6028,69 +6070,58 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
       delta:exDeltaParts(fCur, fPrev, '건', 'bad', cmp)});
   }
 
-  /* ── 추이 카드 — 이번 구간(주간 8주 · 월간 6개월)과 바로 앞 같은 길이의 구간을 겹쳐 본다 ──
-     연간 비교분석 탭 "기간별 서비스 추이"와 같은 읽는 법이고,
+  /* ── 추이 카드 ──
+     주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지를 한 선으로 잇는다.
      무엇을 셀지는 생성 모달의 드롭다운(전체 처리 · A/S · 점검 · VOC 유형 하나)이 정한다.
-     이 선택은 추이 카드에만 적용한다 — KPI·VOC 변화·TOP5·특이사항은 전체 기준 그대로다. */
+     판정은 현재 주·월을 월평균과 비교한다. 이 선택은 추이 카드에만 적용한다. */
   var trend, vocOptions, focus=String(vocFocus||''), isVoc=exTrendIsVocType_(focus);
   var metricLb=exTrendMetricLabel_(focus);
   if(type==='month'){
-    var mtf=focus?buildMonthTrend(focus):mt, mtp=buildMonthTrend(focus, 1);
-    var cur=mtf[mtf.length-1];
-    /* 오늘이 아니라 사용자가 고른 종료일로 부분 월 여부를 판정한다.
-       과거 달의 중간 날짜를 보고해도 월 전체처럼 보이지 않아야 한다. */
-    var ongoing=!!cur.partial;
-    var mBucket=function(t){
-      return {label:t.m+'월', as:t.as, insp:t.insp, ty:t.ty, n:t.n,
-              sel:t.cur, ongoing:(t.cur&&!!t.partial)};
-    };
-    var mMainPeriod=exTrendPeriod_(mtf[0].from,mtf[mtf.length-1].to,true);
-    var mRefPeriod=exTrendPeriod_(mtp[0].from,mtp[mtp.length-1].to,true);
-    var mLine=exTrendLineSpec_(mtf.map(mBucket), mtp.map(mBucket), focus,
-      {main:'최근 '+EX_MONTH_TREND_N+'개월', ref:'직전 '+EX_MONTH_TREND_N+'개월',
-       mainPeriod:mMainPeriod, refPeriod:mRefPeriod});
-    vocOptions=exTrendTypeCounts_(mtf[0].from, mtf[mtf.length-1].to, false);
+    var mSeries=exReportMonthTrend_(focus);
+    var mTotal=mSeries.reduce(function(s,t){return s+exTrendMetricVal_(t,focus);},0);
+    var mAvg=mSeries.length?mTotal/mSeries.length:0;
+    var mPeriod=exTrendPeriodLabel_('month',mSeries);
+    var mLine=exTrendLineSpec_(mSeries,focus,
+      {baseline:mAvg,periodLabel:mPeriod,currentLabel:'현재 월'});
+    vocOptions=exTrendTypeCounts_(mSeries[0].from,mSeries[mSeries.length-1].to,false);
     trend={
       kind:'month',
-      title:(isVoc?('월별 '+focus+' 발생 추이'):'월별 처리 추이')
-            +' · '+mRefPeriod+' 대비',
-      /* 두 구간의 실제 날짜는 아래 수치 타일이 밝힌다 — 제목 줄에서는 무엇을 어떻게 견주는지만 적는다 */
-      basis:'집계 대상 '+metricLb+' · '+mMainPeriod+' ↔ '+mRefPeriod+' · 처리일 기준',
+      title:isVoc?('월별 '+focus+' 발생 추이'):'월별 처리 추이',
+      basis:'집계 대상 '+metricLb+' · '+mPeriod+' · 월평균 기준 · 처리일 기준',
       line: mLine,
       stats:[
-        {label:'기준 월 '+metricLb, value:exNum(exTrendMetricVal_(mBucket(cur), focus))+'건',
-         foot:exMD_(cur.from)+'~'+exMD_(cur.to)+(ongoing?' · 기준일까지':'')},
-        {label:mMainPeriod+' 합계', value:exNum(mLine.sum)+'건', foot:'월평균 '+mLine.avg.toFixed(1)+'건'},
-        {label:mRefPeriod+' 합계', value:exNum(mLine.prevSum)+'건',
-         foot:exMD_(mtp[0].from)+'~'+exMD_(mtp[mtp.length-1].to)},
-        {label:mRefPeriod+' 대비', value:mLine.cmp.label,
+        {label:'현재 월 '+metricLb, value:exTrendCountText_(mLine.sum),
+         foot:mLine.ongoing?'진행 중':'완료'},
+        {label:mPeriod+' 합계', value:exTrendCountText_(mTotal), foot:'1월부터 현재 월'},
+        {label:'월평균', value:exTrendCountText_(mAvg), foot:'표시 기간 평균'},
+        {label:'월평균 대비 현재', value:mLine.cmp.label,
          valueTone:mLine.cmp.tone, foot:mLine.cmp.foot}
       ]
     };
   }else{
-    var tr=buildWeekTrend(focus), trPrev=buildWeekTrend(focus, 1);
-    var wBucket=function(t){
-      return {label:(t.mon.getMonth()+1)+'/'+t.mon.getDate(),
-              as:t.as, insp:t.insp, ty:t.ty, n:t.n, sel:t.sel, ongoing:!!t.partial};
-    };
-    var wMainPeriod=exTrendPeriod_(tr[0].mon,tr[tr.length-1].to);
-    var wRefPeriod=exTrendPeriod_(trPrev[0].mon,trPrev[trPrev.length-1].to);
-    var wLine=exTrendLineSpec_(tr.map(wBucket), trPrev.map(wBucket), focus,
-      {main:'최근 8주', ref:'직전 8주', mainPeriod:wMainPeriod, refPeriod:wRefPeriod});
-    vocOptions=exTrendTypeCounts_(tr[0].mon, tr[tr.length-1].to, true);
+    var wSeries=exReportWeekTrend_(focus), base=exBaseDate();
+    var prevFrom=new Date(base.getFullYear(),base.getMonth()-1,1);
+    var prevTo=new Date(base.getFullYear(),base.getMonth(),0);
+    var curFrom=new Date(base.getFullYear(),base.getMonth(),1);
+    var prevCnt=exCountRange_(prevFrom,prevTo,focus,true), curCnt=exCountRange_(curFrom,base,focus,true);
+    var wAvg=(exTrendMetricVal_(prevCnt,focus)+exTrendMetricVal_(curCnt,focus))/2;
+    var wPeriod=exTrendPeriodLabel_('week',wSeries);
+    var wLine=exTrendLineSpec_(wSeries,focus,
+      {baseline:wAvg,periodLabel:wPeriod,currentLabel:'현재 주차'});
+    vocOptions=exTrendTypeCounts_(wSeries[0].mon,wSeries[wSeries.length-1].to,true);
     trend={
       kind:'week',
-      title:(isVoc?(focus+' 발생 추이'):'서비스 추이')+' · '+wRefPeriod+' 대비',
-      basis:'집계 대상 '+metricLb+' · '+wMainPeriod+' ↔ '+wRefPeriod
-            +' · 주 단위('+WK_DAYS_LABEL+') · 처리일 기준',
+      title:isVoc?(focus+' 발생 추이'):'서비스 추이',
+      basis:'집계 대상 '+metricLb+' · '+wPeriod+' · 월평균 기준 · 주 단위('+WK_DAYS_LABEL+')',
       line: wLine,
       stats:[
-        {label:'기준 주 '+metricLb, value:exNum(wLine.last?wLine.last.main:0)+'건',
-         foot:wLine.last&&wLine.last.ongoing?'진행 중':''},
-        {label:wMainPeriod+' 합계', value:exNum(wLine.sum)+'건', foot:'주평균 '+wLine.avg.toFixed(1)+'건'},
-        {label:wRefPeriod+' 합계', value:exNum(wLine.prevSum)+'건',
-         foot:exMD_(trPrev[0].mon)+'~'+exMD_(trPrev[trPrev.length-1].to)},
-        {label:wRefPeriod+' 대비', value:wLine.cmp.label,
+        {label:'현재 주차 '+metricLb, value:exTrendCountText_(wLine.sum),
+         foot:wLine.ongoing?'진행 중':'완료'},
+        {label:wPeriod+' 합계',
+         value:exTrendCountText_(wSeries.reduce(function(s,t){return s+exTrendMetricVal_(t,focus);},0)),
+         foot:'전월부터 현재 주차'},
+        {label:'월평균', value:exTrendCountText_(wAvg), foot:'전월·당월 평균'},
+        {label:'월평균 대비 현재', value:wLine.cmp.label,
          valueTone:wLine.cmp.tone, foot:wLine.cmp.foot}
       ]
     };
@@ -6121,7 +6152,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
                .filter(function(t){return t.cur>0;}).slice(0,5)
                .map(function(t){return topRow(t,true);}) },
     partTop:{ title:'교체품 TOP 5', basis:'수량 기준 · '+cmpLb+' 대비',
-              rows: exDimCompare(x.rows, x.prev, 'part', false)
+              rows: exPartCompare_(x.rows, x.prev)
                 .filter(function(t){return t.cur>0;}).slice(0,5)
                 .map(function(t){return topRow(t,false);}) },
     /* 자동 특이사항 생성 원천은 buildExecutiveNotes() 하나뿐이다 —
@@ -8686,7 +8717,9 @@ function exShowHistory_(dim, name, opt){
   }else{
     title=name; sort=exHistorySort_;
     var key=(dim==='typeAll')?'type':dim;
-    cur=exHistoryRows_(x.rows, key, name, onlyAS);
+    cur=dim==='part'
+      ? x.rows.filter(function(r){return exPartTopLabel_(r)===name;})
+      : exHistoryRows_(x.rows, key, name, onlyAS);
     sub=(onlyAS?'A/S 기준 · 이상 없음 제외':(dim==='typeAll'?'A/S·점검 통합 · 이상 없음 제외':'교체품 수량 기준'))
       +' · 선택 기간 '+per+' '+exNum(cur.length)+'건';
     curChip=exNum(cur.length)+'건';
@@ -9008,8 +9041,7 @@ function renderExecutiveSummary(x){
           /* TOP5 카드와 같은 data-* / 같은 위임 핸들러를 쓴다 — 현재 0건인 감소 유형도 누를 수 있다 */
           return '<button type="button" class="ex-li ex-row-btn"'
             +' data-hist-dim="typeAll" data-hist-k="'+escAttr(t.k)+'" title="처리 이력 보기">'
-            +'<span class="nm" title="'+escAttr(t.k)+'">'+esc(t.k)
-            +(t.prev===0&&t.cur>0?'<em class="ex-change-new">신규</em>':'')+'</span>'
+            +'<span class="nm" title="'+escAttr(t.k)+'">'+esc(t.k)+'</span>'
             +'<span class="rt">'+t.prev+' → <b>'+t.cur+'</b> '+exDeltaSmall(t.d)+'</span></button>';
         }).join('')+'</div>':'<div class="ex-empty">해당 유형 없음</div>')
       +'</div>';
@@ -9058,7 +9090,7 @@ function renderExecutiveCause(x){
     +'<div class="ex-cbody">'+exBars(types,{empty:'VOC 유형 기록 없음', histDim:'typeAll'})+'</div>';
 
   /* ── 교체품 상위 5 ── */
-  var parts=exDimCompare(x.rows, x.prev, 'part', false)
+  var parts=exPartCompare_(x.rows, x.prev)
     .filter(function(t){return t.cur>0;}).slice(0,5);
   document.getElementById('exPartCard').innerHTML=
     exH3('교체품 TOP 5', '수량 기준 · '+per+' · '+cmpTxt)

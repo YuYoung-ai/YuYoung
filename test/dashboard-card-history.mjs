@@ -51,7 +51,7 @@ const FNS = [
   'skNorm_', 'skCmpKo_', 'exToday', 'exBaseDate',
   'filteredRows_', 'hospStateFilter_', 'nozStateMap_', 'buildNozzleStatusMap',
   'exWindowBaseRows_', 'exWindowRows', 'buildComparisonPeriod', 'exPrevRows',
-  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exVocTypeCompare_',
+  'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exPartTopLabel_', 'exPartDim_', 'exPartCompare_', 'exVocTypeCompare_',
   'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData', 'buildNozzleUnrated',
   'buildNcareCompare', 'exBuild', 'exNum', 'exPeriodLabel', 'exDeltaSmall', 'exBars',
   'exListGroup', 'exHistoryRows_', 'exHistorySort_', 'exHistoryDataset_', 'exHistoryIsLatest_', 'exHistoryVal_',
@@ -142,7 +142,7 @@ const x = load(SAMPLE, WEEK);
 
 const vocTop = D.exDimCompare(x.rows, x.prev, 'type', true);
 const vocTopAll = D.exVocTypeCompare_(x.rows, x.prev);
-const partTop = D.exDimCompare(x.rows, x.prev, 'part', false);
+const partTop = D.exPartCompare_(x.rows, x.prev);
 const change = D.buildExecutiveVocChange(x);
 const curOf = (dim, k, onlyAS) => D.exHistoryRows_(x.rows, dim, k, onlyAS);
 const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
@@ -438,7 +438,7 @@ const prevOf = (dim, k, onlyAS) => D.exHistoryRows_(x.prev, dim, k, onlyAS);
   const causeSrc=grab('renderExecutiveCause');
   ck('48. VOC 유형·교체품 TOP5는 선택 기간 0건 항목을 제외한다',
     /exVocTypeCompare_\(x\.rows, x\.prev\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc) &&
-    /exDimCompare\(x\.rows, x\.prev, 'part', false\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc));
+    /exPartCompare_\(x\.rows, x\.prev\)[\s\S]{0,100}filter\(function\(t\)\{return t\.cur>0;\}\)\.slice\(0,5\)/.test(causeSrc));
   const showHistorySrc=grab('exShowHistory_');
   ck('49. VOC 변화·TOP5 클릭 이력 모두 A/S·점검 통합 기준을 사용한다',
     /dim==='typeAll'\)\?'type':dim/.test(showHistorySrc) &&

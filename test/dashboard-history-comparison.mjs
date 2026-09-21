@@ -15,7 +15,7 @@ function grab(name){
   }
   throw new Error(name);
 }
-const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK',
+const FNS=['nkey','rowDate','ymd','esc','escAttr','skCmpKo_','exNum','isOK','costNum','exPartTopLabel_',
   'hpCleanKey_','hpIsLeakVoc_','hpCleanDays_','isHandpieceCleaning_','vocTypeCanonical_',
   'isDemoRecord','recScope','exPeriodLabel','exHistoryVal_','exHistoryPairKey_',
   'exHistoryValidDate_','exHistoryPeriodLabel_','exHistoryPrevious_','exHistoryComparisonNote_','exHistoryComparisonMeta_',

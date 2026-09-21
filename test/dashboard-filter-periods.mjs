@@ -65,7 +65,8 @@ function load(rows,over){
   ck('2-b. 최신 주 표시 범위도 선택 종료일까지',D.ymd(last.to)==='2026-08-19'&&last.partial===true);
 }
 ck('2-c. 월간 보고서도 오늘이 아닌 선택 종료일로 부분 월 판정',
-  /var ongoing=!!cur\.partial/.test(grab('exReportSnapshot_'))&&/기준일까지/.test(grab('exReportSnapshot_')));
+  /var mSeries=exReportMonthTrend_/.test(grab('exReportSnapshot_'))&&
+  /ongoing:cur&&to<monthEnd/.test(grab('exReportMonthTrend_')));
 {
   load([
     {date:'2025-08-05',hosp:'A',fse:'김',gubun:'A/S'},
