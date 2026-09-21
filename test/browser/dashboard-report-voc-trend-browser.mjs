@@ -84,25 +84,26 @@ const pvText = async () => {
   return t;
 };
 const plain = await pvText();
-ck('3. 기본은 전체 처리를 최근 8주 ↔ 직전 8주로 겹쳐 본다',
-  plain.includes('최근 8주 서비스 추이 · 직전 8주 대비') &&
-  plain.includes('집계 대상 전체 처리(A/S·점검)') &&
-  plain.includes('최근 8주 합계') && plain.includes('직전 8주 합계'));
+ck('3. 기본은 전체 처리를 직전 8주→최근 8주 연속 추이로 본다',
+  plain.includes('전체 처리(A/S·점검) 추이') &&
+  (plain.match(/\d{1,2}\.\d{1,2}~\d{1,2}\.\d{1,2}/g)||[]).length >= 2 &&
+  plain.includes('최근 흐름'));
+ck('3-b. 그래프 구간명은 상대 표현 대신 실제 날짜를 쓴다',
+  !plain.includes('직전 8주') && !plain.includes('최근 8주'));
 
 await page.selectOption('#wkVocSel', '노즐 누수(약액 유입)');
 const focus = await pvText();
 ck('4. 고른 유형이 추이 카드 제목에 나온다',
-  focus.includes('최근 8주 노즐 누수(약액 유입) 발생 추이'));
+  focus.includes('노즐 누수(약액 유입) 발생 추이'));
 ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
-  focus.includes('집계 대상 노즐 누수(약액 유입)') &&
-  focus.includes('기준 주 노즐 누수(약액 유입)') && focus.includes('직전 8주 대비'));
-/* '직전 8주 대비'는 카드 제목에도 나오므로 마지막(수치 타일) 쪽을 본다 */
-ck('6. 직전 8주보다 늘어난 유형은 증가로 판정', /▲/.test(focus.split('직전 8주 대비').pop()));
+  focus.includes('노즐 누수(약액 유입) · 비율') &&
+  (focus.match(/\d{1,2}\.\d{1,2}~\d{1,2}\.\d{1,2}/g)||[]).length >= 2 && focus.includes('주평균'));
+ck('6. 직전 8주보다 늘어난 유형은 증가 추세로 판정', focus.includes('증가 추세'));
 ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
   const kpiRow = focus.split('전체 서비스 건수')[1] || '';
   /* 상단 KPI 줄 = 전체 · A/S · 점검 · 선택 유형 순 */
-  return kpiRow.indexOf('노즐 누수(약액 유입) · 비율') >= 0 &&
-         kpiRow.indexOf('노즐 누수(약액 유입)') < kpiRow.indexOf('최근 8주');
+  const kpiAt = kpiRow.indexOf('노즐 누수(약액 유입) · 비율');
+  return kpiAt >= 0 && kpiAt < kpiRow.indexOf('발생 추이');
 })());
 ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
   (plain.split('전체 서비스 건수')[1] || '').indexOf('비율') ===
@@ -122,11 +123,11 @@ ck('8. 미리보기 추이 그래프가 꺾은선·점으로 그려진다', awai
 await page.selectOption('#wkVocSel', '__insp__');
 const insp = await pvText();
 ck('8-b. 구분만 골라 볼 수도 있다 (A/S 전체 · 점검 전체)',
-  insp.includes('집계 대상 점검') && insp.includes('기준 주 점검'));
+  insp.includes('점검 추이') && insp.includes('점검 건수가'));
 
 await page.selectOption('#wkVocSel', '케이블 불량');
 const down = await pvText();
-ck('9. 직전 8주보다 줄어든 유형은 감소로 판정', /▼/.test(down.split('직전 8주 대비').pop()));
+ck('9. 직전 8주보다 줄어든 유형은 감소 추세로 판정', down.includes('감소 추세'));
 
 /* 보고 주차를 바꾸면 목록을 다시 만든다 — 새 기간에 없는 유형이 남지 않아야 한다 */
 await page.evaluate(() => { const s = document.getElementById('wkSel'); s.selectedIndex = s.options.length - 1; exOnReportPeriodChange_('week'); });
@@ -142,9 +143,9 @@ await page.selectOption('#mnVocSel', '노즐 누수(약액 유입)');
 await page.evaluate(() => previewMonthlyPPT());
 await page.waitForSelector('#mnPvModal.show');
 const mText = (await page.textContent('#mnPvSlides')).replace(/\u00a0/g, ' ');
-ck('12. 월간도 최근 6개월 ↔ 직전 6개월로 겹쳐 본다',
-  mText.includes('월별 노즐 누수(약액 유입) 발생 추이 · 직전 6개월 대비') &&
-  mText.includes('최근 6개월 합계') && mText.includes('직전 6개월 합계'));
+ck('12. 월간도 직전 6개월→최근 6개월 연속 추이로 본다',
+  mText.includes('노즐 누수(약액 유입) 발생 추이') &&
+  (mText.match(/(?:\d{2}\.)?\d{1,2}(?:월)?~(?:\d{2}\.)?\d{1,2}월?/g)||[]).length >= 2 && mText.includes('월평균'));
 
 ck('13. 콘솔 오류 없음', errs.length === 0, errs.join(' | '));
 await browser.close();
