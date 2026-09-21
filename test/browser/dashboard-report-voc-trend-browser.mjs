@@ -36,9 +36,13 @@ for (let i = 15; i >= 0; i--) {
 MONDAYS.forEach((w, i) => {
   const day = k => { const x = new Date(w + 'T00:00:00'); x.setDate(x.getDate() + k); return x.toISOString().slice(0, 10); };
   const recent = i >= 8, j = i - 8;
-  const leak = recent ? j + 3 : 3;             /* 최근 8주 3→10 · 직전 8주 3 */
+  const leak = recent ? 10 - j : 10;           /* 감소 표본: 최근 8주 10→3 */
   const cable = recent ? 9 - j : 9;            /* 최근 8주 9→2 · 직전 8주 9 */
-  for (let k = 0; k < leak; k++) DATA.push({ date: day(k % 5), hosp: '가나병원', gubun: 'A/S', type: '노즐 누수(약액 유입)', part: "Handpiece Ass'y" });
+  for (let k = 0; k < leak; k++) {
+    const internal = (k % 4) !== 3;
+    DATA.push({ date: day(k % 5), hosp: '가나병원', gubun: 'A/S', type: '노즐 누수(약액 유입)',
+      part: internal ? '내부 세척' : "Handpiece Ass'y", cost: internal ? '' : '120000' });
+  }
   for (let k = 0; k < cable; k++) DATA.push({ date: day(k % 5), hosp: '다라의원', gubun: 'A/S', type: '케이블 불량', part: 'Cable' });
   DATA.push({ date: day(1), hosp: '마바병원', gubun: '점검', type: '정기점검' });
 });
@@ -86,7 +90,7 @@ const plain = await pvText();
 ck('3. 기본은 전체 처리를 최근 16주부터 현재 주차까지 연속 추이로 본다',
   plain.includes('전체 처리(A/S·점검) 추이') &&
   plain.includes('2026.04~2026.08.08') && plain.includes('주간 평균') &&
-  plain.includes('최근 흐름'));
+  !plain.includes('최근 흐름'));
 ck('3-b. 그래프 구간명은 상대 표현 대신 실제 날짜를 쓴다',
   !plain.includes('직전 8주') && !plain.includes('최근 8주'));
 
@@ -110,8 +114,8 @@ ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는�
 ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
   (plain.split('전체 서비스 건수')[1] || '').indexOf('비율') ===
   (plain.split('전체 서비스 건수')[1] || '').lastIndexOf('비율'));
-ck('7. 유형을 골라도 기존 KPI·TOP5는 전체 기준 그대로',
-  ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', 'VOC 유형 TOP 5', '교체품 TOP 5']
+ck('7. 유형을 골라도 기존 KPI·노즐 누수 조치 추이는 전체 기준 그대로',
+  ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', '노즐 누수 조치 추이', '자체 수리율']
     .every(t => plain.includes(t) && focus.includes(t)));
 ck('8. 미리보기 추이 그래프가 단일 꺾은선·주간 평균 점선·우측 증감으로 그려진다', await page.evaluate(() => {
   const snap = exReportSnapFromSel_('week');
@@ -122,6 +126,12 @@ ck('8. 미리보기 추이 그래프가 단일 꺾은선·주간 평균 점선·
     items.filter(o => o.trendAverage).length === 1 &&
     items.some(o => o.trendDeltaLabel) && !items.some(o => o.trendBar);
 }));
+if(process.env.SHOT){
+  await page.evaluate(() => previewWeeklyPPT());
+  await page.waitForSelector('#wkPvModal.show');
+  await page.locator('#wkPvSlides > div > div').screenshot({path:process.env.SHOT});
+  await page.evaluate(() => closeWkPreview());
+}
 
 await page.selectOption('#wkVocSel', '__insp__');
 const insp = await pvText();

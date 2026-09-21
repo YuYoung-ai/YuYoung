@@ -67,6 +67,7 @@ const FNS = [
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exPartTopLabel_', 'exPartDim_', 'exPartCompare_', 'exVocTypeCompare_',
   'exTrendVocType_', 'exCountVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
   'exTrendIsVocType_', 'exTrendPeriod_', 'exReportWeekTrend_', 'exReportMonthTrend_',
+  'hpCleanKey_', 'hpIsLeakVoc_', 'exNozzleActionTrend_', 'exNozzleActionSpec_',
   'exTrendPeriodLabel_', 'exTrendCountText_', 'exTrendLineSpec_', 'ycNice_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
   'exMonthTrendNote_', 'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
@@ -94,6 +95,7 @@ const src = [
   grabVar('var WK_LAST='), grabVar('var WK_LEN='), grabVar('var WK_DAYS_LABEL='),
   grabVar('var WK_LAST='),grabVar('var WK_LEN='),grabVar('var WK_DAYS_LABEL='),grabVar('var DEMO_MARK='),
   grabVar('var EX_MONTH_TREND_N='),
+  grabVar('var YC_CLEAN_SAVING_UNIT='),
   grabVar('var NCK_ST='),
   grabVar('var EX_NOTE_SKILL='),
   grabVar('var EX_NOTE_NOZ='),
@@ -210,7 +212,7 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
   ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.line.pts.filter(p => p.sel).length === 1);
   ck('4-d. 좌측 판정 패널에 주간 평균·현재값·증감 상태가 그려진다',
     ['previous','recent','delta'].every(k => wItems.some(o => o.trendSummary === k)) &&
-    wItems.some(o => o.trendState) && wItems.some(o=>o.trendAverage) && has(wItems, '최근 흐름'));
+    wItems.some(o => o.trendState) && wItems.some(o=>o.trendAverage) && !has(wItems, '최근 흐름'));
   ck('5. 월간 PPT는 1월부터 현재 월까지 꺾은선으로 잇는다',
     mSnap.trend.kind === 'month' && mSnap.trend.line.pts.length === 8 &&
     mItems.filter(o => o.trendPoint).length === 8 &&
@@ -285,8 +287,8 @@ function rebuildX(period) {
   return x;
 }
 
-/* ══════ 7·8. VOC TOP5 · 교체품 TOP5 ══════ */
-{
+/* 이전 TOP5 렌더링 계약은 조치 추이 카드로 대체했다. */
+if(false){
   ck('7. VOC 유형 TOP 5 존재', has(wItems, 'VOC 유형 TOP 5') && wSnap.vocTop.rows.length > 0);
   ck('7-b. A/S·점검 중 실제 이상 유형 통합·정상 점검 표기 제외',
     !wSnap.vocTop.rows.some(r => r.k === '이상 없음') && !wSnap.vocTop.rows.some(r => r.k === '정기점검'),
@@ -463,8 +465,8 @@ function rebuildX(period) {
     /데이터가 없습니다/.test(z.notes.items[0]), z.notes.items[0]);
   ck('18-d. 0건에도 회사 제목·로고·푸터는 유지',
     has(zi, '주간업무보고') && zi.some(o => o.k === 'logo') && has(zi, 'BAZ BIOMEDIC'));
-  ck('18-e. 0건에도 빈 카드 안내가 그려진다',
-    has(zi, 'A/S 기록 없음') && has(zi, '교체품 기록 없음'));
+  ck('18-e. 0건에도 노즐 누수 조치 카드와 절감액 자리는 유지한다',
+    has(zi, '노즐 누수 조치 추이') && has(zi, '절감액'));
   load(SAMPLE);
 }
 
@@ -595,17 +597,13 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     ' / change x=' + D.L.change.x.toFixed(3) + ' w=' + D.L.change.w.toFixed(3));
   ck('R3. KPI 3장이 본문 폭을 정확히 채운다',
     Math.abs(D.L.kpi.w * 3 + D.L.kpi.gap * 2 - W) < 0.001);
-  ck('R4. TOP5 두 장 + gap 이 서비스 추이 카드 폭과 정확히 동일',
-    Math.abs(D.L.voc.w + D.L.gap + D.L.part.w - D.L.trend.w) < 0.001,
-    D.L.voc.w.toFixed(3) + ' + ' + D.L.gap + ' + ' + D.L.part.w.toFixed(3) +
-    ' vs ' + D.L.trend.w.toFixed(3));
-  ck('R5. 두 TOP5 카드가 개편 전(3.45 / 2.95)보다 넓다',
-    D.L.voc.w > 3.45 && D.L.part.w > 2.95,
-    'voc=' + D.L.voc.w.toFixed(2) + ' part=' + D.L.part.w.toFixed(2));
+  ck('R4. 하단 조치 추이 카드 폭이 상단 발생 추이 카드와 정확히 동일',
+    Math.abs(D.L.action.w-D.L.trend.w)<0.001 && Math.abs(D.L.action.x-D.L.trend.x)<0.001);
+  ck('R5. 하단 조치 추이 요약 패널 폭이 상단 발생 추이와 동일',
+    Math.abs(D.L.action.leftW-D.L.trend.leftW)<0.001 && Math.abs(D.L.action.graphX-D.L.trend.graphX)<0.001);
   ck('R6. 하단 카드가 왼쪽부터 빈틈없이 이어진다',
-    Math.abs(D.L.voc.x - D.L.page.left) < 0.001 &&
-    Math.abs(D.L.part.x - (D.L.voc.x + D.L.voc.w + D.L.gap)) < 0.001 &&
-    Math.abs(D.L.notes.x + D.L.notes.w - D.L.page.right) < 0.001);
+    Math.abs(D.L.action.x-D.L.page.left)<0.001 &&
+    Math.abs(D.L.notes.x+D.L.notes.w-D.L.page.right)<0.001);
 }
 
 /* ══════ 특이사항 자동 배치 (글자를 무조건 줄이지 않는다) ══════ */
@@ -713,8 +711,8 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     has(emptyItems, '특이사항') && has(emptyItems, '특이사항 없음'),
     allText(emptyItems).indexOf('특이사항 없음') >= 0 ? 'ok' : 'missing');
   ck('E4-c. 전부 제거해도 슬라이드는 1장, 다른 카드는 그대로',
-    deckOf(emptySnap).length === 1 && has(emptyItems, 'VOC 유형 TOP 5') &&
-    has(emptyItems, '교체품 TOP 5') && has(emptyItems, 'BAZ BIOMEDIC'));
+    deckOf(emptySnap).length === 1 && has(emptyItems, '노즐 누수 조치 추이') &&
+    has(emptyItems, 'BAZ BIOMEDIC'));
 
   /* 손대지 않은 상태 복귀 */
   D.setNoteEdits('week', null);
@@ -998,6 +996,28 @@ if (false) {
   load(SAMPLE);
 }
 
+/* ══════ 7. 노즐 누수 조치 추이 ══════ */
+{
+  ck('7. TOP5 두 장 대신 노즐 누수 조치 추이 카드 하나를 표시',
+    has(wItems, '노즐 누수 조치 추이') && !has(wItems, 'VOC 유형 TOP 5') && !has(wItems, '교체품 TOP 5'));
+  ck('7-b. 조치 카드의 대상은 노즐 누수(약액 유입)만 명시',
+    wSnap.action.basis.includes('노즐 누수(약액 유입)') && wSnap.action.pts.length === 16);
+  ck('7-c. 내부 세척 수리·유상 Handpiece 교체를 각각 꺾은선으로 표시',
+    wItems.filter(o=>o.actionSegment==='clean').length===15 &&
+    wItems.filter(o=>o.actionSegment==='replacement').length===15 &&
+    has(wItems, '내부 세척 수리') && has(wItems, 'Handpiece 교체'));
+  ck('7-d. Handpiece 교체 건수와 유상 판매 사유를 좌측 원형 요약에 표시',
+    wItems.some(o=>o.actionReplacementGauge) && wItems.some(o=>o.actionReplacementCount) &&
+    wItems.some(o=>o.actionReplacementReason&&o.t==='유상 판매'));
+  ck('7-e. 좌측 조치 요약 패널 폭은 상단 발생 추이와 동일',
+    Math.abs(D.L.action.leftW-D.L.trend.leftW)<0.001 &&
+    Math.abs(D.L.action.graphX-D.L.trend.graphX)<0.001);
+  ck('7-f. 자체 수리율 원형 그래프와 내부 세척 절감액을 표시',
+    wItems.some(o=>o.actionGauge) && wItems.some(o=>o.actionRepairRate) && wItems.some(o=>o.actionSaving));
+  ck('7-g. 월간도 동일한 조치 카드 구성을 사용',
+    has(mItems,'노즐 누수 조치 추이') && mItems.some(o=>o.actionGauge));
+}
+
 /* ══════ V. 추이 그래프 — 표시 기간 주간 평균 대비 단일 꺾은선 ══════ */
 {
   const rows = [];
@@ -1066,15 +1086,14 @@ if (false) {
     return li.some(o=>o.trendState&&o.color===(leak.trend.line.cmp.dir==='up'?D.C.red:D.C.green)) &&
       ci.some(o=>o.trendState&&o.color===(cable.trend.line.cmp.dir==='up'?D.C.red:D.C.green));
   })());
-  ck('V9. 그래프 최상단 가운데에 전체 기간, 그 아래에 주간 평균을 표시한다',
-    fi.some(o=>o.trendPeriod&&o.t===leak.trend.line.periodLabel) &&
-    fi.some(o=>o.trendAverageLabel&&o.t==='주간 평균 '+D.exTrendCountText_(leak.trend.line.prevSum)) &&
-    fi.filter(o=>o.trendAverageLabel||o.trendPeriod).every(o=>o.y<D.L.trend.graph.plotTop));
+  ck('V9. 전체 기간은 그래프 좌측 최상단에, 평균 보조 문구는 표시하지 않는다',
+    fi.some(o=>o.trendPeriod&&o.t===leak.trend.line.periodLabel&&o.x>=D.L.trend.graph.plotL&&o.y<D.L.trend.graph.plotTop) &&
+    !fi.some(o=>o.trendAverageLabel));
   ck('V9-b. 주간 평균 수평 점선을 한 줄만 표시한다',
     fi.filter(o=>o.trendAverage).length===1 && fi.find(o=>o.trendAverage).dash===true);
   ck('V9-b-1. PPTX 선 렌더러도 평균 점선 속성을 전달한다',
     /else if\(o\.k==='line'\)[\s\S]{0,280}dashType:o\.dash\?'dash':'solid'/.test(SRC));
-  ck('V9-c. 점선이 주간 평균 기준선임을 그래프 좌측 상단에 밝힌다',
+  ck('V9-c. 점선이 주간 평균 기준선임을 그래프 우측 상단에 밝힌다',
     fi.filter(o=>o.trendAverageLegend).length===2 &&
     fi.some(o=>o.trendAverageLegend&&o.t==='주간 평균 건 수'));
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
@@ -1087,12 +1106,12 @@ if (false) {
     fi.some(o=>o.trendPercent)&&fi.some(o=>o.trendState));
   ck('V11-a. 좌측 판정 문구는 건수 대신 평균 대비 증감률을 쓴다',
     fi.some(o=>o.trendNarrative==='deltaPercent'&&/% (?:감소|증가)했습니다$/.test(o.t)));
-  ck('V11-b. 노즐 누수 감소 판단 근거는 그래프 하단에만 표시한다',
+  ck('V11-b. 노즐 누수 감소 판단 근거는 좌측 요약 패널 최하단에 표시한다',
     leakDown.trend.line.cmp.dir==='down' &&
-    itemsOf(leakDown).some(o=>o.trendReason&&o.t==='지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&
+    itemsOf(leakDown).some(o=>o.trendReason&&o.t==='지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소'&&o.x<D.L.trend.graphX&&o.y>=D.L.trend.reason.y) &&
     !itemsOf(cable).some(o=>o.trendReason));
-  ck('V12. 최근 흐름 카드 글자는 가운데 정렬한다',
-    fi.some(o=>o.trendFlow&&o.align==='center'));
+  ck('V12. 최근 흐름 카드는 표시하지 않는다',
+    !fi.some(o=>o.trendFlow) && !has(fi,'최근 흐름'));
   ck('V13. 우측 끝에 주간 평균 대비 증가·감소 방향과 건수를 표시한다',
     fi.some(o=>o.trendDeltaLabel&&/(?:▲|▼|±).*건/.test(o.t)));
   ck('V14. 점의 x좌표가 시간 순서대로 계속 증가하며 기간 구분선은 없다',

@@ -4171,7 +4171,6 @@ var L=(function(){
   /* 하단은 상단 열 경계를 그대로 잇는다 —
        왼쪽(TOP5 두 장 + gap) = 서비스 추이 카드 폭,  오른쪽(특이사항) = VOC 유형 변화 카드 폭
      → 특이사항이 VOC 유형 변화 바로 아래에 x·폭까지 정확히 정렬된다. */
-  var vocW=(trendW-gap)/2, partW=trendW-gap-vocW;   /* 3.90 / 3.90 */
   var notesW=changeW;                               /* 4.67 */
   return {
     page:page, W:W, gap:gap,
@@ -4201,31 +4200,41 @@ var L=(function(){
                      prevX:page.left+0.18, prevW:0.66, arrowX:page.left+0.84, arrowW:0.25,
                      curX:page.left+1.08, curW:0.66, ruleX:page.left+1.76,
                      deltaX:page.left+1.82, deltaW:0.68},
-            reason:{ruleY:rowA.y+2.08, y:rowA.y+2.14, h:0.18,
+            reason:{ruleY:rowA.y+2.19, y:rowA.y+2.23, h:0.10,
                     labelX:page.left+0.18, labelW:0.49,
-                    textX:page.left+0.70, textW:1.66},
+                    textX:page.left+0.18, textW:2.18},
             graphX:page.left+2.58, graphY:rowA.y+0.04,
             graphW:trendW-2.62, graphH:rowA.h-0.08,
             graph:{headY:rowA.y+0.12, headH:0.22, avgY:rowA.y+0.34, avgH:0.18,
-                   chipW:0.72, chipH:0.52, chipTop:rowA.y+0.10,
                    /* 기준 이미지처럼 Y축 여백을 충분히 두고, 마지막 주차 뒤에는 증감 문구 영역을 남긴다. */
                    /* 그래프 시작선은 하단 판단 근거의 시작선과 맞춘다. */
                    plotL:page.left+2.75, plotR:page.left+trendW-0.21,
                    plotTop:rowA.y+0.68, plotBot:rowA.y+1.91,
                    axisW:0.27, axisH:0.16, ticks:3,
                    valueH:0.18, valueDY:0.04, labelY:rowA.y+1.94, labelH:0.15,
-                   avgLabelH:0.20, deltaW:0.72,
-                   reasonRuleY:rowA.y+2.12, reasonY:rowA.y+2.17, reasonH:0.17} },
+                   avgLabelH:0.20, deltaW:0.72} },
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
              rowPitch:0.24, rowH:0.22, rightW:1.55 },
-    top:{ y:rowB.y, h:rowB.h, pad:0.12,
-          headY:rowB.y+0.52, headH:0.18, ruleDY:0.19,
-          rowY:rowB.y+0.72, rowPitch:0.27, rowH:0.24,
-          descDY:0.0266667, descNameH:0.14, descH:0.10,
-          cntW:0.48, deltaW:0.68, colGap:0.02 },
-    voc:{ x:page.left, w:vocW },
-    part:{ x:page.left+vocW+gap, w:partW },
+    /* 하단은 TOP5 두 장 대신, 같은 폭의 노즐 누수 조치 추이 한 장을 둔다.
+       좌측 요약 폭은 상단 발생 추이와 똑같이 2.52in으로 고정해 두 카드의 세로 경계가 이어진다. */
+    action:{ x:page.left, y:rowB.y, w:trendW, h:rowB.h,
+              inset:0.04, leftW:2.52, splitGap:0.06,
+              titleX:page.left+0.18, titleY:rowB.y+0.10, titleW:2.18, titleH:0.28,
+              gauge:{cx:page.left+0.67, cy:rowB.y+0.93, outerR:0.34, pctY:rowB.y+0.78, pctH:0.25,
+                     subY:rowB.y+1.10, subH:0.14},
+              replacement:{cx:page.left+1.68, cy:rowB.y+0.93, outerR:0.34,
+                           countY:rowB.y+0.78, countH:0.25, labelY:rowB.y+1.10, labelH:0.14,
+                           reasonY:rowB.y+1.25, reasonH:0.14},
+              saving:{ruleX:page.left+0.18, ruleY:rowB.y+1.43, ruleW:2.18,
+                      labelY:rowB.y+1.50, labelH:0.16, valueY:rowB.y+1.67, valueH:0.24},
+              graphX:page.left+2.58, graphY:rowB.y+0.04, graphW:trendW-2.62, graphH:rowB.h-0.08,
+              graph:{periodY:rowB.y+0.14, periodH:0.18, subY:rowB.y+0.34, subH:0.16,
+                     legendY:rowB.y+0.14, legendW:1.12, reasonY:rowB.y+0.34, reasonH:0.14,
+                     plotL:page.left+2.75, plotR:page.left+trendW-0.20,
+                     plotTop:rowB.y+0.64, plotBot:rowB.y+1.72,
+                     axisW:0.24, axisH:0.14, ticks:3, valueH:0.15, valueDY:0.025,
+                     labelY:rowB.y+1.79, labelH:0.13} },
     notes:{ x:page.left+trendW+gap, y:rowB.y, w:notesW, h:rowB.h,
             pad:0.14, bulletW:0.16, listY:rowB.y+0.42, listPadB:0.10, colGap:0.18 },
     foot:{ y:7.28, h:0.22, textY:7.26, textW:2.4, textH:0.22 }
@@ -4549,24 +4558,28 @@ function buildExecutivePptDeck(snap){
           t:exFitTxt_(deltaText,SM.deltaW,deltaSize),
           size:deltaSize, bold:true, color:stateColor,
           align:'center', trendSummary:'delta'});
+    /* 판단 근거는 좌측 요약 패널의 최하단에 두어, 판정·기간과 한 묶음으로 읽는다. */
+    if(reason){
+      var RS=T.reason;
+      line({x:T.leftRule.x, y:RS.ruleY, w:T.leftRule.w, color:C.kpiLine, width:0.75});
+      text({x:RS.labelX, y:RS.y, w:RS.labelW, h:RS.h,
+            t:'판단 근거', size:6.2, bold:true, color:C.mut, trendReasonLabel:true});
+      text({x:RS.textX, y:RS.y+0.09, w:RS.textW, h:RS.h,
+            t:exFitTxt_(reason,RS.textW,5.0), size:5.0, bold:true, color:stateColor, trendReason:true});
+    }
 
     /* 우측 그래프 판 — 기간 전체를 끊김 없는 꺾은선으로 표시한다. */
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
-    /* 눈금·주차·흐름·판단 근거를 포함한 시계열 그룹을 우측 판의 시각적 중앙에 둔다. */
-    var chipX=T.graphX+T.graphW-G.chipW-0.23;
-    /* 기간·평균은 흐름 카드가 아닌 실제 주차 점 배열의 가운데에 둔다. */
-    var headW=G.plotR-G.plotL;
-    text({x:G.plotL, y:G.headY, w:headW, h:G.headH,
-          t:ln.periodLabel, size:8.5, bold:true, color:C.navy, align:'center', trendPeriod:true});
-    text({x:G.plotL, y:G.avgY, w:headW, h:G.avgH,
-          t:refCaption+' '+exTrendCountText_(ln.prevSum), size:7.5, bold:true, color:C.mut,
-          align:'center', trendAverageLabel:true});
-    /* 빨간 점선이 뜻하는 기준값을 그래프 좌측 상단에 한 번 더 직접 표기한다. */
-    var legendY=G.headY+0.12;
-    line({x:G.plotL+0.05, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
+    /* 그래프 상단은 평균 설명과 범례만 둔다. 기간은 좌측 요약 패널 하단에서 읽는다. */
+    var headW=G.plotR-G.plotL, trendLegendW=1.28, trendHeadW=headW-trendLegendW-0.08;
+    /* 점선 범례는 조치 추이와 같은 우측 최상단에 둔다. */
+    var legendY=G.headY+0.12, trendLegendX=G.plotR-trendLegendW;
+    text({x:G.plotL, y:G.headY, w:trendHeadW, h:G.headH,
+          t:ln.periodLabel, size:7.0, bold:true, color:C.navy, trendPeriod:true});
+    line({x:trendLegendX, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
           trendAverageLegend:true});
-    text({x:G.plotL+0.34, y:legendY-0.08, w:0.88, h:0.16,
+    text({x:trendLegendX+0.34, y:legendY-0.08, w:trendLegendW-0.34, h:0.16,
           t:refCaption+' 건 수', size:6.6, bold:true, color:C.red,
           trendAverageLegend:true});
 
@@ -4614,26 +4627,6 @@ function buildExecutivePptDeck(snap){
           t:exFitTxt_(chartDeltaText,G.deltaW,chartDeltaSize),
           size:chartDeltaSize, bold:true, color:stateColor, align:'right', trendDeltaLabel:true});
 
-    var mo=ln.momentum||{dir:'flat'};
-    var flow=mo.dir==='down'?(dir==='down'?'감소 지속':'최근 감소')
-            :mo.dir==='up'?(dir==='up'?'증가 지속':'최근 증가'):'유지';
-    rect({x:chipX, y:G.chipTop, w:G.chipW, h:G.chipH, r:0.06,
-          fill:C.kpiBg, line:{color:C.kpiLine, width:0.75}});
-    text({x:chipX+0.05, y:G.chipTop+0.05, w:G.chipW-0.10, h:0.17,
-          t:'최근 흐름', size:7, bold:true, color:C.mut, align:'center'});
-    text({x:chipX+0.05, y:G.chipTop+0.22, w:G.chipW-0.10, h:0.20,
-          t:flow, size:9, bold:true, align:'center',
-          color:mo.dir==='down'?C.green:(mo.dir==='up'?C.red:C.navy), trendFlow:true});
-
-    /* 판단 근거는 그래프 하단에 두어 추이와 바로 연결한다. */
-    if(reason){
-      var reasonL=T.graphX+0.17;
-      line({x:reasonL, y:G.reasonRuleY, w:gridR-reasonL, color:C.kpiLine, width:0.75});
-      text({x:reasonL, y:G.reasonY, w:0.52, h:G.reasonH,
-            t:'판단 근거', size:6.7, bold:true, color:C.mut, trendReasonLabel:true});
-      text({x:reasonL+0.55, y:G.reasonY, w:gridR-reasonL-0.55, h:G.reasonH,
-            t:reason, size:7.1, bold:true, color:stateColor, trendReason:true});
-    }
   })();
 
   /* ── ④ VOC 유형 변화 (증가 TOP3 · 감소 TOP3) ── */
@@ -4667,48 +4660,92 @@ function buildExecutivePptDeck(snap){
     });
   })();
 
-  /* ── ⑤ VOC 유형 TOP 5 · 교체품 TOP 5 (같은 표 규칙) ── */
-  function topCard(T0, blk, headName, headVal, emptyMsg, cardKey){
-    var TP=L.top, T={x:T0.x, y:TP.y, w:T0.w, h:TP.h};
-    cardShell(T, blk.title, blk.basis, 0, true);
-    var hx=T.x+TP.pad, inner=T.w-TP.pad*2;
-    var nameW=inner-TP.cntW-TP.deltaW-TP.colGap*2;
-    var cx=hx+nameW+TP.colGap, dx=cx+TP.cntW+TP.colGap;
-    text({x:hx, y:TP.headY, w:nameW, h:TP.headH, t:headName, size:FT.colHead, color:C.mut,
-          topCard:cardKey, topCol:'name', topRow:-1});
-    text({x:cx, y:TP.headY, w:TP.cntW, h:TP.headH, t:headVal, size:FT.colHead, color:C.mut, align:'right',
-          topCard:cardKey, topCol:'value', topRow:-1});
-    text({x:dx, y:TP.headY, w:TP.deltaW, h:TP.headH, t:'증감', size:FT.colHead, color:C.mut, align:'right',
-          topCard:cardKey, topCol:'delta', topRow:-1});
-    line({x:hx, y:TP.headY+TP.ruleDY, w:inner, color:C.line, width:0.75});
-    if(!blk.rows.length){ emptyLine(T, TP.rowY+0.2, emptyMsg); return; }
-    blk.rows.forEach(function(r,i){
-      var y=TP.rowY+i*TP.rowPitch;
-      var hasDesc=!!(blk.showDescriptions&&r.desc);
-      var nameY=hasDesc?y+TP.descDY:y;
-      var nameH=hasDesc?TP.descNameH:TP.rowH;
-      text({x:hx, y:nameY, w:nameW, h:nameH,
-            t:exFitTxt_(r.k, nameW, FT.rowName), size:hasDesc?8:FT.rowName, color:C.text,
-            topCard:cardKey, topCol:'name', topRow:i});
-      /* 설명 유무와 관계없이 숫자 셀은 교체품 표와 같은 전체 행 높이를 쓴다.
-         VOC 설명은 유형 아래 보조 행으로만 배치해 건수·증감 열의 중심선을 밀지 않는다. */
-      text({x:cx, y:y, w:TP.cntW, h:TP.rowH, t:exNum(r.cur),
-            size:FT.rowVal, bold:true, color:C.navy, align:'right',
-            topCard:cardKey, topCol:'value', topRow:i});
-      var d=r.d, dt = d==null ? '–' : (d===0 ? '±0' : ((d>0?'▲':'▼')+Math.abs(d)));
-      text({x:dx, y:y, w:TP.deltaW, h:TP.rowH, t:dt, size:FT.rowDelta,
-            bold:!!(d!=null&&d!==0), align:'right',
-            color:(d==null||d===0)?C.mut:(d>0?C.red:C.green),
-            topCard:cardKey, topCol:'delta', topRow:i});
-      if(hasDesc){
-        text({x:hx, y:nameY+TP.descNameH, w:inner, h:TP.descH,
-              t:exFitTxt_(r.desc, inner, FT.rowDesc), size:FT.rowDesc, color:C.mut,
-              topCard:cardKey, topCol:'description', topRow:i});
+  /* ── ⑤ 노즐 누수 조치 추이 ──
+     TOP5 두 장이 있던 폭을 하나의 성과 카드로 통합한다. 이 카드는 정확히
+     '노즐 누수(약액 유입)' 행만 읽으며, 내부 세척 수리와 유상 Handpiece 교체를 비교한다. */
+  (function(){
+    var T=L.action, G=T.graph, ac=snap.action, pts=ac.pts||[];
+    rect({x:T.x, y:T.y, w:T.w, h:T.h, r:0.05, card:true,
+          fill:C.white, line:{color:C.line, width:1}, actionCard:true});
+    rect({x:T.x+T.inset, y:T.y+T.inset, w:T.leftW-T.inset, h:T.h-T.inset*2,
+          r:0.08, fill:C.mintBg, actionSummary:true});
+    text({x:T.titleX, y:T.titleY, w:T.titleW, h:T.titleH,
+          t:ac.title, size:exFitSize_(ac.title,T.titleW,[12,11.5,11,10.5]), bold:true, color:C.navy,
+          actionTitle:true});
+    var GA=T.gauge;
+    ring({x:GA.cx-GA.outerR, y:GA.cy-GA.outerR, w:GA.outerR*2, h:GA.outerR*2,
+          pct:ac.repairRate, color:C.green, track:C.line, stroke:13, actionGauge:true});
+    text({x:GA.cx-GA.outerR, y:GA.pctY, w:GA.outerR*2, h:GA.pctH,
+          runs:[{text:exNum(ac.repairRate),size:20,bold:true,color:C.navy},
+                {text:'%',size:9,bold:true,color:C.navy}],
+          t:exNum(ac.repairRate)+'%', size:20, bold:true, color:C.navy, align:'center', actionRepairRate:true});
+    text({x:GA.cx-GA.outerR, y:GA.subY, w:GA.outerR*2, h:GA.subH,
+          t:'자체 수리율', size:7.1, bold:true, color:C.mut, align:'center'});
+    /* 유상 판매 Handpiece 교체는 자체 수리율과 같은 크기의 원형 요약으로 나란히 둔다. */
+    var RP=T.replacement, actionTotal=ac.clean+ac.replacement;
+    var replacementPct=actionTotal?Math.round(ac.replacement/actionTotal*100):0;
+    ring({x:RP.cx-RP.outerR, y:RP.cy-RP.outerR, w:RP.outerR*2, h:RP.outerR*2,
+          pct:replacementPct, color:C.navy, track:C.line, stroke:13, actionReplacementGauge:true});
+    text({x:RP.cx-RP.outerR, y:RP.countY, w:RP.outerR*2, h:RP.countH,
+          t:exNum(ac.replacement)+'건', size:15, bold:true, color:C.navy, align:'center', actionReplacementCount:true});
+    text({x:RP.cx-RP.outerR, y:RP.labelY, w:RP.outerR*2, h:RP.labelH,
+          t:'Handpiece 교체', size:6.2, bold:true, color:C.mut, align:'center'});
+    text({x:RP.cx-RP.outerR, y:RP.reasonY, w:RP.outerR*2, h:RP.reasonH,
+          t:ac.replacementReason, size:6.2, bold:true, color:C.mut, align:'center', actionReplacementReason:true});
+    var SV=T.saving, savingText='₩'+exNum(ac.saving);
+    line({x:SV.ruleX, y:SV.ruleY, w:SV.ruleW, color:C.kpiLine, width:0.75});
+    text({x:SV.ruleX, y:SV.labelY, w:SV.ruleW, h:SV.labelH,
+          t:'절감액', size:7.5, bold:true, color:C.mut, align:'center'});
+    text({x:SV.ruleX, y:SV.valueY, w:SV.ruleW, h:SV.valueH,
+          t:savingText, size:exFitSize_(savingText,SV.ruleW,[18,16,14,12]), bold:true, color:C.navy,
+          align:'center', actionSaving:true});
+
+    rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
+          fill:C.white, line:{color:C.line, width:0.6}});
+    var headW=G.plotR-G.plotL, legendReserve=G.legendW*2+0.15, periodW=headW-legendReserve;
+    text({x:G.plotL, y:G.periodY, w:periodW, h:G.periodH,
+          t:ac.periodLabel, size:7.0, bold:true, color:C.navy, actionPeriod:true});
+    /* 범례는 발생 추이와 같은 우측 최상단에 둔다. 교체 사유는 좌측 원형 요약에서 읽는다. */
+    var lx=G.plotR-G.legendW*2-0.12;
+    line({x:lx, y:G.legendY+0.05, w:0.21, color:C.green, width:1.4, actionLegend:'clean'});
+    dot({cx:lx+0.105, cy:G.legendY+0.05, r:0.025, fill:C.green, actionLegend:'clean'});
+    text({x:lx+0.25, y:G.legendY-0.03, w:0.83, h:0.16, t:'내부 세척 수리', size:6.4, bold:true, color:C.green,
+          actionLegend:'clean'});
+    lx+=G.legendW;
+    line({x:lx, y:G.legendY+0.05, w:0.21, color:C.navy, width:1.4, actionLegend:'replacement'});
+    dot({cx:lx+0.105, cy:G.legendY+0.05, r:0.025, fill:C.navy, actionLegend:'replacement'});
+    text({x:lx+0.25, y:G.legendY-0.03, w:0.83, h:0.16, t:'Handpiece 교체', size:6.4, bold:true, color:C.navy,
+          actionLegend:'replacement'});
+
+    var n=pts.length||1, dataL=G.plotL+0.23, dataR=G.plotR-0.23, plotW=dataR-dataL;
+    var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
+    var maxV=1; pts.forEach(function(p){maxV=Math.max(maxV,p.clean||0,p.replacement||0);});
+    var ny=ycNice_(maxV,G.ticks), sy=function(v){return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop);};
+    for(var gi=0;gi<=G.ticks;gi++){
+      var gv=ny.step*gi, gy=sy(gv);
+      line({x:G.plotL, y:gy, w:G.plotR-G.plotL, color:C.line, width:gi?0.5:0.75, actionGrid:true});
+      text({x:G.plotL-G.axisW-0.03, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
+            t:exNum(gv), size:6.6, color:C.mut, align:'right'});
+    }
+    ['clean','replacement'].forEach(function(key){
+      var color=key==='clean'?C.green:C.navy;
+      for(var i=1;i<n;i++) seg({x1:cx(i-1), y1:sy(pts[i-1][key]||0), x2:cx(i), y2:sy(pts[i][key]||0),
+                                 color:color, width:1.45, actionSegment:key, actionIdx:i});
+      for(var j=0;j<n;j++){
+        var py=sy(pts[j][key]||0), lw=n>10?Math.min(0.29,Math.max(0.22,step)):0.40;
+        text({x:Math.max(G.plotL,cx(j)-lw/2), y:Math.max(G.plotTop,py-G.valueH-G.valueDY), w:lw, h:G.valueH,
+              t:exNum(pts[j][key]||0), size:n>10?5.5:6.2, bold:true, color:color, align:'center',
+              actionPointValue:key, actionIdx:j});
+        dot({cx:cx(j), cy:py, r:0.032, fill:color, actionPoint:key, actionIdx:j});
       }
     });
-  }
-  topCard(L.voc,  snap.vocTop,  '유형 · 현상', '건수', 'A/S 기록 없음', 'voc');
-  topCard(L.part, snap.partTop, '교체품',      '수량', '교체품 기록 없음', 'part');
+    pts.forEach(function(p,i){
+      var lw=n>10?Math.min(0.32,Math.max(0.25,step)):0.44;
+      text({x:Math.max(G.plotL,cx(i)-lw/2), y:G.labelY, w:lw, h:G.labelH,
+            t:p.label||'', size:n>10?4.8:5.8, bold:!!p.sel, color:p.sel?C.navy:C.mut,
+            align:'center', actionPointLabel:true, actionIdx:i});
+    });
+  })();
 
   /* ── ⑥ 특이사항 (대시보드 특이사항 카드와 같은 문장 — 새로 만들지 않는다) ── */
   (function(){
@@ -6028,6 +6065,37 @@ function exReportMonthTrend_(focus){
   }
   return out;
 }
+/* 노즐 누수(약액 유입) 조치만 별도 시계열로 만든다.
+   발생 추이와 같은 주차·월 구간을 쓰되, 내부 세척 수리와 유상 Handpiece 교체를 분리한다. */
+function exNozzleActionTrend_(kind){
+  var base=kind==='month' ? exReportMonthTrend_('') : exReportWeekTrend_('');
+  return base.map(function(bucket){
+    var from=kind==='month' ? bucket.from : bucket.mon;
+    var to=new Date(bucket.to); to.setHours(23,59,59,999);
+    var clean=0, replacement=0;
+    exWindowRows(from,to).forEach(function(r){
+      var d=rowDate(r), part=hpCleanKey_(r.part);
+      if(!hpIsLeakVoc_(r) || recScope(r)!=='customer') return;
+      if(kind==='week' && (!d || !isReportDay_(d))) return;
+      if(part==='내부세척') clean++;
+      /* 이 카드는 비용 절감 성과를 보이므로 유상 판매 Handpiece 교체만 비교군으로 센다. */
+      else if(part==="handpieceass'y" && Number(r._cost||0)>0) replacement++;
+    });
+    return {label:bucket.label, mon:bucket.mon, from:from, to:bucket.to, sel:bucket.sel, ongoing:bucket.ongoing,
+            clean:clean, replacement:replacement};
+  });
+}
+function exNozzleActionSpec_(kind){
+  var pts=exNozzleActionTrend_(kind), clean=0, replacement=0;
+  pts.forEach(function(p){ clean+=p.clean; replacement+=p.replacement; });
+  var total=clean+replacement, rate=total?Math.round(clean/total*100):0;
+  return {title:'노즐 누수 조치 추이',
+          basis:'대상 · 노즐 누수(약액 유입) · 처리일 기준',
+          periodLabel:exTrendPeriodLabel_(kind,pts), kind:kind, pts:pts,
+          clean:clean, replacement:replacement, repairRate:rate,
+          saving:clean*YC_CLEAN_SAVING_UNIT,
+          replacementReason:replacement?'유상 판매':'해당 없음'};
+}
 function exTrendPeriodLabel_(kind, buckets){
   if(!buckets||!buckets.length) return '';
   var first=buckets[0], last=buckets[buckets.length-1], end=last.to;
@@ -6179,7 +6247,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
       ? ('월간업무보고_'+a.getFullYear()+'년'+(a.getMonth()+1)+'월.pptx')
       : ('주간업무보고_'+a.getFullYear()+'년'+wkLabel(a).replace(' ','')+'.pptx'),
     cmp:cmp, cmpLabel:cmpLb, rowCount:x.rows.length,
-    kpi:kpi, trend:trend, vocFocus:focus, vocOptions:vocOptions,
+    kpi:kpi, trend:trend, action:exNozzleActionSpec_(type), vocFocus:focus, vocOptions:vocOptions,
     change:{ title:'VOC 유형 변화', basis:cmpLb+' 대비 · A/S·점검 통합 · 이상 없음 제외',
              hasPrev:!!x.prev, up:vc.up.map(chRow), down:vc.down.map(chRow) },
     vocTop:{ title:'VOC 유형 TOP 5', basis:'A/S·점검 통합 · 이상 없음 제외 · '+cmpLb+' 대비',
