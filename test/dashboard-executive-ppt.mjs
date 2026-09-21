@@ -1029,8 +1029,8 @@ if (false) {
     plain.vocOptions.find(o => o.k === '노즐누수(약액 유입)').n ===
       leak.trend.line.pts.reduce((s,p)=>s+p.main,0));
   ck('V2. 최근 16주를 현재 주차까지 실제 시간 순서로 잇는다',
-    leak.trend.line.pts.length===16 && leak.trend.line.pts[0].label==='4월3주' &&
-    leak.trend.line.pts[leak.trend.line.pts.length-1].label==='8월1주' &&
+    leak.trend.line.pts.length===16 && leak.trend.line.pts[0].label==='4/20' &&
+    leak.trend.line.pts[leak.trend.line.pts.length-1].label==='8/3' &&
     new Set(leak.trend.line.pts.map(p=>p.label)).size===16,
     leak.trend.line.pts.map(p=>p.label+':'+p.main).join(' / '));
   ck('V3. 현재 주차를 최근 16주의 주간 평균과 비교해 판정한다', (() => {
@@ -1072,6 +1072,9 @@ if (false) {
     fi.filter(o=>o.trendAverageLabel||o.trendPeriod).every(o=>o.y<D.L.trend.graph.plotTop));
   ck('V9-b. 주간 평균 수평 점선을 한 줄만 표시한다',
     fi.filter(o=>o.trendAverage).length===1 && fi.find(o=>o.trendAverage).dash===true);
+  ck('V9-c. 점선이 주간 평균 기준선임을 그래프 좌측 상단에 밝힌다',
+    fi.filter(o=>o.trendAverageLegend).length===2 &&
+    fi.some(o=>o.trendAverageLegend&&o.t==='점선: 주간 평균'));
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&
@@ -1080,6 +1083,8 @@ if (false) {
   ck('V11. 좌측 판정은 주간 평균·현재 주차·증감을 표시한다',
     leak.trend.stats.length===4 && ['previous','recent','delta'].every(k=>fi.some(o=>o.trendSummary===k)) &&
     fi.some(o=>o.trendPercent)&&fi.some(o=>o.trendState));
+  ck('V11-a. 좌측 판정 문구는 건수 대신 평균 대비 증감률을 쓴다',
+    fi.some(o=>o.trendNarrative==='deltaPercent'&&/% (?:감소|증가)했습니다$/.test(o.t)));
   ck('V11-b. 노즐 누수 감소 판단 근거는 그래프 하단에만 표시한다',
     leakDown.trend.line.cmp.dir==='down' &&
     itemsOf(leakDown).some(o=>o.trendReason&&o.t==='사용자 교육 개선 · 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&

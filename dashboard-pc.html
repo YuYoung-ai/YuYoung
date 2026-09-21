@@ -4483,10 +4483,11 @@ function buildExecutivePptDeck(snap){
     var title=isVoc ? ln.metricLabel+' 발생 추이' : ln.metricLabel+' 추이';
     var refCaption=ln.baselineLabel||ln.refName, mainCaption=ln.currentLabel||ln.mainName;
     var noun=refCaption+' 대비 현재';
-    var verb=dir==='down'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 감소했습니다'
-            :dir==='up'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 증가했습니다':'차이가 없습니다';
     var pct=ln.cmp.pct==null?null:Math.abs(ln.cmp.pct);
     var pctText=pct==null?'—':exNum(pct)+'%';
+    /* 좌측 요약은 절대 건수 대신 평균 대비 변화율을 보여 주고, 건수는 우측 그래프에서 보완한다. */
+    var verb=dir==='down'?(pct==null?'감소했습니다':pctText+' 감소했습니다')
+            :dir==='up'?(pct==null?'증가했습니다':pctText+' 증가했습니다'):'차이가 없습니다';
     var d=ln.sum-ln.prevSum;
     var deltaText=d===0?'변화 없음':exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
     var reason=(dir==='down' && /노즐\s*누수/.test(ln.metricLabel))
@@ -4524,7 +4525,7 @@ function buildExecutivePptDeck(snap){
           t:noun, size:nounSize, bold:true, color:stateColor});
     var verbSize=exFitSize_(verb,ST.descW,[9.3,8.8,8.3,7.8,7.3]);
     text({x:ST.descX, y:ST.descY+ST.lineH, w:ST.descW, h:ST.lineH,
-          t:verb, size:verbSize, bold:true, color:stateColor});
+          t:verb, size:verbSize, bold:true, color:stateColor, trendNarrative:'deltaPercent'});
     line({x:T.leftRule.x, y:T.leftRule.y, w:T.leftRule.w, color:C.kpiLine, width:0.75});
 
     var SM=T.summary;
@@ -4561,6 +4562,13 @@ function buildExecutivePptDeck(snap){
     text({x:G.plotL, y:G.avgY, w:headW, h:G.avgH,
           t:refCaption+' '+exTrendCountText_(ln.prevSum), size:7.5, bold:true, color:C.mut,
           align:'center', trendAverageLabel:true});
+    /* 빨간 점선이 뜻하는 기준값을 그래프 좌측 상단에 한 번 더 직접 표기한다. */
+    var legendY=G.headY+0.12;
+    line({x:G.plotL+0.05, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
+          trendAverageLegend:true});
+    text({x:G.plotL+0.34, y:legendY-0.08, w:0.88, h:0.16,
+          t:'점선: '+refCaption, size:6.6, bold:true, color:C.red,
+          trendAverageLegend:true});
 
     /* 눈금선은 판단 근거 구분선의 끝까지 잇고, 첫·마지막 주차는 양 끝에서 여백을 둔다.
        주차 값·라벨이 카드 테두리에 붙지 않으며 모든 주차 간격은 동일하다. */
@@ -4593,10 +4601,10 @@ function buildExecutivePptDeck(snap){
       text({x:pointLabelX, y:Math.max(G.plotTop,py-G.valueH-G.valueDY),
             w:pointLabelW, h:G.valueH, t:exNum(pts[pi].main||0), size:7.0,
             bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi});
-      /* 16주는 점을 모두 보이되, 축 라벨은 두 주 간격으로 표시해 겹침을 막는다. */
-      var pointAxisLabel=(n>10 && pi!==0 && !last && pi%2)?'':(pts[pi].label||'');
+      /* 16주도 시작일(월/일)만 써서 각 주차를 빠짐없이 읽는다. */
+      var pointAxisLabel=pts[pi].label||'';
       text({x:pointLabelX, y:G.labelY,
-            w:pointLabelW, h:G.labelH, t:pointAxisLabel, size:n>10?5.6:6.2,
+            w:pointLabelW, h:G.labelH, t:pointAxisLabel, size:n>10?5.2:6.2,
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
     var deltaY=Math.max(G.plotTop,Math.min(G.plotBot-G.valueH,sy(ln.sum)+0.07));
@@ -6003,7 +6011,7 @@ function exReportWeekTrend_(focus){
       if(g==='A/S'){as++;n++;} else if(g==='점검'){insp++;n++;}
       if(focus&&exTrendVocType_(r)===focus) ty++;
     });
-    out.push({label:(mo.getMonth()+1)+'월'+wkNo(mo)+'주', mon:new Date(mo), to:to,
+    out.push({label:(mo.getMonth()+1)+'/'+mo.getDate(), mon:new Date(mo), to:to,
               n:n,as:as,insp:insp,ty:ty,sel:cur,ongoing:cur&&to<wkEnd});
   }
   return out;
