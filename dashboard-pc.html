@@ -1597,12 +1597,12 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>보고 주차 (월~토)</label>
       <select id="wkSel" onchange="exOnReportPeriodChange_('week')"></select>
-      <div class="mhint">전월 전체 주차부터 현재 주차까지 · 월평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
+      <div class="mhint">전월 전체 주차부터 현재 주차까지 · 표시 기간 주간 평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">고른 대상의 전월·당월 주차를 꺾은선으로 이어 그리고, 현재 주차를 월평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상의 전월·당월 주차를 꺾은선으로 이어 그리고, 현재 주차를 표시 기간의 주간 평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
     <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
     <details class="voc-desc-editor" id="wkVocDescBox">
@@ -4186,29 +4186,30 @@ var L=(function(){
           valDY:0.27, valH:0.36, subDY:0.64, subH:0.24 },
     /* 카드 공통 — 제목 줄(제목 좌 · 기준 우), 좁은 카드는 기준을 둘째 줄에 둔다 */
     card:{ pad:0.14, titleDY:0.07, titleH:0.26, basisDY:0.30, basisH:0.20, minInlineBasis:1.6 },
-    /* 추이 카드 — 월평균 판정 요약(좌) + 전월부터 현재까지 잇는 단일 꺾은선(우).
+    /* 추이 카드 — 기간 평균 판정 요약(좌) + 전월부터 현재까지 잇는 단일 꺾은선(우).
        주간·월간 PPT가 같은 좌표를 쓰며, 미리보기와 실제 PPT도 같은 표시 목록을 그린다. */
     trend:{ x:page.left, y:rowA.y, w:trendW, h:rowA.h,
             inset:0.04, leftW:2.52, splitGap:0.06,
             titleX:page.left+0.18, titleY:rowA.y+0.08, titleW:2.20, titleH:0.32,
-            gauge:{cx:page.left+0.70, cy:rowA.y+0.92, outerR:0.39, innerR:0.305,
-                   pctY:rowA.y+0.66, pctH:0.39, subY:rowA.y+1.04, subH:0.20,
-                   arcSegs:40, arcW:4.0, baseW:2.7, arcStart:135, arcSpan:270},
+            gauge:{cx:page.left+0.70, cy:rowA.y+0.92, outerR:0.42, innerR:0.305,
+                   pctY:rowA.y+0.72, pctH:0.32, subY:rowA.y+1.04, subH:0.20,
+                   arcSegs:80, arcW:9.0, baseW:9.0, arcStart:-90, arcSpan:360},
             status:{x:page.left+1.28, y:rowA.y+0.47, w:0.94, h:0.27,
                     descX:page.left+1.28, descY:rowA.y+0.78, descW:1.08, lineH:0.25},
             leftRule:{x:page.left+0.18, y:rowA.y+1.43, w:2.18},
             summary:{labelY:rowA.y+1.51, labelH:0.20, valueY:rowA.y+1.72, valueH:0.31,
                      prevX:page.left+0.18, prevW:0.66, arrowX:page.left+0.84, arrowW:0.25,
                      curX:page.left+1.08, curW:0.66, ruleX:page.left+1.76,
-                     deltaX:page.left+1.82, deltaW:0.56},
+                     deltaX:page.left+1.82, deltaW:0.68},
             reason:{ruleY:rowA.y+2.08, y:rowA.y+2.14, h:0.18,
                     labelX:page.left+0.18, labelW:0.49,
                     textX:page.left+0.70, textW:1.66},
             graphX:page.left+2.58, graphY:rowA.y+0.04,
             graphW:trendW-2.62, graphH:rowA.h-0.08,
             graph:{headY:rowA.y+0.12, headH:0.22, avgY:rowA.y+0.34, avgH:0.18,
-                   chipW:0.90, chipH:0.52, chipTop:rowA.y+0.10,
-                   plotL:page.left+2.88, plotR:page.left+trendW-0.16,
+                   chipW:0.72, chipH:0.52, chipTop:rowA.y+0.10,
+                   /* 기준 이미지처럼 Y축 여백을 충분히 두고, 마지막 주차 뒤에는 증감 문구 영역을 남긴다. */
+                   plotL:page.left+3.20, plotR:page.left+trendW-0.21,
                    plotTop:rowA.y+0.68, plotBot:rowA.y+1.91,
                    axisW:0.27, axisH:0.16, ticks:3,
                    valueH:0.18, valueDY:0.04, labelY:rowA.y+1.94, labelH:0.15,
@@ -4391,6 +4392,7 @@ function buildExecutivePptDeck(snap){
   /* 임의 각도 선(꺾은선 구간)·점 — 선 그래프에서만 쓴다. 두 backend 가 같은 좌표를 읽는다. */
   function seg(o){ o.k='seg'; items.push(o); return o; }
   function dot(o){ o.k='dot'; items.push(o); return o; }
+  function ring(o){ o.k='ring'; items.push(o); return o; }
   function text(o){ o.k='text'; items.push(o); return o; }
   function tone(t){ return EX_TONE_COLOR[t]||C.text; }
 
@@ -4468,7 +4470,7 @@ function buildExecutivePptDeck(snap){
 
   /* ── ③ 대상 발생 추이 ──
      주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지 한 선으로 잇는다.
-     현재값은 월평균과 비교하고, 그래프 안의 점선도 같은 월평균을 뜻한다. */
+     현재값은 기간 평균과 비교하고, 그래프 안의 점선도 같은 평균을 뜻한다. */
   (function(){
     var T=L.trend, G=T.graph, tr=snap.trend, ln=tr.line, pts=ln.pts;
     var isVoc=exTrendIsVocType_(ln.focus), isAs=ln.focus===EX_TREND_METRIC_AS;
@@ -4477,14 +4479,14 @@ function buildExecutivePptDeck(snap){
     var stateColor=dir==='down'?C.green:(dir==='up'?C.red:C.mut);
     var soft=dir==='down'?C.mintBg:(dir==='up'?C.redSoft:C.grayBg);
     var title=isVoc ? ln.metricLabel+' 발생 추이' : ln.metricLabel+' 추이';
-    var noun='월평균 대비 현재';
+    var refCaption=ln.baselineLabel||ln.refName, mainCaption=ln.currentLabel||ln.mainName;
+    var noun=refCaption+' 대비 현재';
     var verb=dir==='down'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 감소했습니다'
             :dir==='up'?exTrendCountText_(Math.abs(ln.sum-ln.prevSum))+' 증가했습니다':'차이가 없습니다';
     var pct=ln.cmp.pct==null?null:Math.abs(ln.cmp.pct);
     var pctText=pct==null?'—':exNum(pct)+'%';
     var d=ln.sum-ln.prevSum;
-    var deltaText=d===0?'변화 없음':exNum(Math.abs(d))+'건 '+(d>0?'증가':'감소');
-    var refCaption=ln.baselineLabel||ln.refName, mainCaption=ln.currentLabel||ln.mainName;
+    var deltaText=d===0?'변화 없음':exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
     var reason=(dir==='down' && /노즐\s*누수/.test(ln.metricLabel))
       ? '사용자 교육 개선 · 노즐 재사용 감소' : '';
 
@@ -4497,32 +4499,27 @@ function buildExecutivePptDeck(snap){
     text({x:T.titleX, y:T.titleY, w:T.titleW, h:T.titleH,
           t:exFitTxt_(title,T.titleW,titleSize), size:titleSize, bold:true, color:C.navy});
 
-    /* 원형 판정 — 열린 270도 트랙으로 증감률을 표시해 꽉 찬 도넛의 무거움을 줄인다. */
+    /* 원형 판정 — 사진 참조와 같은 360° 도넛 링. 변화율은 앰버, 증감 의미는 본문 색으로 분리한다. */
     var GA=T.gauge;
-    var arcPct=pct==null?0:Math.min(100,pct), arcN=Math.max(0,Math.round(GA.arcSegs*arcPct/100));
-    for(var ai=0;ai<GA.arcSegs;ai++){
-      var a1=(GA.arcStart+ai*(GA.arcSpan/GA.arcSegs))*Math.PI/180;
-      var a2=(GA.arcStart+(ai+0.72)*(GA.arcSpan/GA.arcSegs))*Math.PI/180;
-      seg({x1:GA.cx+Math.cos(a1)*GA.outerR, y1:GA.cy+Math.sin(a1)*GA.outerR,
-           x2:GA.cx+Math.cos(a2)*GA.outerR, y2:GA.cy+Math.sin(a2)*GA.outerR,
-           color:C.line, width:GA.baseW, gauge:true});
-      if(ai<arcN) seg({x1:GA.cx+Math.cos(a1)*GA.outerR, y1:GA.cy+Math.sin(a1)*GA.outerR,
-           x2:GA.cx+Math.cos(a2)*GA.outerR, y2:GA.cy+Math.sin(a2)*GA.outerR,
-           color:stateColor, width:GA.arcW, gauge:true, gaugeActive:true});
-    }
-    var pctSize=exFitSize_(pctText,GA.outerR*2,[18,16,14,12,10]);
+    ring({x:GA.cx-GA.outerR, y:GA.cy-GA.outerR, w:GA.outerR*2, h:GA.outerR*2,
+          pct:pct==null?0:Math.min(100,pct), color:C.amber, track:C.line, stroke:14,
+          gauge:true, gaugeActive:true});
+    var pctNum=pct==null?'—':exNum(pct), pctSize=exFitSize_(pctNum,GA.outerR*2,[23,21,19,17,15]);
     text({x:GA.cx-GA.outerR, y:GA.pctY, w:GA.outerR*2, h:GA.pctH,
-          t:pctText, size:pctSize, bold:true, color:stateColor, align:'center', trendPercent:true});
+          t:pctText, runs:[{text:pctNum,size:pctSize,bold:true,color:C.amber},
+                            {text:pct==null?'':'%',size:10,bold:true,color:C.amber}],
+          size:pctSize, bold:true, color:C.amber, align:'center', trendPercent:true});
     text({x:GA.cx-GA.outerR, y:GA.subY, w:GA.outerR*2, h:GA.subH,
-          t:'월평균 대비', size:6.8, bold:true, color:C.mut, align:'center'});
+          t:refCaption+' 대비', size:6.8, bold:true, color:C.mut, align:'center'});
 
     var ST=T.status;
     rect({x:ST.x, y:ST.y, w:ST.w, h:ST.h, r:0.10,
           fill:dir==='down'?C.mintRing:(dir==='up'?'F3C9C4':C.line)});
     text({x:ST.x, y:ST.y, w:ST.w, h:ST.h, t:state, size:8.7, bold:true,
           color:stateColor, align:'center', trendState:true});
+    var nounSize=exFitSize_(noun,ST.descW,[9.3,8.8,8.3,7.8,7.3]);
     text({x:ST.descX, y:ST.descY, w:ST.descW, h:ST.lineH,
-          t:noun, size:9.3, bold:true, color:stateColor});
+          t:noun, size:nounSize, bold:true, color:stateColor});
     var verbSize=exFitSize_(verb,ST.descW,[9.3,8.8,8.3,7.8,7.3]);
     text({x:ST.descX, y:ST.descY+ST.lineH, w:ST.descW, h:ST.lineH,
           t:verb, size:verbSize, bold:true, color:stateColor});
@@ -4544,36 +4541,41 @@ function buildExecutivePptDeck(snap){
           size:exFitSize_(exTrendCountText_(ln.sum),SM.curW,[15,14,13,12,11]), bold:true, color:C.navy,
           trendSummary:'recent'});
     rect({x:SM.ruleX, y:SM.labelY, w:0.01, h:SM.valueY+SM.valueH-SM.labelY, fill:C.kpiLine});
+    var deltaSize=exFitSize_(deltaText,SM.deltaW,[11.5,11,10.5,10,9.5,9,8.5,8]);
     text({x:SM.deltaX, y:SM.valueY-0.02, w:SM.deltaW, h:SM.valueH,
-          t:exFitTxt_(deltaText,SM.deltaW,exFitSize_(deltaText,SM.deltaW,[10,9.5,9,8.5])),
-          size:exFitSize_(deltaText,SM.deltaW,[10,9.5,9,8.5]), bold:true, color:stateColor,
+          t:exFitTxt_(deltaText,SM.deltaW,deltaSize),
+          size:deltaSize, bold:true, color:stateColor,
           align:'center', trendSummary:'delta'});
 
     /* 우측 그래프 판 — 기간 전체를 끊김 없는 꺾은선으로 표시한다. */
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
-    var chipX=T.graphX+T.graphW-G.chipW-0.10;
-    var headW=chipX-G.plotL-0.08;
+    /* 눈금·주차·흐름·판단 근거를 포함한 시계열 그룹을 우측 판의 시각적 중앙에 둔다. */
+    var chipX=T.graphX+T.graphW-G.chipW-0.23;
+    /* 기간·평균은 흐름 카드가 아닌 실제 주차 점 배열의 가운데에 둔다. */
+    var headW=(G.plotR-0.36)-G.plotL;
     text({x:G.plotL, y:G.headY, w:headW, h:G.headH,
           t:ln.periodLabel, size:8.5, bold:true, color:C.navy, align:'center', trendPeriod:true});
     text({x:G.plotL, y:G.avgY, w:headW, h:G.avgH,
-          t:'월평균 '+exTrendCountText_(ln.prevSum), size:7.5, bold:true, color:C.mut,
+          t:refCaption+' '+exTrendCountText_(ln.prevSum), size:7.5, bold:true, color:C.mut,
           align:'center', trendAverageLabel:true});
 
-    var n=pts.length||1, dataR=G.plotR-G.deltaW, plotW=dataR-G.plotL;
-    var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?G.plotL+step*i:G.plotL+plotW/2;};
+    /* 눈금선은 판단 근거 구분선의 끝까지 잇고, 첫·마지막 주차는 양 끝에서 여백을 둔다.
+       주차 값·라벨이 카드 테두리에 붙지 않으며 모든 주차 간격은 동일하다. */
+    var n=pts.length||1, gridR=G.plotR, dataL=G.plotL+0.28, dataR=gridR-0.50, plotW=dataR-dataL;
+    var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=Math.max(ln.prevSum||0,1);
     pts.forEach(function(p){ maxV=Math.max(maxV,p.main||0); });
     var ny=ycNice_(maxV,G.ticks), sy=function(v){ return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop); };
     for(var gi=0;gi<=G.ticks;gi++){
       var gv=ny.step*gi, gy=sy(gv);
-      line({x:G.plotL, y:gy, w:dataR-G.plotL, color:C.line, width:gi?0.5:0.75});
+      line({x:G.plotL, y:gy, w:gridR-G.plotL, color:C.line, width:gi?0.5:0.75});
       text({x:G.plotL-G.axisW-0.04, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
             t:exNum(gv), size:FT.legend, color:C.mut, align:'right'});
     }
-    /* 월평균 기준선과 실제 꺾은선. 마지막 점은 현재 주·월이므로 한 번 더 강조한다. */
+    /* 기간 평균 기준선과 실제 꺾은선. 마지막 점은 현재 주·월이므로 한 번 더 강조한다. */
     var avgY=sy(ln.prevSum||0);
-    line({x:G.plotL, y:avgY, w:dataR-G.plotL, color:C.blue2, width:1, dash:true,
+    line({x:G.plotL, y:avgY, w:gridR-G.plotL, color:C.red, width:1, dash:true,
           trendAverage:true, trendValue:ln.prevSum});
     for(var si=1;si<n;si++){
       seg({x1:cx(si-1), y1:sy(pts[si-1].main||0), x2:cx(si), y2:sy(pts[si].main||0),
@@ -4584,17 +4586,21 @@ function buildExecutivePptDeck(snap){
       if(last) dot({cx:cx(pi),cy:py,r:0.085,fill:C.mintRing,trendCurrentHalo:true});
       dot({cx:cx(pi),cy:py,r:last?0.047:0.036,fill:C.navy,trendPoint:true,
            trendSeries:'main',trendIdx:pi,trendCurrent:last});
-      text({x:cx(pi)-Math.max(0.22,step/2), y:Math.max(G.plotTop,py-G.valueH-G.valueDY),
-            w:Math.max(0.44,step), h:G.valueH, t:exNum(pts[pi].main||0), size:7.0,
+      var pointLabelW=Math.min(0.52,Math.max(0.44,step)), pointLabelX=Math.max(G.plotL+0.02,
+        Math.min(cx(pi)-pointLabelW/2,gridR-pointLabelW-0.02));
+      text({x:pointLabelX, y:Math.max(G.plotTop,py-G.valueH-G.valueDY),
+            w:pointLabelW, h:G.valueH, t:exNum(pts[pi].main||0), size:7.0,
             bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi});
-      text({x:cx(pi)-Math.max(0.22,step/2), y:G.labelY,
-            w:Math.max(0.44,step), h:G.labelH, t:pts[pi].label||'', size:6.2,
+      text({x:pointLabelX, y:G.labelY,
+            w:pointLabelW, h:G.labelH, t:pts[pi].label||'', size:6.2,
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
-    var deltaY=Math.max(G.plotTop,Math.min(G.plotBot-G.valueH,sy(ln.sum)-G.valueH/2));
-    text({x:dataR+0.04, y:deltaY, w:G.deltaW-0.02, h:G.valueH,
-          t:(d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소')),
-          size:7.2, bold:true, color:stateColor, align:'center', trendDeltaLabel:true});
+    var deltaY=Math.max(G.plotTop,Math.min(G.plotBot-G.valueH,sy(ln.sum)+0.07));
+    var chartDeltaText=d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
+    var chartDeltaSize=exFitSize_(chartDeltaText,G.deltaW,[7.2,6.8,6.4,6]);
+    text({x:gridR-G.deltaW, y:deltaY, w:G.deltaW, h:G.valueH,
+          t:exFitTxt_(chartDeltaText,G.deltaW,chartDeltaSize),
+          size:chartDeltaSize, bold:true, color:stateColor, align:'right', trendDeltaLabel:true});
 
     var mo=ln.momentum||{dir:'flat'};
     var flow=mo.dir==='down'?(dir==='down'?'감소 지속':'최근 감소')
@@ -4609,10 +4615,11 @@ function buildExecutivePptDeck(snap){
 
     /* 판단 근거는 그래프 하단에 두어 추이와 바로 연결한다. */
     if(reason){
-      line({x:G.plotL, y:G.reasonRuleY, w:G.plotR-G.plotL, color:C.kpiLine, width:0.75});
-      text({x:G.plotL, y:G.reasonY, w:0.52, h:G.reasonH,
+      var reasonL=T.graphX+0.17;
+      line({x:reasonL, y:G.reasonRuleY, w:gridR-reasonL, color:C.kpiLine, width:0.75});
+      text({x:reasonL, y:G.reasonY, w:0.52, h:G.reasonH,
             t:'판단 근거', size:6.7, bold:true, color:C.mut, trendReasonLabel:true});
-      text({x:G.plotL+0.55, y:G.reasonY, w:G.plotR-G.plotL-0.55, h:G.reasonH,
+      text({x:reasonL+0.55, y:G.reasonY, w:gridR-reasonL-0.55, h:G.reasonH,
             t:reason, size:7.1, bold:true, color:stateColor, trendReason:true});
     }
   })();
@@ -4740,6 +4747,19 @@ function exPptRuns_(o){
   return [{text:String(o.t==null?'':o.t), size:o.size||FT.note, bold:!!o.bold, color:o.color||C.text}];
 }
 
+/* 원형 추이 판정은 SVG 한 장으로 렌더링한다. 선분을 여러 개 이어 그리면 PPT·미리보기에서
+   가장자리가 톱니처럼 보이므로, 같은 벡터 도넛을 두 backend가 공유한다. */
+function exRingSvg_(o){
+  var pct=Math.max(0,Math.min(100,Number(o.pct)||0)), sw=Number(o.stroke)||12;
+  var r=50-sw/2, c=2*Math.PI*r, dash=c*pct/100;
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    +'<circle cx="50" cy="50" r="'+r+'" fill="none" stroke="#'+o.track+'" stroke-width="'+sw+'"/>'
+    +(pct?'<circle cx="50" cy="50" r="'+r+'" fill="none" stroke="#'+o.color+'" stroke-width="'+sw+'"'
+      +' stroke-linecap="round" stroke-dasharray="'+dash+' '+(c-dash)+'" transform="rotate(-90 50 50)"/>':'')
+    +'</svg>';
+}
+function exSvgDataUri_(svg){ return 'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg))); }
+
 /* ══════ backend ① PPTX ══════ */
 function exPptRenderSlide_(pptx, items, logoData){
   var s=pptx.addSlide();
@@ -4764,6 +4784,8 @@ function exPptRenderSlide_(pptx, items, logoData){
       s.addShape(pptx.shapes.OVAL,
         {x:o.cx-o.r, y:o.cy-o.r, w:o.r*2, h:o.r*2,
          fill:{color:o.fill}, line:o.line?{color:o.line.color, width:o.line.width}:{type:'none'}});
+    }else if(o.k==='ring'){
+      s.addImage({data:exSvgDataUri_(exRingSvg_(o)), x:o.x, y:o.y, w:o.w, h:o.h});
     }else if(o.k==='text'){
       s.addText(exPptRuns_(o).map(function(r){
         return {text:r.text, options:{fontSize:r.size, bold:r.bold, color:r.color, fontFace:FT.face}};
@@ -4820,6 +4842,9 @@ function exPptRenderHtml_(items){
       el(o.cx-o.r, o.cy-o.r, o.r*2, o.r*2,
          'background:'+pvHex(o.fill)+';border-radius:50%'
          +(o.line?';border:'+Math.max(1,o.line.width)+'px solid '+pvHex(o.line.color):''));
+    }else if(o.k==='ring'){
+      var re=el(o.x,o.y,o.w,o.h,'',null);
+      re.innerHTML='<img src="'+exSvgDataUri_(exRingSvg_(o))+'" alt="" style="display:block;width:100%;height:100%">';
     }else if(o.k==='text'){
       /* 런 사이·앞뒤 공백은 HTML 에서 접히므로 nbsp 로 고정한다 — PPT 와 글자가 같아야 한다 */
       var html=exPptRuns_(o).map(function(r){
@@ -6004,28 +6029,29 @@ function exTrendCountText_(n){
   var v=Math.round(Number(n||0)*10)/10;
   return (Math.abs(v-Math.round(v))<0.001?exNum(Math.round(v)):v.toFixed(1))+'건';
 }
-/* 단일 시계열과 월평균 기준으로 현재 주·월의 증가/감소를 판정한다. */
+/* 단일 시계열과 기간 평균 기준으로 현재 주·월의 증가/감소를 판정한다. */
 function exTrendLineSpec_(series, focus, opt){
   opt=opt||{};
   var val=function(b){ return exTrendMetricVal_(b, focus); };
   var pts=(series||[]).map(function(b){
     return {label:b.label,sel:!!b.sel,ongoing:!!b.ongoing,main:val(b)};
   });
-  var baseline=Number(opt.baseline||0), current=pts.length?pts[pts.length-1].main:0;
+  var baseline=Number(opt.baseline||0), baselineLabel=opt.baselineLabel||'월평균';
+  var current=pts.length?pts[pts.length-1].main:0;
   var d=current-baseline, pct=baseline>0?Math.round(d/baseline*100):null;
   var recent=pts.slice(Math.max(0,pts.length-3)), first=recent.length?recent[0].main:0;
   var md=current-first, mp=first>0?Math.round(md/first*100):null;
   var momentum={dir:md>0?'up':(md<0?'down':'flat'),d:md,pct:mp,n:recent.length};
   var cmp={dir:d>0?'up':(d<0?'down':'flat'), pct:pct, tone:d>0?'up':(d<0?'down':'flat'),
            label:d===0?'±0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d)),
-           foot:baseline>0?'월평균 대비':'월평균 0건'};
+           foot:baseline>0?baselineLabel+' 대비':baselineLabel+' 0건'};
   return {pts:pts,cmp:cmp,momentum:momentum,focus:focus||'',
           sum:current,prevSum:baseline,avg:baseline,prevAvg:baseline,
-          periodLabel:opt.periodLabel||'',baselineLabel:'월평균',
+          periodLabel:opt.periodLabel||'',baselineLabel:baselineLabel,
           currentLabel:opt.currentLabel||'현재',ongoing:pts.length&&pts[pts.length-1].ongoing,
           last:pts.length?pts[pts.length-1]:null,
           metricLabel:exTrendMetricLabel_(focus),
-          mainName:opt.currentLabel||'현재',refName:'월평균'};
+          mainName:opt.currentLabel||'현재',refName:baselineLabel};
 }
 
 function buildExecutiveReportSnapshot(opt){
@@ -6073,7 +6099,8 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
   /* ── 추이 카드 ──
      주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지를 한 선으로 잇는다.
      무엇을 셀지는 생성 모달의 드롭다운(전체 처리 · A/S · 점검 · VOC 유형 하나)이 정한다.
-     판정은 현재 주·월을 월평균과 비교한다. 이 선택은 추이 카드에만 적용한다. */
+     주간은 표시 기간의 주간 평균, 월간은 표시 기간의 월평균과 비교한다.
+     이 선택은 추이 카드에만 적용한다. */
   var trend, vocOptions, focus=String(vocFocus||''), isVoc=exTrendIsVocType_(focus);
   var metricLb=exTrendMetricLabel_(focus);
   if(type==='month'){
@@ -6082,7 +6109,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     var mAvg=mSeries.length?mTotal/mSeries.length:0;
     var mPeriod=exTrendPeriodLabel_('month',mSeries);
     var mLine=exTrendLineSpec_(mSeries,focus,
-      {baseline:mAvg,periodLabel:mPeriod,currentLabel:'현재 월'});
+      {baseline:mAvg,baselineLabel:'월평균',periodLabel:mPeriod,currentLabel:'현재 월'});
     vocOptions=exTrendTypeCounts_(mSeries[0].from,mSeries[mSeries.length-1].to,false);
     trend={
       kind:'month',
@@ -6099,29 +6126,26 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
       ]
     };
   }else{
-    var wSeries=exReportWeekTrend_(focus), base=exBaseDate();
-    var prevFrom=new Date(base.getFullYear(),base.getMonth()-1,1);
-    var prevTo=new Date(base.getFullYear(),base.getMonth(),0);
-    var curFrom=new Date(base.getFullYear(),base.getMonth(),1);
-    var prevCnt=exCountRange_(prevFrom,prevTo,focus,true), curCnt=exCountRange_(curFrom,base,focus,true);
-    var wAvg=(exTrendMetricVal_(prevCnt,focus)+exTrendMetricVal_(curCnt,focus))/2;
+    var wSeries=exReportWeekTrend_(focus);
+    var wTotal=wSeries.reduce(function(s,t){return s+exTrendMetricVal_(t,focus);},0);
+    var wAvg=wSeries.length?wTotal/wSeries.length:0;
     var wPeriod=exTrendPeriodLabel_('week',wSeries);
     var wLine=exTrendLineSpec_(wSeries,focus,
-      {baseline:wAvg,periodLabel:wPeriod,currentLabel:'현재 주차'});
+      {baseline:wAvg,baselineLabel:'주간 평균',periodLabel:wPeriod,currentLabel:'현재 주차'});
     vocOptions=exTrendTypeCounts_(wSeries[0].mon,wSeries[wSeries.length-1].to,true);
     trend={
       kind:'week',
       title:isVoc?(focus+' 발생 추이'):'서비스 추이',
-      basis:'집계 대상 '+metricLb+' · '+wPeriod+' · 월평균 기준 · 주 단위('+WK_DAYS_LABEL+')',
+      basis:'집계 대상 '+metricLb+' · '+wPeriod+' · 주간 평균 기준 · 주 단위('+WK_DAYS_LABEL+')',
       line: wLine,
       stats:[
         {label:'현재 주차 '+metricLb, value:exTrendCountText_(wLine.sum),
          foot:wLine.ongoing?'진행 중':'완료'},
         {label:wPeriod+' 합계',
-         value:exTrendCountText_(wSeries.reduce(function(s,t){return s+exTrendMetricVal_(t,focus);},0)),
+         value:exTrendCountText_(wTotal),
          foot:'전월부터 현재 주차'},
-        {label:'월평균', value:exTrendCountText_(wAvg), foot:'전월·당월 평균'},
-        {label:'월평균 대비 현재', value:wLine.cmp.label,
+        {label:'주간 평균', value:exTrendCountText_(wAvg), foot:'표시 기간 평균'},
+        {label:'주간 평균 대비 현재', value:wLine.cmp.label,
          valueTone:wLine.cmp.tone, foot:wLine.cmp.foot}
       ]
     };

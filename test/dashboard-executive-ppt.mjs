@@ -203,12 +203,12 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     wItems.filter(o => o.trendPoint).length === 5 &&
     wItems.filter(o => o.trendSegment).length === 4 &&
     !wItems.some(o => o.trendBar));
-  ck('4-b. 주간 기간과 월평균 판정 기준을 직접 밝힌다',
+  ck('4-b. 주간 기간과 표시 기간 주간 평균 판정 기준을 직접 밝힌다',
     wSnap.trend.line.periodLabel === '2026.07~2026.08.08' &&
-    wSnap.trend.line.mainName === '현재 주차' && wSnap.trend.line.refName === '월평균' &&
+    wSnap.trend.line.mainName === '현재 주차' && wSnap.trend.line.refName === '주간 평균' &&
     wSnap.trend.line.pts.every(p => typeof p.main === 'number'));
   ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.line.pts.filter(p => p.sel).length === 1);
-  ck('4-d. 좌측 판정 패널에 월평균·현재값·증감 상태가 그려진다',
+  ck('4-d. 좌측 판정 패널에 주간 평균·현재값·증감 상태가 그려진다',
     ['previous','recent','delta'].every(k => wItems.some(o => o.trendSummary === k)) &&
     wItems.some(o => o.trendState) && wItems.some(o=>o.trendAverage) && has(wItems, '최근 흐름'));
   ck('5. 월간 PPT는 1월부터 현재 월까지 꺾은선으로 잇는다',
@@ -998,7 +998,7 @@ if (false) {
   load(SAMPLE);
 }
 
-/* ══════ V. 추이 그래프 — 월평균 대비 단일 꺾은선 ══════ */
+/* ══════ V. 추이 그래프 — 표시 기간 주간 평균 대비 단일 꺾은선 ══════ */
 {
   const rows = [];
   const mondays = [];
@@ -1018,6 +1018,9 @@ if (false) {
   const snapOf = f => D.buildExecutiveReportSnapshot(Object.assign({ vocFocus: f }, WEEK));
   const plain = snapOf(''), leak = snapOf('노즐누수(약액 유입)');
   const cable = snapOf('케이블 단선'), asOnly = snapOf('__as__'), inspOnly = snapOf('__insp__');
+  const downRows=rows.filter(r=>r.type!=='노즐누수(약액 유입)').map(r=>
+    r.type==='케이블 단선'?Object.assign({},r,{type:'노즐누수(약액 유입)'}):r);
+  load(downRows); const leakDown=snapOf('노즐누수(약액 유입)'); load(rows);
 
   ck('V1. 유형 목록은 그래프 전체 기간에서 센 유형만 담는다',
     plain.vocOptions.length === 2 && plain.vocOptions.every(o => o.k !== '정기점검'),
@@ -1029,12 +1032,12 @@ if (false) {
     leak.trend.line.pts.map(p=>p.label).join(',') === '7월1주,7월2주,7월3주,7월4주,8월1주' &&
     leak.trend.line.pts.map(p=>p.main).join(',') === '5,6,7,8,9',
     leak.trend.line.pts.map(p=>p.label+':'+p.main).join(' / '));
-  ck('V3. 현재 주차를 전월·당월 월평균과 비교해 판정한다', (() => {
+  ck('V3. 현재 주차를 표시 기간 주간 평균과 비교해 판정한다', (() => {
     const ln=leak.trend.line, d=ln.sum-ln.prevSum;
-    return ln.prevSum===18.5 && ln.sum===9 && ln.cmp.dir===(d<0?'down':d>0?'up':'flat') &&
-      ln.cmp.label.includes('9.5건');
+    return ln.prevSum===7 && ln.sum===9 && ln.cmp.dir===(d<0?'down':d>0?'up':'flat') &&
+      ln.cmp.label.includes('2건');
   })(), leak.trend.line.cmp.label+' / avg='+leak.trend.line.prevSum);
-  ck('V3-b. 월평균이 0건이면 증감률을 만들지 않는다', (() => {
+  ck('V3-b. 주간 평균이 0건이면 증감률을 만들지 않는다', (() => {
     load([]); const z=snapOf('노즐누수(약액 유입)'); load(rows);
     return z.trend.line.prevSum===0 && z.trend.line.cmp.pct===null && z.trend.line.cmp.dir==='flat';
   })());
@@ -1042,9 +1045,9 @@ if (false) {
     plain.trend.line.pts.every((p,i)=>p.main===asOnly.trend.line.pts[i].main+inspOnly.trend.line.pts[i].main) &&
     inspOnly.trend.line.pts.every(p=>p.main===1) &&
     asOnly.trend.line.metricLabel==='A/S(VOC)' && inspOnly.trend.line.metricLabel==='점검');
-  ck('V5. 카드 기준 줄에 전체 기간과 월평균 기준을 밝힌다',
+  ck('V5. 카드 기준 줄에 전체 기간과 주간 평균 기준을 밝힌다',
     leak.trend.title.includes('노즐누수(약액 유입)') &&
-    leak.trend.basis.includes(leak.trend.line.periodLabel) && leak.trend.basis.includes('월평균 기준'));
+    leak.trend.basis.includes(leak.trend.line.periodLabel) && leak.trend.basis.includes('주간 평균 기준'));
   ck('V6. 유형 선택은 추이 카드와 보조 KPI 한 장에만 적용된다',
     JSON.stringify(leak.kpi.slice(0,3))===JSON.stringify(plain.kpi) &&
     JSON.stringify(leak.vocTop)===JSON.stringify(plain.vocTop) &&
@@ -1056,33 +1059,33 @@ if (false) {
   ck('V7. 단일 네이비 꺾은선과 모든 주차 점을 그린다',
     points.length===leak.trend.line.pts.length && segs.length===points.length-1 &&
     points.every(o=>o.fill===D.C.navy) && segs.every(o=>o.color===D.C.navy));
-  ck('V8. 월평균 대비 감소는 초록, 증가는 빨강으로 표시한다', (() => {
+  ck('V8. 주간 평균 대비 감소는 초록, 증가는 빨강으로 표시한다', (() => {
     const li=itemsOf(leak), ci=itemsOf(cable);
-    return li.some(o=>o.trendState&&o.color===D.C.green) &&
+    return li.some(o=>o.trendState&&o.color===(leak.trend.line.cmp.dir==='up'?D.C.red:D.C.green)) &&
       ci.some(o=>o.trendState&&o.color===(cable.trend.line.cmp.dir==='up'?D.C.red:D.C.green));
   })());
-  ck('V9. 그래프 최상단 가운데에 전체 기간, 그 아래에 월평균을 표시한다',
+  ck('V9. 그래프 최상단 가운데에 전체 기간, 그 아래에 주간 평균을 표시한다',
     fi.some(o=>o.trendPeriod&&o.t===leak.trend.line.periodLabel) &&
-    fi.some(o=>o.trendAverageLabel&&o.t==='월평균 '+D.exTrendCountText_(leak.trend.line.prevSum)) &&
+    fi.some(o=>o.trendAverageLabel&&o.t==='주간 평균 '+D.exTrendCountText_(leak.trend.line.prevSum)) &&
     fi.filter(o=>o.trendAverageLabel||o.trendPeriod).every(o=>o.y<D.L.trend.graph.plotTop));
-  ck('V9-b. 월평균 수평 점선을 한 줄만 표시한다',
+  ck('V9-b. 주간 평균 수평 점선을 한 줄만 표시한다',
     fi.filter(o=>o.trendAverage).length===1 && fi.find(o=>o.trendAverage).dash===true);
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&
       segs.every(o=>o.x1>=T.x&&o.x2<=T.x+T.w&&o.y1>=T.y&&o.y1<=T.y+T.h&&o.y2>=T.y&&o.y2<=T.y+T.h);
   })());
-  ck('V11. 좌측 판정은 월평균·현재 주차·증감을 표시한다',
+  ck('V11. 좌측 판정은 주간 평균·현재 주차·증감을 표시한다',
     leak.trend.stats.length===4 && ['previous','recent','delta'].every(k=>fi.some(o=>o.trendSummary===k)) &&
     fi.some(o=>o.trendPercent)&&fi.some(o=>o.trendState));
   ck('V11-b. 노즐 누수 감소 판단 근거는 그래프 하단에만 표시한다',
-    leak.trend.line.cmp.dir==='down' &&
-    fi.some(o=>o.trendReason&&o.t==='사용자 교육 개선 · 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&
+    leakDown.trend.line.cmp.dir==='down' &&
+    itemsOf(leakDown).some(o=>o.trendReason&&o.t==='사용자 교육 개선 · 노즐 재사용 감소'&&o.y>D.L.trend.graph.plotBot) &&
     !itemsOf(cable).some(o=>o.trendReason));
   ck('V12. 최근 흐름 카드 글자는 가운데 정렬한다',
     fi.some(o=>o.trendFlow&&o.align==='center'));
-  ck('V13. 우측 끝에 월평균 대비 증가·감소량을 표시한다',
-    fi.some(o=>o.trendDeltaLabel&&/감소|증가|0건/.test(o.t)));
+  ck('V13. 우측 끝에 주간 평균 대비 증가·감소 방향과 건수를 표시한다',
+    fi.some(o=>o.trendDeltaLabel&&/(?:▲|▼|±).*건/.test(o.t)));
   ck('V14. 점의 x좌표가 시간 순서대로 계속 증가하며 기간 구분선은 없다',
     points.every((p,i)=>!i||p.cx>points[i-1].cx) && !fi.some(o=>o.trendDivider));
 

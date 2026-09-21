@@ -85,7 +85,7 @@ const pvText = async () => {
 const plain = await pvText();
 ck('3. 기본은 전체 처리를 전월부터 현재 주차까지 연속 추이로 본다',
   plain.includes('전체 처리(A/S·점검) 추이') &&
-  plain.includes('2026.07~2026.08.08') && plain.includes('월평균') &&
+  plain.includes('2026.07~2026.08.08') && plain.includes('주간 평균') &&
   plain.includes('최근 흐름'));
 ck('3-b. 그래프 구간명은 상대 표현 대신 실제 날짜를 쓴다',
   !plain.includes('직전 8주') && !plain.includes('최근 8주'));
@@ -96,9 +96,9 @@ ck('4. 고른 유형이 추이 카드 제목에 나온다',
   focus.includes('노즐 누수(약액 유입) 발생 추이'));
 ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
   focus.includes('노즐 누수(약액 유입) · 비율') &&
-  focus.includes('2026.07~2026.08.08') && focus.includes('월평균'));
+  focus.includes('2026.07~2026.08.08') && focus.includes('주간 평균'));
 const focusDir=await page.evaluate(() => exReportSnapFromSel_('week').trend.line.cmp.dir);
-ck('6. 현재 주차를 월평균과 비교해 증가·감소를 판정',
+ck('6. 현재 주차를 표시 기간 주간 평균과 비교해 증가·감소를 판정',
   ['up','down','flat'].includes(focusDir) &&
   (focusDir==='up'?focus.includes('증가 추세'):focusDir==='down'?focus.includes('감소 추세'):focus.includes('유지')));
 ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
@@ -113,7 +113,7 @@ ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
 ck('7. 유형을 골라도 기존 KPI·TOP5는 전체 기준 그대로',
   ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', 'VOC 유형 TOP 5', '교체품 TOP 5']
     .every(t => plain.includes(t) && focus.includes(t)));
-ck('8. 미리보기 추이 그래프가 단일 꺾은선·월평균 점선·우측 증감으로 그려진다', await page.evaluate(() => {
+ck('8. 미리보기 추이 그래프가 단일 꺾은선·주간 평균 점선·우측 증감으로 그려진다', await page.evaluate(() => {
   const snap = exReportSnapFromSel_('week');
   const items = buildExecutivePptDeck(snap)[0].items;
   const n=snap.trend.line.pts.length;
@@ -126,11 +126,11 @@ ck('8. 미리보기 추이 그래프가 단일 꺾은선·월평균 점선·우�
 await page.selectOption('#wkVocSel', '__insp__');
 const insp = await pvText();
 ck('8-b. 구분만 골라 볼 수도 있다 (A/S 전체 · 점검 전체)',
-  insp.includes('점검 추이') && insp.includes('월평균 대비 현재'));
+  insp.includes('점검 추이') && insp.includes('주간 평균 대비 현재'));
 
 await page.selectOption('#wkVocSel', '케이블 불량');
 const down = await pvText();
-ck('9. 다른 유형도 월평균 대비 기준으로 판정', await page.evaluate(() => {
+ck('9. 다른 유형도 주간 평균 대비 기준으로 판정', await page.evaluate(() => {
   const snap=exReportSnapFromSel_('week'), dir=snap.trend.line.cmp.dir;
   return ['up','down','flat'].includes(dir);
 }));
