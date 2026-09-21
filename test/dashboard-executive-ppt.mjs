@@ -1106,7 +1106,7 @@ if (false) {
     fi.some(o=>o.trendPercent)&&fi.some(o=>o.trendState));
   ck('V11-a. 좌측 판정 문구는 건수 대신 평균 대비 증감률을 쓴다',
     fi.some(o=>o.trendNarrative==='deltaPercent'&&/% (?:감소|증가)했습니다$/.test(o.t)));
-  ck('V11-b. 노즐 누수 감소 판단 근거는 좌측 요약 패널 최하단에 표시한다',
+  ck('V11-b. 노즐 누수 감소 판단 근거는 좌측 요약 지표 아래에 표시한다',
     leakDown.trend.line.cmp.dir==='down' &&
     itemsOf(leakDown).some(o=>o.trendReason&&o.t==='지속적인 사용자 교육을 통한 오사용 예방 및 노즐 재사용 감소'&&o.x<D.L.trend.graphX&&o.y>=D.L.trend.reason.y) &&
     !itemsOf(cable).some(o=>o.trendReason));
