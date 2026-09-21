@@ -4783,7 +4783,8 @@ function exPptRenderSlide_(pptx, items, logoData){
          line: o.line?{color:o.line.color, width:o.line.width}:{type:'none'}});
     }else if(o.k==='line'){
       s.addShape(pptx.shapes.LINE,{x:o.x, y:o.y, w:o.w, h:0,
-        line:{color:o.color, width:o.width||1}});
+        /* HTML 미리보기와 동일하게 평균 기준선 등의 점선 속성을 PPTX에도 전달한다. */
+        line:{color:o.color, width:o.width||1, dashType:o.dash?'dash':'solid'}});
     }else if(o.k==='seg'){
       /* PPTX 의 LINE 은 좌상단 기준 사각 영역의 대각선이다 —
          왼쪽 아래에서 오른쪽 위로 가는 구간만 flipV 로 뒤집는다. */

@@ -1072,6 +1072,8 @@ if (false) {
     fi.filter(o=>o.trendAverageLabel||o.trendPeriod).every(o=>o.y<D.L.trend.graph.plotTop));
   ck('V9-b. 주간 평균 수평 점선을 한 줄만 표시한다',
     fi.filter(o=>o.trendAverage).length===1 && fi.find(o=>o.trendAverage).dash===true);
+  ck('V9-b-1. PPTX 선 렌더러도 평균 점선 속성을 전달한다',
+    /else if\(o\.k==='line'\)[\s\S]{0,280}dashType:o\.dash\?'dash':'solid'/.test(SRC));
   ck('V9-c. 점선이 주간 평균 기준선임을 그래프 좌측 상단에 밝힌다',
     fi.filter(o=>o.trendAverageLegend).length===2 &&
     fi.some(o=>o.trendAverageLegend&&o.t==='주간 평균 건 수'));
