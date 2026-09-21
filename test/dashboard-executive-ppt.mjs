@@ -196,15 +196,15 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
     wItems.filter(o => o.card && o.y === D.L.kpi.y).length === 3);
 }
 
-/* ══════ 4·5. 추이 카드 — 주간 전월~현재 주 / 월간 1월~현재 월 ══════ */
+/* ══════ 4·5. 추이 카드 — 주간 최근 16주 / 월간 1월~현재 월 ══════ */
 {
-  ck('4. 주간 PPT는 전월 첫 보고 주부터 현재 주차까지 꺾은선으로 잇는다',
-    wSnap.trend.kind === 'week' && wSnap.trend.line.pts.length === 5 &&
-    wItems.filter(o => o.trendPoint).length === 5 &&
-    wItems.filter(o => o.trendSegment).length === 4 &&
+  ck('4. 주간 PPT는 최근 16주부터 현재 주차까지 꺾은선으로 잇는다',
+    wSnap.trend.kind === 'week' && wSnap.trend.line.pts.length === 16 &&
+    wItems.filter(o => o.trendPoint).length === 16 &&
+    wItems.filter(o => o.trendSegment).length === 15 &&
     !wItems.some(o => o.trendBar));
   ck('4-b. 주간 기간과 표시 기간 주간 평균 판정 기준을 직접 밝힌다',
-    wSnap.trend.line.periodLabel === '2026.07~2026.08.08' &&
+    wSnap.trend.line.periodLabel === '2026.04~2026.08.08' &&
     wSnap.trend.line.mainName === '현재 주차' && wSnap.trend.line.refName === '주간 평균' &&
     wSnap.trend.line.pts.every(p => typeof p.main === 'number'));
   ck('4-c. 선택한 보고 주차를 강조', wSnap.trend.line.pts.filter(p => p.sel).length === 1);
@@ -1028,14 +1028,16 @@ if (false) {
   ck('V1-b. 유형 목록 건수와 단일 꺾은선의 주차 합계가 같다',
     plain.vocOptions.find(o => o.k === '노즐누수(약액 유입)').n ===
       leak.trend.line.pts.reduce((s,p)=>s+p.main,0));
-  ck('V2. 전월 모든 주차와 현재 주차를 실제 시간 순서로 잇는다',
-    leak.trend.line.pts.map(p=>p.label).join(',') === '7월1주,7월2주,7월3주,7월4주,8월1주' &&
-    leak.trend.line.pts.map(p=>p.main).join(',') === '5,6,7,8,9',
+  ck('V2. 최근 16주를 현재 주차까지 실제 시간 순서로 잇는다',
+    leak.trend.line.pts.length===16 && leak.trend.line.pts[0].label==='4월3주' &&
+    leak.trend.line.pts[leak.trend.line.pts.length-1].label==='8월1주' &&
+    new Set(leak.trend.line.pts.map(p=>p.label)).size===16,
     leak.trend.line.pts.map(p=>p.label+':'+p.main).join(' / '));
-  ck('V3. 현재 주차를 표시 기간 주간 평균과 비교해 판정한다', (() => {
-    const ln=leak.trend.line, d=ln.sum-ln.prevSum;
-    return ln.prevSum===7 && ln.sum===9 && ln.cmp.dir===(d<0?'down':d>0?'up':'flat') &&
-      ln.cmp.label.includes('2건');
+  ck('V3. 현재 주차를 최근 16주의 주간 평균과 비교해 판정한다', (() => {
+    return [leak,cable].every(s=>{
+      const ln=s.trend.line, avg=ln.pts.reduce((sum,p)=>sum+p.main,0)/ln.pts.length, d=ln.sum-avg;
+      return Math.abs(ln.prevSum-avg)<0.0001 && ln.cmp.dir===(d<0?'down':d>0?'up':'flat');
+    });
   })(), leak.trend.line.cmp.label+' / avg='+leak.trend.line.prevSum);
   ck('V3-b. 주간 평균이 0건이면 증감률을 만들지 않는다', (() => {
     load([]); const z=snapOf('노즐누수(약액 유입)'); load(rows);

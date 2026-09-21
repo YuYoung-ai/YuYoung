@@ -26,7 +26,7 @@ function ck(name, cond, detail = '') {
   console.log(cond ? '✅' : '❌', name, detail);
 }
 
-/* 16주 표본 — 실제 보고 그래프는 이 중 전월 주차부터 현재 주차까지만 사용한다. */
+/* 16주 표본 — 실제 보고 그래프는 이 구간 전체를 현재 주차까지 사용한다. */
 const DATA = [];
 const MONDAYS = [];
 for (let i = 15; i >= 0; i--) {
@@ -83,9 +83,9 @@ const pvText = async () => {
   return t;
 };
 const plain = await pvText();
-ck('3. 기본은 전체 처리를 전월부터 현재 주차까지 연속 추이로 본다',
+ck('3. 기본은 전체 처리를 최근 16주부터 현재 주차까지 연속 추이로 본다',
   plain.includes('전체 처리(A/S·점검) 추이') &&
-  plain.includes('2026.07~2026.08.08') && plain.includes('주간 평균') &&
+  plain.includes('2026.04~2026.08.08') && plain.includes('주간 평균') &&
   plain.includes('최근 흐름'));
 ck('3-b. 그래프 구간명은 상대 표현 대신 실제 날짜를 쓴다',
   !plain.includes('직전 8주') && !plain.includes('최근 8주'));
@@ -96,7 +96,7 @@ ck('4. 고른 유형이 추이 카드 제목에 나온다',
   focus.includes('노즐 누수(약액 유입) 발생 추이'));
 ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
   focus.includes('노즐 누수(약액 유입) · 비율') &&
-  focus.includes('2026.07~2026.08.08') && focus.includes('주간 평균'));
+  focus.includes('2026.04~2026.08.08') && focus.includes('주간 평균'));
 const focusDir=await page.evaluate(() => exReportSnapFromSel_('week').trend.line.cmp.dir);
 ck('6. 현재 주차를 표시 기간 주간 평균과 비교해 증가·감소를 판정',
   ['up','down','flat'].includes(focusDir) &&

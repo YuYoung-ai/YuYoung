@@ -1597,12 +1597,12 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>보고 주차 (월~토)</label>
       <select id="wkSel" onchange="exOnReportPeriodChange_('week')"></select>
-      <div class="mhint">전월 전체 주차부터 현재 주차까지 · 표시 기간 주간 평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
+      <div class="mhint">최근 16주부터 현재 주차까지 · 표시 기간 주간 평균 대비 판정 · 전체 1페이지 · 고객 서비스 · 데모 운영 제외</div>
     </div>
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">고른 대상의 전월·당월 주차를 꺾은선으로 이어 그리고, 현재 주차를 표시 기간의 주간 평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">고른 대상의 최근 16주를 꺾은선으로 이어 그리고, 현재 주차를 표시 기간의 주간 평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
     </div>
     <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
     <details class="voc-desc-editor" id="wkVocDescBox">
@@ -4209,7 +4209,8 @@ var L=(function(){
             graph:{headY:rowA.y+0.12, headH:0.22, avgY:rowA.y+0.34, avgH:0.18,
                    chipW:0.72, chipH:0.52, chipTop:rowA.y+0.10,
                    /* 기준 이미지처럼 Y축 여백을 충분히 두고, 마지막 주차 뒤에는 증감 문구 영역을 남긴다. */
-                   plotL:page.left+3.20, plotR:page.left+trendW-0.21,
+                   /* 그래프 시작선은 하단 판단 근거의 시작선과 맞춘다. */
+                   plotL:page.left+2.75, plotR:page.left+trendW-0.21,
                    plotTop:rowA.y+0.68, plotBot:rowA.y+1.91,
                    axisW:0.27, axisH:0.16, ticks:3,
                    valueH:0.18, valueDY:0.04, labelY:rowA.y+1.94, labelH:0.15,
@@ -4239,10 +4240,11 @@ function wkNo(mon){ return Math.floor((mon.getDate()-1)/7)+1; } /* 월 내 주�
 function wkLabel(mon){ return (mon.getMonth()+1)+'월 '+wkNo(mon)+'주차'; }
 /* ── 업무보고 한 주 = 월요일 ~ 토요일 ──
    토요일 당직 처리도 그 주의 실적이므로 보고 주에 넣는다. 주 길이는 여기서만 관리한다 —
-   기간 프리셋·주간 보고 기간·8주 추이 집계·비교 기간(전주) 판정이 모두 이 값을 따른다. */
+   기간 프리셋·주간 보고 기간·16주 보고 추이 집계·비교 기간(전주) 판정이 모두 이 값을 따른다. */
 var WK_LAST=5;                                   /* 월요일 + 5일 = 토요일 */
 var WK_LEN=WK_LAST+1;                            /* 한 주 6일(월~토) */
 var WK_DAYS_LABEL='월~토';
+var EX_REPORT_WEEK_TREND_N=16;                   /* 주간 업무보고 추이 표시 주 수 */
 function weekEnd(mon){ return addD(mon, WK_LAST); }
 /* 보고 대상 요일 — 일요일 기록만 주간 집계에서 뺀다 */
 function isReportDay_(d){ return d.getDay()!==0; }
@@ -4469,7 +4471,7 @@ function buildExecutivePptDeck(snap){
   }
 
   /* ── ③ 대상 발생 추이 ──
-     주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지 한 선으로 잇는다.
+     주간은 최근 16주부터 현재 주까지, 월간은 1월부터 현재 월까지 한 선으로 잇는다.
      현재값은 기간 평균과 비교하고, 그래프 안의 점선도 같은 평균을 뜻한다. */
   (function(){
     var T=L.trend, G=T.graph, tr=snap.trend, ln=tr.line, pts=ln.pts;
@@ -4553,7 +4555,7 @@ function buildExecutivePptDeck(snap){
     /* 눈금·주차·흐름·판단 근거를 포함한 시계열 그룹을 우측 판의 시각적 중앙에 둔다. */
     var chipX=T.graphX+T.graphW-G.chipW-0.23;
     /* 기간·평균은 흐름 카드가 아닌 실제 주차 점 배열의 가운데에 둔다. */
-    var headW=(G.plotR-0.36)-G.plotL;
+    var headW=G.plotR-G.plotL;
     text({x:G.plotL, y:G.headY, w:headW, h:G.headH,
           t:ln.periodLabel, size:8.5, bold:true, color:C.navy, align:'center', trendPeriod:true});
     text({x:G.plotL, y:G.avgY, w:headW, h:G.avgH,
@@ -4562,7 +4564,7 @@ function buildExecutivePptDeck(snap){
 
     /* 눈금선은 판단 근거 구분선의 끝까지 잇고, 첫·마지막 주차는 양 끝에서 여백을 둔다.
        주차 값·라벨이 카드 테두리에 붙지 않으며 모든 주차 간격은 동일하다. */
-    var n=pts.length||1, gridR=G.plotR, dataL=G.plotL+0.28, dataR=gridR-0.50, plotW=dataR-dataL;
+    var n=pts.length||1, gridR=G.plotR, dataL=G.plotL+0.28, dataR=gridR-0.28, plotW=dataR-dataL;
     var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=Math.max(ln.prevSum||0,1);
     pts.forEach(function(p){ maxV=Math.max(maxV,p.main||0); });
@@ -4586,13 +4588,15 @@ function buildExecutivePptDeck(snap){
       if(last) dot({cx:cx(pi),cy:py,r:0.085,fill:C.mintRing,trendCurrentHalo:true});
       dot({cx:cx(pi),cy:py,r:last?0.047:0.036,fill:C.navy,trendPoint:true,
            trendSeries:'main',trendIdx:pi,trendCurrent:last});
-      var pointLabelW=Math.min(0.52,Math.max(0.44,step)), pointLabelX=Math.max(G.plotL+0.02,
+      var pointLabelW=n>10?Math.min(0.32,Math.max(0.26,step)):Math.min(0.52,Math.max(0.44,step)), pointLabelX=Math.max(G.plotL+0.02,
         Math.min(cx(pi)-pointLabelW/2,gridR-pointLabelW-0.02));
       text({x:pointLabelX, y:Math.max(G.plotTop,py-G.valueH-G.valueDY),
             w:pointLabelW, h:G.valueH, t:exNum(pts[pi].main||0), size:7.0,
             bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi});
+      /* 16주는 점을 모두 보이되, 축 라벨은 두 주 간격으로 표시해 겹침을 막는다. */
+      var pointAxisLabel=(n>10 && pi!==0 && !last && pi%2)?'':(pts[pi].label||'');
       text({x:pointLabelX, y:G.labelY,
-            w:pointLabelW, h:G.labelH, t:pts[pi].label||'', size:6.2,
+            w:pointLabelW, h:G.labelH, t:pointAxisLabel, size:n>10?5.6:6.2,
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
     var deltaY=Math.max(G.plotTop,Math.min(G.plotBot-G.valueH,sy(ln.sum)+0.07));
@@ -4951,7 +4955,7 @@ function exReportSnapFromSel_(type){
     vocFocus:EX_PPT_VOC_FOCUS[type]||'',
     notes:exNoteOverride_(type)});
 }
-/* 드롭다운 목록 — 추이 구간(주간 8주 · 월간 6개월)에 실제로 기록이 있는 유형만 담는다.
+/* 드롭다운 목록 — 추이 구간(주간 16주 · 월간 6개월)에 실제로 기록이 있는 유형만 담는다.
    기록이 없는 유형을 고르면 0건짜리 평평한 선이 되어 보고가 아니라 오해가 된다. */
 function exRefreshVocFocusSelect_(type){
   var sel=document.getElementById((type==='month'?'mn':'wk')+'VocSel');
@@ -5079,10 +5083,10 @@ function exOnReportPeriodChange_(type){
 function openWeekly(){
   if(!exRequireLevel3_()) return;
   if(!RAW.length){ toast('데이터가 아직 없습니다'); return; }
-  /* 데이터에 존재하는 주(월요일) 목록 — 최근 8주 */
+  /* 데이터에 존재하는 주(월요일) 목록 — 최근 16개 보고 주차 */
   var set={};
   RAW.forEach(function(r){ var d=rowDate(r); if(d) set[ymd(monday(d))]=1; });
-  document.getElementById('wkSel').innerHTML=Object.keys(set).sort().reverse().slice(0,8)
+  document.getElementById('wkSel').innerHTML=Object.keys(set).sort().reverse().slice(0,16)
     .map(function(k){
       var m=new Date(k+'T00:00:00');
       return '<option value="'+k+'">'+m.getFullYear()+'년 '+wkLabel(m)+' ('+wkRange(m)+')</option>';
@@ -5985,11 +5989,10 @@ function exTrendMetricLabel_(focus){
 function exTrendIsVocType_(focus){
   return !!focus && focus!==EX_TREND_METRIC_AS && focus!==EX_TREND_METRIC_INSP;
 }
-/* 주간 보고용: 전월의 첫 월요일부터 기준 주까지 모든 주차를 잇는다. */
+/* 주간 보고용: 최근 16주를 기준 주까지 시간순으로 잇는다. */
 function exReportWeekTrend_(focus){
-  var base=exBaseDate(), first=new Date(base.getFullYear(),base.getMonth()-1,1);
-  var start=monday(first); if(start<first) start=addD(start,7);
-  var endMon=monday(base), out=[];
+  var nWeeks=typeof EX_REPORT_WEEK_TREND_N==='number'?EX_REPORT_WEEK_TREND_N:16;
+  var base=exBaseDate(), endMon=monday(base), start=addD(endMon,-7*(nWeeks-1)), out=[];
   for(var mo=new Date(start);mo<=endMon;mo=addD(mo,7)){
     var wkEnd=weekEnd(mo), cur=ymd(mo)===ymd(endMon);
     var to=cur&&base<wkEnd?new Date(base):wkEnd, end=new Date(to); end.setHours(23,59,59,999);
@@ -6097,7 +6100,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
   }
 
   /* ── 추이 카드 ──
-     주간은 전월 첫 보고 주부터 현재 주까지, 월간은 1월부터 현재 월까지를 한 선으로 잇는다.
+     주간은 최근 16주부터 현재 주까지, 월간은 1월부터 현재 월까지를 한 선으로 잇는다.
      무엇을 셀지는 생성 모달의 드롭다운(전체 처리 · A/S · 점검 · VOC 유형 하나)이 정한다.
      주간은 표시 기간의 주간 평균, 월간은 표시 기간의 월평균과 비교한다.
      이 선택은 추이 카드에만 적용한다. */
