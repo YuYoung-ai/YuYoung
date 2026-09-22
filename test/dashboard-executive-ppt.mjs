@@ -1026,6 +1026,10 @@ if (false) {
     wItems.some(o=>o.actionCurrentPeriodBand) && wItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='이번 주') &&
     wItems.filter(o=>o.actionCurrentHalo).length===2 &&
     mItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='당월'));
+  ck('7-g-2. 7월 13일 내부 세척 수리 적용 주차에는 밝은 파란 구간·후광과 표기를 둔다',
+    wItems.some(o=>o.actionRepairStartBand&&o.fill===D.C.blueBg&&o.w>0.9) &&
+    wItems.some(o=>o.actionRepairStartHalo&&o.actionIdx===12&&o.fill===D.C.blueRing) &&
+    wItems.some(o=>o.actionRepairStartLabel&&o.t==='적용 시점'));
 
   load([
     {date:'2026-08-03',hosp:'가나',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},

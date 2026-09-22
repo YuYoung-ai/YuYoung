@@ -4115,11 +4115,11 @@ function renderMemberCompare(rows){
 
 /* 색상 상수 — PPT 안의 모든 색은 여기서만 관리한다.
    회사 양식 색(네이비·청록·회선) + 대시보드 증감 색(빨강=증가/악화, 초록=감소/개선) */
-var C={navy:'1B2F5E', teal:'2E7D9E', red:'C0392B', green:'1E7E4E', amber:'B8860B',
+var C={navy:'1B2F5E', teal:'2E7D9E', red:'C0392B', green:'1E7E4E', amber:'B8860B', blue:'2F80ED',
        line:'DDE3EE', mut:'6B7A99', text:'333333', white:'FFFFFF',
        kpiBg:'F6FAFE', kpiLine:'C9D8EC', headBg:'EEF3FA',
        selBg:'FFF6DC', grayBg:'F4F6F8',
-       mintBg:'ECF8F2', mintRing:'CDEBDD', redSoft:'FBEAE8', recentBg:'F4F8FD'};
+       mintBg:'ECF8F2', mintRing:'CDEBDD', blueBg:'E8F3FF', blueRing:'C7E3FF', redSoft:'FBEAE8', recentBg:'F4F8FD'};
 /* 증감 색 — 대시보드 .ex-up/.ex-down/.ex-neutral 과 같은 의미를 쓴다 */
 var EX_TONE_COLOR={up:C.red, down:C.green, neutral:C.mut, flat:C.mut};
 
@@ -4760,9 +4760,22 @@ function buildExecutivePptDeck(snap){
     var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=1; pts.forEach(function(p){maxV=Math.max(maxV,p.clean||0,p.replacement||0);});
     var ny=ycNice_(maxV,G.ticks), sy=function(v){return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop);};
+    /* 내부 세척 수리는 7월 13일 적용을 시작한 주차를 별도로 후광 처리한다.
+       표시 기간에 해당 주차가 없을 때는 별도 표식을 그리지 않는다. */
+    var repairApplyIdx=ac.kind==='week' ? pts.findIndex(function(p){ return p.label==='7/13'; }) : -1;
     /* 수리 조치 그래프도 동일하게 마지막 보고 주·월을 별도 배경으로 읽을 수 있게 한다. */
     var currentPeriodLabel=ac.kind==='month'?'당월':'이번 주';
     var currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18)), currentBandW=G.plotR-currentBandX;
+    var repairApplyBandX=null, repairApplyBandW=0;
+    if(repairApplyIdx>=0){
+      repairApplyBandX=Math.max(G.plotL,cx(repairApplyIdx)-(n>1?step/2:0.18));
+      /* 적용 시작부터 마지막 보고 주차까지를 하나의 성과 구간으로 덮는다.
+         마지막 주차의 민트 영역은 뒤에서 한 번 더 그려 현재 보고 기간을 구분한다. */
+      repairApplyBandW=G.plotR-repairApplyBandX;
+      rect({x:repairApplyBandX, y:G.plotTop-0.045, w:repairApplyBandW,
+            h:G.labelY+G.labelH-G.plotTop+0.09,
+            fill:C.blueBg, actionRepairStartBand:true});
+    }
     rect({x:currentBandX, y:G.plotTop, w:currentBandW, h:G.labelY+G.labelH-G.plotTop,
           fill:C.mintBg, actionCurrentPeriodBand:true});
     for(var gi=0;gi<=G.ticks;gi++){
@@ -4782,11 +4795,12 @@ function buildExecutivePptDeck(snap){
       for(var j=0;j<n;j++){
         var val=pts[j][key]||0, py=sy(val), other=pts[j][key==='clean'?'replacement':'clean']||0;
         var px=actionCX(key,j), lw=n>10?Math.min(0.27,Math.max(0.23,step)):0.40;
-        var last=j===n-1;
+        var last=j===n-1, repairStart=key==='clean' && j===repairApplyIdx;
         if(last) dot({cx:px, cy:py, r:0.066, fill:C.mintRing, actionCurrentHalo:key, actionIdx:j});
-        dot({cx:px, cy:py, r:last?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
+        if(repairStart) dot({cx:px, cy:py, r:0.085, fill:C.blueRing, actionRepairStartHalo:true, actionIdx:j});
+        dot({cx:px, cy:py, r:(last||repairStart)?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
         if(!val) continue;
-        var below=key==='replacement' && py+G.valueH+0.055<=G.plotBot-0.01;
+        var below=(key==='replacement'||repairStart) && py+G.valueH+0.055<=G.plotBot-0.01;
         var ly=below ? py+0.045 : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
         /* 같은 값이면서 아래 공간도 없을 때만 라벨을 추가로 옆으로 벌린다. */
         if(!below && val===other) px+=key==='clean'?-0.055:0.055;
@@ -4803,6 +4817,12 @@ function buildExecutivePptDeck(snap){
     });
     text({x:currentBandX+0.02, y:G.plotTop+0.03, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
           t:currentPeriodLabel, size:5.8, bold:true, color:C.green, align:'center', actionCurrentPeriodLabel:true});
+    if(repairApplyBandX!=null){
+      var repairStartLabelW=0.56, repairStartLabelX=Math.max(G.plotL,
+          Math.min(repairApplyBandX+repairApplyBandW/2-repairStartLabelW/2,G.plotR-repairStartLabelW));
+      text({x:repairStartLabelX, y:G.plotTop+0.03, w:repairStartLabelW, h:G.valueH,
+            t:'적용 시점', size:4.8, bold:true, color:C.blue, align:'center', actionRepairStartLabel:true});
+    }
     /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
     text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
           t:'※ 1건당 절감액', size:4.9, bold:true, color:C.mut, align:'center', actionSavingBasis:true});
