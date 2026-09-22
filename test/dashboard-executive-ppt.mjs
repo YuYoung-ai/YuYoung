@@ -1022,6 +1022,10 @@ if (false) {
     wItems.some(o=>o.actionSavingBasisFormula&&o.t==='리페어 제작비 - 수리비 = 281,200원'));
   ck('7-g. 월간도 동일한 조치 카드 구성을 사용',
     has(mItems,'수리 조치 및 비용 절감 추이') && mItems.some(o=>o.actionGauge));
+  ck('7-g-1. 수리 조치 그래프는 마지막 보고 기간을 민트 영역·확대 점·후광으로 강조',
+    wItems.some(o=>o.actionCurrentPeriodBand) && wItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='이번 주') &&
+    wItems.filter(o=>o.actionCurrentHalo).length===2 &&
+    mItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='당월'));
 
   load([
     {date:'2026-08-03',hosp:'가나',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
@@ -1121,6 +1125,10 @@ if (false) {
   ck('V9-c-1. 노즐 누수 발생 꺾은선 범례를 평균 범례와 함께 표시',
     fi.filter(o=>o.trendSeriesLegend).length===3 &&
     fi.some(o=>o.trendSeriesLegend&&o.t==='노즐 누수 발생 건 수'));
+  ck('V9-c-2. 노즐 누수 발생 그래프는 마지막 보고 기간을 민트 영역과 이번 주·당월 표기로 강조',
+    fi.some(o=>o.trendCurrentPeriodBand) && fi.some(o=>o.trendCurrentPeriodLabel&&o.t==='이번 주') &&
+    D.buildExecutivePptDeck(D.buildExecutiveReportSnapshot(Object.assign({vocFocus:'노즐누수(약액 유입)'},MONTH)))[0].items
+      .some(o=>o.trendCurrentPeriodLabel&&o.t==='당월'));
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&

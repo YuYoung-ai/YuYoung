@@ -4606,6 +4606,15 @@ function buildExecutivePptDeck(snap){
     var maxV=Math.max(ln.prevSum||0,1);
     pts.forEach(function(p){ maxV=Math.max(maxV,p.main||0); });
     var ny=ycNice_(maxV,G.ticks), sy=function(v){ return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop); };
+    /* 노즐 누수 발생 추이는 마지막 보고 주·월만 연한 민트 영역으로 구분한다.
+       마지막 데이터 점이 있는 구간의 절반 폭부터 우측 여백까지를 하나의 보고 기간으로 본다. */
+    var currentPeriodLabel=tr.kind==='month'?'당월':'이번 주', currentBandX=null, currentBandW=0;
+    if(isNozzleLeak && n){
+      currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18));
+      currentBandW=gridR-currentBandX;
+      rect({x:currentBandX, y:G.plotTop, w:currentBandW, h:G.labelY+G.labelH-G.plotTop,
+            fill:C.mintBg, trendCurrentPeriodBand:true});
+    }
     for(var gi=0;gi<=G.ticks;gi++){
       var gv=ny.step*gi, gy=sy(gv);
       line({x:G.plotL, y:gy, w:gridR-G.plotL, color:C.line, width:gi?0.5:0.75});
@@ -4636,10 +4645,15 @@ function buildExecutivePptDeck(snap){
             w:pointLabelW, h:G.labelH, t:pointAxisLabel, size:n>10?5.2:6.2,
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
-    var deltaY=G.plotTop+0.04;
+    if(currentBandX!=null){
+      text({x:currentBandX+0.02, y:G.plotTop+0.04, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
+            t:currentPeriodLabel, size:6.0, bold:true, color:C.green, align:'center', trendCurrentPeriodLabel:true});
+    }
+    var deltaY=G.plotTop+0.04, deltaX=currentBandX!=null
+      ? Math.max(G.plotL,currentBandX-G.deltaW-0.05) : gridR-G.deltaW;
     var chartDeltaText=d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
     var chartDeltaSize=exFitSize_(chartDeltaText,G.deltaW,[7.2,6.8,6.4,6]);
-    text({x:gridR-G.deltaW, y:deltaY, w:G.deltaW, h:G.valueH,
+    text({x:deltaX, y:deltaY, w:G.deltaW, h:G.valueH,
           t:exFitTxt_(chartDeltaText,G.deltaW,chartDeltaSize),
           size:chartDeltaSize, bold:true, color:stateColor, align:'right', trendDeltaLabel:true});
 
@@ -4746,6 +4760,11 @@ function buildExecutivePptDeck(snap){
     var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=1; pts.forEach(function(p){maxV=Math.max(maxV,p.clean||0,p.replacement||0);});
     var ny=ycNice_(maxV,G.ticks), sy=function(v){return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop);};
+    /* 수리 조치 그래프도 동일하게 마지막 보고 주·월을 별도 배경으로 읽을 수 있게 한다. */
+    var currentPeriodLabel=ac.kind==='month'?'당월':'이번 주';
+    var currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18)), currentBandW=G.plotR-currentBandX;
+    rect({x:currentBandX, y:G.plotTop, w:currentBandW, h:G.labelY+G.labelH-G.plotTop,
+          fill:C.mintBg, actionCurrentPeriodBand:true});
     for(var gi=0;gi<=G.ticks;gi++){
       var gv=ny.step*gi, gy=sy(gv);
       line({x:G.plotL, y:gy, w:G.plotR-G.plotL, color:C.line, width:gi?0.5:0.75, actionGrid:true});
@@ -4763,7 +4782,9 @@ function buildExecutivePptDeck(snap){
       for(var j=0;j<n;j++){
         var val=pts[j][key]||0, py=sy(val), other=pts[j][key==='clean'?'replacement':'clean']||0;
         var px=actionCX(key,j), lw=n>10?Math.min(0.27,Math.max(0.23,step)):0.40;
-        dot({cx:px, cy:py, r:0.034, fill:color, actionPoint:key, actionIdx:j});
+        var last=j===n-1;
+        if(last) dot({cx:px, cy:py, r:0.066, fill:C.mintRing, actionCurrentHalo:key, actionIdx:j});
+        dot({cx:px, cy:py, r:last?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
         if(!val) continue;
         var below=key==='replacement' && py+G.valueH+0.055<=G.plotBot-0.01;
         var ly=below ? py+0.045 : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
@@ -4780,6 +4801,8 @@ function buildExecutivePptDeck(snap){
             t:p.label||'', size:n>10?4.8:5.8, bold:!!p.sel, color:p.sel?C.navy:C.mut,
             align:'center', actionPointLabel:true, actionIdx:i});
     });
+    text({x:currentBandX+0.02, y:G.plotTop+0.03, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
+          t:currentPeriodLabel, size:5.8, bold:true, color:C.green, align:'center', actionCurrentPeriodLabel:true});
     /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
     text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
           t:'※ 1건당 절감액', size:4.9, bold:true, color:C.mut, align:'center', actionSavingBasis:true});
