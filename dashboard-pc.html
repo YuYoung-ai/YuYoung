@@ -4227,7 +4227,8 @@ var L=(function(){
                    avgLabelH:0.20, deltaW:0.72} },
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
-             rowPitch:0.24, rowH:0.22, rightW:1.55 },
+             /* 증감 표시는 짧으므로 필요한 폭만 남기고, 여유는 설명 칸에 준다. */
+             rowPitch:0.24, rowH:0.22, rightW:0.88 },
     /* 하단은 TOP5 두 장 대신, 같은 폭의 수리 조치 및 비용 절감 추이 한 장을 둔다.
        좌측 요약 폭은 상단 발생 추이와 똑같이 2.52in으로 고정해 두 카드의 세로 경계가 이어진다. */
     action:{ x:page.left, y:rowB.y, w:trendW, h:rowB.h,
@@ -4700,13 +4701,18 @@ function buildExecutivePptDeck(snap){
         var y=y0+i*T.rowPitch;
         /* 유형명 오른쪽에는 같은 보고서용 VOC 설명을 붙인다.
            증감 수치는 기존처럼 우측 끝에 고정해 비교가 흔들리지 않게 한다. */
-        var nw=iw-0.16-T.rightW-0.06, nameW=Math.min(1.16,Math.max(0.90,nw*0.38)), descW=nw-nameW-0.05;
+        var nw=iw-0.16-T.rightW-0.06, nameW=Math.min(1.42,Math.max(1.15,nw*0.40)), descW=nw-nameW-0.05;
+        var nameSize=exFitSize_(t.k,nameW,[FT.rowName,8,7.5,7,6.5,6]),
+            /* 기본 크기를 먼저 사용하고, 유난히 긴 설명만 한 단계씩 맞춘다. */
+            descSize=exFitSize_(t.desc||'',descW,[6.2,6.0,5.8,5.6,5.4,5.2,5.0,4.8,4.6,4.4,4.2,4.0,3.8]),
+            /* 실제 VOC 명칭은 전부 보여주되, 비정상적으로 긴 신규 명칭만 카드 밖으로 넘지 않게 한다. */
+            nameText=exTxtW_(t.k,nameSize)<=nameW ? t.k : exFitTxt_(t.k,nameW,nameSize);
         text({x:T.x+CD.pad+0.08, y:y, w:nameW, h:T.rowH,
-              t:exFitTxt_(t.k, nameW, FT.rowName), size:FT.rowName, color:C.text,
+              t:nameText, size:nameSize, color:C.text,
               changeRow:i, changeCol:'name'});
         text({x:T.x+CD.pad+0.08+nameW+0.05, y:y, w:descW, h:T.rowH,
-              t:exFitTxt_(t.desc||'',descW,5.8), size:5.8, color:C.mut,
-              changeRow:i, changeCol:'description'});
+              t:t.desc||'', size:descSize, color:C.mut,
+              changeRow:i, changeCol:'description', changeDescFull:true});
         text({x:T.x+T.w-CD.pad-0.08-T.rightW, y:y, w:T.rightW, h:T.rowH, align:'right',
               runs:[{text:t.prev+' → ', size:FT.rowDelta, color:C.mut},
                     {text:String(t.cur), size:FT.rowVal, bold:true, color:C.navy},
