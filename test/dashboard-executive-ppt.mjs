@@ -67,7 +67,7 @@ const FNS = [
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exPartTopLabel_', 'exPartDim_', 'exPartCompare_', 'exVocTypeCompare_',
   'exTrendVocType_', 'exCountVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
   'exTrendIsVocType_', 'exTrendPeriod_', 'exReportWeekTrend_', 'exReportMonthTrend_',
-  'hpCleanKey_', 'hpIsLeakVoc_', 'exNozzleActionTrend_', 'exNozzleActionSpec_',
+  'hpCleanKey_', 'hpIsLeakVoc_', 'exNozzleActionIsHandpieceReplacement_', 'exNozzleActionCounts_', 'exNozzleActionSavingSummary_', 'exNozzleActionTrend_', 'exNozzleActionSpec_',
   'exTrendPeriodLabel_', 'exTrendCountText_', 'exTrendLineSpec_', 'ycNice_',
   'buildWeekTrend', 'exCountRange_', 'buildMonthTrend', 'buildMonthTrendCompare',
   'exMonthTrendNote_', 'ncareAsOf_', 'ncareAsOfLabel_', 'buildNcareStatus', 'buildSkillData', 'buildNozzleData',
@@ -466,7 +466,7 @@ if(false){
   ck('18-d. 0건에도 회사 제목·로고·푸터는 유지',
     has(zi, '주간업무보고') && zi.some(o => o.k === 'logo') && has(zi, 'BAZ BIOMEDIC'));
   ck('18-e. 0건에도 노즐 누수 조치 카드와 절감액 자리는 유지한다',
-    has(zi, '노즐 누수 조치 추이') && has(zi, '절감액'));
+    has(zi, '수리 조치 및 비용 절감 추이') && has(zi, '절감액'));
   load(SAMPLE);
 }
 
@@ -711,7 +711,7 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     has(emptyItems, '특이사항') && has(emptyItems, '특이사항 없음'),
     allText(emptyItems).indexOf('특이사항 없음') >= 0 ? 'ok' : 'missing');
   ck('E4-c. 전부 제거해도 슬라이드는 1장, 다른 카드는 그대로',
-    deckOf(emptySnap).length === 1 && has(emptyItems, '노즐 누수 조치 추이') &&
+    deckOf(emptySnap).length === 1 && has(emptyItems, '수리 조치 및 비용 절감 추이') &&
     has(emptyItems, 'BAZ BIOMEDIC'));
 
   /* 손대지 않은 상태 복귀 */
@@ -996,26 +996,48 @@ if (false) {
   load(SAMPLE);
 }
 
-/* ══════ 7. 노즐 누수 조치 추이 ══════ */
+/* ══════ 7. 수리 조치 및 비용 절감 추이 ══════ */
 {
-  ck('7. TOP5 두 장 대신 노즐 누수 조치 추이 카드 하나를 표시',
-    has(wItems, '노즐 누수 조치 추이') && !has(wItems, 'VOC 유형 TOP 5') && !has(wItems, '교체품 TOP 5'));
+  ck('7. TOP5 두 장 대신 수리 조치 및 비용 절감 추이 카드 하나를 표시',
+    has(wItems, '수리 조치 및 비용 절감 추이') && !has(wItems, 'VOC 유형 TOP 5') && !has(wItems, '교체품 TOP 5'));
   ck('7-b. 조치 카드의 대상은 노즐 누수(약액 유입)만 명시',
     wSnap.action.basis.includes('노즐 누수(약액 유입)') && wSnap.action.pts.length === 16);
-  ck('7-c. 내부 세척 수리·유상 Handpiece 교체를 각각 꺾은선으로 표시',
+  ck('7-c. 내부 세척 수리·Handpiece 전체 교체를 각각 꺾은선으로 표시',
     wItems.filter(o=>o.actionSegment==='clean').length===15 &&
     wItems.filter(o=>o.actionSegment==='replacement').length===15 &&
     has(wItems, '내부 세척 수리') && has(wItems, 'Handpiece 교체'));
-  ck('7-d. Handpiece 교체 건수와 유상 판매 사유를 좌측 원형 요약에 표시',
+  ck('7-d. Handpiece 전체 교체 건수와 유상 판매 건수를 좌측 원형 요약에 표시',
     wItems.some(o=>o.actionReplacementGauge) && wItems.some(o=>o.actionReplacementCount) &&
-    wItems.some(o=>o.actionReplacementReason&&o.t==='유상 판매'));
+    wItems.some(o=>o.actionReplacementReason&&o.t==='유상 판매 2건'));
+  ck('7-d-1. 좌측 요약은 16주 합계가 아니라 현재 보고 기간 Handpiece 교체를 집계',
+    wSnap.action.replacement===2 && wSnap.action.paidReplacement===2,
+    '보고 기간 전체 교체 '+wSnap.action.replacement+'건 / 유상 판매 '+wSnap.action.paidReplacement+'건');
   ck('7-e. 좌측 조치 요약 패널 폭은 상단 발생 추이와 동일',
     Math.abs(D.L.action.leftW-D.L.trend.leftW)<0.001 &&
     Math.abs(D.L.action.graphX-D.L.trend.graphX)<0.001);
-  ck('7-f. 자체 수리율 원형 그래프와 내부 세척 절감액을 표시',
-    wItems.some(o=>o.actionGauge) && wItems.some(o=>o.actionRepairRate) && wItems.some(o=>o.actionSaving));
+  ck('7-f. 자체 수리율 원형 그래프와 기준 기간·누적 내부 세척 절감액을 표시',
+    wItems.some(o=>o.actionGauge) && wItems.some(o=>o.actionRepairRate) && wItems.some(o=>o.actionSaving) &&
+    wItems.some(o=>o.actionSavingCumulative) &&
+    wItems.some(o=>o.actionSavingBasis&&o.t==='※ 1건당 절감액') &&
+    wItems.some(o=>o.actionSavingBasisFormula&&o.t==='리페어 제작비 - 수리비 = 281,200원'));
   ck('7-g. 월간도 동일한 조치 카드 구성을 사용',
-    has(mItems,'노즐 누수 조치 추이') && mItems.some(o=>o.actionGauge));
+    has(mItems,'수리 조치 및 비용 절감 추이') && mItems.some(o=>o.actionGauge));
+
+  load([
+    {date:'2026-08-03',hosp:'가나',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
+    {date:'2026-08-04',hosp:'나나',gubun:'A/S',type:'노즐누수(약액 유입)',part:"Handpiece Ass'y"},
+    {date:'2026-08-05',hosp:'다다',gubun:'A/S',type:'노즐누수(약액 유입)',part:"Handpiece Ass'y",cost:'120000'},
+    {date:'2026-07-27',hosp:'라라',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
+    {date:'2026-07-28',hosp:'마마',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'}
+  ]);
+  const periodAction=D.buildExecutiveReportSnapshot(WEEK).action;
+  ck('7-h. 기준 기간 전체 교체·유상 판매·당월 누적 및 이번 주 절감액을 각각 산정',
+    periodAction.clean===1 && periodAction.replacement===2 && periodAction.paidReplacement===1 &&
+    periodAction.saving===281200 && periodAction.savingSummary.cumulative===281200 &&
+    periodAction.savingSummary.period===281200 && periodAction.savingSummary.cumulativeLabel==='당월 누적 절감액' &&
+    periodAction.savingSummary.periodLabel==='이번 주 절감액',
+    JSON.stringify(periodAction));
+  load(SAMPLE);
 }
 
 /* ══════ V. 추이 그래프 — 표시 기간 주간 평균 대비 단일 꺾은선 ══════ */
@@ -1067,8 +1089,8 @@ if (false) {
     plain.trend.line.pts.every((p,i)=>p.main===asOnly.trend.line.pts[i].main+inspOnly.trend.line.pts[i].main) &&
     inspOnly.trend.line.pts.every(p=>p.main===1) &&
     asOnly.trend.line.metricLabel==='A/S(VOC)' && inspOnly.trend.line.metricLabel==='점검');
-  ck('V5. 카드 기준 줄에 전체 기간과 주간 평균 기준을 밝힌다',
-    leak.trend.title.includes('노즐누수(약액 유입)') &&
+  ck('V5. 노즐 누수 카드 제목과 기준 줄에 전체 기간·주간 평균 기준을 밝힌다',
+    leak.trend.title==='노즐 누수 발생 추이' &&
     leak.trend.basis.includes(leak.trend.line.periodLabel) && leak.trend.basis.includes('주간 평균 기준'));
   ck('V6. 유형 선택은 추이 카드와 보조 KPI 한 장에만 적용된다',
     JSON.stringify(leak.kpi.slice(0,3))===JSON.stringify(plain.kpi) &&
@@ -1096,6 +1118,9 @@ if (false) {
   ck('V9-c. 점선이 주간 평균 기준선임을 그래프 우측 상단에 밝힌다',
     fi.filter(o=>o.trendAverageLegend).length===2 &&
     fi.some(o=>o.trendAverageLegend&&o.t==='주간 평균 건 수'));
+  ck('V9-c-1. 노즐 누수 발생 꺾은선 범례를 평균 범례와 함께 표시',
+    fi.filter(o=>o.trendSeriesLegend).length===3 &&
+    fi.some(o=>o.trendSeriesLegend&&o.t==='노즐 누수 발생 건 수'));
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&

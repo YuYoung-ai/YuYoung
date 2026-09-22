@@ -96,8 +96,8 @@ ck('3-b. 그래프 구간명은 상대 표현 대신 실제 날짜를 쓴다',
 
 await page.selectOption('#wkVocSel', '노즐 누수(약액 유입)');
 const focus = await pvText();
-ck('4. 고른 유형이 추이 카드 제목에 나온다',
-  focus.includes('노즐 누수(약액 유입) 발생 추이'));
+ck('4. 노즐 누수 선택 시 간결한 추이 카드 제목을 표시',
+  focus.includes('노즐 누수 발생 추이'));
 ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
   focus.includes('노즐 누수(약액 유입) · 비율') &&
   focus.includes('2026.04~2026.08.08') && focus.includes('주간 평균'));
@@ -114,8 +114,8 @@ ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는�
 ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
   (plain.split('전체 서비스 건수')[1] || '').indexOf('비율') ===
   (plain.split('전체 서비스 건수')[1] || '').lastIndexOf('비율'));
-ck('7. 유형을 골라도 기존 KPI·노즐 누수 조치 추이는 전체 기준 그대로',
-  ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', '노즐 누수 조치 추이', '자체 수리율']
+ck('7. 유형을 골라도 기존 KPI·수리 조치 및 비용 절감 추이는 전체 기준 그대로',
+  ['전체 서비스 건수', 'A/S(VOC) 건수', '점검 건수', '수리 조치 및 비용 절감 추이', '자체 수리율']
     .every(t => plain.includes(t) && focus.includes(t)));
 ck('8. 미리보기 추이 그래프가 단일 꺾은선·주간 평균 점선·우측 증감으로 그려진다', await page.evaluate(() => {
   const snap = exReportSnapFromSel_('week');
@@ -160,7 +160,7 @@ await page.evaluate(() => previewMonthlyPPT());
 await page.waitForSelector('#mnPvModal.show');
 const mText = (await page.textContent('#mnPvSlides')).replace(/\u00a0/g, ' ');
 ck('12. 월간도 1월부터 현재 월까지 연속 추이로 본다',
-  mText.includes('노즐 누수(약액 유입) 발생 추이') &&
+  mText.includes('노즐 누수 발생 추이') &&
   mText.includes('2026.01~2026.08') && mText.includes('월평균'));
 
 ck('13. 콘솔 오류 없음', errs.length === 0, errs.join(' | '));

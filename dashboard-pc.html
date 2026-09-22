@@ -4216,7 +4216,7 @@ var L=(function(){
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
              rowPitch:0.24, rowH:0.22, rightW:1.55 },
-    /* 하단은 TOP5 두 장 대신, 같은 폭의 노즐 누수 조치 추이 한 장을 둔다.
+    /* 하단은 TOP5 두 장 대신, 같은 폭의 수리 조치 및 비용 절감 추이 한 장을 둔다.
        좌측 요약 폭은 상단 발생 추이와 똑같이 2.52in으로 고정해 두 카드의 세로 경계가 이어진다. */
     action:{ x:page.left, y:rowB.y, w:trendW, h:rowB.h,
               inset:0.04, leftW:2.52, splitGap:0.06,
@@ -4227,7 +4227,11 @@ var L=(function(){
                            countY:rowB.y+0.75, countH:0.29, labelY:rowB.y+1.30, labelH:0.16,
                            reasonY:rowB.y+1.44, reasonH:0.14},
               saving:{ruleX:page.left+0.18, ruleY:rowB.y+1.58, ruleW:2.18,
-                      labelY:rowB.y+1.64, labelH:0.16, valueY:rowB.y+1.80, valueH:0.24},
+                      leftX:page.left+0.18, colW:1.05, splitX:page.left+1.27,
+                      rightX:page.left+1.32, labelY:rowB.y+1.60, labelH:0.13,
+                      valueY:rowB.y+1.73, valueH:0.20,
+                      basisTitleY:rowB.y+1.93, basisTitleH:0.08,
+                      basisFormulaY:rowB.y+2.01, basisFormulaH:0.08},
               graphX:page.left+2.58, graphY:rowB.y+0.04, graphW:trendW-2.62, graphH:rowB.h-0.08,
               graph:{periodY:rowB.y+0.14, periodH:0.18, subY:rowB.y+0.34, subH:0.16,
                      legendY:rowB.y+0.14, legendW:1.12, reasonY:rowB.y+0.34, reasonH:0.14,
@@ -4484,12 +4488,14 @@ function buildExecutivePptDeck(snap){
      현재값은 기간 평균과 비교하고, 그래프 안의 점선도 같은 평균을 뜻한다. */
   (function(){
     var T=L.trend, G=T.graph, tr=snap.trend, ln=tr.line, pts=ln.pts;
-    var isVoc=exTrendIsVocType_(ln.focus), isAs=ln.focus===EX_TREND_METRIC_AS;
+    var isVoc=exTrendIsVocType_(ln.focus), isAs=ln.focus===EX_TREND_METRIC_AS,
+        isNozzleLeak=hpCleanKey_(ln.focus)==='노즐누수(약액유입)';
     var isOccurrence=isVoc||isAs;
     var dir=ln.cmp.dir, state=dir==='down'?'감소 추세':(dir==='up'?'증가 추세':'유지');
     var stateColor=dir==='down'?C.green:(dir==='up'?C.red:C.mut);
     var soft=dir==='down'?C.mintBg:(dir==='up'?C.redSoft:C.grayBg);
-    var title=isVoc ? ln.metricLabel+' 발생 추이' : ln.metricLabel+' 추이';
+    var title=isNozzleLeak ? '노즐 누수 발생 추이'
+      : (isVoc ? ln.metricLabel+' 발생 추이' : ln.metricLabel+' 추이');
     var refCaption=ln.baselineLabel||ln.refName, mainCaption=ln.currentLabel||ln.mainName;
     var noun=refCaption+' 대비 현재';
     var pct=ln.cmp.pct==null?null:Math.abs(ln.cmp.pct);
@@ -4573,14 +4579,23 @@ function buildExecutivePptDeck(snap){
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
     /* 그래프 상단은 평균 설명과 범례만 둔다. 기간은 좌측 요약 패널 하단에서 읽는다. */
-    var headW=G.plotR-G.plotL, trendLegendW=1.28, trendHeadW=headW-trendLegendW-0.08;
-    /* 점선 범례는 조치 추이와 같은 우측 최상단에 둔다. */
-    var legendY=G.headY+0.12, trendLegendX=G.plotR-trendLegendW;
+    var headW=G.plotR-G.plotL, trendSeriesLegendW=1.32, trendAverageLegendW=1.24,
+        trendLegendGap=0.08, trendHeadW=headW-trendSeriesLegendW-trendAverageLegendW-trendLegendGap-0.08;
+    /* 실제 발생 꺾은선과 평균 점선을 같은 행에 나란히 밝혀 해석 기준을 분명히 한다. */
+    var legendY=G.headY+0.12, trendAverageLegendX=G.plotR-trendAverageLegendW,
+        trendSeriesLegendX=trendAverageLegendX-trendSeriesLegendW-trendLegendGap,
+        trendSeriesLabel=isNozzleLeak?'노즐 누수 발생 건 수':ln.metricLabel+' 건 수';
     text({x:G.plotL, y:G.headY, w:trendHeadW, h:G.headH,
           t:ln.periodLabel, size:7.0, bold:true, color:C.navy, trendPeriod:true});
-    line({x:trendLegendX, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
+    line({x:trendSeriesLegendX, y:legendY, w:0.25, color:C.navy, width:1.4,
+          trendSeriesLegend:true});
+    dot({cx:trendSeriesLegendX+0.125, cy:legendY, r:0.026, fill:C.navy, trendSeriesLegend:true});
+    text({x:trendSeriesLegendX+0.34, y:legendY-0.08, w:trendSeriesLegendW-0.34, h:0.16,
+          t:exFitTxt_(trendSeriesLabel,trendSeriesLegendW-0.34,6.2),
+          size:6.2, bold:true, color:C.navy, trendSeriesLegend:true});
+    line({x:trendAverageLegendX, y:legendY, w:0.25, color:C.red, width:1.2, dash:true,
           trendAverageLegend:true});
-    text({x:trendLegendX+0.34, y:legendY-0.08, w:trendLegendW-0.34, h:0.16,
+    text({x:trendAverageLegendX+0.34, y:legendY-0.08, w:trendAverageLegendW-0.34, h:0.16,
           t:refCaption+' 건 수', size:6.6, bold:true, color:C.red,
           trendAverageLegend:true});
 
@@ -4661,9 +4676,9 @@ function buildExecutivePptDeck(snap){
     });
   })();
 
-  /* ── ⑤ 노즐 누수 조치 추이 ──
+  /* ── ⑤ 수리 조치 및 비용 절감 추이 ──
      TOP5 두 장이 있던 폭을 하나의 성과 카드로 통합한다. 이 카드는 정확히
-     '노즐 누수(약액 유입)' 행만 읽으며, 내부 세척 수리와 유상 Handpiece 교체를 비교한다. */
+     '노즐 누수(약액 유입)' 행만 읽으며, 내부 세척 수리와 Handpiece 전체 교체를 비교한다. */
   (function(){
     var T=L.action, G=T.graph, ac=snap.action, pts=ac.pts||[];
     rect({x:T.x, y:T.y, w:T.w, h:T.h, r:0.05, card:true,
@@ -4682,31 +4697,40 @@ function buildExecutivePptDeck(snap){
           t:exNum(ac.repairRate)+'%', size:20, bold:true, color:C.navy, align:'center', actionRepairRate:true});
     text({x:GA.cx-GA.outerR, y:GA.subY, w:GA.outerR*2, h:GA.subH,
           t:'자체 수리율', size:8.2, bold:true, color:C.green, align:'center', actionRepairLabel:true});
-    /* 유상 판매 Handpiece 교체는 자체 수리율과 같은 크기의 원형 요약으로 나란히 둔다. */
-    var RP=T.replacement, actionTotal=ac.clean+ac.replacement;
+    /* Handpiece 전체 교체는 자체 수리율과 같은 크기의 원형 요약으로 나란히 둔다.
+       비용 입력 여부와 관계없이 같은 대상 VOC의 모든 Handpiece 교체를 포함한다. */
+    var RP=T.replacement, actionTotal=ac.clean+ac.replacement,
+        replacementTextW=1.02, replacementTextX=RP.cx-replacementTextW/2;
     var replacementPct=actionTotal?Math.round(ac.replacement/actionTotal*100):0;
     ring({x:RP.cx-RP.outerR, y:RP.cy-RP.outerR, w:RP.outerR*2, h:RP.outerR*2,
           pct:replacementPct, color:C.navy, track:C.line, stroke:13, actionReplacementGauge:true});
-    text({x:RP.cx-RP.outerR, y:RP.countY, w:RP.outerR*2, h:RP.countH,
+    text({x:replacementTextX, y:RP.countY, w:replacementTextW, h:RP.countH,
           t:exNum(ac.replacement)+'건', size:15, bold:true, color:C.navy, align:'center', actionReplacementCount:true});
-    text({x:RP.cx-RP.outerR, y:RP.labelY, w:RP.outerR*2, h:RP.labelH,
+    text({x:replacementTextX, y:RP.labelY, w:replacementTextW, h:RP.labelH,
           t:'Handpiece 교체', size:7.2, bold:true, color:C.navy, align:'center'});
-    text({x:RP.cx-RP.outerR, y:RP.reasonY, w:RP.outerR*2, h:RP.reasonH,
-          t:ac.replacementReason, size:6.7, bold:true, color:C.mut, align:'center', actionReplacementReason:true});
-    var SV=T.saving, savingText='₩'+exNum(ac.saving);
+    text({x:replacementTextX, y:RP.reasonY, w:replacementTextW, h:RP.reasonH,
+          t:ac.replacementReason, size:7.0, bold:true, color:C.mut, align:'center', actionReplacementReason:true});
+    var SV=T.saving;
     line({x:SV.ruleX, y:SV.ruleY, w:SV.ruleW, color:C.kpiLine, width:0.75});
-    text({x:SV.ruleX, y:SV.labelY, w:SV.ruleW, h:SV.labelH,
-          t:'절감액', size:7.5, bold:true, color:C.mut, align:'center'});
-    text({x:SV.ruleX, y:SV.valueY, w:SV.ruleW, h:SV.valueH,
-          t:savingText, size:exFitSize_(savingText,SV.ruleW,[18,16,14,12]), bold:true, color:C.navy,
-          align:'center', actionSaving:true});
+    var SS=ac.savingSummary, cumSavingText='₩'+exNum(SS.cumulative), periodSavingText='₩'+exNum(SS.period);
+    text({x:SV.leftX, y:SV.labelY, w:SV.colW, h:SV.labelH,
+          t:SS.cumulativeLabel, size:6.6, bold:true, color:C.mut, align:'center', actionSavingCumulativeLabel:true});
+    text({x:SV.leftX, y:SV.valueY, w:SV.colW, h:SV.valueH,
+          t:cumSavingText, size:exFitSize_(cumSavingText,SV.colW,[16,14,12,10]), bold:true, color:C.green,
+          align:'center', actionSavingCumulative:true});
+    rect({x:SV.splitX, y:SV.labelY-0.02, w:0.01, h:SV.valueY+SV.valueH-SV.labelY+0.02, fill:C.kpiLine});
+    text({x:SV.rightX, y:SV.labelY, w:SV.colW, h:SV.labelH,
+          t:SS.periodLabel, size:6.6, bold:true, color:C.mut, align:'center', actionSavingPeriodLabel:true});
+    text({x:SV.rightX, y:SV.valueY, w:SV.colW, h:SV.valueH,
+          t:periodSavingText, size:exFitSize_(periodSavingText,SV.colW,[16,14,12,10]), bold:true, color:C.navy,
+          align:'center', actionSaving:true, actionSavingPeriod:true});
 
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
     var headW=G.plotR-G.plotL, legendReserve=G.legendW*2+0.15, periodW=headW-legendReserve;
     text({x:G.plotL, y:G.periodY, w:periodW, h:G.periodH,
           t:ac.periodLabel, size:7.0, bold:true, color:C.navy, actionPeriod:true});
-    /* 범례는 발생 추이와 같은 우측 최상단에 둔다. 교체 사유는 좌측 원형 요약에서 읽는다. */
+    /* 범례는 발생 추이와 같은 우측 최상단에 둔다. 전체 교체 적용 기준은 좌측 원형 요약에서 읽는다. */
     var lx=G.plotR-G.legendW*2-0.12;
     line({x:lx, y:G.legendY+0.05, w:0.21, color:C.green, width:1.4, actionLegend:'clean'});
     dot({cx:lx+0.105, cy:G.legendY+0.05, r:0.025, fill:C.green, actionLegend:'clean'});
@@ -4756,6 +4780,11 @@ function buildExecutivePptDeck(snap){
             t:p.label||'', size:n>10?4.8:5.8, bold:!!p.sel, color:p.sel?C.navy:C.mut,
             align:'center', actionPointLabel:true, actionIdx:i});
     });
+    /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
+    text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
+          t:'※ 1건당 절감액', size:4.9, bold:true, color:C.mut, align:'center', actionSavingBasis:true});
+    text({x:T.x+0.12, y:SV.basisFormulaY, w:T.leftW-0.24, h:SV.basisFormulaH,
+          t:'리페어 제작비 - 수리비 = 281,200원', size:4.5, color:C.mut, align:'center', actionSavingBasisFormula:true});
   })();
 
   /* ── ⑥ 특이사항 (대시보드 특이사항 카드와 같은 문장 — 새로 만들지 않는다) ── */
@@ -6077,7 +6106,35 @@ function exReportMonthTrend_(focus){
   return out;
 }
 /* 노즐 누수(약액 유입) 조치만 별도 시계열로 만든다.
-   발생 추이와 같은 주차·월 구간을 쓰되, 내부 세척 수리와 유상 Handpiece 교체를 분리한다. */
+   발생 추이와 같은 주차·월 구간을 쓰되, 내부 세척 수리와 Handpiece 전체 교체를 분리한다. */
+function exNozzleActionIsHandpieceReplacement_(r){
+  var k=hpCleanKey_(r&&r.part);
+  return !!k && k!=='없음' &&
+    (k.indexOf('handpiece')>=0 || k.indexOf('핸드피스')>=0 || k.indexOf('hpass')>=0 || k==='hp');
+}
+/* 좌측 요약은 추이 전체가 아니라 보고서에 선택한 기준 기간만 집계한다.
+   Handpiece 교체는 전체 교체 건수를, 유상 판매는 비용 입력 건수를 별도로 보여 준다. */
+function exNozzleActionCounts_(rows){
+  var clean=0, replacement=0, paidReplacement=0;
+  (rows||[]).forEach(function(r){
+    if(!hpIsLeakVoc_(r) || recScope(r)!=='customer') return;
+    if(hpCleanKey_(r.part)==='내부세척') { clean++; return; }
+    if(exNozzleActionIsHandpieceReplacement_(r)){
+      replacement++;
+      if(Number(r._cost||0)>0) paidReplacement++;
+    }
+  });
+  return {clean:clean, replacement:replacement, paidReplacement:paidReplacement};
+}
+function exNozzleActionSavingSummary_(kind, from, to, periodSaving){
+  var end=new Date(to+'T23:59:59'), start;
+  if(kind==='month') start=new Date(end.getFullYear(),0,1);
+  else start=new Date(end.getFullYear(),end.getMonth(),1);
+  var cumulative=exNozzleActionCounts_(exWindowRows(start,end)).clean*YC_CLEAN_SAVING_UNIT;
+  return {cumulative:cumulative, period:periodSaving,
+          cumulativeLabel:kind==='month'?'연 누적 절감액':'당월 누적 절감액',
+          periodLabel:kind==='month'?'당월 절감액':'이번 주 절감액'};
+}
 function exNozzleActionTrend_(kind){
   var base=kind==='month' ? exReportMonthTrend_('') : exReportWeekTrend_('');
   return base.map(function(bucket){
@@ -6089,23 +6146,23 @@ function exNozzleActionTrend_(kind){
       if(!hpIsLeakVoc_(r) || recScope(r)!=='customer') return;
       if(kind==='week' && (!d || !isReportDay_(d))) return;
       if(part==='내부세척') clean++;
-      /* 이 카드는 비용 절감 성과를 보이므로 유상 판매 Handpiece 교체만 비교군으로 센다. */
-      else if(part==="handpieceass'y" && Number(r._cost||0)>0) replacement++;
+      /* 유상 판매 여부와 무관하게 대상 VOC의 Handpiece 전체 교체를 비교군으로 센다. */
+      else if(exNozzleActionIsHandpieceReplacement_(r)) replacement++;
     });
     return {label:bucket.label, mon:bucket.mon, from:from, to:bucket.to, sel:bucket.sel, ongoing:bucket.ongoing,
             clean:clean, replacement:replacement};
   });
 }
-function exNozzleActionSpec_(kind){
-  var pts=exNozzleActionTrend_(kind), clean=0, replacement=0;
-  pts.forEach(function(p){ clean+=p.clean; replacement+=p.replacement; });
-  var total=clean+replacement, rate=total?Math.round(clean/total*100):0;
-  return {title:'노즐 누수 조치 추이',
+function exNozzleActionSpec_(kind, rows, from, to){
+  var pts=exNozzleActionTrend_(kind), cur=exNozzleActionCounts_(rows);
+  var total=cur.clean+cur.replacement, rate=total?Math.round(cur.clean/total*100):0;
+  var saving=cur.clean*YC_CLEAN_SAVING_UNIT;
+  return {title:'수리 조치 및 비용 절감 추이',
           basis:'대상 · 노즐 누수(약액 유입) · 처리일 기준',
           periodLabel:exTrendPeriodLabel_(kind,pts), kind:kind, pts:pts,
-          clean:clean, replacement:replacement, repairRate:rate,
-          saving:clean*YC_CLEAN_SAVING_UNIT,
-          replacementReason:replacement?'유상 판매':'해당 없음'};
+          clean:cur.clean, replacement:cur.replacement, paidReplacement:cur.paidReplacement, repairRate:rate,
+          saving:saving, savingSummary:exNozzleActionSavingSummary_(kind,from,to,saving),
+          replacementReason:cur.replacement?('유상 판매 '+exNum(cur.paidReplacement)+'건'):'유상 판매 0건'};
 }
 function exTrendPeriodLabel_(kind, buckets){
   if(!buckets||!buckets.length) return '';
@@ -6204,7 +6261,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     vocOptions=exTrendTypeCounts_(mSeries[0].from,mSeries[mSeries.length-1].to,false);
     trend={
       kind:'month',
-      title:isVoc?('월별 '+focus+' 발생 추이'):'월별 처리 추이',
+      title:hpCleanKey_(focus)==='노즐누수(약액유입)'?'노즐 누수 발생 추이':(isVoc?('월별 '+focus+' 발생 추이'):'월별 처리 추이'),
       basis:'집계 대상 '+metricLb+' · '+mPeriod+' · 월평균 기준 · 처리일 기준',
       line: mLine,
       stats:[
@@ -6226,7 +6283,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     vocOptions=exTrendTypeCounts_(wSeries[0].mon,wSeries[wSeries.length-1].to,true);
     trend={
       kind:'week',
-      title:isVoc?(focus+' 발생 추이'):'서비스 추이',
+      title:hpCleanKey_(focus)==='노즐누수(약액유입)'?'노즐 누수 발생 추이':(isVoc?(focus+' 발생 추이'):'서비스 추이'),
       basis:'집계 대상 '+metricLb+' · '+wPeriod+' · 주간 평균 기준 · 주 단위('+WK_DAYS_LABEL+')',
       line: wLine,
       stats:[
@@ -6258,7 +6315,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
       ? ('월간업무보고_'+a.getFullYear()+'년'+(a.getMonth()+1)+'월.pptx')
       : ('주간업무보고_'+a.getFullYear()+'년'+wkLabel(a).replace(' ','')+'.pptx'),
     cmp:cmp, cmpLabel:cmpLb, rowCount:x.rows.length,
-    kpi:kpi, trend:trend, action:exNozzleActionSpec_(type), vocFocus:focus, vocOptions:vocOptions,
+    kpi:kpi, trend:trend, action:exNozzleActionSpec_(type, x.rows, from, to), vocFocus:focus, vocOptions:vocOptions,
     change:{ title:'VOC 유형 변화', basis:cmpLb+' 대비 · A/S·점검 통합 · 이상 없음 제외',
              hasPrev:!!x.prev, up:vc.up.map(chRow), down:vc.down.map(chRow) },
     vocTop:{ title:'VOC 유형 TOP 5', basis:'A/S·점검 통합 · 이상 없음 제외 · '+cmpLb+' 대비',
