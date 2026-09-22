@@ -1631,6 +1631,12 @@ exApplyLevel3Tools_();
   <div class="mbox" style="max-width:1080px">
     <h2>👁 PPT 미리보기</h2>
     <div class="mhint" style="margin:0 0 10px">실제 PPT와 같은 표시 목록·좌표·색상·데이터로 그린 미리보기입니다 · 주간업무보고 전체 1페이지</div>
+    <div id="wkPvLabelTools" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px;padding:8px 10px;border:1px solid #D7E1F3;border-radius:7px;background:#F7FAFF;color:#506486;font-size:12px">
+      <span id="wkPvLabelHint" style="margin-right:4px">수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.</span>
+      <button type="button" class="note-reset" data-action-label-pos="auto" onclick="exSetActionLabelPlacement_('week','auto')">자동</button>
+      <button type="button" class="note-reset" data-action-label-pos="top" onclick="exSetActionLabelPlacement_('week','top')">위</button>
+      <button type="button" class="note-reset" data-action-label-pos="bottom" onclick="exSetActionLabelPlacement_('week','bottom')">아래</button>
+    </div>
     <div id="wkPvSlides" style="max-height:68vh;overflow:auto;background:#E8ECF4;padding:10px;border-radius:8px"></div>
     <div class="mbtns">
       <button class="mbtn cancel" onclick="closeWkPreview()">닫기</button>
@@ -1680,6 +1686,12 @@ exApplyLevel3Tools_();
   <div class="mbox" style="max-width:1080px">
     <h2>👁 PPT 미리보기</h2>
     <div class="mhint" style="margin:0 0 10px">실제 PPT와 같은 표시 목록·좌표·색상·데이터로 그린 미리보기입니다 · 월간업무보고 전체 1페이지</div>
+    <div id="mnPvLabelTools" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px;padding:8px 10px;border:1px solid #D7E1F3;border-radius:7px;background:#F7FAFF;color:#506486;font-size:12px">
+      <span id="mnPvLabelHint" style="margin-right:4px">수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.</span>
+      <button type="button" class="note-reset" data-action-label-pos="auto" onclick="exSetActionLabelPlacement_('month','auto')">자동</button>
+      <button type="button" class="note-reset" data-action-label-pos="top" onclick="exSetActionLabelPlacement_('month','top')">위</button>
+      <button type="button" class="note-reset" data-action-label-pos="bottom" onclick="exSetActionLabelPlacement_('month','bottom')">아래</button>
+    </div>
     <div id="mnPvSlides" style="max-height:68vh;overflow:auto;background:#E8ECF4;padding:10px;border-radius:8px"></div>
     <div class="mbtns">
       <button class="mbtn cancel" onclick="closeMnPreview()">닫기</button>
@@ -4784,8 +4796,9 @@ function buildExecutivePptDeck(snap){
       text({x:G.plotL-G.axisW-0.03, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
             t:exNum(gv), size:6.6, color:C.mut, align:'right'});
     }
-    /* 두 계열이 같은 주차·유사 값일 때도 읽히도록 점·값을 좌우와 상하로 분리한다.
-       0건 라벨은 축선과 겹치므로 생략하고, 점만 남겨 값이 없음을 분명히 한다. */
+    /* 0건 라벨은 축선과 겹치므로 생략하고, 점만 남겨 값이 없음을 분명히 한다.
+       두 계열 수치가 겹치는 경우에는 미리보기에서 사용자가 위·아래를 직접 선택한다.
+       선택 좌표는 이 표시 목록에도 그대로 쓰므로 PPT 생성 결과와 항상 일치한다. */
     var actionCX=function(key,i){ return cx(i)+(key==='clean'?-0.025:0.025); };
     ['clean','replacement'].forEach(function(key){
       var color=key==='clean'?C.green:C.navy;
@@ -4800,13 +4813,23 @@ function buildExecutivePptDeck(snap){
         if(repairStart) dot({cx:px, cy:py, r:0.085, fill:C.blueRing, actionRepairStartHalo:true, actionIdx:j});
         dot({cx:px, cy:py, r:(last||repairStart)?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
         if(!val) continue;
+        var manualPlacement=exActionLabelPlacement_(ac.kind,pts[j].label,key);
         var below=(key==='replacement'||repairStart) && py+G.valueH+0.055<=G.plotBot-0.01;
-        var ly=below ? py+0.045 : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
-        /* 같은 값이면서 아래 공간도 없을 때만 라벨을 추가로 옆으로 벌린다. */
-        if(!below && val===other) px+=key==='clean'?-0.055:0.055;
-        text({x:Math.max(G.plotL,Math.min(px-lw/2,G.plotR-lw)), y:ly, w:lw, h:G.valueH,
+        if(manualPlacement==='top') below=false;
+        else if(manualPlacement==='bottom') below=true;
+        var ly=below
+          ? Math.min(G.plotBot-G.valueH,py+0.045)
+          : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
+        /* 기본 상태에서는 동률일 때만 아주 조금 나눠 읽기 쉽게 한다.
+           수동으로 위치를 고른 숫자는 사용자의 선택을 우선한다. */
+        if(!manualPlacement && !below && val===other) px+=key==='clean'?-0.055:0.055;
+        var labelX=Math.max(G.plotL,Math.min(px-lw/2,G.plotR-lw));
+        text({x:labelX, y:ly, w:lw, h:G.valueH,
               t:exNum(val), size:n>10?6.2:6.8, bold:true, color:color, align:'center',
-              actionPointValue:key, actionIdx:j});
+              actionPointValue:key, actionIdx:j,
+              actionLabelEditKey:exActionLabelEditKey_(pts[j].label,key),
+              actionLabelPlacement:manualPlacement||'auto', actionLabelPeriod:pts[j].label,
+              actionLabelKind:ac.kind});
       }
     });
     pts.forEach(function(p,i){
@@ -4985,8 +5008,17 @@ function exPptRenderHtml_(items){
           +'color:'+pvHex(r.color)+'">'+esc(r.text).replace(/ /g,'\u00a0')+'</span>';
       }).join('');
       var jc = o.align==='right'?'flex-end' : (o.align==='center'?'center':'flex-start');
-      el(o.x,o.y,o.w,o.h,'display:flex;align-items:'+(o.valign==='top'?'flex-start':'center')
+      var te=el(o.x,o.y,o.w,o.h,'display:flex;align-items:'+(o.valign==='top'?'flex-start':'center')
         +';justify-content:'+jc+';white-space:nowrap;overflow:hidden;line-height:1.15', html);
+      /* 수리 조치 그래프의 값 라벨은 미리보기에서 직접 선택할 수 있다. */
+      if(o.actionPointValue){
+        te.setAttribute('data-action-label-key',o.actionLabelEditKey||'');
+        te.setAttribute('data-action-label-kind',o.actionLabelKind||'');
+        te.setAttribute('data-action-label-period',o.actionLabelPeriod||'');
+        te.setAttribute('data-action-label-series',o.actionPointValue||'');
+        te.style.cursor='pointer'; te.style.overflow='visible';
+        te.title='숫자 위치 조정';
+      }
     }else if(o.k==='logo'){
       el(o.x,o.y,o.w,o.h,'').innerHTML='<img src="logo.png" alt="BAZ" '
         +'style="width:100%;height:100%;object-fit:contain" '
@@ -5054,6 +5086,16 @@ function exReportPeriodFromSel_(type){
    null = 손대지 않음(자동 특이사항 그대로) · 배열 = 사용자가 확인/수정한 문장 목록.
    화면 저장(localStorage)·시트 저장을 하지 않는다. 보고 기간을 바꾸면 null 로 되돌린다. */
 var EX_NOTE_EDITS={week:null, month:null};
+/* 수리 조치 그래프 수치 위치. 보고 기간 안에서만 쓰는 미리보기·PPT 공용 상태이며 저장하지 않는다.
+   key = "주차/월|계열" · 값 = top | bottom. 값이 없으면 기본 자동 배치다. */
+var EX_ACTION_LABEL_EDITS={week:{}, month:{}};
+var EX_ACTION_LABEL_SELECTED={week:null, month:null};
+function exActionLabelEditKey_(periodLabel, series){ return String(periodLabel||'')+'|'+String(series||''); }
+function exActionLabelPlacement_(type, periodLabel, series){
+  var map=EX_ACTION_LABEL_EDITS[type]||{};
+  var v=map[exActionLabelEditKey_(periodLabel,series)];
+  return v==='top'||v==='bottom'?v:'';
+}
 /* 특이사항 HTML → 편집용 평문 (강조 태그만 벗기고 문장은 그대로) */
 function exNotePlain_(html){
   return exHtmlRuns_(html).map(function(r){ return r.text; }).join('');
@@ -5184,6 +5226,8 @@ function exResetNoteEdits_(type){
 /* 보고 기간이 바뀌면 새 기간의 자동 특이사항으로 다시 초기화한다 */
 function exOnReportPeriodChange_(type){
   EX_NOTE_EDITS[type]=null;
+  EX_ACTION_LABEL_EDITS[type]={};
+  EX_ACTION_LABEL_SELECTED[type]=null;
   exRefreshVocFocusSelect_(type);
   exRefreshVocDescEditor_(type);
   exRefreshNoteEditor_(type);
@@ -5251,6 +5295,36 @@ function exPvFit(id){
     h.style.height=(pvIn(L.page.h)*sc)+'px';
   });
 }
+function exUpdateActionLabelTools_(type){
+  var pre=type==='month'?'mn':'wk', selected=EX_ACTION_LABEL_SELECTED[type];
+  var hint=document.getElementById(pre+'PvLabelHint'), tools=document.getElementById(pre+'PvLabelTools');
+  if(!tools) return;
+  var pos=selected?exActionLabelPlacement_(type,selected.period,selected.series)||'auto':'auto';
+  if(hint) hint.textContent=selected
+    ? selected.period+' · '+(selected.series==='clean'?'내부 세척 수리':'Handpiece 교체')+' 숫자 위치'
+    : '수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.';
+  Array.prototype.forEach.call(tools.querySelectorAll('[data-action-label-pos]'),function(b){
+    var active=selected && b.getAttribute('data-action-label-pos')===pos;
+    b.disabled=!selected;
+    b.style.opacity=selected?'1':'0.45';
+    b.style.outline=active?'2px solid #1E355F':'none';
+  });
+}
+function exSelectActionLabel_(type, target){
+  var key=target.getAttribute('data-action-label-key');
+  if(!key) return;
+  EX_ACTION_LABEL_SELECTED[type]={key:key, period:target.getAttribute('data-action-label-period')||'',
+    series:target.getAttribute('data-action-label-series')||''};
+  exUpdateActionLabelTools_(type);
+}
+function exSetActionLabelPlacement_(type, placement){
+  var selected=EX_ACTION_LABEL_SELECTED[type];
+  if(!selected) return;
+  var map=EX_ACTION_LABEL_EDITS[type]||(EX_ACTION_LABEL_EDITS[type]={});
+  if(placement==='top'||placement==='bottom') map[selected.key]=placement;
+  else delete map[selected.key];
+  exPreviewReport(type);
+}
 function exPreviewReport(type){
   var snap=exReportSnapFromSel_(type);
   if(!snap){ toast('보고 '+(type==='month'?'월':'주차')+'을 먼저 선택하세요'); return; }
@@ -5262,8 +5336,13 @@ function exPreviewReport(type){
     holder.appendChild(exPptRenderHtml_(sl.items));
     wrap.appendChild(holder);
   });
+  wrap.onclick=function(e){
+    var target=e.target.closest('[data-action-label-key]');
+    if(target) exSelectActionLabel_(type,target);
+  };
   document.getElementById((type==='month')?'mnPvModal':'wkPvModal').classList.add('show');
   exPvFit(wrapId);
+  exUpdateActionLabelTools_(type);
 }
 function previewWeeklyPPT(){ exPreviewReport('week'); }
 function previewMonthlyPPT(){ exPreviewReport('month'); }

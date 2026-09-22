@@ -81,7 +81,7 @@ const FNS = [
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
   'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
-  'exNoteOverride_',
+  'exNoteOverride_', 'exActionLabelEditKey_', 'exActionLabelPlacement_',
   'buildExecutivePptDeck', 'exPptRuns_',
   'exWeekPeriod_', 'exMonthPeriod_'
 ];
@@ -103,6 +103,8 @@ const src = [
   grabVar('var EX_TREND_METRIC_AS='),
   grabVar('var EX_TONE_CLS='),
   grabVar('var EX_NOTE_EDITS='),
+  grabVar('var EX_ACTION_LABEL_EDITS='),
+  grabVar('var EX_ACTION_LABEL_SELECTED='),
   grabObj('var C={navy:'), grabObj('var FT={face:'), grabObj('var L=(function(){'),
   grabVar('var EX_TONE_COLOR='),
   grabObj('var EX_VOC_DESC=(function(){'),
@@ -110,7 +112,8 @@ const src = [
   'return {' + FNS.join(',') + ', L:L, C:C, FT:FT, EX_VOC_DESC:EX_VOC_DESC,' +
   ' setRAW:function(v){RAW=v;}, setHOSPDB:function(v){HOSPDB=v;},' +
   ' setF:function(v){F=v;}, getF:function(){return F;}, getEXCMP:function(){return EX_CMP;},'+
-  ' setNoteEdits:function(t,v){EX_NOTE_EDITS[t]=v;}, getNoteEdits:function(t){return EX_NOTE_EDITS[t];}};'
+  ' setNoteEdits:function(t,v){EX_NOTE_EDITS[t]=v;}, getNoteEdits:function(t){return EX_NOTE_EDITS[t];},'+
+  ' setActionLabelEdits:function(t,v){EX_ACTION_LABEL_EDITS[t]=v;}, getActionLabelEdits:function(t){return EX_ACTION_LABEL_EDITS[t];}};'
 ].join('\n');
 const D = new Function(src)();
 
@@ -1045,6 +1048,19 @@ if (false) {
     periodAction.savingSummary.period===281200 && periodAction.savingSummary.cumulativeLabel==='당월 누적 절감액' &&
     periodAction.savingSummary.periodLabel==='이번 주 절감액',
     JSON.stringify(periodAction));
+  load([
+    {date:'2026-08-03',hosp:'가나',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
+    {date:'2026-08-03',hosp:'나나',gubun:'A/S',type:'노즐누수(약액 유입)',part:"Handpiece Ass'y"}
+  ]);
+  const autoActionItems=D.buildExecutivePptDeck(D.buildExecutiveReportSnapshot(WEEK))[0].items;
+  const manualTarget=autoActionItems.find(o=>o.actionPointValue==='clean');
+  D.setActionLabelEdits('week',{[manualTarget.actionLabelEditKey]:'bottom'});
+  const manualActionItems=D.buildExecutivePptDeck(D.buildExecutiveReportSnapshot(WEEK))[0].items;
+  const moved=manualActionItems.find(o=>o.actionLabelEditKey===manualTarget.actionLabelEditKey);
+  ck('7-g-3. 수리 조치 숫자는 미리보기에서 선택한 위·아래 위치를 PPT 표시 목록에도 그대로 반영',
+    moved && moved.actionLabelPlacement==='bottom' && moved.y>manualTarget.y,
+    JSON.stringify({before:manualTarget&&manualTarget.y,after:moved&&moved.y}));
+  D.setActionLabelEdits('week',{});
   load(SAMPLE);
 }
 
