@@ -279,6 +279,11 @@ ck('2. 월간 PPT 슬라이드 1장', mDeck.length === 1, '슬라이드 ' + mDec
   ck('6-f. 점검 중 발견된 VOC도 변화 카드에 포함하고 정상 점검 표기는 제외',
     wSnap.change.up.some(t => t.k === '노즐 막힘' && t.cur === 1) &&
     !wSnap.change.up.concat(wSnap.change.down).some(t => t.k === '정기점검' || t.k === '이상 없음'));
+  const changeDesc=wSnap.change.up.concat(wSnap.change.down).find(t => t.desc);
+  ck('6-g. VOC 유형 변화 카드도 각 유형 오른쪽에 보고서용 설명을 표시',
+    !!changeDesc && wItems.some(o => o.changeCol === 'description' &&
+      String(o.t).replace('…','').length > 0 && changeDesc.desc.indexOf(String(o.t).replace('…','')) === 0),
+    changeDesc&&changeDesc.desc);
   load(SAMPLE);
 }
 function rebuildX(period) {

@@ -4698,14 +4698,20 @@ function buildExecutivePptDeck(snap){
       }
       g.items.forEach(function(t,i){
         var y=y0+i*T.rowPitch;
-        var nw=iw-0.16-T.rightW-0.06;
-        text({x:T.x+CD.pad+0.08, y:y, w:nw, h:T.rowH,
-              t:exFitTxt_(t.k, nw, FT.rowName), size:FT.rowName, color:C.text});
+        /* 유형명 오른쪽에는 같은 보고서용 VOC 설명을 붙인다.
+           증감 수치는 기존처럼 우측 끝에 고정해 비교가 흔들리지 않게 한다. */
+        var nw=iw-0.16-T.rightW-0.06, nameW=Math.min(1.16,Math.max(0.90,nw*0.38)), descW=nw-nameW-0.05;
+        text({x:T.x+CD.pad+0.08, y:y, w:nameW, h:T.rowH,
+              t:exFitTxt_(t.k, nameW, FT.rowName), size:FT.rowName, color:C.text,
+              changeRow:i, changeCol:'name'});
+        text({x:T.x+CD.pad+0.08+nameW+0.05, y:y, w:descW, h:T.rowH,
+              t:exFitTxt_(t.desc||'',descW,5.8), size:5.8, color:C.mut,
+              changeRow:i, changeCol:'description'});
         text({x:T.x+T.w-CD.pad-0.08-T.rightW, y:y, w:T.rightW, h:T.rowH, align:'right',
               runs:[{text:t.prev+' → ', size:FT.rowDelta, color:C.mut},
                     {text:String(t.cur), size:FT.rowVal, bold:true, color:C.navy},
                     {text:'  '+(t.d>0?'▲':'▼')+Math.abs(t.d), size:FT.rowDelta, bold:true,
-                     color:t.d>0?C.red:C.green}]});
+                     color:t.d>0?C.red:C.green}], changeRow:i, changeCol:'value'});
       });
     });
   })();
@@ -6466,7 +6472,8 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     };
   }
 
-  function chRow(t){ return {k:t.k, prev:t.prev, cur:t.cur, d:t.d, isNew:(t.prev===0&&t.cur>0)}; }
+  function chRow(t){ return {k:t.k, prev:t.prev, cur:t.cur, d:t.d, isNew:(t.prev===0&&t.cur>0),
+                              desc:exVocDesc_(t.k,vocDescriptions)}; }
   function topRow(t, withDesc){
     return {k:t.k, prev:t.prev, cur:t.cur, d:t.d,
             desc:withDesc?exVocDesc_(t.k, vocDescriptions):''};
