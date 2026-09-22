@@ -5366,6 +5366,8 @@ function exSetActionLabelPlacement_(type, placement){
     if(placement==='top'||placement==='bottom') map[s.key]=placement;
     else delete map[s.key];
   });
+  /* 적용한 묶음은 즉시 해제한다. 다음 조정에는 새로 고른 숫자만 포함된다. */
+  EX_ACTION_LABEL_SELECTED[type]=[];
   exPreviewReport(type);
 }
 function exPreviewReport(type){
