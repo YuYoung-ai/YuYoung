@@ -1632,7 +1632,7 @@ exApplyLevel3Tools_();
     <h2>👁 PPT 미리보기</h2>
     <div class="mhint" style="margin:0 0 10px">실제 PPT와 같은 표시 목록·좌표·색상·데이터로 그린 미리보기입니다 · 주간업무보고 전체 1페이지</div>
     <div id="wkPvLabelTools" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px;padding:8px 10px;border:1px solid #D7E1F3;border-radius:7px;background:#F7FAFF;color:#506486;font-size:12px">
-      <span id="wkPvLabelHint" style="margin-right:4px">수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.</span>
+      <span id="wkPvLabelHint" style="margin-right:4px">발생·조치 추이 그래프의 숫자를 여러 개 선택한 뒤 위치를 정하세요.</span>
       <button type="button" class="note-reset" data-action-label-pos="auto" onclick="exSetActionLabelPlacement_('week','auto')">자동</button>
       <button type="button" class="note-reset" data-action-label-pos="top" onclick="exSetActionLabelPlacement_('week','top')">위</button>
       <button type="button" class="note-reset" data-action-label-pos="bottom" onclick="exSetActionLabelPlacement_('week','bottom')">아래</button>
@@ -1687,7 +1687,7 @@ exApplyLevel3Tools_();
     <h2>👁 PPT 미리보기</h2>
     <div class="mhint" style="margin:0 0 10px">실제 PPT와 같은 표시 목록·좌표·색상·데이터로 그린 미리보기입니다 · 월간업무보고 전체 1페이지</div>
     <div id="mnPvLabelTools" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 8px;padding:8px 10px;border:1px solid #D7E1F3;border-radius:7px;background:#F7FAFF;color:#506486;font-size:12px">
-      <span id="mnPvLabelHint" style="margin-right:4px">수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.</span>
+      <span id="mnPvLabelHint" style="margin-right:4px">발생·조치 추이 그래프의 숫자를 여러 개 선택한 뒤 위치를 정하세요.</span>
       <button type="button" class="note-reset" data-action-label-pos="auto" onclick="exSetActionLabelPlacement_('month','auto')">자동</button>
       <button type="button" class="note-reset" data-action-label-pos="top" onclick="exSetActionLabelPlacement_('month','top')">위</button>
       <button type="button" class="note-reset" data-action-label-pos="bottom" onclick="exSetActionLabelPlacement_('month','bottom')">아래</button>
@@ -4648,9 +4648,17 @@ function buildExecutivePptDeck(snap){
            trendSeries:'main',trendIdx:pi,trendCurrent:last});
       var pointLabelW=n>10?Math.min(0.32,Math.max(0.26,step)):Math.min(0.52,Math.max(0.44,step)), pointLabelX=Math.max(G.plotL+0.02,
         Math.min(cx(pi)-pointLabelW/2,gridR-pointLabelW-0.02));
-      text({x:pointLabelX, y:Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02),
+      var trendManualPlacement=exTrendLabelPlacement_(tr.kind,pts[pi].label,'main');
+      var trendLabelY=trendManualPlacement==='bottom'
+        ? Math.min(G.plotBot-G.valueH,py+0.045)
+        : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
+      text({x:pointLabelX, y:trendLabelY,
             w:pointLabelW, h:G.valueH, t:exNum(pts[pi].main||0), size:n>10?6.6:7.2,
-            bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi});
+            bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi,
+            graphPointValue:true, graphLabelChart:'trend',
+            graphLabelEditKey:exTrendLabelEditKey_(pts[pi].label,'main'),
+            graphLabelPlacement:trendManualPlacement||'auto', graphLabelPeriod:pts[pi].label,
+            graphLabelSeries:'main', graphLabelKind:tr.kind});
       /* 16주도 시작일(월/일)만 써서 각 주차를 빠짐없이 읽는다. */
       var pointAxisLabel=pts[pi].label||'';
       text({x:pointLabelX, y:G.labelY,
@@ -4827,6 +4835,10 @@ function buildExecutivePptDeck(snap){
         text({x:labelX, y:ly, w:lw, h:G.valueH,
               t:exNum(val), size:n>10?6.2:6.8, bold:true, color:color, align:'center',
               actionPointValue:key, actionIdx:j,
+              graphPointValue:true, graphLabelChart:'action',
+              graphLabelEditKey:exActionLabelEditKey_(pts[j].label,key),
+              graphLabelPlacement:manualPlacement||'auto', graphLabelPeriod:pts[j].label,
+              graphLabelSeries:key, graphLabelKind:ac.kind,
               actionLabelEditKey:exActionLabelEditKey_(pts[j].label,key),
               actionLabelPlacement:manualPlacement||'auto', actionLabelPeriod:pts[j].label,
               actionLabelKind:ac.kind});
@@ -5010,14 +5022,21 @@ function exPptRenderHtml_(items){
       var jc = o.align==='right'?'flex-end' : (o.align==='center'?'center':'flex-start');
       var te=el(o.x,o.y,o.w,o.h,'display:flex;align-items:'+(o.valign==='top'?'flex-start':'center')
         +';justify-content:'+jc+';white-space:nowrap;overflow:hidden;line-height:1.15', html);
-      /* 수리 조치 그래프의 값 라벨은 미리보기에서 직접 선택할 수 있다. */
-      if(o.actionPointValue){
-        te.setAttribute('data-action-label-key',o.actionLabelEditKey||'');
-        te.setAttribute('data-action-label-kind',o.actionLabelKind||'');
-        te.setAttribute('data-action-label-period',o.actionLabelPeriod||'');
-        te.setAttribute('data-action-label-series',o.actionPointValue||'');
+      /* 발생·수리 조치 그래프의 값 라벨은 미리보기에서 복수 선택할 수 있다. */
+      if(o.graphPointValue||o.actionPointValue){
+        te.setAttribute('data-graph-label-key',o.graphLabelEditKey||o.actionLabelEditKey||'');
+        te.setAttribute('data-graph-label-chart',o.graphLabelChart||'action');
+        te.setAttribute('data-graph-label-kind',o.graphLabelKind||o.actionLabelKind||'');
+        te.setAttribute('data-graph-label-period',o.graphLabelPeriod||o.actionLabelPeriod||'');
+        te.setAttribute('data-graph-label-series',o.graphLabelSeries||o.actionPointValue||'');
         te.style.cursor='pointer'; te.style.overflow='visible';
         te.title='숫자 위치 조정';
+        var selected=EX_ACTION_LABEL_SELECTED[o.graphLabelKind||o.actionLabelKind]||[];
+        if(!Array.isArray(selected)) selected=[selected];
+        if(selected.some(function(s){ return s&&s.key===(o.graphLabelEditKey||o.actionLabelEditKey); })){
+          te.style.outline='2px solid #1E355F'; te.style.borderRadius='3px';
+          te.style.background='#EEF5FF';
+        }
       }
     }else if(o.k==='logo'){
       el(o.x,o.y,o.w,o.h,'').innerHTML='<img src="logo.png" alt="BAZ" '
@@ -5086,15 +5105,25 @@ function exReportPeriodFromSel_(type){
    null = 손대지 않음(자동 특이사항 그대로) · 배열 = 사용자가 확인/수정한 문장 목록.
    화면 저장(localStorage)·시트 저장을 하지 않는다. 보고 기간을 바꾸면 null 로 되돌린다. */
 var EX_NOTE_EDITS={week:null, month:null};
-/* 수리 조치 그래프 수치 위치. 보고 기간 안에서만 쓰는 미리보기·PPT 공용 상태이며 저장하지 않는다.
-   key = "주차/월|계열" · 값 = top | bottom. 값이 없으면 기본 자동 배치다. */
+/* 발생·수리 조치 그래프 수치 위치. 보고 기간 안에서만 쓰는 미리보기·PPT 공용 상태이며 저장하지 않는다.
+   key = "그래프|주차/월|계열" · 값 = top | bottom. 값이 없으면 기본 자동 배치다. */
 var EX_ACTION_LABEL_EDITS={week:{}, month:{}};
-var EX_ACTION_LABEL_SELECTED={week:null, month:null};
-function exActionLabelEditKey_(periodLabel, series){ return String(periodLabel||'')+'|'+String(series||''); }
-function exActionLabelPlacement_(type, periodLabel, series){
+var EX_ACTION_LABEL_SELECTED={week:[], month:[]};
+function exGraphLabelEditKey_(chart, periodLabel, series){
+  return String(chart||'')+'|'+String(periodLabel||'')+'|'+String(series||'');
+}
+function exGraphLabelPlacement_(type, chart, periodLabel, series){
   var map=EX_ACTION_LABEL_EDITS[type]||{};
-  var v=map[exActionLabelEditKey_(periodLabel,series)];
+  var v=map[exGraphLabelEditKey_(chart,periodLabel,series)];
   return v==='top'||v==='bottom'?v:'';
+}
+function exActionLabelEditKey_(periodLabel, series){ return exGraphLabelEditKey_('action',periodLabel,series); }
+function exActionLabelPlacement_(type, periodLabel, series){
+  return exGraphLabelPlacement_(type,'action',periodLabel,series);
+}
+function exTrendLabelEditKey_(periodLabel, series){ return exGraphLabelEditKey_('trend',periodLabel,series); }
+function exTrendLabelPlacement_(type, periodLabel, series){
+  return exGraphLabelPlacement_(type,'trend',periodLabel,series);
 }
 /* 특이사항 HTML → 편집용 평문 (강조 태그만 벗기고 문장은 그대로) */
 function exNotePlain_(html){
@@ -5227,7 +5256,7 @@ function exResetNoteEdits_(type){
 function exOnReportPeriodChange_(type){
   EX_NOTE_EDITS[type]=null;
   EX_ACTION_LABEL_EDITS[type]={};
-  EX_ACTION_LABEL_SELECTED[type]=null;
+  EX_ACTION_LABEL_SELECTED[type]=[];
   exRefreshVocFocusSelect_(type);
   exRefreshVocDescEditor_(type);
   exRefreshNoteEditor_(type);
@@ -5297,32 +5326,46 @@ function exPvFit(id){
 }
 function exUpdateActionLabelTools_(type){
   var pre=type==='month'?'mn':'wk', selected=EX_ACTION_LABEL_SELECTED[type];
+  if(!Array.isArray(selected)) selected=EX_ACTION_LABEL_SELECTED[type]=selected?[selected]:[];
   var hint=document.getElementById(pre+'PvLabelHint'), tools=document.getElementById(pre+'PvLabelTools');
   if(!tools) return;
-  var pos=selected?exActionLabelPlacement_(type,selected.period,selected.series)||'auto':'auto';
-  if(hint) hint.textContent=selected
-    ? selected.period+' · '+(selected.series==='clean'?'내부 세척 수리':'Handpiece 교체')+' 숫자 위치'
-    : '수리 조치 그래프의 숫자를 누른 뒤 위치를 정하세요.';
+  var pos=selected.length?exGraphLabelPlacement_(type,selected[0].chart,selected[0].period,selected[0].series)||'auto':'auto';
+  var samePos=selected.length>0&&selected.every(function(s){
+    return (exGraphLabelPlacement_(type,s.chart,s.period,s.series)||'auto')===pos;
+  });
+  if(hint) hint.textContent=selected.length
+    ? (selected.length===1
+      ? selected[0].period+' · '+(selected[0].chart==='trend'?'노즐 누수 발생':'수리 조치')+' 숫자 위치'
+      : selected.length+'개 숫자 선택됨 · 위 또는 아래를 한 번에 적용')
+    : '발생·조치 추이 그래프의 숫자를 여러 개 선택한 뒤 위치를 정하세요.';
   Array.prototype.forEach.call(tools.querySelectorAll('[data-action-label-pos]'),function(b){
-    var active=selected && b.getAttribute('data-action-label-pos')===pos;
-    b.disabled=!selected;
-    b.style.opacity=selected?'1':'0.45';
+    var active=samePos && b.getAttribute('data-action-label-pos')===pos;
+    b.disabled=!selected.length;
+    b.style.opacity=selected.length?'1':'0.45';
     b.style.outline=active?'2px solid #1E355F':'none';
   });
 }
 function exSelectActionLabel_(type, target){
-  var key=target.getAttribute('data-action-label-key');
+  var key=target.getAttribute('data-graph-label-key');
   if(!key) return;
-  EX_ACTION_LABEL_SELECTED[type]={key:key, period:target.getAttribute('data-action-label-period')||'',
-    series:target.getAttribute('data-action-label-series')||''};
+  var selected=EX_ACTION_LABEL_SELECTED[type];
+  if(!Array.isArray(selected)) selected=EX_ACTION_LABEL_SELECTED[type]=selected?[selected]:[];
+  var at=selected.findIndex(function(s){ return s.key===key; });
+  if(at>=0) selected.splice(at,1);
+  else selected.push({key:key, chart:target.getAttribute('data-graph-label-chart')||'action',
+    period:target.getAttribute('data-graph-label-period')||'',
+    series:target.getAttribute('data-graph-label-series')||''});
   exUpdateActionLabelTools_(type);
 }
 function exSetActionLabelPlacement_(type, placement){
   var selected=EX_ACTION_LABEL_SELECTED[type];
-  if(!selected) return;
+  if(!Array.isArray(selected)) selected=EX_ACTION_LABEL_SELECTED[type]=selected?[selected]:[];
+  if(!selected.length) return;
   var map=EX_ACTION_LABEL_EDITS[type]||(EX_ACTION_LABEL_EDITS[type]={});
-  if(placement==='top'||placement==='bottom') map[selected.key]=placement;
-  else delete map[selected.key];
+  selected.forEach(function(s){
+    if(placement==='top'||placement==='bottom') map[s.key]=placement;
+    else delete map[s.key];
+  });
   exPreviewReport(type);
 }
 function exPreviewReport(type){
@@ -5337,7 +5380,7 @@ function exPreviewReport(type){
     wrap.appendChild(holder);
   });
   wrap.onclick=function(e){
-    var target=e.target.closest('[data-action-label-key]');
+    var target=e.target.closest('[data-graph-label-key]');
     if(target) exSelectActionLabel_(type,target);
   };
   document.getElementById((type==='month')?'mnPvModal':'wkPvModal').classList.add('show');

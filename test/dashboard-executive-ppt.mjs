@@ -81,7 +81,8 @@ const FNS = [
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
   'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
-  'exNoteOverride_', 'exActionLabelEditKey_', 'exActionLabelPlacement_',
+  'exNoteOverride_', 'exGraphLabelEditKey_', 'exGraphLabelPlacement_',
+  'exActionLabelEditKey_', 'exActionLabelPlacement_', 'exTrendLabelEditKey_', 'exTrendLabelPlacement_',
   'buildExecutivePptDeck', 'exPptRuns_',
   'exWeekPeriod_', 'exMonthPeriod_'
 ];
@@ -1149,6 +1150,13 @@ if (false) {
     fi.some(o=>o.trendCurrentPeriodBand) && fi.some(o=>o.trendCurrentPeriodLabel&&o.t==='이번 주') &&
     D.buildExecutivePptDeck(D.buildExecutiveReportSnapshot(Object.assign({vocFocus:'노즐누수(약액 유입)'},MONTH)))[0].items
       .some(o=>o.trendCurrentPeriodLabel&&o.t==='당월'));
+  const trendTargets=fi.filter(o=>o.trendPointValue).slice(0,2);
+  D.setActionLabelEdits('week',Object.fromEntries(trendTargets.map(o=>[o.graphLabelEditKey,'bottom'])));
+  const movedTrend=itemsOf(leak).filter(o=>trendTargets.some(t=>t.graphLabelEditKey===o.graphLabelEditKey));
+  ck('V9-c-3. 노즐 누수 발생 추이도 여러 숫자의 위·아래 위치를 함께 지정해 PPT에 반영',
+    movedTrend.length===2 && movedTrend.every((o,i)=>o.graphLabelPlacement==='bottom'&&o.y>trendTargets[i].y),
+    JSON.stringify(movedTrend.map(o=>o.graphLabelPlacement)));
+  D.setActionLabelEdits('week',{});
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
     const T=D.L.trend;
     return points.every(o=>o.cx>=T.x&&o.cx<=T.x+T.w&&o.cy>=T.y&&o.cy<=T.y+T.h) &&
