@@ -75,6 +75,9 @@ deno run deno-auth/hash.ts '실제비밀번호' '홍길동' 2
    | `GOOGLE_CLIENT_ID` | Google 웹 OAuth 클라이언트 ID(선택) |
    | `GOOGLE_AUTH_ENABLED` | `true` (client ID가 있을 때만 활성) |
    | `GOOGLE_USERS` | 최초 허용 사용자 JSON 배열(선택, 아래 12절) |
+   | `GITHUB_TOKEN` | 예시자료 게시용 GitHub fine-grained PAT(선택, 아래 13절) |
+   | `GITHUB_REPO` | `YuYoung-ai/YuYoung` (기본값, 보통 생략) |
+   | `GITHUB_BRANCH` | `main` (기본값, 보통 생략) |
 4. 저장 후 재배포. 프로젝트 URL을 확인한다 — 예: `https://baz-auth.deno.dev`.
 
 > GitHub 연동 배포를 원하면: New Project → 이 리포 선택 → Entry point `deno-auth/main.ts`.
@@ -87,7 +90,7 @@ deno run deno-auth/hash.ts '실제비밀번호' '홍길동' 2
 브라우저나 curl로:
 ```
 https://<프로젝트>.deno.dev/?action=ping
-→ {"ok":true,"ver":"deno-1.2.0-security","mode":"signed","fp":"UMwCPhSl","creds":6,"kv":true,"deviceAuth":true,"googleAuth":true,"originPolicy":"allowlist",...}
+→ {"ok":true,"ver":"deno-1.2.0-security","mode":"signed","fp":"UMwCPhSl","creds":6,"kv":true,"deviceAuth":true,"googleAuth":true,"tePublish":true,"originPolicy":"allowlist",...}
 ```
 - **`fp` 가 기존 auth ping의 `fp`와 같아야 한다** → secret 정합 확인(가장 중요).
 - `mode:"signed"`, `creds` 가 계정 수와 일치.
@@ -233,3 +236,54 @@ Google의 불변 식별자 `sub`를 사용자에게 묶는다.
 Google 로그인과 기존 비밀번호 로그인은 함께 동작한다. 전 사용자가 노트북·휴대폰에서 각각 한 번씩
 Google 로그인을 완료한 뒤 비밀번호 일반 계정을 제거한다. Google 장애에 대비한 비상 Lv.3 계정 하나는
 자동 로그인 없이 별도로 보관한다.
+
+---
+
+## 13. VOC 예시자료 게시 (대시보드 "🚀 바로 게시")
+
+대시보드 **🖼 예시자료 관리**에서 사진·영상을 등록한 뒤, 저장소에 커밋하는 일까지 이 서버가 대신한다.
+예전에는 PC에서 폴더에 저장한 뒤 사람이 `git commit`·`push` 를 해야 했고, 휴대폰에서는 아예 끝낼 수
+없었다. GitHub 쓰기 토큰을 공개 페이지(GitHub Pages)에 둘 수는 없으므로, 이미 Lv.3 토큰을 검증하는
+이 서버에 토큰을 두고 검증에 통과한 요청만 커밋한다.
+
+### 켜기
+
+1. GitHub → Settings → Developer settings → **Fine-grained personal access token** 발급
+   - Repository access: **Only select repositories → 이 저장소 하나만**
+   - Permissions: **Contents: Read and write** (그 외 권한은 주지 않는다)
+   - 만료: 90일 등 짧게 잡고 주기적으로 교체한다
+2. Deno Deploy → Settings → Environment Variables → `GITHUB_TOKEN` 에 붙여넣고 재배포
+3. `?action=ping` 응답에 `"tePublish":true` 가 보이면 준비 완료
+   (토큰이 없으면 게시 요청만 `publish_disabled` 로 거부되고 로그인 등 다른 기능은 그대로 동작한다)
+4. 끄려면 `TE_PUBLISH_ENABLED=false` 로 두거나 `GITHUB_TOKEN` 을 비운다
+
+### 요청 흐름
+
+```
+브라우저(Lv.3)  ──te_blob(파일 1개씩)──▶  이 서버  ──▶ GitHub blob 생성
+                ──te_commit(매니페스트)─▶  이 서버  ──▶ tree → commit → 브랜치 이동
+                                                        ──▶ Pages 워크플로 자동 배포(약 1분)
+```
+
+### 서버 검증 (브라우저 값은 그대로 믿지 않는다)
+
+- Lv.3 토큰을 다시 검증한다. 화면에서 버튼을 숨기는 것과는 무관하게 서버가 막는다.
+- 쓸 수 있는 경로는 `assets/type-examples/media/<sha256 앞 12자리>.webp|mp4` 와
+  `assets/type-examples/index.json` 뿐이다. 그 밖의 경로는 `bad_path` 로 거부한다.
+- 올라온 내용의 해시가 파일명과 다르면 `hash_mismatch` 로 거부한다(파일명을 지어낼 수 없다).
+- 사진 1MB·영상 5MB·15초, 한 번에 8개까지. index.json 은 서버에서 다시 파싱·검증한다.
+- 결과 트리가 기존과 같으면 커밋을 만들지 않는다(같은 요청이 두 번 와도 빈 커밋이 남지 않는다).
+- 브랜치가 그 사이 움직이면 base 를 다시 읽어 한 번 재시도한다.
+- 게시 이력은 감사 기록(`te_publish`)에 남는다 — 보안 관리(Lv.3) 화면에서 확인한다.
+
+### 문제가 생기면
+
+| 응답 | 뜻 | 조치 |
+|---|---|---|
+| `publish_disabled` | `GITHUB_TOKEN` 미설정 또는 스위치 off | 위 1~3단계 확인 |
+| `forbidden` | Lv.3 아님 | 권한 확인 |
+| `hash_mismatch` | 업로드 중 내용이 바뀜 | 다시 게시 |
+| `invalid_manifest` | index.json 검증 실패 | 아무것도 커밋되지 않음 — 화면의 오류 목록 확인 |
+| `github_failed` | 토큰 만료·권한 부족·GitHub 오류 | 토큰 재발급, 저장소 권한 확인 |
+
+잘못 올라간 게시는 GitHub에서 해당 커밋 하나만 revert 하면 된다(파일과 index.json 이 한 커밋에 있다).

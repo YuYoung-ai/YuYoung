@@ -227,11 +227,14 @@
     },
 
     // Lv.3 보안 관리센터용 요청. 서버가 토큰 레벨을 다시 검증하므로 UI 숨김에 의존하지 않는다.
-    adminRequest: function (action, payload) {
+    // opts: 큰 본문을 보내는 호출(예시자료 게시 등)이 자동 재시도·짧은 제한시간을 끄고
+    //       직접 정할 수 있게 열어 둔다. 안 넘기면 기존 동작(2회 시도·15초) 그대로다.
+    adminRequest: function (action, payload, opts) {
+      var o = opts || {};
       var body = payload || {};
       body.action = action;
       body.token = this.token();
-      return postJSON(body, { tries: 2, timeoutMs: 15000 })
+      return postJSON(body, { tries: o.tries || 2, timeoutMs: o.timeoutMs || 15000 })
         .then(function (r) { return r || { ok: false, error: 'no_response' }; })
         .catch(function () { return { ok: false, error: 'network' }; });
     },

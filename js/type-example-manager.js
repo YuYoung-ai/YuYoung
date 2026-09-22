@@ -10,9 +10,17 @@
  *    대표 예시는 WebP/MP4·공개 저장소용이라 기준이 달라, 회귀 위험을 피하려고
  *    여기에 별도 변환기를 둔다(공유·수정하지 않는다).
  *
- * 이 모듈은 GAS·Google Sheets·Drive를 호출하지 않는다. 네트워크 요청 자체가 없고,
+ * 이 모듈은 GAS·Google Sheets·Drive를 호출하지 않는다. 스스로 요청을 만들지 않고,
  * 유형 목록은 대시보드가 이미 받아 둔 데이터를, 매니페스트는 대시보드가 이미
  * 페이지당 1회 받아 둔 index.json을 그대로 받아서 쓴다.
+ *
+ * 저장은 세 갈래다 — 앞의 둘은 파일을 만들 뿐이고 커밋은 사람이 한다.
+ *   ① 🚀 바로 게시   : host.publish() 콜백(대시보드 → 인증 서버 Lv.3)으로 저장소에
+ *                      커밋한다. 폰에도 저장소 작업본이 필요 없어 기기를 가리지 않는다.
+ *                      요청은 호스트가 보낸다 — 이 모듈에는 서버 주소도 fetch도 없다.
+ *   ② 📁 폴더 저장   : Chrome·Edge 에서 저장소 폴더에 직접 쓴다. 한 번 고른 폴더는
+ *                      IndexedDB 에 기억해 다음부터 선택 단계를 건너뛴다.
+ *   ③ ⬇ 파일 다운로드: 그 밖의 브라우저용 폴백. 받은 파일을 안내된 경로에 넣는다.
  *
  * ES5 호환(빌드 없음). 브라우저는 window.BazTypeExampleManager, Node는 module.exports.
  ************************************************************/
@@ -469,6 +477,24 @@
     return (v / 1024 / 1024).toFixed(2) + 'MB';
   }
 
+  /** 변경 목록 → 커밋 메시지·안내에 쓸 한 줄 요약 */
+  function changeSummary(changes) {
+    var ch = changes || {}, keys = Object.keys(ch).sort(), parts = [];
+    keys.forEach(function (key) {
+      var labels = [], s;
+      for (s = 0; s < SLOTS.length; s++) if (ch[key] && ch[key][SLOTS[s].id]) labels.push(SLOTS[s].label);
+      if (labels.length) parts.push(splitKey(key).type + ' ' + labels.join('·'));
+    });
+    if (!parts.length) return '';
+    return parts[0] + (parts.length > 1 ? ' 외 ' + (parts.length - 1) + '건' : '');
+  }
+  /** 로컬 저장 뒤 그대로 붙여 넣을 수 있는 커밋 명령 */
+  function commitCommand(summary) {
+    var s = String(summary || '').replace(/["\\`$]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    return 'git add ' + ASSET_ROOT.replace(/\/$/, '') +
+      ' && git commit -m "예시자료 갱신' + (s ? ' · ' + s : '') + '" && git push';
+  }
+
   var PURE = {
     ASSET_ROOT: ASSET_ROOT, MEDIA_DIR: MEDIA_DIR, MANIFEST_PATH: MANIFEST_PATH, SLOTS: SLOTS,
     MAX_DIM: MAX_DIM, TARGET_BYTES: TARGET_BYTES, IDEAL_MIN_BYTES: IDEAL_MIN_BYTES,
@@ -484,7 +510,8 @@
     resolveKey: resolveKey, buildTypeRows: buildTypeRows, slotState: slotState,
     todayLocal: todayLocal, applyChanges: applyChanges, serializeManifest: serializeManifest,
     validateManifest: validateManifest, cleanupCandidates: cleanupCandidates,
-    planWrites: planWrites, formatBytes: formatBytes
+    planWrites: planWrites, formatBytes: formatBytes,
+    changeSummary: changeSummary, commitCommand: commitCommand
   };
 
   /* ══════════════════════════════════════════════════════════════════
@@ -700,7 +727,9 @@
   var S = {
     open: false, host: null, hostRows: [], manifest: null, rows: [], changes: {},
     busy: false, loadError: false, expanded: {}, savedPreviews: {},
-    filterCat: '', query: '', onlyMissing: false, el: null, collage: null
+    filterCat: '', query: '', onlyMissing: false, el: null, collage: null,
+    dirHandle: null,          /* 기억해 둔 저장소 폴더(File System Access) */
+    lastCommand: ''           /* 로컬 저장 직후 안내하는 git 명령 */
   };
 
   function escHtml(s) {
@@ -839,8 +868,11 @@
       +   '<div class="bte-foot">'
       +     '<span class="bte-grow" data-el="changed">변경된 항목 없음</span>'
       +     '<button type="button" class="bte-btn" data-act="reset">↺ 작업 취소·초기화</button>'
+      +     '<button type="button" class="bte-btn" data-act="dirforget" hidden>📂 폴더 변경</button>'
+      +     '<button type="button" class="bte-btn" data-act="copycmd" hidden>📋 커밋 명령 복사</button>'
       +     '<button type="button" class="bte-btn" data-act="download">⬇ 파일 다운로드</button>'
-      +     '<button type="button" class="bte-btn bte-go" data-act="save">📁 저장소 폴더에 저장</button>'
+      +     '<button type="button" class="bte-btn" data-act="save">📁 저장소 폴더에 저장</button>'
+      +     '<button type="button" class="bte-btn bte-go" data-act="publish" hidden>🚀 바로 게시</button>'
       +   '</div>'
       + '</div>'
       + '<section class="bte-collage" data-el="collage" hidden aria-label="사진 합성 수동 조정">'
@@ -872,7 +904,10 @@
       changed: back.querySelector('[data-el="changed"]'),
       reset: back.querySelector('[data-act="reset"]'),
       download: back.querySelector('[data-act="download"]'),
-      save: back.querySelector('[data-act="save"]')
+      save: back.querySelector('[data-act="save"]'),
+      publish: back.querySelector('[data-act="publish"]'),
+      dirforget: back.querySelector('[data-act="dirforget"]'),
+      copycmd: back.querySelector('[data-act="copycmd"]')
     };
     el.collage = back.querySelector('[data-el="collage"]');
     el.collageCanvas = back.querySelector('[data-el="collage-canvas"]');
@@ -889,6 +924,9 @@
     el.reset.addEventListener('click', function () { resetAll(); });
     el.download.addEventListener('click', function () { guard(saveByDownload); });
     el.save.addEventListener('click', function () { guard(saveToDirectory); });
+    el.publish.addEventListener('click', function () { guard(publishToRepo); });
+    el.dirforget.addEventListener('click', function () { forgetDirectory(); });
+    el.copycmd.addEventListener('click', function () { copyCommand(); });
     back.addEventListener('click', function (e) {
       if (e.target === back) { close(); return; }
       var act = e.target.closest && e.target.closest('[data-act="close"]');
@@ -1074,9 +1112,20 @@
   function syncButtons() {
     if (!S.el) return;
     var n = changeCount();
+    var blocked = S.busy || !n || S.loadError;
     S.el.reset.disabled = S.busy || !n;
-    S.el.download.disabled = S.busy || !n || S.loadError;
-    S.el.save.disabled = S.busy || !n || S.loadError;
+    S.el.download.disabled = blocked;
+    S.el.save.disabled = blocked;
+    S.el.publish.disabled = blocked;
+    S.el.dirforget.disabled = S.busy;
+    S.el.copycmd.disabled = S.busy;
+    /* 게시를 쓸 수 있으면 게시가 기본 동작, 아니면 폴더 저장이 기본 동작 */
+    var pub = canPublish();
+    S.el.publish.hidden = !pub;
+    S.el.save.hidden = !canPickDirectory();
+    S.el.save.className = 'bte-btn' + (!pub && !S.el.save.hidden ? ' bte-go' : '');
+    S.el.dirforget.hidden = !S.dirHandle;
+    S.el.copycmd.hidden = !S.lastCommand;
   }
 
   /* ── 사진 합성 편집기 ───────────────────────────────────────────── */
@@ -1375,7 +1424,8 @@
     };
   }
 
-  function afterSave(plan, lines) {
+  function afterSave(plan, lines, opts) {
+    var o = opts || {}, summary = changeSummary(S.changes);
     /* 저장한 예시는 아직 배포되기 전이라 서버에서 못 받는다 —
        미리보기 URL을 그대로 재사용해 화면에서 깨진 미리보기가 보이지 않게 한다. */
     var k, s;
@@ -1394,7 +1444,15 @@
       msg.push('정리 후보(자동 삭제하지 않음) — 더 이상 참조되지 않는 기존 파일:');
       plan.cleanup.forEach(function (p) { msg.push('  · ' + p); });
     }
-    msg.push('마지막으로 저장소에서 변경 파일을 확인한 뒤 커밋하세요.');
+    if (o.published) {
+      S.lastCommand = '';
+      msg.push('배포는 GitHub Pages 워크플로가 이어서 진행합니다 — 약 1분 뒤 모든 사용자 화면에 반영됩니다.');
+    } else {
+      S.lastCommand = commitCommand(summary);
+      msg.push('마지막으로 저장소에서 변경 파일을 확인한 뒤 커밋하세요.');
+      msg.push('  ' + S.lastCommand);
+      msg.push('"📋 커밋 명령 복사" 버튼으로 위 명령을 그대로 복사할 수 있습니다.');
+    }
     note(msg.join('\n'), 'ok');
     renderCatOptions();
     renderList();
@@ -1416,20 +1474,190 @@
     return dir.getFileHandle(name).then(function () { return true; }, function () { return false; });
   }
 
+  /* ── 게시 · 저장 보조 ─────────────────────────────────────────────
+     저장 결과를 사람이 손으로 옮기던 자리를 줄인다.
+      · publish  : 호스트가 넘겨준 콜백으로 저장소에 바로 커밋한다(모듈은 직접 요청하지 않는다)
+      · 폴더 기억: 한 번 고른 저장소 폴더를 IndexedDB 에 남겨 다음 저장부터 선택을 생략한다
+      · 커밋 명령: 로컬 저장 뒤 붙여 넣을 git 명령을 만들어 둔다 */
+
+  var PUBLISH_ERRORS = {
+    publish_disabled: '서버에 게시 기능이 켜져 있지 않습니다. "저장소 폴더에 저장" 또는 "파일 다운로드"를 사용하세요.',
+    unauthorized: '로그인이 만료되었습니다. 다시 로그인한 뒤 시도해 주세요.',
+    forbidden: 'Lv.3 권한이 필요합니다.',
+    network: '서버에 연결하지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.',
+    no_response: '서버가 응답하지 않았습니다. 잠시 뒤 다시 시도해 주세요.',
+    bad_path: '허용되지 않는 파일 경로입니다.',
+    bad_base64: '업로드 데이터가 손상됐습니다. 다시 시도해 주세요.',
+    hash_mismatch: '올린 파일이 변환 결과와 다릅니다. 다시 시도해 주세요.',
+    too_large: '파일 용량 제한을 넘었습니다.',
+    too_many_files: '한 번에 게시할 수 있는 파일 수를 넘었습니다. 나눠서 게시해 주세요.',
+    bad_manifest_size: 'index.json 크기가 허용 범위를 벗어났습니다.',
+    invalid_manifest: 'index.json 검증에 실패해 아무 파일도 커밋하지 않았습니다.',
+    github_failed: '저장소에 커밋하지 못했습니다.'
+  };
+  function publishError(r) {
+    var code = (r && r.error) || 'no_response';
+    var base = PUBLISH_ERRORS[code] || ('게시하지 못했습니다 (' + code + ')');
+    var detail = r && (r.detail || (r.errors && r.errors.join('\n· ')));
+    return base + (detail ? '\n· ' + detail : '');
+  }
+  function canPublish() { return !!(S.host && typeof S.host.publish === 'function'); }
+
+  /** 변환이 끝난 결과 blob 만 base64 로 바꾼다(원본은 이 경로에 오지 않는다) */
+  function blobBase64(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        var s = String(fr.result || ''), at = s.indexOf(',');
+        if (at < 0) { reject(new Error('파일을 읽지 못했습니다')); return; }
+        resolve(s.slice(at + 1));
+      };
+      fr.onerror = function () { reject(new Error('파일을 읽지 못했습니다')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * 저장소에 바로 커밋한다. 파일을 한 개씩 올린 뒤(①) 마지막에 커밋 한 번(②).
+   * 서버가 경로·해시·매니페스트를 다시 검증하므로 화면의 검증을 통과했다고 통과되지 않는다.
+   */
+  function publishToRepo() {
+    if (!canPublish()) throw new Error('이 화면에서는 바로 게시를 쓸 수 없습니다');
+    var plan = prepare();
+    var summary = changeSummary(S.changes);
+    var ask = ['저장소에 바로 커밋하고 배포합니다.', '',
+      '· 새 예시 파일 ' + plan.writes.length + '개',
+      '· ' + MANIFEST_PATH + ' 갱신',
+      '· 약 1분 뒤 모든 사용자 화면에 반영됩니다', '', '계속할까요?'];
+    if (typeof confirm === 'function' && !confirm(ask.join('\n'))) { note('게시를 취소했습니다'); return null; }
+    setBusy(true);
+    var uploaded = [];
+    return plan.writes.reduce(function (p, w, i) {
+      return p.then(function () {
+        note('게시 중 · 파일 ' + (i + 1) + '/' + plan.writes.length + ' 올리는 중…');
+        return blobBase64(w.blob).then(function (data) {
+          return S.host.publish('blob', { path: w.path, data: data });
+        }).then(function (r) {
+          if (!r || !r.ok) throw new Error(publishError(r));
+          uploaded.push({ path: w.path, sha: r.sha });
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      note('게시 중 · 커밋하는 중…');
+      /* 파일이 다 올라간 뒤에야 매니페스트를 커밋한다 — 중간에 끊기면 저장소는 그대로다 */
+      return S.host.publish('commit', { files: uploaded, manifest: plan.json, summary: summary });
+    }).then(function (r) {
+      if (!r || !r.ok) throw new Error(publishError(r));
+      setBusy(false);
+      var lines = [r.unchanged
+        ? '이미 같은 내용이 저장소에 있어 새 커밋을 만들지 않았습니다.'
+        : '게시 완료 · 새 예시 파일 ' + (r.files || 0) + '개 · ' + MANIFEST_PATH + ' 갱신'];
+      if (r.commit) lines.push('커밋 ' + String(r.commit).slice(0, 7) + (r.url ? ' · ' + r.url : ''));
+      afterSave(plan, lines, { published: true });
+    }, function (e) {
+      setBusy(false);
+      renderList();
+      throw e;
+    });
+  }
+
+  /* ── 저장소 폴더 기억(IndexedDB) ───────────────────────────────────
+     폴더 핸들은 문자열로 못 만든다 — localStorage 가 아니라 IndexedDB 에 담는다.
+     핸들을 들고 있어도 권한은 브라우저가 따로 관리하므로 저장할 때마다 확인한다. */
+  var DIR_DB = 'baz-type-example', DIR_STORE = 'handles', DIR_KEY = 'repoRoot';
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      if (typeof indexedDB === 'undefined') { reject(new Error('no-idb')); return; }
+      var req = indexedDB.open(DIR_DB, 1);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains(DIR_STORE)) req.result.createObjectStore(DIR_STORE);
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error || new Error('idb-open')); };
+    });
+  }
+  function idbRun(mode, run) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx = db.transaction(DIR_STORE, mode), req = run(tx.objectStore(DIR_STORE));
+        tx.oncomplete = function () { db.close(); resolve(req && req.result); };
+        tx.onabort = tx.onerror = function () { db.close(); reject(tx.error || new Error('idb-tx')); };
+      });
+    });
+  }
+  function quiet(p, fallback) { return p.then(null, function () { return fallback; }); }
+  function dirLoad() { return quiet(idbRun('readonly', function (st) { return st.get(DIR_KEY); }), null); }
+  function dirSave(h) { return quiet(idbRun('readwrite', function (st) { return st.put(h, DIR_KEY); }), null); }
+  function dirForget() { return quiet(idbRun('readwrite', function (st) { return st['delete'](DIR_KEY); }), null); }
+
+  function ensureWritable(handle) {
+    if (!handle || !handle.queryPermission) return Promise.resolve(handle);
+    return Promise.resolve(handle.queryPermission({ mode: 'readwrite' })).then(function (state) {
+      if (state === 'granted') return handle;
+      if (!handle.requestPermission) throw new Error('폴더 쓰기 권한이 없습니다');
+      return Promise.resolve(handle.requestPermission({ mode: 'readwrite' })).then(function (next) {
+        if (next !== 'granted') throw new Error('폴더 쓰기 권한이 없습니다');
+        return handle;
+      });
+    });
+  }
+  /** 기억한 폴더가 있으면 그대로, 없거나 권한을 잃었으면 다시 고르게 한다 */
+  function pickRoot() {
+    var remembered = S.dirHandle;
+    if (!remembered) {
+      return window.showDirectoryPicker({ mode: 'readwrite', id: 'baz-type-examples' }).then(ensureWritable);
+    }
+    return ensureWritable(remembered).then(null, function () {
+      S.dirHandle = null;
+      dirForget();
+      note('기억한 폴더를 쓸 수 없어 다시 선택합니다…');
+      return window.showDirectoryPicker({ mode: 'readwrite', id: 'baz-type-examples' }).then(ensureWritable);
+    });
+  }
+  function forgetDirectory() {
+    if (S.busy) return;
+    S.dirHandle = null;
+    dirForget();
+    note('기억한 저장소 폴더를 지웠습니다. 다음 저장 때 다시 선택합니다.');
+    syncButtons();
+  }
+
+  /* ── 커밋 명령 복사 ──────────────────────────────────────────────── */
+  function copyFallback(text) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      return !!ok;
+    } catch (e) { return false; }
+  }
+  function copyCommand() {
+    if (S.busy || !S.lastCommand) return;
+    var text = S.lastCommand;
+    function done() { note('커밋 명령을 복사했습니다.\n' + text, 'ok'); }
+    function failed() { note('복사하지 못했습니다. 아래 명령을 직접 복사해 주세요.\n' + text, 'err'); }
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { if (copyFallback(text)) done(); else failed(); });
+      return;
+    }
+    if (copyFallback(text)) done(); else failed();
+  }
+
   /** File System Access API — 사용자가 고른 저장소 폴더의 올바른 상대 경로에 저장한다 */
   function saveToDirectory() {
     var plan = prepare();
     if (!canPickDirectory()) throw new Error('이 브라우저는 폴더 저장을 지원하지 않습니다. "파일 다운로드"를 사용하세요.');
     setBusy(true);
-    note('저장소 최상위 폴더를 선택하세요…');
-    var root = null, mediaDir = null, existing = [];
-    return window.showDirectoryPicker({ mode: 'readwrite', id: 'baz-type-examples' }).then(function (h) {
+    note(S.dirHandle ? '기억한 저장소 폴더를 확인하는 중…' : '저장소 최상위 폴더를 선택하세요…');
+    var root = null, mediaDir = null, existing = [], remembered = !!S.dirHandle;
+    return pickRoot().then(function (h) {
       root = h;
-      if (h.requestPermission) return Promise.resolve(h.requestPermission({ mode: 'readwrite' })).then(function (st) {
-        if (st !== 'granted') throw new Error('폴더 쓰기 권한이 없습니다');
-        return h;
-      });
-      return h;
     }).then(function () {
       /* 엉뚱한 폴더에 쓰지 않도록 저장소인지 먼저 확인한다 */
       return getDir(root, ['assets', 'type-examples'], false).then(function (te) {
@@ -1441,6 +1669,8 @@
         throw new Error('저장소 폴더가 아닙니다. assets/type-examples/index.json 이 있는 최상위 폴더를 선택해 주세요.');
       });
     }).then(function (teDir) {
+      /* 저장소가 맞다고 확인된 폴더만 기억한다 — 다음 저장부터는 선택 단계가 없다 */
+      if (root && root !== S.dirHandle) { S.dirHandle = root; dirSave(root); }
       return teDir.getDirectoryHandle('media', { create: true }).then(function (m) {
         mediaDir = m;
         return plan.writes.reduce(function (p, w) {
@@ -1471,6 +1701,7 @@
       setBusy(false);
       var lines = ['저장 완료 · 새 예시 파일 ' + (plan.writes.length - existing.length) + '개 · ' + MANIFEST_PATH + ' 갱신'];
       if (existing.length) lines.push('같은 내용이라 건너뛴 파일 ' + existing.length + '개');
+      if (!remembered) lines.push('이 폴더를 기억했습니다 — 다음 저장부터는 선택 없이 바로 씁니다("📂 폴더 변경"으로 해제).');
       afterSave(plan, lines);
     }, function (e) {
       setBusy(false);
@@ -1544,6 +1775,8 @@
       S.rows = buildTypeRows(S.hostRows, S.manifest);
       renderCatOptions();
       renderList();
+      /* 권한을 여기서 묻지 않는다 — 저장 버튼을 누를 때(사용자 조작 안에서) 확인한다 */
+      if (canPickDirectory()) dirLoad().then(function (h) { S.dirHandle = h || null; syncButtons(); });
       if (S.loadError) note('index.json 을 불러오지 못했습니다. 저장이 막혀 있으니 새로고침 후 다시 열어 주세요.', 'err');
       else if (!S.hostRows.length) note('대시보드 데이터가 아직 없어 index.json 에 등록된 유형만 표시합니다.');
       else note('');
@@ -1567,6 +1800,7 @@
     });
     S.savedPreviews = {};
     S.changes = {};
+    S.lastCommand = '';
     S.open = false;
     S.el.back.style.display = 'none';
     note('');
@@ -1575,8 +1809,9 @@
   var api = {
     open: open, close: close, convert: convert, convertImage: convertImage, convertVideo: convertVideo,
     convertCollage: convertCollage, encodeWebp: encodeWebp, encodeCollage: encodeCollage,
-    canPickDirectory: canPickDirectory,
-    _state: S                                  /* 디버그용 — 대시보드는 참조하지 않는다 */
+    canPickDirectory: canPickDirectory, canPublish: canPublish,
+    _state: S,                                 /* 디버그용 — 대시보드는 참조하지 않는다 */
+    _dir: { load: dirLoad, save: dirSave, forget: dirForget }   /* 디버그·회귀 테스트용 */
   };
   for (var pk in PURE) { if (Object.prototype.hasOwnProperty.call(PURE, pk)) api[pk] = PURE[pk]; }
   return api;
