@@ -537,6 +537,11 @@ function doPost(e){
        (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외)
        ※ 사진 업로드보다 반드시 먼저 — 인증 없는 요청이 Drive에 파일을 남기면 안 된다. */
     var actName = (payload && payload.action) || '';
+    /* 병원 업무 전용 경로: 기존 기록·사진·전역 락 경로로 흘려보내지 않는다. */
+    if(/^work_/.test(actName)){
+      return json_(typeof hospitalWorkPost_==='function' ? hospitalWorkPost_(payload)
+        : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
+    }
     if(actName !== 'menu_save' && actName !== 'weeklyauto_save'){
       var denied = requireWrite_(payload);
       if(denied) return json_(denied);
@@ -873,6 +878,10 @@ function doGet(e){
   var p = (e && e.parameter) || {};
   var action = p.action || 'ping';
   try{
+    if(/^work_/.test(action)){
+      return json_(typeof hospitalWorkGet_==='function' ? hospitalWorkGet_(p)
+        : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
+    }
     /* [보안] 조회 API도 로그인 토큰 필수 — 외부인의 업무 데이터 열람 차단.
        예외: ping(연결 진단), menu(index.html 로그인 화면이 로그인 전에 호출·업무 데이터 없음).
        guide는 아래 gateGuide_에서 Lv.3을 별도로 요구한다. */
