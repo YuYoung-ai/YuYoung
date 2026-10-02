@@ -1,0 +1,267 @@
+/** 병원 A/S 업무관리. 기존 Handover.gs + baz_token_lib.gs와 같은 프로젝트에 추가.
+ * 편집기에서 setupHospitalWork() 1회 실행 후 기존 웹앱 새 버전을 배포한다.
+ * 변경로그가 내구성 있는 커밋 저널이며 요청/댓글 시트는 재실행 가능한 투영이다.
+ * pending 저널은 다음 요청에서 잠금 안에서 복구한다. SQL 트랜잭션을 가정하지 않는다.
+ */
+var HW = {
+  REQUESTS:'업무요청', HISTORY:'업무처리이력', LOG:'업무변경로그', HOSPITALS:'업무병원',
+  STATUSES:['접수','방문예정','처리중','결과확인','완료','보류','취소']
+};
+function hwSS_(){
+  var id=PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_SS_ID');
+  if(!id) throw new Error('업무관리 초기화가 필요합니다. GAS 편집기에서 setupHospitalWork를 실행하세요.');
+  return SpreadsheetApp.openById(id);
+}
+function setupHospitalWork(){
+  var lock=LockService.getScriptLock(); lock.waitLock(10000);
+  try{
+    var props=PropertiesService.getScriptProperties(), id=props.getProperty('HOSPITAL_WORK_SS_ID');
+    var ss=id?SpreadsheetApp.openById(id):SpreadsheetApp.getActiveSpreadsheet();
+    if(!ss) throw new Error('handover 스프레드시트에 연결된 편집기에서 실행하세요.');
+    if(!ss.getSheetByName(CONFIG.SHEET_NAME)) throw new Error('handover 원본 탭이 없는 파일입니다.');
+    [[HW.REQUESTS,['id','json']],[HW.HISTORY,['id','requestId','json']],
+      [HW.LOG,['operationId','actor','fingerprint','state','event','response','createdAt']],
+      [HW.HOSPITALS,['id','key','json']]].forEach(function(spec){
+      var sh=ss.getSheetByName(spec[0])||ss.insertSheet(spec[0]);
+      if(sh.getLastRow()===0){ sh.getRange(1,1,1,spec[1].length).setValues([spec[1]]); sh.setFrozenRows(1); }
+      else if(JSON.stringify(sh.getRange(1,1,1,spec[1].length).getDisplayValues()[0])!==JSON.stringify(spec[1])){
+        throw new Error(spec[0]+' 헤더가 다릅니다. 기존 데이터를 지우지 않고 초기화를 중단했습니다.');
+      }
+    });
+    props.setProperty('HOSPITAL_WORK_SS_ID',ss.getId());
+    return '업무 전용 탭 준비 완료 · '+ss.getId();
+  }finally{ lock.releaseLock(); }
+}
+function hwSheet_(name){ var sh=hwSS_().getSheetByName(name); if(!sh) throw new Error(name+' 탭 없음: setupHospitalWork 실행 필요'); return sh; }
+function hwRows_(name,width){ var sh=hwSheet_(name), n=sh.getLastRow()-1; return n>0?sh.getRange(2,1,n,width).getDisplayValues():[]; }
+function hwFind_(name,id,col){
+  var sh=hwSheet_(name), n=sh.getLastRow()-1;
+  if(n<1) return 0;
+  var cell=sh.getRange(2,col||1,n,1).createTextFinder(String(id)).matchEntireCell(true).findNext();
+  return cell?cell.getRow():0;
+}
+function hwPut_(name,id,values){
+  var sh=hwSheet_(name), row=hwFind_(name,id)||sh.getLastRow()+1;
+  sh.getRange(row,1,1,values.length).setValues([values.map(safeCell_)]);
+}
+function hwRequest_(id){ var row=hwFind_(HW.REQUESTS,id); return row?JSON.parse(hwSheet_(HW.REQUESTS).getRange(row,2).getValue()):null; }
+function hwHistory_(id){ var row=hwFind_(HW.HISTORY,id); return row?JSON.parse(hwSheet_(HW.HISTORY).getRange(row,3).getValue()):null; }
+function hwHash_(value){ return syncRevOf_(value); }
+function hwKey_(h){ return [String(h.name||'').trim(),String(h.sn||'').trim(),String(h.region||'').trim()].join('\u001f'); }
+function hwText_(v,max,label){ var s=String(v==null?'':v).trim(); if(s.length>max) throw new Error(label+'은 '+max+'자 이하로 입력하세요.'); return s; }
+function hwDateTime_(v,required,label){
+  var s=String(v||'');
+  if(!s&&!required) return '';
+  if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) throw new Error(label+' 날짜와 시간을 확인하세요.');
+  var d=new Date(s+':00+09:00');
+  if(isNaN(d.getTime())||Utilities.formatDate(d,'Asia/Seoul',"yyyy-MM-dd'T'HH:mm")!==s) throw new Error(label+' 날짜가 올바르지 않습니다.');
+  return s;
+}
+function hwAccess_(p){
+  var level=verifyLevel_(p.token||''), min=1;
+  var menu=menuGet_(); (menu.menu||[]).forEach(function(m){ if(m.id==='hospitalwork') min=Number(m.level)||1; });
+  if(level<min) throw new Error('업무관리 접근 권한이 없거나 로그인이 만료되었습니다.');
+  var actor=authName_(p.token||'');
+  if(!actor) throw new Error('작성자 확인 실패: 서명 토큰 라이브러리와 로그인을 확인하세요.');
+  return {name:actor,level:level};
+}
+function hwLock_(fn){ var l=LockService.getScriptLock(); l.waitLock(10000); try{ return fn(); }finally{ l.releaseLock(); } }
+function hwProject_(ev){
+  if(ev.hospital) hwPut_(HW.HOSPITALS,ev.hospital.id,[ev.hospital.id,ev.hospital.key,JSON.stringify(ev.hospital)]);
+  if(ev.history) hwPut_(HW.HISTORY,ev.history.id,[ev.history.id,ev.history.requestId,JSON.stringify(ev.history)]);
+  if(ev.request) hwPut_(HW.REQUESTS,ev.request.id,[ev.request.id,JSON.stringify(ev.request)]);
+  SpreadsheetApp.flush();
+}
+function hwRecover_(){
+  var sh=hwSheet_(HW.LOG), n=sh.getLastRow()-1;
+  if(n<1) return;
+  var cells=sh.getRange(2,4,n,1).createTextFinder('prepared').matchEntireCell(true).findAll();
+  cells.sort(function(a,b){return a.getRow()-b.getRow();}).forEach(function(cell){
+    var row=cell.getRow(), ev=JSON.parse(sh.getRange(row,5).getValue());
+    hwProject_(ev); sh.getRange(row,4).setValue('committed'); SpreadsheetApp.flush();
+  });
+}
+function hwCommit_(p,who,build){
+  var op=hwText_(p.operationId,90,'operationId');
+  if(!/^[A-Za-z0-9_-]{8,90}$/.test(op)) throw new Error('저장 식별자가 없습니다. 다시 시도하세요.');
+  var clean=JSON.parse(JSON.stringify(p)); delete clean.token;
+  var fingerprint=hwHash_({actor:who.name,payload:clean});
+  return hwLock_(function(){
+    try{hwRecover_();}catch(recoveryError){recoveryError.retrySameOperation=true;throw recoveryError;}
+    var sh=hwSheet_(HW.LOG), prev=hwFind_(HW.LOG,op);
+    if(prev){
+      var row=sh.getRange(prev,1,1,7).getDisplayValues()[0];
+      if(row[1]!==who.name||row[2]!==fingerprint) throw new Error('같은 저장 식별자에 다른 내용이 전달되었습니다.');
+      return JSON.parse(row[5]);
+    }
+    var ev=build(); if(ev.response.success===false) return ev.response;
+    var eventBody=JSON.stringify(ev);
+    if(eventBody.length>44000) throw new Error('기록이 너무 큽니다. 내용을 줄여주세요.');
+    var at=sh.getLastRow()+1;
+    try{
+      sh.getRange(at,1,1,7).setValues([[op,who.name,fingerprint,'prepared',eventBody,JSON.stringify(ev.response),new Date().toISOString()].map(safeCell_)]);
+      SpreadsheetApp.flush();
+      hwProject_(ev); sh.getRange(at,4).setValue('committed'); SpreadsheetApp.flush();
+    }catch(commitError){commitError.retrySameOperation=true;throw commitError;}
+    return ev.response;
+  });
+}
+function hwConflict_(current){ return {response:{success:false,conflict:true,current:current,error:'다른 사용자가 수정했습니다. 최신 내용과 입력 내용을 비교하세요.'}}; }
+function hwHospital_(key){
+  var raw=getHospDBRich_({force:'1'}); if(!raw.success) throw new Error(raw.error);
+  var matches=raw.data.filter(function(h){return hwKey_(h)===key;});
+  if(matches.length!==1) throw new Error('병원 원본과 일치하지 않거나 중복입니다. 병원을 다시 선택하세요.');
+  var row=hwFind_(HW.HOSPITALS,key,2), h=matches[0];
+  return {id:row?String(hwSheet_(HW.HOSPITALS).getRange(row,1).getValue()):Utilities.getUuid(),key:key,name:h.name,sn:h.sn,region:h.region};
+}
+function hwSave_(p,who){
+  return hwCommit_(p,who,function(){
+    var old=p.id?hwRequest_(p.id):null;
+    if(p.id&&!old) throw new Error('요청을 찾지 못했습니다.');
+    if(old&&String(old.revision)!==String(p.baseRevision)) return hwConflict_(old);
+    var input=p.form||{}, hosp=hwHospital_(hwText_(input.hospitalKey,500,'병원'));
+    var r={id:old?old.id:Utilities.getUuid(),hospitalId:hosp.id,hospitalKey:hosp.key,hospitalName:hosp.name,sn:hosp.sn,region:hosp.region,
+      symptom:hwText_(input.symptom,4000,'접수 증상'),cs:hwText_(input.cs,60,'CS 담당자'),engineer:hwText_(input.engineer,60,'엔지니어'),
+      sales:hwText_(input.sales,60,'영업 담당자'),registeredAt:hwDateTime_(input.registeredAt,true,'등록일시'),
+      visitAt:hwDateTime_(input.visitAt,false,'방문일시'),deadline:hwDateTime_(input.deadline,false,'마감'),status:String(input.status||'접수')};
+    if(!r.symptom||!r.cs) throw new Error('접수 증상과 CS 담당자를 입력하세요.');
+    if(HW.STATUSES.indexOf(r.status)<0) throw new Error('알 수 없는 상태입니다.');
+    if(r.status==='완료'&&(!old||old.status!=='완료')) throw new Error('결과를 등록한 후 완료 처리하세요.');
+    if(['방문예정','처리중'].indexOf(r.status)>=0&&(!r.visitAt||!r.engineer)) throw new Error('방문 일시와 엔지니어가 필요합니다. 미정이면 접수 상태로 저장하세요.');
+    var engineers=getMaster_({}).fse||[];
+    if(r.engineer&&engineers.indexOf(r.engineer)<0&&(!old||old.engineer!==r.engineer)) throw new Error('엔지니어 원본 목록에 없는 이름입니다. 목록을 동기화하세요.');
+    if(old&&old.hospitalId!==hosp.id&&hwRows_(HW.HISTORY,3).some(function(x){return x[1]===old.id;})) throw new Error('이력이 있는 요청의 병원은 변경할 수 없습니다. 새 요청을 등록하세요.');
+    var all=hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);});
+    var duplicates=all.filter(function(x){return x.id!==r.id&&x.hospitalId===r.hospitalId&&['완료','취소'].indexOf(x.status)<0;});
+    var overlaps=all.filter(function(x){return x.id!==r.id&&r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt&&['완료','취소'].indexOf(x.status)<0;});
+    if((duplicates.length||overlaps.length)&&!p.acknowledgeDuplicates) return {response:{success:false,duplicate:true,candidates:duplicates,overlaps:overlaps,error:'진행 중인 요청 또는 같은 엔지니어의 동일 방문 일시가 있습니다. 확인 후 별도 요청으로 저장하세요.'}};
+    var now=new Date().toISOString(); r.createdAt=old?old.createdAt:now; r.createdBy=old?old.createdBy:who.name;
+    r.updatedAt=now; r.updatedBy=who.name; r.revision=(old?old.revision:0)+1;
+    r.latest=old?old.latest:''; r.completedAt=old&&r.status==='완료'?old.completedAt:''; r.completedBy=old&&r.status==='완료'?old.completedBy:'';
+    return {kind:old?'request_update':'request_create',before:old,request:r,hospital:hosp,response:{success:true,request:r}};
+  });
+}
+function hwComment_(p,who){
+  return hwCommit_(p,who,function(){
+    var r=hwRequest_(p.requestId); if(!r) throw new Error('요청 없음');
+    var old=p.historyId?hwHistory_(p.historyId):null;
+    if(p.historyId&&(!old||old.requestId!==r.id||old.kind!=='comment')) throw new Error('댓글을 찾지 못했습니다.');
+    if(old&&old.author!==who.name&&who.level<3) throw new Error('본인 댓글 또는 관리자만 수정할 수 있습니다.');
+    if(old&&String(old.revision)!==String(p.baseHistoryRevision)) return hwConflict_(old);
+    var body=hwText_(p.body,4000,'댓글'); if(!body) throw new Error('댓글을 입력하세요.');
+    var now=new Date().toISOString(), h={id:old?old.id:Utilities.getUuid(),requestId:r.id,kind:'comment',body:body,
+      author:old?old.author:who.name,createdAt:old?old.createdAt:now,updatedAt:now,updatedBy:who.name,revision:(old?old.revision:0)+1};
+    var before=JSON.parse(JSON.stringify(r)); r.revision++; r.updatedAt=now;r.updatedBy=who.name;r.latest=body.slice(0,120);
+    return {kind:old?'comment_update':'comment_add',before:old,history:h,request:r,requestBefore:before,response:{success:true,request:r,history:h}};
+  });
+}
+function hwSource_(o){
+  var s=slim_(o);
+  var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:s.gubun,cat:s.cat,type:s.type,
+    part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||''};
+  out.version=hwHash_(out); out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
+  if(!out.recordId) out.recordId='legacy_'+Number(o._row)+'_'+out.version;
+  return out;
+}
+function hwSources_(hosp){
+  // 직접 최신 원본 읽기: recent의 부분 일치·불완전한 slim 응답·오래된 캐시를 사용하지 않는다.
+  var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh);
+  if(!hdr) throw new Error('Handover 원본 헤더를 찾지 못했습니다.');
+  var n=lastDataRow_(sh,hdr)-hdr.row;
+  var rows=n>0?sh.getRange(hdr.row+1,1,n,sh.getLastColumn()).getDisplayValues():[];
+  return rows.map(function(v,i){var o={_row:hdr.row+1+i};hdr.headers.forEach(function(h,c){if(h)o[h]=v[c];});return o;})
+    .filter(function(o){return o['처리일']&&String(o['병원명']||'').trim()===String(hosp).trim();}).map(function(o){return {raw:o,source:hwSource_(o)};});
+}
+function hwGetSource_(r,p){
+  var matches=hwSources_(r.hospitalName).filter(function(x){
+    if(x.source.recordId===p.recordId) return true;
+    var legacy=String(p.recordId||'').match(/^legacy_(\d+)_(.+)$/);
+    return legacy&&Number(x.raw._row)===Number(legacy[1])&&x.source.version===legacy[2];
+  });
+  if(matches.length!==1) throw new Error('원본이 없거나 식별자가 중복·변경되었습니다. 다시 불러오세요.');
+  if(matches[0].source.gubun!=='A/S') throw new Error('A/S 기록을 선택하세요.');
+  return matches[0];
+}
+function hwResult_(p,who){
+  return hwCommit_(p,who,function(){
+    var r=hwRequest_(p.requestId); if(!r) throw new Error('요청 없음');
+    if(String(r.revision)!==String(p.baseRevision)) return hwConflict_(r);
+    var hit=hwGetSource_(r,p), s=hit.source;
+    if(s.version!==p.sourceVersion) throw new Error('미리보기 후 Handover 원본이 바뀌었습니다. 다시 불러와 확인하세요.');
+    if(s.recordId.indexOf('legacy_')===0){
+      var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME), hdr=findHeader_(sh), col=colBy_(hdr,REC_ID_COLS);
+      if(!col){ col=sh.getLastColumn()+1; sh.getRange(hdr.row,col).setValue('기록 ID'); }
+      s.recordId=Utilities.getUuid(); sh.getRange(hit.raw._row,col).setValue(s.recordId); SpreadsheetApp.flush(); bazDropHandoverCaches_(r.hospitalName);
+    }
+    var histories=hwRows_(HW.HISTORY,3).map(function(x){return JSON.parse(x[2]);});
+    var same=histories.filter(function(x){return x.kind==='result'&&x.source.recordId===s.recordId;});
+    if(same.some(function(x){return x.requestId!==r.id;})) throw new Error('이 Handover 결과는 다른 요청에 연결되어 있습니다. 해당 요청을 먼저 확인하세요.');
+    var old=same[0]||null;
+    if(old&&String(old.revision)!==String(p.baseHistoryRevision)) return hwConflict_(old);
+    var memo=hwText_(p.memo,2000,'고객센터 보완 메모');
+    var now=new Date().toISOString(), before=JSON.parse(JSON.stringify(r));
+    var h={id:old?old.id:Utilities.getUuid(),requestId:r.id,kind:'result',source:s,body:s.detail,memo:memo,
+      author:old?old.author:who.name,createdAt:old?old.createdAt:now,updatedAt:now,updatedBy:who.name,revision:(old?old.revision:0)+1};
+    r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail.slice(0,120);
+    // 원본 갱신으로 이미 완료된 업무를 재개하지 않는다.
+    r.status=p.complete||r.status==='완료'?'완료':'결과확인';
+    if(p.complete){ r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name; }
+    return {kind:'result_save',before:old,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
+  });
+}
+function hwComplete_(p,who){
+  return hwCommit_(p,who,function(){
+    var r=hwRequest_(p.requestId);if(!r) throw new Error('요청 없음');
+    if(String(r.revision)!==String(p.baseRevision)) return hwConflict_(r);
+    if(!hwRows_(HW.HISTORY,3).some(function(x){return x[1]===r.id&&JSON.parse(x[2]).kind==='result';})) throw new Error('Handover 결과를 등록한 후 완료 처리하세요.');
+    var before=JSON.parse(JSON.stringify(r)), now=new Date().toISOString();
+    r.status='완료';r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;r.updatedAt=now;r.updatedBy=who.name;r.revision++;
+    return {kind:'complete',before:before,request:r,response:{success:true,request:r}};
+  });
+}
+function hwRead_(fn){ return hwLock_(function(){hwRecover_();return fn();}); }
+function hospitalWorkGet_(p){
+  try{
+    var who=hwAccess_(p); hwSS_();
+    if(p.action==='work_bootstrap'){
+      var db=getHospDBRich_({force:'1'});if(!db.success) throw new Error(db.error);
+      var master=getMaster_({}), list=hwRead_(function(){return hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);});});
+      return {success:true,requests:list,hospitals:db.data.map(function(h){h.key=hwKey_(h);return h;}),engineers:master.fse||[],who:who,updatedAt:new Date().toISOString()};
+    }
+    if(p.action==='work_sync') return hwRead_(function(){
+      var list=hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}), rev=hwHash_(list);
+      return {success:true,revision:rev,nochange:rev===p.revision,requests:rev===p.revision?null:list,updatedAt:new Date().toISOString()};
+    });
+    if(p.action==='work_detail') return hwRead_(function(){
+      var r=hwRequest_(p.id);if(!r) throw new Error('요청 없음');
+      var history=hwRows_(HW.HISTORY,3).filter(function(x){return x[1]===r.id;}).map(function(x){return JSON.parse(x[2]);});
+      var requests=hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}).filter(function(x){return x.hospitalId===r.hospitalId;});
+      var logs=hwRows_(HW.LOG,7).filter(function(x){return x[3]==='committed';}).map(function(x){return JSON.parse(x[4]);}).filter(function(x){return x.request&&x.request.id===r.id;}).map(function(x){
+        return {kind:x.kind,at:x.request.updatedAt,actor:x.request.updatedBy,before:x.before,requestBefore:x.requestBefore,after:x.history||x.request};
+      });
+      return {success:true,request:r,history:history,requests:requests,logs:logs,updatedAt:new Date().toISOString()};
+    });
+    if(p.action==='work_handover_candidates'){
+      var r=hwRead_(function(){return hwRequest_(p.requestId);});
+      var hosp=r?r.hospitalName:hwText_(p.hospitalName,120,'병원');
+      if(!hosp) throw new Error('병원 선택 필요');
+      var sources=hwSources_(hosp).map(function(x){return x.source;}).sort(function(a,b){return b.date.localeCompare(a.date);});
+      return {success:true,data:sources.slice(0,100),total:sources.length,updatedAt:new Date().toISOString()};
+    }
+    if(p.action==='work_handover_detail'){
+      var r=hwRead_(function(){return hwRequest_(p.requestId);});if(!r) throw new Error('요청 없음');
+      return {success:true,source:hwGetSource_(r,p).source,updatedAt:new Date().toISOString()};
+    }
+    throw new Error('알 수 없는 업무 조회');
+  }catch(e){return {success:false,error:String(e.message||e)};}
+}
+function hospitalWorkPost_(p){
+  try{
+    var who=hwAccess_(p);
+    if(p.action==='work_save')return hwSave_(p,who);
+    if(p.action==='work_history_add'||p.action==='work_history_update')return hwComment_(p,who);
+    if(p.action==='work_result_save')return hwResult_(p,who);
+    if(p.action==='work_complete')return hwComplete_(p,who);
+    throw new Error('알 수 없는 업무 저장');
+  }catch(e){return {success:false,error:String(e.message||e),retrySameOperation:!!e.retrySameOperation};}
+}
