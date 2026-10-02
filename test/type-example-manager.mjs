@@ -57,8 +57,10 @@ ck('7. 관리 모듈에 네트워크 호출 자체가 없다',
   !/\bfetch\s*\(/.test(SRC) && !/XMLHttpRequest|EventSource|WebSocket|navigator\.sendBeacon|import\s*\(/.test(SRC));
 ck('8. 관리 모듈에 GAS·Drive·Sheets 흔적이 없다',
   !/script\.google|googleusercontent|drive\.google|spreadsheets|gvRetry|HANDOVER_URL|action=|\bDriveApp\b/i.test(SRC));
-ck('9. 관리 모듈은 base64·dataURL 로 사진을 다루지 않는다',
-  !/data:image|toDataURL|btoa\s*\(|FileReader/.test(SRC));
+ck('9. 변환·미리보기는 dataURL 을 쓰지 않는다(게시 업로드에서만 결과 blob 을 base64 로 바꾼다)',
+  !/data:image|toDataURL|btoa\s*\(/.test(SRC) &&
+  (SRC.match(/FileReader|readAsDataURL/g) || []).length === 2 &&
+  /function blobBase64/.test(SRC) && /변환이 끝난 결과 blob 만 base64/.test(SRC));
 ck('10. 유형 목록·매니페스트는 대시보드가 이미 받아 둔 것을 넘겨받는다',
   /rows: RAW,/.test(DASH) && /loadManifest: exTypeExampleLoad_/.test(DASH) &&
   /typeof h\.loadManifest === 'function' \? h\.loadManifest\(\)/.test(SRC));
@@ -275,13 +277,17 @@ ck('48. 교체로 참조가 끊긴 기존 파일은 정리 후보로만 안내�
 ck('49. 기존 폴더·기존 파일을 마이그레이션하지 않는다',
   Object.values(MANIFEST.items).flatMap(i => [i.symptom, i.after]).filter(Boolean)
     .every(p => fs.existsSync(path.join(ROOT, p.src))) &&
-  !/rename|migrat/i.test(SRC));
+  !/\bmigrat/i.test(SRC) &&
+  /function mediaPath\(hash12, kind\)/.test(SRC) &&        /* 새 파일은 언제나 해시 경로 */
+  M.planWrites({ k: { symptom: { src: 'x', blob: {} } } })[0].path === 'x');
 
 /* ══════════ 6. 저장 · GitHub 직접 커밋 없음 ══════════ */
 section('저장 방식');
 
-ck('50. GitHub PAT·OAuth·직접 커밋 기능이 없다',
-  !/github|token|oauth|Authorization|api\.github/i.test(SRC));
+ck('50. 모듈에 저장소 주소·토큰·인증 헤더가 없다 — 커밋은 호스트 콜백에 맡긴다',
+  !/api\.github|github\.com|Authorization|Bearer|oauth|\btoken\b/i.test(SRC) &&
+  !/\bfetch\s*\(/.test(SRC) &&
+  /S\.host\.publish\('blob'/.test(SRC) && /S\.host\.publish\('commit'/.test(SRC));
 ck('51. 저장은 사용자의 명시적 클릭에서만 시작한다',
   /el\.save\.addEventListener\('click'/.test(SRC) && /el\.download\.addEventListener\('click'/.test(SRC) &&
   !/setTimeout\([^)]*saveToDirectory|setInterval/.test(SRC));
@@ -339,7 +345,9 @@ ck('61-d. 합성 편집기는 순서·드래그 위치·확대·회전·자동 �
 ck('62. 개인정보 노출 금지 안내가 있다',
   /환자·직원 얼굴, 병원명, 장비 S\/N, 문서·모니터의 개인정보/.test(SRC));
 ck('63. 처리 중 중복 클릭을 막는다',
-  /if \(S\.busy\) return;/.test(SRC) && /function setBusy/.test(SRC) && /S\.el\.save\.disabled = S\.busy/.test(SRC));
+  /if \(S\.busy\) return;/.test(SRC) && /function setBusy/.test(SRC) &&
+  /var blocked = S\.busy \|\| !n \|\| S\.loadError;/.test(SRC) &&
+  /S\.el\.save\.disabled = blocked;/.test(SRC) && /S\.el\.publish\.disabled = blocked;/.test(SRC));
 ck('64. 변환 실패는 기존 데이터를 건드리지 않고 오류만 표시한다',
   /변환 실패 · /.test(SRC) && /기존 등록 내용을 건드리지 않는다/.test(SRC));
 ck('65. 관리 화면은 대시보드 DOM·상태를 바꾸지 않는다',
@@ -364,6 +372,55 @@ ck('72. README 에 합성 배치와 공통 전체화면 출력 절차가 있다'
   /사진 2~4장 합성/.test(README)&&/4장은 2×2/.test(README)&&/공통 전체화면 뷰어/.test(README));
 ck('73. README 에 수동 순서·프레이밍·확대·회전 조정 절차가 있다',
   /프레이밍 위치/.test(README)&&/확대·90도 회전/.test(README)&&/순서를 바꿀 수 있습니다/.test(README));
+
+/* ══════════ 10. 등록 다음 단계 — 게시 · 폴더 기억 · 커밋 명령 ══════════ */
+section('저장 이후 절차');
+
+const AUTH = read('auth.js');
+
+ck('74. 게시 버튼은 호스트가 게시 콜백을 줄 때만 나타나고, 그때는 게시가 기본 동작이 된다',
+  /function canPublish\(\) \{ return !!\(S\.host && typeof S\.host\.publish === 'function'\); \}/.test(SRC) &&
+  /S\.el\.publish\.hidden = !pub;/.test(SRC) &&
+  /S\.el\.save\.className = 'bte-btn' \+ \(!pub && !S\.el\.save\.hidden \? ' bte-go' : ''\);/.test(SRC) &&
+  /data-act="publish" hidden/.test(SRC));
+ck('75. 게시는 파일을 하나씩 올린 뒤 마지막에 커밋한다(끊겨도 매니페스트가 먼저 올라가지 않는다)',
+  /plan\.writes\.reduce\(/.test(SRC) &&
+  SRC.indexOf("S.host.publish('blob'") < SRC.indexOf("S.host.publish('commit'") &&
+  /파일이 다 올라간 뒤에야 매니페스트를 커밋한다/.test(SRC) &&
+  /var plan = prepare\(\);[\s\S]{0,400}confirm/.test(SRC));      /* 검증을 통과해야 확인창이 뜬다 */
+ck('76. 서버 오류 코드를 그대로 노출하지 않고 사람 말로 바꾼다',
+  /publish_disabled:/.test(SRC) && /invalid_manifest:/.test(SRC) && /unauthorized:/.test(SRC) &&
+  /function publishError/.test(SRC));
+ck('77. 커밋 메시지 요약과 붙여 넣을 커밋 명령을 만든다',
+  M.changeSummary({ '장비|크랙': { symptom: { src: 'a' } } }) === '크랙 증상' &&
+  M.changeSummary({ '장비|크랙': { symptom: { src: 'a' }, after: { src: 'b' } }, '장비|누수': { after: { src: 'c' } } })
+    === '누수 처리 결과 외 1건' &&
+  M.changeSummary({}) === '' &&
+  M.commitCommand('크랙 증상') === 'git add assets/type-examples && git commit -m "예시자료 갱신 · 크랙 증상" && git push' &&
+  !/["`$\\]/.test(M.commitCommand('따옴표 " 백틱 ` 달러 $ 역슬래시 \\').replace(/^git add [^"]+"|"[^"]*$/g, '')));
+ck('78. 저장소 폴더는 IndexedDB 에 기억하고, 권한은 저장을 누른 순간에 확인한다',
+  /indexedDB\.open\(DIR_DB, 1\)/.test(SRC) && /function dirSave/.test(SRC) && /function dirForget/.test(SRC) &&
+  /queryPermission\(\{ mode: 'readwrite' \}\)/.test(SRC) &&
+  /권한을 여기서 묻지 않는다/.test(SRC) &&
+  /저장소가 맞다고 확인된 폴더만 기억한다/.test(SRC) &&
+  /data-act="dirforget"/.test(SRC));
+ck('79. 게시 뒤에는 커밋 안내 대신 자동 배포를 알리고, 로컬 저장 뒤에만 커밋 명령을 남긴다',
+  /if \(o\.published\) \{[\s\S]{0,200}약 1분 뒤 모든 사용자 화면에 반영/.test(SRC) &&
+  /S\.lastCommand = commitCommand\(summary\);/.test(SRC) &&
+  /변경 파일을 확인한 뒤 커밋하세요/.test(SRC) &&
+  /S\.el\.copycmd\.hidden = !S\.lastCommand;/.test(SRC));
+ck('80. 대시보드는 Lv.3 인증 요청으로만 게시를 중계한다(페이지에 저장소 토큰이 없다)',
+  /publish: exTypeExamplePublish_/.test(DASH) &&
+  /BazAuth\.adminRequest\(kind==='blob'\?'te_blob':'te_commit'/.test(DASH) &&
+  /\{tries:1,timeoutMs:60000\}/.test(DASH) &&                    /* 자동 재시도로 같은 파일을 두 번 올리지 않는다 */
+  !/ghp_|github_pat_|api\.github\.com/.test(DASH) &&
+  /if\(!exRequireLevel3_\(\)\) return;[\s\S]{0,200}EX_TE_MGR_LOADING/.test(DASH));
+ck('81. auth.js 는 호출별 재시도·제한시간을 받되 기본 동작은 그대로다',
+  /adminRequest: function \(action, payload, opts\)/.test(AUTH) &&
+  /tries: o\.tries \|\| 2, timeoutMs: o\.timeoutMs \|\| 15000/.test(AUTH));
+ck('82. README 에 게시·폴더 기억·커밋 명령 절차가 있다',
+  /🚀 바로 게시/.test(README) && /GITHUB_TOKEN/.test(README) &&
+  /폴더 변경/.test(README) && /커밋 명령 복사/.test(README));
 
 console.log('\n──────────────────────────────');
 console.log(`통과 ${pass}/${total}`);

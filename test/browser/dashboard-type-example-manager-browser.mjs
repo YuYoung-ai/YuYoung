@@ -47,7 +47,22 @@ page.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
 page.on('console',m=>{if(m.type()==='error'&&!/ERR_FAILED|ERR_ABORTED|ERR_CONNECTION/.test(m.text()))errs.push('CONSOLE: '+m.text());});
 page.on('request',r=>net.push(r.url()));
 page.on('dialog',d=>d.accept());
-await page.route('**yuyoung-ai.deno.net/**',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,valid:true,level:3,name:'테스트'})}));
+/* 인증 서버 대역 — 예시자료 게시(te_blob·te_commit)는 저장소 대신 여기서 받아 둔다 */
+const pub={calls:[],blobs:[],commits:[]};
+const reply=b=>({status:200,contentType:'application/json',body:JSON.stringify(b)});
+await page.route('**yuyoung-ai.deno.net/**',r=>{
+  let body={};try{body=JSON.parse(r.request().postData()||'{}');}catch{}
+  pub.calls.push(body.action||'');
+  if(body.action==='te_blob'){
+    pub.blobs.push({path:body.path,bytes:Buffer.from(String(body.data||''),'base64').length,token:body.token});
+    return r.fulfill(reply({ok:true,path:body.path,sha:'a'.repeat(40)}));
+  }
+  if(body.action==='te_commit'){
+    pub.commits.push({files:body.files,manifest:body.manifest,summary:body.summary,token:body.token});
+    return r.fulfill(reply({ok:true,commit:'b'.repeat(40),url:'https://github.test/commit/bbbbbbb',files:(body.files||[]).length}));
+  }
+  return r.fulfill(reply({ok:true,valid:true,level:3,name:'테스트'}));
+});
 await page.route('**://script.google.com/**',r=>{
   const u=r.request().url();let body={success:true};
   if(u.includes('action=all'))body={success:true,data:DATA,updated:'2026-08-24 09:00'};
@@ -214,6 +229,38 @@ ck('22-e. 수동 배치한 사진 4장을 1200×900 이하·300KB 목표의 단�
 const collageMeta=String(await page.textContent(sel('.bte-meta','after'))).replace(/\s+/g,' ');
 ck('22-f. 합성 원본 장수·수동 배치와 결과 크기·해상도를 화면에 표시한다',
   /합성 원본 4장/.test(collageMeta)&&/수동 배치/.test(collageMeta)&&/변환 WebP/.test(collageMeta)&&/1200×900/.test(collageMeta),collageMeta);
+
+/* ── 6-b. 게시(저장소 커밋) — 폰에서도 여기서 끝난다 ── */
+const pubBtn='.bte-foot [data-act="publish"]';
+ck('22-g. 게시 버튼이 보이고 기본 동작으로 강조된다',
+  await page.isVisible(pubBtn)&&/bte-go/.test(await page.getAttribute(pubBtn,'class')||'')&&
+  !/bte-go/.test(await page.getAttribute('.bte-foot [data-act="save"]','class')||''));
+await page.click(pubBtn);
+await page.waitForFunction(()=>/게시 완료/.test(document.querySelector('.bte-msg')?.textContent||''),null,{timeout:30000});
+ck('22-h. 파일을 먼저 올리고 매니페스트를 마지막에 커밋한다',
+  pub.calls.filter(a=>/^te_/.test(a)).join()==='te_blob,te_commit'&&pub.blobs.length===1&&pub.commits.length===1,
+  JSON.stringify(pub.calls));
+ck('22-i. 게시에는 Lv.3 토큰·해시 경로·index.json 이 함께 담긴다',
+  pub.blobs[0].path===collage.src&&pub.blobs[0].bytes===collage.bytes&&pub.commits[0].token==='tok-smoke'&&
+  pub.commits[0].files[0].path===collage.src&&
+  JSON.parse(pub.commits[0].manifest).items[KEY].after.src===collage.src&&
+  /크랙 처리 결과/.test(pub.commits[0].summary||''),JSON.stringify(pub.commits[0]?.summary));
+const pubMsg=String(await page.textContent('.bte-msg')).replace(/\s+/g,' ');
+ck('22-j. 게시 뒤에는 커밋 대신 자동 배포를 안내하고 변경 목록을 비운다',
+  /약 1분 뒤 모든 사용자 화면에 반영/.test(pubMsg)&&!/변경 파일을 확인한 뒤 커밋/.test(pubMsg)&&
+  /변경된 항목 없음/.test(await page.textContent('.bte-foot [data-el="changed"]')),pubMsg.slice(0,120));
+
+/* 폴더 저장은 실제 파일 선택창이 필요해 자동화할 수 없다 —
+   대신 그 폴더를 기억하는 저장소(IndexedDB)가 실제로 남고 지워지는지 확인한다 */
+const dirMemory=await page.evaluate(async()=>{
+  const M=window.BazTypeExampleManager;
+  await M._dir.save({marker:'repo-root'});
+  const kept=await M._dir.load();
+  await M._dir.forget();
+  return {kept,cleared:await M._dir.load()};
+});
+ck('22-k. 고른 저장소 폴더를 브라우저에 기억하고 "폴더 변경"으로 지운다',
+  dirMemory.kept&&dirMemory.kept.marker==='repo-root'&&!dirMemory.cleared,JSON.stringify(dirMemory));
 
 /* ── 7. 필터 · 레이아웃 · 격리 ── */
 await page.selectOption('.bte-tools [data-act="cat"]','장비');
