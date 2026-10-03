@@ -32,6 +32,7 @@ handover.data=[['처리일','병원명','CS 담당자','점검/AS','대분류','
  ['2026-10-02','샘플병원 분점','엔지니어 B','A/S','점검','누수','','','다른 지점 내용','','','SN2','report-2'],
  ['2026-09-29','샘플병원','엔지니어 A','A/S','점검','누수','','','과거 내용','','','SN1','']];
 const sandbox={console,Date,JSON,Map,Set,SpreadsheetApp:{openById:()=>ss,getActiveSpreadsheet:()=>ss,flush(){}},
+  ContentService:{MimeType:{JSON:'json'},createTextOutput:text=>({text,setMimeType(){return this;}})},
   PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k)||null,setProperty:(k,v)=>props.set(k,v)})},
   Utilities:{getUuid:()=>crypto.randomUUID(),DigestAlgorithm:{SHA_256:'sha256'},Charset:{UTF_8:'utf8'},computeDigest:(_,value)=>[...crypto.createHash('sha256').update(value).digest()],
     formatDate:(d,tz,fmt)=>{const s=new Intl.DateTimeFormat('sv-SE',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(d).replace(' ','T');return fmt.includes('HH:mm')?s:s.slice(0,10);}},
@@ -97,4 +98,83 @@ assert.ok(read('auth.js').includes("'hospital-work.html':{ tool: 'hospitalwork',
 assert.ok(read('index.html').includes('data-toolid="hospitalwork"'));
 assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(read('js/baz-work-manager.js')),'no polling or focus sync');
 assert.equal(lockHeld,false);
-console.log('hospital-work: auth, source validation, duplicate warning, revision conflicts, comments, exact Handover mapping, source revisions, legacy IDs, durable interruption recovery passed.');
+// Automatic linking uses visit date (not registration date), exact hospital, and one-to-one matches.
+const autoRequest=(day,extra={})=>{const saved=post({action:'work_save',form:{...form,visitAt:day+'T14:00',...extra},acknowledgeDuplicates:true});assert.equal(saved.success,true,JSON.stringify(saved));return saved.request;};
+const addSource=(day,extra={})=>{
+ const s={hospital:'샘플병원',engineer:'엔지니어 B',gubun:'A/S',result:'정상',sn:'SN1',recordId:crypto.randomUUID(),...extra};
+ const row=[day,s.hospital,s.engineer,s.gubun,'점검','누수','','0','자동 연결 현장 내용',s.result,'자동 연결 비고',s.sn,s.recordId];handover.data.push(row);return row;
+};
+const hook=(hospital,day)=>copy(sandbox.hwLock_(()=>sandbox.hospitalWorkHandoverSaved_(hospital,day)));
+const journalCount=()=>sheets.get('업무변경로그').data.length;
+const auto=autoRequest('2026-10-10');
+addSource('2026-10-02',{recordId:'registration-date-only'});
+assert.equal(get({action:'work_detail',id:auto.id}).request.status,'방문예정','registration date must not match');
+const autoSource=addSource('2026-10-10');
+addSource('2026-10-10',{hospital:'샘플병원 분점'});addSource('2026-10-10',{gubun:'점검'});
+assert.equal(hook('샘플병원','2026-10-10').completed,1,'post-save hook completes exact visit match');
+let autoDetail=get({action:'work_detail',id:auto.id});
+assert.equal(autoDetail.request.status,'완료');assert.equal(autoDetail.request.cs,'CS A');assert.equal(autoDetail.request.visitAt,auto.visitAt);
+assert.equal(autoDetail.history[0].source.recordId,autoSource[12]);assert.equal(autoDetail.history[0].source.engineer,'엔지니어 B');assert.equal(autoDetail.history[0].auto,true);
+assert.ok(autoDetail.logs.some(x=>x.kind==='result_auto'),'automatic completion is audited');
+const autoRevision=autoDetail.request.revision,afterAuto=journalCount();
+hook('샘플병원','2026-10-10');get({action:'work_bootstrap'});get({action:'work_sync'});
+assert.equal(journalCount(),afterAuto,'repeated synchronization does not duplicate result or audit');
+assert.equal(get({action:'work_detail',id:auto.id}).request.revision,autoRevision);
+const reopened=post({action:'work_save',id:auto.id,baseRevision:autoRevision,form:{...form,visitAt:auto.visitAt,status:'처리중'},acknowledgeDuplicates:true});assert.equal(reopened.success,true);
+const reopenedDetail=get({action:'work_detail',id:auto.id});assert.equal(reopenedDetail.request.status,'처리중');assert.equal(reopenedDetail.autoMatch.skipped[0].reason,'reopened','old auto result cannot close explicitly reopened work');
+// Existing source before request creation is picked up by sync without a new Handover write.
+addSource('2026-10-11');const preexisting=autoRequest('2026-10-11');
+const synced=get({action:'work_sync'});assert.ok(synced.autoMatch.completed.some(x=>x.requestId===preexisting.id));
+assert.equal(synced.requests.find(x=>x.id===preexisting.id).status,'완료');
+const ambiguous=autoRequest('2026-10-12');addSource('2026-10-12');addSource('2026-10-12');
+assert.equal(get({action:'work_detail',id:ambiguous.id}).autoMatch.skipped[0].reason,'sources');
+assert.equal(get({action:'work_detail',id:ambiguous.id}).request.status,'방문예정');
+const duplicate1=autoRequest('2026-10-13'),duplicate2=autoRequest('2026-10-13',{visitAt:'2026-10-13T18:00'});addSource('2026-10-13');
+assert.equal(get({action:'work_detail',id:duplicate1.id}).autoMatch.skipped[0].reason,'requests');
+assert.equal(get({action:'work_detail',id:duplicate2.id}).request.status,'방문예정');
+const mismatch=autoRequest('2026-10-14');addSource('2026-10-14',{sn:'SN-other'});
+assert.equal(get({action:'work_detail',id:mismatch.id}).autoMatch.skipped[0].reason,'sn');
+const incomplete=autoRequest('2026-10-15');addSource('2026-10-15',{result:''});
+assert.equal(get({action:'work_detail',id:incomplete.id}).autoMatch.skipped[0].reason,'result');
+const held=autoRequest('2026-10-16',{status:'보류'});addSource('2026-10-16');assert.equal(get({action:'work_detail',id:held.id}).request.status,'보류');
+const cancelled=autoRequest('2026-10-17',{status:'취소'});addSource('2026-10-17');assert.equal(get({action:'work_detail',id:cancelled.id}).request.status,'취소');
+const noVisit=autoRequest('2026-10-18',{visitAt:'',status:'접수'});addSource('2026-10-18');assert.equal(get({action:'work_detail',id:noVisit.id}).request.status,'접수');
+const duplicateId=autoRequest('2026-10-19');addSource('2026-10-19',{recordId:'duplicate-source-id'});addSource('2026-10-20',{recordId:'duplicate-source-id'});
+assert.equal(get({action:'work_detail',id:duplicateId.id}).autoMatch.skipped[0].reason,'id');
+// A manually selected result and memo remain authoritative; the same source can finish review.
+const preserve=autoRequest('2026-10-21'),memoRow=addSource('2026-10-22');
+const memoSource=get({action:'work_handover_detail',requestId:preserve.id,recordId:memoRow[12]}).source;
+const memoImport=post({action:'work_result_save',requestId:preserve.id,baseRevision:preserve.revision,recordId:memoSource.recordId,sourceVersion:memoSource.version,memo:'유지할 고객센터 메모'});
+assert.equal(memoImport.success,true);
+const moved=post({action:'work_save',id:preserve.id,baseRevision:memoImport.request.revision,form:{...form,visitAt:'2026-10-22T14:00',status:'결과확인'},acknowledgeDuplicates:true});assert.equal(moved.success,true);
+const preserved=get({action:'work_detail',id:preserve.id});assert.equal(preserved.request.status,'완료');assert.equal(preserved.history.length,1);assert.equal(preserved.history[0].memo,'유지할 고객센터 메모');
+const linked=autoRequest('2026-10-22',{status:'방문예정'});
+// Completed same-day requests continue to participate in ambiguity checks.
+assert.equal(get({action:'work_detail',id:linked.id}).autoMatch.skipped[0].reason,'requests');
+// Legacy IDs and partial automatic writes recover through the same durable journal.
+const legacyAuto=autoRequest('2026-10-23'),legacyRow=addSource('2026-10-23',{recordId:''});failSheet='업무처리이력';
+assert.throws(()=>hook('샘플병원','2026-10-23'),/simulated interrupted projection/);
+assert.ok(legacyRow[12]&&!legacyRow[12].startsWith('legacy_'),'stable source ID assigned before projection');
+const recoveredAuto=get({action:'work_detail',id:legacyAuto.id});assert.equal(recoveredAuto.success,true);assert.equal(recoveredAuto.request.status,'완료');assert.equal(recoveredAuto.history.length,1);
+assert.equal(sheets.get('업무변경로그').data.some(r=>r[3]==='prepared'),false);
+// Run actual Handover doPost: auxiliary failure must still return source-save success.
+const realSave=autoRequest('2026-10-24');failSheet='업무처리이력';const realReqId=crypto.randomUUID();
+const payload={token:'alice',reqId:realReqId,date:'2026-10-24',hosp:'샘플병원',fse:'엔지니어 B',gubun:'A/S',sn:'SN1',result:'수리',detail:'실제 doPost 저장',cost:'0'};
+const realResponse=JSON.parse(sandbox.doPost({postData:{contents:JSON.stringify(payload)}}).text);
+assert.equal(realResponse.success,true,JSON.stringify(realResponse));assert.equal(realResponse.workAuto.pending,true);
+assert.equal(handover.data.filter(r=>r[12]===realReqId).length,1,'source written once despite auto failure');
+assert.equal(get({action:'work_detail',id:realSave.id}).request.status,'완료','next read recovers failed auxiliary completion');
+const realRetry=JSON.parse(sandbox.doPost({postData:{contents:JSON.stringify(payload)}}).text);assert.equal(realRetry.success,true);assert.equal(handover.data.filter(r=>r[12]===realReqId).length,1);
+const unauthorizedTarget=autoRequest('2026-10-25');addSource('2026-10-25');
+assert.equal(get({action:'work_detail',id:unauthorizedTarget.id,token:''}).success,false);
+assert.equal(sandbox.hwRequest_(unauthorizedTarget.id).status,'방문예정','unauthenticated read cannot trigger completion');
+const immediateTarget=autoRequest('2026-10-26');
+const immediatePayload={...payload,reqId:crypto.randomUUID(),date:'2026-10-26'};
+const immediateResponse=JSON.parse(sandbox.doPost({postData:{contents:JSON.stringify(immediatePayload)}}).text);
+assert.equal(immediateResponse.success,true);assert.equal(immediateResponse.workAuto.completed,1);
+assert.equal(sandbox.hwRequest_(immediateTarget.id).status,'완료','Handover save completes request before any subsequent browser read');
+const manualCandidate=get({action:'work_handover_candidates',requestId:ambiguous.id}).data.find(s=>s.date==='2026-10-12');
+const manualFallback=post({action:'work_result_save',requestId:ambiguous.id,baseRevision:ambiguous.revision,recordId:manualCandidate.recordId,sourceVersion:manualCandidate.version,complete:true});
+assert.equal(manualFallback.success,true,'ambiguous matches still support manual selection/completion');
+assert.equal(lockHeld,false);
+console.log('hospital-work: manual workflow plus visit-date auto completion, exact hospital/AS match, duplicates, SN, missing result/date, hold/cancel, stable IDs, memo preservation, idempotent sync, actual Handover save and auxiliary failure recovery passed.');

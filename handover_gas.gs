@@ -854,6 +854,17 @@ function doPost(e){
                savedFields: savedFields, warnings: warnings,
                fseMismatch: !!(authUser && authUser !== P.fse), authUser: authUser,
                inv:inv, msg:msg, error:''};
+    // 원본 저장 성공과 자동 연결 성공은 분리한다. 보조 작업 실패로 원본을 재저장하지 않는다.
+    if(isHandover && typeof hospitalWorkHandoverSaved_==='function'){
+      try{
+        out.workAuto=hospitalWorkHandoverSaved_(P.hosp,P.date);
+        if(out.workAuto.completed)out.msg+='\n✅ 병원 A/S 업무 자동 완료';
+        if(out.workAuto.needsReview)out.msg+='\n병원 업무에서 Handover 연결 대상을 직접 확인하세요.';
+      }catch(workError){
+        out.workAuto={enabled:true,pending:true};out.msg+='\n원본 저장 완료 · 업무 자동 연결은 동기화에서 다시 확인합니다.';
+        log_('WORK_AUTO_PENDING',null,{reqId:reqId});
+      }
+    }
     /* 재전송·동시 요청이 같은 결과를 받도록 영속 저장 (위 double-checked 확인과 한 쌍) */
     if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row});
     return json_(out);

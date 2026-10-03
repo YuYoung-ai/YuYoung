@@ -72,6 +72,10 @@
       state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
       $('sync-time').textContent='현황 확인 '+time(data.updatedAt)+' · 필요할 때 동기화';
       $('new').disabled=false;
+      if(data.autoMatch){
+        var completed=data.autoMatch.completed.length,skipped=data.autoMatch.skipped.length;
+        if(completed||skipped)notify((completed?'Handover 결과 '+completed+'건 자동 연결·완료. ':'')+(skipped?'자동 연결 확인이 필요한 업무 '+skipped+'건은 상세에서 직접 확인하세요.':''));
+      }
       if(state.detail){
         var latest=state.requests.find(function(r){return r.id===state.detail.request.id;});
         if(latest&&latest.revision!==state.detail.request.revision){
@@ -88,6 +92,7 @@
     return '<dl class="result-fields">'+fields.map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
   }
   function auditText(log){
+    if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 병원명·방문일 일치로 완료';
     if(log.kind==='request_create')return '고객센터 A/S 접수';
     if(log.kind==='comment_add')return '댓글 등록';
     if(log.kind==='comment_update')return '댓글 수정 · 이전 내용: '+(log.before?log.before.body:'');
@@ -120,6 +125,13 @@
     if(detailError)status.textContent='최신 상세 확인 실패: '+detailError+' · 최신 내용 확인 버튼으로 다시 시도하세요.';
     status.hidden=!detailLoading&&!detailError;
     var checked=$('detail').querySelector('.facts + .hint');checked.hidden=!!d.preview;if(!d.preview&&(detailLoading||detailError))checked.textContent='이전 상세 확인 '+time(d.updatedAt);checked.before(status);
+    if(!d.preview&&d.autoMatch){
+      var skipped=d.autoMatch.skipped.find(function(x){return x.requestId===r.id;});
+      if(skipped){var warning=document.createElement('p');warning.id='auto-match-status';warning.className='notice';warning.setAttribute('role','status');warning.textContent=skipped.message;checked.after(warning);}
+    }
+    if(entries.some(function(h){return h.kind==='result'&&h.auto;})){
+      var autoLabel=document.createElement('p');autoLabel.className='hint';autoLabel.textContent='Handover 결과 자동 연결 · 병원명·방문일 일치';checked.after(autoLabel);
+    }
     $('detail').setAttribute('aria-busy',String(detailLoading));
     if(d.preview){$('detail').querySelector('.detail-section h3 .muted').textContent='확인 중';$('detail').querySelector('.timeline').textContent='댓글과 처리 결과는 상세 조회 후 표시됩니다.';}
     $('detail').querySelectorAll('[data-action="edit"],[data-action="import"],[data-action="complete"],[data-comment],[data-result],#comment-form button[type="submit"]').forEach(function(b){b.disabled=detailLoading||!!detailError;});
