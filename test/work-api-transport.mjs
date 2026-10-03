@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const calls=[];let configure,broken=false;
+const root={crypto:{randomUUID:()=> 'test-op'},BazAuth:{token:()=> 'test-token',config:()=>new Promise(r=>configure=r)}};
+const context={window:root,AbortController,URLSearchParams,setTimeout,clearTimeout,fetch:async(url,opts)=>{calls.push({url,opts});if(broken)throw new Error('offline');return new Response(JSON.stringify({success:true}));}};
+vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-api.js',import.meta.url),'utf8'),context);
+await root.BazWorkAPI.get('work_detail',{id:'work'});
+assert.ok(calls[0].url.startsWith('https://script.google.com/'),'first call does not wait for config');
+configure({ok:true,workApi:true});await Promise.resolve();
+await root.BazWorkAPI.get('work_detail',{id:'work'});
+assert.equal(calls[1].url,'https://yuyoung.yuyoung-ai.deno.net');assert.equal(calls[1].opts.method,'POST');assert.equal(JSON.parse(calls[1].opts.body).token,'test-token');
+broken=true;await assert.rejects(root.BazWorkAPI.post('work_save',{operationId:'test-op'}),e=>e.unknown===true);assert.equal(calls.length,3,'ambiguous write never falls back to GAS');
+assert.equal(JSON.parse(calls[2].opts.body).operationId,'test-op');
+console.log('work-api-transport: nonblocking feature discovery, Deno POST reads, original operation identity and no ambiguous write fallback passed.');

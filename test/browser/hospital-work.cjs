@@ -160,7 +160,21 @@ let browser;
  await page.locator('#sync').click();await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
  assert.ok((await page.locator('#auto-match-status').textContent()).includes('직접 선택'));assert.equal(await page.locator('#detail > .badge').textContent(),'방문예정');assert.equal(await page.locator('[data-action=import]').isDisabled(),false);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'automatic-review notice fits mobile');
+ // An enabled Deno deployment uses the same UI contract and POST reads. Explicit sync bypasses references.
+ const denoPage=await browser.newPage({viewport:{width:390,height:844}}),denoCalls=[];
+ denoPage.on('pageerror',e=>errors.push(e.message));
+ await denoPage.route('**/auth.js',route=>route.fulfill({contentType:'text/javascript',body:"window.BazAuth={name:()=> 'CS 샘플',token:()=> 'fixture-token',cachedLevel:()=>1,config:()=>Promise.resolve({ok:true,workApi:true})};"}));
+ await denoPage.route('https://yuyoung.yuyoung-ai.deno.net/**',async route=>{
+   assert.equal(route.request().method(),'POST');const p=route.request().postDataJSON();denoCalls.push(p);
+   await route.fulfill({contentType:'application/json',body:JSON.stringify(response(p.action,p))});
+ });
+ await denoPage.goto('http://127.0.0.1:'+server.address().port+'/hospital-work.html');await denoPage.waitForFunction(()=>!document.querySelector('#new').disabled);
+ await denoPage.locator('.mobile-cards [data-open="sample-2"]').click();await denoPage.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
+ assert.ok(denoCalls.some(p=>p.action==='work_detail'&&p.token==='fixture-token'));
+ await denoPage.locator('#sync').click();await denoPage.waitForFunction(()=>!document.querySelector('#sync').disabled);
+ assert.ok(denoCalls.some(p=>p.action==='work_bootstrap'&&p.force==='1'));
+ await denoPage.close();
  assert.deepEqual(errors,[]);
- console.log('hospital-work browser: immediate mobile detail, failure/retry, late response isolation, draft retention, manual workflow, automatic completion display/metrics, ambiguous-result notice/manual fallback, dark/PC/mobile layouts passed.');
+ console.log('hospital-work browser: immediate mobile detail, failure/retry, late response isolation, draft retention, manual workflow, automatic completion display/metrics, ambiguous-result notice/manual fallback, Deno POST integration/forced sync, dark/PC/mobile layouts passed.');
  await browser.close();server.close();
 })().catch(async e=>{console.error(e);if(browser)await browser.close();server.close();process.exitCode=1;});

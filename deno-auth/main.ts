@@ -5,7 +5,7 @@
  *   보안 재설계로 각 데이터 GAS 가 토큰을 '로컬 HMAC 검증'하게 되면서,
  *   auth 를 깨워 두던 검증 왕복 트래픽이 사라졌다. 그 결과 auth GAS 는
  *   로그인 때만 호출돼 자주 잠들고, 첫 로그인이 콜드스타트(30~50초)가 됐다.
- *   → 로그인 발급기만 '콜드스타트가 없는' Deno Deploy 로 옮긴다. 토큰은 기존
+ *   → 로그인 발급기를 Deno Deploy로 옮긴다. 실제 초기 응답 시간은 배포 환경에서 측정한다. 토큰은 기존
  *     baz_token_lib.gs 와 100% 동일한 HMAC-SHA256 서명 형식이라 데이터 GAS·프런트 무수정.
  *
  * 토큰 형식(기존과 동일):
@@ -48,7 +48,7 @@
  *   KV 가 없으면 device_* 는 kv_unavailable 을 반환할 뿐, 일반 로그인은 정상 동작한다.
  ************************************************************/
 
-const VER = "deno-1.2.0-security";
+const VER = "deno-1.3.0-work";
 
 const enc = new TextEncoder();
 
@@ -504,7 +504,97 @@ function withCors(res: Response, req: Request): Response {
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type");
   headers.set("Access-Control-Max-Age", "86400");
+  headers.set("Access-Control-Expose-Headers", "Server-Timing, X-Baz-Work-Mode");
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/* 병원 업무 중계: DB는 Sheets 유지, ACL과 업무 변경은 GAS가 최종 검증한다.
+ * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
+ * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
+const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_detail", "work_handover_candidates", "work_handover_detail"]);
+const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete"]);
+function workUpstream(): string {
+  try {
+    const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
+    return u.protocol === "https:" && u.hostname === "script.google.com" && !u.port &&
+        !u.username && !u.password && !u.search && !u.hash && /^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(u.pathname)
+      ? u.href : "";
+  } catch { return ""; }
+}
+const WORK_GAS_URL = workUpstream();
+const WORK_API_ENABLED = /^(1|true|on|yes)$/i.test(Deno.env.get("WORK_API_ENABLED") || "false") && !!WORK_GAS_URL;
+const workTtlValue = Number(Deno.env.get("WORK_REFERENCE_TTL_SEC") || "120");
+const WORK_REFERENCE_TTL_MS = (Number.isFinite(workTtlValue) ? Math.min(300, Math.max(0, workTtlValue)) : 120) * 1000;
+type WorkBody = Record<string, unknown> & { success: boolean };
+type WorkOutput = { body: WorkBody; status: number; upstreamMs: number };
+let workReferences: { hospitals: unknown[]; engineers: unknown[]; until: number } | null = null;
+let workGeneration = 0, workActive = 0;
+const workInFlight = new Map<string, Promise<WorkOutput>>();
+function workReply(out: WorkOutput, mode: string, started: number): Response {
+  const totalMs = Math.round(performance.now() - started);
+  const res = json(out.body, out.status);
+  res.headers.set("Server-Timing", `work;dur=${totalMs}, gas;dur=${out.upstreamMs}`);
+  res.headers.set("X-Baz-Work-Mode", mode);
+  return res;
+}
+async function workForward(action: string, p: Record<string, unknown>): Promise<Response> {
+  const started = performance.now();
+  const fail = (error: string, status: number) => workReply({ body: { success: false, error }, status, upstreamMs: 0 }, "error", started);
+  if (!WORK_READS.has(action) && !WORK_WRITES.has(action)) return fail("지원하지 않는 업무 API입니다.", 400);
+  if (!WORK_API_ENABLED) return fail("업무 중계가 비활성 상태입니다. 다시 접속해 주세요.", 503);
+  const verified = await verifyToken(String(p.token || ""));
+  if (!verified.ok) return fail("로그인이 만료되었습니다.", 401);
+  const write = WORK_WRITES.has(action), force = String(p.force || "") === "1";
+  // 저장/강제 동기화 이후 조회를 이전 요청과 합치지 않는다.
+  if (write || force) { workGeneration++; workReferences = null; }
+  const generation = workGeneration;
+  const refs = !write && !force && action === "work_bootstrap" && workReferences && workReferences.until > Date.now()
+    ? workReferences : null;
+  const payload: Record<string, unknown> = { ...p, action };
+  delete payload.__ua;
+  delete payload.omitReferences; // 중계가 가진 기준 정보가 있을 때만 생략 허용
+  if (refs) payload.omitReferences = "1";
+  const canonical = Object.keys(payload).sort().map((k) => [k, payload[k]]);
+  // 서명 토큰과 전체 조회 조건을 해시하므로 다른 사용자/세션 응답을 공유하지 않는다.
+  const key = write ? "" : generation + ":" + b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(JSON.stringify(canonical)))));
+  let task = key ? workInFlight.get(key) : undefined;
+  const mode = task ? "coalesced" : refs ? "references-hit" : "live";
+  if (!task) {
+    if (workActive >= 64) return fail("요청이 많습니다. 잠시 후 다시 시도해 주세요.", 503);
+    workActive++;
+    task = (async (): Promise<WorkOutput> => {
+      const upstreamStarted = performance.now(), ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 28000);
+      try {
+        const response = await fetch(WORK_GAS_URL, {
+          method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload), signal: ctl.signal, cache: "no-store", redirect: "follow",
+        });
+        if (!response.ok) throw new Error("upstream_status");
+        const body = await response.json() as WorkBody;
+        if (!body || typeof body.success !== "boolean") throw new Error("upstream_format");
+        if (body.success && action === "work_bootstrap") {
+          if (refs && body.referencesIncluded === false) {
+            body.hospitals = refs.hospitals; body.engineers = refs.engineers;
+          } else if (body.referencesIncluded === true && Array.isArray(body.hospitals) && Array.isArray(body.engineers) && generation === workGeneration) {
+            workReferences = { hospitals: body.hospitals, engineers: body.engineers, until: Date.now() + WORK_REFERENCE_TTL_MS };
+          }
+        }
+        return { body, status: 200, upstreamMs: Math.round(performance.now() - upstreamStarted) };
+      } catch (error) {
+        const timeout = error instanceof Error && error.name === "AbortError";
+        // 실패 본문/토큰/병원명은 로그에 남기지 않는다. 저장은 자동 재전송하지 않는다.
+        return { body: { success: false, error: timeout ? "응답 대기 시간이 지났습니다." : "업무 서버 연결을 확인해 주세요.", retrySameOperation: write }, status: timeout ? 504 : 502, upstreamMs: Math.round(performance.now() - upstreamStarted) };
+      } finally { clearTimeout(timer); workActive--; }
+    })();
+    if (key) workInFlight.set(key, task);
+    const ownedTask = task;
+    void task.then(() => { if (key && workInFlight.get(key) === ownedTask) workInFlight.delete(key); });
+  }
+  const out = await task;
+  if (write) { workGeneration++; workReferences = null; }
+  console.info(JSON.stringify({ event: "work_request", action, mode, success: out.body.success, status: out.status, totalMs: Math.round(performance.now() - started), gasMs: out.upstreamMs }));
+  return workReply(out, mode, started);
 }
 
 async function handleAction(
@@ -512,12 +602,14 @@ async function handleAction(
   p: Record<string, unknown>,
   clientIp: string,
 ): Promise<Response> {
+  if (action.startsWith("work_")) return workForward(action, p);
   if (action === "config") {
     return json({
       ok: true,
       googleAuth: GOOGLE_AUTH_ENABLED,
       googleClientId: GOOGLE_AUTH_ENABLED ? GOOGLE_CLIENT_ID : "",
       deviceAuth: DEVICE_AUTH_ENABLED,
+      workApi: WORK_API_ENABLED,
     });
   }
 
@@ -776,6 +868,7 @@ Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (req.method === "GET") {
       const u = new URL(req.url);
       const action = u.searchParams.get("action") || "ping";
+      if (action.startsWith("work_")) return withCors(json({ success: false, error: "업무 API는 POST로 호출하세요." }, 405), req);
       const p: Record<string, unknown> = {};
       u.searchParams.forEach((v, k) => (p[k] = v));
       p.__ua = req.headers.get("user-agent") || "";

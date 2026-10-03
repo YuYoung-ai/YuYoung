@@ -539,6 +539,11 @@ function doPost(e){
     var actName = (payload && payload.action) || '';
     /* 병원 업무 전용 경로: 기존 기록·사진·전역 락 경로로 흘려보내지 않는다. */
     if(/^work_/.test(actName)){
+      // Deno 중계는 토큰을 URL 대신 POST 본문으로 보낸다. 조회도 기존 ACL·잠금 경로를 쓴다.
+      if(/^(work_bootstrap|work_sync|work_detail|work_handover_candidates|work_handover_detail)$/.test(actName)){
+        return json_(typeof hospitalWorkGet_==='function' ? hospitalWorkGet_(payload)
+          : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
+      }
       return json_(typeof hospitalWorkPost_==='function' ? hospitalWorkPost_(payload)
         : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
     }

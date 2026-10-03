@@ -3,16 +3,16 @@ import vm from 'node:vm';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8');
-let failSheet='',lockHeld=false;
+let failSheet='',lockHeld=false,readRanges=[],finderReading=false;
 class Range{
   constructor(sheet,row,col,rows=1,cols=1){Object.assign(this,{sheet,row,col,rows,cols});}
   getDisplayValues(){return this.getValues().map(r=>r.map(x=>String(x??'')));}
-  getValues(){return Array.from({length:this.rows},(_,r)=>Array.from({length:this.cols},(_,c)=>this.sheet.data[this.row+r-1]?.[this.col+c-1]??''));}
+  getValues(){if(!finderReading)readRanges.push({sheet:this.sheet.name,row:this.row,col:this.col,rows:this.rows,cols:this.cols});return Array.from({length:this.rows},(_,r)=>Array.from({length:this.cols},(_,c)=>this.sheet.data[this.row+r-1]?.[this.col+c-1]??''));}
   getValue(){return this.getValues()[0][0];}
   setValues(values){if(this.sheet.name===failSheet){failSheet='';throw new Error('simulated interrupted projection');}values.forEach((v,r)=>{this.sheet.data[this.row+r-1]??=[];v.forEach((x,c)=>{this.sheet.data[this.row+r-1][this.col+c-1]=x;});});return this;}
   setValue(v){return this.setValues([[v]]);}
   getRow(){return this.row;}
-  createTextFinder(text){let exact=false;const matches=()=>{const out=[];this.getDisplayValues().forEach((r,i)=>r.forEach((v,c)=>{if(exact?v===text:v.includes(text))out.push(new Range(this.sheet,this.row+i,this.col+c));}));return out;};return {matchEntireCell(v){exact=v;return this;},findNext(){return matches()[0]||null;},findAll(){return matches();}};}
+  createTextFinder(text){let exact=false;const matches=()=>{const out=[];finderReading=true;let values;try{values=this.getDisplayValues();}finally{finderReading=false;}values.forEach((r,i)=>r.forEach((v,c)=>{if(exact?v===text:v.includes(text))out.push(new Range(this.sheet,this.row+i,this.col+c));}));return out;};return {matchEntireCell(v){exact=v;return this;},findNext(){return matches()[0]||null;},findAll(){return matches();}};}
 }
 class Sheet{
   constructor(name){this.name=name;this.data=[];}
@@ -176,5 +176,25 @@ assert.equal(sandbox.hwRequest_(immediateTarget.id).status,'완료','Handover sa
 const manualCandidate=get({action:'work_handover_candidates',requestId:ambiguous.id}).data.find(s=>s.date==='2026-10-12');
 const manualFallback=post({action:'work_result_save',requestId:ambiguous.id,baseRevision:ambiguous.revision,recordId:manualCandidate.recordId,sourceVersion:manualCandidate.version,complete:true});
 assert.equal(manualFallback.success,true,'ambiguous matches still support manual selection/completion');
+// Reference reuse still checks live ACL, runs reconciliation, and supports forced refresh.
+const originalDb=sandbox.getHospDBRich_,originalMaster=sandbox.getMaster_;let dbParams=[],masterParams=[];
+sandbox.getHospDBRich_=p=>{dbParams.push(p);return originalDb(p);};sandbox.getMaster_=p=>{masterParams.push(p);return originalMaster(p);};
+const withoutRefs=get({action:'work_bootstrap',omitReferences:'1'});assert.equal(withoutRefs.success,true);assert.equal(withoutRefs.referencesIncluded,false);assert.ok(!withoutRefs.hospitals);assert.equal(dbParams.length,0);assert.equal(masterParams.length,0);
+const normalRefs=get({action:'work_bootstrap'});assert.equal(normalRefs.referencesIncluded,true);assert.equal(dbParams.at(-1).force,'0');
+const forceRefs=get({action:'work_bootstrap',omitReferences:'1',force:'1'});assert.equal(forceRefs.referencesIncluded,true);assert.equal(dbParams.at(-1).force,'1');assert.equal(masterParams.at(-1).force,'1');
+const originalMenu=sandbox.menuGet_;sandbox.menuGet_=()=>({menu:[{id:'hospitalwork',level:3}]});
+assert.equal(get({action:'work_bootstrap',omitReferences:'1'}).success,false,'cached references never bypass live menu ACL');sandbox.menuGet_=originalMenu;
+const postRead=JSON.parse(sandbox.doPost({postData:{contents:JSON.stringify({action:'work_detail',token:'alice',id:immediateTarget.id})}}).text);assert.equal(postRead.success,true);assert.equal(postRead.request.status,'완료');
+// Thousands of unrelated journal/history rows must not be transferred for a single detail.
+for(let i=0;i<1000;i++){
+  sheets.get('업무처리이력').data.push(['unrelated-h'+i,'unrelated-job'+i,JSON.stringify({id:'unrelated-h'+i,requestId:'unrelated-job'+i,kind:'comment',body:'irrelevant'})]);
+  sheets.get('업무변경로그').data.push(['unrelated-op'+i,'actor','hash','committed',JSON.stringify({kind:'comment_add',request:{id:'unrelated-job'+i}}),'{}','time']);
+}
+readRanges=[];const indexed=get({action:'work_detail',id:immediateTarget.id});assert.equal(indexed.success,true);assert.equal(indexed.history.length,1);assert.equal(indexed.logs.length,postRead.logs.length);
+const detailCells=readRanges.filter(x=>['업무처리이력','업무변경로그'].includes(x.sheet)).reduce((n,x)=>n+x.rows*x.cols,0);
+assert.ok(detailCells<30,'detail transfers matched history/journal cells: '+detailCells);
+readRanges=[];const activeDetail=get({action:'work_detail',id:incomplete.id});assert.equal(activeDetail.autoMatch.skipped[0].reason,'result');
+assert.ok(!readRanges.some(x=>x.sheet==='업무처리이력'&&x.rows>100),'active detail auto linking also limits history transfer');
+console.log('hospital-work performance fixture: 1,000 unrelated history/log rows, detail history/log transferred cells='+detailCells+' (TextFinder search stays in Sheets).');
 assert.equal(lockHeld,false);
 console.log('hospital-work: manual workflow plus visit-date auto completion, exact hospital/AS match, duplicates, SN, missing result/date, hold/cancel, stable IDs, memo preservation, idempotent sync, actual Handover save and auxiliary failure recovery passed.');

@@ -62,10 +62,10 @@
     function rowButton(r){return '<button class="row-open" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+'</button><div class="summary">'+esc(r.symptom)+'</div>';}
     $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><td>'+rowButton(r)+'</td><td>'+badge(r.status)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+esc(time(r.visitAt))+'</td><td>'+esc(r.engineer||'미배정')+'</td><td>'+esc(r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>';}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(r.hospitalName)+'</span>'+badge(r.status)+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';
   }
-  async function sync(){
+  async function sync(force){
     if(syncing||busy)return;syncing=true;$('sync').disabled=true;$('sync').textContent='동기화 중…';notify('');
     try{
-      var data=await api.get('work_bootstrap');if(!data.success)throw new Error(data.error);
+      var data=await api.get('work_bootstrap',force===true?{force:'1'}:{});if(!data.success)throw new Error(data.error);
       // 늦게 도착한 목록으로 이 PC에서 저장한 더 높은 버전을 덮지 않는다.
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
@@ -279,7 +279,7 @@
   try{document.documentElement.dataset.theme=localStorage.getItem('baz_work_theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');}catch(e){}
   $('theme').onclick=function(){var value=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=value;try{localStorage.setItem('baz_work_theme',value);}catch(e){}};
   statuses.forEach(function(s){$('status').add(new Option(s,s));$('status-filter').add(new Option(s,s));});
-  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=sync;
+  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=function(){sync(true);};
   $('search').oninput=function(){state.page=1;renderList();};$('status-filter').onchange=function(){state.page=1;renderList();};$('sort').onchange=function(){state.page=1;renderList();};
   $('prev').onclick=function(){state.page--;renderList();};$('next').onclick=function(){state.page++;renderList();};
   document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){state.filter=b.dataset.filter;state.page=1;renderList();};});

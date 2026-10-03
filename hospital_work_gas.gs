@@ -7,12 +7,17 @@ var HW = {
   REQUESTS:'업무요청', HISTORY:'업무처리이력', LOG:'업무변경로그', HOSPITALS:'업무병원',
   STATUSES:['접수','방문예정','처리중','결과확인','완료','보류','취소']
 };
+// 실행별 시트 핸들만 재사용한다. 행 데이터와 권한은 매 요청 확인한다.
+var _hwSS=null, _hwSheets={};
+function hwResetContext_(){ _hwSS=null; _hwSheets={}; }
 function hwSS_(){
+  if(_hwSS) return _hwSS;
   var id=PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_SS_ID');
   if(!id) throw new Error('업무관리 초기화가 필요합니다. GAS 편집기에서 setupHospitalWork를 실행하세요.');
-  return SpreadsheetApp.openById(id);
+  return (_hwSS=SpreadsheetApp.openById(id));
 }
 function setupHospitalWork(){
+  hwResetContext_();
   var lock=LockService.getScriptLock(); lock.waitLock(10000);
   try{
     var props=PropertiesService.getScriptProperties(), id=props.getProperty('HOSPITAL_WORK_SS_ID');
@@ -32,7 +37,18 @@ function setupHospitalWork(){
     return '업무 전용 탭 준비 완료 · '+ss.getId();
   }finally{ lock.releaseLock(); }
 }
-function hwSheet_(name){ var sh=hwSS_().getSheetByName(name); if(!sh) throw new Error(name+' 탭 없음: setupHospitalWork 실행 필요'); return sh; }
+function hwSheet_(name){ var sh=_hwSheets[name]||hwSS_().getSheetByName(name); if(!sh) throw new Error(name+' 탭 없음: setupHospitalWork 실행 필요'); return (_hwSheets[name]=sh); }
+// 일치한 행만 연속 구간으로 묶어 읽는다.
+function hwMatchedRows_(sh,col,text,exact,start,width,first,last){
+  first=first||2; last=last||sh.getLastRow(); if(last<first) return [];
+  var cells=sh.getRange(first,col,last-first+1,1).createTextFinder(String(text)).matchEntireCell(!!exact).findAll();
+  var rows=cells.map(function(c){return c.getRow();}).sort(function(a,b){return a-b;}),out=[];
+  for(var i=0;i<rows.length;){
+    var begin=rows[i],end=begin;i++;while(i<rows.length&&rows[i]===end+1)end=rows[i++];
+    sh.getRange(begin,start,end-begin+1,width).getDisplayValues().forEach(function(v,j){out.push({row:begin+j,values:v});});
+  }
+  return out;
+}
 function hwRows_(name,width){ var sh=hwSheet_(name), n=sh.getLastRow()-1; return n>0?sh.getRange(2,1,n,width).getDisplayValues():[]; }
 function hwFind_(name,id,col){
   var sh=hwSheet_(name), n=sh.getLastRow()-1;
@@ -171,9 +187,9 @@ function hwSources_(hosp){
   // 직접 최신 원본 읽기: recent의 부분 일치·불완전한 slim 응답·오래된 캐시를 사용하지 않는다.
   var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh);
   if(!hdr) throw new Error('Handover 원본 헤더를 찾지 못했습니다.');
-  var n=lastDataRow_(sh,hdr)-hdr.row;
-  var rows=n>0?sh.getRange(hdr.row+1,1,n,sh.getLastColumn()).getDisplayValues():[];
-  return rows.map(function(v,i){var o={_row:hdr.row+1+i};hdr.headers.forEach(function(h,c){if(h)o[h]=v[c];});return o;})
+  var col=hdr.headers.indexOf('병원명')+1;if(!col) throw new Error('Handover 병원명 열 없음');
+  var rows=hwMatchedRows_(sh,col,String(hosp).trim(),false,1,sh.getLastColumn(),hdr.row+1,lastDataRow_(sh,hdr));
+  return rows.map(function(hit){var o={_row:hit.row};hdr.headers.forEach(function(h,c){if(h)o[h]=hit.values[c];});return o;})
     .filter(function(o){return o['처리일']&&String(o['병원명']||'').trim()===String(hosp).trim();}).map(function(o){return {raw:o,source:hwSource_(o)};});
 }
 function hwGetSource_(r,p){
@@ -244,7 +260,7 @@ function hwAutoReconcileLocked_(target){
   });
   var summary={completed:[],skipped:[]};if(!eligible.length)return summary;
   eligible.forEach(function(r){pairs[hwAutoPair_(r.hospitalName,hwAutoDate_(r))]=true;});
-  var sources=hwAutoSources_(pairs),histories=hwRows_(HW.HISTORY,3).map(function(x){return JSON.parse(x[2]);});
+  var sources=hwAutoSources_(pairs),histories=hwAutoHistories_(eligible,sources);
   var who={name:'Handover 자동 연결',level:0};
   eligible.forEach(function(r){
     var date=hwAutoDate_(r),key=hwAutoPair_(r.hospitalName,date),matches=sources.filter(function(x){return hwAutoPair_(x.source.hospitalName,x.source.date)===key;});
@@ -280,8 +296,17 @@ function hwAutoReconcileLocked_(target){
   });
   return summary;
 }
+function hwAutoHistories_(eligible,sources){
+  // 상세 1건에서는 해당 업무/원본을 참조하는 이력만 읽는다. 큰 동기화는 한 번에 읽는다.
+  if(eligible.length+sources.length>8) return hwRows_(HW.HISTORY,3).map(function(x){return JSON.parse(x[2]);});
+  var sh=hwSheet_(HW.HISTORY),rows={};
+  eligible.forEach(function(r){hwMatchedRows_(sh,2,r.id,true,3,1).forEach(function(x){rows[x.row]=x.values[0];});});
+  sources.forEach(function(s){hwMatchedRows_(sh,3,JSON.stringify(s.source.recordId),false,3,1).forEach(function(x){rows[x.row]=x.values[0];});});
+  return Object.keys(rows).map(function(row){return JSON.parse(rows[row]);});
+}
 // doPost가 원본 행/사진 저장을 확정한 뒤, 기존 ScriptLock 안에서 호출한다.
 function hospitalWorkHandoverSaved_(hospitalName,date){
+  hwResetContext_();
   if(!PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_SS_ID'))return {enabled:false};
   hwRecover_();var summary=hwAutoReconcileLocked_({hospitalName:hospitalName,date:_issueDateNorm_(date)});
   return {enabled:true,completed:summary.completed.length,needsReview:summary.skipped.length};
@@ -299,12 +324,19 @@ function hwComplete_(p,who){
 }
 function hwRead_(fn){ return hwLock_(function(){hwRecover_();return fn();}); }
 function hospitalWorkGet_(p){
+  hwResetContext_();
   try{
     var who=hwAccess_(p); hwSS_();
     if(p.action==='work_bootstrap'){
-      var db=getHospDBRich_({force:'1'});if(!db.success) throw new Error(db.error);
-      var master=getMaster_({}), data=hwReadWithAuto_(function(auto){return {requests:hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}),autoMatch:auto};});
-      return {success:true,requests:data.requests,autoMatch:data.autoMatch,hospitals:db.data.map(function(h){h.key=hwKey_(h);return h;}),engineers:master.fse||[],who:who,updatedAt:new Date().toISOString()};
+      var data=hwReadWithAuto_(function(auto){return {requests:hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}),autoMatch:auto};});
+      var out={success:true,requests:data.requests,autoMatch:data.autoMatch,who:who,updatedAt:new Date().toISOString(),referencesIncluded:false};
+      if(String(p.omitReferences||'')!=='1'||String(p.force||'')==='1'){
+        var db=getHospDBRich_({force:String(p.force||'')==='1'?'1':'0'});if(!db.success) throw new Error(db.error);
+        var master=getMaster_({force:String(p.force||'')==='1'?'1':'0'});
+        if(master.success===false) throw new Error(master.error||'담당자 목록 조회 실패');
+        out.hospitals=db.data.map(function(h){h.key=hwKey_(h);return h;});out.engineers=master.fse||[];out.referencesIncluded=true;
+      }
+      return out;
     }
     if(p.action==='work_sync') return hwReadWithAuto_(function(auto){
       var list=hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}), rev=hwHash_(list);
@@ -312,9 +344,9 @@ function hospitalWorkGet_(p){
     });
     if(p.action==='work_detail') return hwReadWithAuto_(function(auto){
       var r=hwRequest_(p.id);if(!r) throw new Error('요청 없음');
-      var history=hwRows_(HW.HISTORY,3).filter(function(x){return x[1]===r.id;}).map(function(x){return JSON.parse(x[2]);});
+      var history=hwMatchedRows_(hwSheet_(HW.HISTORY),2,r.id,true,3,1).map(function(x){return JSON.parse(x.values[0]);});
       var requests=hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}).filter(function(x){return x.hospitalId===r.hospitalId;});
-      var logs=hwRows_(HW.LOG,7).filter(function(x){return x[3]==='committed';}).map(function(x){return JSON.parse(x[4]);}).filter(function(x){return x.request&&x.request.id===r.id;}).map(function(x){
+      var logs=hwMatchedRows_(hwSheet_(HW.LOG),5,JSON.stringify(r.id),false,4,2).filter(function(x){return x.values[0]==='committed';}).map(function(x){return JSON.parse(x.values[1]);}).filter(function(x){return x.request&&x.request.id===r.id;}).map(function(x){
         return {kind:x.kind,at:x.request.updatedAt,actor:x.request.updatedBy,before:x.before,requestBefore:x.requestBefore,after:x.history||x.request};
       });
       return {success:true,request:r,history:history,requests:requests,logs:logs,autoMatch:auto,updatedAt:new Date().toISOString()};
@@ -334,6 +366,7 @@ function hospitalWorkGet_(p){
   }catch(e){return {success:false,error:String(e.message||e)};}
 }
 function hospitalWorkPost_(p){
+  hwResetContext_();
   try{
     var who=hwAccess_(p);
     if(p.action==='work_save')return hwSave_(p,who);
