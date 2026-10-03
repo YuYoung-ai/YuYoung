@@ -43,7 +43,6 @@ html[data-theme=dark] #detail{--detail-accent:#c5b5ff;--detail-soft:#362e53}
 #detail progress::-webkit-progress-value{background:var(--detail-accent);border-radius:10px}
 #detail progress::-moz-progress-bar{background:var(--detail-accent)}
 #detail .completion-progress strong{color:var(--detail-accent);font-size:19px;font-weight:500}
-#detail .completion-progress .hint{margin-top:8px}
 #detail .detail-buttons{margin:15px 0 12px;gap:7px}
 #detail .request-extra{color:var(--muted);font-size:12px}
 #detail summary{cursor:pointer}
@@ -62,7 +61,6 @@ html[data-theme=dark] #detail{--detail-accent:#c5b5ff;--detail-soft:#362e53}
 #detail .detail-result dt.result-wide{margin-top:8px}
 #detail .detail-result dd.result-wide{padding-left:12px;border-left:2px solid var(--detail-soft)}
 #detail .detail-result .result-outcome{font-weight:700;color:var(--detail-accent)}
-#detail .detail-result button{font-size:12px;margin-top:11px}
 #detail .result-memo{background:var(--bg);padding:12px 14px;border-radius:7px;margin:15px 0;font-size:13px}
 #detail .result-empty{line-height:1.8;margin-bottom:17px}
 #detail .result-empty strong{display:block;font-size:14px;font-weight:500}
@@ -77,5 +75,17 @@ html[data-theme=dark] #detail{--detail-accent:#c5b5ff;--detail-soft:#362e53}
 #detail .comment-actions .hint:empty{display:none}
 #detail .comment-actions button[type=submit]{margin-left:auto}
 #detail .detail-records{font-size:12px}
+#detail .detail-tools>summary{font-size:14px;font-weight:650;color:var(--detail-accent);min-height:24px}
+#detail .detail-tools-body{padding-top:18px}
+#detail .detail-tools-body>p{margin-bottom:6px}
+#detail .result-link-tools{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+#detail .result-link-tools h4{margin:0 0 7px;font-size:14px}
+#detail .result-link{padding:14px 0;border-bottom:1px solid var(--line);font-size:12px}
+#detail .result-link>strong{margin-right:7px}
+#detail .result-link .entry-meta{margin-top:7px}
+#detail .result-link button{font-size:12px;margin-top:10px}
+#detail .result-link-tools .result-actions{margin-top:16px}
+#detail .detail-tools .detail-records{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+#detail summary:focus-visible{outline:3px solid var(--detail-accent);outline-offset:3px;border-radius:3px}
 @media(max-width:1100px){#detail{flex-basis:auto}}
 @media(max-width:700px){#detail .detail-summary,#detail .detail-content,#detail .detail-section{padding:22px 18px}#detail .facts{grid-template-columns:minmax(0,1fr);gap:20px}#detail .detail-heading h2{font-size:24px}#detail .facts dd{font-size:15px}#detail .detail-result .result-fields,#detail .receipt-section .entry-body{font-size:15px}#detail .comment-form textarea{font-size:16px}}
