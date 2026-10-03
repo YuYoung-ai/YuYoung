@@ -5,6 +5,8 @@ const root=path.resolve(__dirname,'../..'),output=process.env.HOSPITAL_WORK_SCRE
 const hospitals=[{name:'샘플피부과 강남점',sn:'TEST-001',region:'서울',sales:'영업 A',ncare:'Basic',key:'gangnam'},
  {name:'샘플의원 분당점',sn:'TEST-002',region:'경기',sales:'영업 B',ncare:'Standard',key:'bundang'}];
 let requests=[],history=[],ops=new Map(),abortOnce=false,mutationCount=0,calls=[];
+let holdDetails=false,heldDetails=[],detailWaiters=[];
+function nextDetail(){return heldDetails.length?Promise.resolve(heldDetails.shift()):new Promise(resolve=>detailWaiters.push(resolve));}
 const stamp=()=>new Date().toISOString();
 function request(form,id='sample-'+(requests.length+1)){const h=hospitals.find(x=>x.key===form.hospitalKey);return {id,hospitalId:h.key,hospitalKey:h.key,hospitalName:h.name,sn:h.sn,region:h.region,...form,revision:1,createdAt:stamp(),updatedAt:stamp(),latest:''};}
 requests.push(request({hospitalKey:'gangnam',symptom:'사용 중 간헐적인 누수 발생',cs:'CS 샘플',engineer:'엔지니어 A',sales:'영업 A',status:'방문예정',registeredAt:'2026-10-02T09:00',visitAt:'2026-10-05T14:00',deadline:'2026-10-06T18:00'}));
@@ -35,18 +37,56 @@ const server=http.createServer((req,res)=>{const filename=path.resolve(root,'.'+
 let browser;
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
- browser=await chromium.launch({headless:true,channel:process.env.BROWSER_CHANNEL||'msedge'});
+ browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE,args:['--no-sandbox','--no-zygote','--single-process','--in-process-gpu']}:{channel:process.env.BROWSER_CHANNEL||'msedge'})});
  const page=await browser.newPage({viewport:{width:1440,height:1060}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/auth.js',route=>route.fulfill({contentType:'text/javascript',body:"window.BazAuth={name:()=> 'CS 샘플',token:()=> 'fixture-token',cachedLevel:()=>1};"}));
  await page.route('https://script.google.com/**',async route=>{
    const req=route.request(),p=req.method()==='POST'?JSON.parse(req.postData()):Object.fromEntries(new URL(req.url()).searchParams);
-   calls.push(p.action);const data=response(p.action,p);
+   calls.push(p.action);let data=JSON.parse(JSON.stringify(response(p.action,p)));
+   if(holdDetails&&p.action==='work_detail'){
+     const override=await new Promise(resolve=>{const gate={id:p.id,finish:resolve};const waiter=detailWaiters.shift();if(waiter)waiter(gate);else heldDetails.push(gate);});
+     if(override)data=override;
+   }
    if(abortOnce&&req.method()==='POST'){abortOnce=false;await route.abort('failed');return;}
    await route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*'},body:JSON.stringify(data)});
  });
  const url=`http://127.0.0.1:${server.address().port}/hospital-work.html`;
  await page.goto(url);await page.locator('#new').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#new').disabled);
+ // Hold the server response: the mobile detail must open before the network completes.
+ await page.setViewportSize({width:390,height:844});holdDetails=true;
+ await page.locator('.mobile-cards [data-open="sample-1"]').click();const firstDetail=await nextDetail();
+ assert.equal(firstDetail.id,'sample-1');
+ assert.equal(await page.locator('#detail').isVisible(),true,'detail visible before response');
+ assert.equal(await page.locator('.list-panel').isVisible(),false,'mobile list yields to detail immediately');
+ assert.ok((await page.locator('#detail .facts').textContent()).includes(requests[0].symptom));
+ assert.equal(await page.locator('#detail .detail-section h3 .muted').textContent(),'확인 중','unloaded history is not zero');
+ assert.equal(await page.locator('[data-action=edit]').isDisabled(),true);
+ assert.equal(await page.locator('#comment-form button[type=submit]').isDisabled(),true);
+ assert.equal(await page.locator('#detail').getAttribute('aria-busy'),'true');
+ const detailReads=calls.filter(x=>x==='work_detail').length;
+ await page.locator('.mobile-cards [data-open="sample-1"]').evaluate(b=>{b.click();b.click();});
+ assert.equal(calls.filter(x=>x==='work_detail').length,detailReads,'double click shares in-flight read');
+ await page.locator('#comment-body').fill('상세 확인 중 작성한 초안');
+ firstDetail.finish();await page.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
+ assert.equal(await page.locator('#comment-body').inputValue(),'상세 확인 중 작성한 초안','response preserves typed draft');
+ assert.equal(await page.locator('#comment-body').evaluate(el=>document.activeElement===el),true,'response preserves input focus');
+ assert.equal(await page.locator('[data-action=edit]').isDisabled(),false);
+ // A failure keeps the visible detail and draft; retry uses a fresh server response.
+ await page.locator('[data-action=refresh-detail]').click();const failedDetail=await nextDetail();
+ assert.ok((await page.locator('#detail-status').textContent()).includes('이전 상세 표시'));
+ failedDetail.finish({success:false,error:'검증용 상세 조회 실패'});
+ await page.waitForFunction(()=>document.querySelector('#detail-status').textContent.includes('최신 상세 확인 실패'));
+ assert.equal(await page.locator('#detail').isVisible(),true);assert.equal(await page.locator('[data-action=edit]').isDisabled(),true);
+ assert.equal(await page.locator('#comment-body').inputValue(),'상세 확인 중 작성한 초안');
+ await page.locator('[data-action=refresh-detail]').click();const retryDetail=await nextDetail();retryDetail.finish();
+ await page.waitForFunction(()=>!document.querySelector('[data-action=edit]').disabled);
+ // Closing while loading must not reopen the panel on a late response.
+ await page.locator('[data-action=refresh-detail]').click();const closedDetail=await nextDetail();
+ await page.getByRole('button',{name:'상세 닫기'}).click();
+ closedDetail.finish();holdDetails=false;
+ await page.waitForLoadState('networkidle');assert.equal(await page.locator('#detail').isVisible(),false,'late response does not reopen closed detail');
+ await page.setViewportSize({width:1440,height:1060});
  await page.getByRole('button',{name:'샘플피부과 강남점',exact:true}).first().click();
  await page.getByRole('button',{name:'기본 정보 수정'}).click();
  await page.locator('#symptom').fill('고객센터 수정 증상');
@@ -58,6 +98,11 @@ let browser;
  await page.getByRole('button',{name:'댓글 수정',exact:true}).click();await page.locator('#comment-body').fill('수정한 댓글');
  await page.getByRole('button',{name:'상세 닫기'}).click();await page.getByRole('button',{name:'샘플피부과 강남점',exact:true}).first().click();
  assert.equal(await page.locator('#comment-body').inputValue(),'수정한 댓글');
+ holdDetails=true;await page.reload();await page.waitForFunction(()=>!document.querySelector('#new').disabled);
+ await page.getByRole('button',{name:'샘플피부과 강남점',exact:true}).first().click();const editDraftDetail=await nextDetail();
+ assert.ok((await page.locator('#comment-edit-label').textContent()).includes('원본 확인 중'));
+ await page.locator('#comment-body').fill('수정한 댓글');editDraftDetail.finish();holdDetails=false;
+ await page.waitForFunction(()=>!document.querySelector('#comment-form button[type=submit]').disabled);
  await page.locator('#comment-form button[type=submit]').click();await page.locator('#detail').getByText('수정한 댓글',{exact:true}).waitFor();assert.equal(history.filter(x=>x.kind==='comment').length,1,'edit draft does not create duplicate comment');
  await page.getByRole('button',{name:'Handover 결과 불러오기'}).click();await page.locator('[data-source]').first().click();await page.locator('#source-preview').waitFor({state:'visible'});
  assert.ok((await page.locator('#source-preview').textContent()).includes(source.detail));
@@ -71,18 +116,34 @@ let browser;
  abortOnce=true;await page.locator('#request-form button[type=submit]').click();await page.locator('#pending').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#retry').disabled);
  const countBeforeRetry=mutationCount;await page.reload();await page.waitForFunction(()=>!document.querySelector('#new').disabled);await page.locator('#retry').click();await page.locator('#pending').waitFor({state:'hidden'});
  assert.equal(mutationCount,countBeforeRetry,'uncertain-save retry uses same durable operation');assert.equal(requests.length,2);
+ // A previous hospital's late failure or success cannot replace the selected detail.
+ holdDetails=true;
+ await page.getByRole('button',{name:'상세 닫기'}).click();
+ await page.locator('[data-filter=all]').click();
+ await page.locator('.table-scroll [data-open="sample-1"]').click();const oldFailure=await nextDetail();
+ await page.locator('.table-scroll [data-open="sample-2"]').click();const newDetail=await nextDetail();
+ oldFailure.finish({success:false,error:'다른 병원의 늦은 실패'});newDetail.finish();
+ await page.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
+ assert.ok((await page.locator('#detail h2').textContent()).includes(hospitals[1].name));
+ assert.equal(await page.locator('#notice').isVisible(),false,'stale failure is ignored');
+ await page.locator('.table-scroll [data-open="sample-1"]').click();const oldSuccess=await nextDetail();
+ await page.locator('.table-scroll [data-open="sample-2"]').click();const finalDetail=await nextDetail();
+ finalDetail.finish();await page.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
+ oldSuccess.finish();holdDetails=false;
+ await page.waitForLoadState('networkidle');assert.ok((await page.locator('#detail h2').textContent()).includes(hospitals[1].name),'late success does not replace selected hospital');
  // Verify manual sync keeps filters and does not erase an open form draft.
  await page.getByRole('button',{name:'상세 닫기'}).click();await page.locator('#new').click();await page.locator('#symptom').fill('동기화 중 보존할 초안');
  const syncButton=page.locator('#sync');await syncButton.evaluate(b=>b.click());await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
  assert.equal(await page.locator('#symptom').inputValue(),'동기화 중 보존할 초안');await page.locator('#close-editor').click();
  const reads=calls.length;await page.waitForTimeout(1600);assert.equal(calls.length,reads,'no periodic fetch');
  await page.locator('[data-filter=all]').click();await page.getByRole('button',{name:'샘플피부과 강남점',exact:true}).first().click();
+ await page.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
  fs.mkdirSync(output,{recursive:true});await page.screenshot({path:path.join(output,'hospital-work-pc.png'),fullPage:true});
  await page.locator('#theme').click();await page.screenshot({path:path.join(output,'hospital-work-dark.png'),fullPage:true});await page.locator('#theme').click();
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'hospital-work-mobile.png'),fullPage:true});
  await page.getByRole('button',{name:'상세 닫기'}).click();
  for(const width of [390,320]){await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'page fits '+width);await page.locator('#new').click();assert.equal(await page.locator('#editor').evaluate(d=>d.scrollWidth<=d.clientWidth),true,'form fits '+width);await page.locator('#close-editor').click();}
  assert.deepEqual(errors,[]);
- console.log('hospital-work browser: real form submission, conflict merge, edit draft, Handover import/completion, new draft, durable unknown retry across reload, manual sync, dark/PC/mobile layouts passed.');
+ console.log('hospital-work browser: immediate mobile detail before response, loading states, duplicate click, draft retention, failure/retry, late response isolation, real form submission, conflict merge, Handover import/completion, durable unknown retry, manual sync, dark/PC/mobile layouts passed.');
  await browser.close();server.close();
 })().catch(async e=>{console.error(e);if(browser)await browser.close();server.close();process.exitCode=1;});
