@@ -3,7 +3,7 @@
   var api=window.BazWorkAPI, $=function(id){return document.getElementById(id);};
   var statuses=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
   var state={requests:[],hospitals:[],engineers:[],filter:'active',page:1,detail:null,selected:null,editing:null,baseline:null,source:null,loaded:false};
-  var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false;
+  var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false,syncCheckedAt='';
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
   var pending=null,commentEdit=null;
@@ -16,6 +16,14 @@
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
   function badge(status){return '<span class="badge '+(status==='완료'?'done':['보류','취소'].includes(status)?'hold':'')+'">'+esc(status)+'</span>';}
   function notify(message){$('notice').textContent=message||'';$('notice').hidden=!message;}
+  function showSyncState(phase,at){
+    if(at)syncCheckedAt=at;
+    $('sync-state').dataset.state=phase;
+    $('sync-state').textContent=phase==='loading'?'동기화 진행 중':phase==='done'?'동기화 완료':'동기화 실패';
+    $('sync-time').textContent=syncCheckedAt?'마지막 동기화 '+time(syncCheckedAt):'아직 동기화되지 않았습니다.';
+    $('sync-hint').textContent=phase==='loading'?'최신 접수와 처리 결과를 확인하고 있습니다.':phase==='error'?(state.loaded?'기존 정보를 표시하고 있습니다. ':'')+'동기화 버튼을 눌러 다시 확인하세요.':'최신 정보는 동기화 버튼을 눌러 확인하세요.';
+    $('sync').setAttribute('aria-busy',String(phase==='loading'));
+  }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}
   function updatePending(){ $('pending').hidden=!pending; $('retry').disabled=busy; }
   function upsert(r){var i=state.requests.findIndex(function(x){return x.id===r.id;});if(i<0)state.requests.unshift(r);else if(state.requests[i].revision<=r.revision)state.requests[i]=r;}
@@ -69,14 +77,13 @@
     $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><td>'+rowButton(r)+'</td><td>'+badge(r.status)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+esc(time(r.visitAt))+'</td><td>'+esc(r.engineer||'미배정')+'</td><td>'+esc(r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>';}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(r.hospitalName)+'</span>'+badge(r.status)+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';
   }
   async function sync(force){
-    if(syncing||busy)return;syncing=true;$('sync').disabled=true;$('sync').textContent='동기화 중…';notify('');
+    if(syncing||busy)return;syncing=true;$('sync').disabled=true;$('sync').textContent='동기화 중…';showSyncState('loading');notify('');
     try{
       var data=await api.get('work_bootstrap',force===true?{force:'1'}:{});if(!data.success)throw new Error(data.error);
       // 늦게 도착한 목록으로 이 PC에서 저장한 더 높은 버전을 덮지 않는다.
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
       state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
-      $('sync-time').textContent='현황 확인 '+time(data.updatedAt)+' · 필요할 때 동기화';
       $('new').disabled=false;
       if(data.autoMatch){
         var completed=data.autoMatch.completed.length,skipped=data.autoMatch.skipped.length;
@@ -92,7 +99,8 @@
         }
       }
       if($('editor').open)notify('목록을 동기화했습니다. 작성 중인 접수 입력은 유지되며 저장 시 최신 버전을 확인합니다.');
-    }catch(e){notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
+      showSyncState('done',data.updatedAt);
+    }catch(e){showSyncState('error');notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
     finally{syncing=false;$('sync').disabled=false;$('sync').textContent='↻ 동기화';}
   }
   function resultFields(s){

@@ -7,6 +7,8 @@ const hospitals=[{name:'샘플피부과 강남점',sn:'TEST-001',region:'서울'
 let requests=[],history=[],ops=new Map(),abortOnce=false,mutationCount=0,calls=[];
 let holdDetails=false,heldDetails=[],detailWaiters=[];
 let autoSummary=null;
+let holdBootstraps=true,heldBootstraps=[],bootstrapWaiters=[];
+function nextBootstrap(){return heldBootstraps.length?Promise.resolve(heldBootstraps.shift()):new Promise(resolve=>bootstrapWaiters.push(resolve));}
 function nextDetail(){return heldDetails.length?Promise.resolve(heldDetails.shift()):new Promise(resolve=>detailWaiters.push(resolve));}
 const stamp=()=>new Date().toISOString();
 function request(form,id='sample-'+(requests.length+1)){const h=hospitals.find(x=>x.key===form.hospitalKey);return {id,hospitalId:h.key,hospitalKey:h.key,hospitalName:h.name,sn:h.sn,region:h.region,...form,revision:1,createdAt:stamp(),updatedAt:stamp(),latest:''};}
@@ -45,6 +47,10 @@ let browser;
  await page.route('https://script.google.com/**',async route=>{
    const req=route.request(),p=req.method()==='POST'?JSON.parse(req.postData()):Object.fromEntries(new URL(req.url()).searchParams);
    calls.push(p.action);let data=JSON.parse(JSON.stringify(response(p.action,p)));
+   if(holdBootstraps&&p.action==='work_bootstrap'){
+     const override=await new Promise(resolve=>{const gate={finish:resolve};const waiter=bootstrapWaiters.shift();if(waiter)waiter(gate);else heldBootstraps.push(gate);});
+     if(override)data=override;
+   }
    if(holdDetails&&p.action==='work_detail'){
      const override=await new Promise(resolve=>{const gate={id:p.id,finish:resolve};const waiter=detailWaiters.shift();if(waiter)waiter(gate);else heldDetails.push(gate);});
      if(override)data=override;
@@ -53,7 +59,18 @@ let browser;
    await route.fulfill({contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*'},body:JSON.stringify(data)});
  });
  const url=`http://127.0.0.1:${server.address().port}/hospital-work.html`;
- await page.goto(url);await page.locator('#new').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#new').disabled);
+ await page.goto(url);const initialBootstrap=await nextBootstrap();
+ assert.equal(await page.locator('#sync-state').textContent(),'동기화 진행 중');
+ assert.equal(await page.locator('#sync').getAttribute('aria-busy'),'true');
+ assert.equal(await page.locator('#sync').isDisabled(),true);
+ assert.equal(await page.locator('#sync-time').textContent(),'아직 동기화되지 않았습니다.');
+ initialBootstrap.finish();holdBootstraps=false;
+ await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
+ assert.equal(await page.locator('#sync-state').textContent(),'동기화 완료');
+ assert.equal(await page.locator('#sync').getAttribute('aria-busy'),'false');
+ assert.equal(await page.locator('#sync-hint').textContent(),'최신 정보는 동기화 버튼을 눌러 확인하세요.');
+ assert.equal(await page.locator('#sync').getAttribute('aria-describedby'),'sync-hint');
+ await page.locator('#new').waitFor({state:'visible'});await page.waitForFunction(()=>!document.querySelector('#new').disabled);
  // Hold the server response: the mobile detail must open before the network completes.
  await page.setViewportSize({width:390,height:844});holdDetails=true;
  await page.locator('.mobile-cards [data-open="sample-1"]').click();const firstDetail=await nextDetail();
@@ -167,6 +184,20 @@ let browser;
  await page.getByRole('button',{name:'상세 닫기'}).click();await page.locator('#new').click();await page.locator('#symptom').fill('동기화 중 보존할 초안');
  const syncButton=page.locator('#sync');await syncButton.evaluate(b=>b.click());await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
  assert.equal(await page.locator('#symptom').inputValue(),'동기화 중 보존할 초안');await page.locator('#close-editor').click();
+ // Visible sync progress and failure preserve existing records and the successful-check timestamp.
+ const checkedBeforeFailure=await page.locator('#sync-time').textContent(),listBeforeFailure=await page.locator('#list').textContent();
+ holdBootstraps=true;await page.locator('#sync').click();const failedBootstrap=await nextBootstrap();
+ assert.equal(await page.locator('#sync-state').textContent(),'동기화 진행 중');
+ assert.ok((await page.locator('#sync-hint').textContent()).includes('확인하고 있습니다'));
+ assert.equal(await page.locator('#list').textContent(),listBeforeFailure,'in-flight sync retains visible records');
+ failedBootstrap.finish({success:false,error:'검증용 동기화 실패'});holdBootstraps=false;
+ await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
+ assert.equal(await page.locator('#sync-state').textContent(),'동기화 실패');
+ assert.equal(await page.locator('#sync-time').textContent(),checkedBeforeFailure,'failed sync does not advance last successful timestamp');
+ assert.ok((await page.locator('#sync-hint').textContent()).includes('기존 정보를 표시'));
+ assert.equal(await page.locator('#list').textContent(),listBeforeFailure);
+ await page.locator('#sync').click();await page.waitForFunction(()=>!document.querySelector('#sync').disabled);
+ assert.equal(await page.locator('#sync-state').textContent(),'동기화 완료');
  const reads=calls.length;await page.waitForTimeout(1600);assert.equal(calls.length,reads,'no periodic fetch');
  await page.locator('[data-filter=all]').click();await page.getByRole('button',{name:'샘플피부과 강남점',exact:true}).first().click();
  await page.waitForFunction(()=>document.querySelector('#detail').getAttribute('aria-busy')==='false');
