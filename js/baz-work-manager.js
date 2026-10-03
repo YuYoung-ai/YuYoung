@@ -89,7 +89,31 @@
   }
   function resultFields(s){
     var fields=[['처리일',s.date],['실제 처리자',s.engineer],['장비 S/N',s.sn],['A/S 항목',[s.cat,s.type].filter(Boolean).join(' / ')],['처리 내용',s.detail],['처리 결과',s.result],['교체품',s.part],['교체비용',s.cost],['특이사항',s.remark]];
-    return '<dl class="result-fields">'+fields.map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
+    return '<dl class="result-fields">'+fields.map(function(x){var wide=x[0]==='처리 내용'||x[0]==='특이사항',kind=wide?' class="result-wide"':x[0]==='처리 결과'?' class="result-outcome"':'';return '<dt'+kind+'>'+esc(x[0])+'</dt><dd'+kind+'>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
+  }
+  function detailMarkup(d,r,results,comments){
+    var back='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>';
+    var home='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg>';
+    var person='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg>';
+    var facts=[['상태',badge(r.status)],['담당자','<span class="person-chip"><span class="person-icon">'+person+'</span><span class="person-name">'+esc(r.engineer||'미배정')+'</span></span>'],['방문 일시',esc(time(r.visitAt))],['마감일','<span class="'+(overdue(r)?'deadline-overdue':'')+'">'+esc(time(r.deadline))+'</span>']];
+    return [
+      '<div class="detail-bar"><button data-action="close-detail" aria-label="상세 닫기">'+back+'</button><a href="index.html" aria-label="메인으로">'+home+'</a><div><strong>A/S 업무 상세</strong><span>병원 접수 · 현장 처리 내역</span></div></div>',
+      '<div class="detail-summary"><div class="request-byline"><span class="request-avatar" aria-hidden="true">'+esc((r.cs||'CS').slice(-2))+'</span><div><strong>'+esc(r.cs||'담당 미기록')+'</strong><span>CS 접수 담당 · '+esc(time(r.registeredAt))+'</span></div></div>',
+      '<div class="detail-heading"><div><h2>'+esc(r.hospitalName)+'</h2><p class="detail-sub">'+esc([r.region,r.sn||'S/N 미기록'].filter(Boolean).join(' · '))+'</p></div></div>',
+      '<dl class="facts">'+facts.map(function(x){return '<div class="fact"><dt>'+x[0]+'</dt><dd>'+x[1]+'</dd></div>';}).join('')+'</dl>',
+      r.status==='완료'?'<div class="completion-progress"><span>진척도</span><div><progress max="100" value="100" aria-label="업무 완료 100%">100%</progress><strong>100%</strong></div><p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy||'미기록')+'</p></div>':'',
+      '<p id="detail-checked" class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button></div>',
+      '<details class="request-extra"><summary>기본 정보 더 보기</summary><dl class="result-fields"><dt>CS 담당</dt><dd>'+esc(r.cs)+'</dd><dt>영업 담당</dt><dd>'+esc(r.sales||'미기록')+'</dd><dt>등록일시</dt><dd>'+esc(time(r.registeredAt))+'</dd></dl></details></div>',
+      '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+esc(r.symptom)+'</p></section>',
+      '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">AS 처리 결과</h3><div class="detail-content"><div class="result-list">',
+      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result"><div class="result-title"><h4>현장 처리 내역</h4>'+(h.auto?'<span class="result-origin">자동 연결</span>':'')+'</div>'+resultFields(h.source)+(h.memo?'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>':'')+'<div class="entry-meta">연결: '+esc(h.author)+' · '+esc(time(h.createdAt))+(h.revision>1?' · 수정 '+esc(time(h.updatedAt)):'')+'</div><button data-result="'+esc(h.id)+'">원본 비교·갱신</button></article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong><p class="hint">Handover의 병원명·처리일이 병원명·방문일과 일치하면 결과가 자동 연결됩니다.</p></div>',
+      '</div><div class="result-actions"><button data-action="import">Handover 결과 불러오기</button>'+(r.status!=='완료'?'<button class="primary" data-action="complete">완료 처리</button>':'')+'<a href="handover.html">Handover 열기 ↗</a></div></div></section>',
+      '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
+      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
+      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="2" maxlength="4000" placeholder="댓글을 입력하세요. 추가 상담, 변경 사유, 고객센터 메모" required></textarea><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
+      '<details class="detail-section detail-records"><summary>이 병원의 다른 A/S 요청 · '+d.requests.length+'건</summary>'+d.requests.map(function(x){return '<button class="history-request" data-open="'+esc(x.id)+'">'+esc(time(x.registeredAt))+' · '+esc(x.status)+'<br>'+esc(x.symptom.slice(0,100))+'</button>';}).join('')+'</details>',
+      '<details class="detail-section detail-records"><summary>변경 이력 · 이전 내용 확인</summary>'+d.logs.slice().reverse().map(function(log){return '<div class="audit-item">'+esc(auditText(log))+'<br><small>'+esc(log.actor)+' · '+esc(time(log.at))+'</small></div>';}).join('')+'</details>'
+    ].join('');
   }
   function auditText(log){
     if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 병원명·방문일 일치로 완료';
@@ -106,7 +130,7 @@
     var previousInput=$('comment-body'),restoreFocus=previousInput&&previousInput.dataset.requestId===r.id&&document.activeElement===previousInput;
     var selection=restoreFocus?[previousInput.selectionStart,previousInput.selectionEnd]:null;
     var entries=d.history.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);});
-    $('detail').innerHTML='<div class="detail-heading"><div><div class="eyebrow">SERVICE DETAIL</div><h2>'+esc(r.hospitalName)+'</h2><div class="detail-sub">'+esc(r.region)+' · '+esc(r.sn||'S/N 미기록')+'</div></div><button data-action="close-detail" aria-label="상세 닫기">✕</button></div>'+badge(r.status)+'<dl class="facts">'+[['접수 증상',r.symptom],['방문 일시',time(r.visitAt)],['엔지니어',r.engineer||'미배정'],['CS 담당',r.cs],['영업 담당',r.sales||'미기록'],['등록일시',time(r.registeredAt)],['마감',time(r.deadline)]].map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>';}).join('')+'</dl><p class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button><button class="primary" data-action="import">Handover 결과 불러오기</button><a href="handover.html">Handover 열기 ↗</a>'+(r.status!=='완료'?'<button data-action="complete">완료 처리</button>':'')+'</div>'+(r.status==='완료'?'<p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy)+'</p>':'')+'<section class="detail-section"><h3>댓글 및 처리 결과 <span class="muted">'+entries.length+'</span></h3><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="3" maxlength="4000" placeholder="추가 상담, 변경 사유, 고객센터 메모" required></textarea><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form><div class="timeline">'+entries.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div>'+(h.kind==='result'?'<div class="result-entry"><strong>Handover 현장 처리 결과</strong>'+resultFields(h.source)+'<p class="hint">불러온 기록 · '+esc(h.source.recordId)+'</p>'+(h.memo?'<div class="entry-body">고객센터 보완: '+esc(h.memo)+'</div>':'')+'<button data-result="'+esc(h.id)+'">원본 비교·갱신</button></div>':'<div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':''))+'</article>';}).join('')+'</div></section><details class="detail-section"><summary>이 병원의 다른 A/S 요청 · '+d.requests.length+'건</summary>'+d.requests.map(function(x){return '<button class="history-request" data-open="'+esc(x.id)+'">'+esc(time(x.registeredAt))+' · '+esc(x.status)+'<br>'+esc(x.symptom.slice(0,100))+'</button>';}).join('')+'</details><details class="detail-section"><summary>변경 이력 · 이전 내용 확인</summary>'+d.logs.slice().reverse().map(function(log){return '<div class="audit-item">'+esc(auditText(log))+'<br><small>'+esc(log.actor)+' · '+esc(time(log.at))+'</small></div>';}).join('')+'</details>';
+    $('detail').innerHTML=detailMarkup(d,r,entries.filter(function(h){return h.kind==='result';}),entries.filter(function(h){return h.kind!=='result';}));
     $('detail').hidden=false;commentEdit=null;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
     $('comment-body').value=commentDraft.body||'';
@@ -124,7 +148,7 @@
     status.textContent=detailLoading?(d.preview?'접수 정보 표시 · 댓글과 처리 결과를 불러오는 중…':'이전 상세 표시 · 최신 내용을 확인하는 중…'):'';
     if(detailError)status.textContent='최신 상세 확인 실패: '+detailError+' · 최신 내용 확인 버튼으로 다시 시도하세요.';
     status.hidden=!detailLoading&&!detailError;
-    var checked=$('detail').querySelector('.facts + .hint');checked.hidden=!!d.preview;if(!d.preview&&(detailLoading||detailError))checked.textContent='이전 상세 확인 '+time(d.updatedAt);checked.before(status);
+    var checked=$('detail-checked');checked.hidden=!!d.preview;if(!d.preview&&(detailLoading||detailError))checked.textContent='이전 상세 확인 '+time(d.updatedAt);checked.before(status);
     if(!d.preview&&d.autoMatch){
       var skipped=d.autoMatch.skipped.find(function(x){return x.requestId===r.id;});
       if(skipped){var warning=document.createElement('p');warning.id='auto-match-status';warning.className='notice';warning.setAttribute('role','status');warning.textContent=skipped.message;checked.after(warning);}
@@ -133,7 +157,6 @@
       var autoLabel=document.createElement('p');autoLabel.className='hint';autoLabel.textContent='Handover 결과 자동 연결 · 병원명·방문일 일치';checked.after(autoLabel);
     }
     $('detail').setAttribute('aria-busy',String(detailLoading));
-    if(d.preview){$('detail').querySelector('.detail-section h3 .muted').textContent='확인 중';$('detail').querySelector('.timeline').textContent='댓글과 처리 결과는 상세 조회 후 표시됩니다.';}
     $('detail').querySelectorAll('[data-action="edit"],[data-action="import"],[data-action="complete"],[data-comment],[data-result],#comment-form button[type="submit"]').forEach(function(b){b.disabled=detailLoading||!!detailError;});
     var refresh=$('detail').querySelector('[data-action="refresh-detail"]');refresh.disabled=detailLoading;refresh.textContent=detailLoading?'최신 내용 확인 중…':'최신 내용 확인';
     $('comment-body').dataset.requestId=r.id;
