@@ -1,0 +1,32 @@
+name: Capture hospital-work PC preview
+on:
+  push:
+    branches: ["codex/pc-main-preview-20261004"]
+    paths:
+      - ".github/workflows/capture-pc-main.yml"
+      - "test/browser/hospital-work-main-preview.cjs"
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install preview browser
+        run: |
+          npm install --prefix /tmp/pc-render playwright@1.56.1
+          /tmp/pc-render/node_modules/.bin/playwright install --with-deps chromium
+      - name: Render desktop main screen with sample data
+        env:
+          PLAYWRIGHT_MODULE: /tmp/pc-render/node_modules/playwright
+          HOSPITAL_WORK_SCREENSHOTS: /tmp/pc-shots
+        run: node test/browser/hospital-work-main-preview.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hospital-work-pc-main-preview
+          path: /tmp/pc-shots/hospital-work-main-pc.png
+          retention-days: 30
