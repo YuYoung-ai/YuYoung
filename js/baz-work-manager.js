@@ -21,7 +21,6 @@
     $('sync-state').dataset.state=phase;
     $('sync-state').textContent=phase==='loading'?'동기화 진행 중':phase==='done'?'동기화 완료':'동기화 실패';
     $('sync-time').textContent=syncCheckedAt?'마지막 동기화 '+time(syncCheckedAt):'아직 동기화되지 않았습니다.';
-    $('sync-hint').textContent=phase==='loading'?'최신 접수와 처리 결과를 확인하고 있습니다.':phase==='error'?(state.loaded?'기존 정보를 표시하고 있습니다. ':'')+'동기화 버튼을 눌러 다시 확인하세요.':'최신 정보는 동기화 버튼을 눌러 확인하세요.';
     $('sync').setAttribute('aria-busy',String(phase==='loading'));
   }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}

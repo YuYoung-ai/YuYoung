@@ -1,20 +1,19 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#14223a"><title>병원 A/S 업무관리 | BAZ CS</title>
+<meta name="theme-color" content="#14223a"><title>CS 서비스 현황 | BAZ CS</title>
 <script src="auth.js"></script><link rel="stylesheet" href="css/hospital-work.css">
 </head><body>
-<header class="topbar"><a class="brand" href="index.html"><img src="logo.png" alt="BAZ" width="32" height="32">CS WORKSPACE</a><div class="top-actions"><span id="account"></span><button id="theme" type="button" aria-label="화면 테마 변경">테마</button><a href="index.html">메인으로</a></div></header>
+<header class="topbar"><a class="brand" href="index.html"><img src="logo.png" alt="BAZ" width="32" height="32">CS WORKSPACE</a><div class="top-actions"><span id="account"></span><button id="theme" type="button" aria-label="화면 테마 변경">테마</button><button id="sync" type="button" aria-describedby="sync-state sync-time">↻ 동기화</button><a href="index.html">메인으로</a></div></header>
 <main>
-  <div class="page-heading"><div><div class="eyebrow">HOSPITAL SERVICE</div><h1>병원 A/S 업무관리</h1><p>Handover 처리 결과를 방문일 기준으로 자동 연결합니다.</p></div><div class="heading-actions"><button id="sync" type="button" aria-describedby="sync-hint">↻ 동기화</button><button id="new" class="primary" type="button">＋ A/S 접수</button></div></div>
-  <div class="sync-line"><div class="sync-summary"><div class="sync-overview"><span id="sync-state" class="sync-state" data-state="loading" role="status" aria-live="polite" aria-atomic="true">동기화 진행 중</span><span id="sync-time">최신 현황을 불러오는 중…</span></div><p id="sync-hint" class="sync-hint">최신 정보는 동기화 버튼을 눌러 확인하세요.</p></div><span id="save-status" role="status" aria-live="polite"></span></div>
+  <div class="page-heading"><h1>CS 서비스 현황</h1><div class="heading-actions"><div class="sync-line"><div class="sync-summary"><div class="sync-overview"><span id="sync-state" class="sync-state" data-state="loading" role="status" aria-live="polite" aria-atomic="true">동기화 진행 중</span><span id="sync-time">최신 현황을 불러오는 중…</span></div></div><span id="save-status" role="status" aria-live="polite"></span></div><button id="new" class="primary" type="button">＋ A/S 접수</button></div></div>
   <div id="notice" class="notice" role="alert" hidden></div>
   <div id="pending" class="pending" hidden><div><strong>저장 결과 확인이 필요합니다</strong><p>응답을 확인하지 못한 기록이 있습니다. 같은 기록으로 재시도하여 중복을 방지합니다.</p></div><button id="retry" type="button">같은 기록으로 재시도</button></div>
   <div class="metrics" aria-label="조회 현황"><button data-filter="active"><span>진행 업무</span><strong id="count-active">—</strong></button><button data-filter="today"><span>오늘 방문</span><strong id="count-today">—</strong></button><button data-filter="review"><span>결과 확인</span><strong id="count-review">—</strong></button><button data-filter="overdue"><span>마감 초과</span><strong id="count-overdue">—</strong></button></div>
   <section class="workspace" aria-label="업무 목록과 상세">
     <div class="list-panel">
+      <div class="list-caption"><div class="list-heading"><h2>처리 내역</h2><span id="list-count">불러오는 중</span></div><label>정렬 <select id="sort"><option value="visit">방문 일정순</option><option value="updated">최근 변경순</option><option value="deadline">마감순</option></select></label></div>
       <div class="list-tools"><label class="search"><span class="sr-only">병원·증상·담당자 검색</span><input id="search" type="search" placeholder="병원명, 증상, 담당자 검색"></label><label><span class="sr-only">상태 필터</span><select id="status-filter"><option value="">모든 상태</option></select></label></div>
       <div class="filter-bar" aria-label="빠른 필터"><button data-filter="active" aria-pressed="true">진행 중</button><button data-filter="today" aria-pressed="false">오늘 방문</button><button data-filter="mine" aria-pressed="false">내 담당</button><button data-filter="unassigned" aria-pressed="false">미배정</button><button data-filter="all" aria-pressed="false">완료 포함</button></div>
-      <div class="list-caption"><span id="list-count">불러오는 중</span><label>정렬 <select id="sort"><option value="visit">방문 일정순</option><option value="updated">최근 변경순</option><option value="deadline">마감순</option></select></label></div>
       <div id="list" aria-live="polite"><div class="empty">업무 목록을 불러오고 있습니다.</div></div>
       <div class="pagination"><button id="prev" type="button">이전</button><span id="page-info"></span><button id="next" type="button">다음</button></div>
     </div>
