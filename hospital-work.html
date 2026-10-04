@@ -12,9 +12,9 @@
   <div class="metrics" aria-label="조회 현황"><button data-filter="active"><span>진행 업무</span><strong id="count-active">—</strong></button><button data-filter="today"><span>오늘 방문</span><strong id="count-today">—</strong></button><button data-filter="review"><span>결과 확인</span><strong id="count-review">—</strong></button><button data-filter="overdue"><span>마감 초과</span><strong id="count-overdue">—</strong></button></div>
   <section class="workspace" aria-label="업무 목록과 상세">
     <div class="list-panel">
+      <div class="list-caption"><div class="list-heading"><h2>처리 내역</h2><span id="list-count">불러오는 중</span></div><label>정렬 <select id="sort"><option value="visit">방문 일정순</option><option value="updated">최근 변경순</option><option value="deadline">마감순</option></select></label></div>
       <div class="list-tools"><label class="search"><span class="sr-only">병원·증상·담당자 검색</span><input id="search" type="search" placeholder="병원명, 증상, 담당자 검색"></label><label><span class="sr-only">상태 필터</span><select id="status-filter"><option value="">모든 상태</option></select></label></div>
       <div class="filter-bar" aria-label="빠른 필터"><button data-filter="active" aria-pressed="true">진행 중</button><button data-filter="today" aria-pressed="false">오늘 방문</button><button data-filter="mine" aria-pressed="false">내 담당</button><button data-filter="unassigned" aria-pressed="false">미배정</button><button data-filter="all" aria-pressed="false">완료 포함</button></div>
-      <div class="list-caption"><span id="list-count">불러오는 중</span><label>정렬 <select id="sort"><option value="visit">방문 일정순</option><option value="updated">최근 변경순</option><option value="deadline">마감순</option></select></label></div>
       <div id="list" aria-live="polite"><div class="empty">업무 목록을 불러오고 있습니다.</div></div>
       <div class="pagination"><button id="prev" type="button">이전</button><span id="page-info"></span><button id="next" type="button">다음</button></div>
     </div>
