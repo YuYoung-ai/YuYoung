@@ -1,11 +1,11 @@
 # BAZ 로그인 서버 — Deno Deploy 판 (GAS auth 대체)
 
-로그인 발급기를 **콜드스타트가 없는 Deno Deploy**로 옮겨 "첫 로그인 30~50초" 문제를 없앤다.
+로그인 발급기를 Deno Deploy에서 운영한다. 실제 첫 응답 시간은 배포 환경에서 측정한다.
 토큰은 기존 `baz_token_lib.gs`와 **100% 동일한 HMAC-SHA256 서명 형식**으로 발급하므로,
 **데이터 GAS 8개는 바꿀 필요가 없다.** 비밀번호 로그인과 선택적 Google 로그인이 모두 같은 토큰을 발급한다.
 
 ```
-[브라우저] ──login/verify──▶ [Deno Deploy]  (콜드스타트 없음, 즉시 토큰 발급)
+[브라우저] ──login/verify──▶ [Deno Deploy]  (HMAC 토큰 발급)
 [브라우저] ──데이터 요청──▶ [데이터 GAS]   (토큰을 로컬 HMAC 검증 — auth 안 부름 · 무수정)
 ```
 
@@ -15,8 +15,7 @@
 
 재설계로 데이터 GAS가 토큰을 **스스로(로컬) 검증**하게 되면서, auth를 깨워 두던 검증 왕복이
 사라졌다 → auth는 로그인 때만 호출돼 잠들고 → 첫 로그인이 콜드스타트. keepWarm/prewarm은
-임시방편이고 GAS 트리거 시간 한도(일반 계정 90분/일)에 걸린다. Deno Deploy는 엣지에서 상시
-실행돼 **콜드스타트 자체가 없다.**
+임시방편이고 GAS 트리거 시간 한도(일반 계정 90분/일)에 걸린다. Deno Deploy도 배포 환경과 유휴 상태에 따라 시작 지연이 생길 수 있다. 운영 응답 시간을 측정한다.
 
 ---
 
@@ -233,3 +232,18 @@ Google의 불변 식별자 `sub`를 사용자에게 묶는다.
 Google 로그인과 기존 비밀번호 로그인은 함께 동작한다. 전 사용자가 노트북·휴대폰에서 각각 한 번씩
 Google 로그인을 완료한 뒤 비밀번호 일반 계정을 제거한다. Google 장애에 대비한 비상 Lv.3 계정 하나는
 자동 로그인 없이 별도로 보관한다.
+
+
+## 병원 업무 API (선택, 로그인 기능 유지)
+
+`main.ts`의 `work_*` 경로를 같은 앱에서 활성화할 수 있다. DB는 기존 GAS/Sheets에 둔다. 새로운 업무 경로는 기존 로그인·Google 로그인·기기 로그인과 별도로 동작하며 기존 계정/토큰 설정을 변경하지 않는다.
+
+| 환경변수 | 기본값 | 목적 |
+|---|---|---|
+| WORK_API_ENABLED | false | 업무 중계 스위치 |
+| WORK_GAS_URL | 빈 값 | 기존 병원 업무 GAS 웹앱의 HTTPS /macros/s/.../exec URL |
+| WORK_REFERENCE_TTL_SEC | 120 | 병원·엔지니어 기준 정보 메모리 TTL, 0~300초 |
+
+반드시 GAS POST 조회 라우팅을 먼저 배포한 뒤 활성화한다. 공개 `config.workApi`는 스위치 ON과 URL 유효성 여부만 알려준다. 실제 upstream 연결 성공을 보증하지 않는다. `WORK_API_ENABLED=false`로 끄고 페이지를 다시 열면 GAS 경로로 되돌린다. 업무/로그는 캐시하지 않고 기준 정보를 재사용하는 경우에도 매번 GAS의 현재 권한과 상태를 확인한다. 자세한 배포 순서·운영 측정은 [병원 업무 문서](../docs/hospital-work.md)를 따른다.
+
+검증: `deno check deno-auth/main.ts`, `node test/deno-auth-security.mjs`, `node test/deno-work-proxy.mjs`.

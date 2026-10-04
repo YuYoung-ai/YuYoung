@@ -539,6 +539,11 @@ function doPost(e){
     var actName = (payload && payload.action) || '';
     /* 병원 업무 전용 경로: 기존 기록·사진·전역 락 경로로 흘려보내지 않는다. */
     if(/^work_/.test(actName)){
+      // Deno 중계는 토큰을 URL 대신 POST 본문으로 보낸다. 조회도 기존 ACL·잠금 경로를 쓴다.
+      if(/^(work_bootstrap|work_sync|work_detail|work_handover_candidates|work_handover_detail)$/.test(actName)){
+        return json_(typeof hospitalWorkGet_==='function' ? hospitalWorkGet_(payload)
+          : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
+      }
       return json_(typeof hospitalWorkPost_==='function' ? hospitalWorkPost_(payload)
         : {success:false,error:'hospital_work_gas.gs 추가 및 웹앱 새 버전 배포가 필요합니다.'});
     }
@@ -854,6 +859,17 @@ function doPost(e){
                savedFields: savedFields, warnings: warnings,
                fseMismatch: !!(authUser && authUser !== P.fse), authUser: authUser,
                inv:inv, msg:msg, error:''};
+    // 원본 저장 성공과 자동 연결 성공은 분리한다. 보조 작업 실패로 원본을 재저장하지 않는다.
+    if(isHandover && typeof hospitalWorkHandoverSaved_==='function'){
+      try{
+        out.workAuto=hospitalWorkHandoverSaved_(P.hosp,P.date);
+        if(out.workAuto.completed)out.msg+='\n✅ 병원 A/S 업무 자동 완료';
+        if(out.workAuto.needsReview)out.msg+='\n병원 업무에서 Handover 연결 대상을 직접 확인하세요.';
+      }catch(workError){
+        out.workAuto={enabled:true,pending:true};out.msg+='\n원본 저장 완료 · 업무 자동 연결은 동기화에서 다시 확인합니다.';
+        log_('WORK_AUTO_PENDING',null,{reqId:reqId});
+      }
+    }
     /* 재전송·동시 요청이 같은 결과를 받도록 영속 저장 (위 double-checked 확인과 한 쌍) */
     if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row});
     return json_(out);

@@ -3,7 +3,8 @@
   var api=window.BazWorkAPI, $=function(id){return document.getElementById(id);};
   var statuses=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
   var state={requests:[],hospitals:[],engineers:[],filter:'active',page:1,detail:null,selected:null,editing:null,baseline:null,source:null,loaded:false};
-  var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false;
+  var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false,syncCheckedAt='';
+  var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
   var pending=null,commentEdit=null;
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -15,10 +16,24 @@
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
   function badge(status){return '<span class="badge '+(status==='완료'?'done':['보류','취소'].includes(status)?'hold':'')+'">'+esc(status)+'</span>';}
   function notify(message){$('notice').textContent=message||'';$('notice').hidden=!message;}
+  function showSyncState(phase,at){
+    if(at)syncCheckedAt=at;
+    $('sync-state').dataset.state=phase;
+    $('sync-state').textContent=phase==='loading'?'동기화 진행 중':phase==='done'?'동기화 완료':'동기화 실패';
+    $('sync-time').textContent=syncCheckedAt?'마지막 동기화 '+time(syncCheckedAt):'아직 동기화되지 않았습니다.';
+    $('sync-hint').textContent=phase==='loading'?'최신 접수와 처리 결과를 확인하고 있습니다.':phase==='error'?(state.loaded?'기존 정보를 표시하고 있습니다. ':'')+'동기화 버튼을 눌러 다시 확인하세요.':'최신 정보는 동기화 버튼을 눌러 확인하세요.';
+    $('sync').setAttribute('aria-busy',String(phase==='loading'));
+  }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}
   function updatePending(){ $('pending').hidden=!pending; $('retry').disabled=busy; }
   function upsert(r){var i=state.requests.findIndex(function(x){return x.id===r.id;});if(i<0)state.requests.unshift(r);else if(state.requests[i].revision<=r.revision)state.requests[i]=r;}
   function label(h){return h.name+' · '+(h.sn||'S/N 미기록')+' · '+(h.region||'지역 미기록');}
+  function hospitalTerms(r){
+    // 접수에 저장된 병원 키로만 연결한다. 동명 병원/지점의 조건을 대신 표시하지 않는다.
+    var matches=state.hospitals.filter(function(h){return h.key===r.hospitalKey;}),h=matches.length===1?matches[0]:null;
+    function value(key){return h?String(h[key]==null?'':h[key]).trim()||'미기록':'미확인';}
+    return '<div><dt>AS 유/무상</dt><dd>'+esc(value('asType'))+'</dd></div><div><dt>N-care</dt><dd>'+esc(value('ncare'))+'</dd></div>';
+  }
   function formValues(){return {hospitalKey:state.selected?state.selected.key:'',symptom:$('symptom').value,cs:$('cs').value,engineer:$('engineer').value,sales:$('sales').value,status:$('status').value,registeredAt:$('registeredAt').value,visitAt:$('visitAt').value,deadline:$('deadline').value};}
   function saveDraft(){
     if(!$('editor').open)return;
@@ -61,17 +76,22 @@
     function rowButton(r){return '<button class="row-open" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+'</button><div class="summary">'+esc(r.symptom)+'</div>';}
     $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><td>'+rowButton(r)+'</td><td>'+badge(r.status)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+esc(time(r.visitAt))+'</td><td>'+esc(r.engineer||'미배정')+'</td><td>'+esc(r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>';}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+'"><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(r.hospitalName)+'</span>'+badge(r.status)+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';
   }
-  async function sync(){
-    if(syncing||busy)return;syncing=true;$('sync').disabled=true;$('sync').textContent='동기화 중…';notify('');
+  async function sync(force){
+    if(syncing||busy)return;syncing=true;$('sync').disabled=true;$('sync').textContent='동기화 중…';showSyncState('loading');notify('');
     try{
-      var data=await api.get('work_bootstrap');if(!data.success)throw new Error(data.error);
+      var data=await api.get('work_bootstrap',force===true?{force:'1'}:{});if(!data.success)throw new Error(data.error);
       // 늦게 도착한 목록으로 이 PC에서 저장한 더 높은 버전을 덮지 않는다.
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
       state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
-      $('sync-time').textContent='현황 확인 '+time(data.updatedAt)+' · 필요할 때 동기화';
       $('new').disabled=false;
+      if(data.autoMatch){
+        var completed=data.autoMatch.completed.length,skipped=data.autoMatch.skipped.length;
+        if(completed||skipped)notify((completed?'Handover 결과 '+completed+'건 자동 연결·완료. ':'')+(skipped?'자동 연결 확인이 필요한 업무 '+skipped+'건은 상세에서 직접 확인하세요.':''));
+      }
       if(state.detail){
+        // 기준 정보만 바뀌어도 즉시 반영하며 댓글 입력과 접힘 상태는 유지한다.
+        $('hospital-terms').innerHTML=hospitalTerms(state.detail.request);
         var latest=state.requests.find(function(r){return r.id===state.detail.request.id;});
         if(latest&&latest.revision!==state.detail.request.revision){
           if($('comment-body')&&$('comment-body').value.trim())notify('선택 업무가 변경되었습니다. 작성 중인 댓글은 유지했습니다. 저장 전 최신 내용을 확인하세요.');
@@ -79,14 +99,48 @@
         }
       }
       if($('editor').open)notify('목록을 동기화했습니다. 작성 중인 접수 입력은 유지되며 저장 시 최신 버전을 확인합니다.');
-    }catch(e){notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
+      showSyncState('done',data.updatedAt);
+    }catch(e){showSyncState('error');notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
     finally{syncing=false;$('sync').disabled=false;$('sync').textContent='↻ 동기화';}
   }
   function resultFields(s){
     var fields=[['처리일',s.date],['실제 처리자',s.engineer],['장비 S/N',s.sn],['A/S 항목',[s.cat,s.type].filter(Boolean).join(' / ')],['처리 내용',s.detail],['처리 결과',s.result],['교체품',s.part],['교체비용',s.cost],['특이사항',s.remark]];
-    return '<dl class="result-fields">'+fields.map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
+    return '<dl class="result-fields">'+fields.map(function(x){var wide=x[0]==='처리 내용'||x[0]==='특이사항',kind=wide?' class="result-wide"':x[0]==='처리 결과'?' class="result-outcome"':'';return '<dt'+kind+'>'+esc(x[0])+'</dt><dd'+kind+'>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
+  }
+  function detailMarkup(d,r,results,comments){
+    var back='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>';
+    var home='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-8 9 8M5 9v12h5v-7h4v7h5V9"/></svg>';
+    var person='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg>';
+    function personChip(name){return '<span class="person-chip"><span class="person-icon">'+person+'</span><span class="person-name">'+esc(name||'미배정')+'</span></span>';}
+    var facts=[['상태',badge(r.status)],['엔지니어',personChip(r.engineer),'fact-assignee'],['영업 담당자',personChip(r.sales),'fact-assignee'],['방문 일시',esc(time(r.visitAt))],['마감일','<span class="'+(overdue(r)?'deadline-overdue':'')+'">'+esc(time(r.deadline))+'</span>']];
+    return [
+      '<div class="detail-bar"><button data-action="close-detail" aria-label="상세 닫기">'+back+'</button><a href="index.html" aria-label="메인으로">'+home+'</a><div><strong>A/S 업무 상세</strong><span>병원 접수 · 현장 처리 내역</span></div></div>',
+      '<div class="detail-summary"><div class="request-byline"><span class="request-avatar" aria-hidden="true">'+esc((r.cs||'CS').slice(-2))+'</span><div><strong>'+esc(r.cs||'담당 미기록')+'</strong><span>CS 접수 담당 · '+esc(time(r.registeredAt))+'</span></div></div>',
+      '<div class="detail-heading"><div><h2>'+esc(r.hospitalName)+'</h2><p class="detail-sub">'+esc([r.region,r.sn||'S/N 미기록'].filter(Boolean).join(' · '))+'</p></div></div>',
+      '<dl id="hospital-terms" class="hospital-terms" aria-label="병원 서비스 조건">'+hospitalTerms(r)+'</dl>',
+      '<dl class="facts">'+facts.map(function(x){return '<div class="fact '+(x[2]||'')+'"><dt>'+x[0]+'</dt><dd>'+x[1]+'</dd></div>';}).join('')+'</dl>',
+      r.status==='완료'?'<div class="completion-progress"><span>진척도</span><div><progress max="100" value="100" aria-label="업무 완료 100%">100%</progress><strong>100%</strong></div></div>':'',
+      '</div>',
+      '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+esc(r.symptom)+'</p></section>',
+      '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">AS 처리 결과</h3><div class="detail-content"><div class="result-list">',
+      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result"><div class="result-title"><h4>현장 처리 내역</h4></div>'+resultFields(h.source)+(h.memo?'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>':'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
+      '</div></div></section>',
+      '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
+      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
+      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="2" maxlength="4000" placeholder="댓글을 입력하세요. 추가 상담, 변경 사유, 고객센터 메모" required></textarea><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
+      '<details id="detail-tools" class="detail-section detail-tools" data-request-id="'+esc(r.id)+'"><summary>상세 관리 및 이력</summary><div class="detail-tools-body">',
+      r.status==='완료'?'<p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy||'미기록')+'</p>':'',
+      '<p id="detail-checked" class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button></div>',
+      '<details class="request-extra"><summary>기본 정보 더 보기</summary><dl class="result-fields"><dt>CS 담당</dt><dd>'+esc(r.cs)+'</dd><dt>영업 담당</dt><dd>'+esc(r.sales||'미기록')+'</dd><dt>등록일시</dt><dd>'+esc(time(r.registeredAt))+'</dd></dl></details>',
+      '<div class="result-link-tools"><h4>Handover 연결 관리</h4><p class="hint">Handover의 병원명·처리일이 병원명·방문일과 일치하면 결과가 자동 연결됩니다.</p>',
+      results.map(function(h){return '<div class="result-link"><strong>'+esc(h.source.date||'처리일 미기록')+' · '+esc(h.source.engineer||'처리자 미기록')+'</strong>'+(h.auto?'<span class="result-origin">자동 연결</span>':'')+'<div class="entry-meta">연결: '+esc(h.author)+' · '+esc(time(h.createdAt))+(h.revision>1?' · 수정 '+esc(time(h.updatedAt)):'')+'</div><button data-result="'+esc(h.id)+'">원본 비교·갱신</button></div>';}).join(''),
+      '<div class="result-actions"><button data-action="import">Handover 결과 불러오기</button>'+(r.status!=='완료'?'<button class="primary" data-action="complete">완료 처리</button>':'')+'<a href="handover.html">Handover 열기 ↗</a></div></div>',
+      '<details class="detail-records"><summary>이 병원의 다른 A/S 요청 · '+d.requests.length+'건</summary>'+d.requests.map(function(x){return '<button class="history-request" data-open="'+esc(x.id)+'">'+esc(time(x.registeredAt))+' · '+esc(x.status)+'<br>'+esc(x.symptom.slice(0,100))+'</button>';}).join('')+'</details>',
+      '<details class="detail-records"><summary>변경 이력 · 이전 내용 확인</summary>'+d.logs.slice().reverse().map(function(log){return '<div class="audit-item">'+esc(auditText(log))+'<br><small>'+esc(log.actor)+' · '+esc(time(log.at))+'</small></div>';}).join('')+'</details></div></details>'
+    ].join('');
   }
   function auditText(log){
+    if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 병원명·방문일 일치로 완료';
     if(log.kind==='request_create')return '고객센터 A/S 접수';
     if(log.kind==='comment_add')return '댓글 등록';
     if(log.kind==='comment_update')return '댓글 수정 · 이전 내용: '+(log.before?log.before.body:'');
@@ -97,28 +151,72 @@
   }
   function renderDetail(){
     var d=state.detail,r=d.request;
+    var previousInput=$('comment-body'),restoreFocus=previousInput&&previousInput.dataset.requestId===r.id&&document.activeElement===previousInput;
+    var selection=restoreFocus?[previousInput.selectionStart,previousInput.selectionEnd]:null;
+    var previousTools=$('detail-tools'),keepToolsOpen=previousTools&&!$('detail').hidden&&previousTools.dataset.requestId===r.id&&previousTools.open;
     var entries=d.history.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);});
-    $('detail').innerHTML='<div class="detail-heading"><div><div class="eyebrow">SERVICE DETAIL</div><h2>'+esc(r.hospitalName)+'</h2><div class="detail-sub">'+esc(r.region)+' · '+esc(r.sn||'S/N 미기록')+'</div></div><button data-action="close-detail" aria-label="상세 닫기">✕</button></div>'+badge(r.status)+'<dl class="facts">'+[['접수 증상',r.symptom],['방문 일시',time(r.visitAt)],['엔지니어',r.engineer||'미배정'],['CS 담당',r.cs],['영업 담당',r.sales||'미기록'],['등록일시',time(r.registeredAt)],['마감',time(r.deadline)]].map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>';}).join('')+'</dl><p class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button><button class="primary" data-action="import">Handover 결과 불러오기</button><a href="handover.html">Handover 열기 ↗</a>'+(r.status!=='완료'?'<button data-action="complete">완료 처리</button>':'')+'</div>'+(r.status==='완료'?'<p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy)+'</p>':'')+'<section class="detail-section"><h3>댓글 및 처리 결과 <span class="muted">'+entries.length+'</span></h3><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="3" maxlength="4000" placeholder="추가 상담, 변경 사유, 고객센터 메모" required></textarea><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form><div class="timeline">'+entries.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div>'+(h.kind==='result'?'<div class="result-entry"><strong>Handover 현장 처리 결과</strong>'+resultFields(h.source)+'<p class="hint">불러온 기록 · '+esc(h.source.recordId)+'</p>'+(h.memo?'<div class="entry-body">고객센터 보완: '+esc(h.memo)+'</div>':'')+'<button data-result="'+esc(h.id)+'">원본 비교·갱신</button></div>':'<div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':''))+'</article>';}).join('')+'</div></section><details class="detail-section"><summary>이 병원의 다른 A/S 요청 · '+d.requests.length+'건</summary>'+d.requests.map(function(x){return '<button class="history-request" data-open="'+esc(x.id)+'">'+esc(time(x.registeredAt))+' · '+esc(x.status)+'<br>'+esc(x.symptom.slice(0,100))+'</button>';}).join('')+'</details><details class="detail-section"><summary>변경 이력 · 이전 내용 확인</summary>'+d.logs.slice().reverse().map(function(log){return '<div class="audit-item">'+esc(auditText(log))+'<br><small>'+esc(log.actor)+' · '+esc(time(log.at))+'</small></div>';}).join('')+'</details>';
+    $('detail').innerHTML=detailMarkup(d,r,entries.filter(function(h){return h.kind==='result';}),entries.filter(function(h){return h.kind!=='result';}));
     $('detail').hidden=false;commentEdit=null;
+    $('detail-tools').open=!!keepToolsOpen;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
     $('comment-body').value=commentDraft.body||'';
     if(commentDraft.historyId){
       var savedComment=d.history.find(function(h){return h.id===commentDraft.historyId&&h.kind==='comment';});
       if(savedComment){commentEdit=Object.assign({},savedComment,{revision:commentDraft.baseRevision});$('comment-edit-label').textContent='댓글 수정 초안 복원됨';}
+      else if(d.preview){commentEdit={id:commentDraft.historyId,revision:commentDraft.baseRevision};$('comment-edit-label').textContent='댓글 수정 초안 · 원본 확인 중';}
     }
     var cancelComment=document.createElement('button');cancelComment.type='button';cancelComment.id='cancel-comment';cancelComment.textContent='수정 취소';cancelComment.hidden=!commentEdit;
     $('comment-edit-label').after(cancelComment);
     cancelComment.onclick=function(){commentEdit=null;$('comment-edit-label').textContent='';$('comment-body').value='';this.hidden=true;store(scope+'_comment_'+r.id,null);};
     $('comment-body').addEventListener('input',function(){store(scope+'_comment_'+r.id,{body:this.value,historyId:commentEdit?commentEdit.id:'',baseRevision:commentEdit?commentEdit.revision:0});});
     $('comment-form').addEventListener('submit',saveComment);
+    var status=document.createElement('p');status.id='detail-status';status.className=detailError?'notice':'hint';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+    status.textContent=detailLoading?(d.preview?'접수 정보 표시 · 댓글과 처리 결과를 불러오는 중…':'이전 상세 표시 · 최신 내용을 확인하는 중…'):'';
+    if(detailError)status.textContent='최신 상세 확인 실패: '+detailError+' · 하단의 상세 관리 및 이력을 펼쳐 최신 내용 확인 버튼으로 다시 시도하세요.';
+    status.hidden=!detailLoading&&!detailError;
+    var checked=$('detail-checked');checked.hidden=!!d.preview;if(!d.preview&&(detailLoading||detailError))checked.textContent='이전 상세 확인 '+time(d.updatedAt);$('detail').querySelector('.detail-summary').append(status);
+    if(!d.preview&&d.autoMatch){
+      var skipped=d.autoMatch.skipped.find(function(x){return x.requestId===r.id;});
+      if(skipped){var warning=document.createElement('p');warning.id='auto-match-status';warning.className='notice';warning.setAttribute('role','status');warning.textContent=skipped.message;$('detail').querySelector('.results-section .detail-content').prepend(warning);}
+    }
+    if(entries.some(function(h){return h.kind==='result'&&h.auto;})){
+      var autoLabel=document.createElement('p');autoLabel.className='hint';autoLabel.textContent='Handover 결과 자동 연결 · 병원명·방문일 일치';checked.after(autoLabel);
+    }
+    $('detail').setAttribute('aria-busy',String(detailLoading));
+    $('detail').querySelectorAll('[data-action="edit"],[data-action="import"],[data-action="complete"],[data-comment],[data-result],#comment-form button[type="submit"]').forEach(function(b){b.disabled=detailLoading||!!detailError;});
+    var refresh=$('detail').querySelector('[data-action="refresh-detail"]');refresh.disabled=detailLoading;refresh.textContent=detailLoading?'최신 내용 확인 중…':'최신 내용 확인';
+    $('comment-body').dataset.requestId=r.id;
+    if(restoreFocus){$('comment-body').focus({preventScroll:true});$('comment-body').setSelectionRange(selection[0],selection[1]);}
     renderList();
   }
   async function openDetail(id){
-    if(busy)return;var seq=++detailSeq;notify('');
-    try{var d=await api.get('work_detail',{id:id});if(seq!==detailSeq)return;if(!d.success)throw new Error(d.error);state.detail=d;upsert(d.request);renderDetail();if(matchMedia('(max-width:700px)').matches)$('detail').scrollIntoView({block:'start'});}
-    catch(e){notify('상세 확인 실패: '+e.message);}
+    if(busy)return;
+    if(detailLoading&&state.detail&&state.detail.request.id===id)return detailTask;
+    var seq=++detailSeq,known=state.requests.find(function(r){return r.id===id;}),cached=detailCache.get(id);
+    notify('');detailLoading=true;detailError='';
+    // 목록의 접수 정보는 즉시 표시한다. 댓글/결과의 미조회 상태를 0건으로 표시하지 않는다.
+    if(known||cached){
+      state.detail=Object.assign({},cached||{history:[],logs:[],requests:state.requests.filter(function(r){return r.hospitalId===known.hospitalId;}),updatedAt:'',preview:true},{request:known||cached.request});
+      renderDetail();if(matchMedia('(max-width:700px)').matches)$('detail').scrollIntoView({block:'start'});
+    }
+    detailTask=(async function(){
+      try{
+        var d=await api.get('work_detail',{id:id});if(seq!==detailSeq)return;if(!d.success)throw new Error(d.error);
+        var latest=state.requests.find(function(r){return r.id===id;});
+        if(latest&&latest.revision>d.request.revision)throw new Error('이 PC에서 확인한 정보보다 이전 응답입니다. 다시 확인하세요.');
+        detailLoading=false;state.detail=d;upsert(d.request);
+        // 이 탭에서만 최대 20건 보존하며 재방문해도 서버에서 최신 내용을 확인한다.
+        detailCache.delete(id);detailCache.set(id,d);if(detailCache.size>20)detailCache.delete(detailCache.keys().next().value);
+        renderDetail();
+      }catch(e){
+        if(seq!==detailSeq)return;
+        detailLoading=false;detailError=e.message;
+        if(state.detail&&state.detail.request.id===id)renderDetail();else notify('상세 확인 실패: '+e.message);
+      }finally{if(seq===detailSeq)detailTask=null;}
+    })();
+    return detailTask;
   }
-  function closeDetail(){detailSeq++;state.detail=null;$('detail').hidden=true;renderList();}
+  function closeDetail(){detailSeq++;detailLoading=false;detailError='';detailTask=null;state.detail=null;$('detail').hidden=true;$('detail').setAttribute('aria-busy','false');renderList();}
   async function selectHospital(fillSales){
     var value=$('hospital-input').value.trim(),matches=state.hospitals.filter(function(h){return label(h)===value||h.name===value;});
     var seq=++hospitalSeq;state.selected=matches.length===1?matches[0]:null;
@@ -166,7 +264,7 @@
       if(!data.success&&data.retrySameOperation){notify(data.error+' 같은 기록으로 재시도하세요.');$('save-status').textContent='저장 결과 확인 필요';return null;}
       pending=null;store(pendingKey,null);updatePending();
       if(!data.success){$('save-status').textContent='저장되지 않음';return data;}
-      upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
+      detailCache.delete(data.request.id);upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
       if(operation.context==='request'){store(draftKey,null);$('editor').close();}
       if(operation.context==='comment'){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}
       if(operation.context==='result'){store(scope+'_result_'+data.request.id,null);$('result-dialog').close();}
@@ -184,7 +282,7 @@
     err('form-error',data.error);
   }
   async function saveComment(event){
-    event.preventDefault();var r=state.detail.request,body=$('comment-body').value;
+    event.preventDefault();if(detailLoading||detailError)return;var r=state.detail.request,body=$('comment-body').value;
     var data=await write(commentEdit?'work_history_update':'work_history_add',{requestId:r.id,body:body,historyId:commentEdit?commentEdit.id:'',baseHistoryRevision:commentEdit?commentEdit.revision:0},'comment');
     if(data&&!data.success)notify(data.error+(data.conflict?'\n최신 댓글을 확인한 뒤 다시 편집하세요. 입력한 내용은 초안에 남아 있습니다.':''));
   }
@@ -230,7 +328,7 @@
   try{document.documentElement.dataset.theme=localStorage.getItem('baz_work_theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');}catch(e){}
   $('theme').onclick=function(){var value=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=value;try{localStorage.setItem('baz_work_theme',value);}catch(e){}};
   statuses.forEach(function(s){$('status').add(new Option(s,s));$('status-filter').add(new Option(s,s));});
-  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=sync;
+  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=function(){sync(true);};
   $('search').oninput=function(){state.page=1;renderList();};$('status-filter').onchange=function(){state.page=1;renderList();};$('sort').onchange=function(){state.page=1;renderList();};
   $('prev').onclick=function(){state.page--;renderList();};$('next').onclick=function(){state.page++;renderList();};
   document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){state.filter=b.dataset.filter;state.page=1;renderList();};});
@@ -238,9 +336,12 @@
   $('detail').onclick=function(event){
     var b=event.target.closest('button');if(!b)return;
     if(b.dataset.open){openDetail(b.dataset.open);return;}
+    if(b.dataset.action==='close-detail'){closeDetail();return;}
+    if(b.dataset.action==='refresh-detail'){openDetail(state.detail.request.id);return;}
+    if(detailLoading||detailError)return;
     if(b.dataset.comment){commentEdit=state.detail.history.find(function(h){return h.id===b.dataset.comment;});$('comment-body').value=commentEdit.body;$('comment-edit-label').textContent='댓글 수정 중';$('cancel-comment').hidden=false;$('comment-body').focus();store(scope+'_comment_'+state.detail.request.id,{body:commentEdit.body,historyId:commentEdit.id,baseRevision:commentEdit.revision});return;}
     if(b.dataset.result){openResults(state.detail.history.find(function(h){return h.id===b.dataset.result;}));return;}
-    var action=b.dataset.action;if(action==='close-detail')closeDetail();if(action==='edit')openEditor(state.detail.request);if(action==='refresh-detail')openDetail(state.detail.request.id);if(action==='import')openResults();
+    var action=b.dataset.action;if(action==='edit')openEditor(state.detail.request);if(action==='import')openResults();
     if(action==='complete'){write('work_complete',{requestId:state.detail.request.id,baseRevision:state.detail.request.revision},'complete').then(function(d){if(d&&!d.success)notify(d.error);});}
   };
   $('hospital-input').oninput=function(){selectHospital(true);saveDraft();};
