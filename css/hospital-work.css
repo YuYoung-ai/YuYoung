@@ -152,3 +152,6 @@ html[data-theme=dark] #detail{--detail-accent:#c5b5ff;--detail-soft:#362e53}
   .card-top{font-size:16px}
   .card-meta,.card-summary{font-size:13px}
 }
+
+
+.work-kind{margin-left:8px;background:var(--surface-2,#edf2f7);color:var(--text,#27364b);border:1px solid var(--line,#dbe3ed)}button.danger{color:#be3447;border-color:#e6abb4}.facts .fact dd{flex-wrap:wrap}.filter-bar{flex-wrap:wrap}
