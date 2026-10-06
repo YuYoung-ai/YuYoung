@@ -239,7 +239,7 @@
     var selection=restoreFocus?[previousInput.selectionStart,previousInput.selectionEnd]:null;
     var previousTools=$('detail-tools'),keepToolsOpen=previousTools&&!$('detail').hidden&&previousTools.dataset.requestId===r.id&&previousTools.open;
     var entries=d.history.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);});
-    $('detail').innerHTML=detailMarkup(d,r,entries.filter(function(h){return h.kind==='result';}),entries.filter(function(h){return h.kind!=='result';}));
+    $('detail').innerHTML=detailMarkup(d,r,entries.filter(function(h){return h.kind==='result';}),entries.filter(function(h){return h.kind!=='result'&&!(h.kind==='comment'&&h.flowImport);}));
     $('detail').hidden=false;commentEdit=null;
     $('detail-tools').open=!!keepToolsOpen;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
