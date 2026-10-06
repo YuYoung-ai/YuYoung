@@ -98,9 +98,10 @@ function hwKvApply_(events){
 function syncHospitalWorkKv(){
  hwResetContext_();var props=PropertiesService.getScriptProperties();if(props.getProperty('HOSPITAL_WORK_KV_STAGE')!=='active')return 'KV 미활성';
  var started=Date.now();try{
-  var pending=hwKvCall_('pending',{});if(pending.events.length)hwKvCall_('ack',{items:hwKvApply_(pending.events)});
+  var pending=hwKvCall_('pending',{}),batches=0;
+  while(pending.events.length&&batches<5&&Date.now()-started<120000){hwKvCall_('ack',{items:hwKvApply_(pending.events)});batches++;if(!pending.more)break;pending=hwKvCall_('pending',{});}
   // Recover missing save-hook events by rechecking only visit-date pairs in current work.
-  hwLock_(function(){var pairs={},seen={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(!r.deletedAt&&r.status!=='취소'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});hwAutoSources_(pairs).forEach(function(hit){var pair=hwAutoPair_(hit.source.hospitalName,hit.source.date);if(!seen[pair]){seen[pair]=true;hwKvQueueSources_(hit.source.hospitalName,hit.source.date);}});});
+  hwLock_(function(){var pairs={},seen={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(!r.deletedAt&&r.status!=='취소'&&r.status!=='완료'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});hwAutoSources_(pairs).forEach(function(hit){var pair=hwAutoPair_(hit.source.hospitalName,hit.source.date);if(!seen[pair]){seen[pair]=true;hwKvQueueSources_(hit.source.hospitalName,hit.source.date);}});});
   var queue=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']),n=queue.getLastRow()-1,rows=n>0?queue.getRange(2,5,n,1).createTextFinder('pending').matchEntireCell(true).findAll().slice(0,20):[];
   if(rows.length){var sources=rows.map(function(c){var old=JSON.parse(queue.getRange(c.getRow(),4).getValue()),hits=hwSources_(old.hospitalName).filter(function(x){return x.source.recordId===old.recordId;});if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복되었거나 삭제됐습니다.');hwKvStableSource_(hits[0]);return hits[0].source;});hwKvCall_('sources',{sources:sources});hwLock_(function(){rows.forEach(function(c){queue.getRange(c.getRow(),5).setValue('sent');});});}
   // Check reference/ACL changes each run; only transfer changed snapshots.
