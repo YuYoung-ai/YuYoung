@@ -79,16 +79,30 @@ function migrateHospitalWorkToKv(){
  hwKvCall_('activate',{manifest:manifest});hwKvFinishMigration_(props);
  return 'KV 전환 완료 · 접수 '+manifest.requests.count+'건 · 이력 '+manifest.history.count+'건';
 }
+function hwKvPurge_(r){
+ var history=hwSheet_(HW.HISTORY),n=history.getLastRow()-1;
+ if(n>0)history.getRange(2,2,n,1).createTextFinder(r.id).matchEntireCell(true).findAll().sort(function(a,b){return b.getRow()-a.getRow();}).forEach(function(c){history.deleteRow(c.getRow());});
+ hwPut_(HW.REQUESTS,r.id,[r.id,JSON.stringify(r)]);
+ // Keep journal identifiers for idempotency, but discard the old request payloads.
+ var journal=hwKvSheet_(HW_KV_LOG,['eventId','seq','actor','kind','event','createdAt']),jn=journal.getLastRow()-1;
+ if(jn>0)journal.getRange(2,5,jn,1).createTextFinder(JSON.stringify(r.id)).matchEntireCell(false).findAll().forEach(function(c){var e=JSON.parse(c.getValue());if(e.request&&e.request.id===r.id)c.setValue(JSON.stringify({id:e.id,seq:e.seq,actor:e.actor,at:e.at,kind:'purge',request:r}));});
+ var legacy=hwSheet_(HW.LOG),ln=legacy.getLastRow()-1;
+ if(ln>0)legacy.getRange(2,5,ln,1).createTextFinder(JSON.stringify(r.id)).matchEntireCell(false).findAll().forEach(function(c){var e=JSON.parse(c.getValue());if(e.request&&e.request.id===r.id)legacy.getRange(c.getRow(),5,1,2).setValues([[JSON.stringify({kind:'purge',request:r}),JSON.stringify({success:false,purged:true,deleted:true,error:'영구 삭제된 접수입니다.'})]]);});
+}
 function hwKvApply_(events){
  return hwLock_(function(){
   var sh=hwKvSheet_(HW_KV_LOG,['eventId','seq','actor','kind','event','createdAt']),ack=[];
   events.sort(function(a,b){return a.seq-b.seq;}).forEach(function(ev){
    var n=sh.getLastRow()-1,done=n>0?sh.getRange(2,1,n,1).createTextFinder(ev.id).matchEntireCell(true).findNext():null;
    if(!done){
-    if(ev.hospital)hwPut_(HW.HOSPITALS,ev.hospital.id,[ev.hospital.id,ev.hospital.key,JSON.stringify(ev.hospital)]);
-    if(ev.history){var old=hwHistory_(ev.history.id);if(!old||Number(old.revision)<=Number(ev.history.revision))hwPut_(HW.HISTORY,ev.history.id,[ev.history.id,ev.history.requestId,JSON.stringify(ev.history)]);}
-    var original=hwRequest_(ev.request.id);if(!original||Number(original.revision)<=Number(ev.request.revision))hwPut_(HW.REQUESTS,ev.request.id,[ev.request.id,JSON.stringify(ev.request)]);
-    SpreadsheetApp.flush();sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[ev.id,ev.seq,ev.actor,ev.kind,JSON.stringify(ev),ev.at].map(safeCell_)]);SpreadsheetApp.flush();
+    var original=hwRequest_(ev.request.id),stored=ev;
+    if(ev.request.purgedAt||original&&original.purgedAt){var marker=original&&original.purgedAt&&(!ev.request.purgedAt||Number(original.revision)>Number(ev.request.revision))?original:ev.request;hwKvPurge_(marker);stored={id:ev.id,seq:ev.seq,actor:ev.actor,at:ev.at,kind:'purge',request:marker};}
+    else{
+     if(ev.hospital)hwPut_(HW.HOSPITALS,ev.hospital.id,[ev.hospital.id,ev.hospital.key,JSON.stringify(ev.hospital)]);
+     if(ev.history){var old=hwHistory_(ev.history.id);if(!old||Number(old.revision)<=Number(ev.history.revision))hwPut_(HW.HISTORY,ev.history.id,[ev.history.id,ev.history.requestId,JSON.stringify(ev.history)]);}
+     if(!original||Number(original.revision)<=Number(ev.request.revision))hwPut_(HW.REQUESTS,ev.request.id,[ev.request.id,JSON.stringify(ev.request)]);
+    }
+    SpreadsheetApp.flush();sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[ev.id,ev.seq,ev.actor,stored.kind,JSON.stringify(stored),ev.at].map(safeCell_)]);SpreadsheetApp.flush();
    }
    ack.push({id:ev.id,seq:ev.seq});
   });return ack;

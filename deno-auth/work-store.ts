@@ -6,7 +6,7 @@ const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과�
 const key=(...parts:any[])=>[NS,...parts];
 const copy=(v:any)=>JSON.parse(JSON.stringify(v));
 const text=(v:any,max:number,label:string)=>{const s=String(v??'').trim();if(s.length>max)throw new Error(label+'은 '+max+'자 이하로 입력하세요.');return s;};
-const live=(r:Obj)=>!r.deletedAt;
+const live=(r:Obj)=>!r.deletedAt&&!r.purgedAt;
 const active=(r:Obj)=>live(r)&&!['완료','취소'].includes(r.status);
 const kind=(s:Obj)=>['A/S','점검'].includes(s.gubun);
 const clash=(current:Obj)=>({success:false,conflict:true,current,error:'다른 사용자가 수정했습니다. 최신 내용과 입력 내용을 비교하세요.'});
@@ -25,7 +25,7 @@ export function createWorkStore(kv:any){
  async function status(){return (await get('meta')).value||{ready:false,seq:0};}
  async function refs(){return (await get('refs')).value;}
  async function access(who:Actor){const r=await refs();if(!r||!who.name||who.level<(Number(r.minimumLevel)||1))throw new Error('업무관리 접근 권한이 없거나 기준 정보가 준비되지 않았습니다.');return r;}
- async function request(id:any,deleted=false){const e=await get('request',String(id));if(!e.value)throw new Error('요청을 찾지 못했습니다.');if(!deleted&&!live(e.value)){const x:any=new Error('삭제된 접수입니다. 동기화하거나 휴지통에서 복원하세요.');x.deleted=true;x.current=e.value;throw x;}return e;}
+ async function request(id:any,deleted=false){const e=await get('request',String(id));if(!e.value)throw new Error('요청을 찾지 못했습니다.');if(e.value.purgedAt){const x:any=new Error('영구 삭제된 접수입니다. 복원할 수 없습니다.');x.deleted=true;x.purged=true;x.current=e.value;throw x;}if(!deleted&&!live(e.value)){const x:any=new Error('삭제된 접수입니다. 동기화하거나 휴지통에서 복원하세요.');x.deleted=true;x.current=e.value;throw x;}return e;}
  async function hospitalRequests(id:string){return values(['hospital',id]);}
  async function history(id:string){return values(['history',id]);}
  async function sources(name:string){return values(['source',name]);}
@@ -42,7 +42,9 @@ export function createWorkStore(kv:any){
   for(let attempt=0;attempt<12;attempt++){
    const previous=await get('operation',op);
    if(previous.value){
-    const old=previous.value;if(old.actor!==who.name||!(old.fingerprint===fingerprint||(old.legacy&&old.fingerprint===fingerprint.slice(0,24))))throw new Error('같은 저장 식별자에 다른 내용이 전달되었습니다.');return copy(old.response);
+    const old=previous.value;if(old.actor!==who.name||!(old.fingerprint===fingerprint||(old.legacy&&old.fingerprint===fingerprint.slice(0,24))))throw new Error('같은 저장 식별자에 다른 내용이 전달되었습니다.');
+    const current=old.response.request?.id?(await get('request',old.response.request.id)).value:null;
+    if(current?.purgedAt&&p.action!=='work_purge')return {success:false,deleted:true,purged:true,current,error:'영구 삭제된 접수입니다. 복원할 수 없습니다.'};return copy(old.response);
    }
    const meta=await get('meta');if(!meta.value?.ready)throw new Error('업무 데이터 전환 중입니다. 잠시 후 다시 시도하세요.');
    const ev=await build();if(ev.response?.success===false)return ev.response;
@@ -63,6 +65,7 @@ export function createWorkStore(kv:any){
    if(ev.flowImport)tx=tx.set(key('flowImport',ev.flowImport.sourceId),{...ev.flowImport,requestId:ev.request.id});
    if(checks.length)tx=tx.check(...checks);
    if(ev.before?.hospitalId&&ev.before.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',ev.before.hospitalId,ev.request.id));
+   if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
    if((await tx.commit()).ok)return response;
   }
   const e:any=new Error('다른 저장과 겹쳤습니다. 같은 기록으로 다시 시도하세요.');e.retrySameOperation=true;throw e;
@@ -136,6 +139,36 @@ export function createWorkStore(kv:any){
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;
   return {kind:p.action.slice(5),before,request:r,response:{success:true,request:r}};
  });}
+ async function cleanupPurge(r:Obj){
+  // Primary records and old retry payloads are removed in bounded, resumable transactions.
+  for await(const e of kv.list({prefix:key('history',r.id)})){
+   const binding=e.value.source?.recordId?await get('link',e.value.source.recordId):null;
+   let tx=kv.atomic().check(e).delete(e.key);
+   if(binding?.value?.requestId===r.id)tx=tx.check(binding).delete(binding.key);
+   if(!(await tx.commit()).ok)throw new Error('삭제 정리를 다시 시도합니다.');
+  }
+  for await(const e of kv.list({prefix:key('audit',r.id)}))if(e.value.kind!=='purge')if(!(await kv.atomic().check(e).delete(e.key).commit()).ok)throw new Error('삭제 이력 정리를 다시 시도합니다.');
+  for(const table of ['operation','change','outbox'])for await(const e of kv.list({prefix:key(table)})){
+   const target=table==='operation'?e.value.response?.request:e.value.request;
+   if(target?.id!==r.id||target.purgedAt)continue;
+   const clean=table==='operation'?{...e.value,response:{success:false,deleted:true,purged:true,current:r,error:'영구 삭제된 접수입니다. 복원할 수 없습니다.'}}:table==='change'?{seq:e.value.seq,request:r}:{id:e.value.id,seq:e.value.seq,actor:e.value.actor,at:e.value.at,kind:'purge',request:r,response:{success:true,request:r}};
+   if(!(await kv.atomic().check(e).set(e.key,clean).commit()).ok)throw new Error('삭제 전달 기록 정리를 다시 시도합니다.');
+  }
+  const task=await get('purgeCleanup',r.id);if(task.value)await kv.atomic().check(task).delete(task.key).commit();
+ }
+ async function purge(p:Obj,who:Actor){
+  if(who.level<3)throw new Error('관리자만 휴지통을 비울 수 있습니다.');
+  if(p.confirmPermanentDelete!==true)throw new Error('영구 삭제 대상과 복원 불가 안내를 확인하세요.');
+  const output=await mutate(p,who,async()=>{
+   const original=await request(p.requestId,true),r=original.value;
+   if(!r.deletedAt)throw new Error('휴지통의 접수만 영구 삭제할 수 있습니다.');
+   if(String(r.revision)!==String(p.baseRevision))return {response:clash(r)};
+   const now=new Date().toISOString(),marker={id:r.id,hospitalId:r.hospitalId,revision:r.revision+1,deletedAt:r.deletedAt,purgedAt:now,purgedBy:who.name,updatedAt:now};
+   return {kind:'purge',request:marker,checks:[original],response:{success:true,request:marker,purged:true}};
+  });
+  if(output.success)try{await cleanupPurge(output.request);}catch{output.cleanupPending=true;}
+  return output;
+ }
  async function detail(p:Obj){
   const e=await request(p.id,true),r=e.value;
   const limit=100,his=kv.list({prefix:key('history',r.id)},{limit,cursor:p.historyCursor||undefined}),audit=kv.list({prefix:key('audit',r.id)},{limit,cursor:p.auditCursor||undefined,reverse:true});
@@ -220,9 +253,10 @@ export function createWorkStore(kv:any){
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
     case 'work_result_save':return await result(p,who);
     case 'work_complete':case 'work_delete':case 'work_restore':return await lifecycle(p,who);
+    case 'work_purge':return await purge(p,who);
     default:throw new Error('지원하지 않는 업무 API입니다.');
    }
-  }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,current:e.current};}
+  }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
   for(const s of items){if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
@@ -274,7 +308,7 @@ export function createWorkStore(kv:any){
    const current=await refs();await kv.set(key('refs'),bounded({...current,...p.references}));return {success:true};
   }
   if(verb==='sources')return {success:true,...await ingestSources(p.sources||[])};
-  if(verb==='pending'){const rows=await values(['outbox'],{limit:21});return {success:true,events:rows.slice(0,20),more:rows.length>20,seq:(await status()).seq};}
+  if(verb==='pending'){for(const r of await values(['purgeCleanup'],{limit:2}))await cleanupPurge(r);const rows=await values(['outbox'],{limit:21});return {success:true,events:rows.slice(0,20),more:rows.length>20,seq:(await status()).seq};}
   if(verb==='ack'){
    for(const item of p.items||[]){const e=await get('outbox',Number(item.seq));if(e.value?.id===item.id)await kv.atomic().check(e).delete(e.key).commit();}
    return {success:true};

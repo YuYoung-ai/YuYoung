@@ -23,6 +23,7 @@ class Sheet{
   getLastColumn(){return Math.max(0,...this.data.map(x=>x.length));}
   setFrozenRows(){}
   getName(){return this.name;}
+  deleteRow(row){this.data.splice(row-1,1);return this;}
 }
 const sheets=new Map(),ss={getId:()=> 'fixture-handover',getSheetByName:n=>sheets.get(n)||null,insertSheet:n=>{const sh=new Sheet(n);sheets.set(n,sh);return sh;},getSheets:()=>[...sheets.values()]};
 const props=new Map();
@@ -214,5 +215,25 @@ assert.equal(sheets.get('업무KV변경로그').data.length,2,'duplicate deliver
 assert.equal(sheets.get('업무처리이력').data.filter(x=>x[0]===mirrorHistory.id).length,1);
 sandbox.hwKvApply_([{...mirrorEvent,id:'kv-older-fixture',seq:0,request:originalMirror,history:{...mirrorHistory,revision:0,body:'오래된 내용'}}]);
 assert.equal(sandbox.hwRequest_(id).latest,'KV 저장 내용','older projection cannot replace newer request');assert.equal(sandbox.hwHistory_(mirrorHistory.id).body,'KV 저장 내용');
+const keptHandover=copy(handover.data),keptHospitals=copy(sheets.get('업무병원').data),purgeId='kv-purge-fixture';
+const purgeOriginal={...originalMirror,id:purgeId,revision:2,deletedAt:'2026-10-06T01:00:00Z'};
+const purgeOld={id:'kv-purge-old',seq:2,actor:'CS A',kind:'comment_add',request:purgeOriginal,history:{id:'purge-h1',requestId:purgeId,revision:1,body:'삭제 대상 댓글'},at:'now'};
+sandbox.hwKvApply_([purgeOld]);
+sandbox.hwPut_(sandbox.HW.HISTORY,'purge-h2',['purge-h2',purgeId,JSON.stringify({id:'purge-h2',requestId:purgeId,body:'삭제 대상 결과'})]);
+sheets.get('업무변경로그').data.push(['purge-legacy','CS A','hash','committed',JSON.stringify(purgeOld),JSON.stringify({success:true,request:purgeOriginal,history:purgeOld.history}),'time']);
+const marker={id:purgeId,hospitalId:purgeOriginal.hospitalId,revision:3,deletedAt:purgeOriginal.deletedAt,purgedAt:'2026-10-06T02:00:00Z'};
+const purgeEvent={id:'kv-purge-event',seq:3,actor:'관리자',kind:'purge',request:marker,at:'now'};
+failSheet='업무요청';assert.throws(()=>sandbox.hwKvApply_([purgeEvent]),/interrupted/);
+assert.equal(sheets.get('업무KV변경로그').data.filter(r=>r[0]===purgeEvent.id).length,0,'failed purge remains unacknowledged for retry');
+sandbox.hwKvApply_([purgeEvent]);sandbox.hwKvApply_([purgeEvent]);
+assert.deepEqual(copy(sandbox.hwRequest_(purgeId)),marker);
+assert.equal(sheets.get('업무처리이력').data.filter(r=>r[1]===purgeId).length,0,'all matching history rows removed without row-shift omissions');
+const oldJournal=JSON.parse(sheets.get('업무KV변경로그').data.find(r=>r[0]===purgeOld.id)[4]);assert.equal(oldJournal.kind,'purge');assert.ok(!oldJournal.history&&!oldJournal.request.symptom);
+const oldLegacy=sheets.get('업무변경로그').data.find(r=>r[0]==='purge-legacy');assert.ok(!JSON.parse(oldLegacy[4]).history);assert.equal(JSON.parse(oldLegacy[5]).purged,true);
+sandbox.hwKvApply_([{...purgeOld,id:'kv-purge-late',seq:4,request:{...purgeOriginal,revision:100}}]);
+assert.deepEqual(copy(sandbox.hwRequest_(purgeId)),marker,'late raw event cannot resurrect a purged request even with an unexpected higher revision');
+assert.equal(sheets.get('업무처리이력').data.filter(r=>r[1]===purgeId).length,0);
+assert.deepEqual(copy(handover.data),keptHandover);assert.deepEqual(copy(sheets.get('업무병원').data),keptHospitals);
+console.log('GAS permanent deletion: interrupted retry, multi-row history removal, legacy/KV journal sanitation, late-event fence and Handover/hospital preservation passed.');
 console.log('hospital-work: manual workflow plus visit-date auto completion, exact hospital/AS match, duplicates, SN, missing result/date, hold/cancel, stable IDs, memo preservation, idempotent sync, actual Handover save and auxiliary failure recovery passed.');
 
