@@ -15,6 +15,7 @@
   function active(r){return !r.deletedAt&&r.status!=='완료'&&r.status!=='취소';}
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
   function badge(status){return '<span class="badge '+(status==='완료'?'done':['보류','취소'].includes(status)?'hold':'')+'">'+esc(status)+'</span>';}
+  function statusPicker(r,detail){return '<select'+(detail?' id="detail-status-select" data-detail-status="1"':'')+' class="status-picker '+(r.status==='완료'?'done':['보류','취소'].includes(r.status)?'hold':'')+'" data-status-request="'+esc(r.id)+'" aria-label="'+esc(detail?'접수 상태 변경':r.hospitalName+' 상태 변경')+'" title="상태를 선택하면 바로 저장됩니다."'+(r.deletedAt||r.purgedAt?' disabled':'')+'>'+statuses.map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';}
   function notify(message){$('notice').textContent=message||'';$('notice').hidden=!message;}
   function showSyncState(phase,at){
     if(at)syncCheckedAt=at;
@@ -100,7 +101,7 @@
     if(!shown.length){$('list').innerHTML='<div class="empty"><strong>'+(state.requests.length?'조건에 맞는 업무가 없습니다':'등록된 A/S 업무가 없습니다')+'</strong>'+(state.requests.length?'검색어나 필터를 변경해 보세요.':'상단의 A/S 접수에서 첫 요청을 등록하세요.')+'</div>';return;}
     function rowButton(r){return '<button class="row-open" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+'</button><div class="summary">'+esc(r.symptom)+'</div>';}
     function rowCheck(r){return '<input type="checkbox" data-select-request="'+esc(r.id)+'" aria-label="'+esc(r.hospitalName+' · '+time(r.visitAt)+' · '+r.symptom.slice(0,60)+' 접수 선택')+'"'+(checkedRequests.has(r.id)?' checked':'')+(canManage(r)?'':' disabled title="등록자 또는 관리자만 선택할 수 있습니다."')+'>';}
-    $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th class="selection-cell"><span class="sr-only">접수 선택</span></th><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><td class="selection-cell">'+rowCheck(r)+'</td><td>'+rowButton(r)+'</td><td>'+badge(r.status)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+esc(time(r.visitAt))+'</td><td>'+esc(r.engineer||'미배정')+'</td><td>'+esc(r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>';}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><label class="mobile-select">'+rowCheck(r)+'<span class="sr-only">접수 선택</span></label><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(r.hospitalName)+'</span>'+badge(r.status)+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';updateSelection();
+    $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th class="selection-cell"><span class="sr-only">접수 선택</span></th><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><td class="selection-cell">'+rowCheck(r)+'</td><td>'+rowButton(r)+'</td><td>'+statusPicker(r)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+esc(time(r.visitAt))+'</td><td>'+esc(r.engineer||'미배정')+'</td><td>'+esc(r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>';}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><div class="mobile-status">'+statusPicker(r)+'</div><label class="mobile-select">'+rowCheck(r)+'<span class="sr-only">접수 선택</span></label><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(r.hospitalName)+'</span>'+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';updateSelection();
   }
   async function sync(force){
     if(syncing||busy||bulkWorking)return;syncing=true;updateSelection();$('sync').disabled=true;$('sync').textContent='동기화 중…';showSyncState('loading');notify('');
@@ -150,8 +151,7 @@
     function personChip(name){return '<span class="person-chip"><span class="person-icon">'+person+'</span><span class="person-name">'+esc(name||'미배정')+'</span></span>';}
     var kinds=Array.from(new Set(results.map(function(h){return h.source.gubun;}).filter(function(v){return v==='A/S'||v==='점검';})));
     var category=kinds.length?kinds.join(' · '):r.gubun||'구분 미확인';
-    var statusOptions=['접수','방문예정','처리중','결과확인','완료','보류','취소'].map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('');
-    var statusMarkup='<div class="detail-status-editor">'+badge(r.status)+'<span class="badge work-kind" aria-label="처리 구분">'+esc(category)+'</span><div class="status-inputs"><select id="detail-status-select" aria-label="접수 상태 변경"'+(r.deletedAt||d.preview?' disabled':'')+'>'+statusOptions+'</select><button data-action="save-status" type="button" disabled>상태 저장</button></div></div>';
+    var statusMarkup='<div class="detail-status-editor">'+statusPicker(r,true)+'<span class="badge work-kind" aria-label="처리 구분">'+esc(category)+'</span></div>';
     var facts=[['상태',statusMarkup],['엔지니어',personChip(r.engineer),'fact-assignee'],['영업 담당자',personChip(r.sales),'fact-assignee'],['방문 일시',esc(time(r.visitAt))],['마감일','<span class="'+(overdue(r)?'deadline-overdue':'')+'">'+esc(time(r.deadline))+'</span>']];
     return [
       '<div class="detail-bar"><button data-action="close-detail" aria-label="상세 닫기">'+back+'</button><a href="index.html" aria-label="메인으로">'+home+'</a><div><strong>서비스 업무 상세</strong><span>병원 접수 · 현장 처리 내역</span></div></div>',
@@ -339,17 +339,19 @@
     err('form-error',data.error);
   }
   function updateStatusControl(){
-    if(!state.detail)return;var select=$('detail-status-select'),button=$('detail').querySelector('[data-action="save-status"]');if(!select||!button)return;
-    var locked=busy||syncing||bulkWorking||!!pending||detailLoading||!!detailError||!!state.detail.request.deletedAt||!!state.detail.preview;
-    select.disabled=locked;button.disabled=locked||select.value===state.detail.request.status;
+    document.querySelectorAll('[data-status-request]').forEach(function(select){
+      var r=state.requests.find(function(r){return r.id===select.dataset.statusRequest;}),same=state.detail&&state.detail.request.id===select.dataset.statusRequest;
+      select.disabled=busy||syncing||bulkWorking||!!pending||!r||!!r.deletedAt||!!r.purgedAt||!!(same&&(detailLoading||detailError||state.detail.preview));
+    });
   }
-  async function saveStatus(){
-    if(busy||syncing||bulkWorking||pending||detailLoading||detailError||!state.detail||state.detail.preview)return;
-    var r=state.detail.request,next=$('detail-status-select').value;if(r.deletedAt||next===r.status)return;
-    var data=await write('work_status',{requestId:r.id,baseRevision:r.revision,status:next},'status');
-    if(data&&!data.success)notify(data.error+(data.conflict?'\n최신 내용 확인 후 상태를 다시 선택하세요.':''));
+  async function saveStatus(r,next){
+    var same=state.detail&&r&&state.detail.request.id===r.id;
+    if(busy||syncing||bulkWorking||pending||!r||r.deletedAt||r.purgedAt||same&&(detailLoading||detailError||state.detail.preview)||next===r.status)return;
+    var data=await write('work_status',{requestId:r.id,baseRevision:r.revision,status:next},same?'status':'bulk-status');
+    if(data&&!data.success){document.querySelectorAll('[data-status-request]').forEach(function(select){if(select.dataset.statusRequest===r.id)select.value=r.status;});notify(data.error+(data.conflict?'\n동기화 또는 최신 내용 확인 후 상태를 다시 선택하세요.':''));}
     updateStatusControl();
   }
+  function statusChanged(event){var select=event.target.closest('[data-status-request]');if(select)saveStatus(state.requests.find(function(r){return r.id===select.dataset.statusRequest;}),select.value);}
   async function saveComment(event){
     event.preventDefault();if(detailLoading||detailError)return;var r=state.detail.request,body=$('comment-body').value;if(r.deletedAt){notify('삭제된 접수에는 댓글을 남길 수 없습니다.');return;}
     var data=await write(commentEdit?'work_history_update':'work_history_add',{requestId:r.id,body:body,historyId:commentEdit?commentEdit.id:'',baseHistoryRevision:commentEdit?commentEdit.revision:0},'comment');
@@ -404,7 +406,7 @@
   $('selection-mode').onclick=function(){if(busy||syncing||bulkWorking||pending)return;selectionMode=!selectionMode;if(!selectionMode)checkedRequests.clear();renderList();};
   $('select-page').onchange=function(){if(!selectionMode||busy||syncing||bulkWorking||pending)return;shownRequests.filter(canManage).forEach(function(r){if($('select-page').checked)checkedRequests.add(r.id);else checkedRequests.delete(r.id);});renderList();};
   $('clear-selection').onclick=clearSelection;
-  $('list').onchange=function(event){var input=event.target.closest('[data-select-request]');if(!selectionMode||!input||busy||syncing||bulkWorking||pending)return;var r=shownRequests.find(function(r){return r.id===input.dataset.selectRequest;});if(!r||!canManage(r))return;if(input.checked)checkedRequests.add(r.id);else checkedRequests.delete(r.id);renderList();};
+  $('list').onchange=function(event){statusChanged(event);var input=event.target.closest('[data-select-request]');if(!selectionMode||!input||busy||syncing||bulkWorking||pending)return;var r=shownRequests.find(function(r){return r.id===input.dataset.selectRequest;});if(!r||!canManage(r))return;if(input.checked)checkedRequests.add(r.id);else checkedRequests.delete(r.id);renderList();};
   $('delete-selected').onclick=function(){openLifecycle('delete',shownRequests.filter(function(r){return checkedRequests.has(r.id);}));};
   $('restore-selected').onclick=function(){openLifecycle('restore',shownRequests.filter(function(r){return checkedRequests.has(r.id);}));};
   $('empty-trash').onclick=async function(){
@@ -428,10 +430,10 @@
     if(detailLoading||detailError)return;
     if(b.dataset.comment){commentEdit=state.detail.history.find(function(h){return h.id===b.dataset.comment;});$('comment-body').value=commentEdit.body;$('comment-edit-label').textContent='댓글 수정 중';$('cancel-comment').hidden=false;$('comment-body').focus();store(scope+'_comment_'+state.detail.request.id,{body:commentEdit.body,historyId:commentEdit.id,baseRevision:commentEdit.revision});return;}
     if(b.dataset.result){openResults(state.detail.history.find(function(h){return h.id===b.dataset.result;}));return;}
-    var action=b.dataset.action;if(action==='save-status'){saveStatus();return;}if(action==='edit')openEditor(state.detail.request);if(action==='import')openResults();
+    var action=b.dataset.action;if(action==='edit')openEditor(state.detail.request);if(action==='import')openResults();
     if(action==='complete'){write('work_complete',{requestId:state.detail.request.id,baseRevision:state.detail.request.revision},'complete').then(function(d){if(d&&!d.success)notify(d.error);});}
   };
-  $('detail').onchange=function(event){if(event.target.id==='detail-status-select')updateStatusControl();};
+  $('detail').onchange=statusChanged;
   $('hospital-input').oninput=function(){selectHospital(true);saveDraft();};
   $('request-form').addEventListener('input',function(event){if(event.target.id!=='ack'){$('ack').checked=false;$('duplicate-ack').hidden=true;}saveDraft();});
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();};
