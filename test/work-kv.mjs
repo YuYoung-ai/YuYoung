@@ -153,4 +153,29 @@ for(const gubun of ['A/S','점검']){
  const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal((await s.ingestSources([report])).linked,1);
  assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'original Handover can be reused after permanent deletion');
 }
+{
+ const db=new Kv(),s=createWorkStore(db);await s.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
+ const created=await s.handle({...op,operationId:crypto.randomUUID()},alice);let r=created.request;
+ const comment=await s.handle({action:'work_history_add',requestId:r.id,body:'수동 변경 전 상담',operationId:crypto.randomUUID()},alice);r=comment.request;
+ for(const status of ['완료','처리중','보류','접수','방문예정','결과확인','취소','완료']){
+  const p={action:'work_status',requestId:r.id,baseRevision:r.revision,status,operationId:crypto.randomUUID()},out=await s.handle(p,alice);
+  assert.equal(out.success,true,'manual status '+status+' requires no Handover result');assert.equal(out.request.status,status);assert.equal(out.request.revision,r.revision+1);
+  assert.deepEqual(await s.handle(p,alice),out,'status retry is idempotent');
+  if(status==='완료'){assert.ok(out.request.completedAt);assert.equal(out.request.completedBy,alice.name);}else{assert.equal(out.request.completedAt,'');assert.equal(out.request.completedBy,'');}
+  for(const key of ['hospitalName','visitAt','engineer','symptom','latest'])assert.equal(out.request[key],r[key],'status write preserves '+key);
+  assert.equal(out.event.kind,'status_change');assert.equal(out.event.before.status,r.status);r=out.request;
+ }
+ const preserved=await s.handle({action:'work_detail',id:r.id},alice);assert.deepEqual(preserved.history,[comment.history]);
+ assert.equal((await s.handle({action:'work_status',requestId:r.id,baseRevision:r.revision,status:'invalid',operationId:crypto.randomUUID()},alice)).success,false);
+ assert.equal((await s.handle({action:'work_status',requestId:r.id,baseRevision:r.revision,status:'접수',operationId:crypto.randomUUID()},{name:'외부',level:0})).success,false);
+ const parallel=await Promise.all(['보류','처리중'].map(status=>s.handle({action:'work_status',requestId:r.id,baseRevision:r.revision,status,operationId:crypto.randomUUID()},alice)));
+ assert.equal(parallel.filter(x=>x.success).length,1);assert.equal(parallel.filter(x=>x.conflict).length,1,'concurrent status edits cannot overwrite');r=parallel.find(x=>x.success).request;
+ const full=await s.handle({action:'work_save',id:r.id,baseRevision:r.revision,form:{...form,status:'완료'},operationId:crypto.randomUUID()},alice);assert.equal(full.success,true,'existing edit form can also complete');assert.ok(full.request.completedAt);
+ const reopen=await s.handle({action:'work_save',id:r.id,baseRevision:full.request.revision,form:{...form,status:'처리중'},operationId:crypto.randomUUID()},alice);assert.equal(reopen.request.completedAt,'','edit form clears current completion on reopening');
+ const done=await s.handle({action:'work_complete',requestId:r.id,baseRevision:reopen.request.revision,operationId:crypto.randomUUID()},alice);assert.equal(done.success,true,'completion button follows manual completion policy');
+ const trash=await s.handle({action:'work_delete',requestId:r.id,baseRevision:done.request.revision,operationId:crypto.randomUUID()},alice);
+ assert.equal((await s.handle({action:'work_status',requestId:r.id,baseRevision:trash.request.revision,status:'접수',operationId:crypto.randomUUID()},alice)).deleted,true);
+ const synced=await s.handle({action:'work_sync',revision:'0'},bob);assert.ok(synced.requests.some(x=>x.id===r.id),'manual changes are delivered on other PC sync');
+ console.log('manual status: all seven states, no-result completion, reopening metadata, idempotency, atomic conflicts, ACL, trash rejection, preserved history and edit-form parity passed.');
+}
 console.log('work-kv: revisions, ACL, trash AS/inspection relink, original history preservation, restore/relink races, admin-confirmed permanent deletion, resumable cleanup, tombstones/mirror sanitation and active source protection passed.');
