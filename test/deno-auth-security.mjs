@@ -268,7 +268,7 @@ async function googleIdToken(overrides = {}) {
     serve: (fn) => { handler = fn; return { finished: Promise.resolve() }; },
   };
   const rememberedSource = path.join(ROOT, 'test', '.tmp-deno-auth-remember.ts');
-  fs.copyFileSync(SOURCE_PATH, rememberedSource);
+  fs.writeFileSync(rememberedSource, SOURCE.replace("'./work-store.ts'", "'../deno-auth/work-store.ts'"));
   try {
     await import(pathToFileURL(rememberedSource).href);
   } finally {
