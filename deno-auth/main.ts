@@ -513,7 +513,7 @@ function withCors(res: Response, req: Request): Response {
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
 const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_detail", "work_handover_candidates", "work_handover_detail", "work_flow_preview"]);
-const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_flow_import"]);
+const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");

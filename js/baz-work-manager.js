@@ -33,6 +33,8 @@
     $('selection-mode').textContent=selectionMode?(state.filter==='trash'?'복원 모드 닫기':'삭제 모드 닫기'):(state.filter==='trash'?'복원':'삭제');
     $('selection-mode').setAttribute('aria-expanded',String(selectionMode));
     $('selection-mode').disabled=locked;
+    $('empty-trash').hidden=state.filter!=='trash'||window.BazAuth.cachedLevel()<3;
+    $('empty-trash').disabled=locked||!state.requests.some(function(r){return r.deletedAt&&!r.purgedAt;});
     checkedRequests.forEach(function(id){if(!eligible.some(function(r){return r.id===id;}))checkedRequests.delete(id);});
     $('selection-count').textContent='선택 '+checkedRequests.size+'건';
     $('select-page').checked=eligible.length>0&&checkedRequests.size===eligible.length;
@@ -75,6 +77,7 @@
     $('count-review').textContent=state.requests.filter(function(r){return !r.deletedAt&&r.status==='결과확인';}).length;
     $('count-overdue').textContent=state.requests.filter(overdue).length;
     var rows=state.requests.filter(function(r){
+      if(r.purgedAt)return false;
       if(!!r.deletedAt!==(state.filter==='trash'))return false;
       if(status&&r.status!==status)return false;
       if(search&&![r.hospitalName,r.symptom,r.cs,r.engineer,r.sales].join(' ').toLowerCase().includes(search))return false;
@@ -114,6 +117,7 @@
       // 늦게 도착한 목록으로 이 PC에서 저장한 더 높은 버전을 덮지 않는다.
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
+      for(var removed of state.requests.filter(function(r){return r.purgedAt;}))await forgetPurged(removed.id);
       kvReady=data.storage==='kv';sourceCheckedAt=data.sourceCheckedAt||sourceCheckedAt;state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
       $('new').disabled=false;
       if(data.autoMatch){
@@ -227,6 +231,7 @@
     if(busy)return;
     if(detailLoading&&state.detail&&state.detail.request.id===id)return detailTask;
     var seq=++detailSeq,known=state.requests.find(function(r){return r.id===id;}),cached=detailCache.get(id)||await cache.detail(account,id).catch(function(){return null;});
+    if(known&&known.purgedAt){await forgetPurged(id);notify('영구 삭제된 접수입니다.');return;}
     notify('');detailLoading=true;detailError='';
     // 목록의 접수 정보는 즉시 표시한다. 댓글/결과의 미조회 상태를 0건으로 표시하지 않는다.
     if(known||cached){
@@ -235,7 +240,7 @@
     }
     detailTask=(async function(){
       try{
-        var d=(!force&&cached&&!cached.preview&&known&&cached.request.revision===known.revision)?cached:await api.get('work_detail',{id:id});if(seq!==detailSeq)return;if(!d.success)throw new Error(d.error);
+        var d=(!force&&cached&&!cached.preview&&known&&cached.request.revision===known.revision)?cached:await api.get('work_detail',{id:id});if(seq!==detailSeq)return;if(!d.success){if(d.purged&&d.current){upsert(d.current);await forgetPurged(id);await persistSnapshot();renderList();notify(d.error);return;}throw new Error(d.error);}
         var latest=state.requests.find(function(r){return r.id===id;});
         if(latest&&latest.revision>d.request.revision)throw new Error('이 PC에서 확인한 정보보다 이전 응답입니다. 다시 확인하세요.');
         detailLoading=false;state.detail=d;upsert(d.request);
@@ -299,6 +304,7 @@
       pending=null;store(pendingKey,null);await cache.savePending(account,null).catch(function(){});updatePending();
       if(!data.success){$('save-status').textContent='저장되지 않음';return data;}
       upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
+      if(data.request.purgedAt){await forgetPurged(data.request.id);await persistSnapshot();notify('접수를 영구 삭제했습니다.');return data;}
       if(operation.context==='request'){store(draftKey,null);$('editor').close();}
       if(operation.context==='comment'){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}
       if(operation.context==='result'){store(scope+'_result_'+data.request.id,null);$('result-dialog').close();}
@@ -385,6 +391,12 @@
   $('list').onchange=function(event){var input=event.target.closest('[data-select-request]');if(!selectionMode||!input||busy||syncing||bulkWorking||pending)return;var r=shownRequests.find(function(r){return r.id===input.dataset.selectRequest;});if(!r||!canManage(r))return;if(input.checked)checkedRequests.add(r.id);else checkedRequests.delete(r.id);renderList();};
   $('delete-selected').onclick=function(){openLifecycle('delete',shownRequests.filter(function(r){return checkedRequests.has(r.id);}));};
   $('restore-selected').onclick=function(){openLifecycle('restore',shownRequests.filter(function(r){return checkedRequests.has(r.id);}));};
+  $('empty-trash').onclick=async function(){
+    if(busy||syncing||bulkWorking||pending||window.BazAuth.cachedLevel()<3)return;
+    await sync();if($('sync-state').dataset.state!=='done')return;
+    openLifecycle('purge',state.requests.filter(function(r){return r.deletedAt&&!r.purgedAt;}));
+  };
+  $('purge-confirm').onchange=function(){if(lifecyclePlan&&lifecyclePlan.action==='purge')$('confirm-lifecycle').disabled=!this.checked;};
   function cancelLifecycle(){if(!bulkWorking)$('lifecycle-dialog').close();}
   $('close-lifecycle').onclick=$('cancel-lifecycle').onclick=cancelLifecycle;
   $('lifecycle-dialog').addEventListener('cancel',function(event){if(bulkWorking)event.preventDefault();});
@@ -415,32 +427,42 @@
   $('result-memo').oninput=function(){if(state.source&&state.detail)store(scope+'_result_'+state.detail.request.id,{recordId:state.source.recordId,memo:this.value});};
   $('retry').onclick=async function(){var d=await sendPending();if(d&&!d.success)notify(d.error);};
   async function persistSnapshot(){if(!kvReady)return;try{await cache.save(account,{storage:'kv',requests:state.requests,hospitals:state.hospitals,engineers:state.engineers,revision:revision,updatedAt:syncCheckedAt,sourceCheckedAt:sourceCheckedAt});}catch(e){notify('브라우저 보관 실패 · 서버 저장은 유지됩니다. 다음 접속에서 다시 조회합니다.');}}
+  async function forgetPurged(id){
+    detailCache.delete(id);checkedRequests.delete(id);
+    await cache.saveDetail(account,id,null).catch(function(){});
+    store(scope+'_comment_'+id,null);store(scope+'_result_'+id,null);
+    var draft=read(draftKey);if(draft&&draft.id===id){store(draftKey,null);if($('editor').open)$('editor').close();}
+    if(state.detail&&state.detail.request.id===id)closeDetail();
+  }
   function changeLifecycle(action){if(state.detail)openLifecycle(action,[state.detail.request]);}
   function openLifecycle(action,requests){
     if(busy||syncing||bulkWorking||pending){notify('먼저 진행 중인 저장 결과를 확인하세요.');return;}
-    requests=requests.filter(function(r){return canManage(r)&&!!r.deletedAt===(action==='restore');});if(!requests.length)return;
+    if(action==='purge'&&window.BazAuth.cachedLevel()<3)return;
+    requests=requests.filter(function(r){return !r.purgedAt&&canManage(r)&&!!r.deletedAt===(action!=='delete');});if(!requests.length)return;
     lifecyclePlan={action:action,items:requests.map(function(r){return {id:r.id,revision:r.revision,hospitalName:r.hospitalName,visitAt:r.visitAt,symptom:r.symptom};})};
-    $('lifecycle-title').textContent='선택한 접수 '+requests.length+'건 '+(action==='delete'?'삭제':'복원');
-    $('lifecycle-description').textContent=action==='delete'?'아래 접수만 휴지통으로 이동합니다. 댓글과 처리 이력은 보존되며 휴지통에서 복원할 수 있습니다. Handover 원본과 병원 정보는 유지됩니다.':'아래 접수를 목록으로 복원합니다. 상태·댓글·처리 이력은 그대로 유지됩니다.';
+    $('lifecycle-title').textContent=action==='purge'?'휴지통 '+requests.length+'건 비우기':'선택한 접수 '+requests.length+'건 '+(action==='delete'?'삭제':'복원');
+    $('lifecycle-description').textContent=action==='purge'?'아래는 검색·페이지 필터와 관계없이 휴지통에 있는 전체 접수입니다. 접수와 댓글·처리 결과를 영구 삭제하며 복원할 수 없습니다. Handover 원본과 병원 정보는 유지됩니다.':action==='delete'?'아래 접수만 휴지통으로 이동합니다. 댓글과 처리 이력은 보존되며 휴지통에서 복원할 수 있습니다. Handover 원본과 병원 정보는 유지됩니다.':'아래 접수를 목록으로 복원합니다. 상태·댓글·처리 이력은 그대로 유지됩니다.';
     $('lifecycle-list').innerHTML=requests.map(function(r){return '<li><strong>'+esc(r.hospitalName)+'</strong><span>'+esc(time(r.visitAt))+' · '+esc(r.status)+'</span><p>'+esc(r.symptom)+'</p></li>';}).join('');
     $('restore-duplicate-label').hidden=action!=='restore';$('restore-duplicate').checked=false;
-    $('confirm-lifecycle').textContent=action==='delete'?'휴지통으로 이동':'선택 접수 복원';$('confirm-lifecycle').className=action==='delete'?'danger selection-delete':'primary';$('lifecycle-progress').textContent='';
+    $('purge-confirm-label').hidden=action!=='purge';$('purge-confirm').checked=false;$('confirm-lifecycle').disabled=action==='purge';
+    $('confirm-lifecycle').textContent=action==='purge'?'영구 삭제':action==='delete'?'휴지통으로 이동':'선택 접수 복원';$('confirm-lifecycle').className=action==='restore'?'primary':'danger selection-delete';$('lifecycle-progress').textContent='';
     $('lifecycle-dialog').showModal();
   }
   async function submitLifecycle(event){
     event.preventDefault();if(!lifecyclePlan||busy||syncing||bulkWorking||pending)return;
+    if(lifecyclePlan.action==='purge'&&!$('purge-confirm').checked)return;
     var plan=lifecyclePlan,completed=0,errors=[],ack=$('restore-duplicate').checked;bulkWorking=true;updatePending();
     ['close-lifecycle','cancel-lifecycle','confirm-lifecycle'].forEach(function(id){$(id).disabled=true;});
     try{
       for(var i=0;i<plan.items.length;i++){
         var r=plan.items[i];$('lifecycle-progress').textContent=(i+1)+' / '+plan.items.length+'건 처리 중…';
-        var data=await write('work_'+plan.action,{requestId:r.id,baseRevision:r.revision,acknowledgeDuplicates:ack},'bulk-'+plan.action);
+        var data=await write('work_'+plan.action,{requestId:r.id,baseRevision:r.revision,acknowledgeDuplicates:ack,confirmPermanentDelete:plan.action==='purge'},'bulk-'+plan.action);
         if(data&&data.success){completed++;checkedRequests.delete(r.id);}
         else {errors.push(r.hospitalName+' · '+(data?data.error:'저장 결과 확인 필요'));if(!data)break;}
       }
     }finally{
       bulkWorking=false;['close-lifecycle','cancel-lifecycle','confirm-lifecycle'].forEach(function(id){$(id).disabled=false;});$('lifecycle-dialog').close();renderList();updatePending();
-      notify(completed+'건 '+(plan.action==='delete'?'휴지통 이동':'복원')+' 완료'+(errors.length?'\n'+errors.join('\n')+'\n처리되지 않은 선택은 유지됩니다. 저장 결과 확인 또는 동기화 후 다시 시도하세요.':''));
+      notify(completed+'건 '+(plan.action==='purge'?'영구 삭제':plan.action==='delete'?'휴지통 이동':'복원')+' 완료'+(errors.length?'\n'+errors.join('\n')+'\n처리되지 않은 접수는 유지됩니다. 저장 결과 확인 또는 동기화 후 다시 시도하세요.':''));
     }
   }
   async function loadMoreHistory(){var d=state.detail;try{var next=await api.get('work_detail',{id:d.request.id,historyCursor:d.historyCursor||'',auditCursor:d.auditCursor||''});if(!next.success)throw new Error(next.error);var hm=new Map(d.history.map(function(h){return [h.id,h];}));next.history.forEach(function(h){hm.set(h.id,h);});next.history=Array.from(hm.values());next.logs=d.logs.concat(next.logs).filter(function(l,i,a){return a.findIndex(function(x){return x.at===l.at&&x.kind===l.kind&&x.actor===l.actor;})===i;});state.detail=next;detailCache.set(next.request.id,next);await cache.saveDetail(account,next.request.id,next);renderDetail();}catch(e){notify(e.message);}}

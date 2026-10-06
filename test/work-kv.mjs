@@ -61,7 +61,7 @@ async function relinkFixture(gubun='A/S'){
  const db=new Kv(),s=createWorkStore(db);
  await s.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});
  await s.bridge('activate',{manifest:await s.manifest()});
- const first=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ const createPayload={...op,operationId:crypto.randomUUID()},first=await s.handle(createPayload,alice);
  const report={...source,gubun,recordId:'reused-report'};
  await s.ingestSources([report]);
  const found=await s.handle({action:'work_detail',id:first.request.id},alice);
@@ -70,7 +70,7 @@ async function relinkFixture(gubun='A/S'){
  const trash=await s.handle({action:'work_delete',requestId:first.request.id,baseRevision:completed.request.revision,operationId:crypto.randomUUID()},alice);
  assert.equal(trash.success,true);
  const original=await s.handle({action:'work_detail',id:first.request.id},alice);
- return {db,s,report,trash,original};
+ return {db,s,report,trash,original,createPayload};
 }
 for(const gubun of ['A/S','점검']){
  const {s,report,trash,original}=await relinkFixture(gubun);
@@ -119,4 +119,38 @@ for(const gubun of ['A/S','점검']){
  const blocked=await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice);
  assert.equal(blocked.success,false);assert.match(blocked.error,/다른 접수에 연결/);
 }
-console.log('work-kv: revisions, ACL, trash result reuse (auto/manual AS/inspection), original history preservation, restore/relink race and competing live owner protection, durable mirror, migration and detail badge passed.');
+{
+ const {db,s,report,trash,createPayload}=await relinkFixture();
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);await s.ingestSources([report]);
+ const before=await s.handle({action:'work_detail',id:fresh.request.id},alice);
+ const payload={action:'work_purge',requestId:trash.request.id,baseRevision:trash.request.revision,confirmPermanentDelete:true,operationId:crypto.randomUUID()};
+ assert.equal((await s.handle(payload,alice)).success,false,'even the author cannot empty trash without admin access');
+ assert.equal((await s.handle({...payload,confirmPermanentDelete:false},admin)).success,false,'explicit permanent-delete acknowledgement required');
+ assert.equal((await s.handle({...payload,baseRevision:0},admin)).conflict,true);
+ assert.equal((await s.handle({...payload,requestId:fresh.request.id,baseRevision:before.request.revision},admin)).success,false,'active requests cannot be purged');
+ const purged=await s.handle(payload,admin);assert.equal(purged.success,true);assert.ok(purged.request.purgedAt);assert.equal(purged.request.hospitalName,undefined,'only a minimal tombstone remains');
+ assert.deepEqual(await s.handle(payload,admin),purged,'permanent-delete retries are idempotent');
+ assert.equal((await s.handle({action:'work_detail',id:trash.request.id},admin)).purged,true);
+ assert.equal((await s.handle({action:'work_restore',requestId:trash.request.id,baseRevision:purged.request.revision,operationId:crypto.randomUUID()},admin)).purged,true);
+ assert.equal([...db.data.values()].filter(e=>e.key[1]==='history'&&e.key[2]===trash.request.id).length,0,'purged comments/results removed');
+ assert.equal([...db.data.values()].filter(e=>e.key[1]==='audit'&&e.key[2]===trash.request.id&&e.value.kind!=='purge').length,0);
+ assert.equal((await db.get([s.NS,'link',report.recordId])).value.requestId,fresh.request.id,'purge never removes another live request link');
+ assert.deepEqual((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history,before.history);
+ assert.deepEqual((await s.sources(hospital.name))[0],report,'Handover source retained');
+ const replay=await s.handle(createPayload,alice);assert.equal(replay.success,false);assert.equal(replay.purged,true,'retrying an old save cannot recreate a permanently deleted request');
+ const deletedDelta=(await s.handle({action:'work_sync',revision:'0'},bob)).requests.find(r=>r.id===trash.request.id);assert.ok(deletedDelta.purgedAt,'other PCs receive the permanent-delete tombstone');
+ const queue=await s.bridge('pending',{});assert.ok(queue.events.filter(e=>e.request.id===trash.request.id).every(e=>e.kind==='purge'&&!e.history&&!e.before&&!e.request.hospitalName),'queued old copies sanitized');
+}
+{
+ const {db,s,report,trash}=await relinkFixture();
+ const atomic=db.atomic.bind(db);let commits=0;
+ db.atomic=()=>{const tx=atomic(),commit=tx.commit;tx.commit=async()=>++commits===2?{ok:false}:commit();return tx;};
+ const purged=await s.handle({action:'work_purge',requestId:trash.request.id,baseRevision:trash.request.revision,confirmPermanentDelete:true,operationId:crypto.randomUUID()},admin);
+ assert.equal(purged.success,true);assert.equal(purged.cleanupPending,true,'cleanup interruption does not undo the deletion fence');
+ assert.ok((await db.get([s.NS,'purgeCleanup',trash.request.id])).value,'cleanup retry is durable');
+ await s.bridge('pending',{});assert.equal((await db.get([s.NS,'purgeCleanup',trash.request.id])).value,null);
+ assert.equal((await db.get([s.NS,'link',report.recordId])).value,null,'purged owner binding is released');
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal((await s.ingestSources([report])).linked,1);
+ assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'original Handover can be reused after permanent deletion');
+}
+console.log('work-kv: revisions, ACL, trash AS/inspection relink, original history preservation, restore/relink races, admin-confirmed permanent deletion, resumable cleanup, tombstones/mirror sanitation and active source protection passed.');
