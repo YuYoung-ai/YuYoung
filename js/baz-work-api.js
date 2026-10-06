@@ -2,10 +2,17 @@
   'use strict';
   var URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';
   var DENO='https://yuyoung.yuyoung-ai.deno.net',denoReady=false;
-  // 기능 확인을 기다리느라 첫 목록을 지연하지 않는다. 배포/스위치 OFF면 GAS 사용.
-  if(root.BazAuth.config)root.BazAuth.config().then(function(c){denoReady=!!(c&&c.ok&&c.workApi===true);}).catch(function(){});
+  // 첫 요청도 활성화된 Deno 중계를 사용한다. 설정 조회는 최대 1.5초만 기다린다.
+  // OFF/실패/시간 초과면 GAS 사용. 늦게 도착한 설정은 이후 요청부터 적용한다.
+  var configReady=new Promise(function(resolve){
+    var timer=setTimeout(resolve,1500);
+    Promise.resolve().then(function(){return root.BazAuth.config?root.BazAuth.config():null;})
+      .then(function(c){denoReady=!!(c&&c.ok&&c.workApi===true);},function(){})
+      .then(function(){clearTimeout(timer);resolve();});
+  });
   function id(){return root.crypto.randomUUID();}
   async function call(action,params,write){
+    await configReady;
     var ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},35000);
     var payload=Object.assign({},params,{action:action,token:root.BazAuth.token()});
     var url=denoReady?DENO:URL,options={signal:ctl.signal,cache:'no-store'};
