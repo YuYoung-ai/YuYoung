@@ -38,7 +38,7 @@ const sandbox={console,Date,JSON,Map,Set,SpreadsheetApp:{openById:()=>ss,getActi
     formatDate:(d,tz,fmt)=>{const s=new Intl.DateTimeFormat('sv-SE',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(d).replace(' ','T');return fmt.includes('HH:mm')?s:s.slice(0,10);}},
   LockService:{getScriptLock:()=>({waitLock(){assert.equal(lockHeld,false,'no nested lock');lockHeld=true;},releaseLock(){lockHeld=false;}})},
   bazVerifyLocal_:token=>token==='alice'?{ok:true,level:1,name:'CS A'}:token==='bob'?{ok:true,level:1,name:'CS B'}:token==='admin'?{ok:true,level:3,name:'관리자'}:{ok:false}};
-vm.createContext(sandbox);vm.runInContext(read('handover_gas.gs'),sandbox);vm.runInContext(read('hospital_work_gas.gs'),sandbox);
+vm.createContext(sandbox);vm.runInContext(read('handover_gas.gs'),sandbox);vm.runInContext(read('hospital_work_gas.gs'),sandbox);vm.runInContext(read('hospital_work_kv_gas.gs'),sandbox);
 sandbox.getHospDBRich_=()=>({success:true,data:[{name:'샘플병원',sn:'SN1',region:'서울',sales:'영업 A'},{name:'샘플병원 분점',sn:'SN2',region:'서울',sales:'영업 B'}]});
 sandbox.getMaster_=()=>({fse:['엔지니어 A','엔지니어 B']});
 sandbox.bazDropHandoverCaches_=()=>{};
@@ -110,7 +110,7 @@ const auto=autoRequest('2026-10-10');
 addSource('2026-10-02',{recordId:'registration-date-only'});
 assert.equal(get({action:'work_detail',id:auto.id}).request.status,'방문예정','registration date must not match');
 const autoSource=addSource('2026-10-10');
-addSource('2026-10-10',{hospital:'샘플병원 분점'});addSource('2026-10-10',{gubun:'점검'});
+addSource('2026-10-10',{hospital:'샘플병원 분점'});addSource('2026-10-09',{gubun:'점검'});
 assert.equal(hook('샘플병원','2026-10-10').completed,1,'post-save hook completes exact visit match');
 let autoDetail=get({action:'work_detail',id:auto.id});
 assert.equal(autoDetail.request.status,'완료');assert.equal(autoDetail.request.cs,'CS A');assert.equal(autoDetail.request.visitAt,auto.visitAt);
@@ -197,4 +197,22 @@ readRanges=[];const activeDetail=get({action:'work_detail',id:incomplete.id});as
 assert.ok(!readRanges.some(x=>x.sheet==='업무처리이력'&&x.rows>100),'active detail auto linking also limits history transfer');
 console.log('hospital-work performance fixture: 1,000 unrelated history/log rows, detail history/log transferred cells='+detailCells+' (TextFinder search stays in Sheets).');
 assert.equal(lockHeld,false);
+// KV mode blocks legacy writes and permits Handover lookup before a new request is mirrored.
+props.set('HOSPITAL_WORK_KV_STAGE','active');
+assert.equal(post({action:'work_save',form}).upgradeRequired,true);
+assert.equal(get({action:'work_bootstrap'}).upgradeRequired,true);
+addSource('2026-10-27',{gubun:'점검'});
+const inspections=get({action:'work_handover_candidates',requestId:'not-yet-mirrored',hospitalName:'샘플병원'});
+assert.equal(inspections.success,true);const inspection=inspections.data.find(x=>x.date==='2026-10-27');assert.equal(inspection.gubun,'점검');assert.ok(inspection.observedAt);
+assert.equal(get({action:'work_handover_detail',requestId:'not-yet-mirrored',hospitalName:'샘플병원',recordId:inspection.recordId}).source.gubun,'점검');
+const originalMirror=copy(sandbox.hwRequest_(id)),mirrorHistory={id:'kv-comment-fixture',requestId:id,kind:'comment',body:'KV 저장 내용',revision:1};
+const mirrorEvent={id:'kv-event-fixture',seq:1,actor:'CS A',kind:'comment_add',request:{...originalMirror,revision:originalMirror.revision+1,latest:'KV 저장 내용'},history:mirrorHistory,at:new Date().toISOString()};
+failSheet='업무요청';assert.throws(()=>sandbox.hwKvApply_([mirrorEvent]),/interrupted/);
+assert.equal(sheets.get('업무KV변경로그').data.length,1,'interrupted projection is not acknowledged');
+assert.equal(sandbox.hwKvApply_([mirrorEvent]).length,1);assert.equal(sandbox.hwKvApply_([mirrorEvent]).length,1);
+assert.equal(sheets.get('업무KV변경로그').data.length,2,'duplicate delivery applies once');
+assert.equal(sheets.get('업무처리이력').data.filter(x=>x[0]===mirrorHistory.id).length,1);
+sandbox.hwKvApply_([{...mirrorEvent,id:'kv-older-fixture',seq:0,request:originalMirror,history:{...mirrorHistory,revision:0,body:'오래된 내용'}}]);
+assert.equal(sandbox.hwRequest_(id).latest,'KV 저장 내용','older projection cannot replace newer request');assert.equal(sandbox.hwHistory_(mirrorHistory.id).body,'KV 저장 내용');
 console.log('hospital-work: manual workflow plus visit-date auto completion, exact hospital/AS match, duplicates, SN, missing result/date, hold/cancel, stable IDs, memo preservation, idempotent sync, actual Handover save and auxiliary failure recovery passed.');
+

@@ -48,7 +48,8 @@
  *   KV 가 없으면 device_* 는 kv_unavailable 을 반환할 뿐, 일반 로그인은 정상 동작한다.
  ************************************************************/
 
-const VER = "deno-1.3.0-work";
+import { createWorkStore } from './work-store.ts';
+const VER = "deno-1.4.0-work-kv";
 
 const enc = new TextEncoder();
 
@@ -512,7 +513,7 @@ function withCors(res: Response, req: Request): Response {
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
 const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_detail", "work_handover_candidates", "work_handover_detail"]);
-const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete"]);
+const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
@@ -544,6 +545,32 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
   if (!WORK_API_ENABLED) return fail("업무 중계가 비활성 상태입니다. 다시 접속해 주세요.", 503);
   const verified = await verifyToken(String(p.token || ""));
   if (!verified.ok) return fail("로그인이 만료되었습니다.", 401);
+  const kv = await getKv();
+  if (kv) {
+    const store = createWorkStore(kv);
+    if ((await store.status()).ready) {
+      if (action === 'work_handover_candidates' || action === 'work_handover_detail') {
+        try {await store.checkAccess({name:verified.name||'',level:verified.level||0});}
+        catch {return fail('업무관리 접근 권한이 없습니다.',403);}
+        const payload:Record<string,unknown>={...p,action};
+        if(p.requestId){
+          try {const r=(await store.request(p.requestId)).value;payload.hospitalName=r.hospitalName;}
+          catch {return fail('요청을 찾지 못했거나 삭제된 접수입니다.',403);}
+        }
+        const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
+        try {
+          const upstream=await fetch(WORK_GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload),signal:ctl.signal,redirect:'follow'});
+          const body=await upstream.json();
+          if (!body.success) return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
+          await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data);
+          return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
+        } catch { return fail('Handover 원본 조회에 실패했습니다. 다시 불러오세요.',502); }
+        finally {clearTimeout(timer);}
+      }
+      const body=await store.handle({...p,action},{name:verified.name||'',level:verified.level||0});
+      return workReply({body:body as WorkBody,status:200,upstreamMs:0},'kv',started);
+    }
+  }
   const write = WORK_WRITES.has(action), force = String(p.force || "") === "1";
   // 저장/강제 동기화 이후 조회를 이전 요청과 합치지 않는다.
   if (write || force) { workGeneration++; workReferences = null; }
@@ -602,6 +629,16 @@ async function handleAction(
   p: Record<string, unknown>,
   clientIp: string,
 ): Promise<Response> {
+  if (action === 'work_bridge') {
+    const kv=await getKv();if(!kv||!SECRET)return json({success:false,error:'업무 KV 연결이 없습니다.'},503);
+    const clean={...p};delete clean.__ua;delete clean.signature;
+    const at=Number(p.at),nonce=String(p.nonce||'');
+    if (!Number.isFinite(at)||Math.abs(Date.now()-at)>300000||!/^[A-Za-z0-9_-]{8,90}$/.test(nonce)||!safeEq(await hmacB64u('baz-work-bridge-v1\n'+JSON.stringify(clean)),String(p.signature||'')))return json({success:false,error:'연동 인증 실패'},403);
+    const nonceKey=['hospitalwork-v2','bridgeNonce',nonce],entry=await kv.get(nonceKey);
+    if(entry.value!==null||!(await kv.atomic().check(entry).set(nonceKey,true,{expireIn:600000}).commit()).ok)return json({success:false,error:'이미 처리한 연동 요청입니다.'},409);
+    try{return json(await createWorkStore(kv).bridge(String(p.verb||''),(p.payload||{}) as Record<string,any>));}
+    catch(e){return json({success:false,error:e instanceof Error?e.message:'업무 연동 실패'},500);}
+  }
   if (action.startsWith("work_")) return workForward(action, p);
   if (action === "config") {
     return json({
@@ -610,6 +647,7 @@ async function handleAction(
       googleClientId: GOOGLE_AUTH_ENABLED ? GOOGLE_CLIENT_ID : "",
       deviceAuth: DEVICE_AUTH_ENABLED,
       workApi: WORK_API_ENABLED,
+      workStorage: (await getKv()) && (await createWorkStore((await getKv())!).status()).ready ? 'kv' : 'gas',
     });
   }
 
@@ -880,3 +918,4 @@ Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
     return withCors(json({ ok: false, error: "server_error" }), req);
   }
 });
+
