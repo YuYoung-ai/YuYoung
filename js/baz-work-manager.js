@@ -15,7 +15,7 @@
   function active(r){return !r.deletedAt&&r.status!=='완료'&&r.status!=='취소';}
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
   function badge(status){return '<span class="badge '+(status==='완료'?'done':['보류','취소'].includes(status)?'hold':'')+'">'+esc(status)+'</span>';}
-  function statusPicker(r,detail){return '<select'+(detail?' id="detail-status-select" data-detail-status="1"':'')+' class="status-picker '+(r.status==='완료'?'done':['보류','취소'].includes(r.status)?'hold':'')+'" data-status-request="'+esc(r.id)+'" aria-label="'+esc(detail?'접수 상태 변경':r.hospitalName+' 상태 변경')+'" title="상태를 선택하면 바로 저장됩니다."'+(r.deletedAt||r.purgedAt?' disabled':'')+'>'+statuses.map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>';}
+  function statusPicker(r,detail){return '<span class="badge status-badge"><select'+(detail?' id="detail-status-select" data-detail-status="1"':'')+' class="status-picker" data-status-request="'+esc(r.id)+'" aria-label="'+esc(detail?'접수 상태 변경':r.hospitalName+' 상태 변경')+'" title="상태를 선택하면 바로 저장됩니다."'+(r.deletedAt||r.purgedAt?' disabled':'')+'>'+statuses.map(function(s){return '<option value="'+s+'"'+(s===r.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select></span>';}
   function notify(message){$('notice').textContent=message||'';$('notice').hidden=!message;}
   function showSyncState(phase,at){
     if(at)syncCheckedAt=at;
