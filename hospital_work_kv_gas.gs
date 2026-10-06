@@ -4,13 +4,17 @@ var HW_KV_LOG='업무KV변경로그',HW_KV_CONTROL='업무연동관리',HW_KV_QU
 function hwKvMode_(){return !!PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_KV_STAGE');}
 function hwKvSign_(body){
  var secret=bazTokenConf_().secret;if(!secret)throw new Error('기존 토큰 서명 설정을 확인하세요.');
- return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature('baz-work-bridge-v1\n'+JSON.stringify(body),secret)).replace(/=+$/,'');
+ return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature('baz-work-bridge-v1\n'+JSON.stringify(body),secret,Utilities.Charset.UTF_8)).replace(/=+$/,'');
 }
 function hwKvCall_(verb,payload){
  var body={action:'work_bridge',verb:verb,at:Date.now(),nonce:Utilities.getUuid(),payload:payload||{}};body.signature=hwKvSign_(body);
  var response=UrlFetchApp.fetch(HW_KV_URL,{method:'post',contentType:'text/plain;charset=utf-8',payload:JSON.stringify(body),muteHttpExceptions:true});
  var out;try{out=JSON.parse(response.getContentText());}catch(e){throw new Error('Deno 연동 응답을 확인하지 못했습니다.');}
  if(!out.success)throw new Error(out.error||'Deno 연동 실패');return out;
+}
+/** Read-only health check, including non-ASCII payload signing. */
+function checkHospitalWorkKv(){
+ var out=hwKvCall_('status',{probe:'한글 · A/S · 점검 · 😀'});Logger.log(JSON.stringify(out));return out;
 }
 function hwKvSheet_(name,headers){
  var sh=hwSS_().getSheetByName(name)||hwSS_().insertSheet(name);
