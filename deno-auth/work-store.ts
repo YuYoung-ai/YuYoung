@@ -1,5 +1,6 @@
 // Shared work data only. Authentication keys and databases are never changed here.
 import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
+import {createWorkRoster} from './work-roster.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -20,6 +21,7 @@ async function hash(v:any){return [...new Uint8Array(await crypto.subtle.digest(
 function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48000)throw new Error('기록이 너무 큽니다. 내용을 줄여주세요.');return v;}
 
 export function createWorkStore(kv:any){
+ const roster=createWorkRoster(kv);
  async function get(...parts:any[]){return kv.get(key(...parts));}
  async function values(parts:any[],options:Obj={}){const out:Obj[]=[];for await(const e of kv.list({prefix:key(...parts)},options))out.push(e.value);return out;}
  async function status(){return (await get('meta')).value||{ready:false,seq:0};}
@@ -189,13 +191,13 @@ export function createWorkStore(kv:any){
  async function bootstrap(p:Obj,who:Actor){
   const meta=await status(),reference=await refs(),it=kv.list({prefix:key('request')},{limit:200,cursor:p.pageCursor||undefined}),requests:Obj[]=[];
   for await(const e of it)requests.push(e.value);
-  return {success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
  }
  async function sync(p:Obj){
   const meta=await status(),after=Number(p.revision||0);if(!Number.isSafeInteger(after)||after<0||after>meta.seq)throw new Error('동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.');
   const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',meta.seq+1)},{limit:100});for await(const e of it)rows.push(e.value);
   const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
-  return {success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
  }
  async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
  async function flowPlan(row:Obj,context:Obj){
@@ -256,6 +258,8 @@ export function createWorkStore(kv:any){
    switch(p.action){
     case 'work_bootstrap':return await bootstrap(p,who);
     case 'work_sync':return await sync(p);
+    case 'work_roster':return await roster.read(p.rosterMonth);
+    case 'work_roster_save':case 'work_roster_delete':return await roster.save(p,who);
     case 'work_flow_preview':return await flowPreview(p,who);
     case 'work_flow_import':return await flowImport(p,who);
     case 'work_detail':return await detail(p);
