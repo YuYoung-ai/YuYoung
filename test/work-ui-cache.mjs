@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
-function fixture(saved){
- const nodes=new Map(),calls=[],writes=[];
- function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},classList:{toggle(){}},setAttribute(){},querySelectorAll:()=>[],add(){},addEventListener(){},focus(){},scrollIntoView(){}});return nodes.get(id);}
- const cache={snapshot:async()=>saved,pending:async()=>null,save:async(account,value)=>writes.push({account,value})};
- const api={get:async(action,p)=>{calls.push({action,p});return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',updatedAt:'2026-10-06T01:00:00Z'};}};
- vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A'}},document:{getElementById:node,querySelectorAll:()=>[],documentElement:{dataset:{}}},localStorage:{getItem:()=>null,setItem(){},removeItem(){}},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
- return {nodes,calls,writes};
+function fixture(saved,options={}){
+ const nodes=new Map(),calls=[],writes=[],posts=[],local=new Map(),filters=['active','all','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
+ function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){}},setAttribute(){},querySelectorAll:()=>[],add(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
+ const cache={snapshot:async()=>saved,pending:async()=>null,savePending:async()=>{},saveDetail:async()=>{},save:async(account,value)=>writes.push({account,value})};
+ const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
+ vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
+ return {nodes,calls,writes,posts,filters,local};
 }
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
 const saved={storage:'kv',requests:[],hospitals:[],engineers:[],revision:'6',updatedAt:'2026-10-06T00:00:00Z'};
@@ -16,3 +16,19 @@ const cached=fixture(saved);await flush();assert.equal(cached.calls.length,0,'op
 cached.nodes.get('sync').onclick();await flush();assert.equal(cached.calls[0].action,'work_sync');assert.equal(cached.calls[0].p.revision,'6');assert.equal(cached.writes[0].value.revision,'7');
 const first=fixture(null);await flush();assert.equal(first.calls.length,1);assert.equal(first.calls[0].action,'work_bootstrap','first PC loads one initial snapshot');assert.equal(first.writes[0].account,'사용자 A');
 console.log('work-ui-cache: cached startup sends no request; user sync fetches deltas; first PC bootstraps and persists account snapshot.');
+const makeRequest=(id,createdBy='사용자 A')=>({id,hospitalId:'h-'+id,hospitalName:'병원 '+id,createdBy,visitAt:'',deadline:'',symptom:'증상 '+id,status:'접수',cs:createdBy,engineer:'',sales:'',revision:4,updatedAt:'2026-10-06T00:00:00Z'});
+const withRows=rows=>({...saved,requests:rows});
+function selectRow(f,id,checked=true){const input={dataset:{selectRequest:id},checked};f.nodes.get('list').onchange({target:{closest:()=>input}});}
+function selectPage(f){f.nodes.get('select-page').checked=true;f.nodes.get('select-page').onchange();}
+const deletable=fixture(withRows([makeRequest('one'),makeRequest('other','사용자 B')]));await flush();
+assert.equal(deletable.nodes.get('delete-selected').disabled,true);selectPage(deletable);assert.equal(deletable.nodes.get('selection-count').textContent,'선택 1건','non-admin cannot select another owner');
+deletable.nodes.get('delete-selected').onclick();assert.equal(deletable.posts.length,0,'confirmation does not delete');assert.ok(deletable.nodes.get('lifecycle-list').innerHTML.includes('병원 one'));assert.ok(!deletable.nodes.get('lifecycle-list').innerHTML.includes('병원 other'));
+deletable.nodes.get('cancel-lifecycle').onclick();assert.equal(deletable.posts.length,0,'cancel preserves records');
+deletable.nodes.get('delete-selected').onclick();await deletable.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});
+assert.equal(deletable.posts.length,1);assert.equal(deletable.posts[0].p.baseRevision,4);assert.equal(deletable.posts[0].action,'work_delete');assert.ok(deletable.writes.at(-1).value.requests.find(r=>r.id==='one').deletedAt);assert.equal(deletable.nodes.get('selection-count').textContent,'선택 0건');
+deletable.filters.find(f=>f.dataset.filter==='trash').onclick();assert.equal(deletable.nodes.get('delete-selected').hidden,true);assert.equal(deletable.nodes.get('restore-selected').hidden,false);selectPage(deletable);deletable.nodes.get('restore-selected').onclick();await deletable.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(deletable.posts[1].action,'work_restore');assert.equal(deletable.posts[1].p.baseRevision,5,'restore uses current displayed revision');
+const paged=fixture(withRows(Array.from({length:51},(_,i)=>makeRequest(String(i)))));await flush();selectPage(paged);assert.equal(paged.nodes.get('selection-count').textContent,'선택 50건','select all applies only to current page');paged.nodes.get('next').onclick();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','page change clears hidden selections');selectPage(paged);paged.nodes.get('search').value='missing';paged.nodes.get('search').oninput();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','search cannot leave hidden selections');
+const partial=fixture(withRows([makeRequest('one'),makeRequest('two')]),{post:async(action,p)=>p.requestId==='one'?{success:true,request:{...makeRequest('one'),deletedAt:'now',revision:5}}:{success:false,error:'다른 PC에서 수정되었습니다.',conflict:true}});await flush();selectPage(partial);partial.nodes.get('delete-selected').onclick();await partial.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(partial.posts.length,2);assert.equal(partial.nodes.get('selection-count').textContent,'선택 1건','failed row remains selected');assert.ok(partial.nodes.get('notice').textContent.includes('다른 PC'));
+const unknown=fixture(withRows([makeRequest('one'),makeRequest('two')]),{post:async()=>({success:false,error:'응답 확인 필요',retrySameOperation:true})});await flush();selectPage(unknown);unknown.nodes.get('delete-selected').onclick();await unknown.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(unknown.posts.length,1,'unknown result stops next row');assert.equal(unknown.nodes.get('selection-count').textContent,'선택 2건');assert.equal(unknown.nodes.get('pending').hidden,false);assert.equal(unknown.nodes.get('delete-selected').disabled,true);assert.ok([...unknown.local.keys()].some(k=>k.endsWith('_pending')),'same-operation retry is durable');
+const admin=fixture(withRows([makeRequest('one','사용자 B')]),{level:3});await flush();selectPage(admin);assert.equal(admin.nodes.get('selection-count').textContent,'선택 1건','admin can select other owner');
+console.log('work-list selection: owner/admin permissions, page scope, cancel, revisioned delete/restore, partial failures and uncertain-result stop passed.');
