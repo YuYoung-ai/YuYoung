@@ -35,6 +35,10 @@ export function createWorkStore(kv:any){
   // A missing owner is not proof of deletion, so keep that link protected.
   return {entry,owner,inUse:!!entry.value&&(!owner?.value||live(owner.value))};
  }
+ function completionFields(r:Obj,previous:string,who:Actor,now:string){
+  if(r.status==='완료'){if(previous!=='완료'||!r.completedAt){r.completedAt=now;r.completedBy=who.name;}}
+  else{r.completedAt='';r.completedBy='';}
+ }
  async function mutate(p:Obj,who:Actor,build:any){
   const op=text(p.operationId,90,'저장 식별자');if(!/^[A-Za-z0-9_-]{8,90}$/.test(op))throw new Error('저장 식별자가 없습니다. 다시 시도하세요.');
   const clean={...p};delete clean.token;delete clean.__ua;
@@ -79,7 +83,7 @@ export function createWorkStore(kv:any){
   const r:Obj={id,hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,sn:h.sn||'',region:h.region||'',symptom:text(f.symptom,4000,'접수 증상'),cs:text(f.cs,60,'CS 담당자'),engineer:text(f.engineer,60,'엔지니어'),sales:text(f.sales,60,'영업 담당자'),registeredAt:datetime(f.registeredAt,true,'등록일시'),visitAt:datetime(f.visitAt,false,'방문일시'),deadline:datetime(f.deadline,false,'마감'),status:String(f.status||'접수'),createdAt:old?.createdAt||now,createdBy:old?.createdBy||who.name,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1,latest:old?.latest||'',completedAt:old?.completedAt||'',completedBy:old?.completedBy||'',gubun:old?.gubun||''};
   if(!r.symptom||!r.cs)throw new Error('접수 증상과 CS 담당자를 입력하세요.');
   if(!STATES.includes(r.status))throw new Error('알 수 없는 상태입니다.');
-  if(r.status==='완료'&&old?.status!=='완료')throw new Error('처리 결과를 등록한 뒤 완료하세요.');
+  completionFields(r,old?.status||'',who,now);
   if(['방문예정','처리중'].includes(r.status)&&(!r.visitAt||!r.engineer))throw new Error('방문 일시와 엔지니어가 필요합니다.');
   if(r.engineer&&!reference.engineers.includes(r.engineer)&&r.engineer!==old?.engineer)throw new Error('엔지니어 원본 목록에 없습니다. 동기화하세요.');
   if(old&&old.hospitalId!==h.id&&(await history(id)).length)throw new Error('이력이 있는 요청의 병원은 변경할 수 없습니다. 새 요청을 등록하세요.');
@@ -96,6 +100,14 @@ export function createWorkStore(kv:any){
   const h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'comment',body,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=body.slice(0,120);
   return {kind:old?'comment_update':'comment_add',before:old||null,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
+ });}
+ async function changeStatus(p:Obj,who:Actor){return mutate(p,who,async()=>{
+  const original=await request(p.requestId),r=copy(original.value);
+  if(String(r.revision)!==String(p.baseRevision))return {response:clash(r)};
+  const next=String(p.status||'');if(!STATES.includes(next))throw new Error('알 수 없는 상태입니다.');
+  const before=copy(r),now=new Date().toISOString();r.status=next;completionFields(r,before.status,who,now);
+  r.revision++;r.updatedAt=now;r.updatedBy=who.name;
+  return {kind:'status_change',before,request:r,checks:[original],response:{success:true,request:r}};
  });}
  async function result(p:Obj,who:Actor,automatic=false){return mutate(p,who,async()=>{
   const r=copy((await request(p.requestId)).value);
@@ -123,9 +135,7 @@ export function createWorkStore(kv:any){
   if(String(r.revision)!==String(p.baseRevision))return {response:clash(r)};
   const before=copy(r),now=new Date().toISOString();
   if(p.action==='work_complete'){
-   const results=(await history(r.id)).filter(h=>h.kind==='result');
-   if(!results.some(h=>h.source?.result||h.source?.detail))throw new Error('처리 결과를 등록한 뒤 완료하세요.');
-   r.status='완료';r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;
+   r.status='완료';completionFields(r,before.status,who,now);
   }else{
    if(who.level<3&&r.createdBy!==who.name)throw new Error('접수 등록자 또는 관리자만 삭제·복원할 수 있습니다.');
    if(p.action==='work_restore'){
@@ -250,6 +260,7 @@ export function createWorkStore(kv:any){
     case 'work_flow_import':return await flowImport(p,who);
     case 'work_detail':return await detail(p);
     case 'work_save':return await save(p,who);
+    case 'work_status':return await changeStatus(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
     case 'work_result_save':return await result(p,who);
     case 'work_complete':case 'work_delete':case 'work_restore':return await lifecycle(p,who);
