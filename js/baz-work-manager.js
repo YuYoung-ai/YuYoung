@@ -119,7 +119,7 @@
     $('count-active').textContent=state.requests.filter(active).length;
     $('count-today').textContent=state.requests.filter(function(r){return active(r)&&r.visitAt.slice(0,10)===today;}).length;
     $('count-review').textContent=state.requests.filter(function(r){return !r.deletedAt&&r.status==='결과확인';}).length;
-    $('count-overdue').textContent=state.requests.filter(overdue).length;
+    $('count-completed').textContent=state.requests.filter(function(r){return !r.deletedAt&&!r.purgedAt&&r.status==='완료';}).length;
     var rows=state.requests.filter(function(r){
       if(r.purgedAt)return false;
       if(!!r.deletedAt!==(state.filter==='trash'))return false;
@@ -130,7 +130,7 @@
       if(state.filter==='mine')return active(r)&&(r.cs===account||r.engineer===account);
       if(state.filter==='unassigned')return active(r)&&(!r.engineer||!r.visitAt);
       if(state.filter==='review')return r.status==='결과확인';
-      if(state.filter==='overdue')return overdue(r);
+      if(state.filter==='completed')return r.status==='완료';
       return true;
     });
     var sort=$('sort').value;
@@ -454,7 +454,7 @@
   $('roster-delete-submit').onclick=async function(){if(!rosterDelete||rosterLoading||busy||pending||syncing||bulkWorking)return;var r=rosterDelete,data=await write('work_roster_delete',{date:r.date,person:r.person,baseRevision:r.revision},'roster');if(data&&!data.success)err('roster-error',data.error);};
   $('search').oninput=function(){clearSelection();state.page=1;renderList();};$('status-filter').onchange=function(){clearSelection();state.page=1;renderList();};$('sort').onchange=function(){clearSelection();state.page=1;renderList();};
   $('prev').onclick=function(){clearSelection();state.page--;renderList();};$('next').onclick=function(){clearSelection();state.page++;renderList();};
-  document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){selectionMode=false;clearSelection();state.filter=b.dataset.filter;state.page=1;renderList();};});
+  document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){selectionMode=false;clearSelection();state.filter=b.dataset.filter;if(state.filter==='completed')$('status-filter').value='';state.page=1;renderList();};});
   $('selection-mode').onclick=function(){if(busy||syncing||bulkWorking||pending)return;selectionMode=!selectionMode;if(!selectionMode)checkedRequests.clear();renderList();};
   $('select-page').onchange=function(){if(!selectionMode||busy||syncing||bulkWorking||pending)return;shownRequests.filter(canManage).forEach(function(r){if($('select-page').checked)checkedRequests.add(r.id);else checkedRequests.delete(r.id);});renderList();};
   $('clear-selection').onclick=clearSelection;
