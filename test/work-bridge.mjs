@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import nodeCrypto from 'node:crypto';
 const fixture=fs.readFileSync(new URL('work-kv.mjs',import.meta.url),'utf8');
 const Kv=vm.runInNewContext('('+fixture.slice(fixture.indexOf('class Kv{'),fixture.indexOf('const kv=new Kv()')).trim()+')',{Map,structuredClone,JSON,String,Number,Infinity});
 const kv=new Kv();let handler,forwarded;
@@ -13,6 +14,10 @@ const secret=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.TO
 async function bridge(verb,payload={},at=Date.now()){const body={action:'work_bridge',verb,at,nonce:crypto.randomUUID(),payload};body.signature=Buffer.from(await crypto.subtle.sign('HMAC',secret,new TextEncoder().encode('baz-work-bridge-v1\n'+JSON.stringify(body)))).toString('base64url');return body;}
 assert.equal((await post({action:'work_bridge',verb:'status',at:Date.now(),nonce:crypto.randomUUID(),signature:'invalid'})).status,403);
 const once=await bridge('status');assert.equal((await post(once)).body.success,true);assert.equal((await post(once)).status,409);
+const gas={bazTokenConf_:()=>({secret:env.TOKEN_SECRET}),Utilities:{Charset:{UTF_8:'utf8'},base64EncodeWebSafe:bytes=>Buffer.from(bytes).toString('base64url'),computeHmacSha256Signature:(value,key,charset)=>{assert.equal(charset,'utf8','GAS must explicitly sign Unicode in UTF-8');return [...nodeCrypto.createHmac('sha256',key).update(value,charset).digest()];}}};
+vm.createContext(gas);vm.runInContext(fs.readFileSync(new URL('../hospital_work_kv_gas.gs',import.meta.url),'utf8'),gas);
+const unicode={action:'work_bridge',verb:'status',at:Date.now(),nonce:crypto.randomUUID(),payload:{hospital:'바노바기피부과',kind:'점검',memo:'정상 · 😀',key:'병원\u001fSN'}};unicode.signature=gas.hwKvSign_(unicode);
+assert.equal((await post(unicode)).body.success,true,'actual GAS signer accepted by Deno with Korean, emoji and separators');
 assert.equal((await post(await bridge('status',{},Date.now()-600000))).status,403);
 assert.equal((await post(await bridge('seed',{references:{engineers:[],minimumLevel:1},hospitals:[]}))).body.success,true);
 const manifest=(await post(await bridge('status'))).body.manifest;
