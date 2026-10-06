@@ -512,8 +512,8 @@ function withCors(res: Response, req: Request): Response {
 /* 병원 업무 중계: DB는 Sheets 유지, ACL과 업무 변경은 GAS가 최종 검증한다.
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
-const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_detail", "work_handover_candidates", "work_handover_detail"]);
-const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore"]);
+const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_detail", "work_handover_candidates", "work_handover_detail", "work_flow_preview"]);
+const WORK_WRITES = new Set(["work_save", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_flow_import"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
@@ -571,6 +571,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
       return workReply({body:body as WorkBody,status:200,upstreamMs:0},'kv',started);
     }
   }
+  if(action==='work_flow_preview'||action==='work_flow_import')return fail('Flow 이전은 활성화된 Deno KV에서만 가능합니다.',503);
   const write = WORK_WRITES.has(action), force = String(p.force || "") === "1";
   // 저장/강제 동기화 이후 조회를 이전 요청과 합치지 않는다.
   if (write || force) { workGeneration++; workReferences = null; }

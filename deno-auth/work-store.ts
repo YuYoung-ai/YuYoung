@@ -1,4 +1,5 @@
 // Shared work data only. Authentication keys and databases are never changed here.
+import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -53,6 +54,7 @@ export function createWorkStore(kv:any){
    if(ev.history)tx=tx.set(key('history',ev.history.requestId,ev.history.id),ev.history);
    if(ev.link)tx=tx.set(key('link',ev.link),{requestId:ev.request.id,historyId:ev.history.id});
    if(ev.hospital)tx=tx.set(key('hospitalRef',ev.hospital.key),ev.hospital);
+   if(ev.flowImport)tx=tx.set(key('flowImport',ev.flowImport.sourceId),{...ev.flowImport,requestId:ev.request.id});
    if(checks.length)tx=tx.check(...checks);
    if(ev.before?.hospitalId&&ev.before.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',ev.before.hospitalId,ev.request.id));
    if((await tx.commit()).ok)return response;
@@ -146,12 +148,67 @@ export function createWorkStore(kv:any){
   const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
   return {success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
  }
+ async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
+ async function flowPlan(row:Obj,context:Obj){
+  const parsed=parseFlowRow(row),occurrence=Number(row.occurrence||1);if(!Number.isSafeInteger(occurrence)||occurrence<1||occurrence>100)throw new Error('원본 중복 순번을 확인하세요.');
+  const sourceId=await hash([row.hospitalName,row.content,row.status,row.engineer,row.visitAt,row.cs,occurrence]);
+  const previous=context.imports?context.imports.get(sourceId):(await get('flowImport',sourceId)).value;
+  const found=matchFlowHospital(parsed,context.hospitals);
+  const legacyId='flow_h_'+(await hash([flowName(parsed.hospitalName),parsed.source.sn])).slice(0,32);
+  const hospital=found.hospital||{id:legacyId,key:legacyId,name:parsed.hospitalName,sn:parsed.source.sn,region:'',sales:'',asType:'',ncare:'',origin:'flow'};
+  const candidates=(context.requests||await hospitalRequests(hospital.id)).filter((r:Obj)=>live(r)&&!r.flowImport&&r.hospitalId===hospital.id&&r.visitAt?.slice(0,10)===parsed.visitAt.slice(0,10));
+  const exact=candidates.filter((r:Obj)=>r.visitAt===parsed.visitAt);
+  return {sourceId,parsed,hospital,match:found.match,previous,target:exact.length===1?exact[0]:null,candidates:exact.length===1?[]:candidates};
+ }
+ async function flowPreview(p:Obj,who:Actor){
+  if(who.level<3)throw new Error('관리자만 Flow 데이터를 이전할 수 있습니다.');
+  if(!Array.isArray(p.rows)||!p.rows.length||p.rows.length>1000)throw new Error('이전할 원본 1~1000건을 선택하세요.');
+  const context=await flowContext(),items=[],ids=new Set(),targets=new Set();
+  for(const row of p.rows){const plan=await flowPlan(row,context);if(ids.has(plan.sourceId))throw new Error('원본 중복 순번이 겹칩니다.');ids.add(plan.sourceId);
+   let target=plan.target;if(target&&targets.has(target.id)){plan.candidates=[target];target=null;}if(target)targets.add(target.id);
+   items.push({sourceId:plan.sourceId,sourceRow:row.sourceRow,hospitalName:plan.parsed.hospitalName,canonicalName:plan.hospital.name,match:plan.match,gubun:plan.parsed.gubun,status:plan.parsed.status,visitAt:plan.parsed.visitAt,symptom:plan.parsed.symptom,engineer:plan.parsed.engineer,cs:plan.parsed.cs,alreadyImported:!!plan.previous,targetRequestId:target?.id||'',targetRevision:target?.revision||0,candidates:plan.candidates.map((r:Obj)=>({id:r.id,hospitalName:r.hospitalName,visitAt:r.visitAt,status:r.status,engineer:r.engineer,revision:r.revision,symptom:r.symptom}))});
+  }return {success:true,items};
+ }
+ async function flowImport(p:Obj,who:Actor){
+  if(who.level<3)throw new Error('관리자만 Flow 데이터를 이전할 수 있습니다.');
+  if(!Array.isArray(p.rows)||!p.rows.length||p.rows.length>10)throw new Error('한 번에 1~10건씩 이전하세요.');
+  const context=await flowContext(true),results=[];
+  for(const input of p.rows){
+   try{
+    const plan=await flowPlan(input.row,context);
+    if(plan.previous){results.push({success:true,skipped:true,sourceId:plan.sourceId,requestId:plan.previous.requestId});continue;}
+    const targetId=input.targetRequestId||'';
+    if(plan.candidates.length&&!targetId&&!input.separateRequest)throw new Error('같은 병원·날짜의 기존 접수를 확인하세요.');
+    if(plan.target&&!targetId&&!input.separateRequest)throw new Error('같은 방문일시의 기존 접수를 선택하세요.');
+    const operation={action:'work_flow_import',row:input.row,targetRequestId:targetId,targetRevision:input.targetRevision||0,separateRequest:!!input.separateRequest,operationId:'flow_'+plan.sourceId};
+    const output=await mutate(operation,who,async()=>{
+     const marker=await get('flowImport',plan.sourceId);if(marker.value)return {response:{success:false,error:'다른 관리자에 의해 이미 이전되었습니다. 다시 미리보기를 확인하세요.'}};
+     const original=targetId?await request(targetId):null,old=original?.value;
+     if(old&&(old.hospitalId!==plan.hospital.id||old.visitAt?.slice(0,10)!==plan.parsed.visitAt.slice(0,10)))throw new Error('기존 접수의 병원·날짜가 다릅니다.');
+     if(old&&Number(old.revision)!==Number(input.targetRevision))return {response:clash(old)};
+     const now=new Date().toISOString(),x=plan.parsed,id=old?.id||'flow_'+plan.sourceId,r=old?copy(old):{id,hospitalId:plan.hospital.id,hospitalKey:plan.hospital.key,hospitalName:plan.hospital.name,sn:plan.hospital.sn||'',region:plan.hospital.region||'',symptom:x.symptom,cs:x.cs,engineer:x.engineer,sales:plan.hospital.sales||'',registeredAt:x.visitAt,visitAt:x.visitAt,deadline:'',status:x.status,createdAt:now,createdBy:x.cs,updatedAt:now,updatedBy:who.name,revision:0,latest:'',completedAt:'',completedBy:'',gubun:x.gubun,flowImport:{sourceId:plan.sourceId,sourceHospitalName:x.hospitalName,sourceRow:input.row.sourceRow,sourceStatus:input.row.status,importedAt:now,importedBy:who.name}};
+     r.revision++;r.updatedAt=now;r.updatedBy=who.name;
+     const origin={sourceId:plan.sourceId,sourceRow:input.row.sourceRow,hospitalName:x.hospitalName,status:input.row.status,engineer:x.engineer,cs:x.cs,visitAt:x.visitAt};
+     const rawBody='[Flow 이전 원문]\n원본 병원: '+x.hospitalName+'\n원본 상태: '+input.row.status+'\n담당 엔지니어: '+(x.engineer||'미기록')+'\n접수 담당: '+x.cs+'\n방문일시: '+x.visitAt+'\n\n'+x.raw;
+     const h:Obj={id:'flow_history_'+plan.sourceId,requestId:id,kind:old||x.status!=='완료'?'comment':'result',author:x.cs,createdAt:new Date(x.visitAt+':00+09:00').toISOString(),updatedAt:now,updatedBy:who.name,revision:1,flowImport:origin};
+     if(h.kind==='result'){h.source={...x.source,hospitalName:r.hospitalName,recordId:'flow_'+plan.sourceId,version:plan.sourceId};h.body=x.source.detail;h.memo=rawBody;h.auto=false;}
+     else h.body=rawBody;
+     if(!old)r.latest=x.source.result||x.source.detail.slice(0,120)||x.symptom.slice(0,120);
+     return {kind:'flow_import',before:old||null,request:r,history:h,hospital:plan.hospital,flowImport:origin,checks:[marker,...(original?[original]:[])],response:{success:true,request:r,history:h,sourceId:plan.sourceId,merged:!!old}};
+    });
+    results.push(output);
+    if(!output.success&&output.retrySameOperation)break;
+   }catch(e:any){results.push({success:false,error:e.message,sourceRow:input.row?.sourceRow});}
+  }return {success:true,results};
+ }
  async function handle(p:Obj,who:Actor){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
    switch(p.action){
     case 'work_bootstrap':return await bootstrap(p,who);
     case 'work_sync':return await sync(p);
+    case 'work_flow_preview':return await flowPreview(p,who);
+    case 'work_flow_import':return await flowImport(p,who);
     case 'work_detail':return await detail(p);
     case 'work_save':return await save(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
@@ -207,7 +264,7 @@ export function createWorkStore(kv:any){
   }
   if(verb==='references'){
    const old=await values(['hospitalRef']);for(const h of p.hospitals||[])await kv.set(key('hospitalRef',h.key),bounded(h));
-   const keep=new Set((p.hospitals||[]).map((h:Obj)=>h.key));for(const h of old)if(!keep.has(h.key))await kv.delete(key('hospitalRef',h.key));
+   const keep=new Set((p.hospitals||[]).map((h:Obj)=>h.key));for(const h of old)if(!keep.has(h.key)&&h.origin!=='flow')await kv.delete(key('hospitalRef',h.key));
    const current=await refs();await kv.set(key('refs'),bounded({...current,...p.references}));return {success:true};
   }
   if(verb==='sources')return {success:true,...await ingestSources(p.sources||[])};
