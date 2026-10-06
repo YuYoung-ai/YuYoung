@@ -180,3 +180,29 @@ for(const gubun of ['A/S','점검']){
  console.log('manual status: all seven states, no-result completion, reopening metadata, idempotency, atomic conflicts, ACL, trash rejection, preserved history and edit-form parity passed.');
 }
 console.log('work-kv: revisions, ACL, trash AS/inspection relink, original history preservation, restore/relink races, admin-confirmed permanent deletion, resumable cleanup, tombstones/mirror sanitation and active source protection passed.');
+
+// Roster records have their own revision/operation space; a schedule never becomes an A/S request.
+{
+ const db=new Kv(),s=createWorkStore(db);await s.bridge('seed',{hospitals:[hospital],references:{engineers:['양승주'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
+ const write=(payload,who=alice)=>s.handle({action:'work_roster_save',date:'2026-08-17',person:'양승주',type:'휴무',baseRevision:0,operationId:crypto.randomUUID(),...payload},who);
+ const p={action:'work_roster_save',date:'2026-08-17',person:'양승주',type:'휴무',baseRevision:0,operationId:crypto.randomUUID()};
+ const added=await s.handle(p,alice);assert.equal(added.success,true);assert.equal(added.schedule.revision,1);assert.deepEqual(await s.handle(p,alice),added,'retry creates one schedule');
+ assert.equal((await s.handle({...p,type:'당직'},alice)).success,false,'different operation payload cannot reuse an id');
+ assert.equal((await s.handle(p,bob)).success,false,'another actor cannot replay a saved operation');
+ const duplicate=await write({type:'당직'});assert.equal(duplicate.conflict,true);assert.equal(duplicate.current.type,'휴무','one date/person cannot have both types');
+ const next=await write({date:'2026-08-19',type:'당직'});assert.equal(next.success,true);
+ const sync=await s.handle({action:'work_sync',revision:'0',rosterMonth:'2026-08'},bob);assert.equal(sync.requests.length,0);assert.equal(sync.revision,'0');assert.deepEqual(sync.roster.map(x=>[x.date,x.type]).sort(),[['2026-08-17','휴무'],['2026-08-19','당직']]);
+ assert.equal((await s.handle({action:'work_bootstrap',rosterMonth:'2026-08'},bob)).roster.length,2);
+ assert.equal((await s.handle({action:'work_roster',rosterMonth:'2026-09'},bob)).roster.length,0,'months are isolated');
+ const parallel=await Promise.all(['휴무','당직'].map(type=>write({type,baseRevision:1},type==='휴무'?alice:bob)));assert.equal(parallel.filter(x=>x.success).length,1);assert.equal(parallel.filter(x=>x.conflict).length,1,'concurrent edits cannot overwrite');
+ const current=parallel.find(x=>x.success).schedule,removed=await s.handle({action:'work_roster_delete',date:current.date,person:current.person,baseRevision:current.revision,operationId:crypto.randomUUID()},bob);assert.equal(removed.success,true);assert.ok(removed.schedule.deletedAt);
+ const beforeRetry=(await s.handle({action:'work_roster',rosterMonth:'2026-08'},alice)).roster;
+ assert.equal(beforeRetry.filter(x=>!x.deletedAt).length,1);assert.equal((await write({baseRevision:0})).conflict,true,'stale add cannot revive a deleted row');
+ const restored=await write({baseRevision:removed.schedule.revision});assert.equal(restored.success,true);assert.equal(restored.schedule.deletedAt,'');
+ for(const payload of [{date:'2026-02-30'},{date:'2026-13-01'},{person:''},{person:'x'.repeat(61)},{type:'외근'},{baseRevision:-1}])assert.equal((await write(payload)).success,false,JSON.stringify(payload));
+ assert.equal((await s.handle({action:'work_roster',rosterMonth:'2026-08'},{name:'',level:0})).success,false);
+ assert.equal((await write({date:'2026-08-20'},{name:'읽기 불가',level:0})).success,false);
+ assert.equal((await s.status()).seq,0,'roster has no Handover/outbox or service revision side effects');
+ assert.ok([...db.data.values()].some(x=>x.key[1]==='rosterAudit'),'edits retain a separate audit');
+ console.log('work-roster: monthly shared read/sync, date/person uniqueness, idempotency, atomic conflicts, validation, ACL, reversible deletion and no A/S side effects passed.');
+}
