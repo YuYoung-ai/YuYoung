@@ -29,6 +29,12 @@ export function createWorkStore(kv:any){
  async function hospitalRequests(id:string){return values(['hospital',id]);}
  async function history(id:string){return values(['history',id]);}
  async function sources(name:string){return values(['source',name]);}
+ async function sourceLink(recordId:string){
+  const entry=await get('link',recordId),owner=entry.value?await get('request',entry.value.requestId):null;
+  // Old links remain as trash history. Only an explicitly deleted owner permits reuse.
+  // A missing owner is not proof of deletion, so keep that link protected.
+  return {entry,owner,inUse:!!entry.value&&(!owner?.value||live(owner.value))};
+ }
  async function mutate(p:Obj,who:Actor,build:any){
   const op=text(p.operationId,90,'저장 식별자');if(!/^[A-Za-z0-9_-]{8,90}$/.test(op))throw new Error('저장 식별자가 없습니다. 다시 시도하세요.');
   const clean={...p};delete clean.token;delete clean.__ua;
@@ -94,20 +100,20 @@ export function createWorkStore(kv:any){
   const src=await get('source',r.hospitalName,String(p.recordId)),s=src.value;
   if(!s||!kind(s))throw new Error('A/S 또는 점검 기록을 선택하세요.');
   if(s.version!==p.sourceVersion)throw new Error('Handover 원본이 바뀌었습니다. 다시 불러와 확인하세요.');
-  const linked=await get('link',s.recordId);
+  const binding=await sourceLink(s.recordId),linked=binding.entry;
   if(automatic){
    const day=r.visitAt?.slice(0,10),same=(await values(['request'])).filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
    const matches=(await sources(r.hospitalName)).filter(x=>x.date===day&&kind(x));
-   if(!['접수','방문예정','처리중'].includes(r.status)||same.length!==1||matches.length!==1||!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||(await history(r.id)).some(h=>h.kind==='result')||linked.value)return {response:{success:false,skipped:true}};
+   if(!['접수','방문예정','처리중'].includes(r.status)||same.length!==1||matches.length!==1||!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||(await history(r.id)).some(h=>h.kind==='result')||binding.inUse)return {response:{success:false,skipped:true}};
   }
-  if(linked.value&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
-  const old=linked.value?(await get('history',r.id,linked.value.historyId)).value:null;
+  if(binding.inUse&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
+  const old=linked.value?.requestId===r.id?(await get('history',r.id,linked.value.historyId)).value:null;
   if(old&&String(old.revision)!==String(p.baseHistoryRevision||0))return {response:clash(old)};
   const now=new Date().toISOString(),before=copy(r),h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=s.gubun;
   r.status=p.complete||r.status==='완료'?'완료':'결과확인';
   if(p.complete){r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;}
-  return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,checks:[src,linked],response:{success:true,request:r,history:h}};
+  return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
  });}
  async function lifecycle(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const r=copy((await request(p.requestId,p.action==='work_restore')).value);
@@ -236,7 +242,7 @@ export function createWorkStore(kv:any){
    if(!matches.length)continue;
    if(same.length!==1||matches.length!==1){skipped.push({requestId:r.id,reason:'ambiguous'});continue;}
    const s=matches[0],hs=(await history(r.id)).filter(h=>h.kind==='result');
-   if(!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||hs.length||(await get('link',s.recordId)).value)continue;
+   if(!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||hs.length||(await sourceLink(s.recordId)).inUse)continue;
    const p={action:'work_auto_result',requestId:r.id,recordId:s.recordId,sourceVersion:s.version,baseRevision:r.revision,operationId:'auto_'+await hash([r.id,s.recordId,s.version,r.revision])};
    const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;
   }

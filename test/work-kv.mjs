@@ -56,4 +56,67 @@ const main=fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8
 const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui));
 const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<span>완료<\/span><span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
-console.log('work-kv: revisions, idempotency, inspection auto-review/manual import, comments/ACL, deletion+delta+restore, durable mirror ack, stale sources, ambiguity, migration freeze and detail badge passed.');
+// Existing deleted-owner links must heal without clearing the original result/history.
+async function relinkFixture(gubun='A/S'){
+ const db=new Kv(),s=createWorkStore(db);
+ await s.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});
+ await s.bridge('activate',{manifest:await s.manifest()});
+ const first=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ const report={...source,gubun,recordId:'reused-report'};
+ await s.ingestSources([report]);
+ const found=await s.handle({action:'work_detail',id:first.request.id},alice);
+ const completed=await s.handle({action:'work_result_save',requestId:first.request.id,baseRevision:found.request.revision,baseHistoryRevision:found.history[0].revision,recordId:report.recordId,sourceVersion:report.version,memo:'기존 접수 보완',complete:true,operationId:crypto.randomUUID()},alice);
+ assert.equal(completed.success,true);
+ const trash=await s.handle({action:'work_delete',requestId:first.request.id,baseRevision:completed.request.revision,operationId:crypto.randomUUID()},alice);
+ assert.equal(trash.success,true);
+ const original=await s.handle({action:'work_detail',id:first.request.id},alice);
+ return {db,s,report,trash,original};
+}
+for(const gubun of ['A/S','점검']){
+ const {s,report,trash,original}=await relinkFixture(gubun);
+ const fresh=await s.handle({...op,form:{...form,status:gubun==='점검'?'보류':'방문예정'},operationId:crypto.randomUUID()},alice);
+ assert.equal(fresh.success,true,'same hospital/date can be re-registered after trash');
+ if(gubun==='A/S')assert.equal((await s.ingestSources([report])).linked,1,'auto matching reclaims a trashed owner link');
+ else assert.equal((await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,memo:'새 접수 보완',operationId:crypto.randomUUID()},alice)).success,true,'manual selection also reclaims a trashed link');
+ const freshDetail=await s.handle({action:'work_detail',id:fresh.request.id},alice);
+ assert.equal(freshDetail.request.status,'결과확인');assert.equal(freshDetail.request.gubun,gubun);assert.equal(freshDetail.history.length,1);
+ assert.notEqual(freshDetail.history[0].id,original.history[0].id,'re-registration gets its own result entry');
+ assert.equal(freshDetail.history[0].memo,gubun==='점검'?'새 접수 보완':'','old CS memo is not copied to the new request');
+ const stillTrashed=await s.handle({action:'work_detail',id:trash.request.id},alice);
+ for(const field of ['request','history','logs'])assert.deepEqual(stillTrashed[field],original[field],'trash '+field+' is untouched');
+ await s.ingestSources([report]);assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'repeated delivery creates no duplicate result');
+ const restored=await s.handle({action:'work_restore',requestId:trash.request.id,baseRevision:trash.request.revision,acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);
+ assert.equal(restored.success,true);
+ const blocked=await s.handle({action:'work_result_save',requestId:restored.request.id,baseRevision:restored.request.revision,baseHistoryRevision:original.history[0].revision,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice);
+ assert.equal(blocked.success,false);assert.match(blocked.error,/다른 접수에 연결/,'restoring an old request never steals the newer link');
+ assert.deepEqual((await s.handle({action:'work_detail',id:restored.request.id},alice)).history,original.history);
+}
+{
+ const {db,s,report,trash}=await relinkFixture();
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ const atomic=db.atomic.bind(db);let restoreBeforeCommit=true;
+ db.atomic=()=>{const tx=atomic(),commit=tx.commit;tx.commit=async()=>{
+  if(restoreBeforeCommit){restoreBeforeCommit=false;const restored=await s.handle({action:'work_restore',requestId:trash.request.id,baseRevision:trash.request.revision,acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);assert.equal(restored.success,true);}
+  return commit();
+ };return tx;};
+ const blocked=await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice);
+ assert.equal(blocked.success,false);assert.match(blocked.error,/다른 접수에 연결/,'restore racing with relink is rechecked atomically');
+ assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,0);
+}
+{
+ const {s,report}=await relinkFixture();
+ const fresh=await Promise.all([alice,bob].map(who=>s.handle({...op,acknowledgeDuplicates:true,operationId:crypto.randomUUID()},who)));
+ const attempts=await Promise.all(fresh.map((x,i)=>s.handle({action:'work_result_save',requestId:x.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},i?bob:alice)));
+ assert.equal(attempts.filter(x=>x.success).length,1,'only one live request wins a reused report');
+ assert.match(attempts.find(x=>!x.success).error,/다른 접수에 연결/);
+}
+{
+ const {s,report,trash}=await relinkFixture();
+ const restored=await s.handle({action:'work_restore',requestId:trash.request.id,baseRevision:trash.request.revision,operationId:crypto.randomUUID()},alice);
+ assert.equal(restored.request.status,'완료');
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ assert.equal((await s.ingestSources([report])).linked,0,'a restored completed owner remains protected');
+ const blocked=await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice);
+ assert.equal(blocked.success,false);assert.match(blocked.error,/다른 접수에 연결/);
+}
+console.log('work-kv: revisions, ACL, trash result reuse (auto/manual AS/inspection), original history preservation, restore/relink race and competing live owner protection, durable mirror, migration and detail badge passed.');
