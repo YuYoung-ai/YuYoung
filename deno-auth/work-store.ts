@@ -122,10 +122,16 @@ export function createWorkStore(kv:any){
   if(p.historyId&&(!old||old.kind!=='comment'))throw new Error('댓글을 찾지 못했습니다.');
   if(old&&old.author!==who.name&&who.level<3)throw new Error('본인 댓글 또는 관리자만 수정할 수 있습니다.');
   if(old&&String(old.revision)!==String(p.baseHistoryRevision))return {response:clash(old)};
-  const body=text(p.body,4000,'댓글');if(!body)throw new Error('댓글을 입력하세요.');const now=new Date().toISOString(),before=copy(r);
+  const lifecycle=typeof p.deleted==='boolean';
+  if(lifecycle&&!old)throw new Error('삭제하거나 복원할 댓글을 찾지 못했습니다.');
+  if(old?.deletedAt&&!lifecycle)throw new Error('삭제된 댓글입니다. 먼저 복원하세요.');
+  const body=lifecycle?old.body:text(p.body,4000,'댓글');if(!body)throw new Error('댓글을 입력하세요.');const now=new Date().toISOString(),before=copy(r);
   const h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'comment',body,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
-  r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=body.slice(0,120);
-  return {kind:old?'comment_update':'comment_add',before:old||null,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
+  if(lifecycle)Object.assign(h,{deletedAt:p.deleted?now:'',deletedBy:p.deleted?who.name:''});
+  r.revision++;r.updatedAt=now;r.updatedBy=who.name;
+  const latest=(await history(r.id)).filter(x=>x.id!==h.id&&!x.deletedAt).concat(p.deleted?[]:[h]).sort((a,b)=>String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)))[0];
+  r.latest=latest?String(latest.source?.result||latest.body||'').slice(0,120):'';
+  return {kind:lifecycle?(p.deleted?'comment_delete':'comment_restore'):old?'comment_update':'comment_add',before:old||null,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
  });}
  async function changeStatus(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const original=await request(p.requestId),r=copy(original.value);

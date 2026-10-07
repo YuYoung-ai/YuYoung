@@ -7,6 +7,7 @@
   var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false,syncCheckedAt='';
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
+  var refreshCommentPreview=function(){};
   var pending=null,commentEdit=null,checkedRequests=new Set(),shownRequests=[],selectionMode=false,bulkWorking=false,lifecyclePlan=null;
   var editMode=false,inlineDraftKey=scope+'_inline_edits',inlineDrafts=read(inlineDraftKey)||{};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -299,8 +300,9 @@
       d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
       '</div>'+((d.historyCursor||d.auditCursor)?'<button data-action="more-history">이력 더 보기</button>':'')+'</div></section>',
       '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
-      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+commentMarkup(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
-      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="2" maxlength="4000" placeholder="댓글과 URL을 입력하세요. 추가 상담, 변경 사유, 고객센터 메모" required></textarea><p class="hint comment-url-hint">URL을 붙여 넣으면 저장 후 클릭 가능한 링크로 표시됩니다.</p><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
+      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+(window.BazWorkComments?window.BazWorkComments.render(h.body):commentMarkup(h.body))+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<div class="comment-controls"><button data-comment="'+esc(h.id)+'">댓글 수정</button><button data-comment-delete="'+esc(h.id)+'">댓글 삭제</button></div><div class="comment-delete-confirm" hidden><span>이 댓글을 삭제할까요? 삭제 후 복원할 수 있습니다.</span><button class="danger" data-comment-confirm="'+esc(h.id)+'">삭제 확인</button><button data-comment-cancel>취소</button></div>':'')+'</article>';}).join(''),
+      (d.history||[]).some(function(h){return h.kind==='comment'&&h.deletedAt;})?'<details class="deleted-comments"><summary>삭제된 댓글</summary>'+(d.history||[]).filter(function(h){return h.kind==='comment'&&h.deletedAt;}).map(function(h){return '<div class="entry"><small>'+esc(h.author)+' · 삭제 '+esc(time(h.deletedAt))+'</small>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment-restore="'+esc(h.id)+'">댓글 복원</button>':'')+'</div>';}).join('')+'</details>':'',
+      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="3" maxlength="4000" placeholder="댓글·URL을 입력하거나 클라우디움 공유 표를 붙여 넣으세요." required></textarea><p class="hint comment-url-hint">클라우디움 공유 표를 붙여 넣거나 URL.html 파일을 불러오면 수정 URL만 댓글에 입력됩니다.</p><div id="comment-preview" class="comment-preview" role="region" aria-label="댓글 미리보기" hidden></div><p id="comment-share-error" class="notice" role="alert" hidden></p><input id="comment-file-input" type="file" accept=".html,.htm,text/html" aria-label="클라우디움 공유 링크 파일" hidden><div class="comment-actions"><button id="comment-file-button" type="button">공유 링크 파일</button><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
       '<details id="detail-tools" class="detail-section detail-tools" data-request-id="'+esc(r.id)+'"><summary>상세 관리 및 이력</summary><div class="detail-tools-body">',
       r.status==='완료'?'<p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy||'미기록')+'</p>':'',
       '<p id="detail-checked" class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><p class="hint">Handover 연동 확인 '+esc(time(sourceCheckedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button></div>',
@@ -317,6 +319,8 @@
     if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 고객센터 결과 확인 대기';if(log.kind==='status_change')return '상태 수동 변경 · '+(log.before&&log.before.status||'미기록')+' → '+(log.after&&log.after.status||'미기록');if(log.kind==='delete')return '접수 휴지통 이동';if(log.kind==='restore')return '접수 복원';
     if(log.kind==='request_create')return '고객센터 접수';
     if(log.kind==='comment_add')return '댓글 등록';
+    if(log.kind==='comment_delete')return '댓글 삭제 · 이전 내용: '+(log.before?log.before.body:'');
+    if(log.kind==='comment_restore')return '댓글 복원';
     if(log.kind==='comment_update')return '댓글 수정 · 이전 내용: '+(log.before?log.before.body:'');
     if(log.kind==='result_save')return log.before?'Handover 결과 갱신 · 이전 처리 내용: '+(log.before.source.detail||''):'Handover 결과 등록';
     var before=log.requestBefore||log.before||{},after=log.after||{},labels={status:'상태',engineer:'엔지니어',visitAt:'방문',deadline:'마감',cs:'CS 담당',sales:'영업 담당',symptom:'증상'};
@@ -331,20 +335,21 @@
     var entries=d.history.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);});
     var results=entries.filter(function(h){return h.kind==='result';});
     results=results.filter(function(h){return h.source.origin!=='flow'||!h.source.sn||!results.some(function(other){return other.source.origin!=='flow'&&other.source.sn===h.source.sn&&other.source.date===h.source.date;});});
-    $('detail').innerHTML=detailMarkup(d,r,results,entries.filter(function(h){return h.kind!=='result'&&!(h.kind==='comment'&&h.flowImport);}));
+    $('detail').innerHTML=detailMarkup(d,r,results,entries.filter(function(h){return h.kind!=='result'&&!h.deletedAt&&!(h.kind==='comment'&&h.flowImport);}));
     $('detail').hidden=false;commentEdit=null;
     $('detail-tools').open=!!keepToolsOpen;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
     $('comment-body').value=commentDraft.body||'';
     if(commentDraft.historyId){
-      var savedComment=d.history.find(function(h){return h.id===commentDraft.historyId&&h.kind==='comment';});
+      var savedComment=d.history.find(function(h){return h.id===commentDraft.historyId&&h.kind==='comment'&&!h.deletedAt;});
       if(savedComment){commentEdit=Object.assign({},savedComment,{revision:commentDraft.baseRevision});$('comment-edit-label').textContent='댓글 수정 초안 복원됨';}
       else if(d.preview){commentEdit={id:commentDraft.historyId,revision:commentDraft.baseRevision};$('comment-edit-label').textContent='댓글 수정 초안 · 원본 확인 중';}
     }
     var cancelComment=document.createElement('button');cancelComment.type='button';cancelComment.id='cancel-comment';cancelComment.textContent='수정 취소';cancelComment.hidden=!commentEdit;
     $('comment-edit-label').after(cancelComment);
-    cancelComment.onclick=function(){commentEdit=null;$('comment-edit-label').textContent='';$('comment-body').value='';this.hidden=true;store(scope+'_comment_'+r.id,null);};
+    cancelComment.onclick=function(){commentEdit=null;$('comment-edit-label').textContent='';$('comment-body').value='';this.hidden=true;store(scope+'_comment_'+r.id,null);refreshCommentPreview();};
     $('comment-body').addEventListener('input',function(){store(scope+'_comment_'+r.id,{body:this.value,historyId:commentEdit?commentEdit.id:'',baseRevision:commentEdit?commentEdit.revision:0});});
+    refreshCommentPreview=window.BazWorkComments?window.BazWorkComments.mount({input:$('comment-body'),preview:$('comment-preview'),fileInput:$('comment-file-input'),fileButton:$('comment-file-button'),error:$('comment-share-error')}):function(){};
     $('comment-form').addEventListener('submit',saveComment);
     var status=document.createElement('p');status.id='detail-status';status.className=detailError?'notice':'hint';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
     status.textContent=detailLoading?(d.preview?'접수 정보 표시 · 댓글과 처리 결과를 불러오는 중…':'이전 상세 표시 · 최신 내용을 확인하는 중…'):'';
@@ -359,7 +364,7 @@
       var autoLabel=document.createElement('p');autoLabel.className='hint';autoLabel.textContent='Handover 결과 자동 연결 · 병원명·방문일 일치';checked.after(autoLabel);
     }
     $('detail').setAttribute('aria-busy',String(detailLoading));
-    $('detail').querySelectorAll('[data-action="edit"],[data-action="import"],[data-action="complete"],[data-comment],[data-result],#comment-form button[type="submit"]').forEach(function(b){b.disabled=detailLoading||!!detailError||!!r.deletedAt;});
+    $('detail').querySelectorAll('[data-action="edit"],[data-action="import"],[data-action="complete"],[data-comment],[data-comment-delete],[data-comment-confirm],[data-comment-restore],[data-result],#comment-form button[type="submit"],#comment-file-button,#comment-file-input').forEach(function(b){b.disabled=detailLoading||!!detailError||!!r.deletedAt;});
     updateStatusControl();
     var refresh=$('detail').querySelector('[data-action="refresh-detail"]');refresh.disabled=detailLoading;refresh.textContent=detailLoading?'최신 내용 확인 중…':'최신 내용 확인';
     $('comment-body').dataset.requestId=r.id;
@@ -435,7 +440,7 @@
   }
   async function sendPending(){
     if(!pending||busy)return null;busy=true;updatePending();$('save-status').textContent='서버 저장 중…';
-    var disabledBefore=Array.from(document.querySelectorAll('dialog input,dialog select,dialog textarea,#comment-body,button[type=submit],#save-complete')).map(function(b){var previous=b.disabled;b.disabled=true;return {element:b,disabled:previous};});
+    var disabledBefore=Array.from(document.querySelectorAll('dialog input,dialog select,dialog textarea,#comment-body,[data-comment],[data-comment-delete],[data-comment-confirm],[data-comment-restore],#comment-file-button,#comment-file-input,button[type=submit],#save-complete')).map(function(b){var previous=b.disabled;b.disabled=true;return {element:b,disabled:previous};});
     var operation=pending;
     try{
       var data=await api.post(operation.action,operation.payload);
@@ -447,7 +452,7 @@
       upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
       if(data.request.purgedAt){await forgetPurged(data.request.id);await persistSnapshot();notify('접수를 영구 삭제했습니다.');return data;}
       if(operation.context==='request'){store(draftKey,null);$('editor').close();}
-      if(operation.context==='comment'){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}
+      if(operation.context==='comment'||(operation.context==='comment-lifecycle'&&read(scope+'_comment_'+data.request.id)?.historyId===operation.payload.historyId)){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}
       if(operation.context==='result'){store(scope+'_result_'+data.request.id,null);$('result-dialog').close();}
       // KV response is sufficient; no second detail request on the save path.
       var detail=detailCache.get(data.request.id)||(state.detail&&state.detail.request.id===data.request.id?state.detail:null)||await cache.detail(account,data.request.id).catch(function(){return null;});
@@ -581,7 +586,14 @@
     if(b.dataset.action==='delete'||b.dataset.action==='restore'){changeLifecycle(b.dataset.action);return;}
     if(b.dataset.action==='more-history'){loadMoreHistory();return;}
     if(detailLoading||detailError)return;
-    if(b.dataset.comment){commentEdit=state.detail.history.find(function(h){return h.id===b.dataset.comment;});$('comment-body').value=commentEdit.body;$('comment-edit-label').textContent='댓글 수정 중';$('cancel-comment').hidden=false;$('comment-body').focus();store(scope+'_comment_'+state.detail.request.id,{body:commentEdit.body,historyId:commentEdit.id,baseRevision:commentEdit.revision});return;}
+    if(b.dataset.commentDelete){if(busy||pending||state.detail.request.deletedAt)return;b.closest('.entry').querySelector('.comment-delete-confirm').hidden=false;return;}
+    if(b.dataset.commentCancel!==undefined){b.closest('.comment-delete-confirm').hidden=true;return;}
+    if(b.dataset.commentConfirm||b.dataset.commentRestore){
+      if(busy||pending||state.detail.request.deletedAt)return;
+      var h=state.detail.history.find(function(x){return x.id===(b.dataset.commentConfirm||b.dataset.commentRestore);});if(!h||h.kind!=='comment')return;
+      write('work_history_update',{requestId:state.detail.request.id,historyId:h.id,baseHistoryRevision:h.revision,deleted:!!b.dataset.commentConfirm},'comment-lifecycle').then(function(data){if(data&&!data.success)notify(data.error);else if(data&&data.success){if(commentEdit&&commentEdit.id===h.id){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}notify(b.dataset.commentConfirm?'댓글을 삭제했습니다.':'댓글을 복원했습니다.');}});return;
+    }
+    if(b.dataset.comment){commentEdit=state.detail.history.find(function(h){return h.id===b.dataset.comment;});$('comment-body').value=commentEdit.body;$('comment-edit-label').textContent='댓글 수정 중';$('cancel-comment').hidden=false;$('comment-body').focus();store(scope+'_comment_'+state.detail.request.id,{body:commentEdit.body,historyId:commentEdit.id,baseRevision:commentEdit.revision});refreshCommentPreview();return;}
     if(b.dataset.result){openResults(state.detail.history.find(function(h){return h.id===b.dataset.result;}));return;}
     var action=b.dataset.action;if(action==='edit')openEditor(state.detail.request);if(action==='import')openResults();
     if(action==='complete'){write('work_complete',{requestId:state.detail.request.id,baseRevision:state.detail.request.revision},'complete').then(function(d){if(d&&!d.success)notify(d.error);});}

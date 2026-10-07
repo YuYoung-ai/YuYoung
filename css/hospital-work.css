@@ -203,3 +203,13 @@ html[data-theme=dark] body:before{filter:brightness(2.3);opacity:.065}
 .calendar-content .calendar-heading{padding-top:3px}
 @media(max-width:700px){body:before{width:86vw}.calendar-toggle h2{font-size:14px}.calendar-month-preview{font-size:12px}.calendar-toggle{min-height:48px}.calendar-content{padding:0 12px 12px}}
 @media(prefers-reduced-motion:reduce){.calendar-toggle-arrow{transition:none}}
+
+/* Cloudium link cards contain text and navigation links only. */
+.comment-note{white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-preview{margin:12px 0 14px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-preview:before{content:'저장 전 미리보기';display:block;font-size:11px;color:var(--muted);margin-bottom:7px;white-space:normal}
+
+.comment-controls,.comment-delete-confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.comment-delete-confirm{padding:10px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.deleted-comments{font-size:12px;color:var(--muted);margin:12px 0}
+.deleted-comments .entry{display:flex;gap:12px;align-items:center;justify-content:space-between}
