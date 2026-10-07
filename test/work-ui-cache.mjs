@@ -10,6 +10,24 @@ function fixture(saved,options={}){
  vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
  return {nodes,calls,writes,detailWrites,posts,filters,local};
 }
+{
+ const escapeCode=source.split('\n').find(line=>line.trim().startsWith('function esc('));
+ const linkCode=source.slice(source.indexOf('  function commentMarkup('),source.indexOf('  function store('));
+ const links=vm.runInNewContext(escapeCode+'\n'+linkCode+'\ncommentMarkup;', {URL});
+ const body='확인 <script>alert(1)</script>\nhttps://example.com/a?q=1&b=2. 다음 (https://example.com/a_(b)) http://example.org/한글\nhttps://example.com/" onclick="bad';
+ const html=links(body);
+ assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+ assert.ok(html.includes('href="https://example.com/a?q=1&amp;b=2"'));
+ assert.ok(html.includes('>https://example.com/a?q=1&amp;b=2</a>.'));
+ assert.ok(html.includes('href="https://example.com/a_(b)"'));
+ assert.ok(html.includes('href="http://example.org/한글"'));
+ assert.ok(html.includes('target="_blank" rel="noopener noreferrer"'));
+ assert.ok(!html.includes(' onclick="bad'));
+ for(const unsafe of ['javascript:alert(1)','data:text/html,<script>alert(1)</script>','https://user:pass@example.com/','https://'])assert.ok(!links(unsafe).includes('<a '));
+ assert.equal(links('첫 줄\n둘째 줄'),'첫 줄\n둘째 줄');
+ assert.ok(source.includes('commentMarkup(h.body)'), 'comment timeline uses link formatting');
+ console.log('comment URL: HTTP/HTTPS, multiple URLs, query escaping, Unicode, punctuation/brackets, new-tab isolation and unsafe markup/protocol/credentials rejection passed.');
+}
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
 const saved={storage:'kv',requests:[],hospitals:[],engineers:[],revision:'6',updatedAt:'2026-10-06T00:00:00Z'};
 const cached=fixture(saved);await flush();assert.equal(cached.calls.length,0,'opening cached PC does not query server');assert.equal(cached.nodes.get('sync-state').textContent,'이 PC의 보관 데이터');
@@ -123,6 +141,18 @@ console.log('inline status UI: selection immediately writes, unchanged/loading/p
 
 const off={id:'off',date:'2026-08-17',person:'양승주',type:'휴무',revision:1,deletedAt:''},duty={...off,id:'duty',date:'2026-08-19',type:'당직'};
 const rosterSaved={...saved,rosterMonth:'2026-08',rosterLoaded:true,roster:[duty,off]};let rosterUnknown=false;
+{
+ const f=fixture({...rosterSaved,roster:[duty,off,{...off,id:'removed',date:'2026-08-18',deletedAt:'deleted'}]});await flush();
+ const days=f.nodes.get('roster-calendar-days').innerHTML;assert.equal((days.match(/data-calendar-date=/g)||[]).length,31);assert.equal((days.split('data-calendar-date="2026-08-01"')[0].match(/calendar-blank/g)||[]).length,6,'August 2026 begins on Saturday');
+ assert.ok(days.includes('양승주 휴무'));assert.ok(days.includes('양승주 당직'));assert.ok(!days.includes('8월 18일 · 양승주'),'deleted schedules do not create calendar marks');
+ f.nodes.get('roster-calendar-days').onclick({target:{closest:()=>({dataset:{calendarDate:'2026-08-17'},disabled:false})}});assert.ok(f.nodes.get('roster-calendar-selection').innerHTML.includes('양승주 휴무'));assert.equal(f.calls.length,0,'selecting a date is local');
+ await f.nodes.get('roster-calendar-edit').onclick();assert.equal(f.nodes.get('roster-date').value,'2026-08-17');assert.equal(f.nodes.get('roster-dialog').open,true);f.nodes.get('roster-close').onclick();
+ await f.nodes.get('roster-calendar-next').onclick();assert.equal(f.calls[0].action,'work_roster');assert.equal(f.calls[0].p.rosterMonth,'2026-09');assert.equal(f.nodes.get('roster-calendar-month').textContent,'2026. 09');assert.ok(!f.nodes.get('roster-calendar-days').innerHTML.includes('양승주'));
+ const leap=fixture({...saved,rosterMonth:'2024-02',rosterLoaded:true,roster:[]});await flush();assert.ok(leap.nodes.get('roster-calendar-days').innerHTML.includes('2024-02-29'));assert.ok(!leap.nodes.get('roster-calendar-days').innerHTML.includes('2024-02-30'));
+ const year=fixture({...saved,rosterMonth:'2026-12',rosterLoaded:true,roster:[]});await flush();await year.nodes.get('roster-calendar-next').onclick();assert.equal(year.calls[0].p.rosterMonth,'2027-01');
+ const failed=fixture(rosterSaved,{get:async()=>({success:false,error:'일정 조회 실패'})});await flush();await failed.nodes.get('roster-calendar-next').onclick();assert.equal(failed.nodes.get('roster-calendar-month').textContent,'2026. 08');assert.equal(failed.nodes.get('roster-calendar-error').hidden,false);assert.equal(failed.nodes.get('roster-calendar-error').textContent,'일정 조회 실패');
+ console.log('roster calendar: weekday alignment, leap day/year rollover, date-local details, cached startup, deleted-entry exclusion, prefilled schedule management and explicit month load/failure preservation passed.');
+}
 const rosterFixture=fixture(rosterSaved,{post:async(action,p)=>rosterUnknown?{success:false,retrySameOperation:true,error:'응답 확인 필요'}:{success:true,schedule:{id:p.date==='2026-08-17'?'off':'added',date:p.date,person:p.person,type:p.type||'휴무',revision:p.baseRevision+1,updatedAt:'2026-10-06T02:00:00Z',deletedAt:action==='work_roster_delete'?'now':''}}});await flush();
 assert.equal(rosterFixture.calls.length,0,'cached roster opens without polling');
 const rosterHeader=rosterFixture.nodes.get('roster-summary').innerHTML;assert.ok(rosterHeader.indexOf('8/17 양승주 휴무')<rosterHeader.indexOf('8/19 양승주 당직'),'header is sorted by date');
