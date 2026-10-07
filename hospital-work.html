@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#14223a"><title>CS 서비스 현황 | BAZ CS</title>
-<script src="auth.js"></script><link rel="stylesheet" href="css/hospital-work.css?v=205">
+<script src="auth.js"></script><link rel="stylesheet" href="css/hospital-work.css?v=206">
 </head><body>
 <header class="topbar"><a class="brand" href="index.html"><img src="logo.png" alt="BAZ" width="32" height="32">CS WORKSPACE</a><div class="top-actions"><span id="account"></span><button id="theme" type="button" aria-label="화면 테마 변경">테마</button><button id="sync" type="button" aria-describedby="sync-state sync-time">↻ 동기화</button><button id="roster-open" type="button" aria-haspopup="dialog">근무 일정</button><a href="index.html">메인으로</a></div></header>
 <main>
@@ -40,6 +40,6 @@
 </form></dialog>
 <dialog id="result-dialog"><form id="result-form"><div class="dialog-heading"><div><div class="eyebrow">HANDOVER RESULT</div><h2>현장 결과 불러오기</h2></div><button id="close-result" type="button" aria-label="결과 창 닫기">✕</button></div><div class="form-body"><p class="hint">해당 접수의 A/S·점검 기록을 선택하세요. 저장된 텍스트만 가져옵니다.</p><div id="source-list"></div><div id="source-preview" hidden></div><label class="field">고객센터 보완 메모<textarea id="result-memo" maxlength="2000" rows="2" placeholder="필요한 경우에만 입력"></textarea></label><div id="result-error" class="notice" hidden role="alert"></div></div><div class="form-footer"><button id="save-result" type="submit" class="primary">결과 등록</button><button id="save-complete" type="button">결과 등록 후 완료</button></div></form></dialog>
 <dialog id="lifecycle-dialog" aria-labelledby="lifecycle-title" aria-describedby="lifecycle-description"><form id="lifecycle-form"><div class="dialog-heading"><div><div class="eyebrow">SERVICE REQUEST</div><h2 id="lifecycle-title">선택한 접수 삭제</h2></div><button id="close-lifecycle" type="button" aria-label="선택 관리 창 닫기">✕</button></div><div class="form-body"><p id="lifecycle-description" class="hint"></p><ul id="lifecycle-list" class="lifecycle-list"></ul><label id="restore-duplicate-label" class="check" hidden><input id="restore-duplicate" type="checkbox">중복된 접수를 별도 요청으로 복원합니다.</label><label id="purge-confirm-label" class="check" hidden><input id="purge-confirm" type="checkbox">위 접수 전체를 영구 삭제하며 복원할 수 없음을 확인했습니다.</label><p id="lifecycle-progress" role="status" aria-live="polite"></p></div><div class="form-footer"><button id="cancel-lifecycle" type="button">취소</button><button id="confirm-lifecycle" class="danger selection-delete" type="submit">휴지통으로 이동</button></div></form></dialog>
-<script src="js/baz-work-cache.js"></script><script src="js/baz-work-api.js"></script><script src="js/baz-work-manager.js?v=205"></script>
+<script src="js/baz-work-cache.js"></script><script src="js/baz-work-api.js"></script><script src="js/baz-work-manager.js?v=206"></script>
 </body></html>
 
