@@ -513,7 +513,7 @@ function withCors(res: Response, req: Request): Response {
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
 const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_roster", "work_detail", "work_handover_candidates", "work_handover_detail", "work_flow_preview", "work_flow_relink_preview"]);
-const WORK_WRITES = new Set(["work_save", "work_status", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
+const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_status", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
@@ -573,6 +573,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
     }
   }
   if(action.startsWith('work_roster'))return fail('근무 일정은 활성화된 Deno KV에서만 가능합니다.',503);
+  if(action==='work_request_edit')return fail('목록 수정은 활성화된 Deno KV에서만 가능합니다.',503);
   if(action.startsWith('work_flow_'))return fail('Flow 이전은 활성화된 Deno KV에서만 가능합니다.',503);
   const write = WORK_WRITES.has(action), force = String(p.force || "") === "1";
   // 저장/강제 동기화 이후 조회를 이전 요청과 합치지 않는다.

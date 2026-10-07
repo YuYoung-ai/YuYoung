@@ -25,8 +25,15 @@ assert.equal((await db.get([store.NS,'hospital',r.hospitalId,r.id])).value,null)
 assert.equal((await store.handle({action:'work_flow_relink_preview',rows:[input]},admin)).skipped[0].reason,'이미 연결됨');
 const outbox=(await store.bridge('pending',{})).events.find(x=>x.kind==='hospital_relink');assert.equal(outbox.before.hospitalId,r.hospitalId);assert.equal(outbox.request.hospitalId,hospital.id);assert.equal(outbox.hospital.ncare,'Premium');
 assert.equal((await store.handle({action:'work_flow_import',rows:[{row}]},admin)).results[0].skipped,true,'correction does not create another import');
+const second={...hospital,id:'second',key:'second-key',name:'변경할 병원',sn:'BW9001'};
+await store.bridge('references',{hospitals:[hospital,second],references:{engineers:['기사'],minimumLevel:1}});
+const editedForm={...form,hospitalKey:second.key,gubun:'A/S',cs:'수정 CS',symptom:'수정 증상',visitAt:'2026-07-16T10:00'};
+assert.equal((await store.handle({action:'work_request_edit',id:r.id,baseRevision:updated.revision,form:editedForm,operationId:crypto.randomUUID()},user)).success,false,'hospital correction requires explicit acknowledgement');
+const editOp={action:'work_request_edit',id:r.id,baseRevision:updated.revision,form:editedForm,acknowledgeHospitalChange:true,operationId:crypto.randomUUID()};
+const editResult=await store.handle(editOp,user);assert.equal(editResult.success,true);assert.equal(editResult.request.gubun,'A/S');assert.equal(editResult.request.cs,'수정 CS');assert.equal(editResult.request.hospitalId,second.id);assert.equal(editResult.request.sn,r.sn);assert.deepEqual(editResult.request.flowImport,r.flowImport);assert.deepEqual((await store.handle({action:'work_detail',id:r.id},user)).history,before.history);assert.deepEqual(await store.handle(editOp,user),editResult);
+assert.equal((await store.handle({...editOp,operationId:crypto.randomUUID()},user)).conflict,true);
 const demoRow={...row,hospitalName:'데모 장비 점검 요청',sourceRow:4},demo=(await store.handle({action:'work_flow_import',rows:[{row:demoRow}]},admin)).results[0];
 assert.equal((await store.handle({action:'work_flow_relink_preview',rows:[{...input,sourceId:demo.sourceId,originalName:demoRow.hospitalName}]},admin)).skipped[0].reason,'데모 장비 제외');
-await store.handle({action:'work_delete',requestId:r.id,baseRevision:updated.revision,operationId:crypto.randomUUID()},admin);
+await store.handle({action:'work_delete',requestId:r.id,baseRevision:editResult.request.revision,operationId:crypto.randomUUID()},admin);
 assert.equal((await store.handle({action:'work_flow_relink_preview',rows:[input]},admin)).skipped.length,1,'deleted imports are not restored');
 console.log('Flow hospital relink: administrator ACL, canonical reference/index correction, optimistic conflicts, retries, historical serial/status/source/history preservation, demo/deletion exclusion, original import identity and durable mirror event passed.');
