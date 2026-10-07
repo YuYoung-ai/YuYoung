@@ -63,7 +63,7 @@ function hwKvSourceById_(id){
  if(!col)throw new Error('Handover 기록 ID 열이 없습니다.');
  var hits=n>0?sh.getRange(hdr.row+1,col,n,1).createTextFinder(id).matchEntireCell(true).findAll():[];
  if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복되었거나 삭제됐습니다.');
- var row=hits[0].getRow(),values=sh.getRange(row,1,1,sh.getLastColumn()).getValues()[0],raw={_row:row};hdr.headers.forEach(function(h,c){if(h)raw[h]=values[c];});
+ var row=hits[0].getRow(),values=sh.getRange(row,1,1,sh.getLastColumn()).getDisplayValues()[0],raw={_row:row};hdr.headers.forEach(function(h,c){if(h)raw[h]=values[c];});
  var hit={raw:raw,source:hwSource_(raw)};if(!hit.source.date||['A/S','점검'].indexOf(hit.source.gubun)<0)throw new Error('원본 처리일 또는 A/S·점검 구분을 확인하세요.');hwKvStableSource_(hit);return hit.source;
 }
 function hwKvDeliverSources_(){
