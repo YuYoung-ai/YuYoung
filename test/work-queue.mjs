@@ -16,7 +16,7 @@ context.hwKvDeliverSources_();assert.equal(sent.length,20);context.hwKvPublishSt
 rows=[{row:2,id:'fail',state:'pending'}];context.hwKvCall_=()=>{throw new Error('전송 실패');};assert.throws(()=>context.hwKvDeliverSources_());assert.equal(rows[0].state,'pending','failed delivery retains durable retry');
 // Exercise actual stable-ID lookup against a renamed source, independent of queue JSON/name.
 const finder={matchEntireCell:()=>finder,findAll:()=>[{getRow:()=>19}]};
-const sheet={getLastColumn:()=>3,getRange:(row,col,n,width)=>width===1?{createTextFinder:id=>{assert.equal(id,'renamed');return finder;}}:{getValues:()=>[['현재 병원명','renamed','2026-10-07']]}};
+const sheet={getLastColumn:()=>3,getRange:(row,col,n,width)=>width===1?{createTextFinder:id=>{assert.equal(id,'renamed');return finder;}}:{getValues:()=>{throw new Error('Raw Date cells must not bypass the existing formatted source parser');},getDisplayValues:()=>[['현재 병원명','renamed','2026. 10. 7']]}};
 context.hwSS_=()=>({getSheetByName:()=>sheet});context.CONFIG={SHEET_NAME:'Handover'};context.REC_ID_COLS=['기록 ID'];context.findHeader_=()=>({row:2,headers:['병원명','기록 ID','처리일']});context.colBy_=()=>2;context.lastDataRow_=()=>20;context.hwSource_=raw=>({recordId:raw['기록 ID'],hospitalName:raw['병원명'],date:raw['처리일'],gubun:'A/S'});context.hwKvStableSource_=()=>{};
 // Restore the implementation overwritten by the fixture.
 const code=fs.readFileSync(new URL('../hospital_work_kv_gas.gs',import.meta.url),'utf8');vm.runInContext(code.slice(code.indexOf('function hwKvSourceById_'),code.indexOf('function hwKvDeliverSources_')),context);
