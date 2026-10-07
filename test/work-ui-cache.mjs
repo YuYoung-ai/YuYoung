@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
  const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['active','all','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
- function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
+ function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
  const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
- vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
+ vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
  return {nodes,calls,writes,detailWrites,posts,filters,local};
 }
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
@@ -99,3 +99,25 @@ const firstOperation=rosterFixture.posts.at(-1).p.operationId;rosterUnknown=fals
 rosterFixture.nodes.get('roster-month').value='2026-09';await rosterFixture.nodes.get('roster-month').onchange.call(rosterFixture.nodes.get('roster-month'));assert.equal(rosterFixture.calls.at(-1).action,'work_roster');assert.equal(rosterFixture.calls.at(-1).p.rosterMonth,'2026-09');assert.ok(rosterFixture.nodes.get('roster-summary').innerHTML.includes('9월'));assert.ok(!rosterFixture.nodes.get('roster-summary').innerHTML.includes('양승주'));
 const html=fs.readFileSync(new URL('../hospital-work.html',import.meta.url),'utf8');assert.ok(html.indexOf('id="sync"')<html.indexOf('id="roster-open"'));assert.ok(html.indexOf('id="roster-open"')<html.indexOf('메인으로'));
 console.log('work-roster UI: cached startup, header date ordering, adjacent button, duplicate guard, explicit edit/delete, snapshot persistence, month switch and durable unknown-save retry passed.');
+
+// A candidate read may have linked another device on the server. The next save
+// must build its local detail from that response, retaining the linked history.
+const linkRequest={...makeRequest('linked'),status:'결과확인'};
+const fieldSource={recordId:'source-new',version:'v1',date:'2026-10-07',engineer:'사용자 A',sn:'SN2',gubun:'점검',detail:'점검 완료',result:'정상'};
+const autoHistory={id:'auto-history',kind:'result',requestId:linkRequest.id,source:{...fieldSource,recordId:'source-auto',sn:'SN1'},memo:'',revision:1,createdAt:'2026-10-07T01:00:00Z'};
+const linkedDetail={success:true,request:{...linkRequest,revision:5},history:[autoHistory],logs:[],requests:[],updatedAt:'2026-10-07T01:00:00Z'};
+const manualHistory={...autoHistory,id:'manual-history',source:fieldSource};
+const resultUi=fixture(withRows([linkRequest]),{
+ detail:{success:true,request:linkRequest,history:[],logs:[],requests:[]},
+ get:async action=>action==='work_handover_candidates'?{success:true,data:[fieldSource],workDetail:linkedDetail}:action==='work_handover_detail'?{success:true,source:fieldSource,workDetail:linkedDetail}:{success:true,...linkedDetail},
+ post:async()=>({success:true,request:{...linkRequest,revision:6},history:manualHistory})
+});
+await flush();resultUi.nodes.get('list').onclick({target:{closest:()=>({dataset:{open:linkRequest.id}})}});await flush();
+resultUi.nodes.get('detail').onclick({target:{closest:()=>({dataset:{action:'import'}})}});await flush();
+assert.equal(resultUi.detailWrites.at(-1).request.revision,5);
+resultUi.nodes.get('source-list').onclick({target:{closest:()=>({dataset:{source:'0'}})}});await flush();
+resultUi.nodes.get('result-form').onsubmit({preventDefault(){}});await flush();
+assert.equal(resultUi.posts.at(-1).p.baseRevision,5);
+assert.deepEqual(Array.from(resultUi.detailWrites.at(-1).history,h=>h.id).sort(),['auto-history','manual-history']);
+assert.equal(resultUi.detailWrites.at(-1).preview,false,'latest source response keeps a complete current local history after save');
+console.log('Handover read-triggered linking: latest detail persists before the next write and retains all device histories.');

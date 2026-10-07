@@ -415,7 +415,7 @@
     $('result-dialog').showModal();
     try{
       var data=await api.get('work_handover_candidates',{requestId:requestId});if(dialogSeq!==resultDialogSeq)return;if(!data.success)throw new Error(data.error);
-      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;upsert(data.workDetail.request);renderList();renderDetail();}
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(data.workDetail.request.id,data.workDetail);await cache.saveDetail(account,data.workDetail.request.id,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
       state.sources=data.data.filter(function(s){return s.gubun==='A/S'||s.gubun==='점검';});
       $('source-list').innerHTML=state.sources.length?state.sources.map(function(s,i){return '<button class="source-button" type="button" data-source="'+i+'"><strong>'+esc(s.date)+' · '+esc(s.engineer)+' · '+esc(s.sn||'S/N 미기록')+'</strong><br>'+esc([s.cat,s.type,s.detail.slice(0,100)].filter(Boolean).join(' / '))+'</button>';}).join(''):'이 병원에 저장된 A/S·점검 기록이 없습니다. Handover에서 시트 저장을 완료한 뒤 다시 불러오세요.';
       if(data.total>100)$('source-list').insertAdjacentHTML('afterbegin','<p class="hint">최신 100건 표시</p>');
@@ -429,7 +429,7 @@
     state.source=null;err('result-error','');$('source-preview').hidden=true;
     try{
       var data=await api.get('work_handover_detail',{requestId:state.detail.request.id,recordId:candidate.recordId});if(seq!==sourceSeq)return;if(!data.success)throw new Error(data.error);
-      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;upsert(data.workDetail.request);renderList();renderDetail();}
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(data.workDetail.request.id,data.workDetail);await cache.saveDetail(account,data.workDetail.request.id,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
       state.source=data.source;
       var previous=state.detail.history.find(function(h){return h.kind==='result'&&h.source.recordId===data.source.recordId;});state.resultExisting=previous||null;
       var draft=read(scope+'_result_'+state.detail.request.id);

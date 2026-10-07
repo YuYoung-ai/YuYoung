@@ -210,6 +210,13 @@ addSource('2026-10-27',{gubun:'점검'});
 const inspections=get({action:'work_handover_candidates',requestId:'not-yet-mirrored',hospitalName:'샘플병원'});
 assert.equal(inspections.success,true);const inspection=inspections.data.find(x=>x.date==='2026-10-27');assert.equal(inspection.gubun,'점검');assert.ok(inspection.observedAt);
 assert.equal(get({action:'work_handover_detail',requestId:'not-yet-mirrored',hospitalName:'샘플병원',recordId:inspection.recordId}).source.gubun,'점검');
+lockHeld=true;
+try{
+ const stableLookup=get({action:'work_handover_candidates',requestId:'not-yet-mirrored',hospitalName:'샘플병원'});
+ assert.equal(stableLookup.success,true,'stable KV source reads do not wait for a running Sheets mirror');
+ assert.ok(stableLookup.data.every(s=>s.observedAt&& !s.recordId.startsWith('legacy_')));
+ assert.equal(get({action:'work_handover_detail',requestId:'not-yet-mirrored',hospitalName:'샘플병원',recordId:inspection.recordId}).success,true);
+}finally{lockHeld=false;}
 const originalMirror=copy(sandbox.hwRequest_(id)),mirrorHistory={id:'kv-comment-fixture',requestId:id,kind:'comment',body:'KV 저장 내용',revision:1};
 const mirrorEvent={id:'kv-event-fixture',seq:1,actor:'CS A',kind:'comment_add',request:{...originalMirror,revision:originalMirror.revision+1,latest:'KV 저장 내용'},history:mirrorHistory,at:new Date().toISOString()};
 failSheet='업무요청';assert.throws(()=>sandbox.hwKvApply_([mirrorEvent]),/interrupted/);
