@@ -183,9 +183,15 @@
     }catch(e){showSyncState('error');notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
     finally{syncing=false;$('sync').disabled=false;$('sync').textContent='↻ 동기화';updateSelection();}
   }
-  function resultFields(s){
-    var fields=[['처리일',s.date],['실제 처리자',s.engineer],['장비 S/N',s.sn],['처리 구분',s.gubun],['처리 항목',[s.cat,s.type].filter(Boolean).join(' / ')],['처리 내용',s.detail],['처리 결과',s.result],['교체품',s.part],['교체비용',s.cost],['특이사항',s.remark]];
-    return '<dl class="result-fields">'+fields.map(function(x){var wide=x[0]==='처리 내용'||x[0]==='특이사항',kind=wide?' class="result-wide"':x[0]==='처리 결과'?' class="result-outcome"':'';return '<dt'+kind+'>'+esc(x[0])+'</dt><dd'+kind+'>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
+  function resultFields(s,memo){
+    var assessment={nsFill:s.nsFill||'',nsAmt:s.nsAmt||'',jet:s.jet||''};
+    if(s.origin==='flow'&&memo){
+      var patterns={nsFill:/NS\s*충진\s*여부\s*[:：]\s*([^\n]*?)(?=NS\s*충진량|젯\s*분사|\n|$)/,nsAmt:/NS\s*충진량\s*[:：]\s*([^\n]*?)(?=젯\s*분사|비고\s*\/\s*특이사항|\n|$)/,jet:/젯\s*분사\s*판단(?:\[[^\]]*\])?\s*[:：]\s*([^\n]*?)(?=비고\s*\/\s*특이사항|\n|$)/};
+      Object.keys(patterns).forEach(function(k){var hit=patterns[k].exec(memo);if(!assessment[k]&&hit)assessment[k]=hit[1].replace(/\s*[-•]\s*$/,'').trim();});
+    }
+    var reuse=String(s.nozzleReuse||'').trim().toUpperCase(),reuseText=['O','Y','유','예'].includes(reuse)?'유':['X','N','무','아니오'].includes(reuse)?'무':reuse||'미기록';
+    var fields=[['처리일',s.date],['실제 처리자',s.engineer],['장비 S/N',s.sn],['처리 구분',s.gubun],['처리 항목',[s.cat,s.type].filter(Boolean).join(' / ')],['처리 내용',s.detail],['처리 결과',s.result],['교체품',s.part],['교체비용',s.cost],['특이사항',s.remark],['노즐 재사용',reuseText]];
+    return '<dl class="result-fields">'+fields.map(function(x){var wide=x[0]==='처리 내용'||x[0]==='특이사항',kind=wide?' class="result-wide"':x[0]==='처리 결과'?' class="result-outcome"':'';return '<dt'+kind+'>'+esc(x[0])+'</dt><dd'+kind+'>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl><h4>사용자 숙련도 평가</h4><dl class="result-fields">'+[['NS 충진 여부',assessment.nsFill],['NS 충진량',assessment.nsAmt],['젯 분사 판단',assessment.jet]].map(function(x){return '<dt>'+x[0]+'</dt><dd>'+esc(x[1]||'미기록')+'</dd>';}).join('')+'</dl>';
   }
   function detailMarkup(d,r,results,comments){
     var back='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg>';
@@ -206,7 +212,7 @@
       '</div>',
       '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+esc(r.symptom)+'</p></section>',
       '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">처리 결과</h3><div class="detail-content"><div class="result-list">',
-      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result"><div class="result-title"><h4>현장 처리 내역</h4>'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+'</div>'+resultFields(h.source)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
+      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result"><div class="result-title"><h4>현장 처리 내역 · '+esc(h.source.sn||'S/N 미기록')+'</h4>'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+'</div>'+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
       '</div>'+((d.historyCursor||d.auditCursor)?'<button data-action="more-history">이력 더 보기</button>':'')+'</div></section>',
       '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
       d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
@@ -216,7 +222,7 @@
       '<p id="detail-checked" class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><p class="hint">Handover 연동 확인 '+esc(time(sourceCheckedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button></div>',
       (r.deletedAt?'<p class="notice">휴지통 · '+esc(r.deletedBy)+' · '+esc(time(r.deletedAt))+'</p>'+((r.createdBy===account||BazAuth.cachedLevel()>=3)?'<button data-action="restore">접수 복원</button>':''):(r.createdBy===account||BazAuth.cachedLevel()>=3)?'<button class="danger" data-action="delete">접수 삭제</button>':''),
       '<details class="request-extra"><summary>기본 정보 더 보기</summary><dl class="result-fields"><dt>CS 담당</dt><dd>'+esc(r.cs)+'</dd><dt>영업 담당</dt><dd>'+esc(r.sales||'미기록')+'</dd><dt>등록일시</dt><dd>'+esc(time(r.registeredAt))+'</dd></dl></details>',
-      '<div class="result-link-tools"><h4>Handover 연결 관리</h4><p class="hint">Handover의 병원명·처리일이 병원명·방문일과 일치하면 결과가 자동 연결됩니다.</p>',
+      '<div class="result-link-tools"><h4>Handover 연결 관리</h4><p class="hint">같은 병원·방문일의 서로 다른 장비 S/N은 처리 내역에 각각 연결됩니다. 같은 S/N 중복 또는 S/N 미기록은 원본을 직접 선택하세요.</p>',
       results.map(function(h){return '<div class="result-link"><strong>'+esc(h.source.date||'처리일 미기록')+' · '+esc(h.source.engineer||'처리자 미기록')+'</strong>'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':h.auto?'<span class="result-origin">자동 연결</span>':'')+'<div class="entry-meta">연결: '+esc(h.author)+' · '+esc(time(h.createdAt))+(h.revision>1?' · 수정 '+esc(time(h.updatedAt)):'')+'</div>'+(h.source.origin==='flow'?'<p class="hint">엑셀 원문을 보존한 기록입니다. 이후 처리 내용은 댓글 또는 Handover 결과로 추가하세요.</p>':'<button data-result="'+esc(h.id)+'">원본 비교·갱신</button>')+'</div>';}).join(''),
       '<div class="result-actions"><button data-action="import">Handover 결과 불러오기</button>'+(r.status!=='완료'?'<button class="primary" data-action="complete">완료 처리</button>':'')+'<a href="handover.html">Handover 열기 ↗</a></div></div>',
       '<details class="detail-records"><summary>이 병원의 다른 접수 · '+d.requests.length+'건</summary>'+d.requests.map(function(x){return '<button class="history-request" data-open="'+esc(x.id)+'">'+esc(time(x.registeredAt))+' · '+esc(x.status)+'<br>'+esc(x.symptom.slice(0,100))+'</button>';}).join('')+'</details>',
@@ -239,7 +245,9 @@
     var selection=restoreFocus?[previousInput.selectionStart,previousInput.selectionEnd]:null;
     var previousTools=$('detail-tools'),keepToolsOpen=previousTools&&!$('detail').hidden&&previousTools.dataset.requestId===r.id&&previousTools.open;
     var entries=d.history.slice().sort(function(a,b){return b.createdAt.localeCompare(a.createdAt);});
-    $('detail').innerHTML=detailMarkup(d,r,entries.filter(function(h){return h.kind==='result';}),entries.filter(function(h){return h.kind!=='result'&&!(h.kind==='comment'&&h.flowImport);}));
+    var results=entries.filter(function(h){return h.kind==='result';});
+    results=results.filter(function(h){return h.source.origin!=='flow'||!h.source.sn||!results.some(function(other){return other.source.origin!=='flow'&&other.source.sn===h.source.sn&&other.source.date===h.source.date;});});
+    $('detail').innerHTML=detailMarkup(d,r,results,entries.filter(function(h){return h.kind!=='result'&&!(h.kind==='comment'&&h.flowImport);}));
     $('detail').hidden=false;commentEdit=null;
     $('detail-tools').open=!!keepToolsOpen;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
@@ -407,6 +415,7 @@
     $('result-dialog').showModal();
     try{
       var data=await api.get('work_handover_candidates',{requestId:requestId});if(dialogSeq!==resultDialogSeq)return;if(!data.success)throw new Error(data.error);
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;upsert(data.workDetail.request);renderList();renderDetail();}
       state.sources=data.data.filter(function(s){return s.gubun==='A/S'||s.gubun==='점검';});
       $('source-list').innerHTML=state.sources.length?state.sources.map(function(s,i){return '<button class="source-button" type="button" data-source="'+i+'"><strong>'+esc(s.date)+' · '+esc(s.engineer)+' · '+esc(s.sn||'S/N 미기록')+'</strong><br>'+esc([s.cat,s.type,s.detail.slice(0,100)].filter(Boolean).join(' / '))+'</button>';}).join(''):'이 병원에 저장된 A/S·점검 기록이 없습니다. Handover에서 시트 저장을 완료한 뒤 다시 불러오세요.';
       if(data.total>100)$('source-list').insertAdjacentHTML('afterbegin','<p class="hint">최신 100건 표시</p>');
@@ -420,6 +429,7 @@
     state.source=null;err('result-error','');$('source-preview').hidden=true;
     try{
       var data=await api.get('work_handover_detail',{requestId:state.detail.request.id,recordId:candidate.recordId});if(seq!==sourceSeq)return;if(!data.success)throw new Error(data.error);
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;upsert(data.workDetail.request);renderList();renderDetail();}
       state.source=data.source;
       var previous=state.detail.history.find(function(h){return h.kind==='result'&&h.source.recordId===data.source.recordId;});state.resultExisting=previous||null;
       var draft=read(scope+'_result_'+state.detail.request.id);
@@ -428,7 +438,7 @@
       $('source-preview').hidden=false;document.querySelectorAll('[data-source]').forEach(function(b){b.classList.toggle('selected',Number(b.dataset.source)===index);});
       var r=state.detail.request,warnings=[];
       if(r.engineer&&r.engineer!==data.source.engineer)warnings.push('배정 엔지니어와 실제 처리자가 다릅니다.');
-      if(r.sn&&data.source.sn&&r.sn!==data.source.sn)warnings.push('접수 장비와 처리 장비 S/N이 다릅니다.');
+      if(r.sn&&data.source.sn&&r.sn!==data.source.sn)warnings.push('접수 기준 S/N과 다릅니다. 함께 처리한 다른 장비인지 확인하세요.');
       if(!data.source.result)warnings.push('원본에 처리 결과가 미기록입니다.');
       if(warnings.length)err('result-error',warnings.join('\n')+' 해당 요청의 기록이 맞는지 확인하세요.');
     }catch(e){if(seq===sourceSeq)err('result-error',e.message);}

@@ -40,6 +40,9 @@ const sandbox={console,Date,JSON,Map,Set,SpreadsheetApp:{openById:()=>ss,getActi
   LockService:{getScriptLock:()=>({waitLock(){assert.equal(lockHeld,false,'no nested lock');lockHeld=true;},releaseLock(){lockHeld=false;}})},
   bazVerifyLocal_:token=>token==='alice'?{ok:true,level:1,name:'CS A'}:token==='bob'?{ok:true,level:1,name:'CS B'}:token==='admin'?{ok:true,level:3,name:'관리자'}:{ok:false}};
 vm.createContext(sandbox);vm.runInContext(read('handover_gas.gs'),sandbox);vm.runInContext(read('hospital_work_gas.gs'),sandbox);vm.runInContext(read('hospital_work_kv_gas.gs'),sandbox);
+const assessmentSource=sandbox.hwSource_({'처리일':'2026-10-02','병원명':'샘플병원','기록 ID':'assessment','노즐 재사용':'O','NS 충진 여부':'X','NS 충진량':'부족','젯 분사 판단':'교육 필요'});
+assert.equal(assessmentSource.nozzleReuse,'O');assert.equal(assessmentSource.nsFill,'X');assert.equal(assessmentSource.nsAmt,'부족');assert.equal(assessmentSource.jet,'교육 필요');
+assert.notEqual(assessmentSource.version,sandbox.hwSource_({'처리일':'2026-10-02','병원명':'샘플병원','기록 ID':'assessment','노즐 재사용':'X','NS 충진 여부':'X','NS 충진량':'부족','젯 분사 판단':'교육 필요'}).version,'assessment/reuse fields affect source version');
 sandbox.getHospDBRich_=()=>({success:true,data:[{name:'샘플병원',sn:'SN1',region:'서울',sales:'영업 A'},{name:'샘플병원 분점',sn:'SN2',region:'서울',sales:'영업 B'}]});
 sandbox.getMaster_=()=>({fse:['엔지니어 A','엔지니어 B']});
 sandbox.bazDropHandoverCaches_=()=>{};
@@ -50,6 +53,7 @@ assert.equal(get({action:'work_bootstrap'}).success,false,'explicit setup requir
 sandbox.setupHospitalWork();sandbox.setupHospitalWork();assert.equal(handover.data.length,4,'initializer preserves source');
 assert.equal(get({action:'work_bootstrap',token:''}).success,false,'auth enforced');
 const boot=get({action:'work_bootstrap'});
+const aliasSources=copy(sandbox.hwSources_('샘플_병원의원'));assert.equal(aliasSources.length,2);assert.ok(aliasSources.every(x=>x.source.hospitalName==='샘플_병원의원'&&x.source.sourceHospitalName==='샘플병원'),'separator/name suffix aliases preserve exact branch');
 const form={hospitalKey:boot.hospitals[0].key,symptom:'누수',cs:'CS A',engineer:'엔지니어 A',sales:'영업 A',status:'방문예정',registeredAt:'2026-10-02T09:00',visitAt:'2026-10-05T14:00',deadline:''};
 const create={action:'work_save',form,operationId:crypto.randomUUID()};
 const first=post(create);assert.equal(first.success,true);const id=first.request.id;
