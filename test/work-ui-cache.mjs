@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
- const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['active','all','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
+ const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['active','today','mine','unassigned','all','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
  function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
  const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
@@ -27,6 +27,25 @@ assert.ok(masterOnly.nodes.get('hospital-options').innerHTML.includes('병원정
 assert.ok(!masterOnly.nodes.get('hospital-options').innerHTML.includes('엑셀 이력 병원'),'historical names do not pollute new-request autocomplete, including cached PCs');
 const makeRequest=(id,createdBy='사용자 A')=>({id,hospitalId:'h-'+id,hospitalName:'병원 '+id,createdBy,visitAt:'',deadline:'',symptom:'증상 '+id,status:'접수',cs:createdBy,engineer:'',sales:'',revision:4,updatedAt:'2026-10-06T00:00:00Z'});
 const withRows=rows=>({...saved,requests:rows});
+{
+ const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const row=(id,status,visitAt,engineer='',cs='사용자 A')=>({...makeRequest(id),status,visitAt,engineer,cs,deadline:visitAt,updatedAt:visitAt?visitAt+':00Z':'2026-01-01T00:00:00Z'});
+ const rows=[row('earlier','완료',today+'T09:00'),row('later','방문예정',today+'T13:00','사용자 A'),row('missing','완료',''),{...row('trash','완료',today+'T08:00'),deletedAt:'deleted'},row('cancelled','취소',today+'T10:00')];
+ const f=fixture(withRows(rows));await flush();
+ const choose=filter=>f.filters.find(x=>x.dataset.filter===filter).onclick();
+ const ids=()=>Array.from(f.nodes.get('list').innerHTML.matchAll(/class="row-open" data-open="([^"]+)"/g),x=>x[1]);
+ choose('today');assert.deepEqual(ids(),['earlier','later']);assert.equal(f.nodes.get('count-today').textContent,2,'today metric includes completed visits but excludes trash/cancellation');
+ choose('mine');assert.deepEqual(ids(),['earlier','later','missing'],'CS or engineer ownership includes completed requests');
+ choose('unassigned');assert.deepEqual(ids(),['earlier','missing'],'completed unassigned requests remain visible');
+ choose('active');assert.deepEqual(ids(),['later'],'active filter still excludes completion');
+ choose('mine');f.nodes.get('status-filter').value='완료';f.nodes.get('status-filter').onchange();assert.deepEqual(ids(),['earlier','missing'],'status intersection is preserved');f.nodes.get('status-filter').value='';
+ for(const sort of ['visit','updated','deadline']){
+  f.nodes.get('sort').value=sort;f.nodes.get('sort-direction').value='asc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),sort==='updated'?['missing','earlier','later']:['earlier','later','missing']);
+  f.nodes.get('sort-direction').value='desc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),['later','earlier','missing'],'descending dates with unset dates kept last');
+ }
+ assert.equal(f.calls.length,0,'changing filters and direction works entirely on cached data');
+ console.log('list filters/sort: completed today/own/unassigned records, matching today count, status intersection, trash/cancel exclusion, both directions for every date criterion and missing-date placement passed.');
+}
 {
  const h={id:'h1',key:'key1',name:'기준 병원',sn:'BW3007'},r={...makeRequest('inline'),hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,registeredAt:'2026-10-06T09:00',visitAt:'2026-10-06T10:00',gubun:'점검'},r2={...r,id:'inline2'};
  const f=fixture({...saved,requests:[r,r2],hospitals:[h],engineers:['기사']},{post:async(action,p)=>({success:true,request:{...r,...p.form,id:p.id,revision:r.revision+1}})});await flush();
