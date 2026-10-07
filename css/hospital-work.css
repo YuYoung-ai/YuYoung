@@ -183,3 +183,22 @@ button.danger.selection-delete{background:var(--danger);border-color:var(--dange
 @media(max-width:700px){.page-heading{grid-template-columns:minmax(0,1fr)}.page-heading>.roster-calendar{grid-column:1;grid-row:2}.page-heading>.heading-actions{grid-column:1;grid-row:3;justify-items:stretch}.calendar-heading h2,.calendar-month-nav strong{font-size:14px}.calendar-heading button{min-width:44px;min-height:44px;font-size:13px}.calendar-month-nav button{font-size:23px}.calendar-weekdays{font-size:12px}.calendar-day{min-height:44px;font-size:14px;line-height:38px}.calendar-marks{bottom:5px}.calendar-marks i{width:5px;height:5px}.calendar-selection,.calendar-person{font-size:12px}.calendar-selection{min-height:32px}.calendar-legend{font-size:11px}}
 
 #detail .comment-url{text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}#detail .comment-url-hint{font-size:11px;margin:0 0 10px}
+
+/* A quiet brand watermark and a compact native calendar disclosure. */
+.page-heading{position:relative;isolation:isolate}
+.page-heading:before{content:'';position:absolute;left:0;top:0;bottom:0;width:min(44%,360px);background:url('../logo.png') no-repeat left center/contain;opacity:.07;pointer-events:none;z-index:-1}
+html[data-theme=dark] .page-heading:before{filter:brightness(2.3);opacity:.11}
+.roster-calendar{padding:0;align-self:end}
+.calendar-toggle{display:flex;align-items:center;gap:10px;min-height:44px;padding:10px 12px;cursor:pointer;list-style:none;border-radius:12px}
+.calendar-toggle::-webkit-details-marker{display:none}
+.calendar-toggle:hover{background:var(--soft)}
+.calendar-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.calendar-toggle h2{font-size:12px;letter-spacing:-.3px;white-space:nowrap}
+.calendar-month-preview{margin-left:auto;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.calendar-toggle-arrow{font-size:16px;line-height:1;color:var(--muted);transition:transform .15s}
+.roster-calendar[open] .calendar-toggle-arrow{transform:rotate(180deg)}
+.roster-calendar[open] .calendar-month-preview{visibility:hidden}
+.calendar-content{padding:0 12px 10px}
+.calendar-content .calendar-heading{padding-top:3px}
+@media(max-width:700px){.page-heading:before{width:min(70%,280px);height:96px;top:0;bottom:auto;background-position:left top;opacity:.045}.calendar-toggle h2{font-size:14px}.calendar-month-preview{font-size:12px}.calendar-toggle{min-height:48px}.calendar-content{padding:0 12px 12px}}
+@media(prefers-reduced-motion:reduce){.calendar-toggle-arrow{transition:none}}
