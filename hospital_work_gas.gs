@@ -365,11 +365,15 @@ function hospitalWorkGet_(p){
       return {success:true,request:r,history:history,requests:requests,logs:logs,autoMatch:auto,updatedAt:new Date().toISOString()};
     },{requestId:p.id});
     if(p.action==='work_handover_candidates'){
-      var r=hwRead_(function(){return hwRequest_(p.requestId);});
-      var hosp=hwKvMode_()?hwText_(p.hospitalName,120,'병원'):(r?r.hospitalName:hwText_(p.hospitalName,120,'병원'));
+      var kv=hwKvMode_(),r=kv?null:hwRead_(function(){return hwRequest_(p.requestId);});
+      var hosp=kv?hwText_(p.hospitalName,120,'병원'):(r?r.hospitalName:hwText_(p.hospitalName,120,'병원'));
       if(!hosp) throw new Error('병원 선택 필요');
       var hits=hwSources_(hosp).filter(function(x){return ['A/S','점검'].indexOf(x.source.gubun)>=0;});
-      if(hwKvMode_())hwLock_(function(){hits.forEach(hwKvStableSource_);});
+      if(kv){
+        hits.forEach(function(hit){hit.source.observedAt=new Date().toISOString();});
+        var unstable=hits.filter(function(hit){return hit.source.recordId.indexOf('legacy_')===0;});
+        if(unstable.length)hwLock_(function(){unstable.forEach(hwKvStableSource_);});
+      }
       var sources=hits.map(function(x){return x.source;}).sort(function(a,b){return b.date.localeCompare(a.date);});
       return {success:true,data:sources.slice(0,100),total:sources.length,updatedAt:new Date().toISOString()};
     }
