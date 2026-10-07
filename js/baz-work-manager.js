@@ -112,7 +112,7 @@
     if(current&&!names.includes(current))names.push(current);
     $('engineer').innerHTML='<option value="">미배정</option>'+names.map(function(n){return '<option>'+esc(n)+'</option>';}).join('');$('engineer').value=current;
     $('cs-options').innerHTML=Array.from(new Set([account].concat(state.requests.map(function(r){return r.cs;})).filter(Boolean))).map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('');
-    $('hospital-options').innerHTML=state.hospitals.map(function(h){return '<option value="'+esc(label(h))+'"></option>';}).join('');
+    $('hospital-options').innerHTML=state.hospitals.filter(function(h){return h.origin!=='flow';}).map(function(h){return '<option value="'+esc(label(h))+'"></option>';}).join('');
   }
   function renderList(){
     var today=localNow().slice(0,10),search=$('search').value.trim().toLowerCase(),status=$('status-filter').value;
@@ -312,7 +312,7 @@
   }
   function closeDetail(){detailSeq++;detailLoading=false;detailError='';detailTask=null;state.detail=null;$('detail').hidden=true;$('detail').setAttribute('aria-busy','false');renderList();}
   async function selectHospital(fillSales){
-    var value=$('hospital-input').value.trim(),matches=state.hospitals.filter(function(h){return label(h)===value||h.name===value;});
+    var value=$('hospital-input').value.trim(),matches=state.hospitals.filter(function(h){return (h.origin!=='flow'||state.editing&&h.key===state.editing.hospitalKey)&&(label(h)===value||h.name===value);});
     var seq=++hospitalSeq;state.selected=matches.length===1?matches[0]:null;
     $('existing-requests').hidden=true;$('ack').checked=false;$('duplicate-ack').hidden=true;err('form-error','');
     if(!state.selected){$('hospital-match').textContent='목록에서 병원을 선택하세요. 같은 이름의 지점은 S/N과 지역을 확인하세요.';if(fillSales)$('sales').value='';$('past-history').textContent='병원을 선택하세요.';return;}
