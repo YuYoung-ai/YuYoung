@@ -67,6 +67,18 @@ for(const badSn of ['SN1','']){
 await store.ingestSources([source]);let detail=await store.handle({action:'work_detail',id},alice);assert.equal(detail.request.status,'결과확인');assert.equal(detail.request.gubun,'점검');assert.equal(detail.history[0].auto,true);assert.equal(detail.request.completedAt,'');
 await store.ingestSources([source]);assert.equal((await store.handle({action:'work_detail',id},alice)).history.length,1);
 const c1=await store.handle({action:'work_history_add',requestId:id,body:'상담 내용',operationId:crypto.randomUUID()},alice);assert.equal(c1.success,true);
+{
+ const {s,one}=await multiDeviceFixture();
+ const added=await s.handle({action:'work_history_add',requestId:one.request.id,body:'보존할 댓글',operationId:crypto.randomUUID()},alice);
+ const deletion={action:'work_history_update',requestId:one.request.id,historyId:added.history.id,baseHistoryRevision:1,deleted:true,operationId:crypto.randomUUID()};
+ assert.equal((await s.handle(deletion,bob)).success,false,'other staff cannot delete a comment');
+ const removed=await s.handle(deletion,alice);assert.equal(removed.success,true);assert.ok(removed.history.deletedAt);assert.equal(removed.history.body,'보존할 댓글');assert.equal(removed.request.latest,'');
+ assert.deepEqual(await s.handle(deletion,alice),removed,'delete replay is idempotent');
+ assert.equal((await s.handle({...deletion,operationId:crypto.randomUUID()},alice)).conflict,true,'stale delete cannot override a newer revision');
+ assert.equal((await s.handle({...deletion,deleted:undefined,body:'덮어쓰기',baseHistoryRevision:2,operationId:crypto.randomUUID()},alice)).success,false,'deleted comments require restore before editing');
+ const back=await s.handle({...deletion,deleted:false,baseHistoryRevision:2,operationId:crypto.randomUUID()},admin);assert.equal(back.success,true);assert.equal(back.history.deletedAt,'');assert.equal(back.history.body,'보존할 댓글');assert.equal(back.request.latest,'보존할 댓글');
+ const events=(await s.bridge('pending',{})).events;assert.ok(events.some(x=>x.kind==='comment_delete'&&x.history.deletedAt));assert.ok(events.some(x=>x.kind==='comment_restore'&&!x.history.deletedAt));
+}
 const changed=await store.handle({action:'work_history_update',requestId:id,historyId:c1.history.id,baseHistoryRevision:1,body:'수정된 내용',operationId:crypto.randomUUID()},alice);assert.equal(changed.success,true);
 assert.equal((await store.handle({action:'work_history_update',requestId:id,historyId:c1.history.id,baseHistoryRevision:2,body:'남의 댓글 수정',operationId:crypto.randomUUID()},bob)).success,false);
 const drop={action:'work_delete',requestId:id,baseRevision:changed.request.revision,operationId:crypto.randomUUID()};assert.equal((await store.handle(drop,bob)).success,false);
