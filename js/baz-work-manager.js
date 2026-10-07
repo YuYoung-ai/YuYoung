@@ -55,6 +55,7 @@
     var month=state.rosterMonth,year=Number(month.slice(0,4)),number=Number(month.slice(5)),today=localNow().slice(0,10),items=rosterItems();
     if(calendarDate.slice(0,7)!==month)calendarDate=today.slice(0,7)===month?today:month+'-01';
     $('roster-calendar-month').textContent=year+'. '+String(number).padStart(2,'0');
+    $('roster-calendar-preview').textContent=year+'. '+String(number).padStart(2,'0');
     var first=new Date(Date.UTC(year,number-1,1)).getUTCDay(),last=new Date(Date.UTC(year,number,0)).getUTCDate(),slots=Math.ceil((first+last)/7)*7,days='';
     for(var i=0;i<slots;i++){
       var day=i-first+1;if(day<1||day>last){days+='<span class="calendar-blank" aria-hidden="true"></span>';continue;}
