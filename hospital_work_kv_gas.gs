@@ -47,6 +47,32 @@ function hwKvQueueSources_(hospital,date){
  var matches=hwSources_(hospital).filter(function(x){return x.source.date===_issueDateNorm_(date)&&['A/S','점검'].indexOf(x.source.gubun)>=0;}),sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
  matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,n=sh.getLastRow()-1,existing=n>0?sh.getRange(2,1,n,1).createTextFinder(id).matchEntireCell(true).findNext():null;if(!existing)sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',new Date().toISOString()].map(safeCell_)]);});
 }
+/** Queue snapshots count records, not repeated save versions of the same record. */
+function hwKvPendingRows_(){
+ var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']),n=sh.getLastRow()-1;
+ return n>0?sh.getRange(2,1,n,6).getValues().map(function(v,i){return {row:i+2,id:String(v[1]),createdAt:String(v[5]),state:v[4]};}).filter(function(v){return v.state==='pending';}):[];
+}
+function hwKvPublishStatus_(error,failedIds){
+ var rows=hwKvPendingRows_(),ids={},failed=0;rows.forEach(function(r){ids[r.id]=true;});Object.keys(ids).forEach(function(id){if((failedIds||[]).indexOf(id)>=0)failed++;});
+ var payload={checkedAt:new Date().toISOString(),pendingCount:Object.keys(ids).length,pendingEvents:rows.length,failedCount:failed,oldestPendingAt:rows.map(function(r){return r.createdAt;}).sort()[0]||'',lastSuccessAt:PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_KV_LAST_SUCCESS')||'',error:String(error||'').slice(0,500)};
+ hwKvControl_('Handover 대기 건수',payload.pendingCount);hwKvControl_('Handover 대기 확인',payload.checkedAt);hwKvControl_('Handover 오류 건수',failed);hwKvCall_('sync_status',payload);
+}
+/** Find the current source by stable ID even after its hospital name is edited. */
+function hwKvSourceById_(id){
+ var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh),col=hdr&&colBy_(hdr,REC_ID_COLS),n=hdr?lastDataRow_(sh,hdr)-hdr.row:0;
+ if(!col)throw new Error('Handover 기록 ID 열이 없습니다.');
+ var hits=n>0?sh.getRange(hdr.row+1,col,n,1).createTextFinder(id).matchEntireCell(true).findAll():[];
+ if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복되었거나 삭제됐습니다.');
+ var row=hits[0].getRow(),values=sh.getRange(row,1,1,sh.getLastColumn()).getValues()[0],raw={_row:row};hdr.headers.forEach(function(h,c){if(h)raw[h]=values[c];});
+ var hit={raw:raw,source:hwSource_(raw)};if(!hit.source.date||['A/S','점검'].indexOf(hit.source.gubun)<0)throw new Error('원본 처리일 또는 A/S·점검 구분을 확인하세요.');hwKvStableSource_(hit);return hit.source;
+}
+function hwKvDeliverSources_(){
+ var groups={};hwKvPendingRows_().forEach(function(r){(groups[r.id]||(groups[r.id]=[])).push(r);});
+ var accepted=[],sources=[],failedIds=[],errors=[];
+ Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{sources.push(hwKvSourceById_(id));accepted=accepted.concat(groups[id]);}catch(e){failedIds.push(id);errors.push(String(e.message||e));}});
+ if(sources.length){hwKvCall_('sources',{sources:sources});hwLock_(function(){var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);accepted.forEach(function(r){sh.getRange(r.row,5).setValue('sent');});});}
+ return {failedIds:failedIds,error:errors.length?errors.length+'건 원본 확인 필요 · '+errors[0]:''};
+}
 function hwKvHash_(value){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(value),Utilities.Charset.UTF_8).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');}
 function hwKvManifest_(data){var out={};['requests','history','operations'].forEach(function(k){var rows=data[k].map(function(x){if(k==='operations')return {id:x.id,actor:x.actor,fingerprint:x.fingerprint,response:x.response};return x;}).sort(function(a,b){return String(a.id).localeCompare(String(b.id),'en');});out[k]={count:rows.length,hash:hwKvHash_(rows)};});return out;}
 function hwKvSnapshot_(){
@@ -116,12 +142,11 @@ function syncHospitalWorkKv(){
   while(pending.events.length&&batches<5&&Date.now()-started<120000){hwKvCall_('ack',{items:hwKvApply_(pending.events)});batches++;if(!pending.more)break;pending=hwKvCall_('pending',{});}
   // Recover missing save-hook events by rechecking only visit-date pairs in current work.
   hwLock_(function(){var pairs={},seen={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(!r.deletedAt&&r.status!=='취소'&&r.status!=='완료'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});hwAutoSources_(pairs).forEach(function(hit){var pair=hwAutoPair_(hit.source.hospitalName,hit.source.date);if(!seen[pair]){seen[pair]=true;hwKvQueueSources_(hit.source.hospitalName,hit.source.date);}});});
-  var queue=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']),n=queue.getLastRow()-1,rows=n>0?queue.getRange(2,5,n,1).createTextFinder('pending').matchEntireCell(true).findAll().slice(0,20):[];
-  if(rows.length){var sources=rows.map(function(c){var old=JSON.parse(queue.getRange(c.getRow(),4).getValue()),hits=hwSources_(old.hospitalName).filter(function(x){return x.source.recordId===old.recordId;});if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복되었거나 삭제됐습니다.');hwKvStableSource_(hits[0]);return hits[0].source;});hwKvCall_('sources',{sources:sources});hwLock_(function(){rows.forEach(function(c){queue.getRange(c.getRow(),5).setValue('sent');});});}
+  var delivery=hwKvDeliverSources_();
   // Check reference/ACL changes each run; only transfer changed snapshots.
   var refs=hwKvRefs_(),refsHash=hwKvHash_({hospitals:refs.hospitals,engineers:refs.references.engineers,minimumLevel:refs.references.minimumLevel});
   if(refsHash!==props.getProperty('HOSPITAL_WORK_KV_REFS_HASH')){hwKvCall_('references',refs);props.setProperty('HOSPITAL_WORK_KV_REFS_HASH',refsHash);}
-  hwKvControl_('마지막 성공',new Date().toISOString());hwKvControl_('소요 ms',Date.now()-started);hwKvControl_('반영 대기',pending.more?'추가 반영 대기 있음':'이번 배치 반영 완료');hwKvControl_('오류','');
+  var succeededAt=new Date().toISOString();if(!delivery.error){props.setProperty('HOSPITAL_WORK_KV_LAST_SUCCESS',succeededAt);hwKvControl_('마지막 성공',succeededAt);}hwKvControl_('소요 ms',Date.now()-started);hwKvControl_('반영 대기',pending.more?'추가 반영 대기 있음':'이번 배치 반영 완료');hwKvControl_('오류',delivery.error);hwKvPublishStatus_(delivery.error,delivery.failedIds);
   return '업무 연동 완료';
- }catch(e){hwKvControl_('오류',String(e.message||e));throw e;}
+ }catch(e){hwKvControl_('오류',String(e.message||e));try{hwKvPublishStatus_(String(e.message||e),[]);}catch(statusError){Logger.log('업무 대기 현황 전달 실패: '+String(statusError.message||statusError));}throw e;}
 }

@@ -214,13 +214,13 @@ export function createWorkStore(kv:any){
  async function bootstrap(p:Obj,who:Actor){
   const meta=await status(),reference=await refs(),it=kv.list({prefix:key('request')},{limit:200,cursor:p.pageCursor||undefined}),requests:Obj[]=[];
   for await(const e of it)requests.push(e.value);
-  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function sync(p:Obj){
   const meta=await status(),after=Number(p.revision||0);if(!Number.isSafeInteger(after)||after<0||after>meta.seq)throw new Error('동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.');
   const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',meta.seq+1)},{limit:100});for await(const e of it)rows.push(e.value);
   const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
-  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||''};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
  async function flowPlan(row:Obj,context:Obj){
@@ -398,6 +398,14 @@ export function createWorkStore(kv:any){
    const old=await values(['hospitalRef']);for(const h of p.hospitals||[])await kv.set(key('hospitalRef',h.key),bounded(h));
    const keep=new Set((p.hospitals||[]).map((h:Obj)=>h.key));for(const h of old)if(!keep.has(h.key)&&h.origin!=='flow')await kv.delete(key('hospitalRef',h.key));
    const current=await refs();await kv.set(key('refs'),bounded({...current,...p.references}));return {success:true};
+  }
+  if(verb==='sync_status'){
+   const checkedAt=String(p.checkedAt||'');if(!checkedAt||!Number.isFinite(Date.parse(checkedAt))||Date.parse(checkedAt)>Date.now()+60000)throw new Error('연동 확인 시각을 확인하세요.');
+   for(const field of ['pendingCount','pendingEvents','failedCount'])if(!Number.isSafeInteger(p[field])||p[field]<0)throw new Error('연동 대기 건수를 확인하세요.');
+   if(p.failedCount>p.pendingCount||p.pendingCount>p.pendingEvents)throw new Error('연동 대기 집계가 다릅니다.');
+   const value={checkedAt,pendingCount:p.pendingCount,pendingEvents:p.pendingEvents,failedCount:p.failedCount,oldestPendingAt:text(p.oldestPendingAt,40,'최초 대기 시각'),lastSuccessAt:text(p.lastSuccessAt,40,'연동 성공 시각'),error:text(p.error,500,'연동 오류'),intervalMinutes:5,batchSize:20};
+   for(let i=0;i<12;i++){const old=await get('bridgeStatus');if(old.value&&Date.parse(old.value.checkedAt)>=Date.parse(checkedAt))return {success:true,stale:true};if((await kv.atomic().check(old).set(old.key,value).commit()).ok)return {success:true};}
+   throw new Error('연동 현황 저장이 겹쳤습니다.');
   }
   if(verb==='sources')return {success:true,...await ingestSources(p.sources||[])};
   if(verb==='pending'){for(const r of await values(['purgeCleanup'],{limit:2}))await cleanupPurge(r);const rows=await values(['outbox'],{limit:21});return {success:true,events:rows.slice(0,20),more:rows.length>20,seq:(await status()).seq};}

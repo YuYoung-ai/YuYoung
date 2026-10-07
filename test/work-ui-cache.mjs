@@ -13,6 +13,12 @@ function fixture(saved,options={}){
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
 const saved={storage:'kv',requests:[],hospitals:[],engineers:[],revision:'6',updatedAt:'2026-10-06T00:00:00Z'};
 const cached=fixture(saved);await flush();assert.equal(cached.calls.length,0,'opening cached PC does not query server');assert.equal(cached.nodes.get('sync-state').textContent,'이 PC의 보관 데이터');
+assert.equal(cached.nodes.get('handover-pending').textContent,'Handover 대기 미확인','missing queue status must not invent zero');
+const queue={pendingCount:2,pendingEvents:3,failedCount:1,checkedAt:new Date().toISOString(),error:'원본 확인 필요'};
+const pendingView=fixture({...saved,bridgeStatus:queue},{get:async()=>({success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'6',updatedAt:new Date().toISOString(),bridgeStatus:{...queue,pendingCount:0,pendingEvents:0,failedCount:0,error:''}})});await flush();
+assert.equal(pendingView.calls.length,0);assert.ok(pendingView.nodes.get('handover-pending').textContent.includes('2건'));assert.equal(pendingView.nodes.get('handover-pending').dataset.state,'error');
+await pendingView.nodes.get('sync').onclick();await flush();assert.equal(pendingView.nodes.get('handover-pending').textContent,'Handover 대기 0건');assert.equal(pendingView.writes.at(-1).value.bridgeStatus.pendingCount,0);
+const staleQueue=fixture({...saved,bridgeStatus:{...queue,error:'',checkedAt:'2026-01-01T00:00:00Z'}});await flush();assert.ok(staleQueue.nodes.get('handover-pending').textContent.includes('이전 집계'));
 cached.nodes.get('sync').onclick();await flush();assert.equal(cached.calls[0].action,'work_sync');assert.equal(cached.calls[0].p.revision,'6');assert.equal(cached.writes[0].value.revision,'7');
 const first=fixture(null);await flush();assert.equal(first.calls.length,1);assert.equal(first.calls[0].action,'work_bootstrap','first PC loads one initial snapshot');assert.equal(first.writes[0].account,'사용자 A');
 console.log('work-ui-cache: cached startup sends no request; user sync fetches deltas; first PC bootstraps and persists account snapshot.');

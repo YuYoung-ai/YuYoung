@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var cache=window.BazWorkCache,kvReady=false,revision='0',sourceCheckedAt='',api=window.BazWorkAPI, $=function(id){return document.getElementById(id);};
+  var cache=window.BazWorkCache,kvReady=false,revision='0',sourceCheckedAt='',bridgeStatus=null,api=window.BazWorkAPI, $=function(id){return document.getElementById(id);};
   var statuses=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
   var state={requests:[],hospitals:[],engineers:[],roster:[],rosterMonth:localNow().slice(0,7),rosterLoaded:false,filter:'active',page:1,detail:null,selected:null,editing:null,baseline:null,source:null,loaded:false};
   var rosterLoading=false,rosterEdit=null,rosterDelete=null;
@@ -25,6 +25,15 @@
     $('sync-state').textContent=phase==='loading'?'동기화 진행 중':phase==='done'?'동기화 완료':'동기화 실패';
     $('sync-time').textContent=syncCheckedAt?'마지막 동기화 '+time(syncCheckedAt):'아직 동기화되지 않았습니다.';
     $('sync').setAttribute('aria-busy',String(phase==='loading'));
+    renderBridgeStatus();
+  }
+  function renderBridgeStatus(){
+    var s=bridgeStatus,known=s&&Number.isSafeInteger(s.pendingCount)&&s.pendingCount>=0&&Number.isFinite(Date.parse(s.checkedAt));
+    var stale=known&&Date.now()-Date.parse(s.checkedAt)>10*60*1000;
+    $('handover-pending').textContent=known?'Handover 대기 '+s.pendingCount+'건'+(s.error?' · 연동 오류':stale?' · 이전 집계':''):'Handover 대기 미확인';
+    $('handover-pending').dataset.state=!known?'unknown':s.error?'error':stale||s.pendingCount?'waiting':'done';
+    $('handover-checked').textContent=known?'대기 확인 '+time(s.checkedAt):'대기 현황은 동기화로 확인';
+    $('handover-status-detail').textContent=known?'확인 시각: '+time(s.checkedAt)+'\n대기 '+s.pendingCount+'건 / 전송 이벤트 '+s.pendingEvents+'개'+(s.failedCount?' / 원본 확인 필요 '+s.failedCount+'건':'')+(s.oldestPendingAt?'\n최초 대기: '+time(s.oldestPendingAt):'')+(s.error?'\n오류: '+s.error:'')+(stale?'\n10분 이상 지난 집계입니다. 동기화하여 확인하세요.':'')+'\nHandover 저장 후 약 5분 간격으로 최대 20건씩 전달합니다. 이 PC의 동기화 버튼은 서버에 반영된 최신 현황을 가져옵니다. 대기 0건은 전송 대기가 없다는 뜻이며 모든 접수의 완료를 뜻하지 않습니다.':'서버에서 확인한 대기 현황이 아직 없습니다. 확인 전에는 0건으로 표시하지 않습니다. 동기화 버튼으로 최신 집계를 가져오세요.';
   }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}
   function updatePending(){ $('pending').hidden=!pending; $('retry').disabled=busy||bulkWorking;updateSelection();updateRosterControls(); }
@@ -201,7 +210,7 @@
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
       for(var removed of state.requests.filter(function(r){return r.purgedAt;}))await forgetPurged(removed.id);
-      kvReady=data.storage==='kv';sourceCheckedAt=data.sourceCheckedAt||sourceCheckedAt;state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
+      kvReady=data.storage==='kv';sourceCheckedAt=data.sourceCheckedAt||sourceCheckedAt;if(Object.prototype.hasOwnProperty.call(data,'bridgeStatus'))bridgeStatus=data.bridgeStatus;state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
       if(Array.isArray(data.roster)){state.roster=data.roster;state.rosterMonth=data.rosterMonth;state.rosterLoaded=true;}renderRoster();
       $('new').disabled=false;
       if(data.autoMatch){
@@ -550,7 +559,7 @@
   $('result-form').onsubmit=function(event){event.preventDefault();saveResult(false);};$('save-complete').onclick=function(){saveResult(true);};
   $('result-memo').oninput=function(){if(state.source&&state.detail)store(scope+'_result_'+state.detail.request.id,{recordId:state.source.recordId,memo:this.value});};
   $('retry').onclick=async function(){var d=await sendPending();if(d&&!d.success)notify(d.error);};
-  async function persistSnapshot(){if(!kvReady)return;try{await cache.save(account,{storage:'kv',requests:state.requests,hospitals:state.hospitals,engineers:state.engineers,roster:state.roster,rosterMonth:state.rosterMonth,rosterLoaded:state.rosterLoaded,revision:revision,updatedAt:syncCheckedAt,sourceCheckedAt:sourceCheckedAt});}catch(e){notify('브라우저 보관 실패 · 서버 저장은 유지됩니다. 다음 접속에서 다시 조회합니다.');}}
+  async function persistSnapshot(){if(!kvReady)return;try{await cache.save(account,{storage:'kv',requests:state.requests,hospitals:state.hospitals,engineers:state.engineers,roster:state.roster,rosterMonth:state.rosterMonth,rosterLoaded:state.rosterLoaded,revision:revision,updatedAt:syncCheckedAt,sourceCheckedAt:sourceCheckedAt,bridgeStatus:bridgeStatus});}catch(e){notify('브라우저 보관 실패 · 서버 저장은 유지됩니다. 다음 접속에서 다시 조회합니다.');}}
   async function forgetPurged(id){
     delete inlineDrafts[id];store(inlineDraftKey,inlineDrafts);
     detailCache.delete(id);checkedRequests.delete(id);
@@ -594,7 +603,7 @@
   async function start(){
     pending=read(pendingKey)||await cache.pending(account).catch(function(){return null;});updatePending();
     var saved=await cache.snapshot(account).catch(function(){return null;});
-    if(saved&&saved.storage==='kv'&&Array.isArray(saved.requests)&&saved.hospitals){kvReady=true;state.requests=saved.requests;state.hospitals=saved.hospitals;state.engineers=saved.engineers;state.roster=saved.roster||[];state.rosterMonth=saved.rosterMonth||state.rosterMonth;state.rosterLoaded=!!saved.rosterLoaded;revision=saved.revision||'0';sourceCheckedAt=saved.sourceCheckedAt||'';state.loaded=true;fillPeople();renderList();renderRoster();$('new').disabled=false;showSyncState('done',saved.updatedAt);$('sync-state').textContent='이 PC의 보관 데이터';}
+    if(saved&&saved.storage==='kv'&&Array.isArray(saved.requests)&&saved.hospitals){kvReady=true;state.requests=saved.requests;state.hospitals=saved.hospitals;state.engineers=saved.engineers;state.roster=saved.roster||[];state.rosterMonth=saved.rosterMonth||state.rosterMonth;state.rosterLoaded=!!saved.rosterLoaded;revision=saved.revision||'0';sourceCheckedAt=saved.sourceCheckedAt||'';bridgeStatus=saved.bridgeStatus||null;state.loaded=true;fillPeople();renderList();renderRoster();$('new').disabled=false;showSyncState('done',saved.updatedAt);$('sync-state').textContent='이 PC의 보관 데이터';}
     else await sync();
   }
   start();

@@ -19,6 +19,13 @@ const kv=new Kv(),store=createWorkStore(kv),alice={name:'CS A',level:1},bob={nam
 const hospital={id:'h1',key:'병원\u001fSN1\u001f서울',name:'병원',sn:'SN1',region:'서울'};
 await store.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});
 await store.bridge('activate',{manifest:await store.manifest()});
+assert.equal((await store.handle({action:'work_bootstrap'},bob)).bridgeStatus,null,'unconfirmed queue is not reported as zero');
+const queueStatus={checkedAt:'2026-10-07T02:00:00Z',pendingCount:2,pendingEvents:3,failedCount:1,oldestPendingAt:'2026-10-07T01:00:00Z',lastSuccessAt:'',error:'원본 확인 필요'};
+await store.bridge('sync_status',queueStatus);
+assert.equal((await store.handle({action:'work_sync',revision:'0'},bob)).bridgeStatus.pendingCount,2,'status changes sync even without request revisions');
+assert.equal((await store.bridge('sync_status',{...queueStatus,checkedAt:'2026-10-07T01:59:00Z',pendingCount:0,failedCount:0})).stale,true,'late workers cannot overwrite newer snapshots');
+assert.equal((await store.handle({action:'work_bootstrap'},bob)).bridgeStatus.failedCount,1);
+for(const patch of [{pendingCount:-1},{pendingEvents:1},{failedCount:3},{checkedAt:'invalid'}])await assert.rejects(()=>store.bridge('sync_status',{...queueStatus,...patch}));
 assert.equal((await store.handle({action:'work_bootstrap'},bob)).success,true);
 assert.equal((await store.handle({action:'work_bootstrap'},{name:'',level:0})).success,false);
 const form={hospitalKey:hospital.key,symptom:'정기 점검',cs:'CS A',engineer:'엔지니어',sales:'영업',registeredAt:'2026-10-06T09:00',visitAt:'2026-10-06T10:00',deadline:'',status:'방문예정'};
