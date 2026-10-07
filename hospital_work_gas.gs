@@ -179,19 +179,26 @@ function hwComment_(p,who){
 function hwSource_(o){
   var s=slim_(o);
   var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:s.gubun,cat:s.cat,type:s.type,
-    part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||''};
+    part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||'',
+    nozzleReuse:pickH_(o,['노즐 재사용','노즐재사용'])||'',nsFill:s.nsFill||'',nsAmt:s.nsAmt||'',jet:s.jet||''};
   out.version=hwHash_(out); out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
   if(!out.recordId) out.recordId='legacy_'+Number(o._row)+'_'+out.version;
   return out;
+}
+function hwSourceName_(name){return String(name||'').normalize('NFKC').replace(/[\s_]+/g,'').replace(/의원/g,'').toLowerCase();}
+function hwSourceAlias_(source,hosp){
+  if(source.hospitalName!==hosp){source.sourceHospitalName=source.hospitalName;source.hospitalName=hosp;}return source;
 }
 function hwSources_(hosp){
   // 직접 최신 원본 읽기: recent의 부분 일치·불완전한 slim 응답·오래된 캐시를 사용하지 않는다.
   var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh);
   if(!hdr) throw new Error('Handover 원본 헤더를 찾지 못했습니다.');
   var col=hdr.headers.indexOf('병원명')+1;if(!col) throw new Error('Handover 병원명 열 없음');
-  var rows=hwMatchedRows_(sh,col,String(hosp).trim(),false,1,sh.getLastColumn(),hdr.row+1,lastDataRow_(sh,hdr));
+  var requested=String(hosp).trim(),n=lastDataRow_(sh,hdr)-hdr.row,names=n>0?sh.getRange(hdr.row+1,col,n,1).getDisplayValues():[],aliases={};
+  names.forEach(function(v){var name=String(v[0]||'').trim();if(hwSourceName_(name)===hwSourceName_(requested))aliases[name]=true;});
+  var rows=[];Object.keys(aliases).forEach(function(name){rows=rows.concat(hwMatchedRows_(sh,col,name,true,1,sh.getLastColumn(),hdr.row+1,lastDataRow_(sh,hdr)));});
   return rows.map(function(hit){var o={_row:hit.row};hdr.headers.forEach(function(h,c){if(h)o[h]=hit.values[c];});return o;})
-    .filter(function(o){return o['처리일']&&String(o['병원명']||'').trim()===String(hosp).trim();}).map(function(o){return {raw:o,source:hwSource_(o)};});
+    .filter(function(o){return o['처리일']&&hwSourceName_(o['병원명'])===hwSourceName_(requested);}).map(function(o){return {raw:o,source:hwSourceAlias_(hwSource_(o),requested)};});
 }
 function hwGetSource_(r,p){
   var matches=hwSources_(r.hospitalName).filter(function(x){
@@ -239,14 +246,15 @@ function hwAutoSources_(pairs){
   var dc=colBy_(hdr,['처리일']),hc=colBy_(hdr,['병원명']),start=Math.min(dc,hc),width=Math.abs(dc-hc)+1,n=sh.getLastRow()-hdr.row;
   if(!dc||!hc) throw new Error('Handover 병원명·처리일 열을 확인하세요.');
   // 전체 보고서 대신 병원명/처리일 열만 읽고, 일치하는 원본 행만 묶어서 읽는다.
-  var keys=n>0?sh.getRange(hdr.row+1,start,n,width).getDisplayValues():[],positions=[],hits=[];
-  keys.forEach(function(v,i){if(pairs[hwAutoPair_(v[hc-start],_issueDateNorm_(v[dc-start]))])positions.push(hdr.row+1+i);});
+  var keys=n>0?sh.getRange(hdr.row+1,start,n,width).getDisplayValues():[],positions=[],hits=[],aliases={};
+  Object.keys(pairs).forEach(function(k){var p=JSON.parse(k),normalized=hwAutoPair_(hwSourceName_(p[0]),p[1]);(aliases[normalized]||(aliases[normalized]=[])).push(p[0]);});
+  keys.forEach(function(v,i){var names=aliases[hwAutoPair_(hwSourceName_(v[hc-start]),_issueDateNorm_(v[dc-start]))];if(names&&names.length===1)positions.push(hdr.row+1+i);});
   for(var i=0;i<positions.length;){
     var first=positions[i],last=first;i++;
     while(i<positions.length&&positions[i]===last+1){last=positions[i];i++;}
     sh.getRange(first,1,last-first+1,sh.getLastColumn()).getDisplayValues().forEach(function(v,j){
       var raw={_row:first+j};hdr.headers.forEach(function(h,c){if(h)raw[h]=v[c];});
-      var source=hwSource_(raw);if(['A/S','점검'].indexOf(source.gubun)>=0)hits.push({raw:raw,source:source});
+      var source=hwSource_(raw),names=aliases[hwAutoPair_(hwSourceName_(source.hospitalName),source.date)];if(['A/S','점검'].indexOf(source.gubun)>=0&&names&&names.length===1)hits.push({raw:raw,source:hwSourceAlias_(source,names[0])});
     });
   }
   return hits;

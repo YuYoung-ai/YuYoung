@@ -563,6 +563,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           const body=await upstream.json();
           if (!body.success) return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
           await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data);
+          if(p.requestId)body.workDetail=await store.handle({action:'work_detail',id:p.requestId},{name:verified.name||'',level:verified.level||0});
           return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
         } catch { return fail('Handover 원본 조회에 실패했습니다. 다시 불러오세요.',502); }
         finally {clearTimeout(timer);}

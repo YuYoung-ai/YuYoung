@@ -10,6 +10,21 @@ const text=(v:any,max:number,label:string)=>{const s=String(v??'').trim();if(s.l
 const live=(r:Obj)=>!r.deletedAt&&!r.purgedAt;
 const active=(r:Obj)=>live(r)&&!['완료','취소'].includes(r.status);
 const kind=(s:Obj)=>['A/S','점검'].includes(s.gubun);
+function autoSources(r:Obj,all:Obj[],records:Obj[]){
+ const day=r.visitAt?.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
+ let matches=records.filter(s=>s.date===day&&kind(s));
+ if(!matches.length)return {matches,ambiguous:false};
+ if(same.length>1){
+  if(!r.sn||same.filter(x=>x.sn===r.sn).length!==1)return {matches:[],ambiguous:true};
+  matches=matches.filter(s=>s.sn===r.sn);
+  return {matches:matches.length===1?matches:[],ambiguous:matches.length>1};
+ }
+ if(same.length!==1)return {matches:[],ambiguous:true};
+ if(matches.length===1)return {matches:r.sn&&matches[0].sn&&r.sn!==matches[0].sn?[]:matches,ambiguous:false};
+ // A single hospital visit can include several devices, but only distinct, recorded serials prove that.
+ if(matches.some(s=>!s.sn)||new Set(matches.map(s=>s.sn)).size!==matches.length)return {matches:[],ambiguous:true};
+ return {matches,ambiguous:false};
+}
 const clash=(current:Obj)=>({success:false,conflict:true,current,error:'다른 사용자가 수정했습니다. 최신 내용과 입력 내용을 비교하세요.'});
 function datetime(v:any,required:boolean,label:string){
  const s=String(v||'');if(!s&&!required)return '';
@@ -119,9 +134,8 @@ export function createWorkStore(kv:any){
   if(s.version!==p.sourceVersion)throw new Error('Handover 원본이 바뀌었습니다. 다시 불러와 확인하세요.');
   const binding=await sourceLink(s.recordId),linked=binding.entry;
   if(automatic){
-   const day=r.visitAt?.slice(0,10),same=(await values(['request'])).filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
-   const matches=(await sources(r.hospitalName)).filter(x=>x.date===day&&kind(x));
-   if(!['접수','방문예정','처리중'].includes(r.status)||same.length!==1||matches.length!==1||!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||(await history(r.id)).some(h=>h.kind==='result')||binding.inUse)return {response:{success:false,skipped:true}};
+   const plan=autoSources(r,await values(['request']),await sources(r.hospitalName)),hs=(await history(r.id)).filter(h=>h.kind==='result');
+   if(!['접수','방문예정','처리중','결과확인'].includes(r.status)||!plan.matches.some(x=>x.recordId===s.recordId)||!s.result||hs.some(h=>!plan.matches.some(x=>x.recordId===h.source.recordId)||h.source.recordId===s.recordId)||binding.inUse)return {response:{success:false,skipped:true}};
   }
   if(binding.inUse&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
   const old=linked.value?.requestId===r.id?(await get('history',r.id,linked.value.historyId)).value:null;
@@ -285,15 +299,16 @@ export function createWorkStore(kv:any){
   const meta=await status();if(!meta.ready)return {linked:0,skipped:[]};
   const all=await values(['request']);let linked=0;const skipped:Obj[]=[];
   for(const r of all){
-   if(!live(r)||!['접수','방문예정','처리중'].includes(r.status)||!r.visitAt)continue;
-   const day=r.visitAt.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
-   const matches=(await sources(r.hospitalName)).filter(s=>s.date===day&&kind(s));
-   if(!matches.length)continue;
-   if(same.length!==1||matches.length!==1){skipped.push({requestId:r.id,reason:'ambiguous'});continue;}
-   const s=matches[0],hs=(await history(r.id)).filter(h=>h.kind==='result');
-   if(!s.result||(r.sn&&s.sn&&r.sn!==s.sn)||hs.length||(await sourceLink(s.recordId)).inUse)continue;
-   const p={action:'work_auto_result',requestId:r.id,recordId:s.recordId,sourceVersion:s.version,baseRevision:r.revision,operationId:'auto_'+await hash([r.id,s.recordId,s.version,r.revision])};
-   const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;
+   if(!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
+   const plan=autoSources(r,all,await sources(r.hospitalName));
+   if(plan.ambiguous){skipped.push({requestId:r.id,reason:'ambiguous'});continue;}
+   const hs=(await history(r.id)).filter(h=>h.kind==='result');if(hs.some(h=>!plan.matches.some(s=>s.recordId===h.source.recordId)))continue;
+   for(const s of plan.matches){
+    if(!s.result||hs.some(h=>h.source.recordId===s.recordId)||(await sourceLink(s.recordId)).inUse)continue;
+    const current=(await request(r.id)).value;
+    const p={action:'work_auto_result',requestId:r.id,recordId:s.recordId,sourceVersion:s.version,baseRevision:current.revision,operationId:'auto_'+await hash([r.id,s.recordId,s.version,current.revision])};
+    const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;
+   }
   }
   return {linked,skipped};
  }

@@ -27,6 +27,36 @@ const id=created.request.id;
 const stale=await store.handle({action:'work_save',id,baseRevision:0,form,operationId:crypto.randomUUID()},alice);assert.equal(stale.conflict,true);
 const duplicate=await store.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal(duplicate.duplicate,true);
 const source={date:'2026-10-06',hospitalName:'병원',engineer:'엔지니어',sn:'SN1',gubun:'점검',result:'정상',detail:'점검 정상',recordId:'inspection1',version:'v1',observedAt:'2026-10-06T01:00:00Z'};
+async function multiDeviceFixture(){
+ const db=new Kv(),s=createWorkStore(db),second={...hospital,id:'h2',key:'병원\u001fSN2\u001f서울',sn:'SN2'};
+ await s.bridge('seed',{hospitals:[hospital,second],references:{engineers:['엔지니어'],minimumLevel:1}});
+ await s.bridge('activate',{manifest:await s.manifest()});
+ const one=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ return {db,s,one,second};
+}
+{
+ const {s,one}=await multiDeviceFixture();
+ const a={...source,recordId:'multi-a',nsFill:'O',nsAmt:'정상',jet:'가능',nozzleReuse:'X'},b={...source,recordId:'multi-b',sn:'SN2',nozzleReuse:'O'};
+ assert.equal((await s.ingestSources([a,b])).linked,2,'distinct serials join one visit');
+ let d=await s.handle({action:'work_detail',id:one.request.id},alice);assert.equal(d.history.length,2);assert.equal(d.request.status,'결과확인');
+ assert.equal(d.history.find(h=>h.source.sn==='SN1').source.jet,'가능');assert.equal(d.history.find(h=>h.source.sn==='SN2').source.nozzleReuse,'O');
+ assert.equal((await s.ingestSources([a,b])).linked,0,'redelivery does not duplicate device reports');
+ assert.equal((await s.ingestSources([{...source,recordId:'multi-c',sn:'SN3'}])).linked,1,'a later device is added in result review');
+ d=await s.handle({action:'work_detail',id:one.request.id},alice);assert.equal(d.history.length,3);
+ assert.equal((await s.bridge('pending',{})).events.filter(e=>e.kind==='result_auto').length,3,'each device result has a durable mirror event');
+}
+for(const badSn of ['SN1','']){
+ const {s,one}=await multiDeviceFixture();
+ const response=await s.ingestSources([{...source,recordId:'amb-a'},{...source,recordId:'amb-b',sn:badSn}]);
+ assert.equal(response.linked,0,'duplicate or missing serials remain manual');assert.equal(response.skipped.length,1);
+ assert.equal((await s.handle({action:'work_detail',id:one.request.id},alice)).history.length,0);
+}
+{
+ const {s,one,second}=await multiDeviceFixture();
+ const two=await s.handle({...op,form:{...form,hospitalKey:second.key},acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);
+ assert.equal((await s.ingestSources([{...source,recordId:'split-a'},{...source,recordId:'split-b',sn:'SN2'}])).linked,2);
+ for(const [id,sn]of [[one.request.id,'SN1'],[two.request.id,'SN2']]){const d=await s.handle({action:'work_detail',id},alice);assert.equal(d.history.length,1);assert.equal(d.history[0].source.sn,sn,'separate requests are assigned by serial');}
+}
 await store.ingestSources([source]);let detail=await store.handle({action:'work_detail',id},alice);assert.equal(detail.request.status,'결과확인');assert.equal(detail.request.gubun,'점검');assert.equal(detail.history[0].auto,true);assert.equal(detail.request.completedAt,'');
 await store.ingestSources([source]);assert.equal((await store.handle({action:'work_detail',id},alice)).history.length,1);
 const c1=await store.handle({action:'work_history_add',requestId:id,body:'상담 내용',operationId:crypto.randomUUID()},alice);assert.equal(c1.success,true);
@@ -54,6 +84,12 @@ await assert.rejects(()=>clean.bridge('activate',{manifest:{}}),/검증/);assert
 await assert.rejects(()=>store.bridge('seed',{requests:[]}),/다시 가져올/);
 const main=fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8');stripTypeScriptTypes(main);assert.ok(main.includes("baz-work-bridge-v1\\n"));
 const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui));
+const fields=vm.runInNewContext('('+ui.slice(ui.indexOf('function resultFields('),ui.indexOf('function detailMarkup(')).trim()+')',{esc:v=>String(v).replaceAll('<','&lt;')});
+let fieldsMarkup=fields({...source,nozzleReuse:'O',nsFill:'X',nsAmt:'부족',jet:'<교육 필요>'});
+assert.match(fieldsMarkup,/노즐 재사용<\/dt><dd>유/);assert.match(fieldsMarkup,/사용자 숙련도 평가/);assert.match(fieldsMarkup,/&lt;교육 필요>/);
+assert.match(fields({...source,nozzleReuse:'X'}),/노즐 재사용<\/dt><dd>무/);
+assert.match(fields({...source,origin:'flow'},'[사용자 숙련도 평가]NS 충진 여부 : ONS 충진량 : 정상젯 분사 판단[병원담당자] : 가능비고/특이사항 : N/A'),/NS 충진 여부<\/dt><dd>O<\/dd>/);
+assert.match(fields({...source,origin:'flow'},'노즐 재사용 의심'),/노즐 재사용<\/dt><dd>미기록/,'do not infer nozzle reuse from free text');
 const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
 const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<option value="완료" selected>완료<\/option>/);assert.match(markup,/<span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(!markup.includes('data-action="save-status"'));assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
