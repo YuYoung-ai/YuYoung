@@ -96,9 +96,11 @@ export function createWorkStore(kv:any){
   if(old&&String(old.revision)!==String(p.baseRevision))return {response:clash(old)};
   const f=p.form||{},h=(await get('hospitalRef',text(f.hospitalKey,500,'병원'))).value,reference=await refs();
   if(!h)throw new Error('병원 원본 목록에 없습니다. 동기화한 뒤 다시 선택하세요.');
+  if(h.origin==='flow'&&(!old||old.hospitalKey!==h.key))throw new Error('신규 접수는 병원정보DB의 병원을 선택하세요.');
   const id=old?.id||crypto.randomUUID(),now=new Date().toISOString();
   const r:Obj={id,hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,sn:h.sn||'',region:h.region||'',symptom:text(f.symptom,4000,'접수 증상'),cs:text(f.cs,60,'CS 담당자'),engineer:text(f.engineer,60,'엔지니어'),sales:text(f.sales,60,'영업 담당자'),registeredAt:datetime(f.registeredAt,true,'등록일시'),visitAt:datetime(f.visitAt,false,'방문일시'),deadline:datetime(f.deadline,false,'마감'),status:String(f.status||'접수'),createdAt:old?.createdAt||now,createdBy:old?.createdBy||who.name,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1,latest:old?.latest||'',completedAt:old?.completedAt||'',completedBy:old?.completedBy||'',gubun:old?.gubun||''};
   if(!r.symptom||!r.cs)throw new Error('접수 증상과 CS 담당자를 입력하세요.');
+  if(old?.flowImport)r.flowImport=copy(old.flowImport);
   if(!STATES.includes(r.status))throw new Error('알 수 없는 상태입니다.');
   completionFields(r,old?.status||'',who,now);
   if(['방문예정','처리중'].includes(r.status)&&(!r.visitAt||!r.engineer))throw new Error('방문 일시와 엔지니어가 필요합니다.');
@@ -266,6 +268,56 @@ export function createWorkStore(kv:any){
    }catch(e:any){results.push({success:false,error:e.message,sourceRow:input.row?.sourceRow});}
   }return {success:true,results};
  }
+ async function relinkPlan(input:Obj,hospitals:Obj[],context?:Obj){
+  const sourceId=text(input.sourceId,64,'Flow 원본 식별자');
+  if(!/^[a-f0-9]{64}$/.test(sourceId))throw new Error('Flow 원본 식별자를 확인하세요.');
+  const marker=context?context.imports.get(sourceId):(await get('flowImport',sourceId)).value;
+  const entry=marker?.requestId?(context?{value:context.requests.get(marker.requestId)}:await get('request',marker.requestId)):null,r=entry?.value;
+  if(!r||!live(r))return {skip:'삭제되었거나 이전되지 않은 접수',sourceId};
+  if(r.id!=='flow_'+sourceId&&r.flowImport?.sourceId!==sourceId)return {skip:'기존 접수에 추가한 이력은 병원을 변경하지 않습니다.',sourceId};
+  const originalName=r.flowImport?.sourceHospitalName||marker.hospitalName;
+  if(/데모/i.test(originalName||r.hospitalName))return {skip:'데모 장비 제외',sourceId};
+  if(originalName!==input.originalName)throw new Error('보정 파일과 엑셀 원본 병원명이 다릅니다.');
+  const candidates=hospitals.filter(h=>h.origin!=='flow'&&h.name===input.targetName);
+  if(!candidates.length)throw new Error('병원 기준에 없는 이름입니다: '+input.targetName);
+  const h=candidates.find(h=>h.key===input.targetKey)||candidates.find(h=>h.sn===r.sn)||candidates.sort((a,b)=>String(a.key).localeCompare(String(b.key)))[0];
+  if(input.targetKey&&h.key!==input.targetKey)throw new Error('병원 기준 정보가 변경되었습니다. 다시 확인하세요.');
+  if(r.hospitalId===h.id&&r.hospitalKey===h.key&&r.hospitalName===h.name)return {skip:'이미 연결됨',sourceId};
+  return {sourceId,entry,r,h};
+ }
+ async function flowRelinkPreview(p:Obj,who:Actor){
+  if(who.level<3)throw new Error('관리자만 Flow 병원 연결을 보정할 수 있습니다.');
+  if(!Array.isArray(p.rows)||!p.rows.length||p.rows.length>1000)throw new Error('보정할 원본 1~1000건을 선택하세요.');
+  const hospitals=await values(['hospitalRef']),context={imports:new Map((await values(['flowImport'])).map(x=>[x.sourceId,x])),requests:new Map((await values(['request'])).map(x=>[x.id,x]))},items=[],skipped=[],errors=[],seen=new Set();
+  for(const input of p.rows){try{
+   if(seen.has(input.sourceId))throw new Error('중복된 원본 식별자입니다.');seen.add(input.sourceId);
+   const plan=await relinkPlan(input,hospitals,context);
+   if(plan.skip){skipped.push({sourceId:plan.sourceId,reason:plan.skip});continue;}
+   items.push({...input,requestId:plan.r.id,baseRevision:plan.r.revision,targetKey:plan.h.key,previousName:plan.r.hospitalName,visitAt:plan.r.visitAt,sn:plan.r.sn});
+  }catch(e:any){errors.push({sourceId:input.sourceId,error:e.message});}}
+  return {success:true,items,skipped,errors};
+ }
+ async function flowRelink(p:Obj,who:Actor){
+  if(who.level<3)throw new Error('관리자만 Flow 병원 연결을 보정할 수 있습니다.');
+  if(!Array.isArray(p.rows)||!p.rows.length||p.rows.length>10)throw new Error('한 번에 1~10건씩 보정하세요.');
+  const hospitals=await values(['hospitalRef']),results=[];
+  for(const input of p.rows){try{
+   const operation={...input,action:'work_flow_relink',operationId:'relink_'+(await hash(input)).slice(0,64)};
+   const result=await mutate(operation,who,async()=>{
+    const plan=await relinkPlan(input,hospitals);
+    if(plan.skip)return {response:{success:false,error:plan.skip}};
+    const {r:old,entry}=plan,reference=await get('hospitalRef',plan.h.key);
+    if(!reference.value||reference.value.id!==plan.h.id||reference.value.name!==plan.h.name||reference.value.origin==='flow')throw new Error('병원 기준 정보가 변경되었습니다. 다시 확인하세요.');
+    const h=reference.value;
+    if(old.id!==input.requestId)throw new Error('이전 접수 식별자가 변경되었습니다.');
+    if(Number(old.revision)!==Number(input.baseRevision))return {response:clash(old)};
+    const r={...copy(old),hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,region:h.region||'',sales:old.sales||h.sales||'',revision:old.revision+1,updatedAt:new Date().toISOString(),updatedBy:who.name};
+    // Historical device serials, request fields, histories and source ownership remain intact.
+    return {kind:'hospital_relink',before:old,request:r,hospital:h,checks:[entry,reference],response:{success:true,request:r,sourceId:input.sourceId}};
+   });results.push(result);
+  }catch(e:any){results.push({success:false,sourceId:input.sourceId,error:e.message});}}
+  return {success:true,results};
+ }
  async function handle(p:Obj,who:Actor){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
@@ -276,6 +328,8 @@ export function createWorkStore(kv:any){
     case 'work_roster_save':case 'work_roster_delete':return await roster.save(p,who);
     case 'work_flow_preview':return await flowPreview(p,who);
     case 'work_flow_import':return await flowImport(p,who);
+    case 'work_flow_relink_preview':return await flowRelinkPreview(p,who);
+    case 'work_flow_relink':return await flowRelink(p,who);
     case 'work_detail':return await detail(p);
     case 'work_save':return await save(p,who);
     case 'work_status':return await changeStatus(p,who);

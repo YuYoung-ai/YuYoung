@@ -16,6 +16,9 @@ const cached=fixture(saved);await flush();assert.equal(cached.calls.length,0,'op
 cached.nodes.get('sync').onclick();await flush();assert.equal(cached.calls[0].action,'work_sync');assert.equal(cached.calls[0].p.revision,'6');assert.equal(cached.writes[0].value.revision,'7');
 const first=fixture(null);await flush();assert.equal(first.calls.length,1);assert.equal(first.calls[0].action,'work_bootstrap','first PC loads one initial snapshot');assert.equal(first.writes[0].account,'사용자 A');
 console.log('work-ui-cache: cached startup sends no request; user sync fetches deltas; first PC bootstraps and persists account snapshot.');
+const masterOnly=fixture({...saved,hospitals:[{id:'master',key:'master',name:'병원정보DB 병원',sn:'BW3007'},{id:'flow',key:'flow',name:'엑셀 이력 병원',sn:'과거 번호',origin:'flow'}]});await flush();
+assert.ok(masterOnly.nodes.get('hospital-options').innerHTML.includes('병원정보DB 병원'));
+assert.ok(!masterOnly.nodes.get('hospital-options').innerHTML.includes('엑셀 이력 병원'),'historical names do not pollute new-request autocomplete, including cached PCs');
 const makeRequest=(id,createdBy='사용자 A')=>({id,hospitalId:'h-'+id,hospitalName:'병원 '+id,createdBy,visitAt:'',deadline:'',symptom:'증상 '+id,status:'접수',cs:createdBy,engineer:'',sales:'',revision:4,updatedAt:'2026-10-06T00:00:00Z'});
 const withRows=rows=>({...saved,requests:rows});
 function selectRow(f,id,checked=true){const input={dataset:{selectRequest:id},checked};f.nodes.get('list').onchange({target:{closest:()=>input}});}
