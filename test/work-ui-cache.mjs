@@ -10,6 +10,24 @@ function fixture(saved,options={}){
  vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
  return {nodes,calls,writes,detailWrites,posts,filters,local};
 }
+{
+ const escapeCode=source.split('\n').find(line=>line.trim().startsWith('function esc('));
+ const linkCode=source.slice(source.indexOf('  function commentMarkup('),source.indexOf('  function store('));
+ const links=vm.runInNewContext(escapeCode+'\n'+linkCode+'\ncommentMarkup;', {URL});
+ const body='확인 <script>alert(1)</script>\nhttps://example.com/a?q=1&b=2. 다음 (https://example.com/a_(b)) http://example.org/한글\nhttps://example.com/" onclick="bad';
+ const html=links(body);
+ assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+ assert.ok(html.includes('href="https://example.com/a?q=1&amp;b=2"'));
+ assert.ok(html.includes('>https://example.com/a?q=1&amp;b=2</a>.'));
+ assert.ok(html.includes('href="https://example.com/a_(b)"'));
+ assert.ok(html.includes('href="http://example.org/한글"'));
+ assert.ok(html.includes('target="_blank" rel="noopener noreferrer"'));
+ assert.ok(!html.includes(' onclick="bad'));
+ for(const unsafe of ['javascript:alert(1)','data:text/html,<script>alert(1)</script>','https://user:pass@example.com/','https://'])assert.ok(!links(unsafe).includes('<a '));
+ assert.equal(links('첫 줄\n둘째 줄'),'첫 줄\n둘째 줄');
+ assert.ok(source.includes('commentMarkup(h.body)'), 'comment timeline uses link formatting');
+ console.log('comment URL: HTTP/HTTPS, multiple URLs, query escaping, Unicode, punctuation/brackets, new-tab isolation and unsafe markup/protocol/credentials rejection passed.');
+}
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve();};
 const saved={storage:'kv',requests:[],hospitals:[],engineers:[],revision:'6',updatedAt:'2026-10-06T00:00:00Z'};
 const cached=fixture(saved);await flush();assert.equal(cached.calls.length,0,'opening cached PC does not query server');assert.equal(cached.nodes.get('sync-state').textContent,'이 PC의 보관 데이터');

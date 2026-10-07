@@ -10,6 +10,18 @@
   var pending=null,commentEdit=null,checkedRequests=new Set(),shownRequests=[],selectionMode=false,bulkWorking=false,lifecyclePlan=null;
   var editMode=false,inlineDraftKey=scope+'_inline_edits',inlineDrafts=read(inlineDraftKey)||{};
   function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function commentMarkup(body){
+    var text=String(body==null?'':body),out='',cursor=0,pattern=/https?:\/\/[^\s<>"'\x00-\x1f]+/gi,match;
+    while((match=pattern.exec(text))){
+      var candidate=match[0],url=candidate;
+      while(/[.,!?;:、。！？，；：]$/.test(url)||(/[)\]\}）]$/.test(url)&&((url.match(/[)\]\}）]/g)||[]).length>(url.match(/[([\{（]/g)||[]).length)))url=url.slice(0,-1);
+      out+=esc(text.slice(cursor,match.index));
+      var valid=false;try{var parsed=new URL(url);valid=/^https?:$/.test(parsed.protocol)&&!!parsed.hostname&&!parsed.username&&!parsed.password;}catch(e){}
+      out+=valid?'<a class="comment-url" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(url)+'</a>'+esc(candidate.slice(url.length)):esc(candidate);
+      cursor=match.index+candidate.length;
+    }
+    return out+esc(text.slice(cursor));
+  }
   function store(key,v){try{if(v===null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(v));return true;}catch(e){return false;}}
   function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
   function localNow(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date()).replace(' ','T');}
@@ -286,8 +298,8 @@
       d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
       '</div>'+((d.historyCursor||d.auditCursor)?'<button data-action="more-history">이력 더 보기</button>':'')+'</div></section>',
       '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
-      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+esc(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
-      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="2" maxlength="4000" placeholder="댓글을 입력하세요. 추가 상담, 변경 사유, 고객센터 메모" required></textarea><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
+      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+commentMarkup(h.body)+'</div>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment="'+esc(h.id)+'">댓글 수정</button>':'')+'</article>';}).join(''),
+      '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="2" maxlength="4000" placeholder="댓글과 URL을 입력하세요. 추가 상담, 변경 사유, 고객센터 메모" required></textarea><p class="hint comment-url-hint">URL을 붙여 넣으면 저장 후 클릭 가능한 링크로 표시됩니다.</p><div class="comment-actions"><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
       '<details id="detail-tools" class="detail-section detail-tools" data-request-id="'+esc(r.id)+'"><summary>상세 관리 및 이력</summary><div class="detail-tools-body">',
       r.status==='완료'?'<p class="hint">완료 '+esc(time(r.completedAt))+' · '+esc(r.completedBy||'미기록')+'</p>':'',
       '<p id="detail-checked" class="hint">최신 상세 확인 '+esc(time(d.updatedAt))+'</p><p class="hint">Handover 연동 확인 '+esc(time(sourceCheckedAt))+'</p><div class="detail-buttons"><button data-action="edit">기본 정보 수정</button><button data-action="refresh-detail">최신 내용 확인</button></div>',
