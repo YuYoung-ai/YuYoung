@@ -25,6 +25,16 @@ assert.equal((await post(await bridge('activate',{manifest}))).body.ready,true);
 assert.equal((await post({action:'work_bootstrap',token:'invalid'})).status,401);
 const login=await post({action:'login',password:'password'});assert.equal(login.body.ok,true);
 assert.equal((await post({action:'work_bootstrap',token:login.body.token})).body.storage,'kv');
+{
+ const originalFetch=globalThis.fetch;
+ globalThis.fetch=async url=>{const target=new URL(url);assert.equal(target.searchParams.get('action'),'hospdbrich');assert.equal(target.searchParams.get('force'),'1');assert.equal(target.searchParams.get('token'),login.body.token);return new Response(JSON.stringify({success:true,data:[{name:'최신 DB 병원',sn:'BW0001',region:'서울',sales:'DB 영업',asType:'유상',ncare:'가입'}]}));};
+ assert.equal((await post({action:'work_references_refresh',token:'invalid'})).status,401);
+ const refreshed=await post({action:'work_references_refresh',token:login.body.token});assert.equal(refreshed.body.success,true);assert.equal(refreshed.body.hospitals[0].name,'최신 DB 병원');assert.match(refreshed.body.hospitals[0].id,/^hosp_[0-9a-f]{24}$/);
+ globalThis.fetch=async()=>{throw new Error('offline')};assert.equal((await post({action:'work_references_refresh',token:login.body.token})).status,502);
+ assert.equal((await post({action:'work_bootstrap',token:login.body.token})).body.hospitals[0].name,'최신 DB 병원','failed source read preserves cached references');
+ globalThis.fetch=originalFetch;
+ console.log('explicit hospital DB refresh: token/ACL gate, force-read original DB, KV reference update, compatible ID and failed-read preservation passed.');
+}
 assert.equal((await post({action:'work_handover_candidates',hospitalName:'새 접수 병원',token:login.body.token})).body.success,true);
 assert.equal(forwarded.hospitalName,'새 접수 병원','new receipt can query Handover before Sheet mirror');
 assert.equal((await post({action:'work_handover_candidates',requestId:'deleted-or-missing',token:login.body.token})).status,403);

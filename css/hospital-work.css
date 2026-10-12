@@ -213,3 +213,20 @@ html[data-theme=dark] body:before{filter:brightness(2.3);opacity:.065}
 .comment-delete-confirm{padding:10px;border:1px solid var(--line);border-radius:8px;font-size:12px}
 .deleted-comments{font-size:12px;color:var(--muted);margin:12px 0}
 .deleted-comments .entry{display:flex;gap:12px;align-items:center;justify-content:space-between}
+/* Detailed filters and editing reuse the existing table and detail layout. */
+.advanced-filters{margin:0 0 18px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--paper)}
+.advanced-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.advanced-heading p{margin:8px 0 0}.advanced-heading>div:last-child{display:flex;gap:8px}
+.advanced-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 24px}
+.advanced-group{padding:0;margin:0;border:0;min-width:0}.advanced-group legend{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:9px}
+.advanced-group>div{display:flex;flex-wrap:wrap;gap:7px}.advanced-group button{font-size:12px;padding:5px 12px;border-radius:20px;min-height:30px}
+.advanced-group button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink,#102039);border-color:var(--accent)}
+.period-caption{padding:0 18px;margin:0 0 12px}.editable-value{padding:2px 0;min-height:30px;border:0;background:transparent;color:inherit;text-align:left;white-space:pre-wrap;word-break:break-word;box-shadow:none;max-width:100%}
+.editable-value:hover{color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.field-editor{display:flex;align-items:start;gap:5px;max-width:100%}.field-editor input,.field-editor select,.field-editor textarea{width:100%;min-width:0;font:inherit;padding:8px;border:1px solid var(--accent);border-radius:8px;background:var(--paper);color:var(--text)}
+.field-editor>button{flex:none;padding:6px 9px;min-height:34px}.edit-datetime{display:grid;gap:5px;min-width:140px}.edit-datetime input[type=text]{width:130px}
+.row-detail-link{display:block;margin:4px 0;font-size:11px;min-height:24px;padding:0;border:0;background:transparent;color:var(--muted)}
+.edit-save-row td{background:color-mix(in srgb,var(--accent) 4%,var(--paper));padding:12px 16px}.inline-actions{flex-wrap:wrap;justify-content:flex-end;gap:10px}.inline-actions .hint{margin-right:auto}.inline-actions .notice,.inline-actions .inline-conflict{flex-basis:100%}
+.detail-heading .field-editor{font-size:16px}.receipt-section>.inline-actions{margin-top:14px}.editable-card .card-meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+@media(max-width:900px){.advanced-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.advanced-groups{grid-template-columns:1fr}.advanced-heading{display:block}.advanced-heading>div:last-child{margin-top:12px;flex-wrap:wrap}.request-heading-buttons{flex-wrap:wrap}.field-editor{flex-wrap:wrap}}

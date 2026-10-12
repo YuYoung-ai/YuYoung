@@ -512,7 +512,7 @@ function withCors(res: Response, req: Request): Response {
 /* 병원 업무 중계: DB는 Sheets 유지, ACL과 업무 변경은 GAS가 최종 검증한다.
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
-const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_roster", "work_detail", "work_handover_candidates", "work_handover_detail", "work_flow_preview", "work_flow_relink_preview"]);
+const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_handover_candidates", "work_handover_detail", "work_flow_preview", "work_flow_relink_preview"]);
 const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_status", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
 function workUpstream(): string {
   try {
@@ -549,6 +549,30 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
   if (kv) {
     const store = createWorkStore(kv);
     if ((await store.status()).ready) {
+      if(action==='work_references_refresh'){
+        try{await store.checkAccess({name:verified.name||'',level:verified.level||0});}
+        catch{return fail('업무관리 접근 권한이 없습니다.',403);}
+        const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
+        try{
+          // Existing authenticated GAS read endpoint. Keep operational sync on KV;
+          // only this explicit DB-refresh action reads the original spreadsheet.
+          const url=new URL(WORK_GAS_URL);url.searchParams.set('action','hospdbrich');url.searchParams.set('force','1');url.searchParams.set('token',String(p.token||''));
+          const response=await fetch(url,{signal:ctl.signal,redirect:'follow'}),body=await response.json();
+          if(!body.success||!Array.isArray(body.data))throw new Error('병원정보DB 조회 실패');
+          const existing=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
+          const hospitals=[];
+          for(const row of body.data){
+            const key=[row.name,row.sn,row.region].map(x=>String(x||'').trim()).join('\u001f');
+            const previous=existing.hospitals.find((h:any)=>h.origin!=='flow'&&h.key===key);
+            const id=previous?.id||'hosp_'+[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(key))))].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);
+            hospitals.push({id,key,name:String(row.name||'').trim(),sn:String(row.sn||'').trim(),region:String(row.region||'').trim(),sales:String(row.sales||'').trim(),asType:String(row.asType||'').trim(),ncare:String(row.ncare||'').trim()});
+          }
+          await store.bridge('references',{hospitals,references:{referenceCheckedAt:new Date().toISOString()}});
+          const data=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
+          return workReply({body:data as WorkBody,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-references',started);
+        }catch{return fail('병원정보DB 최신 조회에 실패했습니다. 기존 값은 보관되어 있습니다. 다시 시도하세요.',502);}
+        finally{clearTimeout(timer);}
+      }
       if (action === 'work_handover_candidates' || action === 'work_handover_detail') {
         try {await store.checkAccess({name:verified.name||'',level:verified.level||0});}
         catch {return fail('업무관리 접근 권한이 없습니다.',403);}
