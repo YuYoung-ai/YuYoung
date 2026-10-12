@@ -45,7 +45,11 @@ function hwKvStableSource_(hit){
 }
 function hwKvQueueSources_(hospital,date){
  var matches=hwSources_(hospital).filter(function(x){return x.source.date===_issueDateNorm_(date)&&['A/S','점검'].indexOf(x.source.gubun)>=0;}),sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
- var added=0;matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,n=sh.getLastRow()-1,existing=n>0?sh.getRange(2,1,n,1).createTextFinder(id).matchEntireCell(true).findNext():null;if(!existing){sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',new Date().toISOString()].map(safeCell_)]);added++;}});return added;
+ var added=0;matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,n=sh.getLastRow()-1,existing=n>0?sh.getRange(2,1,n,1).createTextFinder(id).matchEntireCell(true).findNext():null;if(!existing){sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',new Date().toISOString()].map(safeCell_)]);added++;}
+ else if(sh.getRange(existing.getRow(),5).getValue()==='source_deleted'){
+  // A restored source may have the same ID/version. Requeue without duplicating its event.
+  sh.getRange(existing.getRow(),4).setValue(JSON.stringify(s));var cell=sh.getRange(existing.getRow(),5);cell.setNote((cell.getNote()||'')+'\n원본 복원으로 전송 재개 · '+new Date().toISOString());cell.setValue('pending');added++;
+ }});return added;
 }
 /** Queue snapshots count records, not repeated save versions of the same record. */
 function hwKvPendingRows_(){
@@ -63,19 +67,33 @@ function hwKvPublishStatus_(error,failedIds){
 }
 /** Find the current source by stable ID even after its hospital name is edited. */
 function hwKvSourceById_(id){
- var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh),col=hdr&&colBy_(hdr,REC_ID_COLS),n=hdr?lastDataRow_(sh,hdr)-hdr.row:0;
+ var sh=hwSS_().getSheetByName(CONFIG.SHEET_NAME),hdr=sh&&findHeader_(sh),col=hdr&&colBy_(hdr,REC_ID_COLS),n=hdr?sh.getLastRow()-hdr.row:0;
  if(!col)throw new Error('Handover 기록 ID 열이 없습니다.');
  var hits=n>0?sh.getRange(hdr.row+1,col,n,1).createTextFinder(id).matchEntireCell(true).findAll():[];
- if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복되었거나 삭제됐습니다.');
+ // Search the whole populated ID column, including rows after blank gaps. Only a
+ // successful zero-hit search proves absence; duplicate IDs and read failures stay pending.
+ if(!hits.length){var missing=new Error('Handover 원본 기록이 없어 전송을 취소합니다.');missing.sourceMissing=true;throw missing;}
+ if(hits.length!==1)throw new Error('연동 원본의 기록 ID가 중복됐습니다.');
  var row=hits[0].getRow(),values=sh.getRange(row,1,1,sh.getLastColumn()).getDisplayValues()[0],raw={_row:row};hdr.headers.forEach(function(h,c){if(h)raw[h]=values[c];});
  var hit={raw:raw,source:hwSource_(raw)};if(!hit.source.date||['A/S','점검'].indexOf(hit.source.gubun)<0)throw new Error('원본 처리일 또는 A/S·점검 구분을 확인하세요.');hwKvStableSource_(hit);return hit.source;
 }
 function hwKvDeliverSources_(){
  var groups={};hwKvPendingRows_().forEach(function(r){(groups[r.id]||(groups[r.id]=[])).push(r);});
- var accepted=[],sources=[],failedIds=[],errors=[];
- Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{sources.push(hwKvSourceById_(id));accepted=accepted.concat(groups[id]);}catch(e){failedIds.push(id);errors.push(String(e.message||e));}});
+ var accepted=[],sources=[],failedIds=[],errors=[],missingIds=[],cancelledIds=[];
+ Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{sources.push(hwKvSourceById_(id));accepted=accepted.concat(groups[id]);}catch(e){if(e.sourceMissing)missingIds.push(id);else{failedIds.push(id);errors.push(String(e.message||e));}}});
+ if(missingIds.length)hwLock_(function(){
+  var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
+  missingIds.forEach(function(id){
+   // Recheck while holding the same lock used by Handover saves/restores.
+   try{hwKvSourceById_(id);return;}catch(e){if(!e.sourceMissing){failedIds.push(id);errors.push(String(e.message||e));return;}}
+   var changed=false;groups[id].forEach(function(r){
+    if(String(sh.getRange(r.row,2).getValue())!==id||sh.getRange(r.row,5).getValue()!=='pending')return;
+    var cell=sh.getRange(r.row,5),note=cell.getNote();cell.setNote((note?note+'\n':'')+'원본 삭제로 전송 취소 · '+new Date().toISOString()+' · 기록 ID: '+id+'\n원본 저장 내용은 이 행의 json에 보존됩니다. 원본 복원·재저장 시 다시 전송합니다.');cell.setValue('source_deleted');changed=true;
+   });if(changed)cancelledIds.push(id);
+  });
+ });
  if(sources.length){hwKvCall_('sources',{sources:sources});hwLock_(function(){var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);accepted.forEach(function(r){sh.getRange(r.row,5).setValue('sent');});});}
- return {failedIds:failedIds,error:errors.length?errors.length+'건 원본 확인 필요 · '+errors[0]:''};
+ return {failedIds:failedIds,error:errors.length?errors.length+'건 원본 확인 필요 · '+errors[0]:'',cancelledIds:cancelledIds};
 }
 function hwKvHash_(value){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(value),Utilities.Charset.UTF_8).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');}
 function hwKvManifest_(data){var out={};['requests','history','operations'].forEach(function(k){var rows=data[k].map(function(x){if(k==='operations')return {id:x.id,actor:x.actor,fingerprint:x.fingerprint,response:x.response};return x;}).sort(function(a,b){return String(a.id).localeCompare(String(b.id),'en');});out[k]={count:rows.length,hash:hwKvHash_(rows)};});return out;}
