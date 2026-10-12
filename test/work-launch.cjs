@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),launch=require('../js/baz-work-launch.js');
+const h={id:'db1',name:'가상 병원 & 지점',sn:'BW001',region:'서울',sales:'영업'},flow={...h,origin:'flow'};
+const context=launch.parse('?'+launch.url({n:h.name,s:h.sn,rg:h.region}).split('?')[1]);
+assert.equal(context.receipt,true);assert.equal(context.embed,true);assert.equal(context.name,h.name);
+assert.equal(launch.match(context,[h,flow]),h);
+assert.equal(launch.match(context,[h,{...h,id:'db2'}]),null,'ambiguous DB rows require explicit selection');
+assert.equal(launch.match({...context,sn:'WRONG'},[h]),null);assert.equal(launch.match({...context,region:'부산'},[h]),null);
+assert.equal(launch.match({...context,name:'가상 병원'},[h]),null,'no fuzzy history/name fallback');
+assert.equal(launch.match(context,[flow]),null);assert.equal(launch.match(launch.parse(''),[h]),null);
+console.log('work-launch: exact DB hospital/name/serial/region matching, ambiguity, historical exclusion, encoded query and embed flags passed.');

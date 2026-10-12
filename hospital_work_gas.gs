@@ -317,7 +317,13 @@ function hwAutoHistories_(eligible,sources){
 }
 // doPost가 원본 행/사진 저장을 확정한 뒤, 기존 ScriptLock 안에서 호출한다.
 function hospitalWorkHandoverSaved_(hospitalName,date){
-  if(hwKvMode_()){hwKvQueueSources_(hospitalName,date);return {enabled:true,pending:true,completed:0};}
+  if(hwKvMode_()){
+    var added=hwKvQueueSources_(hospitalName,date),statusPublished=false;
+    // Publish before the background worker drains the queue. A status failure
+    // must not turn a successful Handover save into a retry of the original.
+    if(added){try{hwKvPublishStatus_();statusPublished=true;}catch(e){Logger.log('Handover 대기 집계 전달 실패: '+String(e.message||e));}}
+    return {enabled:true,pending:true,completed:0,statusPublished:statusPublished};
+  }
   hwResetContext_();
   if(!PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_SS_ID'))return {enabled:false};
   hwRecover_();var summary=hwAutoReconcileLocked_({hospitalName:hospitalName,date:_issueDateNorm_(date)});

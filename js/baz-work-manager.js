@@ -7,6 +7,10 @@
   var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false,syncCheckedAt='';
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
+  var launch=window.BazWorkLaunch?window.BazWorkLaunch.parse(window.location?.search):{receipt:false,embed:false};
+  var embedded=launch.receipt&&launch.embed&&window.parent!==window;
+  if(embedded){$('receipt-launch-status').hidden=false;document.documentElement.dataset.receiptEmbed='true';draftKey=scope+'_lookup_draft_'+encodeURIComponent([launch.name,launch.sn,launch.region].join('|'));}
+  function receiptMessage(type){if(embedded)window.parent.postMessage({type:type},window.location.origin);}
   var refreshCommentPreview=function(){};
   var pending=null,commentEdit=null,checkedRequests=new Set(),shownRequests=[],selectionMode=false,bulkWorking=false,lifecyclePlan=null;
   var fields=window.BazWorkFields,activeField=null,renderHost="list",referenceRefreshing=false,advanced={year:[],month:[],quarter:[],gubun:[],asType:[],ncare:[],engineer:[],cs:[],sales:[],status:[]};
@@ -47,7 +51,7 @@
     $('handover-pending').textContent=known?'Handover 대기 '+s.pendingCount+'건'+(s.error?' · 연동 오류':stale?' · 이전 집계':''):'Handover 대기 미확인';
     $('handover-pending').dataset.state=!known?'unknown':s.error?'error':stale||s.pendingCount?'waiting':'done';
     $('handover-checked').textContent=known?'대기 확인 '+time(s.checkedAt):'대기 현황은 동기화로 확인';
-    $('handover-status-detail').textContent=known?'확인 시각: '+time(s.checkedAt)+'\n대기 '+s.pendingCount+'건 / 전송 이벤트 '+s.pendingEvents+'개'+(s.failedCount?' / 원본 확인 필요 '+s.failedCount+'건':'')+(s.oldestPendingAt?'\n최초 대기: '+time(s.oldestPendingAt):'')+(s.error?'\n오류: '+s.error:'')+(stale?'\n10분 이상 지난 집계입니다. 동기화하여 확인하세요.':'')+'\nHandover 저장 후 약 5분 간격으로 최대 20건씩 전달합니다. 이 PC의 동기화 버튼은 서버에 반영된 최신 현황을 가져옵니다. 대기 0건은 전송 대기가 없다는 뜻이며 모든 접수의 완료를 뜻하지 않습니다.':'서버에서 확인한 대기 현황이 아직 없습니다. 확인 전에는 0건으로 표시하지 않습니다. 동기화 버튼으로 최신 집계를 가져오세요.';
+    $('handover-status-detail').textContent=known?'확인 시각: '+time(s.checkedAt)+'\n대기 '+s.pendingCount+'건 / 전송 이벤트 '+s.pendingEvents+'개'+(s.failedCount?' / 원본 확인 필요 '+s.failedCount+'건':'')+(s.oldestPendingAt?'\n최초 대기: '+time(s.oldestPendingAt):'')+(s.error?'\n오류: '+s.error:'')+(stale?'\n10분 이상 지난 집계입니다. 동기화하여 확인하세요.':'')+'\nHandover 저장 직후 대기 집계를 전달하고, 결과는 약 5분 간격으로 최대 20건씩 전달합니다. 이 PC의 동기화 버튼은 서버에 반영된 최신 현황을 가져옵니다. 대기 0건은 전송 대기가 없다는 뜻이며 모든 접수의 완료를 뜻하지 않습니다.':'서버에서 확인한 대기 현황이 아직 없습니다. 확인 전에는 0건으로 표시하지 않습니다. 동기화 버튼으로 최신 집계를 가져오세요.';
   }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}
   function updatePending(){ $('pending').hidden=!pending; $('retry').disabled=busy||bulkWorking;updateSelection();updateRosterControls(); }
@@ -462,11 +466,11 @@
     catch(e){if(seq===hospitalSeq)$('past-history').textContent='이력 조회 실패: '+e.message;}
   }
   function setForm(form){['symptom','cs','sales','status','registeredAt','visitAt','deadline'].forEach(function(k){$(k).value=form[k]||'';});['registered','visit'].forEach(function(prefix){var parts=String(form[prefix==='registered'?'registeredAt':'visitAt']||'').split('T');$(prefix+'Date').value=parts[0]||'';$(prefix+'Time').value=parts[1]||'';});var h=state.hospitals.find(function(x){return x.key===form.hospitalKey;});$('hospital-input').value=h?label(h):'';if(form.engineer&&!Array.from($('engineer').options).some(function(x){return x.value===form.engineer;}))$('engineer').add(new Option(form.engineer,form.engineer));$('engineer').value=form.engineer||'';selectHospital(false);}
-  function openEditor(request){
+  function openEditor(request,prefill){
     if(!state.loaded||busy)return;state.editing=request||null;state.baseline=request?Object.assign({},request):null;
     $('request-form').reset();err('form-error','');$('duplicate-ack').hidden=true;state.selected=null;
     var draft=read(draftKey),useDraft=draft&&draft.id===(request?request.id:null);
-    var form=request||{cs:account,status:'접수',registeredAt:localNow()};
+    var form=request||{cs:account,status:'접수',registeredAt:localNow(),hospitalKey:prefill?.key||'',sales:prefill?.sales||''};
     if(useDraft){form=draft.form;state.baseline=draft.baseline;if(request)state.editing=Object.assign({},request,{revision:draft.baseRevision});}
     fillPeople();setForm(form);if(useDraft)$('hospital-input').value=draft.hospitalInput||$('hospital-input').value;
     $('editor-title').textContent=request?'A/S 접수 정보 수정':'A/S 접수';$('draft-status').textContent=useDraft?'이 PC의 미저장 초안 복원됨':'';
@@ -499,7 +503,7 @@
       if(operation.context==='inline-request'){activeField=null;delete inlineDrafts[data.request.id];store(inlineDraftKey,inlineDrafts);}
       upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
       if(data.request.purgedAt){await forgetPurged(data.request.id);await persistSnapshot();notify('접수를 영구 삭제했습니다.');return data;}
-      if(operation.context==='request'){store(draftKey,null);$('editor').close();}
+      if(operation.context==='request'){store(draftKey,null);if(!embedded)$('editor').close();}
       if(operation.context==='comment'||(operation.context==='comment-lifecycle'&&read(scope+'_comment_'+data.request.id)?.historyId===operation.payload.historyId)){store(scope+'_comment_'+data.request.id,null);commentEdit=null;}
       if(operation.context==='result'){store(scope+'_result_'+data.request.id,null);$('result-dialog').close();}
       // KV response is sufficient; no second detail request on the save path.
@@ -514,6 +518,7 @@
       busy=false;
       if(data.request.deletedAt){if(state.detail&&state.detail.request.id===data.request.id){detailSeq++;state.detail=null;$('detail').hidden=true;}notify('선택한 접수를 휴지통으로 이동했습니다.');renderList();}
       else if((operation.context==='inline-request'?(state.detail&&state.detail.request.id===data.request.id):operation.context.indexOf('bulk-')!==0||(state.detail&&state.detail.request.id===data.request.id))){state.detail=detail;detailLoading=false;detailError='';renderDetail();}
+      if(operation.context==='request'&&embedded)receiptMessage('baz-work-receipt-saved');
       return data;
     }catch(e){notify('저장 결과를 확인하지 못했습니다. 입력과 저장 식별자를 보존했습니다. '+e.message);$('save-status').textContent='저장 결과 확인 필요';return null;}
     finally{busy=false;disabledBefore.forEach(function(x){x.element.disabled=x.disabled;});updatePending();}
@@ -659,7 +664,7 @@
   $('request-form').addEventListener('input',function(event){if(event.target.id!=='ack'){$('ack').checked=false;$('duplicate-ack').hidden=true;}saveDraft();});
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();};
   ['registeredTime','visitTime'].forEach(function(id){$(id).onblur=function(){var normalized=normalizeTime(this.value);if(normalized)this.value=normalized;saveDraft();};});
-  $('request-form').onsubmit=saveRequest;$('close-editor').onclick=function(){saveDraft();$('editor').close();};$('editor').addEventListener('cancel',saveDraft);
+  $('request-form').onsubmit=saveRequest;$('close-editor').onclick=function(){saveDraft();if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};$('editor').addEventListener('cancel',function(event){saveDraft();if(embedded){event.preventDefault();receiptMessage('baz-work-receipt-close');}});
   $('discard').onclick=function(){store(draftKey,null);$('editor').close();};
   $('existing-requests').onclick=function(event){var b=event.target.closest('[data-existing]');if(b){saveDraft();$('editor').close();openDetail(b.dataset.existing);}};
   $('close-result').onclick=function(){sourceSeq++;resultDialogSeq++;$('result-dialog').close();};$('result-dialog').addEventListener('cancel',function(){sourceSeq++;resultDialogSeq++;});$('source-list').onclick=function(event){var b=event.target.closest('[data-source]');if(b)selectSource(Number(b.dataset.source));};
@@ -712,7 +717,10 @@
     var saved=await cache.snapshot(account).catch(function(){return null;});
     if(saved&&saved.storage==='kv'&&Array.isArray(saved.requests)&&saved.hospitals){kvReady=true;state.requests=saved.requests;state.hospitals=saved.hospitals;state.engineers=saved.engineers;state.roster=saved.roster||[];state.rosterMonth=saved.rosterMonth||state.rosterMonth;state.rosterLoaded=!!saved.rosterLoaded;revision=saved.revision||'0';sourceCheckedAt=saved.sourceCheckedAt||'';bridgeStatus=saved.bridgeStatus||null;state.loaded=true;fillPeople();renderList();renderRoster();$('new').disabled=false;showSyncState('done',saved.updatedAt);$('sync-state').textContent='이 PC의 보관 데이터';}
     else await sync();
+    if(embedded){$('receipt-launch-status').hidden=state.loaded;$('receipt-launch-retry').hidden=state.loaded;$('receipt-launch-message').textContent=state.loaded?'':'접수 정보를 불러오지 못했습니다. 다시 불러오거나 패널을 닫은 뒤 재시도하세요.';}
+    if(launch.receipt&&state.loaded){var selected=window.BazWorkLaunch.match(launch,state.hospitals);openEditor(null,selected);if(launch.name&&!selected)$('hospital-match').textContent='조회한 병원을 최신 병원정보DB에서 확인해 선택하세요. 이름·장비번호·지역이 일치하는 한 개의 후보만 자동 선택합니다.';}
   }
+  $('receipt-launch-retry').onclick=function(){this.hidden=true;$('receipt-launch-message').textContent='접수 양식을 불러오는 중…';return start();};
   start();
 })();
 
