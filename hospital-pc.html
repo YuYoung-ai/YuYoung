@@ -756,7 +756,12 @@
 <script src="js/baz-map-controller.js"></script>
 <script src="js/baz-hospital-data.js"></script>
 <script src="js/baz-history-api.js"></script>
-</head>
+<style>
+.pc-receipt-open{display:block;width:100%;margin:0 0 12px;padding:12px;border-radius:10px;border:1px solid var(--border,#385474);background:var(--accent,#4285d4);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+#pcReceiptPanel{position:fixed;inset:72px 12px 12px auto;width:580px;max-width:calc(100vw - 24px);z-index:10050;border:1px solid var(--border,#385474);border-radius:14px;background:var(--card,#16273c);box-shadow:0 14px 48px #0006;overflow:hidden}
+#pcReceiptPanel[hidden]{display:none}#pcReceiptPanel iframe{width:100%;height:calc(100% - 44px);border:0;display:block}.pc-receipt-bar{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 14px;border-bottom:1px solid var(--border,#385474);font-size:13px}.pc-receipt-bar button{border:0;background:transparent;color:inherit;font-size:20px;cursor:pointer;padding:4px 8px}
+@media(max-width:700px){#pcReceiptPanel{inset:8px;width:calc(100vw - 16px);max-width:none}}
+</style><script src="js/baz-work-launch.js?v=217"></script></head>
 <body>
 <div class="wrap">
 <header>
@@ -792,6 +797,7 @@
   <div id="viewList">
    <div id="schedNotice"></div>
    <div id="filterRail">
+    <button id="pcReceiptOpen" class="pc-receipt-open" type="button">＋ 접수 등록</button>
     <div id="filtToggle"><button id="filtToggleBtn" type="button" title="필터 폭: 숨김 → 기본 → 넓게">넓게 ▷</button></div>
     <div class="search-wrap">
       <span class="ico">🔍</span>
@@ -5282,5 +5288,25 @@ function pcRunDeepLink_(){
 try{ pcRunDeepLink_(); }catch(e){ console.warn('[딥링크] 처리 실패:',e); }
 
 </script>
-</body>
+<aside id="pcReceiptPanel" aria-label="병원 조회 접수 등록" hidden><div class="pc-receipt-bar"><strong>위치·소요시간 확인 후 접수</strong><button id="pcReceiptClose" type="button" aria-label="접수 패널 닫기">×</button></div><iframe id="pcReceiptFrame" title="CS 접수 등록" src="about:blank"></iframe></aside>
+<script>
+(function(){
+ var panel=document.getElementById('pcReceiptPanel'),frame=document.getElementById('pcReceiptFrame'),button=document.getElementById('pcReceiptOpen');
+ document.getElementById('pcReceiptClose').addEventListener('click',function(){panel.hidden=true;frame.src='about:blank';button.focus();});
+ button.addEventListener('click',function(){
+   if(!panel.hidden){frame.focus();return;}
+   var name=typeof pcSelName==='string'&&pcSelName||typeof pcMapFocusName==='string'&&pcMapFocusName||'';
+   var rows=HOSPITALS.filter(function(h){return h.n===name;});
+   if(!name&&typeof pcList!=='undefined'&&pcList.length===1)rows=HOSPITALS.filter(function(h){return h.n===pcList[0].n;});
+   frame.src=BazWorkLaunch.url(rows.length===1?rows[0]:null);panel.hidden=false;
+ });
+ window.addEventListener('message',function(event){
+   if(event.origin!==location.origin||event.source!==frame.contentWindow)return;
+   if(!event.data||!['baz-work-receipt-close','baz-work-receipt-saved'].includes(event.data.type))return;
+   panel.hidden=true;frame.src='about:blank';button.focus();
+   if(event.data.type==='baz-work-receipt-saved'){bazToast('접수 저장 완료 · CS 서비스 현황에서 확인할 수 있습니다.');bazAnnounce('접수 저장 완료');}
+ });
+})();
+</script></body>
 </html>
+

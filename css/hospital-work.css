@@ -230,3 +230,14 @@ html[data-theme=dark] body:before{filter:brightness(2.3);opacity:.065}
 .detail-heading .field-editor{font-size:16px}.receipt-section>.inline-actions{margin-top:14px}.editable-card .card-meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 @media(max-width:900px){.advanced-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.advanced-groups{grid-template-columns:1fr}.advanced-heading{display:block}.advanced-heading>div:last-child{margin-top:12px;flex-wrap:wrap}.request-heading-buttons{flex-wrap:wrap}.field-editor{flex-wrap:wrap}}
+
+/* Keep the page title on the first line, above the controls. */
+.page-heading>h1{align-self:start;grid-column:1/-1;grid-row:1}.page-heading>.roster-calendar{grid-row:2}.page-heading>.heading-actions{grid-row:2}
+@media(max-width:700px){.page-heading>.heading-actions{grid-row:3}}
+html[data-receipt-embed=true] body{background:var(--paper)}
+html[data-receipt-embed=true] .topbar,html[data-receipt-embed=true] main,html[data-receipt-embed=true] #pending{display:none}
+html[data-receipt-embed=true] #editor{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0;box-shadow:none;overflow:auto}
+html[data-receipt-embed=true] #editor::backdrop{background:transparent}
+html[data-receipt-embed=true] #editor .form-body{padding:18px 22px}html[data-receipt-embed=true] #editor .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+#receipt-launch-status{padding:28px;line-height:1.8}#receipt-launch-retry{margin-top:12px}

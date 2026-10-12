@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-const context={Date,Logger:{log(){}},PropertiesService:{getScriptProperties:()=>({getProperty:()=>''})}};
+const properties={};const context={Date,Logger:{log(){}},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties[k]||'',setProperty:(k,v)=>{properties[k]=v;}})}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../hospital_work_kv_gas.gs',import.meta.url),'utf8'),context);
 let rows=[{row:2,id:'renamed',state:'pending',createdAt:'2026-10-07T01:00:00Z'},{row:3,id:'renamed',state:'pending',createdAt:'2026-10-07T02:00:00Z'},{row:4,id:'missing',state:'pending',createdAt:'2026-10-07T03:00:00Z'},{row:5,id:'valid',state:'pending',createdAt:'2026-10-07T04:00:00Z'}],sent=[],calls=[];
 context.hwKvPendingRows_=()=>rows.filter(r=>r.state==='pending');context.hwLock_=fn=>fn();
