@@ -9,20 +9,24 @@ const copy=(v:any)=>JSON.parse(JSON.stringify(v));
 const text=(v:any,max:number,label:string)=>{const s=String(v??'').trim();if(s.length>max)throw new Error(label+'은 '+max+'자 이하로 입력하세요.');return s;};
 const live=(r:Obj)=>!r.deletedAt&&!r.purgedAt;
 const active=(r:Obj)=>live(r)&&!['완료','취소'].includes(r.status);
-const kind=(s:Obj)=>['A/S','점검'].includes(s.gubun);
+const serials=(v:any)=>[...new Set(String(v||'').normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean))];
+const serialMatch=(a:any,b:any)=>serials(a).some(sn=>serials(b).includes(sn));
+const workKind=(v:any)=>{const s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;};
+const kind=(s:Obj)=>['A/S','점검'].includes(workKind(s.gubun));
 function autoSources(r:Obj,all:Obj[],records:Obj[]){
  const day=r.visitAt?.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
  let matches=records.filter(s=>s.date===day&&kind(s));
  if(!matches.length)return {matches,ambiguous:false};
  if(same.length>1){
-  if(!r.sn||same.filter(x=>x.sn===r.sn).length!==1)return {matches:[],ambiguous:true};
-  matches=matches.filter(s=>s.sn===r.sn);
+  matches=matches.filter(s=>serialMatch(r.sn,s.sn)&&same.filter(x=>serialMatch(x.sn,s.sn)).length===1);
   return {matches:matches.length===1?matches:[],ambiguous:matches.length>1};
  }
  if(same.length!==1)return {matches:[],ambiguous:true};
- if(matches.length===1)return {matches:r.sn&&matches[0].sn&&r.sn!==matches[0].sn?[]:matches,ambiguous:false};
+ // Hospital/date uniquely identify the visit. A DB serial correction must not block it.
+ if(matches.length===1)return {matches,ambiguous:false};
  // A single hospital visit can include several devices, but only distinct, recorded serials prove that.
- if(matches.some(s=>!s.sn)||new Set(matches.map(s=>s.sn)).size!==matches.length)return {matches:[],ambiguous:true};
+ const sns=matches.flatMap(s=>serials(s.sn));
+ if(matches.some(s=>!serials(s.sn).length)||new Set(sns).size!==sns.length)return {matches:[],ambiguous:true};
  return {matches,ambiguous:false};
 }
 const clash=(current:Obj)=>({success:false,conflict:true,current,error:'다른 사용자가 수정했습니다. 최신 내용과 입력 내용을 비교하세요.'});
@@ -95,7 +99,13 @@ export function createWorkStore(kv:any){
   const original=p.id?await request(p.id):null,old=original?.value;
   if(p.action==='work_request_edit'&&!old)throw new Error('수정할 접수를 선택하세요.');
   if(old&&String(old.revision)!==String(p.baseRevision))return {response:clash(old)};
-  const f=p.form||{},h=(await get('hospitalRef',text(f.hospitalKey,500,'병원'))).value,reference=await refs();
+  const f=p.form||{},reference=await refs();
+  let selected=await get('hospitalRef',text(f.hospitalKey,500,'병원'));
+  if(!selected.value&&old&&f.hospitalKey===old.hospitalKey){
+   const candidates=(await values(['hospitalRef'])).filter(h=>h.origin!=='flow'&&h.name===old.hospitalName&&String(h.region||'')===String(old.region||''));
+   if(candidates.length===1)selected=await get('hospitalRef',candidates[0].key);
+  }
+  const h=selected.value;
   if(!h)throw new Error('병원 원본 목록에 없습니다. 동기화한 뒤 다시 선택하세요.');
   if(h.origin==='flow'&&(!old||old.hospitalKey!==h.key))throw new Error('신규 접수는 병원정보DB의 병원을 선택하세요.');
   const id=old?.id||crypto.randomUUID(),now=new Date().toISOString();
@@ -105,11 +115,10 @@ export function createWorkStore(kv:any){
   r.hospitalReferenceSN=h.sn||'';
   if(old?.serviceOverrides)r.serviceOverrides=copy(old.serviceOverrides);
   if(p.action==='work_request_edit'){
-   r.gubun=String(f.gubun||old.gubun||'A/S');
+   r.gubun=workKind(f.gubun||old.gubun||'A/S');
    if(!['A/S','점검'].includes(r.gubun))throw new Error('A/S 또는 점검을 선택하세요.');
-   // Historical device identity belongs to the request/result. A name correction
-   // changes the selected DB reference, not the original equipment serial.
-   r.sn=old.sn||'';
+   // The request follows the selected current DB row. Saved source snapshots and audit
+   // events retain the original equipment serials independently.
    if(Object.hasOwn(f,'serviceOverrides')){
     const overrides:Obj={},db=(await values(['hospitalRef'])).filter(x=>x.origin!=='flow');
     for(const field of ['asType','ncare']){
@@ -119,17 +128,17 @@ export function createWorkStore(kv:any){
     }
     r.serviceOverrides=overrides;
    }
-   if(old.hospitalKey!==h.key&&!p.acknowledgeHospitalChange)throw new Error('병원 변경 후에도 기존 댓글과 처리 결과가 유지됩니다. 변경할 병원을 확인하세요.');
+   if(old.hospitalKey!==h.key&&(old.hospitalName!==h.name||String(old.region||'')!==String(h.region||''))&&!p.acknowledgeHospitalChange)throw new Error('병원 변경 후에도 기존 댓글과 처리 결과가 유지됩니다. 변경할 병원을 확인하세요.');
   }
   if(!STATES.includes(r.status))throw new Error('알 수 없는 상태입니다.');
   completionFields(r,old?.status||'',who,now);
   if(['방문예정','처리중'].includes(r.status)&&(!r.visitAt||!r.engineer))throw new Error('방문 일시와 엔지니어가 필요합니다.');
   if(r.engineer&&!reference.engineers.includes(r.engineer)&&r.engineer!==old?.engineer)throw new Error('엔지니어 원본 목록에 없습니다. 동기화하세요.');
   if(r.sales&&r.sales!==old?.sales&&!(await values(['hospitalRef'])).some(x=>x.origin!=='flow'&&String(x.sales||'').trim()===r.sales))throw new Error('병원정보DB 영업 담당자 목록에서 선택하세요.');
-  if(old&&old.hospitalId!==h.id&&p.action!=='work_request_edit'&&(await history(id)).length)throw new Error('이력이 있는 요청의 병원은 목록의 수정 모드에서 변경하세요.');
+  if(old&&old.hospitalId!==h.id&&(old.hospitalName!==h.name||String(old.region||'')!==String(h.region||''))&&p.action!=='work_request_edit'&&(await history(id)).length)throw new Error('이력이 있는 요청의 병원은 목록의 수정 모드에서 변경하세요.');
   const all=await values(['request']),duplicates=all.filter(x=>x.id!==id&&active(x)&&x.hospitalId===r.hospitalId),overlaps=all.filter(x=>x.id!==id&&active(x)&&r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt);
   if((duplicates.length||overlaps.length)&&!p.acknowledgeDuplicates)return {response:{success:false,duplicate:true,candidates:duplicates,overlaps,error:'진행 중인 요청 또는 같은 엔지니어의 동일 방문 일시가 있습니다. 확인 후 저장하세요.'}};
-  return {kind:old?'request_update':'request_create',before:old||null,request:r,hospital:h,response:{success:true,request:r}};
+  return {kind:old?'request_update':'request_create',before:old||null,request:r,hospital:h,checks:[selected],response:{success:true,request:r}};
  });}
  async function comment(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const r=copy((await request(p.requestId)).value),old=p.historyId?(await get('history',r.id,String(p.historyId))).value:null;
@@ -170,7 +179,7 @@ export function createWorkStore(kv:any){
   const old=linked.value?.requestId===r.id?(await get('history',r.id,linked.value.historyId)).value:null;
   if(old&&String(old.revision)!==String(p.baseHistoryRevision||0))return {response:clash(old)};
   const now=new Date().toISOString(),before=copy(r),h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
-  r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=s.gubun;
+  r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=workKind(s.gubun);
   r.status=p.complete||r.status==='완료'?'완료':'결과확인';
   if(p.complete){r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;}
   return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
@@ -350,7 +359,7 @@ export function createWorkStore(kv:any){
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
    switch(p.action){
     case 'work_bootstrap':return await bootstrap(p,who);
-    case 'work_sync':return await sync(p);
+    case 'work_sync':await reconcileSources();return await sync(p);
     case 'work_roster':return await roster.read(p.rosterMonth);
     case 'work_roster_save':case 'work_roster_delete':return await roster.save(p,who);
     case 'work_flow_preview':return await flowPreview(p,who);
@@ -358,8 +367,15 @@ export function createWorkStore(kv:any){
     case 'work_flow_relink_preview':return await flowRelinkPreview(p,who);
     case 'work_flow_relink':return await flowRelink(p,who);
     case 'work_detail':return await detail(p);
-    case 'work_save':return await save(p,who);
-    case 'work_request_edit':return await save(p,who);
+    case 'work_save':case 'work_request_edit':{
+     const saved=await save(p,who);
+     if(!saved.success||!p.id)return saved;
+     // The user edit is already committed. Matching failure must never make it look unsaved.
+     try{
+      const autoMatch=await reconcileSources(p.id),workDetail=await detail({id:p.id});
+      return {...saved,request:workDetail.request,workDetail,autoMatch};
+     }catch{return {...saved,autoMatchPending:true};}
+    }
     case 'work_status':return await changeStatus(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
     case 'work_result_save':return await result(p,who);
@@ -370,7 +386,7 @@ export function createWorkStore(kv:any){
   }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
-  for(const s of items){if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
+  for(const item of items){const s={...item,gubun:workKind(item.gubun)};if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
    const old=await get('source',s.hospitalName,s.recordId),meta=await get('meta');
    if(old.value?.observedAt&&(!s.observedAt||old.value.observedAt>s.observedAt))break;
    // Source changes invalidate in-flight automatic matching as well as older source deliveries.
@@ -378,10 +394,13 @@ export function createWorkStore(kv:any){
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
   }}
   const r=await get('refs');if(r.value)await kv.set(key('refs'),{...r.value,sourceCheckedAt:checkedAt});
+  return reconcileSources();
+ }
+ async function reconcileSources(requestId?:string){
   const meta=await status();if(!meta.ready)return {linked:0,skipped:[]};
   const all=await values(['request']);let linked=0;const skipped:Obj[]=[];
   for(const r of all){
-   if(!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
+   if((requestId&&r.id!==requestId)||!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
    const plan=autoSources(r,all,await sources(r.hospitalName));
    if(plan.ambiguous){skipped.push({requestId:r.id,reason:'ambiguous'});continue;}
    const hs=(await history(r.id)).filter(h=>h.kind==='result');if(hs.some(h=>!plan.matches.some(s=>s.recordId===h.source.recordId)))continue;

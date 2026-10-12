@@ -7,6 +7,16 @@ assert.equal(fields.hospital({...r,sn:'historical-device',hospitalReferenceSN:'S
 assert.equal(fields.hospital(r,[renamed,{...renamed,key:'other'}]),null,'ambiguous serials must not select a hospital');
 assert.equal(fields.hospital({...r,sn:''},[renamed]),null,'no name fuzzy matching on DB disappearance');
 assert.equal(fields.hospital(r,[{...a,origin:'flow'}]),null,'history rows never become DB candidates');
+const corrected={key:'원래 병원\u001fBW4015,BV5015\u001f서울',name:'원래 병원',region:'서울',sn:'BW4015,BV5015'};
+const old={hospitalKey:'원래 병원\u001fWRONG\u001f서울',hospitalName:'원래 병원',region:'서울',sn:'WRONG'};
+assert.equal(fields.hospital(old,[corrected]),corrected,'exact unique name/region recovers a serial correction');
+assert.equal(fields.hospital({hospitalKey:old.hospitalKey},[corrected]),corrected,'stale form keys recover the same exact hospital');
+assert.equal(fields.hospital(old,[corrected,{...corrected,key:'second',sn:'OTHER'}]),null,'multiple same-name DB devices require an explicit selection');
+assert.equal(fields.hospital(old,[{...corrected,region:'부산'}]),null,'region prevents guessing another branch');
+assert.equal(fields.serialMatch('BW4015, bv5015','BV5015'),true);
+assert.equal(fields.serialMatch('BW4015/BV5015','BV501'),false,'whole serial tokens, never substring matching');
+assert.deepEqual(fields.serials(' BW4015; BV5015\nBW4015 '),['BW4015','BV5015']);
+for(const value of ['AS','as',' A / S ','ＡＳ'])assert.equal(fields.kind(value),'A/S');
 assert.equal(fields.terms(r,[renamed]).asType,'무상');
 assert.equal(fields.terms({...r,serviceOverrides:{asType:'유상'}},[renamed]).asType,'유상');
 assert.equal(fields.terms({...r,serviceOverrides:{}},[renamed]).asType,'무상');

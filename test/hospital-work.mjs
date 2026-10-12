@@ -41,6 +41,9 @@ const sandbox={console,Date,JSON,Map,Set,SpreadsheetApp:{openById:()=>ss,getActi
   bazVerifyLocal_:token=>token==='alice'?{ok:true,level:1,name:'CS A'}:token==='bob'?{ok:true,level:1,name:'CS B'}:token==='admin'?{ok:true,level:3,name:'관리자'}:{ok:false}};
 vm.createContext(sandbox);vm.runInContext(read('handover_gas.gs'),sandbox);vm.runInContext(read('hospital_work_gas.gs'),sandbox);vm.runInContext(read('hospital_work_kv_gas.gs'),sandbox);
 const assessmentSource=sandbox.hwSource_({'처리일':'2026-10-02','병원명':'샘플병원','기록 ID':'assessment','노즐 재사용':'O','NS 충진 여부':'X','NS 충진량':'부족','젯 분사 판단':'교육 필요'});
+for(const header of ['구분','점검/AS','점검/A/S'])for(const value of ['AS','A/S',' a / s ','ＡＳ','점검']){
+ assert.equal(sandbox.hwSource_({'처리일':'2026-10-02','병원명':'샘플병원',[header]:value}).gubun,value==='점검'?'점검':'A/S','Handover classification header/value aliases');
+}
 assert.equal(assessmentSource.nozzleReuse,'O');assert.equal(assessmentSource.nsFill,'X');assert.equal(assessmentSource.nsAmt,'부족');assert.equal(assessmentSource.jet,'교육 필요');
 assert.notEqual(assessmentSource.version,sandbox.hwSource_({'처리일':'2026-10-02','병원명':'샘플병원','기록 ID':'assessment','노즐 재사용':'X','NS 충진 여부':'X','NS 충진량':'부족','젯 분사 판단':'교육 필요'}).version,'assessment/reuse fields affect source version');
 sandbox.getHospDBRich_=()=>({success:true,data:[{name:'샘플병원',sn:'SN1',region:'서울',sales:'영업 A'},{name:'샘플병원 분점',sn:'SN2',region:'서울',sales:'영업 B'}]});
@@ -138,7 +141,7 @@ const duplicate1=autoRequest('2026-10-13'),duplicate2=autoRequest('2026-10-13',{
 assert.equal(get({action:'work_detail',id:duplicate1.id}).autoMatch.skipped[0].reason,'requests');
 assert.equal(get({action:'work_detail',id:duplicate2.id}).request.status,'방문예정');
 const mismatch=autoRequest('2026-10-14');addSource('2026-10-14',{sn:'SN-other'});
-assert.equal(get({action:'work_detail',id:mismatch.id}).autoMatch.skipped[0].reason,'sn');
+assert.equal(get({action:'work_detail',id:mismatch.id}).history[0].source.sn,'SN-other','unique hospital/date pair links despite a serial mismatch');
 const incomplete=autoRequest('2026-10-15');addSource('2026-10-15',{result:''});
 assert.equal(get({action:'work_detail',id:incomplete.id}).autoMatch.skipped[0].reason,'result');
 const held=autoRequest('2026-10-16',{status:'보류'});addSource('2026-10-16');assert.equal(get({action:'work_detail',id:held.id}).request.status,'보류');
