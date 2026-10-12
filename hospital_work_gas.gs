@@ -176,9 +176,10 @@ function hwComment_(p,who){
     return {kind:old?'comment_update':'comment_add',before:old,history:h,request:r,requestBefore:before,response:{success:true,request:r,history:h}};
   });
 }
+function hwKind_(v){var s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;}
 function hwSource_(o){
   var s=slim_(o);
-  var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:s.gubun,cat:s.cat,type:s.type,
+  var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:hwKind_(pickH_(o,['점검/AS','점검/A/S','구분'])||s.gubun),cat:s.cat,type:s.type,
     part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||'',
     nozzleReuse:pickH_(o,['노즐 재사용','노즐재사용'])||'',nsFill:s.nsFill||'',nsAmt:s.nsAmt||'',jet:s.jet||''};
   out.version=hwHash_(out); out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
@@ -233,7 +234,7 @@ function hwResult_(p,who){
       author:old?old.author:who.name,createdAt:old?old.createdAt:now,updatedAt:now,updatedBy:who.name,revision:(old?old.revision:0)+1};
     r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail.slice(0,120);
     // 원본 갱신으로 이미 완료된 업무를 재개하지 않는다.
-    r.status=p.complete||r.status==='완료'?'완료':'결과확인';
+    r.gubun=s.gubun;r.status=p.complete||r.status==='완료'?'완료':'결과확인';
     if(p.complete){ r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name; }
     return {kind:'result_save',before:old,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
   });
@@ -281,7 +282,7 @@ function hwAutoReconcileLocked_(target){
     if(matches.length!==1){skip('sources','같은 병원·처리일의 A/S 기록이 여러 건입니다. Handover 결과를 직접 선택하세요.');return;}
     var hit=matches[0],s=hit.source;
     if(!s.result){skip('result','Handover 처리 결과가 미기록입니다. 원본 확인 후 직접 연결하세요.');return;}
-    if(r.sn&&s.sn&&String(r.sn).trim()!==String(s.sn).trim()){skip('sn','접수 장비와 Handover 장비 S/N이 다릅니다. 직접 확인하세요.');return;}
+    // The single request/result pair already identifies the hospital visit.
     var resultHistories=histories.filter(function(h){return h.kind==='result'&&h.requestId===r.id;});
     if(resultHistories.some(function(h){return h.auto;})){skip('reopened','자동 완료 후 다시 열린 업무입니다. 기존 결과를 검토 후 완료하세요.');return;}
     if(resultHistories.length>1||resultHistories.some(function(h){return h.source.recordId!==s.recordId;})){skip('existing','이미 선택한 결과가 있습니다. 해당 결과를 검토 후 완료하세요.');return;}
@@ -300,7 +301,7 @@ function hwAutoReconcileLocked_(target){
       var now=new Date().toISOString(),before=JSON.parse(JSON.stringify(r));
       var h={id:old?old.id:Utilities.getUuid(),requestId:r.id,kind:'result',source:s,body:s.detail,memo:old?old.memo||'':'',auto:true,
         author:old?old.author:who.name,createdAt:old?old.createdAt:now,updatedAt:now,updatedBy:who.name,revision:(old?old.revision:0)+1};
-      r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail.slice(0,120);r.status='완료';r.completedAt=now;r.completedBy=who.name;
+      r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail.slice(0,120);r.gubun=s.gubun;r.status='완료';r.completedAt=now;r.completedBy=who.name;
       return {kind:'result_auto',before:old,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
     });
     histories.push(saved.history);summary.completed.push({requestId:r.id,recordId:s.recordId});

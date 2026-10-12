@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createWorkStore} from '../deno-auth/work-store.ts';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import workFields from '../js/baz-work-fields.js';
 import {stripTypeScriptTypes} from 'node:module';
 // Versioned fixture exercises actual transactions, including interleaving/replayed writes.
 class Kv{
@@ -34,6 +35,50 @@ const id=created.request.id;
 const stale=await store.handle({action:'work_save',id,baseRevision:0,form,operationId:crypto.randomUUID()},alice);assert.equal(stale.conflict,true);
 const duplicate=await store.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal(duplicate.duplicate,true);
 const source={date:'2026-10-06',hospitalName:'병원',engineer:'엔지니어',sn:'SN1',gubun:'점검',result:'정상',detail:'점검 정상',recordId:'inspection1',version:'v1',observedAt:'2026-10-06T01:00:00Z'};
+async function matchingFixture(hospitals=[hospital]){
+ const db=new Kv(),s=createWorkStore(db);
+ await s.bridge('seed',{hospitals,references:{engineers:['엔지니어'],minimumLevel:1}});
+ await s.bridge('activate',{manifest:await s.manifest()});return {db,s};
+}
+{
+ const {s}=await matchingFixture(),one=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ const report={...source,sn:'BV5015',gubun:' AS '};
+ assert.equal((await s.ingestSources([report])).linked,1,'unique hospital/date pair tolerates different serials');
+ const d=await s.handle({action:'work_detail',id:one.request.id},alice);
+ assert.equal(d.request.gubun,'A/S');assert.equal(d.history[0].source.sn,'BV5015');assert.equal(d.history[0].source.gubun,'A/S');assert.equal(d.request.status,'결과확인');
+ assert.equal((await s.ingestSources([report])).linked,0,'redelivery cannot duplicate the result');
+}
+for(const overlapping of [false,true]){
+ const first={...hospital,sn:'BW4015, BV5015',key:'first'},second={...hospital,id:'h2',key:'second',sn:overlapping?'BV5015':'OTHER'};
+ const {s}=await matchingFixture([first,second]);
+ const one=await s.handle({...op,form:{...form,hospitalKey:first.key},operationId:crypto.randomUUID()},alice);
+ const two=await s.handle({...op,form:{...form,hospitalKey:second.key},acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);
+ const report={...source,sn:'bv5015',gubun:'AS'};
+ assert.equal((await s.ingestSources([report])).linked,overlapping?0:1,'serial tokens select only an unambiguous receipt');
+ assert.equal((await s.handle({action:'work_detail',id:one.request.id},alice)).history.length,overlapping?0:1);
+ assert.equal((await s.handle({action:'work_detail',id:two.request.id},alice)).history.length,0);
+}
+for(const action of ['work_save','work_request_edit']){
+ const {db,s}=await matchingFixture();
+ const first=await s.handle({...op,form:{...form,visitAt:'2026-10-05T10:00'},operationId:crypto.randomUUID()},alice);
+ const note=await s.handle({action:'work_history_add',requestId:first.request.id,body:'DB 수정 전 상담',operationId:crypto.randomUUID()},alice);
+ const report={...source,sn:'BV5015',gubun:'점검'};
+ assert.equal((await s.ingestSources([report])).linked,0,'different visit dates do not link');
+ const corrected={...hospital,id:'h-corrected',key:'병원\u001fBW4015,BV5015\u001f서울',sn:'BW4015,BV5015'};
+ await s.bridge('references',{hospitals:[corrected],references:{}});
+ const edit={action,id:first.request.id,baseRevision:note.request.revision,form:{...form,gubun:'AS'},operationId:crypto.randomUUID()};
+ const saved=await s.handle(edit,alice);
+ assert.equal(saved.success,true);assert.equal(saved.request.sn,corrected.sn,'both edit paths apply the corrected current DB serial');
+ assert.equal(saved.request.hospitalReferenceSN,corrected.sn);assert.equal(saved.request.hospitalKey,corrected.key);
+ assert.equal(saved.autoMatch.linked,1,'saving rechecks the cached Handover without a new original read');
+ assert.equal(saved.request.gubun,'점검','actual Handover classification applies after the edit');
+ assert.equal(saved.workDetail.history.length,2,'save response includes the complete updated result and comment');
+ assert.equal(saved.workDetail.history.find(h=>h.kind==='result').source.sn,'BV5015','DB serial list never replaces the actual source serial');
+ assert.equal(saved.workDetail.history.find(h=>h.kind==='comment').body,'DB 수정 전 상담');
+ const replay=await s.handle(edit,alice);assert.equal(replay.success,true);assert.equal(replay.request.revision,saved.request.revision);assert.equal(replay.workDetail.history.length,2);
+ assert.equal([...db.data.values()].filter(e=>e.key[1]==='audit'&&e.value.kind==='request_update').length,1,'retry never repeats the user edit');
+}
+console.log('matching corrections: unique date pair with mismatched SN, multi-SN membership, overlapping device ambiguity, AS aliases, DB key/SN correction through both edit paths, immediate recheck, source/comment preservation and replay passed.');
 async function multiDeviceFixture(){
  const db=new Kv(),s=createWorkStore(db),second={...hospital,id:'h2',key:'병원\u001fSN2\u001f서울',sn:'SN2'};
  await s.bridge('seed',{hospitals:[hospital,second],references:{engineers:['엔지니어'],minimumLevel:1}});
@@ -109,7 +154,8 @@ const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'u
  const initial=await s.handle({...op,form:{...form,status:'완료'},operationId:crypto.randomUUID()},alice);
  const note=await s.handle({action:'work_history_add',requestId:initial.request.id,body:'기존 결과와 댓글 보존',operationId:crypto.randomUUID()},alice);
  const change={action:'work_request_edit',id:initial.request.id,baseRevision:note.request.revision,form:{...form,status:'완료',hospitalKey:second.key,gubun:'A/S',serviceOverrides:{asType:'유상',ncare:'가입'}},acknowledgeHospitalChange:true,operationId:crypto.randomUUID()};
- const changed=await s.handle(change,alice);assert.equal(changed.success,true);assert.equal(changed.request.hospitalName,'새 병원');assert.equal(changed.request.sn,'SN1','historical device identity is retained');assert.equal(changed.request.hospitalReferenceSN,'SN2');assert.equal(changed.request.region,'부산');assert.deepEqual(changed.request.serviceOverrides,{asType:'유상',ncare:'가입'});
+ const changed=await s.handle(change,alice);assert.equal(changed.success,true);assert.equal(changed.request.hospitalName,'새 병원');assert.equal(changed.request.sn,'SN2','request uses the selected current DB serial');assert.equal(changed.request.hospitalReferenceSN,'SN2');assert.equal(changed.request.region,'부산');assert.deepEqual(changed.request.serviceOverrides,{asType:'유상',ncare:'가입'});
+ assert.equal(changed.event.before.sn,'SN1','audit retains the previous request serial');
  assert.equal((await s.handle({action:'work_detail',id:initial.request.id},alice)).history[0].body,'기존 결과와 댓글 보존');
  assert.equal((await db.get([s.NS,'hospitalRef',second.key])).value.asType,'무상','per-request overrides never modify DB');
  const reset=await s.handle({...change,baseRevision:changed.request.revision,form:{...change.form,serviceOverrides:{}},operationId:crypto.randomUUID()},alice);assert.equal(reset.success,true);assert.deepEqual(reset.request.serviceOverrides,{});
@@ -117,7 +163,7 @@ const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'u
  const rename={...second,key:'변경 병원\u001fSN2\u001f부산',name:'변경 병원'};await s.bridge('references',{hospitals:[hospital,rename],references:{referenceCheckedAt:'2026-10-07'}});
  const synced=await s.handle({action:'work_sync',revision:String((await s.status()).seq)},alice);assert.equal(synced.nochange,true);assert.ok(synced.hospitals.some(h=>h.name==='변경 병원'));assert.ok(!synced.hospitals.some(h=>h.key===second.key));
  const obsolete=await s.handle({...change,baseRevision:reset.request.revision,operationId:crypto.randomUUID()},alice);assert.equal(obsolete.success,false,'removed DB key cannot be saved');
- console.log('completed request edit: hospital/name/reference correction and historical serial preservation, retained history, per-request service override/reset, invalid DB value rejection and DB-only sync without request revision passed.');
+ console.log('completed request edit: current DB serial, audited previous serial, retained history, service override/reset and reference-only sync passed.');
 }
 const fields=vm.runInNewContext('('+ui.slice(ui.indexOf('function resultFields('),ui.indexOf('function detailMarkup(')).trim()+')',{esc:v=>String(v).replaceAll('<','&lt;')});
 let fieldsMarkup=fields({...source,nozzleReuse:'O',nsFill:'X',nsAmt:'부족',jet:'<교육 필요>'});
@@ -126,7 +172,7 @@ assert.match(fields({...source,nozzleReuse:'X'}),/노즐 재사용<\/dt><dd>무/
 assert.match(fields({...source,origin:'flow'},'[사용자 숙련도 평가]NS 충진 여부 : ONS 충진량 : 정상젯 분사 판단[병원담당자] : 가능비고/특이사항 : N/A'),/NS 충진 여부<\/dt><dd>O<\/dd>/);
 assert.match(fields({...source,origin:'flow'},'노즐 재사용 의심'),/노즐 재사용<\/dt><dd>미기록/,'do not infer nozzle reuse from free text');
 const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
-const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{editable:(r,k,v)=>String(v??''),editMode:false,statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
+const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{fields:workFields,editable:(r,k,v)=>String(v??''),editMode:false,statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<option value="완료" selected>완료<\/option>/);assert.match(markup,/<span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(!markup.includes('data-action="save-status"'));assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
 // Existing deleted-owner links must heal without clearing the original result/history.
 async function relinkFixture(gubun='A/S'){

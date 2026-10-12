@@ -77,13 +77,18 @@ const withRows=rows=>({...saved,requests:rows});
 }
 {
  const h={id:'h1',key:'key1',name:'기준 병원',sn:'BW3007'},r={...makeRequest('inline'),hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,registeredAt:'2026-10-06T09:00',visitAt:'2026-10-06T10:00',gubun:'점검'},r2={...r,id:'inline2'};
- const f=fixture({...saved,requests:[r,r2],hospitals:[h],engineers:['기사']},{post:async(action,p)=>({success:true,request:{...r,...p.form,id:p.id,revision:r.revision+1}})});await flush();
+ const f=fixture({...saved,requests:[r,r2],hospitals:[h],engineers:['기사']},{post:async(action,p)=>{
+  const request={...r,...p.form,id:p.id,revision:r.revision+2,gubun:'점검'},event={id:'inline-edit',kind:'request_update'};
+  return {success:true,request,event,workDetail:{success:true,request,history:[{id:'retained',kind:'comment',body:'기존 댓글'},{id:'auto-linked',kind:'result',source:{gubun:'점검',sn:'BV5015'}}],logs:[event],requests:[]}};
+ }});await flush();
  assert.equal(f.nodes.get('edit-mode').textContent,'수정');f.nodes.get('edit-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정 모드 닫기');assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-form="inline"'));assert.ok(f.nodes.get('list').innerHTML.includes('data-edit-field="hospitalInput"'));assert.ok(f.nodes.get('list').innerHTML.includes('<table>'));assert.ok(!f.nodes.get('list').innerHTML.includes('inline-request-list'));
  const fields={hospitalInput:h.name,gubun:'A/S',status:'완료',cs:'수정 CS',engineer:'기사',sales:'영업',registeredDate:'2026-10-06',registeredTime:'900',visitDate:'2026-10-06',visitTime:'1030',symptom:'직접 수정 내용'};
  function form(id,values){return {dataset:{inlineForm:id},querySelectorAll:()=>Object.entries(values).map(([key,value])=>({dataset:{inlineField:key},type:'text',value})),querySelector:()=>({hidden:false}),classList:{add(){}}};}
  const other=form('inline2',{...fields,symptom:'다른 접수 초안'});f.nodes.get('list').oninput({target:{closest:()=>other}});
  const one=form('inline',fields);f.nodes.get('list').oninput({target:{closest:()=>one}});f.nodes.get('sort').onchange();assert.ok(f.nodes.get('list').innerHTML.includes('직접 수정 내용'),'rerender retains row draft');
  await f.nodes.get('list').onsubmit({target:{closest:()=>one},preventDefault(){}});assert.equal(f.posts[0].action,'work_request_edit');assert.equal(f.posts[0].p.baseRevision,r.revision);assert.equal(f.posts[0].p.form.registeredAt,'2026-10-06T09:00');assert.equal(f.posts[0].p.form.visitAt,'2026-10-06T10:30');assert.equal(f.posts[0].p.form.gubun,'A/S');assert.ok(f.nodes.get('list').innerHTML.includes('다른 접수 초안'),'saving one row does not discard other row drafts');
+ assert.equal(f.detailWrites.at(-1).history.length,2,'save-and-reconcile response retains the comment and new result in the local cache');
+ assert.equal(f.detailWrites.at(-1).request.gubun,'점검');assert.equal(f.detailWrites.at(-1).preview,false);assert.equal(f.detailWrites.at(-1).logs.length,1,'response audit is not duplicated');assert.equal(f.calls.length,0,'no second detail/Handover request after saving');
  f.nodes.get('selection-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정','delete mode closes edit mode');
  console.log('inline request editor: unchanged table, click-to-edit fields, row draft retention across render, independent save, manual time normalization and exclusive delete mode passed.');
 }
