@@ -24,6 +24,7 @@ async function scenario(mode){
  const props={getProperty:k=>values[k]||'',setProperty:(k,v)=>{values[k]=v;}};
  const sheet={getLastRow:()=>raw.length+1,getRange:(row,col,n=1,width=1)=>({
   getValues:()=>raw.slice(row-2,row-2+n).map(r=>r.slice(col-1,col-1+width)),
+  getValue:()=>raw[row-2]?.[col-1],
   setValues:vs=>vs.forEach((r,i)=>{raw[row-2+i]=r;}),
   setValue:v=>{raw[row-2][col-1]=v;},
   createTextFinder:id=>{const finder={matchEntireCell:()=>finder,findNext:()=>{const i=raw.findIndex(r=>r[col-1]===id);return i<0?null:{getRow:()=>i+2};}};return finder;}
