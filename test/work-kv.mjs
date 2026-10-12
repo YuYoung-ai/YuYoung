@@ -16,7 +16,7 @@ class Kv{
  }
 }
 const kv=new Kv(),store=createWorkStore(kv),alice={name:'CS A',level:1},bob={name:'CS B',level:1},admin={name:'관리자',level:3};
-const hospital={id:'h1',key:'병원\u001fSN1\u001f서울',name:'병원',sn:'SN1',region:'서울'};
+const hospital={id:'h1',key:'병원\u001fSN1\u001f서울',name:'병원',sn:'SN1',region:'서울',sales:'영업',asType:'유상',ncare:'가입'};
 await store.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});
 await store.bridge('activate',{manifest:await store.manifest()});
 assert.equal((await store.handle({action:'work_bootstrap'},bob)).bridgeStatus,null,'unconfirmed queue is not reported as zero');
@@ -103,6 +103,22 @@ await assert.rejects(()=>clean.bridge('activate',{manifest:{}}),/검증/);assert
 await assert.rejects(()=>store.bridge('seed',{requests:[]}),/다시 가져올/);
 const main=fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8');stripTypeScriptTypes(main);assert.ok(main.includes("baz-work-bridge-v1\\n"));
 const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui));
+{
+ const db=new Kv(),s=createWorkStore(db),second={...hospital,id:'h-new',key:'새 병원\u001fSN2\u001f부산',name:'새 병원',sn:'SN2',region:'부산',asType:'무상',ncare:'미가입'};
+ await s.bridge('seed',{hospitals:[hospital,second],references:{engineers:['엔지니어'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
+ const initial=await s.handle({...op,form:{...form,status:'완료'},operationId:crypto.randomUUID()},alice);
+ const note=await s.handle({action:'work_history_add',requestId:initial.request.id,body:'기존 결과와 댓글 보존',operationId:crypto.randomUUID()},alice);
+ const change={action:'work_request_edit',id:initial.request.id,baseRevision:note.request.revision,form:{...form,status:'완료',hospitalKey:second.key,gubun:'A/S',serviceOverrides:{asType:'유상',ncare:'가입'}},acknowledgeHospitalChange:true,operationId:crypto.randomUUID()};
+ const changed=await s.handle(change,alice);assert.equal(changed.success,true);assert.equal(changed.request.hospitalName,'새 병원');assert.equal(changed.request.sn,'SN1','historical device identity is retained');assert.equal(changed.request.hospitalReferenceSN,'SN2');assert.equal(changed.request.region,'부산');assert.deepEqual(changed.request.serviceOverrides,{asType:'유상',ncare:'가입'});
+ assert.equal((await s.handle({action:'work_detail',id:initial.request.id},alice)).history[0].body,'기존 결과와 댓글 보존');
+ assert.equal((await db.get([s.NS,'hospitalRef',second.key])).value.asType,'무상','per-request overrides never modify DB');
+ const reset=await s.handle({...change,baseRevision:changed.request.revision,form:{...change.form,serviceOverrides:{}},operationId:crypto.randomUUID()},alice);assert.equal(reset.success,true);assert.deepEqual(reset.request.serviceOverrides,{});
+ const invalid=await s.handle({...change,baseRevision:reset.request.revision,form:{...change.form,serviceOverrides:{asType:'임의 입력'}},operationId:crypto.randomUUID()},alice);assert.equal(invalid.success,false);
+ const rename={...second,key:'변경 병원\u001fSN2\u001f부산',name:'변경 병원'};await s.bridge('references',{hospitals:[hospital,rename],references:{referenceCheckedAt:'2026-10-07'}});
+ const synced=await s.handle({action:'work_sync',revision:String((await s.status()).seq)},alice);assert.equal(synced.nochange,true);assert.ok(synced.hospitals.some(h=>h.name==='변경 병원'));assert.ok(!synced.hospitals.some(h=>h.key===second.key));
+ const obsolete=await s.handle({...change,baseRevision:reset.request.revision,operationId:crypto.randomUUID()},alice);assert.equal(obsolete.success,false,'removed DB key cannot be saved');
+ console.log('completed request edit: hospital/name/reference correction and historical serial preservation, retained history, per-request service override/reset, invalid DB value rejection and DB-only sync without request revision passed.');
+}
 const fields=vm.runInNewContext('('+ui.slice(ui.indexOf('function resultFields('),ui.indexOf('function detailMarkup(')).trim()+')',{esc:v=>String(v).replaceAll('<','&lt;')});
 let fieldsMarkup=fields({...source,nozzleReuse:'O',nsFill:'X',nsAmt:'부족',jet:'<교육 필요>'});
 assert.match(fieldsMarkup,/노즐 재사용<\/dt><dd>유/);assert.match(fieldsMarkup,/사용자 숙련도 평가/);assert.match(fieldsMarkup,/&lt;교육 필요>/);
@@ -110,7 +126,7 @@ assert.match(fields({...source,nozzleReuse:'X'}),/노즐 재사용<\/dt><dd>무/
 assert.match(fields({...source,origin:'flow'},'[사용자 숙련도 평가]NS 충진 여부 : ONS 충진량 : 정상젯 분사 판단[병원담당자] : 가능비고/특이사항 : N/A'),/NS 충진 여부<\/dt><dd>O<\/dd>/);
 assert.match(fields({...source,origin:'flow'},'노즐 재사용 의심'),/노즐 재사용<\/dt><dd>미기록/,'do not infer nozzle reuse from free text');
 const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
-const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
+const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{editable:(r,k,v)=>String(v??''),editMode:false,statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<option value="완료" selected>완료<\/option>/);assert.match(markup,/<span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(!markup.includes('data-action="save-status"'));assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
 // Existing deleted-owner links must heal without clearing the original result/history.
 async function relinkFixture(gubun='A/S'){

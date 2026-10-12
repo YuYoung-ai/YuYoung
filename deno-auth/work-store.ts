@@ -102,16 +102,30 @@ export function createWorkStore(kv:any){
   const r:Obj={id,hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,sn:h.sn||'',region:h.region||'',symptom:text(f.symptom,4000,'접수 증상'),cs:text(f.cs,60,'CS 담당자'),engineer:text(f.engineer,60,'엔지니어'),sales:text(f.sales,60,'영업 담당자'),registeredAt:datetime(f.registeredAt,true,'등록일시'),visitAt:datetime(f.visitAt,false,'방문일시'),deadline:datetime(f.deadline,false,'마감'),status:String(f.status||'접수'),createdAt:old?.createdAt||now,createdBy:old?.createdBy||who.name,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1,latest:old?.latest||'',completedAt:old?.completedAt||'',completedBy:old?.completedBy||'',gubun:old?.gubun||''};
   if(!r.symptom||!r.cs)throw new Error('접수 증상과 CS 담당자를 입력하세요.');
   if(old?.flowImport)r.flowImport=copy(old.flowImport);
+  r.hospitalReferenceSN=h.sn||'';
+  if(old?.serviceOverrides)r.serviceOverrides=copy(old.serviceOverrides);
   if(p.action==='work_request_edit'){
    r.gubun=String(f.gubun||old.gubun||'A/S');
    if(!['A/S','점검'].includes(r.gubun))throw new Error('A/S 또는 점검을 선택하세요.');
+   // Historical device identity belongs to the request/result. A name correction
+   // changes the selected DB reference, not the original equipment serial.
    r.sn=old.sn||'';
+   if(Object.hasOwn(f,'serviceOverrides')){
+    const overrides:Obj={},db=(await values(['hospitalRef'])).filter(x=>x.origin!=='flow');
+    for(const field of ['asType','ncare']){
+     const value=text(f.serviceOverrides?.[field],120,field==='asType'?'AS 유/무상':'N-CARE');
+     if(value&&!db.some(x=>String(x[field]||'').trim()===value)&&value!==old.serviceOverrides?.[field])throw new Error('병원정보DB에 없는 서비스 조건입니다. 최신 DB에서 선택하세요.');
+     if(value)overrides[field]=value;
+    }
+    r.serviceOverrides=overrides;
+   }
    if(old.hospitalKey!==h.key&&!p.acknowledgeHospitalChange)throw new Error('병원 변경 후에도 기존 댓글과 처리 결과가 유지됩니다. 변경할 병원을 확인하세요.');
   }
   if(!STATES.includes(r.status))throw new Error('알 수 없는 상태입니다.');
   completionFields(r,old?.status||'',who,now);
   if(['방문예정','처리중'].includes(r.status)&&(!r.visitAt||!r.engineer))throw new Error('방문 일시와 엔지니어가 필요합니다.');
   if(r.engineer&&!reference.engineers.includes(r.engineer)&&r.engineer!==old?.engineer)throw new Error('엔지니어 원본 목록에 없습니다. 동기화하세요.');
+  if(r.sales&&r.sales!==old?.sales&&!(await values(['hospitalRef'])).some(x=>x.origin!=='flow'&&String(x.sales||'').trim()===r.sales))throw new Error('병원정보DB 영업 담당자 목록에서 선택하세요.');
   if(old&&old.hospitalId!==h.id&&p.action!=='work_request_edit'&&(await history(id)).length)throw new Error('이력이 있는 요청의 병원은 목록의 수정 모드에서 변경하세요.');
   const all=await values(['request']),duplicates=all.filter(x=>x.id!==id&&active(x)&&x.hospitalId===r.hospitalId),overlaps=all.filter(x=>x.id!==id&&active(x)&&r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt);
   if((duplicates.length||overlaps.length)&&!p.acknowledgeDuplicates)return {response:{success:false,duplicate:true,candidates:duplicates,overlaps,error:'진행 중인 요청 또는 같은 엔지니어의 동일 방문 일시가 있습니다. 확인 후 저장하세요.'}};

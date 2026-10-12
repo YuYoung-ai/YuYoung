@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+const fieldApi=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
- const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['active','today','mine','unassigned','all','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
+ const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['all','active','today','week','lastweek','month','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
  function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
  const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
- vm.runInNewContext(source,{window:{BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
+ vm.runInNewContext(source,{window:{BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
  return {nodes,calls,writes,detailWrites,posts,filters,local};
 }
 {
@@ -46,35 +47,45 @@ assert.ok(!masterOnly.nodes.get('hospital-options').innerHTML.includes('엑셀 �
 const makeRequest=(id,createdBy='사용자 A')=>({id,hospitalId:'h-'+id,hospitalName:'병원 '+id,createdBy,visitAt:'',deadline:'',symptom:'증상 '+id,status:'접수',cs:createdBy,engineer:'',sales:'',revision:4,updatedAt:'2026-10-06T00:00:00Z'});
 const withRows=rows=>({...saved,requests:rows});
 {
+ const f=fixture(withRows([makeRequest('double')]));await flush();f.nodes.get('edit-mode').onclick();
+ const button={dataset:{editField:'cs',editRequest:'double'},disabled:false,closest:()=>null},event={target:{closest:selector=>['button','[data-edit-field]'].includes(selector)?button:null},preventDefault(){}};
+ assert.ok(!f.nodes.get('list').innerHTML.includes('edit-pencil'));
+ f.nodes.get('list').onclick(event);assert.ok(!f.nodes.get('list').innerHTML.includes('data-inline-field="cs"'),'single click keeps the clean text');
+ f.nodes.get('list').ondblclick(event);assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-field="cs"'),'double click edits in the existing table');
+ f.nodes.get('edit-mode').onclick();f.nodes.get('list').ondblclick(event);assert.ok(!f.nodes.get('list').innerHTML.includes('data-inline-field="cs"'),'read mode cannot edit');
+ f.nodes.get('edit-mode').onclick();f.nodes.get('list').onkeydown({...event,key:'Enter'});assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-field="cs"'),'keyboard Enter opens the same field');
+ console.log('clean editing: no pencils, single-click read, double-click editing, keyboard Enter and read-mode guard passed.');
+}
+{
  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const row=(id,status,visitAt,engineer='',cs='사용자 A')=>({...makeRequest(id),status,visitAt,engineer,cs,deadline:visitAt,updatedAt:visitAt?visitAt+':00Z':'2026-01-01T00:00:00Z'});
  const rows=[row('earlier','완료',today+'T09:00'),row('later','방문예정',today+'T13:00','사용자 A'),row('missing','완료',''),{...row('trash','완료',today+'T08:00'),deletedAt:'deleted'},row('cancelled','취소',today+'T10:00')];
  const f=fixture(withRows(rows));await flush();
  const choose=filter=>f.filters.find(x=>x.dataset.filter===filter).onclick();
- const ids=()=>Array.from(f.nodes.get('list').innerHTML.matchAll(/class="row-open" data-open="([^"]+)"/g),x=>x[1]);
+ const ids=()=>Array.from(f.nodes.get('list').innerHTML.matchAll(/class="row-open" data-open="([^"]+)"/g),x=>x[1]).filter(id=>id!=='cancelled');
  choose('today');assert.deepEqual(ids(),['earlier','later']);assert.equal(f.nodes.get('count-today').textContent,2,'today metric includes completed visits but excludes trash/cancellation');
- choose('mine');assert.deepEqual(ids(),['earlier','later','missing'],'CS or engineer ownership includes completed requests');
- choose('unassigned');assert.deepEqual(ids(),['earlier','missing'],'completed unassigned requests remain visible');
+ choose('all');assert.ok(ids().includes('missing'));
+ choose('all');
  choose('active');assert.deepEqual(ids(),['later'],'active filter still excludes completion');
- choose('mine');f.nodes.get('status-filter').value='완료';f.nodes.get('status-filter').onchange();assert.deepEqual(ids(),['earlier','missing'],'status intersection is preserved');f.nodes.get('status-filter').value='';
+ choose('all');f.nodes.get('status-filter').value='완료';f.nodes.get('status-filter').onchange();assert.deepEqual(ids(),['earlier','missing'],'status intersection is preserved');f.nodes.get('status-filter').value='';
  for(const sort of ['visit','updated','deadline']){
   f.nodes.get('sort').value=sort;f.nodes.get('sort-direction').value='asc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),sort==='updated'?['missing','earlier','later']:['earlier','later','missing']);
   f.nodes.get('sort-direction').value='desc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),['later','earlier','missing'],'descending dates with unset dates kept last');
  }
  assert.equal(f.calls.length,0,'changing filters and direction works entirely on cached data');
- console.log('list filters/sort: completed today/own/unassigned records, matching today count, status intersection, trash/cancel exclusion, both directions for every date criterion and missing-date placement passed.');
+ console.log('list filters/sort: completed today/all records, matching today count, status intersection, both directions for every date criterion and missing-date placement passed.');
 }
 {
  const h={id:'h1',key:'key1',name:'기준 병원',sn:'BW3007'},r={...makeRequest('inline'),hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,registeredAt:'2026-10-06T09:00',visitAt:'2026-10-06T10:00',gubun:'점검'},r2={...r,id:'inline2'};
  const f=fixture({...saved,requests:[r,r2],hospitals:[h],engineers:['기사']},{post:async(action,p)=>({success:true,request:{...r,...p.form,id:p.id,revision:r.revision+1}})});await flush();
- assert.equal(f.nodes.get('edit-mode').textContent,'수정');f.nodes.get('edit-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정 모드 닫기');assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-form="inline"'));assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-field="gubun"'));
+ assert.equal(f.nodes.get('edit-mode').textContent,'수정');f.nodes.get('edit-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정 모드 닫기');assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-form="inline"'));assert.ok(f.nodes.get('list').innerHTML.includes('data-edit-field="hospitalInput"'));assert.ok(f.nodes.get('list').innerHTML.includes('<table>'));assert.ok(!f.nodes.get('list').innerHTML.includes('inline-request-list'));
  const fields={hospitalInput:h.name,gubun:'A/S',status:'완료',cs:'수정 CS',engineer:'기사',sales:'영업',registeredDate:'2026-10-06',registeredTime:'900',visitDate:'2026-10-06',visitTime:'1030',symptom:'직접 수정 내용'};
  function form(id,values){return {dataset:{inlineForm:id},querySelectorAll:()=>Object.entries(values).map(([key,value])=>({dataset:{inlineField:key},type:'text',value})),querySelector:()=>({hidden:false}),classList:{add(){}}};}
  const other=form('inline2',{...fields,symptom:'다른 접수 초안'});f.nodes.get('list').oninput({target:{closest:()=>other}});
  const one=form('inline',fields);f.nodes.get('list').oninput({target:{closest:()=>one}});f.nodes.get('sort').onchange();assert.ok(f.nodes.get('list').innerHTML.includes('직접 수정 내용'),'rerender retains row draft');
  await f.nodes.get('list').onsubmit({target:{closest:()=>one},preventDefault(){}});assert.equal(f.posts[0].action,'work_request_edit');assert.equal(f.posts[0].p.baseRevision,r.revision);assert.equal(f.posts[0].p.form.registeredAt,'2026-10-06T09:00');assert.equal(f.posts[0].p.form.visitAt,'2026-10-06T10:30');assert.equal(f.posts[0].p.form.gubun,'A/S');assert.ok(f.nodes.get('list').innerHTML.includes('다른 접수 초안'),'saving one row does not discard other row drafts');
  f.nodes.get('selection-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정','delete mode closes edit mode');
- console.log('inline request editor: explicit mode, full in-list fields, row draft retention across render, independent save, manual time normalization and exclusive delete mode passed.');
+ console.log('inline request editor: unchanged table, click-to-edit fields, row draft retention across render, independent save, manual time normalization and exclusive delete mode passed.');
 }
 function selectRow(f,id,checked=true){const input={dataset:{selectRequest:id},checked};f.nodes.get('list').onchange({target:{closest:()=>input}});}
 function selectPage(f){if(f.nodes.get('selection-bar').hidden)f.nodes.get('selection-mode').onclick();f.nodes.get('select-page').checked=true;f.nodes.get('select-page').onchange();}
