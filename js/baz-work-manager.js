@@ -460,7 +460,7 @@
     var h=state.selected;if(fillSales)$('sales').value=h.sales||'';
     $('hospital-match').textContent=[h.region,h.sn?'S/N '+h.sn:'S/N 미기록',h.ncare?'N-CARE '+h.ncare:'',h.sales?'영업 '+h.sales:''].filter(Boolean).join(' · ');
     var current=state.requests.filter(function(r){return r.hospitalKey===h.key&&active(r)&&(!state.editing||r.id!==state.editing.id);});
-    if(current.length){$('existing-requests').innerHTML='<strong>이 병원의 미완료 요청 '+current.length+'건</strong><br>'+current.map(function(r){return '<button type="button" data-existing="'+esc(r.id)+'">'+esc(r.status)+' · '+esc(r.symptom.slice(0,70))+'</button>';}).join('');$('existing-requests').hidden=false;}
+    if(current.length){$('existing-requests').innerHTML='<strong>이 병원의 미완료 요청 '+current.length+'건</strong><br>'+current.map(function(r){var text=esc(r.status)+' · '+esc(r.symptom.slice(0,70));return embedded?'<div>'+text+'</div>':'<button type="button" data-existing="'+esc(r.id)+'">'+text+'</button>';}).join('')+(embedded?'<a href="hospital-work.html" target="_blank" rel="noopener">CS 서비스 현황에서 확인</a>':'');$('existing-requests').hidden=false;}
     $('past-history').textContent='기존 처리 이력을 확인하는 중…';
     try{var data=await api.get('work_handover_candidates',{hospitalName:h.name});if(seq!==hospitalSeq)return;if(!data.success)throw new Error(data.error);$('past-history').innerHTML=data.data.length?data.data.slice(0,8).map(function(s){return '<div class="past-item"><strong>'+esc(s.gubun)+' · '+esc(s.date)+' · '+esc(s.engineer)+'</strong><br>'+esc([s.cat,s.type,s.detail].filter(Boolean).join(' / '))+'</div>';}).join('')+(data.total>8?'<p class="hint">최근 8건 표시 · 전체 '+data.total+'건</p>':''):'기존 처리 이력이 없습니다.';}
     catch(e){if(seq===hospitalSeq)$('past-history').textContent='이력 조회 실패: '+e.message;}
@@ -665,7 +665,7 @@
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();};
   ['registeredTime','visitTime'].forEach(function(id){$(id).onblur=function(){var normalized=normalizeTime(this.value);if(normalized)this.value=normalized;saveDraft();};});
   $('request-form').onsubmit=saveRequest;$('close-editor').onclick=function(){saveDraft();if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};$('editor').addEventListener('cancel',function(event){saveDraft();if(embedded){event.preventDefault();receiptMessage('baz-work-receipt-close');}});
-  $('discard').onclick=function(){store(draftKey,null);$('editor').close();};
+  $('discard').onclick=function(){store(draftKey,null);if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};
   $('existing-requests').onclick=function(event){var b=event.target.closest('[data-existing]');if(b){saveDraft();$('editor').close();openDetail(b.dataset.existing);}};
   $('close-result').onclick=function(){sourceSeq++;resultDialogSeq++;$('result-dialog').close();};$('result-dialog').addEventListener('cancel',function(){sourceSeq++;resultDialogSeq++;});$('source-list').onclick=function(event){var b=event.target.closest('[data-source]');if(b)selectSource(Number(b.dataset.source));};
   $('result-form').onsubmit=function(event){event.preventDefault();saveResult(false);};$('save-complete').onclick=function(){saveResult(true);};
@@ -723,4 +723,3 @@
   $('receipt-launch-retry').onclick=function(){this.hidden=true;$('receipt-launch-message').textContent='접수 양식을 불러오는 중…';return start();};
   start();
 })();
-
