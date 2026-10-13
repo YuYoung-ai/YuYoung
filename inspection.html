@@ -2443,8 +2443,20 @@ function buildSheetHTML(opts){
 async function renderSheetCanvas(html){
   const sheet=els.pdfSheet;
   sheet.innerHTML=html;
-  await new Promise(r=>setTimeout(r,120)); // 이미지 로드 대기
   const target=sheet.firstElementChild;
+  // 고정 시간 대기 대신 원본 이미지 로딩을 완료한 뒤 캡처한다.
+  await Promise.all(Array.from(target.querySelectorAll('img'),img=>new Promise((resolve,reject)=>{
+    const ready=()=>img.naturalWidth>0?resolve():reject(new Error('PDF 사진을 불러오지 못했습니다. 다시 생성해 주세요.'));
+    if(img.complete){ready();return;}
+    img.onload=ready;
+    img.onerror=()=>reject(new Error('PDF 사진을 불러오지 못했습니다. 다시 생성해 주세요.'));
+  })));
+  // html2canvas는 object-fit을 지원하지 않으므로 실제 비율로 너비·높이를 지정한다.
+  target.querySelectorAll('img[data-pdf-photo]').forEach(img=>{
+    const scale=Math.min(img.parentElement.clientWidth/img.naturalWidth,img.parentElement.clientHeight/img.naturalHeight);
+    img.style.width=(img.naturalWidth*scale)+'px';
+    img.style.height=(img.naturalHeight*scale)+'px';
+  });
   const canvas=await html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
     width:SHEET_WIDTH, windowWidth:SHEET_WIDTH});
   sheet.innerHTML='';
@@ -2473,7 +2485,9 @@ function buildPhotoSheetHTML(chunk, startIdx){
   const cells=chunk.map((p,k)=>`
     <div style="margin-bottom:18px;">
       <div style="font-size:12px;font-weight:700;color:#1B2F5E;margin-bottom:6px;">사진 ${startIdx+k+1}${p.memo?` <span style="font-weight:500;color:#555;">— ${esc(p.memo)}</span>`:''}</div>
-      <img src="${p.data}" style="width:100%;max-height:300px;object-fit:contain;border:1px solid #ccc;border-radius:6px;background:#fafafa;">
+      <div style="height:300px;display:flex;align-items:center;justify-content:center;border:1px solid #ccc;border-radius:6px;background:#fafafa;overflow:hidden;">
+        <img data-pdf-photo src="${p.data}" style="display:block;">
+      </div>
     </div>`).join('');
   return `
   <div style="width:794px;padding:32px 30px;font-family:'Noto Sans KR',sans-serif;color:#1a1a2e;background:#fff;">
