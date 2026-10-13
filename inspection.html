@@ -2544,6 +2544,15 @@ function addPdfFooters(pdf, docNo, genAt){
 
 // ===== PDF 생성 =====
 let _lastFname='';
+function inspectionPdfFilename(){
+  const safe=(s)=>String(s).replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim();
+  const types=['A/S','장비 점검','장비 교체','장비 업그레이드']
+    .filter(type=>state.types.has(type)).map(type=>type.replace(/[\/\s]/g,''));
+  const type=types.join('+')||'점검';
+  const hospital=safe(v('hospital'))||'병원';
+  const date=safe(v('inspectDate')||today);
+  return `${type}_${hospital}_${date}.pdf`;
+}
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 async function generatePDF(arg){
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
@@ -2587,14 +2596,10 @@ async function generatePDF(arg){
     addPdfFooters(pdf, docNo, genAt);
 
     // 파일명
-    const safe=(s)=>String(s).replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim();
     if(blank){
       _lastFname=simplified?'AS점검_수기양식_간소화.pdf':'AS점검_수기양식.pdf';
     }else{
-      const hosp=v('hospital')||'병원';
-      const cs=v('csName')||'담당자';
-      const dt=v('inspectDate')||today;
-      _lastFname=simplified?`AS점검_${safe(hosp)}_간소화_${dt}_${hhmm}.pdf`:`AS점검_${safe(hosp)}_${safe(cs)}_${dt}_${hhmm}.pdf`;
+      _lastFname=inspectionPdfFilename();
     }
     hideLoading();
 
