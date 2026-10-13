@@ -183,6 +183,8 @@
 
   /* 수기 작성용 PDF 버튼 */
   .btn-blank{display:block;width:100%;margin-top:2px;}
+  body.pdf-simplified #signCard{display:none!important;}
+  .pdf-format-hint{font-size:12px;color:var(--text-muted);line-height:1.6;margin-top:8px;}
 
   /* 최근 방문 이력 (handover.html .recent-* 패턴 이식) */
   .recent-card{background:#FBF8EC;border:1px solid #EFE6C8;border-radius:10px;padding:11px 12px;margin-top:12px;}
@@ -336,7 +338,7 @@
         <button type="button" class="step-dot" data-go="1"><span class="step-num">1</span><span class="step-label">접수</span></button>
         <button type="button" class="step-dot" data-go="2"><span class="step-num">2</span><span class="step-label">점검</span></button>
         <button type="button" class="step-dot" data-go="3"><span class="step-num">3</span><span class="step-label">조치</span></button>
-        <button type="button" class="step-dot" data-go="4"><span class="step-num">4</span><span class="step-label">서명</span></button>
+        <button type="button" class="step-dot" data-go="4"><span class="step-num">4</span><span class="step-label">서명·PDF</span></button>
       </div>
       <button type="button" id="viewToggle" class="view-toggle">전체 보기</button>
     </div>
@@ -495,6 +497,18 @@
         <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none;">
         <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none;">
         <div id="photoList"><div class="photo-empty">아직 추가된 사진이 없습니다 (최대 5장)</div></div>
+      </div>
+    </div>
+
+    <div class="card" id="pdfFormatCard" data-step="4">
+      <div class="card-header"><span class="badge-icon">📄</span><h2>PDF 양식</h2></div>
+      <div class="card-body">
+        <label for="pdfFormat">생성할 양식</label>
+        <select id="pdfFormat" aria-describedby="pdfFormatHint">
+          <option value="standard">기본 양식 — 담당자·서명 포함</option>
+          <option value="simplified">간소화 양식 — 예정일·담당자·서명 제외</option>
+        </select>
+        <p class="pdf-format-hint" id="pdfFormatHint">기본 양식은 CS 담당자 이름과 서명이 필요합니다.</p>
       </div>
     </div>
 
@@ -1698,7 +1712,17 @@ document.getElementById('viewToggle').addEventListener('click', ()=>{
 });
 
 // ===== 검증 =====
-function validate(){
+function pdfFormat(){return v('pdfFormat')==='simplified'?'simplified':'standard';}
+function syncPdfFormat(){
+  const simplified=pdfFormat()==='simplified';
+  document.body.classList.toggle('pdf-simplified',simplified);
+  document.getElementById('pdfFormatHint').textContent=simplified
+    ?'희망 점검 예정일, CS·병원 담당자 이름과 서명을 제외합니다. 서명 없이 생성할 수 있습니다.'
+    :'기본 양식은 CS 담당자 이름과 서명이 필요합니다.';
+}
+document.getElementById('pdfFormat').addEventListener('change',()=>{syncPdfFormat();autoSave();});
+function validate(opts){
+  const simplified=!!(opts && opts.simplified);
   clearAllInvalid();
   if(!state.pay){ showToast('구분(유상/무상)을 선택해주세요');
     const g=document.getElementById('payGroup');
@@ -1708,8 +1732,8 @@ function validate(){
   if(!v('receiveDate')){ showToast('접수 일자를 입력해주세요'); markInvalid('receiveDate'); return false; }
   if(!v('serialNo')){ showToast('장비 S/N을 입력해주세요'); markInvalid('serialNo'); return false; }
   if(!v('hospital')){ showToast('병원명을 입력해주세요'); markInvalid('hospital'); return false; }
-  if(!v('csName')){ showToast('CS 담당자 이름을 입력해주세요'); markInvalid('csName'); return false; }
-  if(csSig.isEmpty()){ showToast('CS 담당자 서명을 입력해주세요');
+  if(!simplified && !v('csName')){ showToast('CS 담당자 이름을 입력해주세요'); markInvalid('csName'); return false; }
+  if(!simplified && csSig.isEmpty()){ showToast('CS 담당자 서명을 입력해주세요');
     const box=document.getElementById('csSigBox');
     revealField('csSigBox');
     if(box){ box.classList.add('field-invalid'); box.scrollIntoView({block:'center',behavior:'smooth'}); }
@@ -1726,6 +1750,7 @@ function collectFormData(){
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
   return {
     basic,
+    pdfFormat: pdfFormat(),
     pay: state.pay,
     types: [...state.types],
     results: {...state.results},
@@ -1738,6 +1763,8 @@ function collectFormData(){
 
 function applyFormData(d){
   if(!d) return;
+  document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
+  syncPdfFormat();
   // 기본 입력
   BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el && d.basic && d.basic[id]!=null) el.value=d.basic[id]; });
   // A/S 분류: 대분류를 먼저 반영해 유형 옵션을 만든 뒤 유형 값을 복원
@@ -2315,6 +2342,7 @@ function logoHeaderHTML(){
 // ===== PDF용 HTML 양식 생성 =====
 function buildSheetHTML(opts){
   const blank = !!(opts && opts.blank);           // 수기 작성용 빈 양식
+  const simplified = !!(opts && opts.simplified);
   const docNo = (opts && opts.docNo) || '';       // 문서번호 (전자 생성 시)
   const genAt = (opts && opts.genAt) || '';       // 생성일시 표기
   // blank 모드: 모든 값 공란, 체크박스 전부 □
@@ -2338,8 +2366,8 @@ function buildSheetHTML(opts){
   const payChk=(x)=> (!blank && state.pay===x) ? '■' : '□';
   const typeChk=(x)=> (!blank && state.types.has(x)) ? '■' : '□';
 
-  const csSigImg=blank ? '' : csSig.dataURL();
-  const hsSigImg=blank ? '' : hsSig.dataURL();
+  const csSigImg=blank || simplified ? '' : csSig.dataURL();
+  const hsSigImg=blank || simplified ? '' : hsSig.dataURL();
 
   return `
   <div style="width:794px;padding:32px 30px;font-family:'Noto Sans KR',sans-serif;color:#1a1a2e;background:#fff;">
@@ -2363,7 +2391,7 @@ function buildSheetHTML(opts){
         <td style="border:1px solid #888;padding:8px 12px;font-size:12px;">
           <table style="width:100%;border:none;"><tr style="border:none;">
             <td style="border:none;padding:0;">${fmtDate(bv('receiveDate'))}</td>
-            <td style="border:none;padding:0;width:30%;text-align:right;color:#555;font-weight:700;">접수처: </td>
+            <td style="border:none;padding:0;width:30%;text-align:right;color:#555;font-weight:700;">영업 담당자: </td>
             <td style="border:none;padding:0;width:30%;">${esc(bv('receiver'))||dash}</td>
           </tr></table>
         </td>
@@ -2410,7 +2438,7 @@ function buildSheetHTML(opts){
         <td style="width:13%;background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">교환품 / 비용</td>
         <td style="border:1px solid #888;padding:10px 12px;font-size:12px;word-break:break-word;overflow-wrap:anywhere;">${esc(bv('replacedPart'))||dash} ${bv('cost')?'/ '+esc(bv('cost'))+'원':''}</td>
       </tr>
-      <tr>
+      ${simplified?'':`<tr>
         <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">희망 점검<br>예정일</td>
         <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(bv('nextDate'))||dash}</td>
         <td colspan="2" style="border:1px solid #888;padding:0;">
@@ -2431,7 +2459,7 @@ function buildSheetHTML(opts){
             </tr>
           </table>
         </td>
-      </tr>
+      </tr>`}
     </table>
 
     <div style="margin-top:14px;text-align:right;font-size:10px;color:#999;">BAZ BIOMEDIC · CS TEAM &nbsp;|&nbsp; A/S 점검 내역서</div>
@@ -2521,7 +2549,8 @@ async function generatePDF(arg){
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
   const preview = !!opts.preview;
   const blank = !!opts.blank;
-  if(!blank && !validate()) return;
+  const simplified=pdfFormat()==='simplified';
+  if(!blank && !validate({simplified})) return;
   showLoading(blank?'수기 양식 생성 중...':(preview?'미리보기 생성 중...':'PDF 생성 중...'));
   await new Promise(r=>setTimeout(r,50));
 
@@ -2540,7 +2569,7 @@ async function generatePDF(arg){
     const pdf=new jsPDF('p','mm','a4');
 
     // 1) 본문 시트
-    const mainCanvas=await renderSheetCanvas(buildSheetHTML({blank, docNo, genAt}));
+    const mainCanvas=await renderSheetCanvas(buildSheetHTML({blank, simplified, docNo, genAt}));
     placeCanvasOnPdf(pdf, mainCanvas, true);
     mainCanvas.width=mainCanvas.height=0; // 메모리 해제
 
@@ -2560,12 +2589,12 @@ async function generatePDF(arg){
     // 파일명
     const safe=(s)=>String(s).replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim();
     if(blank){
-      _lastFname='AS점검_수기양식.pdf';
+      _lastFname=simplified?'AS점검_수기양식_간소화.pdf':'AS점검_수기양식.pdf';
     }else{
       const hosp=v('hospital')||'병원';
       const cs=v('csName')||'담당자';
       const dt=v('inspectDate')||today;
-      _lastFname=`AS점검_${safe(hosp)}_${safe(cs)}_${dt}_${hhmm}.pdf`;
+      _lastFname=simplified?`AS점검_${safe(hosp)}_간소화_${dt}_${hhmm}.pdf`:`AS점검_${safe(hosp)}_${safe(cs)}_${dt}_${hhmm}.pdf`;
     }
     hideLoading();
 
