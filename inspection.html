@@ -125,18 +125,16 @@
   /* 완료 오버레이 */
   .done-overlay{position:fixed;inset:0;z-index:200;background:rgba(16,29,61,.55);display:none;align-items:center;justify-content:center;padding:24px;}
   .done-overlay.show{display:flex;}
-  .done-card{background:#fff;border-radius:16px;width:100%;max-width:360px;padding:28px 24px;text-align:center;}
+  .done-card{background:#fff;border-radius:16px;width:100%;max-width:380px;padding:28px 24px;text-align:center;max-height:90dvh;overflow-y:auto;}
   .done-card .ico{font-size:52px;margin-bottom:14px;}
   .done-card h3{font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;}
   .done-card p{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:22px;}
   .done-card .fname{background:var(--gray-bg);border-radius:8px;padding:10px;font-size:12px;color:var(--navy);font-weight:600;margin-bottom:18px;word-break:break-all;}
+  .done-card .fsize{font-size:12px;color:var(--text-muted);margin:-10px 0 18px;}
   .done-row{display:flex;flex-direction:column;gap:9px;}
   .done-row button{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none;}
-  .flow-guide{background:#F0F6FB;border:1px solid #D4E6F2;border-radius:10px;padding:12px 14px;margin-bottom:14px;text-align:left;}
-  .flow-guide .fg-title{font-size:12.5px;font-weight:800;color:#2E7D9E;margin-bottom:7px;display:flex;align-items:center;gap:5px;}
-  .flow-guide .fg-steps{font-size:12px;color:#4A5C78;line-height:1.7;margin:0;padding-left:2px;}
-  .flow-guide .fg-steps .fg-num{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#2E7D9E;color:#fff;font-size:10px;font-weight:700;margin-right:6px;vertical-align:middle;}
-  .done-dl{background:var(--navy);color:#fff;}
+  .done-share{background:var(--navy);color:#fff;}
+  .done-share:disabled{opacity:.45;cursor:default;}
   .done-new{background:#fff;color:var(--text-muted);border:1.5px solid var(--gray-line);}
 
   /* PDF 렌더용 숨김 영역 */
@@ -554,18 +552,12 @@
   <div class="done-card">
     <div class="ico">✅</div>
     <h3>점검 내역서 완성</h3>
-    <p>A/S 점검 내역서 PDF가 저장되었습니다.</p>
+    <p>생성한 PDF 파일을 관리자에게 공유하세요.</p>
     <div class="fname" id="doneFname"></div>
-    <div class="flow-guide">
-      <div class="fg-title">📎 Flow 앱에 첨부하세요</div>
-      <p class="fg-steps">
-        <span class="fg-num">1</span>Flow 앱에서 해당 병원 처리내역 열기<br>
-        <span class="fg-num">2</span>파일 첨부 → "파일 선택"<br>
-        <span class="fg-num">3</span>다운로드 폴더에서 위 파일명 선택
-      </p>
-    </div>
+    <div class="fsize" id="doneFsize"></div>
+    <p id="pdfShareStatus" role="status" aria-live="polite"></p>
     <div class="done-row">
-      <button class="done-dl" id="doneDl">📥 다시 다운로드</button>
+      <button type="button" class="done-share" id="pdfShareButton" disabled>PDF 파일 공유</button>
       <button class="done-survey" id="doneSurvey" style="padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid #BCD9E8;background:#EAF4F8;color:#2E7D9E;">⭐ 고객 만족도 조사 보내기</button>
       <button class="done-new" id="doneNew">새 점검 내역서</button>
     </div>
@@ -612,6 +604,7 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
+<script src="js/baz-inspection-share.js"></script>
 <script>/* html2canvas 1.4.1 inlined */
 /*!
  * html2canvas 1.4.1 <https://html2canvas.hertzen.com>
@@ -2508,7 +2501,7 @@ function addPdfFooters(pdf, docNo, genAt){
 }
 
 // ===== PDF 생성 =====
-let _lastPdf=null, _lastFname='';
+let _lastFname='';
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 async function generatePDF(arg){
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
@@ -2560,7 +2553,6 @@ async function generatePDF(arg){
       const dt=v('inspectDate')||today;
       _lastFname=`AS점검_${safe(hosp)}_${safe(cs)}_${dt}_${hhmm}.pdf`;
     }
-    _lastPdf=pdf;
     hideLoading();
 
     if(preview){
@@ -2570,7 +2562,8 @@ async function generatePDF(arg){
       pdf.save(_lastFname);
       showToast('수기 작성용 PDF 생성 완료');
     }else{
-      pdf.save(_lastFname);
+      const shareFilename=_lastFname;
+      window.BazInspectionShare.capture(pdf.output('blob'),shareFilename,()=>pdf.save(shareFilename));
       document.getElementById('doneFname').textContent=_lastFname;
       document.getElementById('doneOverlay').classList.add('show');
       showToast('PDF 생성 완료');
@@ -2593,7 +2586,6 @@ let _lastPreviewUrl=null;
 document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
 document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
 document.getElementById('blankPdfBtn').addEventListener('click',()=>generatePDF({blank:true}));
-document.getElementById('doneDl').addEventListener('click',()=>{ if(_lastPdf) _lastPdf.save(_lastFname); });
 document.getElementById('doneSurvey').addEventListener('click',()=>{
   const hosp=encodeURIComponent(v('hospital')||'');
   const cs=encodeURIComponent(v('csName')||'');
@@ -2602,6 +2594,7 @@ document.getElementById('doneSurvey').addEventListener('click',()=>{
 });
 // 완료 오버레이의 "새 점검 내역서" → 새 작업 생성 (기존 작업 보존)
 document.getElementById('doneNew').addEventListener('click',()=>{
+  window.BazInspectionShare.reset();
   document.getElementById('doneOverlay').classList.remove('show');
   newTask();
 });
