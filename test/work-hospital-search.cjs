@@ -12,6 +12,7 @@ assert.deepEqual(search(rows,'bv5015').map(h=>h.key),['b']);
 assert.deepEqual(search(rows,'분당').map(h=>h.key),['b','c'],'same-name equipment records remain distinguishable');
 assert.equal(search(rows,'엑셀').length,0);
 assert.equal(search(rows,'아무병원').length,0);
+assert.equal(search([{name:'정보 일부 없는 병원'}],'정보 일부 없는 병원 · S/N 미기록 · 지역 미기록').length,1,'an existing selection with missing metadata still appears when focused');
 
 class Element {
   constructor(tag){this.tag=tag;this.children=[];this.attrs={};this.dataset={};this.style={};this.handlers={};this.hidden=false;this.isConnected=true;this.value='';}
