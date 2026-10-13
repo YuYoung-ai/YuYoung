@@ -4,7 +4,7 @@
   function search(rows,value){
     var tokens=String(value||'').trim().split(/\s+/).map(normalize).filter(Boolean);
     return rows.filter(function(h){
-      var text=normalize([h.name,h.region,h.sn].join(' '));
+      var text=normalize([h.name,h.region||'지역 미기록',h.sn||'S/N 미기록'].join(' '));
       return h.origin!=='flow'&&tokens.every(function(token){return text.includes(token);});
     }).sort(function(a,b){
       var query=normalize(value),ap=normalize(a.name).startsWith(query),bp=normalize(b.name).startsWith(query);
