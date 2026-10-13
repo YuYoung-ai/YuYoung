@@ -208,7 +208,7 @@
     $('engineer').innerHTML='<option value="">미배정</option>'+names.map(function(n){return '<option>'+esc(n)+'</option>';}).join('');$('engineer').value=current;
     $('cs-options').innerHTML=Array.from(new Set([account].filter(Boolean))).map(function(n){return '<option value="'+esc(n)+'"></option>';}).join('');
     var currentSales=$('sales').value;$('sales').innerHTML='<option value="">미기록</option>'+dbValues('sales').map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');$('sales').value=currentSales;
-    $('hospital-options').innerHTML=state.hospitals.filter(function(h){return h.origin!=='flow';}).map(function(h){return '<option value="'+esc(label(h))+'"></option>';}).join('');
+    hospitalSearch.refresh();
   }
   function hospitalChanged(r,key){var h=state.hospitals.find(function(h){return h.key===key;});return key!==r.hospitalKey&&(!h||h.name!==r.hospitalName||String(h.region||'')!==String(r.region||''));}
   function inlineValues(r){
@@ -224,7 +224,7 @@
     }
     function input(key,type,extra){return '<input data-inline-field="'+key+'" aria-label="'+esc(name)+'" type="'+type+'" value="'+esc(f[key])+'" '+(extra||'')+'>';}
     function select(options,empty){var values=Array.from(new Set(options));return '<select data-inline-field="'+name+'" aria-label="'+esc(name)+'">'+(empty!=null?'<option value="">'+esc(empty)+'</option>':'')+(f[name]&&!values.includes(f[name])?'<option selected disabled value="'+esc(f[name])+'">'+esc(f[name])+' · 현재 DB에 없음</option>':'')+values.map(function(v){return '<option value="'+esc(v)+'"'+(v===f[name]?' selected':'')+'>'+esc(v)+'</option>';}).join('')+'</select>';}
-    var html=name==='hospitalInput'?input(name,'text','list="hospital-options" autocomplete="off"'):name==='symptom'?'<textarea data-inline-field="symptom" aria-label="접수 내용" rows="3" maxlength="4000">'+esc(f.symptom)+'</textarea>':name==='gubun'?select(['A/S','점검']):name==='status'?select(statuses):name==='engineer'?select(state.engineers,'미배정'):name==='sales'?select(dbValues('sales'),'미기록'):name==='asType'||name==='ncare'?select(dbValues(name),'병원DB 값 사용'):name==='visit'||name==='registered'||name==='deadline'?'<span class="edit-datetime">'+input(name+'Date','date')+input(name+'Time','text','inputmode="numeric" maxlength="5" placeholder="10:00 또는 1000"')+'</span>':input(name,'text','maxlength="60"');
+    var html=name==='hospitalInput'?input(name,'text','role="combobox" aria-autocomplete="list" aria-expanded="false" autocomplete="off"'):name==='symptom'?'<textarea data-inline-field="symptom" aria-label="접수 내용" rows="3" maxlength="4000">'+esc(f.symptom)+'</textarea>':name==='gubun'?select(['A/S','점검']):name==='status'?select(statuses):name==='engineer'?select(state.engineers,'미배정'):name==='sales'?select(dbValues('sales'),'미기록'):name==='asType'||name==='ncare'?select(dbValues(name),'병원DB 값 사용'):name==='visit'||name==='registered'||name==='deadline'?'<span class="edit-datetime">'+input(name+'Date','date')+input(name+'Time','text','inputmode="numeric" maxlength="5" placeholder="10:00 또는 1000"')+'</span>':input(name,'text','maxlength="60"');
     return '<span class="field-editor">'+html+'<button type="button" data-edit-done="'+esc(r.id)+'" aria-label="입력 적용">✓</button></span>';
   }
   function inlineActions(r){
@@ -692,6 +692,7 @@
     if(action==='complete'){write('work_complete',{requestId:state.detail.request.id,baseRevision:state.detail.request.revision},'complete').then(function(d){if(d&&!d.success)notify(d.error);});}
   };
   $('detail').onchange=function(event){if(event.target.dataset?.inlineField){var form=event.target.closest('[data-inline-form]');if(form)captureInline(form,event.target.dataset.inlineField);}else statusChanged(event);};
+  var hospitalSearch=window.BazWorkHospitalSearch.create({selector:'#hospital-input, [data-inline-field="hospitalInput"]',getRows:function(){return state.hospitals.filter(function(h){return h.origin!=='flow';});},formatValue:label});
   $('hospital-input').oninput=function(){selectHospital(true);saveDraft();};
   $('request-form').addEventListener('input',function(event){if(event.target.id!=='ack'){$('ack').checked=false;$('duplicate-ack').hidden=true;}saveDraft();});
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();};

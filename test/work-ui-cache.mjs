@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 const fieldApi=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
+ let searchOptions;const hospitalSearch={create:config=>{searchOptions=config;return {refresh(){}};}};
  const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['all','active','today','week','lastweek','month','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
  function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
  const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
- vm.runInNewContext(source,{window:{BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
- return {nodes,calls,writes,detailWrites,posts,filters,local};
+ vm.runInNewContext(source,{window:{BazWorkHospitalSearch:hospitalSearch,BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
+ return {nodes,calls,writes,detailWrites,posts,filters,local,searchOptions};
 }
 {
  const escapeCode=source.split('\n').find(line=>line.trim().startsWith('function esc('));
@@ -42,8 +43,9 @@ cached.nodes.get('sync').onclick();await flush();assert.equal(cached.calls[0].ac
 const first=fixture(null);await flush();assert.equal(first.calls.length,1);assert.equal(first.calls[0].action,'work_bootstrap','first PC loads one initial snapshot');assert.equal(first.writes[0].account,'사용자 A');
 console.log('work-ui-cache: cached startup sends no request; user sync fetches deltas; first PC bootstraps and persists account snapshot.');
 const masterOnly=fixture({...saved,hospitals:[{id:'master',key:'master',name:'병원정보DB 병원',sn:'BW3007'},{id:'flow',key:'flow',name:'엑셀 이력 병원',sn:'과거 번호',origin:'flow'}]});await flush();
-assert.ok(masterOnly.nodes.get('hospital-options').innerHTML.includes('병원정보DB 병원'));
-assert.ok(!masterOnly.nodes.get('hospital-options').innerHTML.includes('엑셀 이력 병원'),'historical names do not pollute new-request autocomplete, including cached PCs');
+assert.equal(masterOnly.searchOptions.getRows()[0].name,'병원정보DB 병원');
+assert.equal(masterOnly.searchOptions.getRows().length,1,'historical names do not pollute new-request autocomplete, including cached PCs');
+assert.equal(masterOnly.searchOptions.formatValue(masterOnly.searchOptions.getRows()[0]),'병원정보DB 병원 · BW3007 · 지역 미기록');
 const makeRequest=(id,createdBy='사용자 A')=>({id,hospitalId:'h-'+id,hospitalName:'병원 '+id,createdBy,visitAt:'',deadline:'',symptom:'증상 '+id,status:'접수',cs:createdBy,engineer:'',sales:'',revision:4,updatedAt:'2026-10-06T00:00:00Z'});
 const withRows=rows=>({...saved,requests:rows});
 {
