@@ -37,6 +37,25 @@
       return values.includes(value);
     });
   }
-  var api={hospital:hospital,terms:terms,range:range,matches:matches,serials:serials,serialMatch:serialMatch,kind:kind};
+  function query(r,q,hospitals){
+    if(r.purgedAt||!!r.deletedAt!==(q.filter==='trash'))return false;
+    if(q.status&&r.status!==q.status||!matches(r,q.advanced,hospitals))return false;
+    var day=String(r.visitAt||'').slice(0,10),period=range(q.filter,q.today,q.month);
+    if(period&&(!day||day<period[0]||day>period[1]))return false;
+    if(q.search&&![q.name||r.hospitalName,r.symptom,r.cs,r.engineer,r.sales].join(' ').toLowerCase().includes(String(q.search).toLowerCase()))return false;
+    if(q.filter==='active')return !['완료','취소'].includes(r.status);
+    if(q.filter==='today')return day===q.today;
+    if(q.filter==='mine')return r.status!=='취소'&&(r.cs===q.account||r.engineer===q.account);
+    if(q.filter==='unassigned')return r.status!=='취소'&&(!r.engineer||!r.visitAt);
+    if(q.filter==='review')return r.status==='결과확인';
+    if(q.filter==='completed')return r.status==='완료';
+    return true;
+  }
+  function counts(requests,q,hospitals){
+    var available=requests.filter(function(r){return !r.deletedAt&&!r.purgedAt;}),week=range('week',q.today,q.month);
+    var completedQuery=Object.assign({},q,{filter:['active','review','completed'].includes(q.filter)?'all':q.filter,status:'완료',advanced:Object.assign({},q.advanced,{status:[]})});
+    return {week:available.filter(function(r){var day=String(r.visitAt||'').slice(0,10);return day&&day>=week[0]&&day<=week[1];}).length,today:available.filter(function(r){return String(r.visitAt||'').slice(0,10)===q.today;}).length,review:available.filter(function(r){return r.status==='결과확인';}).length,completed:requests.filter(function(r){var h=hospital(r,hospitals);return query(r,Object.assign({},completedQuery,{name:h?h.name:r.hospitalName}),hospitals);}).length};
+  }
+  var api={hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,serials:serials,serialMatch:serialMatch,kind:kind};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.BazWorkFields=api;
 })(typeof window==='object'?window:globalThis);

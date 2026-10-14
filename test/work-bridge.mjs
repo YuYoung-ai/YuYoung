@@ -38,5 +38,8 @@ assert.equal((await post({action:'work_bootstrap',token:login.body.token})).body
 assert.equal((await post({action:'work_handover_candidates',hospitalName:'새 접수 병원',token:login.body.token})).body.success,true);
 assert.equal(forwarded.hospitalName,'새 접수 병원','new receipt can query Handover before Sheet mirror');
 assert.equal((await post({action:'work_handover_candidates',requestId:'deleted-or-missing',token:login.body.token})).status,403);
+assert.equal((await post({action:'work_handover_refresh',token:'invalid'})).status,401);
+assert.equal((await post({action:'work_handover_refresh',token:login.body.token})).body.success,true);
+assert.equal(forwarded.action,'work_handover_refresh','explicit sync performs one authenticated original read');
 assert.equal((await post(await bridge('seed',{}))).status,500);
 console.log('work-bridge: domain HMAC, expiry/replay protection, manifest activation, access control and unsaved hospital Handover lookup passed.');

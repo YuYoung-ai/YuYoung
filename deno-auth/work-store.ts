@@ -400,10 +400,15 @@ export function createWorkStore(kv:any){
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
   for(const item of items){const s={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
-   const old=await get('source',s.hospitalName,s.recordId),meta=await get('meta');
-   if(old.value?.observedAt&&(!s.observedAt||old.value.observedAt>s.observedAt))break;
+   const index=await get('sourceIndex',s.recordId),binding=await sourceLink(s.recordId);
+   const linkedHistory=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
+   const previousName=index.value?.hospitalName||linkedHistory?.value?.source?.hospitalName||s.hospitalName;
+   const previous=await get('source',previousName,s.recordId),old=previousName===s.hospitalName?previous:await get('source',s.hospitalName,s.recordId),meta=await get('meta');
+   const observed=index.value?.observedAt||previous.value?.observedAt||old.value?.observedAt;
+   if(observed&&(!s.observedAt||observed>s.observedAt))break;
    // Source changes invalidate in-flight automatic matching as well as older source deliveries.
-   let tx=kv.atomic().check(old,meta).set(old.key,bounded(s)).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
+   let tx=kv.atomic().check(old,previous,index,meta,binding.entry,...(linkedHistory?[linkedHistory]:[])).set(old.key,bounded(s)).set(index.key,{hospitalName:s.hospitalName,observedAt:s.observedAt||''}).set(key('sourcePending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId}).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
+   if(previousName!==s.hospitalName)tx=tx.delete(previous.key);
    if(s.pdf&&(old.value?.pdf?.kind!=='inspection_pdf'||s.pdf.revision!==old.value?.pdf?.revision||s.pdf.sha256!==old.value?.pdf?.sha256))tx=tx.set(key('pdfPending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId});
    if((await tx.commit()).ok)break;
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
@@ -413,6 +418,7 @@ export function createWorkStore(kv:any){
  }
  async function reconcileSources(requestId?:string){
   const meta=await status();if(!meta.ready)return {linked:0,skipped:[]};
+  await reconcileSourceUpdates(requestId);
   const all=await values(['request']);let linked=0;const skipped:Obj[]=[];
   for(const r of all){
    if((requestId&&r.id!==requestId)||!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
@@ -428,6 +434,25 @@ export function createWorkStore(kv:any){
   }
   await reconcilePdfAttachments(requestId);
   return {linked,skipped};
+ }
+ async function reconcileSourceUpdates(requestId?:string){
+  for await(const pending of kv.list({prefix:key('sourcePending')})){
+   const pointer=pending.value,src=await get('source',pointer.hospitalName,pointer.recordId),binding=await sourceLink(pointer.recordId),r=binding.owner?.value;
+   if(requestId&&r&&r.id!==requestId)continue;
+   const old=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
+   if(src.value&&r&&live(r)&&old?.value?.kind==='result'&&old.value.source?.origin!=='flow'&&old.value.source?.version!==src.value.version){
+    const op={action:'work_source_update',requestId:r.id,recordId:pointer.recordId,sourceVersion:src.value.version,baseRevision:r.revision,baseHistoryRevision:old.value.revision,operationId:'source_'+await hash([r.id,pointer.recordId,src.value.version,r.revision,old.value.revision])};
+    const saved=await mutate(op,{name:'Handover 원본 갱신',level:0},async()=>{
+     const current=await request(r.id),owner=await sourceLink(pointer.recordId),source=await get('source',pointer.hospitalName,pointer.recordId),entry=await get('history',r.id,old!.value.id);
+     if(current.value.revision!==op.baseRevision||entry.value?.revision!==op.baseHistoryRevision||owner.entry.value?.requestId!==r.id||owner.entry.value?.historyId!==entry.value?.id||source.value?.version!==op.sourceVersion)return {response:{success:false,skipped:true}};
+     const before=copy(current.value),next=copy(before),now=new Date().toISOString(),s=source.value;
+     const h={...copy(entry.value),source:copy(s),body:s.detail||'',updatedAt:now,updatedBy:'Handover 원본 갱신',revision:entry.value.revision+1};
+     next.revision++;next.updatedAt=now;next.updatedBy=h.updatedBy;next.latest=s.result||s.detail?.slice(0,120)||'';next.gubun=workKind(s.gubun);
+     return {kind:'result_source_update',before:entry.value,requestBefore:before,request:next,history:h,checks:[current,owner.entry,source,entry],response:{success:true,request:next,history:h}};
+    });if(!saved.success)continue;
+   }
+   await kv.atomic().check(pending,src,binding.entry).delete(pending.key).commit();
+  }
  }
  async function reconcilePdfAttachments(requestId?:string){
   // Only pending attachments are read. A normal sync never scans all saved PDF files.

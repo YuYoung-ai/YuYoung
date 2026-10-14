@@ -44,12 +44,26 @@ function hwKvStableSource_(hit){
  var id=Utilities.getUuid();sh.getRange(hit.raw._row,col).setValue(id);hit.source.recordId=id;
 }
 function hwKvQueueSources_(hospital,date){
- var matches=hwSources_(hospital).filter(function(x){return x.source.date===_issueDateNorm_(date)&&['A/S','점검'].indexOf(x.source.gubun)>=0;}),sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
+ var matches=hwSources_(hospital).filter(function(x){return x.source.date===_issueDateNorm_(date)&&['A/S','점검'].indexOf(x.source.gubun)>=0;});return hwKvQueueHits_(matches);
+}
+function hwKvQueueHits_(matches){
+ var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
  var added=0;matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,n=sh.getLastRow()-1,existing=n>0?sh.getRange(2,1,n,1).createTextFinder(id).matchEntireCell(true).findNext():null;if(!existing){sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',new Date().toISOString()].map(safeCell_)]);added++;}
- else if(sh.getRange(existing.getRow(),5).getValue()==='source_deleted'){
+ else if(sh.getRange(existing.getRow(),5).getValue()==='source_deleted'||hwKvQueueReverted_(sh,s)){
   // A restored source may have the same ID/version. Requeue without duplicating its event.
-  sh.getRange(existing.getRow(),4).setValue(JSON.stringify(s));var cell=sh.getRange(existing.getRow(),5);cell.setNote((cell.getNote()||'')+'\n원본 복원으로 전송 재개 · '+new Date().toISOString());cell.setValue('pending');added++;
+  sh.getRange(existing.getRow(),4).setValue(JSON.stringify(s));var cell=sh.getRange(existing.getRow(),5);cell.setNote((cell.getNote()||'')+'\n원본 복원으로 전송 재개 · '+new Date().toISOString());cell.setValue('pending');sh.getRange(existing.getRow(),6).setValue(new Date().toISOString());added++;
  }});return added;
+}
+function hwKvQueueReverted_(sh,s){
+ var n=sh.getLastRow()-1,rows=n>0?sh.getRange(2,1,n,6).getValues():[],latest=null;
+ rows.forEach(function(v){if(String(v[1])===s.recordId&&(!latest||String(v[5])>String(latest[5])))latest=v;});
+ return !!latest&&String(latest[2])!==s.version;
+}
+/** Read only matching rows, including completed records by their immutable ID. */
+function hwKvRefreshSources_(){
+ var pairs={},ids={},requests={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(r.deletedAt||r.purgedAt)return;requests[r.id]=r;if(r.status!=='취소'&&r.status!=='완료'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});
+ hwRows_(HW.HISTORY,3).forEach(function(x){var h=JSON.parse(x[2]);if(requests[h.requestId]&&h.kind==='result'&&h.source&&h.source.origin!=='flow'&&h.source.recordId)ids[h.source.recordId]=true;});
+ return hwAutoSources_(pairs,ids).map(function(hit){hwKvStableSource_(hit);return hit.source;});
 }
 /** Queue snapshots count records, not repeated save versions of the same record. */
 function hwKvPendingRows_(){
@@ -163,7 +177,7 @@ function syncHospitalWorkKv(){
   var pending=hwKvCall_('pending',{}),batches=0;
   while(pending.events.length&&batches<5&&Date.now()-started<120000){hwKvCall_('ack',{items:hwKvApply_(pending.events)});batches++;if(!pending.more)break;pending=hwKvCall_('pending',{});}
   // Recover missing save-hook events by rechecking only visit-date pairs in current work.
-  hwLock_(function(){var pairs={},seen={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(!r.deletedAt&&r.status!=='취소'&&r.status!=='완료'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});hwAutoSources_(pairs).forEach(function(hit){var pair=hwAutoPair_(hit.source.hospitalName,hit.source.date);if(!seen[pair]){seen[pair]=true;hwKvQueueSources_(hit.source.hospitalName,hit.source.date);}});});
+  hwLock_(function(){hwKvQueueHits_(hwKvRefreshSources_().map(function(s){return {source:s};}));});
   var delivery=hwKvDeliverSources_();
   // Check reference/ACL changes each run; only transfer changed snapshots.
   var refs=hwKvRefs_(),refsHash=hwKvHash_({hospitals:refs.hospitals,engineers:refs.references.engineers,minimumLevel:refs.references.minimumLevel});
