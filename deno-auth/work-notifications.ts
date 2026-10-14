@@ -8,6 +8,8 @@ export async function removeRequestNotifications(kv:any,requestId:string){
  await kv.delete(key('latest',requestId));
  for await(const index of kv.list({prefix:key('requestEvent',requestId)})){
   const id=String(index.key[index.key.length-1]);
+  const pending=await kv.get(key('pending',id));
+  if(pending.value?.due)await kv.delete(key('fanoutDue',pending.value.due,id));
   for await(const recipient of kv.list({prefix:key('recipient',id)})){
    const uid=String(recipient.key[recipient.key.length-1]);
    if(!(await kv.atomic().delete(key('inbox',uid,recipient.value)).delete(key('index',uid,id)).delete(key('unread',uid,id)).delete(key('read',uid,id)).delete(recipient.key).commit()).ok)throw new Error('접수 알림 삭제 정리를 다시 시도합니다.');
@@ -106,16 +108,31 @@ export function createWorkNotifications(kv:any,options:Obj){
   const result=await kv.atomic().check(e,stamp).set(key('read',a.uid,id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,id)).commit();
   return result.ok?{success:true}:{success:false,error:'알림 확인 기록을 다시 시도하세요.'};
  }
+ async function migratePending(){
+  const version=await get('fanoutVersion');if(version.value===2)return;
+  for await(const p of kv.list({prefix:key('pending')})){
+   if(p.value.due)continue;
+   const e=(await get('event',p.value.id)).value,due=e?Date.parse(e.createdAt):now();
+   if(!(await kv.atomic().check(p).set(p.key,{...p.value,due},{expireIn:TTL}).set(key('fanoutDue',due,p.value.id),true,{expireIn:TTL}).commit()).ok)throw new Error('알림 대기열 전환을 다시 시도합니다.');
+  }
+  await kv.set(version.key,2);
+ }
  async function fanout(eventId?:string){
-  const pending=eventId?[await get('pending',eventId)]:await rows(['pending'],20);
+  await migratePending();
+  const pending=[];
+  if(eventId)pending.push(await get('pending',eventId));
+  else for await(const index of kv.list({start:key('fanoutDue',0),end:key('fanoutDue',now()+1)},{limit:20})){
+   const p=await get('pending',index.key[index.key.length-1]);
+   if(!p.value||p.value.due!==index.key[index.key.length-2])await kv.delete(index.key);else pending.push(p);
+  }
   if(!pending.some(x=>x.value))return;
   const d=await directory();
   for(const p of pending){
    if(!p.value)continue;const e=(await get('event',p.value.id)).value;
-   if(!e){await kv.delete(p.key);continue;}
+   if(!e){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,p.value.id)).commit();continue;}
    const eligible=d.accounts.filter(a=>e.audience==='all'||a.engineer===e.engineer);
    const valid=await currentEvent(e);
-   if(!valid){await kv.delete(p.key);continue;}
+   if(!valid){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();continue;}
    const guard=await get('latest',e.requestId);if(guard.value!==e.id)continue;
    let complete=true;
    for(const a of eligible){
@@ -132,7 +149,11 @@ export function createWorkNotifications(kv:any,options:Obj){
     if(!(await tx.commit()).ok)complete=false;
    }
    // Missing assigned-account mapping can be repaired by an admin before this expires.
-   if(complete&&(eligible.length||e.audience==='all'))await kv.delete(p.key);
+   if(complete&&(eligible.length||e.audience==='all'))await kv.atomic().check(p).delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();
+   else{
+    const due=now()+(eligible.length?60000:300000),remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
+    await kv.atomic().check(p).set(p.key,{id:e.id,due},{expireIn:remaining}).delete(key('fanoutDue',p.value.due,e.id)).set(key('fanoutDue',due,e.id),true,{expireIn:remaining}).commit();
+   }
   }
  }
  async function deliver(due:Obj,d:Obj){

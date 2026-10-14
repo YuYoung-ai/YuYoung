@@ -4,6 +4,8 @@
  function show(message,state){$('notification-state').textContent=message;$('notification-state').dataset.state=state||'';}
  document.querySelectorAll('[data-platform]').forEach(function(b){b.onclick=function(){choose(b.dataset.platform);};b.onkeydown=function(e){if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();var next=b.dataset.platform==='ios'?'android':'ios';choose(next);$('platform-'+next).focus();}};});
  choose(api.platform());
+ // First-time visitors must be able to install before signing in.
+ api.worker().catch(function(){/* Browser menu installation guidance remains available. */});
  window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();promptEvent=e;choose(document.querySelector('[data-platform][aria-selected=true]').dataset.platform);});
  window.addEventListener('appinstalled',function(){installed=true;promptEvent=null;$('install-button').hidden=true;$('install-state').textContent='설치가 완료되었습니다. 홈 화면에서 BAZ CS를 실행하세요.';});
  $('install-button').onclick=async function(){if(!promptEvent)return;var current=promptEvent;promptEvent=null;this.hidden=true;await current.prompt();await current.userChoice;};

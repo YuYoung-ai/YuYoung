@@ -108,7 +108,8 @@ export function createWorkStore(kv:any){
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
    const alert=assignmentNotification(ev);
    if(alert)tx=tx.set(notificationKey('event',alert.id),alert,{expireIn:30*86400000})
-    .set(notificationKey('pending',alert.id),{id:alert.id},{expireIn:30*86400000})
+    .set(notificationKey('pending',alert.id),{id:alert.id,due:Date.parse(alert.createdAt)},{expireIn:30*86400000})
+    .set(notificationKey('fanoutDue',Date.parse(alert.createdAt),alert.id),true,{expireIn:30*86400000})
     .set(notificationKey('requestEvent',alert.requestId,alert.id),true,{expireIn:30*86400000})
     .set(notificationKey('latest',alert.requestId),alert.id,{expireIn:30*86400000});
    if((await tx.commit()).ok)return response;

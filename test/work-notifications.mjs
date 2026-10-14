@@ -31,7 +31,7 @@ assert.throws(()=>validateSubscription({...sub('a'),keys:{p256dh:'bad',auth:'bad
 await assert.rejects(()=>service.handle({action:'notification_config'},low),/로그인|권한/);
 
 const form={hospitalKey:h.key,symptom:'검증용 접수',cs:'CS',engineer:'담당 A',registeredAt:'2026-10-14T09:00',visitAt:'2026-10-14T12:00',status:'접수'};
-async function create(engineer){const op={action:'work_save',operationId:crypto.randomUUID(),acknowledgeDuplicates:true,form:{...form,engineer}};const saved=await store.handle(op,admin);assert.equal(saved.success,true);return {op,saved};}
+async function create(engineer,operationId=crypto.randomUUID()){const op={action:'work_save',operationId,acknowledgeDuplicates:true,form:{...form,engineer}};const saved=await store.handle(op,admin);assert.equal(saved.success,true);return {op,saved};}
 async function events(){return [...kv.data.values()].filter(x=>x.key[0]===key()[0]&&x.key[1]==='event');}
 const first=await create('담당 A');assert.equal((await events()).length,1,'notification event committed with receipt');
 await store.handle(first.op,admin);assert.equal((await events()).length,1,'operation replay does not produce a new alert');
@@ -76,6 +76,12 @@ await assert.rejects(()=>service.handle({action:'notification_mapping',uid:bob.u
 await service.handle({action:'notification_mapping',uid:bob.uid,engineer:'담당 A'},admin);assert.equal((await service.handle({action:'notification_config'},bob)).engineer,'담당 A');
 accounts=accounts.filter(x=>x.uid!==bob.uid);await assert.rejects(()=>service.handle({action:'notification_list'},bob),/로그인/);
 
+// Missing account mappings must not block ready events behind them.
+await service.handle({action:'notification_mapping',uid:alice.uid,engineer:''},admin);
+await service.handle({action:'notification_mapping',uid:admin.uid,engineer:'담당 B'},admin);
+for(let i=0;i<25;i++)await create('담당 A','aaaa_unmapped_'+String(i).padStart(3,'0'));
+await service.process();const mapped=await create('담당 B','zzzz_mapped_001');await service.process();
+assert.ok((await service.handle({action:'notification_list'},admin)).items.some(x=>x.id===mapped.op.operationId),'unmapped events are deferred so mapped accounts can still receive later notifications');
 // Public configuration exposes only the public key. Concurrent initialization keeps one key.
 const sender1=createPushSender(kv),sender2=createPushSender(kv),publicKeys=await Promise.all([sender1.publicKey(),sender2.publicKey()]);assert.equal(publicKeys[0],publicKeys[1]);assert.equal(Buffer.from(publicKeys[0],'base64url').length,65);
 assert.ok(!JSON.stringify(await service.handle({action:'notification_config'},admin)).includes('privateKey'));
