@@ -353,7 +353,7 @@ function hospitalWorkGet_(p){
   try{
     var who=hwAccess_(p); hwSS_();
     if(hwKvMode_()&&['work_handover_candidates','work_handover_detail','work_handover_refresh'].indexOf(p.action)<0)return {success:false,error:'업무 저장소가 전환됐습니다. 페이지를 새로고침해 주세요.',storage:'kv',upgradeRequired:true};
-    if(p.action==='work_handover_refresh')return hwLock_(function(){return {success:true,data:hwKvRefreshSources_(),sourceCheckedAt:new Date().toISOString()};});
+    if(p.action==='work_handover_refresh')return hwLock_(function(){return {success:true,data:hwKvRefreshSources_(p.target),sourceCheckedAt:new Date().toISOString()};});
     if(p.action==='work_bootstrap'){
       var data=hwReadWithAuto_(function(auto){return {requests:hwRows_(HW.REQUESTS,2).map(function(x){return JSON.parse(x[1]);}),autoMatch:auto};});
       var out={success:true,requests:data.requests,autoMatch:data.autoMatch,who:who,updatedAt:new Date().toISOString(),referencesIncluded:false};

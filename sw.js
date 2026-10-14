@@ -2,7 +2,10 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v240';
+const CACHE_VERSION = 'baz-cs-v241';
+const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
+const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
+let pushBindingTask=Promise.resolve();
 
 // 프리캐시(설치 시 미리 받는 파일) — "셸 최소 구성"만 둔다.
 // ★ 여기에 큰 파일을 추가하지 마세요. 버전을 올릴 때마다 전 사용자가 전량 재다운로드합니다. ★
@@ -54,9 +57,59 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE_VERSION&&k!==PUSH_BINDING_CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// Persist only an opaque account ID, never a login token or a work record.
+self.addEventListener('message',(event)=>{
+ const p=event.data||{};
+ if(!['BAZ_PUSH_BINDING','BAZ_PUSH_LOGOUT'].includes(p.type)||!event.source?.url?.startsWith(self.registration.scope))return;
+ pushBindingTask=pushBindingTask.catch(()=>{}).then(async()=>{
+  const cache=await caches.open(PUSH_BINDING_CACHE);
+  if(p.type==='BAZ_PUSH_LOGOUT'){
+   await cache.delete(PUSH_BINDING_URL);
+   const sub=await self.registration.pushManager.getSubscription();
+   if(sub){const endpoint=sub.endpoint;await sub.unsubscribe();if(p.token){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+    try{await fetch('https://yuyoung.yuyoung-ai.deno.net',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'notification_unsubscribe',endpoint,token:p.token}),signal:controller.signal});}catch{}finally{clearTimeout(timer);}
+   }}
+  }else if(/^[gp]:[A-Za-z0-9_-]{43}$/.test(p.uid||''))await cache.put(PUSH_BINDING_URL,new Response(p.uid));
+  else await cache.delete(PUSH_BINDING_URL);
+  event.ports?.[0]?.postMessage({ok:true});
+ });
+ event.waitUntil(pushBindingTask);
+});
+
+self.addEventListener('push',(event)=>{
+ event.waitUntil((async()=>{
+  let p;try{p=event.data?.json();}catch{return;}if(!p)return;
+  await pushBindingTask.catch(()=>{});
+  const binding=await (await caches.open(PUSH_BINDING_CACHE)).match(PUSH_BINDING_URL);
+  if(!binding||await binding.text()!==p.recipient)return;
+  if(!p.test&&!/^[A-Za-z0-9_-]{8,90}$/.test(p.requestId||''))return;
+  await self.registration.showNotification(String(p.title||'BAZ CS 접수 알림').slice(0,100),{
+   body:String(p.body||'').slice(0,300),icon:new URL('icon-192.png',self.registration.scope).href,
+   tag:p.test?'baz-push-test':'baz-work-'+p.requestId,
+   data:{requestId:p.requestId||'',notificationId:p.notificationId||'',test:!!p.test}
+  });
+  for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage({type:'BAZ_NOTIFICATION_RECEIVED'});
+ })());
+});
+
+self.addEventListener('notificationclick',(event)=>{
+ event.notification.close();
+ event.waitUntil((async()=>{
+  const p=event.notification.data||{},valid=v=>/^[A-Za-z0-9_-]{8,90}$/.test(v||'');
+  if(!p.test&&!valid(p.requestId))return;
+  const url=new URL(p.test?'install.html':'hospital-work.html',self.registration.scope);
+  if(!p.test){url.searchParams.set('request',p.requestId);if(valid(p.notificationId))url.searchParams.set('notification',p.notificationId);}
+  const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+  const existing=windows.find(c=>{const u=new URL(c.url);return u.origin===url.origin&&u.pathname===url.pathname;});
+  if(existing){await existing.focus();if(!p.test)existing.postMessage({type:'BAZ_OPEN_NOTIFICATION',...p});return;}
+  await self.clients.openWindow(url.href);
+ })());
 });
 
 // 같은 출처의 200 응답만 캐시에 갱신

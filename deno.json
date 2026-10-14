@@ -1,0 +1,8 @@
+{
+  "lock": "deno.lock",
+  "unstable": ["kv", "cron"],
+  "tasks": {
+    "check": "deno check --unstable-kv deno-auth/main.ts",
+    "test:push": "deno run --allow-env --allow-read --unstable-kv test/work-push-deno.ts"
+  }
+}

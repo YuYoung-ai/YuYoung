@@ -178,7 +178,10 @@
   button{-webkit-tap-highlight-color:rgba(46,125,158,.2);touch-action:manipulation;}
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
-<script src="auth.js"></script>
+<link rel="stylesheet" href="css/baz-notifications.css?v=241">
+<script src="auth.js?v=241"></script>
+<script src="js/baz-notification-route.js?v=241"></script>
+<script src="js/baz-notifications.js?v=241"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
 <script src="https://accounts.google.com/gsi/client" async></script>
 <script src="https://apis.google.com/js/api.js" async></script>
@@ -210,6 +213,7 @@
   </div>
 
   <!-- 도구 선택 안내 (해제 후) -->
+  <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:12px 0;"><a class="baz-install-link" href="install.html">앱 설치·알림 설정</a><button class="baz-notification-button" type="button" data-notification-open aria-haspopup="dialog">접수 알림 <span data-notification-count hidden></span></button></div>
   <div id="appSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;margin-top:14px;">
     <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;" id="chooseToolText">사용할 도구를 선택하세요</div>
     <button type="button" id="appBtnReport" data-toolid="report" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
@@ -1843,6 +1847,7 @@ function unlockTools(level){
   document.getElementById('lockHint').style.display='none';
   document.getElementById('appSelectStage').style.display='flex';
   applyMenu();  // 도구 노출·레벨·순서: 시트(메뉴설정 탭) 기반 동적 적용
+  BazAuth.returnAfterLogin();
 }
 
 const hubPwModal=document.getElementById('hubPwModal');

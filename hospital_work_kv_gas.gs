@@ -60,7 +60,17 @@ function hwKvQueueReverted_(sh,s){
  return !!latest&&String(latest[2])!==s.version;
 }
 /** Read only matching rows, including completed records by their immutable ID. */
-function hwKvRefreshSources_(){
+function hwKvRefreshSources_(target){
+ if(target){
+  var date=String(target.visitDate||''),name=String(target.hospitalName||'').trim(),targetPairs={},targetIds={};
+  if(!name||name.length>300||date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Array.isArray(target.recordIds)||target.recordIds.length>100)throw new Error('접수별 Handover 조회 조건을 확인하세요.');
+  if(date)targetPairs[hwAutoPair_(name,date)]=true;
+  target.recordIds.forEach(function(id){id=String(id);if(!id||id.length>150)throw new Error('Handover 기록 ID를 확인하세요.');targetIds[id]=true;});
+  if(!Object.keys(targetPairs).length&&!Object.keys(targetIds).length)return [];
+  var hits=hwAutoSources_(targetPairs,targetIds);
+  if(Object.keys(targetIds).some(function(id){return !hits.some(function(hit){return hit.source.recordId===id;});}))throw new Error('연동된 Handover 원본 기록을 찾지 못했습니다. 원본 삭제 여부를 확인하세요.');
+  return hits.map(function(hit){hwKvStableSource_(hit);return hit.source;});
+ }
  var pairs={},ids={},requests={};hwRows_(HW.REQUESTS,2).forEach(function(x){var r=JSON.parse(x[1]);if(r.deletedAt||r.purgedAt)return;requests[r.id]=r;if(r.status!=='취소'&&r.status!=='완료'&&r.visitAt)pairs[hwAutoPair_(r.hospitalName,r.visitAt.slice(0,10))]=true;});
  hwRows_(HW.HISTORY,3).forEach(function(x){var h=JSON.parse(x[2]);if(requests[h.requestId]&&h.kind==='result'&&h.source&&h.source.origin!=='flow'&&h.source.recordId)ids[h.source.recordId]=true;});
  return hwAutoSources_(pairs,ids).map(function(hit){hwKvStableSource_(hit);return hit.source;});
