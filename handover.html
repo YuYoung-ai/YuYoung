@@ -1219,6 +1219,7 @@ function contToInspection(){
   var snv = snVal();
   var rec = HOSPITAL_DB.filter(function(h){ return h.n===val('hosp'); })[0];
   var payload = { v:1, createdAt:Date.now(), source:'handover', form:{
+    handover:{recordId:LAST_REQ_ID},
     basic:{
       receiveDate: val('date')||todayISO(),
       inspectDate: val('date')||todayISO(),

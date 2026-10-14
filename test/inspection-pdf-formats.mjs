@@ -15,6 +15,7 @@ const context=vm.createContext({
   INSP_ITEMS:[{n:1,name:'점검 항목',desc:'점검 상세'}],
   BASIC_IDS:Object.keys(basic),state:{pay:'무상',types:new Set(['A/S']),results:{1:'정상'},memos:{1:'정상 확인'},photos:[]},
   sigStore:{cs:'cs-signature',hs:'hs-signature'},
+  handoverReference:null,uploadedPdfDocument:null,
   v:id=>basic[id]||'',esc:x=>String(x).replace(/</g,'&lt;'),fmtDate:x=>x,
   asItemText:()=>'',asItemCode:()=>'',logoHeaderHTML:()=>'',pdfFormat:()=> 'simplified',
   csSig:{dataURL:()=>{signatureReads++;return 'data:cs-signature';},isEmpty:()=>emptySignature},

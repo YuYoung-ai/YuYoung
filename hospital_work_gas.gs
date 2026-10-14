@@ -182,6 +182,7 @@ function hwSource_(o){
   var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:hwKind_(pickH_(o,['점검/AS','점검/A/S','구분'])||s.gubun),cat:s.cat,type:s.type,
     part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||'',
     nozzleReuse:pickH_(o,['노즐 재사용','노즐재사용'])||'',nsFill:s.nsFill||'',nsAmt:s.nsAmt||'',jet:s.jet||''};
+  if(typeof inspectionPdfSource_==='function'){var pdf=inspectionPdfSource_(o);if(pdf)out.pdf=pdf;}
   out.version=hwHash_(out); out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
   if(!out.recordId) out.recordId='legacy_'+Number(o._row)+'_'+out.version;
   return out;

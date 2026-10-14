@@ -147,7 +147,9 @@ const cleanKv=new Kv(),clean=createWorkStore(cleanKv);await clean.bridge('seed',
 await assert.rejects(()=>clean.bridge('activate',{manifest:{}}),/검증/);assert.equal((await clean.status()).ready,false);
 await assert.rejects(()=>store.bridge('seed',{requests:[]}),/다시 가져올/);
 const main=fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8');stripTypeScriptTypes(main);assert.ok(main.includes("baz-work-bridge-v1\\n"));
-const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui));
+const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));
+// The roster day-rollover timer is separate from work-data polling.
+assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui.replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'')));
 {
  const db=new Kv(),s=createWorkStore(db),second={...hospital,id:'h-new',key:'새 병원\u001fSN2\u001f부산',name:'새 병원',sn:'SN2',region:'부산',asType:'무상',ncare:'미가입'};
  await s.bridge('seed',{hospitals:[hospital,second],references:{engineers:['엔지니어'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});

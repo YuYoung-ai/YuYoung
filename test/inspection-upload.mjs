@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const nodes=Object.fromEntries(['pdfUploadStatus','pdfUploadRetry','pdfOpenLink','doneNew'].map(id=>[id,{hidden:true,disabled:false,textContent:'',addEventListener(type,fn){this[type]=fn;}}]));
+class Reader{readAsDataURL(blob){blob.arrayBuffer().then(a=>{this.result='data:application/pdf;base64,'+Buffer.from(a).toString('base64');this.onload();});}}
+const window={};vm.runInNewContext(fs.readFileSync(new URL('../js/baz-inspection-upload.js',import.meta.url),'utf8'),{window,document:{getElementById:id=>nodes[id]},URL,AbortController,setTimeout,clearTimeout,crypto,FileReader:Reader,Uint8Array});
+const calls=[],saved=[];let fail=true;
+const url='https://script.google.com/macros/s/fixture-upload/exec';
+const pdf={url:'https://drive.google.com/file/d/pdf-file-123/view',revision:1};
+const app=window.BazInspectionUpload.create({url,token:()=> 'fixture-token',onSaved:(data,context)=>saved.push({data,context}),fetch:async(endpoint,options)=>{const p=JSON.parse(options.body);calls.push({endpoint,p});if(p.action==='inspection_pdf_upload'&&fail)throw new Error('연결 끊김');return {json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:'record-123',pdf:null}:{success:true,recordId:'record-123',pdf}};}});
+const size=7*1024*1024,blob=new Blob(['%PDF-1.7\n',' '.repeat(size-9)],{type:'application/pdf'});assert.equal(blob.size,size);
+await app.publish(blob,'AS_검증병원_2026-10-14.pdf',{hospital:'검증병원',date:'2026-10-14',sn:'SN1',taskId:'task-one'});
+assert.equal(nodes.pdfUploadRetry.hidden,false);assert.match(nodes.pdfUploadStatus.textContent,/연결 끊김/);assert.equal(nodes.doneNew.disabled,false);
+const first=calls.find(c=>c.p.action==='inspection_pdf_upload').p;assert.equal(first.bytes,size);assert.equal(Buffer.from(first.base64,'base64').length,size);assert.equal(first.recordId,'record-123');
+fail=false;await nodes.pdfUploadRetry.click();const last=calls.at(-1).p;assert.equal(last.uploadId,first.uploadId);assert.equal(last.sha256,first.sha256);assert.equal(last.base64,first.base64);assert.equal(saved.length,1);assert.equal(saved[0].context.taskId,'task-one');assert.equal(nodes.pdfOpenLink.href,pdf.url);assert.equal(nodes.pdfUploadRetry.hidden,true);
+assert.ok(calls.every(c=>c.endpoint===url),'there is no Deno upload or fallback transport');
+const count=calls.length;await app.publish(new Blob([' '.repeat(size+1)]),'large.pdf',{hospital:'검증',date:'2026-10-14'});assert.equal(calls.length,count);assert.match(nodes.pdfUploadStatus.textContent,/7MB/);
+const rejected=window.BazInspectionUpload.create({url:'https://yuyoung.yuyoung-ai.deno.net',token:()=>'',fetch:()=>{throw new Error('must not call');},onSaved(){}});await rejected.publish(new Blob(['%PDF-1.7']), 'file.pdf',{hospital:'검증',date:'2026-10-14'});assert.match(nodes.pdfUploadStatus.textContent,/서버 주소/);
+app.reset();assert.equal(nodes.pdfOpenLink.hidden,true);assert.equal(nodes.pdfUploadStatus.textContent,'');
+const html=fs.readFileSync(new URL('../inspection.html',import.meta.url),'utf8');for(const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
+assert.ok(html.includes('handover:handoverReference'));assert.ok(html.includes('pdfPublisher.publish(pdfBlob'));
+console.log('inspection-upload: exact 7MB body/digest, direct Google transport, same-file retry, status/link, task identity, size/endpoint guard and page script syntax passed.');

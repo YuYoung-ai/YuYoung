@@ -1,0 +1,18 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF 7MB 전송 확인</title>
+<style>body{font:15px/1.7 system-ui,sans-serif;max-width:650px;margin:60px auto;padding:24px;color:#20314c}button{padding:12px 18px;border:0;border-radius:8px;background:#2359a8;color:white;font:inherit;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;background:#f2f5f9;padding:20px;border-radius:10px}h1{font-size:25px}</style>
+<script src="../../auth.js"></script><h1>PDF 7MB 전송 확인</h1><p>관리자용 저장 경로 검증입니다. 합성 PDF를 Google Drive에 전송해 크기와 내용을 확인하고 시험 파일을 휴지통으로 이동합니다. Handover와 접수·댓글에는 시험 기록을 작성하지 않습니다.</p><button id="verify">7MB 전송 확인</button><pre id="result" role="status">대기 중</pre>
+<script>
+document.getElementById('verify').onclick=async function(){
+ const button=this,status=document.getElementById('result');button.disabled=true;
+ try{
+  const token=window.BazAuth&&BazAuth.token&&BazAuth.token();if(!token)throw new Error('로그인 후 실행하세요.');
+  let text='%PDF-1.4\n',offsets=[0],contents='BT /F1 16 Tf 50 790 Td (7 MB PDF transfer verification) Tj ET\n';
+  const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>','<< /Length '+contents.length+' >>\nstream\n'+contents+'endstream','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  objects.forEach((o,i)=>{offsets.push(text.length);text+=(i+1)+' 0 obj\n'+o+'\nendobj\n';});const xref=text.length;text+='xref\n0 6\n0000000000 65535 f \n';offsets.slice(1).forEach(n=>text+=String(n).padStart(10,'0')+' 00000 n \n');text+='trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
+  text+=' '.repeat(7*1024*1024-text.length);const blob=new Blob([text],{type:'application/pdf'}),bytes=await blob.arrayBuffer(),sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
+  const base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=reject;reader.readAsDataURL(blob);});status.textContent='7MB PDF를 Google 서버로 전송하는 중…';
+  const started=Date.now(),r=await fetch('https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'inspection_pdf_probe',token,uploadId:crypto.randomUUID(),bytes:blob.size,sha256,base64})}),data=await r.json();
+  if(!data.success)throw new Error(data.error||'검증 실패');if(data.bytes!==blob.size||data.sha256!==sha256)throw new Error('전송 내용 불일치');status.textContent='전송·Drive 저장·내용 검증 성공\n파일 크기: '+data.bytes.toLocaleString()+'바이트 (7MB)\n소요 시간: '+((Date.now()-started)/1000).toFixed(1)+'초\n시험 파일 정리 완료 · 접수/댓글 변경 없음';
+ }catch(e){status.textContent='검증 실패: '+e.message;}finally{button.disabled=false;}
+};
+</script></html>

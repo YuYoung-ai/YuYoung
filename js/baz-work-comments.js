@@ -90,5 +90,10 @@
     };
     refresh();return refresh;
   }
-  window.BazWorkComments={render:render,fromHTML:fromHTML,parseDocument:parseDocument,serialize:serialize,mount:mount};
+  function renderPdf(attachment){
+    var a=attachment||{},url=safeURL(a.url,false);
+    if(a.kind!=='inspection_pdf'||!/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?resourcekey=[A-Za-z0-9_-]+)?$/.test(url))return '';
+    return '<a class="inspection-pdf-link" aria-label="AS/점검 내역서" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">AS/점검 내역서</a>';
+  }
+  window.BazWorkComments={render:render,renderPdf:renderPdf,fromHTML:fromHTML,parseDocument:parseDocument,serialize:serialize,mount:mount};
 })();

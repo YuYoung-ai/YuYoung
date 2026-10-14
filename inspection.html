@@ -315,6 +315,7 @@
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
 <script src="auth.js"></script>
+<style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 </head>
 <body>
 <div class="wrap">
@@ -514,6 +515,7 @@
           <option value="simplified">간소화 양식 — 예정일·담당자·서명 제외</option>
         </select>
         <p class="pdf-format-hint" id="pdfFormatHint">기본 양식은 CS 담당자 이름과 서명이 필요합니다.</p>
+        <p class="pdf-format-hint">PDF 생성 시 Drive에 자동 저장하고 Handover에 연결합니다. 링크를 받은 사람이 열 수 있습니다. 최대 7MB.</p>
       </div>
     </div>
 
@@ -571,10 +573,13 @@
   <div class="done-card">
     <div class="ico">✅</div>
     <h3>점검 내역서 완성</h3>
-    <p>생성한 PDF 파일을 관리자에게 공유하세요.</p>
+    <p>생성한 PDF를 Google Drive와 Handover에 저장합니다.</p>
     <div class="fname" id="doneFname"></div>
     <div class="fsize" id="doneFsize"></div>
     <p id="pdfShareStatus" role="status" aria-live="polite"></p>
+    <p id="pdfUploadStatus" role="status" aria-live="polite"></p>
+    <a id="pdfOpenLink" target="_blank" rel="noopener noreferrer" hidden>AS/점검 내역서</a>
+    <button type="button" id="pdfUploadRetry" class="done-share" hidden>Drive 저장 다시 시도</button>
     <div class="done-row">
       <button type="button" class="done-share" id="pdfShareButton" disabled>PDF 파일 공유</button>
       <button class="done-survey" id="doneSurvey" style="padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:1.5px solid #BCD9E8;background:#EAF4F8;color:#2E7D9E;">⭐ 고객 만족도 조사 보내기</button>
@@ -624,6 +629,7 @@
 <div id="pdfSheet"></div>
 
 <script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-inspection-upload.js?v=238"></script>
 <script src="js/baz-inspection-hospitals.js"></script>
 <script>/* html2canvas 1.4.1 inlined */
 /*!
@@ -1759,12 +1765,15 @@ function validate(opts){
 const BASIC_IDS = ['receiveDate','receiver','product','serialNo','subscription','version','hospital',
   'asCat','asSub','asSubCustom','actionDetail','recommend','inspectDate','nextDate','replacedPart','cost','csName','hospitalName'];
 
+let handoverReference=null,uploadedPdfDocument=null;
 function collectFormData(){
   const basic={};
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
   return {
     basic,
     pdfFormat: pdfFormat(),
+    handover:handoverReference,
+    pdfDocument:uploadedPdfDocument,
     pay: state.pay,
     types: [...state.types],
     results: {...state.results},
@@ -1777,6 +1786,8 @@ function collectFormData(){
 
 function applyFormData(d){
   if(!d) return;
+  handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId)}:null;
+  uploadedPdfDocument=d.pdfDocument||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
   syncPdfFormat();
   // 기본 입력
@@ -2021,6 +2032,11 @@ function cloudUrl(){
 }
 function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
+const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,onSaved(saved,context){
+  const tasks=loadTasks(),task=tasks.find(t=>t.id===context.taskId);
+  if(task){task.data.handover={recordId:saved.recordId};task.data.pdfDocument=saved.pdf;persistTasks(tasks);}
+  if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId};uploadedPdfDocument=saved.pdf;}
+}});
 
 function cloudPost(payload){
   // auth.js 방식: text/plain 단순요청(프리플라이트 회피) + JSON 응답
@@ -2625,13 +2641,15 @@ async function generatePDF(arg){
       showToast('수기 작성용 PDF 생성 완료');
     }else{
       const shareFilename=_lastFname;
-      window.BazInspectionShare.capture(pdf.output('blob'),shareFilename,()=>pdf.save(shareFilename));
+      const pdfBlob=pdf.output('blob');
+      window.BazInspectionShare.capture(pdfBlob,shareFilename,()=>pdf.save(shareFilename));
       document.getElementById('doneFname').textContent=_lastFname;
       document.getElementById('doneOverlay').classList.add('show');
       showToast('PDF 생성 완료');
       // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
       exitSignMode();
       saveCurrentTask({status:'completed', documentNo:docNo});
+      pdfPublisher.publish(pdfBlob,shareFilename,{hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),recordId:handoverReference&&handoverReference.recordId||'',taskId:_currentTaskId});
       // Google Sheets 도 완료 처리 (설정 시). 다른 기기에서 조회·재생성 가능
       if(_currentTaskId) cloudSyncTask(getTask(_currentTaskId), {silent:true});
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
@@ -2657,6 +2675,7 @@ document.getElementById('doneSurvey').addEventListener('click',()=>{
 // 완료 오버레이의 "새 점검 내역서" → 새 작업 생성 (기존 작업 보존)
 document.getElementById('doneNew').addEventListener('click',()=>{
   window.BazInspectionShare.reset();
+  pdfPublisher.reset();
   document.getElementById('doneOverlay').classList.remove('show');
   newTask();
 });
