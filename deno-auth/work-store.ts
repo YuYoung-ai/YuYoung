@@ -2,6 +2,7 @@
 import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
 import {createWorkRoster} from './work-roster.ts';
 import {assignmentNotification,notificationKey,removeRequestNotifications} from './work-notifications.ts';
+import {sourceReview,pdfBasis} from './work-source-review.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -19,7 +20,7 @@ function inspectionPdf(value:any){
  const id=text(value.fileId,150,'PDF 파일 ID'),url=text(value.url,500,'PDF 링크');
  if(!/^[A-Za-z0-9_-]+$/.test(id)||!/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?resourcekey=[A-Za-z0-9_-]+)?$/.test(url)||!url.includes('/'+id+'/'))throw new Error('PDF Drive 링크가 올바르지 않습니다.');
  if(!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>7*1024*1024||!Number.isSafeInteger(value.revision)||value.revision<1||!/^[a-f0-9]{64}$/.test(value.sha256))throw new Error('PDF 파일 정보를 확인하세요.');
- return {kind:'inspection_pdf',fileId:id,url,filename:text(value.filename,240,'PDF 파일명'),bytes:value.bytes,sha256:value.sha256,revision:value.revision,uploadedAt:text(value.uploadedAt,40,'PDF 저장 시각'),uploadedBy:text(value.uploadedBy,80,'PDF 등록자'),uploadId:text(value.uploadId,90,'PDF 전송 ID')};
+ return {kind:'inspection_pdf',fileId:id,url,filename:text(value.filename,240,'PDF 파일명'),bytes:value.bytes,sha256:value.sha256,revision:value.revision,uploadedAt:text(value.uploadedAt,40,'PDF 저장 시각'),uploadedBy:text(value.uploadedBy,80,'PDF 등록자'),uploadId:text(value.uploadId,90,'PDF 전송 ID'),...(pdfBasis(value.sourceBasis)?{sourceBasis:pdfBasis(value.sourceBasis)}:{})};
 }
 function autoSources(r:Obj,all:Obj[],records:Obj[]){
  const day=r.visitAt?.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
@@ -89,8 +90,16 @@ export function createWorkStore(kv:any){
    const ev=await build();if(ev.response?.success===false)return ev.response;
    const seq=Number(meta.value.seq||0)+1,now=new Date().toISOString();
    const checks=ev.checks||[];delete ev.checks;
-   ev.id=op;ev.seq=seq;ev.actor=who.name;ev.at=now;bounded(ev);
+   ev.id=op;ev.seq=seq;ev.actor=who.name;ev.at=now;
    const response=copy({...ev.response,event:{id:ev.id,kind:ev.kind,at:ev.at,actor:ev.actor,before:ev.before,requestBefore:ev.requestBefore,after:ev.history||ev.request},storage:'kv',mirrorPending:true});
+   if(ev.compactResponse){
+    // The audit/mirror retains full sources. The operation receipt already has the
+    // full updated history; duplicate clinical snapshots are unnecessary there.
+    response.event.before=ev.before?{id:ev.before.id,sourceReview:ev.before.sourceReview,source:{recordId:ev.before.source?.recordId,detail:String(ev.before.source?.detail||'').slice(0,300)}}:null;
+    response.event.after={id:ev.history?.id,kind:ev.history?.kind,sourceReview:ev.history?.sourceReview};
+    delete ev.response;delete ev.compactResponse;
+   }
+   bounded(ev);
    let tx=kv.atomic().check(meta,previous).set(key('meta'),{...meta.value,seq})
     .set(key('operation',op),bounded({actor:who.name,fingerprint,response}))
     .set(key('change',seq),{seq,request:ev.request})
@@ -133,6 +142,7 @@ export function createWorkStore(kv:any){
   const r:Obj={id,hospitalId:h.id,hospitalKey:h.key,hospitalName:h.name,sn:h.sn||'',region:h.region||'',symptom:text(f.symptom,4000,'접수 증상'),cs:text(f.cs,60,'CS 담당자'),engineer:text(f.engineer,60,'엔지니어'),sales:text(f.sales,60,'영업 담당자'),registeredAt:datetime(f.registeredAt,true,'등록일시'),visitAt:datetime(f.visitAt,false,'방문일시'),deadline:datetime(f.deadline,false,'마감'),status:String(f.status||'접수'),createdAt:old?.createdAt||now,createdBy:old?.createdBy||who.name,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1,latest:old?.latest||'',completedAt:old?.completedAt||'',completedBy:old?.completedBy||'',gubun:old?.gubun||''};
   if(!r.symptom||!r.cs)throw new Error('접수 증상과 CS 담당자를 입력하세요.');
   if(old?.flowImport)r.flowImport=copy(old.flowImport);
+  if(old?.handoverReviewCount)r.handoverReviewCount=old.handoverReviewCount;
   r.hospitalReferenceSN=h.sn||'';
   if(old?.serviceOverrides)r.serviceOverrides=copy(old.serviceOverrides);
   if(p.action==='work_request_edit'){
@@ -201,7 +211,8 @@ export function createWorkStore(kv:any){
   if(binding.inUse&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
   const old=linked.value?.requestId===r.id?(await get('history',r.id,linked.value.historyId)).value:null;
   if(old&&String(old.revision)!==String(p.baseHistoryRevision||0))return {response:clash(old)};
-  const now=new Date().toISOString(),before=copy(r),h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
+  const now=new Date().toISOString(),before=copy(r),h:Obj={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
+  if(old){const review=await sourceReview(old,s,r.status==='완료',now);if(review)h.sourceReview=review;r.handoverReviewCount=Math.max(0,Number(r.handoverReviewCount||0)+(review?.pending?1:0)-(old.sourceReview?.pending?1:0));}
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=workKind(s.gubun);
   r.status=p.complete||r.status==='완료'?'완료':'결과확인';
   if(p.complete){r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;}
@@ -378,6 +389,19 @@ export function createWorkStore(kv:any){
   }catch(e:any){results.push({success:false,sourceId:input.sourceId,error:e.message});}}
   return {success:true,results};
  }
+ async function reviewSource(p:Obj,who:Actor){return mutate(p,who,async()=>{
+  const current=await request(p.requestId),r=current.value,entry=await get('history',r.id,text(p.historyId,120,'처리 이력'));
+  if(r.revision!==p.baseRevision||entry.value?.revision!==p.baseHistoryRevision)return {response:clash(r)};
+  const old=entry.value;
+  if(old?.kind!=='result'||old.source?.origin==='flow'||!old.sourceReview?.pending)throw new Error('확인할 Handover 변경이 없습니다.');
+  const src=await get('source',old.source.hospitalName,old.source.recordId),owner=await sourceLink(old.source.recordId);
+  if(src.value?.version!==p.sourceVersion||old.source.version!==p.sourceVersion||owner.entry.value?.requestId!==r.id)throw new Error('원본이 다시 변경되었습니다. 최신 내용과 비교한 뒤 확인하세요.');
+  const checked=Date.parse(src.value.observedAt||'');
+  if(!Number.isFinite(checked)||Date.now()-checked>120000||checked>Date.now()+60000)throw new Error('최신 Handover 원본을 먼저 확인하세요.');
+  const now=new Date().toISOString(),next={...copy(r),revision:r.revision+1,updatedAt:now,updatedBy:who.name,handoverReviewCount:Math.max(0,Number(r.handoverReviewCount||0)-1)};
+  const h={...copy(old),revision:old.revision+1,updatedAt:now,updatedBy:who.name,sourceReview:{...old.sourceReview,pending:false,reviewedAt:now,reviewedBy:who.name}};
+  return {kind:'result_source_review',compactResponse:true,before:old,requestBefore:r,request:next,history:h,checks:[current,entry,src,owner.entry],response:{success:true,request:next,history:h}};
+ });}
  async function handle(p:Obj,who:Actor){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
@@ -401,6 +425,7 @@ export function createWorkStore(kv:any){
      }catch{return {...saved,autoMatchPending:true};}
     }
     case 'work_status':return await changeStatus(p,who);
+    case 'work_source_review':return await reviewSource(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
     case 'work_result_save':{
      const saved=await result(p,who);if(!saved.success)return saved;
@@ -460,9 +485,11 @@ export function createWorkStore(kv:any){
      const current=await request(r.id),owner=await sourceLink(pointer.recordId),source=await get('source',pointer.hospitalName,pointer.recordId),entry=await get('history',r.id,old!.value.id);
      if(current.value.revision!==op.baseRevision||entry.value?.revision!==op.baseHistoryRevision||owner.entry.value?.requestId!==r.id||owner.entry.value?.historyId!==entry.value?.id||source.value?.version!==op.sourceVersion)return {response:{success:false,skipped:true}};
      const before=copy(current.value),next=copy(before),now=new Date().toISOString(),s=source.value;
-     const h={...copy(entry.value),source:copy(s),body:s.detail||'',updatedAt:now,updatedBy:'Handover 원본 갱신',revision:entry.value.revision+1};
+     const review=await sourceReview(entry.value,s,before.status==='완료',now);
+     const h={...copy(entry.value),source:copy(s),body:s.detail||'',updatedAt:now,updatedBy:'Handover 원본 갱신',revision:entry.value.revision+1,...(review?{sourceReview:review}:{})};
+     next.handoverReviewCount=Math.max(0,Number(before.handoverReviewCount||0)+(review?.pending?1:0)-(entry.value.sourceReview?.pending?1:0));
      next.revision++;next.updatedAt=now;next.updatedBy=h.updatedBy;next.latest=s.result||s.detail?.slice(0,120)||'';next.gubun=workKind(s.gubun);
-     return {kind:'result_source_update',before:entry.value,requestBefore:before,request:next,history:h,checks:[current,owner.entry,source,entry],response:{success:true,request:next,history:h}};
+     return {kind:'result_source_update',compactResponse:true,before:entry.value,requestBefore:before,request:next,history:h,checks:[current,owner.entry,source,entry],response:{success:true,request:next,history:h}};
     });if(!saved.success)continue;
    }
    await kv.atomic().check(pending,src,binding.entry).delete(pending.key).commit();

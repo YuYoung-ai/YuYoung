@@ -34,11 +34,23 @@ function inspectionPdfFolder_(){
   var folder=DriveApp.createFolder(INSPECTION_PDF.FOLDER_NAME);props.setProperty('INSPECTION_PDF_FOLDER_ID',folder.getId());return folder;
 }
 function inspectionPdfHash_(bytes){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,bytes).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');}
+function inspectionPdfBasis_(source,format){
+  var fields={},names=['hospitalName','date','sn','engineer','gubun','cat','type','part','cost','detail','result','remark','nozzleReuse','nsFill','nsAmt','jet'];
+  names.forEach(function(name){fields[name]=inspectionPdfHash_(String(source[name]||'').replace(/\r\n?/g,'\n').trim());});
+  var selected=format==='simplified'?'simplified':'standard',relevant={},printed=['hospitalName','date','sn','gubun','cat','type','part','cost','detail','result','remark'];
+  if(selected==='standard')printed.push('engineer');printed.forEach(function(name){relevant[name]=fields[name];});
+  return {v:1,recordId:source.recordId,fields:fields,fingerprint:inspectionPdfHash_(JSON.stringify(relevant)),capturedAt:new Date().toISOString(),format:selected,template:1};
+}
+function inspectionPdfCheckBasis_(p,source){
+  if(p.sourceFingerprint&&p.sourceFingerprint!==inspectionPdfBasis_(source,p.pdfFormat).fingerprint){var e=new Error('PDF 생성 중 Handover 원본이 변경되었습니다. 최신 내용을 확인하고 PDF를 다시 생성하세요.');e.sourceConflict=true;throw e;}
+}
 function inspectionPdfStored_(raw,strict){
   var value=pickH_(raw,[INSPECTION_PDF.META]);if(!value)return null;
   var p;try{p=JSON.parse(value);}catch(e){if(strict)throw new Error('PDF 정보 형식이 잘못되었습니다.');return null;}
   if(!p.fileId||!/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?resourcekey=[A-Za-z0-9_-]+)?$/.test(p.url||'')||p.url.indexOf('/'+p.fileId+'/')<0||!p.sha256||!p.revision){if(strict)throw new Error('PDF 파일 정보를 확인하세요.');return null;}
-  return {fileId:String(p.fileId),url:String(p.url),filename:String(p.filename||'AS_점검_내역서.pdf').slice(0,240),bytes:Number(p.bytes)||0,sha256:String(p.sha256),revision:Number(p.revision),uploadedAt:String(p.uploadedAt||''),uploadedBy:String(p.uploadedBy||''),uploadId:String(p.uploadId||'')};
+  var out={fileId:String(p.fileId),url:String(p.url),filename:String(p.filename||'AS_점검_내역서.pdf').slice(0,240),bytes:Number(p.bytes)||0,sha256:String(p.sha256),revision:Number(p.revision),uploadedAt:String(p.uploadedAt||''),uploadedBy:String(p.uploadedBy||''),uploadId:String(p.uploadId||'')};
+  if(p.sourceBasis&&p.sourceBasis.v===1&&/^[a-f0-9]{64}$/.test(p.sourceBasis.fingerprint||''))out.sourceBasis=p.sourceBasis;
+  return out;
 }
 // No URL is accepted from the browser; the server creates the Drive URL itself.
 function inspectionPdfSource_(raw){return inspectionPdfStored_(raw);}
@@ -111,8 +123,9 @@ function inspectionPdfStore_(p){
     }
     lock=LockService.getScriptLock();lock.waitLock(20000);
     var hit=inspectionPdfRecord_(p);
-    if(p.action==='inspection_pdf_resolve')return {success:true,recordId:hit.source.recordId,pdf:hit.pdf};
+    if(p.action==='inspection_pdf_resolve')return {success:true,recordId:hit.source.recordId,pdf:hit.pdf,sourceBasis:inspectionPdfBasis_(hit.source,p.pdfFormat)};
     if(hit.pdf&&hit.pdf.sha256===p.sha256){committed=true;return inspectionPdfPublish_(hit,hit.pdf);}
+    inspectionPdfCheckBasis_(p,hit.source);
     if(Number(p.baseRevision||0)!==Number(hit.pdf&&hit.pdf.revision||0))return {success:false,conflict:true,error:'다른 PDF가 먼저 저장되었습니다. 최신 정보를 확인한 뒤 다시 생성하세요.'};
     var filename=String(p.filename||'').replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim().slice(0,240);
     if(!filename||!(/\.pdf$/i.test(filename)))throw new Error('PDF 파일명을 확인하세요.');
@@ -124,12 +137,14 @@ function inspectionPdfStore_(p){
     var key=typeof file.getResourceKey==='function'?file.getResourceKey():'';
     lock=LockService.getScriptLock();lock.waitLock(20000);hit=inspectionPdfRecord_(p);
     if(hit.pdf&&hit.pdf.sha256===p.sha256)return inspectionPdfPublish_(hit,hit.pdf);
+    inspectionPdfCheckBasis_(p,hit.source);
     if(Number(p.baseRevision||0)!==Number(hit.pdf&&hit.pdf.revision||0))return {success:false,conflict:true,error:'다른 PDF가 먼저 저장되었습니다. 최신 정보를 확인한 뒤 다시 생성하세요.'};
     var pdf={fileId:file.getId(),url:'https://drive.google.com/file/d/'+file.getId()+'/view'+(key?'?resourcekey='+key:''),filename:filename,bytes:bytes.length,sha256:p.sha256,revision:Number(hit.pdf&&hit.pdf.revision||0)+1,uploadedAt:new Date().toISOString(),uploadedBy:actor.name,uploadId:p.uploadId};
+    if(p.sourceFingerprint)pdf.sourceBasis=inspectionPdfBasis_(hit.source,p.pdfFormat);
     // Set the durable receipt first; if the visible link write fails, retry repairs it.
     hit.sheet.getRange(hit.row,hit.metaCol).setValue(JSON.stringify(pdf));committed=true;
     return inspectionPdfPublish_(hit,pdf);
   }catch(e){
-    return {success:false,error:String(e.message||e)};
+    return {success:false,error:String(e.message||e),sourceConflict:!!e.sourceConflict};
   }finally{if(lock){try{lock.releaseLock();}catch(ignore){}}if(file&&!committed){try{file.setTrashed(true);}catch(ignore){}}}
 }

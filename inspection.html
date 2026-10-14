@@ -629,7 +629,7 @@
 <div id="pdfSheet"></div>
 
 <script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-upload.js?v=238"></script>
+<script src="js/baz-inspection-upload.js?v=243"></script>
 <script src="js/baz-inspection-hospitals.js"></script>
 <script>/* html2canvas 1.4.1 inlined */
 /*!
@@ -2604,6 +2604,7 @@ async function generatePDF(arg){
     const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}`;
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
+    const uploadContext=!preview&&!blank?await pdfPublisher.prepare({hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),recordId:handoverReference&&handoverReference.recordId||'',taskId:_currentTaskId,pdfFormat:simplified?'simplified':'standard'}):null;
     const {jsPDF}=window.jspdf;
     const pdf=new jsPDF('p','mm','a4');
 
@@ -2649,7 +2650,7 @@ async function generatePDF(arg){
       // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
       exitSignMode();
       saveCurrentTask({status:'completed', documentNo:docNo});
-      pdfPublisher.publish(pdfBlob,shareFilename,{hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),recordId:handoverReference&&handoverReference.recordId||'',taskId:_currentTaskId});
+      pdfPublisher.publish(pdfBlob,shareFilename,{...uploadContext,taskId:_currentTaskId});
       // Google Sheets 도 완료 처리 (설정 시). 다른 기기에서 조회·재생성 가능
       if(_currentTaskId) cloudSyncTask(getTask(_currentTaskId), {silent:true});
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
