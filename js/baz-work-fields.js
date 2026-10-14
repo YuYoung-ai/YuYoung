@@ -40,6 +40,8 @@
   function query(r,q,hospitals){
     if(r.purgedAt||!!r.deletedAt!==(q.filter==='trash'))return false;
     if(q.status&&r.status!==q.status||!matches(r,q.advanced,hospitals))return false;
+    if(q.statusScope==='active'&&!['접수','방문예정','처리중'].includes(r.status))return false;
+    if(q.statusScope==='review'&&r.status!=='결과확인'||q.statusScope==='completed'&&r.status!=='완료')return false;
     var day=String(r.visitAt||'').slice(0,10),period=range(q.filter,q.today,q.month);
     if(period&&(!day||day<period[0]||day>period[1]))return false;
     if(q.search&&![q.name||r.hospitalName,r.symptom,r.cs,r.engineer,r.sales].join(' ').toLowerCase().includes(String(q.search).toLowerCase()))return false;
@@ -52,9 +54,9 @@
     return true;
   }
   function counts(requests,q,hospitals){
-    var available=requests.filter(function(r){return !r.deletedAt&&!r.purgedAt;}),week=range('week',q.today,q.month);
-    var completedQuery=Object.assign({},q,{filter:['active','review','completed'].includes(q.filter)?'all':q.filter,status:'완료',advanced:Object.assign({},q.advanced,{status:[]})});
-    return {week:available.filter(function(r){var day=String(r.visitAt||'').slice(0,10);return day&&day>=week[0]&&day<=week[1];}).length,today:available.filter(function(r){return String(r.visitAt||'').slice(0,10)===q.today;}).length,review:available.filter(function(r){return r.status==='결과확인';}).length,completed:requests.filter(function(r){var h=hospital(r,hospitals);return query(r,Object.assign({},completedQuery,{name:h?h.name:r.hospitalName}),hospitals);}).length};
+    var base=Object.assign({},q,{status:'',statusScope:'all',advanced:Object.assign({},q.advanced,{status:[]})});
+    var scoped=requests.filter(function(r){var h=hospital(r,hospitals);return query(r,Object.assign({},base,{name:h?h.name:r.hospitalName}),hospitals);});
+    return {total:scoped.length,active:scoped.filter(function(r){return ['접수','방문예정','처리중'].includes(r.status);}).length,review:scoped.filter(function(r){return r.status==='결과확인';}).length,completed:scoped.filter(function(r){return r.status==='완료';}).length,globalReview:requests.filter(function(r){return !r.deletedAt&&!r.purgedAt&&r.status==='결과확인';}).length};
   }
   var api={hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,serials:serials,serialMatch:serialMatch,kind:kind};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.BazWorkFields=api;
