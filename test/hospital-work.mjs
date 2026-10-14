@@ -104,7 +104,7 @@ assert.equal(sheets.get('업무변경로그').data.some(r=>r[3]==='prepared'),fa
 assert.equal(post({action:'work_save',form:{...form,symptom:''}}).retrySameOperation,false,'validation error is definite failure');
 assert.ok(read('auth.js').includes("'hospital-work.html':{ tool: 'hospitalwork', level: 1 }"));
 assert.ok(read('index.html').includes('data-toolid="hospitalwork"'));
-assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(read('js/baz-work-manager.js')),'no polling or focus sync');
+assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(read('js/baz-work-manager.js').replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'')),'no work polling or focus sync; roster rollover is independent');
 assert.equal(lockHeld,false);
 // Automatic linking uses visit date (not registration date), exact hospital, and one-to-one matches.
 const autoRequest=(day,extra={})=>{const saved=post({action:'work_save',form:{...form,visitAt:day+'T14:00',...extra},acknowledgeDuplicates:true});assert.equal(saved.success,true,JSON.stringify(saved));return saved.request;};

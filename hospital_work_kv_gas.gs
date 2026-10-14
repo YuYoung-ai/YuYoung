@@ -77,8 +77,8 @@ function hwKvSourceById_(id){
  var row=hits[0].getRow(),values=sh.getRange(row,1,1,sh.getLastColumn()).getDisplayValues()[0],raw={_row:row};hdr.headers.forEach(function(h,c){if(h)raw[h]=values[c];});
  var hit={raw:raw,source:hwSource_(raw)};if(!hit.source.date||['A/S','점검'].indexOf(hit.source.gubun)<0)throw new Error('원본 처리일 또는 A/S·점검 구분을 확인하세요.');hwKvStableSource_(hit);return hit.source;
 }
-function hwKvDeliverSources_(){
- var groups={};hwKvPendingRows_().forEach(function(r){(groups[r.id]||(groups[r.id]=[])).push(r);});
+function hwKvDeliverSources_(onlyRecordId){
+ var groups={};hwKvPendingRows_().filter(function(r){return !onlyRecordId||r.id===onlyRecordId;}).forEach(function(r){(groups[r.id]||(groups[r.id]=[])).push(r);});
  var accepted=[],sources=[],failedIds=[],errors=[],missingIds=[],cancelledIds=[];
  Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{sources.push(hwKvSourceById_(id));accepted=accepted.concat(groups[id]);}catch(e){if(e.sourceMissing)missingIds.push(id);else{failedIds.push(id);errors.push(String(e.message||e));}}});
  if(missingIds.length)hwLock_(function(){

@@ -13,6 +13,13 @@ const serials=(v:any)=>[...new Set(String(v||'').normalize('NFKC').toUpperCase()
 const serialMatch=(a:any,b:any)=>serials(a).some(sn=>serials(b).includes(sn));
 const workKind=(v:any)=>{const s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;};
 const kind=(s:Obj)=>['A/S','점검'].includes(workKind(s.gubun));
+function inspectionPdf(value:any){
+ if(!value)return null;
+ const id=text(value.fileId,150,'PDF 파일 ID'),url=text(value.url,500,'PDF 링크');
+ if(!/^[A-Za-z0-9_-]+$/.test(id)||!/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?resourcekey=[A-Za-z0-9_-]+)?$/.test(url)||!url.includes('/'+id+'/'))throw new Error('PDF Drive 링크가 올바르지 않습니다.');
+ if(!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>7*1024*1024||!Number.isSafeInteger(value.revision)||value.revision<1||!/^[a-f0-9]{64}$/.test(value.sha256))throw new Error('PDF 파일 정보를 확인하세요.');
+ return {kind:'inspection_pdf',fileId:id,url,filename:text(value.filename,240,'PDF 파일명'),bytes:value.bytes,sha256:value.sha256,revision:value.revision,uploadedAt:text(value.uploadedAt,40,'PDF 저장 시각'),uploadedBy:text(value.uploadedBy,80,'PDF 등록자'),uploadId:text(value.uploadId,90,'PDF 전송 ID')};
+}
 function autoSources(r:Obj,all:Obj[],records:Obj[]){
  const day=r.visitAt?.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
  let matches=records.filter(s=>s.date===day&&kind(s));
@@ -86,6 +93,7 @@ export function createWorkStore(kv:any){
     .set(key('hospital',ev.request.hospitalId,ev.request.id),ev.request);
    if(ev.history)tx=tx.set(key('history',ev.history.requestId,ev.history.id),ev.history);
    if(ev.link)tx=tx.set(key('link',ev.link),{requestId:ev.request.id,historyId:ev.history.id});
+   if(ev.pdfPending)tx=tx.set(key('pdfPending',ev.pdfPending.recordId),ev.pdfPending);
    if(ev.hospital)tx=tx.set(key('hospitalRef',ev.hospital.key),ev.hospital);
    if(ev.flowImport)tx=tx.set(key('flowImport',ev.flowImport.sourceId),{...ev.flowImport,requestId:ev.request.id});
    if(checks.length)tx=tx.check(...checks);
@@ -146,10 +154,12 @@ export function createWorkStore(kv:any){
   if(old&&old.author!==who.name&&who.level<3)throw new Error('본인 댓글 또는 관리자만 수정할 수 있습니다.');
   if(old&&String(old.revision)!==String(p.baseHistoryRevision))return {response:clash(old)};
   const lifecycle=typeof p.deleted==='boolean';
+  if(old?.attachment?.kind==='inspection_pdf'&&!lifecycle)throw new Error('PDF 댓글은 내역서를 다시 생성하면 갱신됩니다.');
   if(lifecycle&&!old)throw new Error('삭제하거나 복원할 댓글을 찾지 못했습니다.');
   if(old?.deletedAt&&!lifecycle)throw new Error('삭제된 댓글입니다. 먼저 복원하세요.');
   const body=lifecycle?old.body:text(p.body,4000,'댓글');if(!body)throw new Error('댓글을 입력하세요.');const now=new Date().toISOString(),before=copy(r);
   const h={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'comment',body,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
+  if(old?.attachment)Object.assign(h,{attachment:old.attachment,sourceRecordId:old.sourceRecordId});
   if(lifecycle)Object.assign(h,{deletedAt:p.deleted?now:'',deletedBy:p.deleted?who.name:''});
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;
   const latest=(await history(r.id)).filter(x=>x.id!==h.id&&!x.deletedAt).concat(p.deleted?[]:[h]).sort((a,b)=>String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)))[0];
@@ -182,7 +192,7 @@ export function createWorkStore(kv:any){
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=workKind(s.gubun);
   r.status=p.complete||r.status==='완료'?'완료':'결과확인';
   if(p.complete){r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;}
-  return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
+  return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,...(s.pdf?{pdfPending:{hospitalName:s.hospitalName,recordId:s.recordId}}:{}),checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
  });}
  async function lifecycle(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const r=copy((await request(p.requestId,p.action==='work_restore')).value);
@@ -378,7 +388,10 @@ export function createWorkStore(kv:any){
     }
     case 'work_status':return await changeStatus(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
-    case 'work_result_save':return await result(p,who);
+    case 'work_result_save':{
+     const saved=await result(p,who);if(!saved.success)return saved;
+     try{await reconcilePdfAttachments(p.requestId);const workDetail=await detail({id:p.requestId});return {...saved,request:workDetail.request,workDetail};}catch{return saved;}
+    }
     case 'work_complete':case 'work_delete':case 'work_restore':return await lifecycle(p,who);
     case 'work_purge':return await purge(p,who);
     default:throw new Error('지원하지 않는 업무 API입니다.');
@@ -386,11 +399,13 @@ export function createWorkStore(kv:any){
   }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
-  for(const item of items){const s={...item,gubun:workKind(item.gubun)};if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
+  for(const item of items){const s={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
    const old=await get('source',s.hospitalName,s.recordId),meta=await get('meta');
    if(old.value?.observedAt&&(!s.observedAt||old.value.observedAt>s.observedAt))break;
    // Source changes invalidate in-flight automatic matching as well as older source deliveries.
-   if((await kv.atomic().check(old,meta).set(old.key,bounded(s)).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1}).commit()).ok)break;
+   let tx=kv.atomic().check(old,meta).set(old.key,bounded(s)).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
+   if(s.pdf&&(old.value?.pdf?.kind!=='inspection_pdf'||s.pdf.revision!==old.value?.pdf?.revision||s.pdf.sha256!==old.value?.pdf?.sha256))tx=tx.set(key('pdfPending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId});
+   if((await tx.commit()).ok)break;
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
   }}
   const r=await get('refs');if(r.value)await kv.set(key('refs'),{...r.value,sourceCheckedAt:checkedAt});
@@ -411,7 +426,30 @@ export function createWorkStore(kv:any){
     const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;
    }
   }
+  await reconcilePdfAttachments(requestId);
   return {linked,skipped};
+ }
+ async function reconcilePdfAttachments(requestId?:string){
+  // Only pending attachments are read. A normal sync never scans all saved PDF files.
+  for await(const pending of kv.list({prefix:key('pdfPending')})){
+   const pointer=pending.value,src=await get('source',pointer.hospitalName,pointer.recordId),s=src.value;
+   const binding=await sourceLink(pointer.recordId),r=binding.owner?.value;
+   if(!s?.pdf||!r||!live(r)||(requestId&&r.id!==requestId))continue;
+   const pdf=inspectionPdf(s.pdf),id='pdf_'+await hash(pointer.recordId),old=await get('history',r.id,id);
+   if(old.value?.attachment?.sha256!==pdf!.sha256||old.value?.attachment?.revision!==pdf!.revision){
+    const op={action:'work_pdf_auto',requestId:r.id,recordId:pointer.recordId,baseRevision:r.revision,pdfRevision:pdf!.revision,pdfHash:pdf!.sha256,operationId:'pdf_'+await hash([r.id,pointer.recordId,pdf!.revision,pdf!.sha256,r.revision])};
+    const result=await mutate(op,{name:pdf!.uploadedBy||'내역서 자동 연결',level:0},async()=>{
+     const current=await request(r.id),owner=await sourceLink(pointer.recordId),source=await get('source',pointer.hospitalName,pointer.recordId),entry=await get('history',r.id,id);
+     if(current.value.revision!==op.baseRevision||owner.entry.value?.requestId!==r.id||source.value?.pdf?.sha256!==op.pdfHash||source.value?.pdf?.revision!==op.pdfRevision)return {response:{success:false,skipped:true}};
+     const before=copy(current.value),next=copy(before),now=new Date().toISOString();
+     const h={id,requestId:r.id,kind:'comment',body:'AS/점검 내역서',sourceRecordId:pointer.recordId,attachment:pdf,author:entry.value?.author||pdf!.uploadedBy||'내역서 자동 연결',createdAt:entry.value?.createdAt||now,updatedAt:now,updatedBy:pdf!.uploadedBy||'내역서 자동 연결',revision:(entry.value?.revision||0)+1,deletedAt:'',deletedBy:''};
+     next.revision++;next.updatedAt=now;next.updatedBy=h.updatedBy;next.latest='AS/점검 내역서';
+     return {kind:'pdf_attachment',before:entry.value||null,requestBefore:before,request:next,history:h,checks:[current,owner.entry,source,entry],response:{success:true,request:next,history:h}};
+    });if(!result.success)continue;
+   }
+   // A concurrent regenerated PDF replaces this receipt; do not erase its pending event.
+   await kv.atomic().check(pending,src,binding.entry).delete(pending.key).commit();
+  }
  }
  async function seed(p:Obj){
   if((await status()).ready)throw new Error('활성화된 KV에는 기존 시트를 다시 가져올 수 없습니다.');

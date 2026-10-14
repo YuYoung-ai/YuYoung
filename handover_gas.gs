@@ -537,6 +537,7 @@ function doPost(e){
        (menu_save·weeklyauto_save 는 각자 Lv.3 검증을 별도로 수행하므로 여기서 제외)
        ※ 사진 업로드보다 반드시 먼저 — 인증 없는 요청이 Drive에 파일을 남기면 안 된다. */
     var actName = (payload && payload.action) || '';
+    if(/^inspection_pdf_/.test(actName))return json_(typeof inspectionPdfPost_==='function'?inspectionPdfPost_(payload):{success:false,error:'PDF 저장 서버를 업데이트하세요.'});
     /* 병원 업무 전용 경로: 기존 기록·사진·전역 락 경로로 흘려보내지 않는다. */
     if(/^work_/.test(actName)){
       // Deno 중계는 토큰을 URL 대신 POST 본문으로 보낸다. 조회도 기존 ACL·잠금 경로를 쓴다.
