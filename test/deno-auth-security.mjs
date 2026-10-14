@@ -86,6 +86,7 @@ globalThis.fetch = async (url) => {
   });
 };
 globalThis.Deno = {
+  cron: () => Promise.resolve(),
   env: { get: (name) => env.get(name) },
   openKv: async () => kv,
   serve: (fn) => { handler = fn; return { finished: Promise.resolve() }; },
@@ -263,12 +264,13 @@ async function googleIdToken(overrides = {}) {
   env.set('DEVICE_AUTH_ENABLED', 'true');
   const rememberedKv = new MockKv();
   globalThis.Deno = {
+    cron: () => Promise.resolve(),
     env: { get: (name) => env.get(name) },
     openKv: async () => rememberedKv,
     serve: (fn) => { handler = fn; return { finished: Promise.resolve() }; },
   };
   const rememberedSource = path.join(ROOT, 'test', '.tmp-deno-auth-remember.ts');
-  fs.writeFileSync(rememberedSource, SOURCE.replace("'./work-store.ts'", "'../deno-auth/work-store.ts'"));
+  fs.writeFileSync(rememberedSource, SOURCE.replace(/'\.\/(work-(?:store|notifications|push)\.ts)'/g, "'../deno-auth/$1'"));
   try {
     await import(pathToFileURL(rememberedSource).href);
   } finally {

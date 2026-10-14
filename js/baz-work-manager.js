@@ -9,6 +9,7 @@
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
   var launch=window.BazWorkLaunch?window.BazWorkLaunch.parse(window.location?.search):{receipt:false,embed:false};
+  var notificationTarget=window.BazNotificationRoute?window.BazNotificationRoute.parse(window.location?.search):null,notificationOpening=false;
   var embedded=launch.receipt&&launch.embed&&window.parent!==window;
   if(embedded){$('receipt-launch-status').hidden=false;document.documentElement.dataset.receiptEmbed='true';draftKey=scope+'_lookup_draft_'+encodeURIComponent([launch.name,launch.sn,launch.region].join('|'));}
   function receiptMessage(type){if(embedded)window.parent.postMessage({type:type},window.location.origin);}
@@ -477,6 +478,44 @@
     return detailTask;
   }
   function closeDetail(render){detailSeq++;detailLoading=false;detailError='';detailTask=null;state.detail=null;$('detail').hidden=true;$('detail').setAttribute('aria-busy','false');if(render!==false)renderList();}
+  function notificationBusy(ignoreOpening){return busy||syncing||bulkWorking||pending||rosterLoading||notificationOpening&&!ignoreOpening||Array.from(document.querySelectorAll('dialog[open]')).length>0||!!($('comment-body')&&$('comment-body').value.trim());}
+  function queueNotification(target){
+    if(!window.BazNotificationRoute||!window.BazNotificationRoute.valid(target.requestId))return;
+    notificationTarget={requestId:target.requestId,notificationId:window.BazNotificationRoute.valid(target.notificationId)?target.notificationId:''};
+    $('notification-launch').hidden=false;$('notification-launch-message').textContent='알림의 접수를 최신 내용으로 확인할 수 있습니다.';
+    if(!state.loaded||notificationBusy()){$('notification-launch-message').textContent='작성·저장 중인 내용을 유지했습니다. 작업을 마친 뒤 알림 접수를 열어 주세요.';return;}
+    return openNotification();
+  }
+  async function openNotification(){
+    if(!notificationTarget||!state.loaded)return;
+    if(notificationBusy()){$('notification-launch-message').textContent='작성창을 닫고 저장 결과를 확인한 뒤 다시 눌러 주세요. 입력한 초안은 유지됩니다.';return;}
+    const target={...notificationTarget};notificationOpening=true;
+    $('notification-launch').hidden=false;$('notification-launch-open').disabled=true;$('notification-launch-message').textContent='해당 접수와 Handover의 최신 내용을 확인하고 있습니다…';
+    try{
+      const refreshed=await api.get('work_handover_refresh',{requestId:target.requestId});
+      if(refreshed.deleted&&refreshed.current?.deletedAt){
+        upsert(refreshed.current);await persistSnapshot();renderList();
+        if(state.detail?.request.id===target.requestId)closeDetail(false);
+        if(target.notificationId&&window.BazNotifications){await window.BazNotifications.call('notification_read',{notificationId:target.notificationId,revision:refreshed.current.revision});window.BazNotifications.refresh();}
+        $('notification-launch-message').textContent=refreshed.current.hospitalName+' · 현재 휴지통에 있는 접수입니다.';
+        notificationTarget=null;$('notification-launch-open').hidden=true;return;
+      }
+      if(!refreshed.success)throw new Error(refreshed.error||'Handover 최신 확인 실패');
+      await sync();if($('sync-state').dataset.state!=='done')throw new Error('목록 동기화를 다시 시도하세요.');
+      if(notificationBusy(true))throw new Error('확인 중 새로 시작한 작업을 유지했습니다. 작업을 마친 뒤 다시 눌러 주세요.');
+      await openDetail(target.requestId,true);
+      if(detailError||!state.detail||state.detail.request.id!==target.requestId||state.detail.preview)throw new Error(detailError||'최신 접수 상세를 확인하지 못했습니다.');
+      let readConfirmed=true;
+      $('notification-launch-message').textContent=state.detail.request.hospitalName+' · 최신 접수·Handover 확인 완료 · '+time(refreshed.sourceCheckedAt);
+      if(target.notificationId&&window.BazNotifications){
+        try{await window.BazNotifications.call('notification_read',{notificationId:target.notificationId,revision:state.detail.request.revision,sourceCheckedAt:refreshed.sourceCheckedAt});window.BazNotifications.refresh();}
+        catch(e){readConfirmed=false;$('notification-launch-message').textContent+=' · 알림 확인 기록: '+e.message;}
+      }
+      if(readConfirmed&&notificationTarget?.requestId===target.requestId&&notificationTarget?.notificationId===target.notificationId){notificationTarget=null;$('notification-launch-open').hidden=true;}
+      if(matchMedia('(max-width:700px)').matches)$('detail').scrollIntoView({block:'start'});
+    }catch(e){$('notification-launch-message').textContent='최신 내용 확인 실패 · '+e.message+' 마지막으로 확인한 내용과 구분해 다시 시도하세요.';}
+    finally{notificationOpening=false;$('notification-launch-open').disabled=false;}
+  }
   async function selectHospital(fillSales){
     var value=$('hospital-input').value.trim(),matches=state.hospitals.filter(function(h){return h.origin!=='flow'&&(label(h)===value||h.name===value);});
     var seq=++hospitalSeq;state.selected=matches.length===1?matches[0]:null;
@@ -757,9 +796,12 @@
     if(state.loaded&&!embedded)await refreshTodayRoster();
     if(embedded){$('receipt-launch-status').hidden=state.loaded;$('receipt-launch-retry').hidden=state.loaded;$('receipt-launch-message').textContent=state.loaded?'':'접수 정보를 불러오지 못했습니다. 다시 불러오거나 패널을 닫은 뒤 재시도하세요.';}
     if(launch.receipt&&state.loaded){var selected=window.BazWorkLaunch.match(launch,state.hospitals);openEditor(null,selected);if(launch.name&&!selected)$('hospital-match').textContent='조회한 병원을 최신 병원정보DB에서 확인해 선택하세요. 이름·장비번호·지역이 일치하는 한 개의 후보만 자동 선택합니다.';}
+    if(notificationTarget&&!embedded&&state.loaded)await queueNotification(notificationTarget);
   }
   $('receipt-launch-retry').onclick=function(){this.hidden=true;$('receipt-launch-message').textContent='접수 양식을 불러오는 중…';return start();};
   function checkRosterDay(){if(!embedded&&!document.hidden&&todayRosterDate!==localNow().slice(0,10)&&state.loaded&&!syncing&&!busy&&!rosterLoading)refreshTodayRoster();}
   setInterval(checkRosterDay,60000);document.addEventListener('visibilitychange',function(){if(!document.hidden)checkRosterDay();});
+  if($('notification-launch-open'))$('notification-launch-open').onclick=openNotification;
+  if(window.addEventListener)window.addEventListener('baz-open-notification',function(event){$('notification-launch-open').hidden=false;queueNotification(event.detail||{});});
   start();
 })();

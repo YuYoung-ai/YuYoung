@@ -16,7 +16,11 @@ const reqs=[{id:'complete',status:'완료',hospitalName:'이전 병원명',visit
 const history=[{requestId:'complete',kind:'result',source:{recordId:'linked-complete'}},{requestId:'trash',kind:'result',source:{recordId:'deleted'}},{requestId:'complete',kind:'result',source:{recordId:'flow-old',origin:'flow'}}];
 ctx.hwRows_=name=>name===ctx.HW.REQUESTS?reqs.map(r=>[r.id,JSON.stringify(r)]):history.map((h,i)=>['h'+i,h.requestId,JSON.stringify(h)]);
 const result=ctx.hwKvRefreshSources_();assert.deepEqual(Array.from(result,s=>s.recordId),['linked-complete','new-active']);assert.equal(result[0].hospitalName,'정정된 병원');assert.equal(result[0].date,'2026-10-15');
-assert.ok(reads.every(x=>x.w<4||x.n===2),'full source rows are restricted to matches');
+assert.deepEqual(Array.from(ctx.hwKvRefreshSources_({hospitalName:'이전 병원명',visitDate:'2026-10-14',recordIds:['linked-complete']}),s=>s.recordId),['linked-complete'],'notification scope follows stable source IDs without pulling other visits');
+assert.deepEqual(Array.from(ctx.hwKvRefreshSources_({hospitalName:'진행 병원',visitDate:'2026-10-14',recordIds:[]}),s=>s.recordId),['new-active'],'new receipt candidates do not require the lagging Sheet mirror');
+assert.equal(ctx.hwKvRefreshSources_({hospitalName:'진행 병원',visitDate:'',recordIds:[]}).length,0);
+assert.throws(()=>ctx.hwKvRefreshSources_({hospitalName:'진행 병원',visitDate:'2026-10-14',recordIds:['missing']}),/찾지 못/,'missing linked source is never represented as freshly checked');
+assert.ok(reads.every(x=>x.w<4||x.n<=2),'full source rows are restricted to the selected matches');
 rows.push([...rows[0]]);assert.throws(()=>ctx.hwKvRefreshSources_(),/중복/);rows.pop();rows[0][2]='잘못된 구분';assert.throws(()=>ctx.hwKvRefreshSources_(),/처리일·구분/);rows[0][2]='A/S';
 // Previously sent content reverted to an older version must be queued again.
 const events=[['a','record','v1','{}','sent','2026-10-14T01:00:00Z'],['b','record','v2','{}','sent','2026-10-14T02:00:00Z']];

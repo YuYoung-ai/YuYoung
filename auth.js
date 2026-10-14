@@ -116,6 +116,7 @@
       sessionStorage.setItem(LOGIN_KEY, new Date().toISOString());
       sessionStorage.setItem(VERIFY_KEY, String(Date.now()));   // 로그인 = 방금 검증됨
     } catch (e) {}
+    if(global.dispatchEvent&&global.CustomEvent)global.dispatchEvent(new global.CustomEvent('baz-auth-login'));
   }
 
   function clearSession() {
@@ -342,8 +343,17 @@
     logout: function () {
       var token = this.token();
       var dev = deviceToken();
+      try{
+        localStorage.removeItem('baz_push_uid');
+        if(global.navigator&&global.navigator.serviceWorker){
+          var sw=global.navigator.serviceWorker.controller;
+          if(sw)sw.postMessage({type:'BAZ_PUSH_LOGOUT',token:token});
+          else global.navigator.serviceWorker.getRegistration().then(function(reg){if(reg&&reg.active)reg.active.postMessage({type:'BAZ_PUSH_LOGOUT',token:token});}).catch(function(){});
+        }
+      }catch(e){}
       clearSession();
       clearDevice();   // 명시적 로그아웃 = 이 기기 기억도 해제
+      if(global.dispatchEvent&&global.CustomEvent)global.dispatchEvent(new global.CustomEvent('baz-auth-logout'));
       if (AUTH_URL) {
         if (token) postJSON({ action: 'logout', token: token }).catch(function () {});
         // 기억된 기기도 서버(KV)에서 폐기 — 실패해도 무방
@@ -369,7 +379,7 @@
 
   // 인증 없이 접근 가능한 페이지 (로그인 화면 + 보안 불필요 페이지)
   //   guide/survey 는 업무 데이터가 없어 로그인 없이 열람 가능(페이지 가드 skip → verify 왕복 0).
-  var PUBLIC_PAGES = { 'index.html': 1, '': 1, 'guide.html': 1, 'survey.html': 1 };
+  var PUBLIC_PAGES = { 'index.html': 1, '': 1, 'guide.html': 1, 'survey.html': 1, 'install.html': 1 };
 
   // 페이지별 기본 규칙: tool = 메뉴설정 탭의 도구 id, level = 기본 최소 레벨
   // (index.html의 MENU_DEFAULTS 와 동일한 기준)
@@ -409,6 +419,12 @@
   }
 
   function goLogin_() {
+    try{
+      if(currentPage_()==='hospital-work.html'&&(!BazAuth.token()||BazAuth.cachedLevel()>=requiredLevelFor_('hospital-work.html'))){
+        var p=new URLSearchParams(global.location.search||''),id=p.get('request'),notice=p.get('notification');
+        if(/^[A-Za-z0-9_-]{8,90}$/.test(id||'')){var target='hospital-work.html?request='+encodeURIComponent(id);if(/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))target+='&notification='+encodeURIComponent(notice);BazAuth.rememberReturn(target);}
+      }
+    }catch(e){}
     global.location.replace('index.html');
   }
 
@@ -455,6 +471,15 @@
   // 다른 스크립트에서도 쓸 수 있게 공개 (예: 특정 버튼에서 재검사)
   BazAuth.requiredLevel = function () { return requiredLevelFor_(currentPage_()); };
   BazAuth.guard = guardPage_;
+  BazAuth.rememberReturn=function(path){
+    var url=new URL(path,global.location.href),base=new URL('index.html',global.location.href);
+    if(url.origin!==base.origin||!['hospital-work.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
+    var safe=url.pathname;if(url.pathname.endsWith('/hospital-work.html')){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);}
+    try{sessionStorage.setItem('baz_notification_return_v1',JSON.stringify({path:safe,expires:Date.now()+30*60000}));return true;}catch(e){return false;}
+  };
+  BazAuth.returnAfterLogin=function(){
+    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
+  };
 
   global.BazAuth = BazAuth;
 

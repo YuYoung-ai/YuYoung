@@ -49,7 +49,9 @@
  ************************************************************/
 
 import { createWorkStore } from './work-store.ts';
-const VER = "deno-1.4.0-work-kv";
+import { createWorkNotifications } from './work-notifications.ts';
+import { createPushSender } from './work-push.ts';
+const VER = "deno-1.5.0-work-notifications";
 
 const enc = new TextEncoder();
 
@@ -190,9 +192,9 @@ async function sha256B64u(str: string): Promise<string> {
 }
 
 /* ── 토큰 발급/검증 (baz_token_lib.gs 와 동일 규칙) ── */
-async function issueToken(name: string, level: number, hours: number) {
+async function issueToken(name: string, level: number, hours: number, uid = '') {
   const expSec = Math.floor(Date.now() / 1000) + (hours > 0 ? hours : 6) * 3600;
-  const payload = JSON.stringify({ n: String(name || ""), l: Number(level) || 0, e: expSec, ep: EPOCH });
+  const payload = JSON.stringify({ n: String(name || ""), l: Number(level) || 0, e: expSec, ep: EPOCH, ...(uid ? {u:uid} : {}) });
   const p = b64urlStr(payload);
   const sig = await hmacB64u(p);
   return { token: p + "." + sig, expires: new Date(expSec * 1000).toISOString() };
@@ -206,12 +208,12 @@ async function verifyToken(token: string) {
   let calc: string;
   try { calc = await hmacB64u(p); } catch (_e) { return { ok: false, error: "hmac_error" }; }
   if (!safeEq(calc, sig)) return { ok: false, error: "bad_signature" };
-  let o: { n?: string; l?: number; e?: number; ep?: number };
+  let o: { n?: string; l?: number; e?: number; ep?: number; u?: string };
   try { o = JSON.parse(b64urlDecodeToStr(p)); } catch (_e) { return { ok: false, error: "bad_payload" }; }
   if (!o || typeof o.e === "undefined") return { ok: false, error: "bad_payload" };
   if (Math.floor(Date.now() / 1000) > Number(o.e)) return { ok: false, error: "expired" };
   if (Number(o.ep || 0) < EPOCH) return { ok: false, error: "revoked" };
-  return { ok: true, level: Number(o.l) || 0, name: String(o.n || "") };
+  return { ok: true, level: Number(o.l) || 0, name: String(o.n || ""), uid:String(o.u||'') };
 }
 
 /* ── 비밀번호 대조 ── */
@@ -577,9 +579,18 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         try {await store.checkAccess({name:verified.name||'',level:verified.level||0});}
         catch {return fail('업무관리 접근 권한이 없습니다.',403);}
         const payload:Record<string,unknown>={...p,action};
+        delete payload.__ua;delete payload.target;
         if(p.requestId){
-          try {const r=(await store.request(p.requestId)).value;payload.hospitalName=r.hospitalName;}
-          catch {return fail('요청을 찾지 못했거나 삭제된 접수입니다.',403);}
+          try {
+            const r=(await store.request(p.requestId)).value;payload.hospitalName=r.hospitalName;
+            if(action==='work_handover_refresh'){
+              payload.target=await store.handoverTarget(r.id);
+            }
+          }
+          catch(e:any) {
+            if(e.deleted&&e.current)return workReply({body:{success:false,deleted:true,current:e.current,error:'현재 휴지통에 있는 접수입니다.'},status:200,upstreamMs:0},'kv-deleted',started);
+            return fail('요청을 찾지 못했거나 삭제된 접수입니다.',403);
+          }
         }
         const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
         try {
@@ -593,6 +604,11 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         finally {clearTimeout(timer);}
       }
       const body=await store.handle({...p,action},{name:verified.name||'',level:verified.level||0});
+      if(body.success&&['work_save','work_request_edit'].includes(action)){
+        // Delivery failure must never roll back a successfully saved request.
+        try{await (await notificationService(kv)).process(String(p.operationId||''),4);}
+        catch{body.notificationPending=true;}
+      }
       return workReply({body:body as WorkBody,status:200,upstreamMs:0},'kv',started);
     }
   }
@@ -652,11 +668,42 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
   return workReply(out, mode, started);
 }
 
+async function notificationUid(kind:string,value:string){return kind+':'+await sha256B64u(value.normalize('NFKC').trim());}
+async function notificationAccounts(kv:Deno.Kv){
+  await ensureGoogleUserSeed(kv);
+  const accounts=new Map<string,any>();
+  if(GOOGLE_AUTH_ENABLED)for await(const entry of kv.list<UserRec>({prefix:['user_email']})){
+    const user=entry.value;if(user.status!=='active')continue;
+    const uid=await notificationUid('g',user.email);accounts.set(uid,{uid,name:user.name||user.email,level:user.level,label:'Google · '+user.email});
+  }
+  for(const cred of CREDS){
+    if(!cred.name||(!cred.pw&&!cred.pwsha))continue;
+    const uid=await notificationUid('p',cred.name),old=accounts.get(uid);
+    accounts.set(uid,{uid,name:cred.name,level:Math.max(old?.level||0,cred.level),label:'비밀번호 계정'});
+  }
+  return [...accounts.values()];
+}
+let notificationInstance:ReturnType<typeof createWorkNotifications>|null=null;
+async function notificationService(kv:Deno.Kv){
+  if(!notificationInstance){
+    const sender=createPushSender(kv);
+    notificationInstance=createWorkNotifications(kv,{store:createWorkStore(kv),accounts:()=>notificationAccounts(kv),publicKey:sender.publicKey,send:sender.send});
+  }
+  return notificationInstance;
+}
+
 async function handleAction(
   action: string,
   p: Record<string, unknown>,
   clientIp: string,
 ): Promise<Response> {
+  if(action.startsWith('notification_')){
+    const verified=await verifyToken(String(p.token||''));
+    if(!verified.ok)return json({success:false,error:'로그인이 만료되었습니다.'},401);
+    const kv=await getKv();if(!kv)return json({success:false,error:'알림 저장소가 준비되지 않았습니다.'},503);
+    try{return json(await (await notificationService(kv)).handle(p,verified));}
+    catch(e){return json({success:false,error:e instanceof Error?e.message:'알림 요청 실패'},400);}
+  }
   if (action === 'work_bridge') {
     const kv=await getKv();if(!kv||!SECRET)return json({success:false,error:'업무 KV 연결이 없습니다.'},503);
     const clean={...p};delete clean.__ua;delete clean.signature;
@@ -690,7 +737,7 @@ async function handleAction(
         await writeAudit("google_login", String(claims.email || "unknown"), "", "denied", clientIp);
         return json({ ok: false, error: "access_denied" }, 403);
       }
-      const iss = await issueToken(user.name || user.email, user.level, TTL_HOURS);
+      const iss = await issueToken(user.name || user.email, user.level, TTL_HOURS, await notificationUid('g',user.email));
       let device = "";
       if (p.remember && DEVICE_AUTH_ENABLED) {
         device = newDeviceToken();
@@ -740,7 +787,7 @@ async function handleAction(
       return json({ ok: false, error: "invalid_password" });
     }
     await clearLoginFailures(clientIp);
-    const iss = await issueToken(hit.name, hit.level, TTL_HOURS);
+    const iss = await issueToken(hit.name, hit.level, TTL_HOURS, await notificationUid('p',hit.name));
     let device = "";
     if (p.remember && DEVICE_AUTH_ENABLED) {
       const kv = await getKv();
@@ -786,7 +833,7 @@ async function handleAction(
       name = user.name || user.email;
       level = user.level; // 관리 화면에서 바꾼 최신 권한을 즉시 반영한다.
     }
-    const iss = await issueToken(name, level, TTL_HOURS);
+    const iss = await issueToken(name, level, TTL_HOURS, await notificationUid(v.uid?'g':'p',v.uid||name));
     await kv.set(["dev", dev], { ...v, n: name, l: level, seen: Date.now() }, { expireIn: DEVICE_TTL_MS });
     await writeAudit("device_login", v.uid || name, "", "ok", clientIp, { level });
     return json({ ok: true, token: iss.token, level, name, expires: iss.expires, device: dev });
@@ -918,6 +965,11 @@ async function handleAction(
   return json({ ok: false, error: "unknown_action" });
 }
 
+Deno.cron('baz-work-push-delivery', '* * * * *', async()=>{
+  const kv=await getKv();if(!kv||(await createWorkStore(kv).status()).ready!==true)return;
+  try{await (await notificationService(kv)).process();}catch{console.warn('접수 알림 발송은 다음 주기에 재시도합니다.');}
+});
+
 Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
   if (!originAllowed(req)) return withCors(json({ ok: false, error: "origin_not_allowed" }, 403), req);
   if (req.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), req);
@@ -934,7 +986,7 @@ Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (req.method === "GET") {
       const u = new URL(req.url);
       const action = u.searchParams.get("action") || "ping";
-      if (action.startsWith("work_")) return withCors(json({ success: false, error: "업무 API는 POST로 호출하세요." }, 405), req);
+      if (action.startsWith("work_")||action.startsWith('notification_')) return withCors(json({ success: false, error: "업무·알림 API는 POST로 호출하세요." }, 405), req);
       const p: Record<string, unknown> = {};
       u.searchParams.forEach((v, k) => (p[k] = v));
       p.__ua = req.headers.get("user-agent") || "";

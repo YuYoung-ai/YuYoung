@@ -1,6 +1,7 @@
 // Shared work data only. Authentication keys and databases are never changed here.
 import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
 import {createWorkRoster} from './work-roster.ts';
+import {assignmentNotification,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -57,6 +58,12 @@ export function createWorkStore(kv:any){
  async function hospitalRequests(id:string){return values(['hospital',id]);}
  async function history(id:string){return values(['history',id]);}
  async function sources(name:string){return values(['source',name]);}
+ async function handoverTarget(id:string){
+  const r=(await request(id)).value;
+  const ids=[...new Set((await history(id)).filter(h=>h.kind==='result'&&h.source?.origin!=='flow'&&h.source?.recordId).map(h=>h.source.recordId))];
+  if(ids.length>100)throw new Error('연동된 Handover가 많습니다. 전체 동기화로 확인하세요.');
+  return {requestId:r.id,hospitalName:r.hospitalName,visitDate:String(r.visitAt||'').slice(0,10),recordIds:ids};
+ }
  async function sourceLink(recordId:string){
   const entry=await get('link',recordId),owner=entry.value?await get('request',entry.value.requestId):null;
   // Old links remain as trash history. Only an explicitly deleted owner permits reuse.
@@ -99,6 +106,11 @@ export function createWorkStore(kv:any){
    if(checks.length)tx=tx.check(...checks);
    if(ev.before?.hospitalId&&ev.before.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',ev.before.hospitalId,ev.request.id));
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
+   const alert=assignmentNotification(ev);
+   if(alert)tx=tx.set(notificationKey('event',alert.id),alert,{expireIn:30*86400000})
+    .set(notificationKey('pending',alert.id),{id:alert.id},{expireIn:30*86400000})
+    .set(notificationKey('requestEvent',alert.requestId,alert.id),true,{expireIn:30*86400000})
+    .set(notificationKey('latest',alert.requestId),alert.id,{expireIn:30*86400000});
    if((await tx.commit()).ok)return response;
   }
   const e:any=new Error('다른 저장과 겹쳤습니다. 같은 기록으로 다시 시도하세요.');e.retrySameOperation=true;throw e;
@@ -214,6 +226,7 @@ export function createWorkStore(kv:any){
   return {kind:p.action.slice(5),before,request:r,response:{success:true,request:r}};
  });}
  async function cleanupPurge(r:Obj){
+  await removeRequestNotifications(kv,r.id);
   // Primary records and old retry payloads are removed in bounded, resumable transactions.
   for await(const e of kv.list({prefix:key('history',r.id)})){
    const binding=e.value.source?.recordId?await get('link',e.value.source.recordId):null;
@@ -339,7 +352,7 @@ export function createWorkStore(kv:any){
    if(seen.has(input.sourceId))throw new Error('중복된 원본 식별자입니다.');seen.add(input.sourceId);
    const plan=await relinkPlan(input,hospitals,context);
    if(plan.skip){skipped.push({sourceId:plan.sourceId,reason:plan.skip});continue;}
-   items.push({...input,requestId:plan.r.id,baseRevision:plan.r.revision,targetKey:plan.h.key,previousName:plan.r.hospitalName,visitAt:plan.r.visitAt,sn:plan.r.sn});
+   items.push({...input,requestId:plan.r.id,baseRevision:plan.r.revision,targetKey:plan.h!.key,previousName:plan.r.hospitalName,visitAt:plan.r.visitAt,sn:plan.r.sn});
   }catch(e:any){errors.push({sourceId:input.sourceId,error:e.message});}}
   return {success:true,items,skipped,errors};
  }
@@ -352,8 +365,8 @@ export function createWorkStore(kv:any){
    const result=await mutate(operation,who,async()=>{
     const plan=await relinkPlan(input,hospitals);
     if(plan.skip)return {response:{success:false,error:plan.skip}};
-    const {r:old,entry}=plan,reference=await get('hospitalRef',plan.h.key);
-    if(!reference.value||reference.value.id!==plan.h.id||reference.value.name!==plan.h.name||reference.value.origin==='flow')throw new Error('병원 기준 정보가 변경되었습니다. 다시 확인하세요.');
+    const {r:old,entry}=plan,reference=await get('hospitalRef',plan.h!.key);
+    if(!reference.value||reference.value.id!==plan.h!.id||reference.value.name!==plan.h!.name||reference.value.origin==='flow')throw new Error('병원 기준 정보가 변경되었습니다. 다시 확인하세요.');
     const h=reference.value;
     if(old.id!==input.requestId)throw new Error('이전 접수 식별자가 변경되었습니다.');
     if(Number(old.revision)!==Number(input.baseRevision))return {response:clash(old)};
@@ -399,7 +412,7 @@ export function createWorkStore(kv:any){
   }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
-  for(const item of items){const s={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
+  for(const item of items){const s:Obj={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
    const index=await get('sourceIndex',s.recordId),binding=await sourceLink(s.recordId);
    const linkedHistory=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
    const previousName=index.value?.hospitalName||linkedHistory?.value?.source?.hospitalName||s.hospitalName;
@@ -517,5 +530,5 @@ export function createWorkStore(kv:any){
   }
   throw new Error('지원하지 않는 연동 작업입니다.');
  }
- return {handle,status,bridge,manifest,ingestSources,sources,request,checkAccess:access,NS};
+ return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,checkAccess:access,NS};
 }

@@ -3,12 +3,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
+import {createWorkStore} from '../deno-auth/work-store.ts';
+import {createWorkNotifications} from '../deno-auth/work-notifications.ts';
+import {createPushSender} from '../deno-auth/work-push.ts';
 
 const secret='test-work-secret', upstream='https://script.google.com/macros/s/test-deployment/exec';
 const env=new Map(Object.entries({TOKEN_SECRET:secret,TOKEN_EPOCH:'1',WORK_API_ENABLED:'true',WORK_GAS_URL:upstream,WORK_REFERENCE_TTL_SEC:'1',ALLOWED_ORIGINS:'https://allowed.example'}));
 let handler, gate=null, failed=false, denied=false, hanging=false, revision=0;
 const calls=[],logs=[];
-globalThis.Deno={env:{get:n=>env.get(n)},serve:fn=>{handler=fn;},openKv:async()=>null};
+globalThis.Deno={cron:()=>Promise.resolve(),env:{get:n=>env.get(n)},serve:fn=>{handler=fn;},openKv:async()=>null};
 const originalInfo=console.info;
 console.info=s=>logs.push(s);
 globalThis.fetch=async(url,options)=>{
@@ -25,15 +28,15 @@ globalThis.fetch=async(url,options)=>{
 };
 function token(name){const payload=Buffer.from(JSON.stringify({n:name,l:1,e:Math.floor(Date.now()/1000)+3600,ep:1})).toString('base64url');return payload+'.'+crypto.createHmac('sha256',secret).update(payload).digest('base64url');}
 const alice=token('A'),bob=token('B');
-const source=stripTypeScriptTypes(fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8'));
-function load(){vm.runInNewContext(source,{Deno:globalThis.Deno,fetch:(...a)=>globalThis.fetch(...a),console,crypto:globalThis.crypto,TextEncoder,TextDecoder,URL,Response,Headers,AbortController,Error,performance,Date,Uint8Array,atob,btoa,setTimeout:(...a)=>globalThis.setTimeout(...a),clearTimeout});}
+const source=stripTypeScriptTypes(fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8')).replace(/^import .* from .*;\s*$/gm,'');
+function load(){vm.runInNewContext(source,{createWorkStore,createWorkNotifications,createPushSender,Deno:globalThis.Deno,fetch:(...a)=>globalThis.fetch(...a),console,crypto:globalThis.crypto,TextEncoder,TextDecoder,URL,Response,Headers,AbortController,Error,performance,Date,Uint8Array,atob,btoa,setTimeout:(...a)=>globalThis.setTimeout(...a),clearTimeout});}
 load();
 async function send(action,p={},options={}){
   const res=await handler(new Request('https://auth.example/',{method:'POST',headers:{origin:options.origin||'https://allowed.example','Content-Type':'text/plain'},body:JSON.stringify({token:alice,action,...p})}),{remoteAddr:{hostname:'203.0.113.1'}});
   return {res,body:await res.json()};
 }
 function block(){let resolve;const promise=new Promise(r=>resolve=r);gate={promise,resolve};}
-async function started(n){for(let i=0;i<30&&calls.length<n;i++)await new Promise(setImmediate);assert.equal(calls.length,n);}
+async function started(n){const deadline=Date.now()+2000;while(calls.length<n&&Date.now()<deadline)await new Promise(r=>setTimeout(r,1));assert.equal(calls.length,n);}
 
 const first=await send('work_bootstrap');assert.equal(first.res.headers.get('X-Baz-Work-Mode'),'live');assert.equal(first.body.requests[0].status,'방문예정');
 const second=await send('work_bootstrap');assert.equal(second.res.headers.get('X-Baz-Work-Mode'),'references-hit');assert.equal(calls.at(-1).omitReferences,'1');assert.deepEqual(second.body.hospitals,first.body.hospitals);assert.equal(second.body.requests[0].status,'완료','state remains live with cached references');
