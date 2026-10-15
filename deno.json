@@ -4,6 +4,7 @@
   "tasks": {
     "check": "deno check --unstable-kv deno-auth/main.ts",
     "test:matching": "deno test --unstable-kv test/work-matching-deno.ts",
-    "test:push": "deno run --allow-env --allow-read --unstable-kv test/work-push-deno.ts"
+    "test:push": "deno run --allow-env --allow-read --unstable-kv test/work-push-deno.ts",
+    "test:work-kv": "deno run --allow-read --unstable-kv test/work-indexes.mjs"
   }
 }
