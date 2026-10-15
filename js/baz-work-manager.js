@@ -282,6 +282,9 @@
     $('count-total').textContent=counts.total;$('count-active').textContent=counts.active;$('count-review').textContent=counts.review;$('count-completed').textContent=counts.completed;
     document.querySelectorAll('[data-metric]').forEach(function(b){b.setAttribute('aria-pressed',String(!advanced.status.length&&b.dataset.metric===state.statusScope));});
     $('review-alert').hidden=!counts.globalReview;$('review-alert-count').textContent=counts.globalReview+'건';
+    var sourceAlerts=state.requests.filter(function(r){return !r.deletedAt&&r.handoverReviewCount>0;});
+    if($('source-review-alert')){$('source-review-alert').hidden=!sourceAlerts.length;$('source-review-alert').innerHTML='<summary>Handover 원본 변경 확인 · '+sourceAlerts.length+'건 <small>전체 기간</small></summary><div>'+sourceAlerts.map(function(r){return '<button type="button" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+' · '+esc(time(r.visitAt))+' · '+r.handoverReviewCount+'개 기록</button>';}).join('')+'</div>';}
+
     $('trash-toggle').setAttribute('aria-pressed',String(state.filter==='trash'));$('trash-toggle').textContent=state.filter==='trash'?'휴지통 닫기':'휴지통';
     var rows=state.requests.filter(function(r){
       return fields.query(r,Object.assign({},query,{name:displayRequest(r).hospitalName}),state.hospitals);
@@ -372,10 +375,10 @@
       '</div>',
       '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+editable(r,'symptom',r.symptom)+'</p>'+ (editMode?inlineActions(r):'')+'</section>',
       '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">처리 결과</h3><div class="detail-content"><div class="result-list">',
-      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
+      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+(window.BazSourceReview?window.BazSourceReview.markup(h,!!r.deletedAt):'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
       '</div>'+((d.historyCursor||d.auditCursor)?'<button data-action="more-history">이력 더 보기</button>':'')+'</div></section>',
       '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
-      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+(h.attachment&&h.attachment.kind==='inspection_pdf'?(window.BazWorkComments&&window.BazWorkComments.renderPdf?window.BazWorkComments.renderPdf(h.attachment):esc('AS/점검 내역서')):(window.BazWorkComments?window.BazWorkComments.render(h.body):commentMarkup(h.body)))+'</div>'+((!h.attachment&&(h.author===account||BazAuth.cachedLevel()>=3))?'<div class="comment-controls"><button data-comment="'+esc(h.id)+'">댓글 수정</button><button data-comment-delete="'+esc(h.id)+'">댓글 삭제</button></div><div class="comment-delete-confirm" hidden><span>이 댓글을 삭제할까요? 삭제 후 복원할 수 있습니다.</span><button class="danger" data-comment-confirm="'+esc(h.id)+'">삭제 확인</button><button data-comment-cancel>취소</button></div>':'')+'</article>';}).join(''),
+      d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+(h.attachment&&h.attachment.kind==='inspection_pdf'?(window.BazWorkComments&&window.BazWorkComments.renderPdf?window.BazWorkComments.renderPdf(h.attachment)+'<p class="pdf-review" data-pdf-review="'+esc(h.id)+'">원본 비교 중…</p>':esc('AS/점검 내역서')):(window.BazWorkComments?window.BazWorkComments.render(h.body):commentMarkup(h.body)))+'</div>'+((!h.attachment&&(h.author===account||BazAuth.cachedLevel()>=3))?'<div class="comment-controls"><button data-comment="'+esc(h.id)+'">댓글 수정</button><button data-comment-delete="'+esc(h.id)+'">댓글 삭제</button></div><div class="comment-delete-confirm" hidden><span>이 댓글을 삭제할까요? 삭제 후 복원할 수 있습니다.</span><button class="danger" data-comment-confirm="'+esc(h.id)+'">삭제 확인</button><button data-comment-cancel>취소</button></div>':'')+'</article>';}).join(''),
       (d.history||[]).some(function(h){return h.kind==='comment'&&h.deletedAt;})?'<details class="deleted-comments"><summary>삭제된 댓글</summary>'+(d.history||[]).filter(function(h){return h.kind==='comment'&&h.deletedAt;}).map(function(h){return '<div class="entry"><small>'+esc(h.author)+' · 삭제 '+esc(time(h.deletedAt))+'</small>'+((h.author===account||BazAuth.cachedLevel()>=3)?'<button data-comment-restore="'+esc(h.id)+'">댓글 복원</button>':'')+'</div>';}).join('')+'</details>':'',
       '</div><form id="comment-form" class="comment-form"><label class="sr-only" for="comment-body">댓글 내용</label><textarea id="comment-body" rows="3" maxlength="4000" placeholder="댓글·URL을 입력하거나 클라우디움 공유 표를 붙여 넣으세요." required></textarea><p class="hint comment-url-hint">클라우디움 공유 표를 붙여 넣거나 URL.html 파일을 불러오면 수정 URL만 댓글에 입력됩니다.</p><div id="comment-preview" class="comment-preview" role="region" aria-label="댓글 미리보기" hidden></div><p id="comment-share-error" class="notice" role="alert" hidden></p><input id="comment-file-input" type="file" accept=".html,.htm,text/html" aria-label="클라우디움 공유 링크 파일" hidden><div class="comment-actions"><button id="comment-file-button" type="button">공유 링크 파일</button><span id="comment-edit-label" class="hint"></span><button class="primary" type="submit">댓글 저장</button></div></form></section>',
       '<details id="detail-tools" class="detail-section detail-tools" data-request-id="'+esc(r.id)+'"><summary>상세 관리 및 이력</summary><div class="detail-tools-body">',
@@ -391,6 +394,7 @@
     ].join('');
   }
   function auditText(log){
+    if(log.kind==='result_source_review')return 'Handover 변경 내용 확인 · '+log.actor;
     if(log.kind==='pdf_attachment')return 'AS/점검 내역서 자동 첨부';
     if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 고객센터 결과 확인 대기';if(log.kind==='status_change')return '상태 수동 변경 · '+(log.before&&log.before.status||'미기록')+' → '+(log.after&&log.after.status||'미기록');if(log.kind==='delete')return '접수 휴지통 이동';if(log.kind==='restore')return '접수 복원';
     if(log.kind==='request_create')return '고객센터 접수';
@@ -415,6 +419,7 @@
     results=results.filter(function(h){return h.source.origin!=='flow'||!h.source.sn||!results.some(function(other){return other.source.origin!=='flow'&&other.source.sn===h.source.sn&&other.source.date===h.source.date;});});
     renderHost='detail';$('detail').innerHTML=detailMarkup(d,r,results,entries.filter(function(h){return h.kind!=='result'&&!h.deletedAt&&!(h.kind==='comment'&&h.flowImport);}));
     $('detail').hidden=false;commentEdit=null;
+    refreshPdfReviews(d);
     $('detail-tools').open=!!keepToolsOpen;
     var commentDraft=read(scope+'_comment_'+r.id)||{};
     $('comment-body').value=commentDraft.body||'';
@@ -617,6 +622,33 @@
     var data=await write(commentEdit?'work_history_update':'work_history_add',{requestId:r.id,body:body,historyId:commentEdit?commentEdit.id:'',baseHistoryRevision:commentEdit?commentEdit.revision:0},'comment');
     if(data&&!data.success)notify(data.error+(data.conflict?'\n최신 댓글을 확인한 뒤 다시 편집하세요. 입력한 내용은 초안에 남아 있습니다.':''));
   }
+  async function refreshPdfReviews(d){
+    if(!window.BazSourceReview||d.preview)return;
+    var root=$('detail');
+    await Promise.all((d.history||[]).filter(function(h){return h.attachment?.kind==='inspection_pdf'&&!h.deletedAt;}).map(async function(h){
+      var node=Array.from(root.querySelectorAll('[data-pdf-review]')).find(function(n){return n.dataset.pdfReview===h.id;});if(!node)return;
+      try{var source=d.history.find(function(x){return x.kind==='result'&&x.source?.recordId===h.sourceRecordId;});var result=await window.BazSourceReview.comparePdf(h.attachment,source&&source.source);if(!node.isConnected||state.detail!==d)return;node.textContent=result.text+' · 사진·서명은 비교 대상에서 제외';node.dataset.state=result.state;}
+      catch(e){if(node.isConnected)node.textContent='PDF 원본 비교 실패 · 다시 확인하세요.';}
+    }));
+  }
+  async function confirmSourceReview(id){
+    if(busy||pending||syncing||notificationOpening||!state.detail)return;
+    var previous=state.detail,entry=previous.history.find(function(h){return h.id===id;});if(!entry?.sourceReview?.pending)return;
+    var targetId=previous.request.id,sourceVersion=entry.source.version;notificationOpening=true;
+    try{
+      notify('변경 확인 전 최신 Handover를 확인하고 있습니다…');
+      var fresh=await api.get('work_handover_refresh',{requestId:targetId});if(!fresh.success||!fresh.workDetail?.success)throw new Error(fresh.error||'원본 확인 실패');
+      if(state.detail?.request.id!==targetId)return;
+      state.detail=fresh.workDetail;detailCache.set(targetId,state.detail);await cache.saveDetail(account,targetId,state.detail);upsert(state.detail.request);renderList();renderDetail();
+      var current=state.detail.history.find(function(h){return h.id===id;});
+      if(!current)throw new Error('해당 처리 이력을 더 불러온 뒤 다시 확인하세요.');
+      if(!current.sourceReview?.pending){notify('이미 확인된 원본 변경입니다.');return;}
+      if(current.source.version!==sourceVersion){notify('확인 중 원본이 다시 변경되었습니다. 변경 항목을 다시 비교하세요.');return;}
+      var saved=await write('work_source_review',{requestId:targetId,historyId:id,baseRevision:state.detail.request.revision,baseHistoryRevision:current.revision,sourceVersion:sourceVersion},'source-review');
+      if(saved)notify(saved.success?'원본 변경을 확인했습니다. 업무 상태는 유지됩니다.':saved.error);
+    }catch(e){notify('원본 변경을 확인 처리하지 못했습니다. '+e.message);}
+    finally{notificationOpening=false;}
+  }
   async function openResults(existing){
     if(busy)return;var requestId=state.detail.request.id,dialogSeq=++resultDialogSeq;state.source=null;state.resultExisting=existing||null;sourceSeq++;
     $('source-list').textContent='Handover 기록을 불러오는 중…';$('source-preview').hidden=true;$('result-memo').value=existing?existing.memo||'':'';err('result-error','');
@@ -689,6 +721,7 @@
     selectionMode=false;clearSelection();closeDetail(false);state.statusScope=b.dataset.metric;advanced.status=[];
     state.page=1;renderList();
   };});
+  if($('source-review-alert'))$('source-review-alert').onclick=function(event){var b=event.target.closest('[data-open]');if(b)openDetail(b.dataset.open);};
   $('review-alert-open').onclick=function(){Object.keys(advanced).forEach(function(k){advanced[k]=[];});$('search').value='';state.filter='all';lastLiveFilter='all';state.statusScope='review';selectionMode=false;clearSelection();closeDetail(false);state.page=1;renderList();};
   $('trash-toggle').onclick=function(){selectionMode=false;clearSelection();closeDetail(false);if(state.filter==='trash')state.filter=lastLiveFilter;else{lastLiveFilter=state.filter;state.filter='trash';editMode=false;}state.page=1;renderList();};
   $('selection-mode').onclick=function(){if(busy||syncing||bulkWorking||pending)return;editMode=false;activeField=null;if(state.detail)renderDetail();selectionMode=!selectionMode;if(!selectionMode)checkedRequests.clear();renderList();};
@@ -722,6 +755,7 @@
     if(b.dataset.action==='delete'||b.dataset.action==='restore'){changeLifecycle(b.dataset.action);return;}
     if(b.dataset.action==='more-history'){loadMoreHistory();return;}
     if(detailLoading||detailError)return;
+    if(b.dataset.sourceReview){confirmSourceReview(b.dataset.sourceReview);return;}
     if(b.dataset.commentDelete){if(busy||pending||state.detail.request.deletedAt)return;b.closest('.entry').querySelector('.comment-delete-confirm').hidden=false;return;}
     if(b.dataset.commentCancel!==undefined){b.closest('.comment-delete-confirm').hidden=true;return;}
     if(b.dataset.commentConfirm||b.dataset.commentRestore){

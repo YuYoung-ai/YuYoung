@@ -46,3 +46,13 @@ const winningSame={...winning,fileId:'race-same',url:'https://drive.google.com/f
 onCreate=()=>{handover.data[1][metaCol-1]=JSON.stringify(winningSame);};
 const dedupRace=post({...last,baseRevision:3});assert.ok(dedupRace.success,dedupRace.error);assert.equal(files.at(-1).trashed,true);assert.equal(dedupRace.pdf.fileId,'race-same','same-content concurrent upload reuses the winning file');
 console.log('inspection-upload-gas: header/folder preservation, auth, exact 7MB integrity, stable-record/unique-visit match, direct Drive save, deduplication, revision conflict, partial commit repair and orphan cleanup passed.');
+const basis=post({...common,action:'inspection_pdf_resolve',pdfFormat:'simplified'}).sourceBasis;
+assert.equal(basis.format,'simplified');assert.equal(basis.recordId,common.recordId);
+const freshBytes=Buffer.from('%PDF-1.7\nsource basis test\n%%EOF'),verified={...upload,bytes:freshBytes.length,base64:freshBytes.toString('base64'),sha256:crypto.createHash('sha256').update(freshBytes).digest('hex'),uploadId:'upload-verified',baseRevision:4,sourceFingerprint:basis.fingerprint,pdfFormat:'simplified'};
+const originalDetail=handover.data[1][8],beforeConflict=files.length;
+handover.data[1][8]='생성 후 변경';assert.equal(post(verified).sourceConflict,true);assert.equal(files.length,beforeConflict,'source changed before upload cannot create a file');
+handover.data[1][8]=originalDetail;onCreate=()=>{handover.data[1][8]='전송 중 변경';};assert.equal(post(verified).sourceConflict,true);assert.equal(files.at(-1).trashed,true,'source changed during transfer cleans up only the uncommitted new file');
+handover.data[1][8]=originalDetail;const final=post(verified);assert.ok(final.success,final.error);assert.equal(final.pdf.sourceBasis.fingerprint,basis.fingerprint);assert.equal(final.pdf.sourceBasis.format,'simplified');
+assert.equal(post({...common,action:'inspection_pdf_resolve',pdfFormat:'simplified'}).sourceBasis.fingerprint,basis.fingerprint,'PDF metadata changes do not affect the clinical fingerprint');
+handover.data[1][8]='저장 후 원본 수정';const replay=post(verified);assert.ok(replay.success);assert.equal(replay.pdf.sourceBasis.fingerprint,basis.fingerprint,'lost-response retries preserve the original basis instead of claiming newer content');
+console.log('inspection-upload-gas: source basis, metadata exclusion, pre-transfer and concurrent source conflicts, uncommitted cleanup and idempotent old-basis recovery passed.');

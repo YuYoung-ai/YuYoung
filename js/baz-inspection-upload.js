@@ -11,7 +11,7 @@
       const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),120000);
       try{
         const response=await (options.fetch||fetch)(url.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...payload,action,token:options.token()}),signal:ctl.signal});
-        const data=await response.json();if(!data||!data.success)throw new Error(data&&data.error||'PDF 저장 응답을 확인하지 못했습니다.');return data;
+        const data=await response.json();if(!data||!data.success){const error=new Error(data&&data.error||'PDF 저장 응답을 확인하지 못했습니다.');error.sourceConflict=!!data?.sourceConflict;throw error;}return data;
       }catch(e){if(e.name==='AbortError')throw new Error('응답 대기 시간이 지났습니다. 같은 파일로 다시 시도해 주세요.');throw e;}
       finally{clearTimeout(timer);}
     }
@@ -19,6 +19,7 @@
       if(s.busy)return;s.busy=true;retry.hidden=true;link.hidden=true;newButton.disabled=true;
       try{
         if(s.blob.size>MAX_BYTES)throw new Error('Drive 자동 저장은 최대 7MB입니다. 사진을 줄이고 다시 생성하세요.');
+        if(s.context.sourcePreparationError)throw new Error(s.context.sourcePreparationError+' 원본을 확인한 뒤 PDF를 다시 생성하세요.');
         if(!s.context.hospital||!s.context.date)throw new Error('병원명과 점검일을 확인하세요.');
         message(s,'PDF 생성 완료 · Handover 기록을 확인하는 중…');
         const resolved=await call('inspection_pdf_resolve',s.context);
@@ -34,11 +35,14 @@
         if(current===s){link.href=safe.href;link.hidden=false;}
         message(s,saved.warning||'Google Drive·Handover 저장 완료 · 접수 동기화 후 댓글에서 AS/점검 내역서를 확인하세요.');
         s.base64=null;s.blob=null;
-      }catch(e){message(s,'PDF는 생성되었습니다. '+(e.message||'Drive 저장 실패'));if(current===s)retry.hidden=false;}
+      }catch(e){message(s,'PDF는 생성되었습니다. '+(e.message||'Drive 저장 실패'));if(current===s)retry.hidden=!!s.context.sourcePreparationError||!!e.sourceConflict;}
       finally{s.busy=false;if(current===s)newButton.disabled=false;}
     }
     retry.addEventListener('click',()=>current?run(current):undefined);
-    return {publish(blob,filename,context){current={blob,filename,context:{...context},uploadId:crypto.randomUUID(),busy:false};return run(current);},reset(){current=null;status.textContent='';retry.hidden=true;link.hidden=true;newButton.disabled=false;}};
+    return {async prepare(context){
+      try{const resolved=await call('inspection_pdf_resolve',context);if(!resolved.sourceBasis?.fingerprint)throw new Error('원본 비교 서버가 아직 준비되지 않았습니다.');return {...context,recordId:resolved.recordId,sourceFingerprint:resolved.sourceBasis.fingerprint};}
+      catch(e){return {...context,sourcePreparationError:e.message||'Handover 원본 확인 실패'};}
+    },publish(blob,filename,context){current={blob,filename,context:{...context},uploadId:crypto.randomUUID(),busy:false};return run(current);},reset(){current=null;status.textContent='';retry.hidden=true;link.hidden=true;newButton.disabled=false;}};
   }
   root.BazInspectionUpload={create,MAX_BYTES};
 })(typeof window!=='undefined'?window:this);
