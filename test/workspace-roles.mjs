@@ -1,0 +1,41 @@
+import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert/strict';
+import {createWorkStore} from '../deno-auth/work-store.ts';
+import {createWorkNotifications,notificationKey as nk} from '../deno-auth/work-notifications.ts';
+const fixture=fs.readFileSync(new URL('./work-notifications.mjs',import.meta.url),'utf8');
+const Kv=vm.runInNewContext('('+fixture.slice(fixture.indexOf('class Kv {'),fixture.indexOf('const uid=')).trim()+')',{Map,structuredClone,JSON,String,Number,Infinity});
+const kv=new Kv(),store=createWorkStore(kv),who={name:'담당자',level:1,engineer:'FSE1'},other={name:'다른 담당자',level:1,engineer:'FSE2'};
+const request={id:'unassigned_1',hospitalId:'h1',hospitalName:'검증 병원',sn:'BV5015',hospitalKey:'h1',engineer:'',cs:'CS',status:'접수',visitAt:'2026-10-15T10:00',revision:1,createdBy:'CS'};
+await store.bridge('seed',{hospitals:[{id:'h1',key:'h1',name:'검증 병원'}],requests:[request],references:{engineers:['FSE1','FSE2'],minimumLevel:1}});await store.bridge('activate',{manifest:await store.manifest()});
+const claim=(actor,p={})=>store.handle({action:'work_claim',requestId:request.id,baseRevision:1,expectedEngineer:actor.engineer,operationId:crypto.randomUUID(),...p},actor);
+assert.equal((await claim({...who,engineer:''})).success,false);
+assert.equal((await claim(who,{expectedEngineer:'FSE2',engineer:'FSE2'})).success,false,'payload cannot select a different engineer');
+const concurrent=await Promise.all([claim(who),claim(other)]);assert.equal(concurrent.filter(x=>x.success).length,1);assert.equal(concurrent.filter(x=>x.conflict).length,1);
+const saved=concurrent.find(x=>x.success).request;assert.equal(saved.status,'접수');assert.equal(saved.visitAt,request.visitAt);assert.equal(saved.revision,2);assert.equal((await store.handle({action:'work_detail',id:request.id},who)).history.length,0,'claim does not replace Handover history');
+const event=(await kv.get(nk('event',concurrent.find(x=>x.success).event.id))).value;assert.equal(event.engineer,saved.engineer);
+const r2={...request,id:'unassigned_2',hospitalId:'h2',hospitalKey:'h2'};await kv.set([store.NS,'request',r2.id],r2); // simulate a pre-index legacy row before preparation
+const overlapped=await claim({...who,engineer:saved.engineer},{requestId:r2.id,expectedEngineer:saved.engineer});assert.equal(overlapped.duplicate,true);
+assert.equal((await claim({...who,engineer:saved.engineer},{requestId:r2.id,expectedEngineer:saved.engineer,acknowledgeDuplicates:true})).success,true);
+const done={...request,id:'done',status:'완료'};await kv.set([store.NS,'request',done.id],done);assert.equal((await claim(who,{requestId:'done'})).success,false);
+const winner=concurrent[0].success?who:other,pushAccount={...winner,uid:'g:'+'C'.repeat(43)};let attempts=0;
+await kv.set(nk('mapping',pushAccount.uid),{engineer:saved.engineer});
+const push=createWorkNotifications(kv,{store,accounts:async()=>[pushAccount],now:()=>kv.clock,publicKey:async()=>'',send:async()=>{attempts++;throw Object.assign(new Error('temporary'),{statusCode:503});}});
+await push.handle({action:'notification_subscribe',subscription:{endpoint:'https://fcm.googleapis.com/fcm/send/read-retry-test',keys:{p256dh:Buffer.concat([Buffer.from([4]),Buffer.alloc(64,1)]).toString('base64url'),auth:Buffer.alloc(16,2).toString('base64url')}}},pushAccount);
+const claimedEvent=concurrent.find(x=>x.success).event.id;await push.process(claimedEvent);assert.equal(attempts,1);await push.handle({action:'notification_mark_read',ids:[claimedEvent]},pushAccount);kv.clock+=60001;await push.process(claimedEvent);assert.equal(attempts,1,'read notifications must not produce delayed retry pushes');
+
+const uid='g:'+'A'.repeat(43),foreign='g:'+'B'.repeat(43),account={uid,name:'검증',level:1};let workReads=0;
+const inbox=new Kv(),clock=inbox.clock,notifier=createWorkNotifications(inbox,{now:()=>inbox.clock,accounts:async()=>[account,{uid:foreign,name:'다른 사용자',level:1}],store:{checkAccess:async()=>({engineers:[],minimumLevel:1}),request:async()=>{workReads++;throw Error('not a review');}}});
+async function add(id,createdAt,owner=uid){const event={id,requestId:'request_'+id,hospitalName:'검증 '+id,createdAt:new Date(createdAt).toISOString()},idx=event.createdAt+'|'+id;await inbox.set(nk('inbox',owner,idx),event,{expireIn:30*86400000});await inbox.set(nk('index',owner,id),idx);await inbox.set(nk('unread',owner,id),true);}
+for(let i=0;i<80;i++)await add('notice_'+String(i).padStart(3,'0'),clock-100000+i);
+await add('foreign_1',clock-10000,foreign);
+let listed=await notifier.handle({action:'notification_list'},account);assert.equal(listed.unread,80);assert.ok(listed.cursor);
+let result=await notifier.handle({action:'notification_mark_read',ids:['notice_000','notice_001','foreign_1']},account);assert.equal(result.readIds.length,2);assert.equal((await inbox.get(nk('read',foreign,'foreign_1'))).value,null);
+assert.equal(result.changed,2);assert.equal((await notifier.handle({action:'notification_mark_read',ids:['notice_000']},account)).changed,0,'retry does not inflate the changed count');
+assert.equal((await notifier.handle({action:'notification_list'},account)).unread,78);
+await add('new_notice',clock+2000);let cursor='';do{result=await notifier.handle({action:'notification_mark_read',all:true,through:listed.readThrough,cursor},account);cursor=result.cursor;}while(cursor);
+assert.equal((await notifier.handle({action:'notification_list'},account)).unread,1,'new notifications beyond the operation cutoff stay unread');assert.equal(workReads,0,'bulk read never changes request or source verification');
+assert.equal((await inbox.get(nk('read',uid,'new_notice'))).value,null);
+await assert.rejects(()=>notifier.handle({action:'notification_mark_read',ids:[]},account),/선택/);await assert.rejects(()=>notifier.handle({action:'notification_mark_read',all:true,through:new Date(clock+60000).toISOString()},account),/새로고침/);
+const fields=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
+const rows=[{id:'a',status:'접수',engineer:''},{id:'b',status:'결과확인',engineer:'FSE1'},{id:'c',status:'완료',engineer:'FSE1',handoverReviewCount:1},{id:'d',status:'완료',engineer:''},{id:'e',status:'접수',engineer:'FSE2'}];
+const q={filter:'all',statusScope:'all',advanced:{status:[]},view:'attention'};assert.deepEqual(rows.filter(r=>fields.query(r,q,[])).map(r=>r.id),['a','b','c']);assert.deepEqual(rows.filter(r=>fields.query(r,{...q,view:'mine',engineer:'FSE1'},[])).map(r=>r.id),['b','c']);assert.equal(rows.filter(r=>fields.query(r,{...q,view:'mine',engineer:''},[])).length,0);assert.equal(fields.counts(rows,q,[]).total,3);
+console.log('workspace-roles: authenticated engineer claim, stale mapping, concurrent claim, overlap acknowledgment, untouched source/status, inbox-only read with ownership/cutoff/pagination, missing mapping and shared role metrics passed.');

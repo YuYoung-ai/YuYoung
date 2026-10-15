@@ -51,7 +51,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.7.0-work-performance";
+const VER = "deno-1.8.0-workspace-roles";
 
 const enc = new TextEncoder();
 
@@ -515,7 +515,7 @@ function withCors(res: Response, req: Request): Response {
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
 const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_document_status", "work_index_prepare", "work_handover_candidates", "work_handover_detail", "work_handover_refresh", "work_flow_preview", "work_flow_relink_preview"]);
-const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_status", "work_source_review", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_field_result_link", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
+const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_claim", "work_status", "work_source_review", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_field_result_link", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
@@ -604,8 +604,12 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         } catch { return fail('Handover 원본 조회에 실패했습니다. 다시 불러오세요.',502); }
         finally {clearTimeout(timer);}
       }
-      const body=await store.handle({...p,action},{name:verified.name||'',level:verified.level||0});
-      if(body.success&&['work_save','work_request_edit'].includes(action)){
+      let engineer='';if(action==='work_claim'){
+        try{const mapping=await (await notificationService(kv)).handle({action:'notification_config'},verified);engineer='engineer' in mapping?String(mapping.engineer||''):'';}
+        catch{return fail('본인의 담당자 연결을 확인하지 못했습니다. 앱 설치·알림 설정을 확인하세요.',403);}
+      }
+      const body=await store.handle({...p,action},{name:verified.name||'',level:verified.level||0,engineer});
+      if(body.success&&['work_save','work_request_edit','work_claim'].includes(action)){
         // Delivery failure must never roll back a successfully saved request.
         try{await (await notificationService(kv)).process(String(p.operationId||''),4);}
         catch{body.notificationPending=true;}
@@ -614,6 +618,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
     }
   }
   if(action.startsWith('work_roster'))return fail('근무 일정은 활성화된 Deno KV에서만 가능합니다.',503);
+  if(action==='work_claim')return fail('담당 가져오기는 활성화된 Deno KV에서만 가능합니다.',503);
   if(action==='work_request_edit')return fail('목록 수정은 활성화된 Deno KV에서만 가능합니다.',503);
   if(action.startsWith('work_flow_'))return fail('Flow 이전은 활성화된 Deno KV에서만 가능합니다.',503);
   const write = WORK_WRITES.has(action), force = String(p.force || "") === "1";

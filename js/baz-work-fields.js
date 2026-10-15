@@ -39,6 +39,7 @@
   }
   function query(r,q,hospitals){
     if(r.purgedAt||!!r.deletedAt!==(q.filter==='trash'))return false;
+    if(q.filter!=='trash'&&!workspace(r,q.view,q.engineer))return false;
     if(q.status&&r.status!==q.status||!matches(r,q.advanced,hospitals))return false;
     if(q.statusScope==='active'&&!['접수','방문예정','처리중'].includes(r.status))return false;
     if(q.statusScope==='review'&&r.status!=='결과확인'||q.statusScope==='completed'&&r.status!=='완료')return false;
@@ -58,6 +59,13 @@
     var scoped=requests.filter(function(r){var h=hospital(r,hospitals);return query(r,Object.assign({},base,{name:h?h.name:r.hospitalName}),hospitals);});
     return {total:scoped.length,active:scoped.filter(function(r){return ['접수','방문예정','처리중'].includes(r.status);}).length,review:scoped.filter(function(r){return r.status==='결과확인';}).length,completed:scoped.filter(function(r){return r.status==='완료';}).length,globalReview:requests.filter(function(r){return !r.deletedAt&&!r.purgedAt&&r.status==='결과확인';}).length};
   }
-  var api={hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,serials:serials,serialMatch:serialMatch,kind:kind};
+  function workspace(r,view,engineer){
+    if(view==='mine')return !!engineer&&r.engineer===engineer;
+    if(view==='attention')return r.status==='결과확인'||r.handoverReviewCount>0||(!['완료','취소'].includes(r.status)&&!r.engineer);
+    if(view==='unassigned')return !['완료','취소'].includes(r.status)&&!r.engineer;
+    if(view==='changed')return r.handoverReviewCount>0;
+    return true;
+  }
+  var api={hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,workspace:workspace,serials:serials,serialMatch:serialMatch,kind:kind};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.BazWorkFields=api;
 })(typeof window==='object'?window:globalThis);
