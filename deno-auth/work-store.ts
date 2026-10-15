@@ -3,6 +3,7 @@ import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
 import {createWorkRoster} from './work-roster.ts';
 import {assignmentNotification,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 import {sourceReview,pdfBasis} from './work-source-review.ts';
+import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -50,6 +51,7 @@ function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48
 
 export function createWorkStore(kv:any){
  const roster=createWorkRoster(kv);
+ const indexes=createWorkIndexes(kv);
  async function get(...parts:any[]){return kv.get(key(...parts));}
  async function values(parts:any[],options:Obj={}){const out:Obj[]=[];for await(const e of kv.list({prefix:key(...parts)},options))out.push(e.value);return out;}
  async function status(){return (await get('meta')).value||{ready:false,seq:0};}
@@ -113,7 +115,10 @@ export function createWorkStore(kv:any){
    if(ev.hospital)tx=tx.set(key('hospitalRef',ev.hospital.key),ev.hospital);
    if(ev.flowImport)tx=tx.set(key('flowImport',ev.flowImport.sourceId),{...ev.flowImport,requestId:ev.request.id});
    if(checks.length)tx=tx.check(...checks);
-   if(ev.before?.hospitalId&&ev.before.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',ev.before.hospitalId,ev.request.id));
+   const previousRequest=await get('request',ev.request.id);
+   tx=updateRequestIndexes(tx.check(previousRequest),previousRequest.value,ev.request);
+   tx=await indexes.write(tx,Number(meta.value.seq||0),seq);
+   if(previousRequest.value?.hospitalId&&previousRequest.value.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',previousRequest.value.hospitalId,ev.request.id));
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
    const alert=assignmentNotification(ev);
    if(alert)tx=tx.set(notificationKey('event',alert.id),alert,{expireIn:30*86400000})
@@ -124,6 +129,10 @@ export function createWorkStore(kv:any){
    if((await tx.commit()).ok)return response;
   }
   const e:any=new Error('다른 저장과 겹쳤습니다. 같은 기록으로 다시 시도하세요.');e.retrySameOperation=true;throw e;
+ }
+ async function conflicts(r:Obj){
+  if(await indexes.ready())return indexes.conflicts(r);
+  const all=await values(['request']);return {duplicates:all.filter(x=>x.id!==r.id&&active(x)&&x.hospitalId===r.hospitalId),overlaps:all.filter(x=>x.id!==r.id&&active(x)&&r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt)};
  }
  async function save(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const original=p.id?await request(p.id):null,old=original?.value;
@@ -165,9 +174,9 @@ export function createWorkStore(kv:any){
   completionFields(r,old?.status||'',who,now);
   if(['방문예정','처리중'].includes(r.status)&&(!r.visitAt||!r.engineer))throw new Error('방문 일시와 엔지니어가 필요합니다.');
   if(r.engineer&&!reference.engineers.includes(r.engineer)&&r.engineer!==old?.engineer)throw new Error('엔지니어 원본 목록에 없습니다. 동기화하세요.');
-  if(r.sales&&r.sales!==old?.sales&&!(await values(['hospitalRef'])).some(x=>x.origin!=='flow'&&String(x.sales||'').trim()===r.sales))throw new Error('병원정보DB 영업 담당자 목록에서 선택하세요.');
+  if(r.sales&&r.sales!==old?.sales&&r.sales!==String(h.origin==='flow'?'':h.sales||'').trim()&&!(await values(['hospitalRef'])).some(x=>x.origin!=='flow'&&String(x.sales||'').trim()===r.sales))throw new Error('병원정보DB 영업 담당자 목록에서 선택하세요.');
   if(old&&old.hospitalId!==h.id&&(old.hospitalName!==h.name||String(old.region||'')!==String(h.region||''))&&p.action!=='work_request_edit'&&(await history(id)).length)throw new Error('이력이 있는 요청의 병원은 목록의 수정 모드에서 변경하세요.');
-  const all=await values(['request']),duplicates=all.filter(x=>x.id!==id&&active(x)&&x.hospitalId===r.hospitalId),overlaps=all.filter(x=>x.id!==id&&active(x)&&r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt);
+  const {duplicates,overlaps}=await conflicts(r);
   if((duplicates.length||overlaps.length)&&!p.acknowledgeDuplicates)return {response:{success:false,duplicate:true,candidates:duplicates,overlaps,error:'진행 중인 요청 또는 같은 엔지니어의 동일 방문 일시가 있습니다. 확인 후 저장하세요.'}};
   return {kind:old?'request_update':'request_create',before:old||null,request:r,hospital:h,checks:[selected],response:{success:true,request:r}};
  });}
@@ -206,7 +215,8 @@ export function createWorkStore(kv:any){
   if(p.action==='work_field_result_link'&&(!Number.isFinite(Date.parse(s.observedAt||''))||Date.now()-Date.parse(s.observedAt)>120000))throw new Error('저장된 Handover 원본을 먼저 확인하세요.');
   const binding=await sourceLink(s.recordId),linked=binding.entry;
   if(automatic){
-   const plan=autoSources(r,await values(['request']),await sources(r.hospitalName)),hs=(await history(r.id)).filter(h=>h.kind==='result');
+   const same=await indexes.ready()?await indexes.visits(r.hospitalName,r.visitAt?.slice(0,10)||''):await values(['request']);
+   const plan=autoSources(r,same,await sources(r.hospitalName)),hs=(await history(r.id)).filter(h=>h.kind==='result');
    if(!['접수','방문예정','처리중','결과확인'].includes(r.status)||!plan.matches.some(x=>x.recordId===s.recordId)||!s.result||hs.some(h=>!plan.matches.some(x=>x.recordId===h.source.recordId)||h.source.recordId===s.recordId)||binding.inUse)return {response:{success:false,skipped:true}};
   }
   if(binding.inUse&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
@@ -230,8 +240,7 @@ export function createWorkStore(kv:any){
    if(p.action==='work_restore'){
     if(!r.deletedAt)throw new Error('휴지통에 있는 접수가 아닙니다.');
     r.deletedAt='';r.deletedBy='';r.restoredAt=now;r.restoredBy=who.name;
-    const others=(await values(['request'])).filter(x=>x.id!==r.id&&active(x));
-    const candidates=others.filter(x=>x.hospitalId===r.hospitalId),overlaps=others.filter(x=>r.engineer&&r.visitAt&&x.engineer===r.engineer&&x.visitAt===r.visitAt);
+    const {duplicates:candidates,overlaps}=await conflicts(r);
     if((candidates.length||overlaps.length)&&!p.acknowledgeDuplicates)return {response:{success:false,duplicate:true,candidates,overlaps,error:'복원하면 진행 중인 요청 또는 방문 일정과 겹칩니다. 확인 후 복원하세요.'}};
    }else{r.deletedAt=now;r.deletedBy=who.name;}
   }
@@ -279,13 +288,13 @@ export function createWorkStore(kv:any){
  async function bootstrap(p:Obj,who:Actor){
   const meta=await status(),reference=await refs(),it=kv.list({prefix:key('request')},{limit:200,cursor:p.pageCursor||undefined}),requests:Obj[]=[];
   for await(const e of it)requests.push(e.value);
-  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,queryIndexReady:await indexes.ready(),updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function sync(p:Obj){
   const meta=await status(),after=Number(p.revision||0);if(!Number.isSafeInteger(after)||after<0||after>meta.seq)throw new Error('동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.');
   const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',meta.seq+1)},{limit:100});for await(const e of it)rows.push(e.value);
   const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
-  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,queryIndexReady:await indexes.ready(),hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
  async function flowPlan(row:Obj,context:Obj){
@@ -424,6 +433,7 @@ export function createWorkStore(kv:any){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
    switch(p.action){
+    case 'work_index_prepare':return await indexes.prepare();
     case 'work_bootstrap':return await bootstrap(p,who);
     case 'work_sync':await reconcileSources();return await sync(p);
     case 'work_roster':return await roster.read(p.rosterMonth);
@@ -456,7 +466,7 @@ export function createWorkStore(kv:any){
    }
   }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
- async function ingestSources(items:Obj[],checkedAt=new Date().toISOString()){
+ async function ingestSources(items:Obj[],checkedAt=new Date().toISOString(),requestId?:string){
   for(const item of items){const s:Obj={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
    const index=await get('sourceIndex',s.recordId),binding=await sourceLink(s.recordId);
    const linkedHistory=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
@@ -472,12 +482,13 @@ export function createWorkStore(kv:any){
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
   }}
   const r=await get('refs');if(r.value)await kv.set(key('refs'),{...r.value,sourceCheckedAt:checkedAt});
-  return reconcileSources();
+  return reconcileSources(requestId);
  }
  async function reconcileSources(requestId?:string){
   const meta=await status();if(!meta.ready)return {linked:0,skipped:[]};
   await reconcileSourceUpdates(requestId);
-  const all=await values(['request']);let linked=0;const skipped:Obj[]=[];
+  const indexed=requestId&&await indexes.ready(),target=indexed?(await request(requestId)).value:null;
+  const all=indexed?await indexes.visits(target.hospitalName,target.visitAt?.slice(0,10)||''):await values(['request']);let linked=0;const skipped:Obj[]=[];
   for(const r of all){
    if((requestId&&r.id!==requestId)||!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
    const plan=autoSources(r,all,await sources(r.hospitalName));
@@ -538,6 +549,7 @@ export function createWorkStore(kv:any){
  }
  async function seed(p:Obj){
   if((await status()).ready)throw new Error('활성화된 KV에는 기존 시트를 다시 가져올 수 없습니다.');
+  await indexes.invalidate();
   for(const r of p.requests||[]){bounded(r);await kv.atomic().set(key('request',r.id),r).set(key('hospital',r.hospitalId,r.id),r).commit();}
   for(const h of p.history||[]){let tx=kv.atomic().set(key('history',h.requestId,h.id),bounded(h));if(h.kind==='result')tx=tx.set(key('link',h.source.recordId),{requestId:h.requestId,historyId:h.id});await tx.commit();}
   for(const op of p.operations||[]){if(op.state!=='committed')throw new Error('미완료 GAS 저널이 있습니다.');await kv.set(key('operation',op.id),bounded({actor:op.actor,fingerprint:op.fingerprint,legacy:true,response:op.response}));if(op.event?.request)await kv.set(key('audit',op.event.request.id,-1e15+Date.parse(op.createdAt),op.id),bounded({...op.event,actor:op.actor,at:op.createdAt}));}
@@ -577,5 +589,5 @@ export function createWorkStore(kv:any){
   }
   throw new Error('지원하지 않는 연동 작업입니다.');
  }
- return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,checkAccess:access,NS};
+ return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
 }

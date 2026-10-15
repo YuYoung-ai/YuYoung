@@ -343,6 +343,7 @@
       }
       if($('editor').open)notify('목록을 동기화했습니다. 작성 중인 접수 입력은 유지되며 저장 시 최신 버전을 확인합니다.');
       showSyncState('done',data.updatedAt);await persistSnapshot();
+      if(data.queryIndexReady===false)prepareQueryIndex();
     }catch(e){showSyncState('error');notify(e.message);if(!state.loaded){$('list').innerHTML='<div class="empty"><strong>업무 데이터를 불러오지 못했습니다</strong>로그인과 GAS 배포 상태를 확인하고 동기화 버튼으로 다시 시도하세요.</div>';$('new').disabled=true;}}
     finally{syncing=false;$('sync').disabled=false;$('sync').textContent='↻ 동기화';updateSelection();}
   }
@@ -622,6 +623,16 @@
     event.preventDefault();if(detailLoading||detailError)return;var r=state.detail.request,body=$('comment-body').value;if(r.deletedAt){notify('삭제된 접수에는 댓글을 남길 수 없습니다.');return;}
     var data=await write(commentEdit?'work_history_update':'work_history_add',{requestId:r.id,body:body,historyId:commentEdit?commentEdit.id:'',baseHistoryRevision:commentEdit?commentEdit.revision:0},'comment');
     if(data&&!data.success)notify(data.error+(data.conflict?'\n최신 댓글을 확인한 뒤 다시 편집하세요. 입력한 내용은 초안에 남아 있습니다.':''));
+  }
+  var indexPreparing=false;
+  async function prepareQueryIndex(){
+    if(indexPreparing||!kvReady)return;indexPreparing=true;
+    try{for(var batch=0;batch<32;batch++){
+      if(busy||bulkWorking||document.visibilityState==='hidden')return;
+      var result=await api.get('work_index_prepare',{});if(!result.success)return;
+      document.body.dataset.queryIndexReady=String(!!result.ready);if(result.ready)return;
+      await new Promise(function(resolve){setTimeout(resolve,250);});
+    }}catch(e){}finally{indexPreparing=false;}
   }
   async function openDocumentFlow(){
     if(busy||pending||syncing||bulkWorking||notificationOpening){notify('진행 중인 저장·동기화를 먼저 확인하세요.');return;}
