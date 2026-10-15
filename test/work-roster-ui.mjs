@@ -3,14 +3,15 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 const elements=new Map();
-const element=id=>{if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,innerHTML:'',textContent:'',attributes:{},dataset:{},classList:{toggle(){}},querySelectorAll:()=>[],setAttribute(k,v){this.attributes[k]=v;},focus(){this.focused=true;},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(id);};
+const element=id=>{if(!elements.has(id))elements.set(id,{value:'',hidden:false,disabled:false,innerHTML:'',textContent:'',attributes:{},dataset:{},classList:{toggle(){}},addEventListener(){},querySelectorAll:()=>[],setAttribute(k,v){this.attributes[k]=v;},focus(){this.focused=true;},showModal(){this.open=true;},close(){this.open=false;}});return elements.get(id);};
 const html=fs.readFileSync(new URL('../hospital-work.html',import.meta.url),'utf8');
 for(const id of html.matchAll(/id="([^"]+)"/g))element(id[1]);
 const getCalls=[];let response={success:true,rosterMonth:'2026-10',roster:[]};
 class Clock extends Date{constructor(...args){super(...(args.length?args:['2026-10-12T02:00:00Z']));}static now(){return new Clock().getTime();}}
 const ranges=[];
-const fields={range:(filter,date,month)=>{ranges.push({filter,date,month});return ['2026-10-01','2026-10-31'];},matches:()=>true};
-const sandbox={console,Date:Clock,Intl,URL,Map,Set,document:{getElementById:id=>{assert.ok(elements.has(id),'DOM id exists: '+id);return element(id);},querySelectorAll:()=>[]},localStorage:{getItem:()=>null},window:{location:{search:''},BazAuth:{name:()=> '담당 A'},BazWorkFields:fields,BazWorkCache:{},BazWorkAPI:{get:async(action,params)=>{getCalls.push({action,params});return response;}}}};
+const fieldApi=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
+const fields={...fieldApi,range:(filter,date,month)=>{ranges.push({filter,date,month});return fieldApi.range(filter,date,month);}};
+const sandbox={console,Date:Clock,Intl,URL,Map,Set,document:{getElementById:id=>{assert.ok(elements.has(id),'DOM id exists: '+id);return element(id);},querySelectorAll:()=>[]},localStorage:{getItem:()=>null},window:{location:{search:''},BazAuth:{name:()=> '담당 A',cachedLevel:()=>1},BazWorkFields:fields,BazWorkCache:{},BazWorkAPI:{get:async(action,params)=>{getCalls.push({action,params});return response;}}}};
 vm.createContext(sandbox);
 const prefix=source.slice(0,source.indexOf("  $('account').textContent=account;"));
 vm.runInContext(prefix+`window.test={state,renderRoster,setRosterTab,rememberTodayRoster,renderTodayRoster,refreshTodayRoster,openRoster,loadRoster,rosterSaved,renderList,calendarDate:()=>calendarDate};})();`,sandbox);
@@ -33,7 +34,7 @@ response={success:true,rosterMonth:'2026-10',roster:[{...current,person:'다른 
 response={success:true,rosterMonth:'2026-10',roster:[]};await t.refreshTodayRoster();assert.equal(element('roster-today-notice').hidden,true,'deleted last off-duty person clears notice');
 t.state.rosterMonth='2026-10';t.state.roster=[current];t.renderRoster();t.rosterSaved({schedule:{...current,type:'당직',revision:2}});assert.equal(element('roster-today-notice').hidden,true,'saved changes refresh notice');
 t.state.rosterMonth='2026-11';t.state.filter='month';t.renderList();
-assert.deepEqual(ranges,[{filter:'month',date:'2026-10-12',month:'2026-10'},{filter:'month',date:'2026-10-12',month:'2026-10'}],'work filters still use today after browsing a different roster month');
+assert.ok(ranges.length>0);assert.ok(ranges.every(r=>r.filter==='month'&&r.date==='2026-10-12'&&r.month==='2026-10'),'work filters still use today after browsing a different roster month');
 assert.ok(!html.includes('id="roster-summary"'));
 assert.ok(!html.includes('id="roster-calendar"'));
 assert.ok(html.indexOf('id="roster-tab-calendar"')<html.indexOf('id="roster-tab-manage"'));

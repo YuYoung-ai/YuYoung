@@ -5,7 +5,7 @@ import {assignmentNotification,notificationKey,removeRequestNotifications} from 
 import {sourceReview,pdfBasis} from './work-source-review.ts';
 import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
 type Obj = Record<string, any>;
-type Actor = {name:string;level:number};
+type Actor = {name:string;level:number;engineer?:string};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
 const key=(...parts:any[])=>[NS,...parts];
 const copy=(v:any)=>JSON.parse(JSON.stringify(v));
@@ -197,6 +197,19 @@ export function createWorkStore(kv:any){
   const latest=(await history(r.id)).filter(x=>x.id!==h.id&&!x.deletedAt).concat(p.deleted?[]:[h]).sort((a,b)=>String(b.updatedAt||b.createdAt).localeCompare(String(a.updatedAt||a.createdAt)))[0];
   r.latest=latest?String(latest.source?.result||latest.body||'').slice(0,120):'';
   return {kind:lifecycle?(p.deleted?'comment_delete':'comment_restore'):old?'comment_update':'comment_add',before:old||null,requestBefore:before,request:r,history:h,response:{success:true,request:r,history:h}};
+ });}
+ async function claim(p:Obj,who:Actor){return mutate(p,who,async()=>{
+  const reference=await refs(),engineer=who.engineer;
+  if(!engineer||!reference.engineers.includes(engineer))throw new Error('앱 설치·알림 설정에서 본인의 담당자 연결을 먼저 확인하세요.');
+  if(p.expectedEngineer!==engineer)throw new Error('담당자 연결이 변경되었습니다. 화면을 새로고침한 뒤 다시 가져오세요.');
+  const original=await request(p.requestId),r=copy(original.value);
+  if(String(r.revision)!==String(p.baseRevision)||r.engineer)return {response:clash(r)};
+  if(!active(r))throw new Error('진행 중인 미배정 접수만 가져올 수 있습니다.');
+  const before=copy(r);r.engineer=engineer;
+  const {overlaps}=await conflicts(r);
+  if(overlaps.length&&!p.acknowledgeDuplicates)return {response:{success:false,duplicate:true,candidates:[],overlaps,error:'같은 담당자의 방문 일정이 겹칩니다. 확인 후 다시 가져오세요.'}};
+  r.revision++;r.updatedAt=new Date().toISOString();r.updatedBy=who.name;
+  return {kind:'request_update',before,request:r,checks:[original],response:{success:true,request:r}};
  });}
  async function changeStatus(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const original=await request(p.requestId),r=copy(original.value);
@@ -454,6 +467,7 @@ export function createWorkStore(kv:any){
      }catch{return {...saved,autoMatchPending:true};}
     }
     case 'work_status':return await changeStatus(p,who);
+    case 'work_claim':return await claim(p,who);
     case 'work_source_review':return await reviewSource(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
     case 'work_result_save':case 'work_field_result_link':{

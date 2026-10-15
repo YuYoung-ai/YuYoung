@@ -96,7 +96,28 @@ export function createWorkNotifications(kv:any,options:Obj){
   const iterator=kv.list({prefix:key('inbox',a.uid)},{reverse:true,limit:50,cursor:p.cursor||undefined}),items=[];
   for await(const x of iterator)items.push({...x.value,readAt:(await get('read',a.uid,x.value.id)).value||''});
   const unread=await rows(['unread',a.uid],1001);
-  return {success:true,items,cursor:items.length===50?String(iterator.cursor||''):'',unread:Math.min(1000,unread.length),unreadMore:unread.length>1000};
+  return {success:true,items,cursor:items.length===50?String(iterator.cursor||''):'',readThrough:new Date(now()).toISOString(),unread:Math.min(1000,unread.length),unreadMore:unread.length>1000};
+ }
+ // Inbox acknowledgement only. It never marks a request or Handover as reviewed.
+ async function markInboxRead(p:Obj,a:Obj){
+  let entries:Obj[]=[],cursor='',through='';
+  if(p.all===true){
+   const cutoff=Date.parse(p.through||'');if(!Number.isFinite(cutoff)||cutoff>now()+10000||cutoff<now()-TTL)throw new Error('알림을 새로고침한 뒤 다시 읽음 처리하세요.');
+   through=new Date(cutoff).toISOString();const iterator=kv.list({prefix:key('inbox',a.uid)},{reverse:true,limit:50,cursor:p.cursor||undefined});
+   for await(const entry of iterator)entries.push(entry);if(entries.length===50)cursor=String(iterator.cursor||'');
+  }else{
+   if(!Array.isArray(p.ids)||!p.ids.length||p.ids.length>50||p.ids.some((id:any)=>typeof id!=='string'||!/^[A-Za-z0-9_-]{8,90}$/.test(id)))throw new Error('읽음 처리할 알림을 50개 이하로 선택하세요.');
+   for(const id of new Set(p.ids)){const idx=(await get('index',a.uid,id)).value;if(idx){const entry=await get('inbox',a.uid,idx);if(entry.value)entries.push(entry);}}
+  }
+  const readIds:string[]=[],failedIds:string[]=[];let changed=0;
+  for(let i=0;i<entries.length;i+=4)await Promise.all(entries.slice(i,i+4).map(async entry=>{
+   const e=entry.value;if(!e||through&&e.createdAt>through)return;
+   const stamp=await get('read',a.uid,e.id),ttl=Date.parse(e.createdAt)+TTL-now();if(ttl<=0)return;
+   if(stamp.value){readIds.push(e.id);return;}
+   const result=await kv.atomic().check(entry,stamp).set(key('read',a.uid,e.id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,e.id)).commit();
+   (result.ok?readIds:failedIds).push(e.id);if(result.ok)changed++;
+  }));
+  return {success:true,readIds,failedIds,cursor,through,changed};
  }
  async function markRead(p:Obj,a:Obj){
   const id=String(p.notificationId||''),idx=(await get('index',a.uid,id)).value;
@@ -164,7 +185,7 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(!(await kv.atomic().check(entry).set(entry.key,{...j,lease:leaseDue,claim},{expireIn:PUSH_TTL}).delete(due.key).set(key('due',leaseDue,id),true,{expireIn:PUSH_TTL}).commit()).ok)return;
   const e=(await get('event',j.eventId)).value,sub=(await get('subscription',j.deviceId)).value,a=d.accounts.find((x:Obj)=>x.uid===j.uid);
   let retry=false,expired=false;
-  if(e&&now()-Date.parse(e.createdAt)<PUSH_TTL&&a&&(e.audience==='all'||a.engineer===e.engineer)&&sub?.uid===j.uid&&sub.binding===j.binding&&await currentEvent(e)){
+  if(e&&now()-Date.parse(e.createdAt)<PUSH_TTL&&a&&(e.audience==='all'||a.engineer===e.engineer)&&sub?.uid===j.uid&&sub.binding===j.binding&&!(await get('read',j.uid,e.id)).value&&await currentEvent(e)){
    try{
     await options.send(sub.subscription,{title:e.audience==='all'?'담당자 미지정 접수가 등록되었습니다':'새 접수가 배정되었습니다',body:e.hospitalName+' · '+e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'),requestId:e.requestId,notificationId:e.id,recipient:j.uid},Math.max(1,Math.floor((PUSH_TTL-(now()-Date.parse(e.createdAt)))/1000)));
    }catch(error:any){expired=[404,410].includes(Number(error.statusCode));retry=!expired&&(!error.statusCode||error.statusCode===429||error.statusCode>=500);}
@@ -194,6 +215,7 @@ export function createWorkNotifications(kv:any,options:Obj){
    }
    case 'notification_list':return await list(p,a);
    case 'notification_read':return await markRead(p,a);
+   case 'notification_mark_read':return await markInboxRead(p,a);
    case 'notification_test':{
     const id=await digest(String(p.endpoint||'')),sub=(await get('subscription',id)).value;
     if(sub?.uid!==a.uid)throw new Error('현재 기기의 알림 연결을 먼저 설정하세요.');
