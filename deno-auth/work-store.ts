@@ -4,6 +4,7 @@ import {createWorkRoster} from './work-roster.ts';
 import {assignmentNotification,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 import {sourceReview,pdfBasis} from './work-source-review.ts';
 import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
+import {createWorkMatching} from './work-matching.ts';
 type Obj = Record<string, any>;
 type Actor = {name:string;level:number;engineer?:string};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
@@ -52,6 +53,7 @@ function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48
 export function createWorkStore(kv:any){
  const roster=createWorkRoster(kv);
  const indexes=createWorkIndexes(kv);
+ const matching=createWorkMatching(kv);
  async function get(...parts:any[]){return kv.get(key(...parts));}
  async function values(parts:any[],options:Obj={}){const out:Obj[]=[];for await(const e of kv.list({prefix:key(...parts)},options))out.push(e.value);return out;}
  async function status(){return (await get('meta')).value||{ready:false,seq:0};}
@@ -117,7 +119,9 @@ export function createWorkStore(kv:any){
    if(checks.length)tx=tx.check(...checks);
    const previousRequest=await get('request',ev.request.id);
    tx=updateRequestIndexes(tx.check(previousRequest),previousRequest.value,ev.request);
-   tx=await indexes.write(tx,Number(meta.value.seq||0),seq);
+   if(['request_create','request_update','restore','delete','purge','status_change'].includes(ev.kind))tx=matching.enqueue(tx,[previousRequest.value,ev.request]);
+   const indexState=await indexes.writeState(Number(meta.value.seq||0),seq);
+   tx=tx.check(indexState.entry).set(indexState.entry.key,indexState.value);
    if(previousRequest.value?.hospitalId&&previousRequest.value.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',previousRequest.value.hospitalId,ev.request.id));
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
    const alert=assignmentNotification(ev);
@@ -304,10 +308,11 @@ export function createWorkStore(kv:any){
   return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests,revision:String(p.snapshotSeq??meta.seq),pageCursor:requests.length===200?it.cursor:null,hospitals:await values(['hospitalRef']),engineers:reference.engineers,who,referencesIncluded:true,queryIndexReady:await indexes.ready(),updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function sync(p:Obj){
-  const meta=await status(),after=Number(p.revision||0);if(!Number.isSafeInteger(after)||after<0||after>meta.seq)throw new Error('동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.');
-  const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',meta.seq+1)},{limit:100});for await(const e of it)rows.push(e.value);
+  const meta=await status(),after=Number(p.revision||0),upper=Number(p.snapshotSeq??meta.seq);
+  if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(upper)||upper<after||upper>meta.seq)return {success:false,code:'REVISION_INVALID',error:'동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.'};
+  const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',upper+1)},{limit:100});for await(const e of it)rows.push(e.value);
   const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
-  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),nochange:!rows.length,more:revision<meta.seq,queryIndexReady:await indexes.ready(),hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
+  return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),snapshotSeq:String(upper),nochange:!rows.length,more:revision<upper,queryIndexReady:await indexes.ready(),hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
  async function flowPlan(row:Obj,context:Obj){
@@ -448,7 +453,7 @@ export function createWorkStore(kv:any){
    switch(p.action){
     case 'work_index_prepare':return await indexes.prepare();
     case 'work_bootstrap':return await bootstrap(p,who);
-    case 'work_sync':await reconcileSources();return await sync(p);
+    case 'work_sync':return await sync(p);
     case 'work_roster':return await roster.read(p.rosterMonth);
     case 'work_roster_save':case 'work_roster_delete':return await roster.save(p,who);
     case 'work_flow_preview':return await flowPreview(p,who);
@@ -462,8 +467,8 @@ export function createWorkStore(kv:any){
      if(!saved.success||!p.id)return saved;
      // The user edit is already committed. Matching failure must never make it look unsaved.
      try{
-      const autoMatch=await reconcileSources(p.id),workDetail=await detail({id:p.id});
-      return {...saved,request:workDetail.request,workDetail,autoMatch};
+      const autoMatch=await processPendingMatches(),workDetail=await detail({id:saved.request.id});
+      return {...saved,request:workDetail.request,workDetail,autoMatch:{linked:autoMatch.linked,skipped:autoMatch.skipped},...(autoMatch.failed||autoMatch.pending?{autoMatchPending:true}:{})};
      }catch{return {...saved,autoMatchPending:true};}
     }
     case 'work_status':return await changeStatus(p,who);
@@ -474,7 +479,10 @@ export function createWorkStore(kv:any){
      const saved=await result(p,who);if(!saved.success)return saved;
      try{await reconcilePdfAttachments(p.requestId);const workDetail=await detail({id:p.requestId});return {...saved,request:workDetail.request,workDetail};}catch{return saved;}
     }
-    case 'work_complete':case 'work_delete':case 'work_restore':return await lifecycle(p,who);
+    case 'work_complete':case 'work_delete':case 'work_restore':{
+     const saved=await lifecycle(p,who);if(!saved.success||p.action==='work_complete')return saved;
+     try{await processPendingMatches();return {...saved,request:(await request(p.requestId,true)).value};}catch{return {...saved,autoMatchPending:true};}
+    }
     case 'work_purge':return await purge(p,who);
     default:throw new Error('지원하지 않는 업무 API입니다.');
    }
@@ -492,19 +500,33 @@ export function createWorkStore(kv:any){
    let tx=kv.atomic().check(old,previous,index,meta,binding.entry,...(linkedHistory?[linkedHistory]:[])).set(old.key,bounded(s)).set(index.key,{hospitalName:s.hospitalName,observedAt:s.observedAt||''}).set(key('sourcePending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId}).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
    if(previousName!==s.hospitalName)tx=tx.delete(previous.key);
    if(s.pdf&&(old.value?.pdf?.kind!=='inspection_pdf'||s.pdf.revision!==old.value?.pdf?.revision||s.pdf.sha256!==old.value?.pdf?.sha256))tx=tx.set(key('pdfPending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId});
+   tx=matching.enqueue(tx,[previous.value,s,binding.owner?.value]);
    if((await tx.commit()).ok)break;
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
   }}
   const r=await get('refs');if(r.value)await kv.set(key('refs'),{...r.value,sourceCheckedAt:checkedAt});
-  return reconcileSources(requestId);
+  return processPendingMatches();
  }
- async function reconcileSources(requestId?:string){
-  const meta=await status();if(!meta.ready)return {linked:0,skipped:[]};
-  await reconcileSourceUpdates(requestId);
-  const indexed=requestId&&await indexes.ready(),target=indexed?(await request(requestId)).value:null;
-  const all=indexed?await indexes.visits(target.hospitalName,target.visitAt?.slice(0,10)||''):await values(['request']);let linked=0;const skipped:Obj[]=[];
+ async function processPendingMatches(options:Obj={}):Promise<Obj>{
+  if(!(await status()).ready)return {linked:0,skipped:[],pending:true};
+  if(!await indexes.ready())await indexes.prepare();
+  if(!await indexes.ready())return {linked:0,skipped:[],pending:true};
+  if(options.backfill)await matching.backfill();
+  // Recover pre-upgrade sourcePending items before their legacy handler clears
+  // them. Each new source write already queues the visit in its own transaction.
+  for await(const pending of kv.list({prefix:key('sourcePending')})){
+   const src=await get('source',pending.value.hospitalName,pending.value.recordId),binding=await sourceLink(pending.value.recordId);
+   await matching.enqueue(kv.atomic().check(pending,src,binding.entry),[src.value,binding.owner?.value]).commit();
+  }
+  await reconcileSourceUpdates();
+  const matched=await matching.process(reconcileVisit);
+  await reconcilePdfAttachments();
+  return matched;
+ }
+ async function reconcileVisit(name:string,date:string){
+  const all=await indexes.visits(name,date);let linked=0;const skipped:Obj[]=[];
   for(const r of all){
-   if((requestId&&r.id!==requestId)||!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
+   if(!live(r)||!['접수','방문예정','처리중','결과확인'].includes(r.status)||!r.visitAt)continue;
    const plan=autoSources(r,all,await sources(r.hospitalName));
    if(plan.ambiguous){skipped.push({requestId:r.id,reason:'ambiguous'});continue;}
    const hs=(await history(r.id)).filter(h=>h.kind==='result');if(hs.some(h=>!plan.matches.some(s=>s.recordId===h.source.recordId)))continue;
@@ -512,10 +534,9 @@ export function createWorkStore(kv:any){
     if(!s.result||hs.some(h=>h.source.recordId===s.recordId)||(await sourceLink(s.recordId)).inUse)continue;
     const current=(await request(r.id)).value;
     const p={action:'work_auto_result',requestId:r.id,recordId:s.recordId,sourceVersion:s.version,baseRevision:current.revision,operationId:'auto_'+await hash([r.id,s.recordId,s.version,current.revision])};
-    const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;
+    const response=await result(p,{name:'Handover 자동 연결',level:0},true);if(response.success)linked++;else throw new Error('MATCH_RETRY');
    }
   }
-  await reconcilePdfAttachments(requestId);
   return {linked,skipped};
  }
  async function reconcileSourceUpdates(requestId?:string){
@@ -603,5 +624,5 @@ export function createWorkStore(kv:any){
   }
   throw new Error('지원하지 않는 연동 작업입니다.');
  }
- return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
+ return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,processPendingMatches,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
 }

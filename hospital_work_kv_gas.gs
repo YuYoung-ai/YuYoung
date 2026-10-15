@@ -48,10 +48,12 @@ function hwKvQueueSources_(hospital,date){
 }
 function hwKvQueueHits_(matches){
  var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
- var added=0;matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,n=sh.getLastRow()-1,existing=n>0?sh.getRange(2,1,n,1).createTextFinder(id).matchEntireCell(true).findNext():null;if(!existing){sh.getRange(sh.getLastRow()+1,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',new Date().toISOString()].map(safeCell_)]);added++;}
- else if(sh.getRange(existing.getRow(),5).getValue()==='source_deleted'||hwKvQueueReverted_(sh,s)){
+ var n=sh.getLastRow()-1,rows=n>0?sh.getRange(2,1,n,6).getValues():[],events={},latest={};
+ rows.forEach(function(v,i){events[String(v[0])]={row:i+2,state:v[4]};var id=String(v[1]);if(!latest[id]||String(v[5])>=String(latest[id][5]))latest[id]=v;});
+ var added=0;matches.forEach(function(hit){hwKvStableSource_(hit);var s=hit.source,id=s.recordId+'_'+s.version,existing=events[id],at=new Date().toISOString();if(!existing){var row=sh.getLastRow()+1;sh.getRange(row,1,1,6).setValues([[id,s.recordId,s.version,JSON.stringify(s),'pending',at].map(safeCell_)]);events[id]={row:row,state:'pending'};latest[s.recordId]=[id,s.recordId,s.version,'','pending',at];added++;}
+ else if(existing.state==='source_deleted'||latest[s.recordId]&&String(latest[s.recordId][2])!==s.version){
   // A restored source may have the same ID/version. Requeue without duplicating its event.
-  sh.getRange(existing.getRow(),4).setValue(JSON.stringify(s));var cell=sh.getRange(existing.getRow(),5);cell.setNote((cell.getNote()||'')+'\n원본 복원으로 전송 재개 · '+new Date().toISOString());cell.setValue('pending');sh.getRange(existing.getRow(),6).setValue(new Date().toISOString());added++;
+  sh.getRange(existing.row,4).setValue(JSON.stringify(s));var cell=sh.getRange(existing.row,5);cell.setNote((cell.getNote()||'')+'\n원본 복원으로 전송 재개 · '+at);cell.setValue('pending');sh.getRange(existing.row,6).setValue(at);existing.state='pending';latest[s.recordId]=[id,s.recordId,s.version,'','pending',at];added++;
  }});return added;
 }
 function hwKvQueueReverted_(sh,s){
@@ -78,7 +80,7 @@ function hwKvRefreshSources_(target){
 /** Queue snapshots count records, not repeated save versions of the same record. */
 function hwKvPendingRows_(){
  var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']),n=sh.getLastRow()-1;
- return n>0?sh.getRange(2,1,n,6).getValues().map(function(v,i){return {row:i+2,id:String(v[1]),createdAt:String(v[5]),state:v[4]};}).filter(function(v){return v.state==='pending';}):[];
+ return n>0?sh.getRange(2,1,n,6).getValues().map(function(v,i){return {row:i+2,eventKey:String(v[0]),id:String(v[1]),version:String(v[2]),json:String(v[3]),createdAt:String(v[5]),state:v[4]};}).filter(function(v){return v.state==='pending';}):[];
 }
 function hwKvPublishStatus_(error,failedIds){
  var props=PropertiesService.getScriptProperties();
@@ -104,21 +106,27 @@ function hwKvSourceById_(id){
 function hwKvDeliverSources_(onlyRecordId){
  var groups={};hwKvPendingRows_().filter(function(r){return !onlyRecordId||r.id===onlyRecordId;}).forEach(function(r){(groups[r.id]||(groups[r.id]=[])).push(r);});
  var accepted=[],sources=[],failedIds=[],errors=[],missingIds=[],cancelledIds=[];
- Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{sources.push(hwKvSourceById_(id));accepted=accepted.concat(groups[id]);}catch(e){if(e.sourceMissing)missingIds.push(id);else{failedIds.push(id);errors.push(String(e.message||e));}}});
+ Object.keys(groups).forEach(function(id){if(sources.length>=20)return;try{
+  // Recheck current existence/unique ID, but deliver exactly the saved event.
+  // Reading today's body here would silently acknowledge unsent older versions.
+  hwKvSourceById_(id);
+  groups[id].forEach(function(r){if(sources.length>=20)return;var s=JSON.parse(r.json);if(s.recordId!==r.id||String(s.version)!==r.version)throw new Error('대기 이벤트와 원본 스냅샷이 다릅니다.');sources.push(s);accepted.push(r);});
+ }catch(e){if(e.sourceMissing)missingIds.push(id);else{failedIds.push(id);errors.push(String(e.message||e));}}});
  if(missingIds.length)hwLock_(function(){
   var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);
   missingIds.forEach(function(id){
    // Recheck while holding the same lock used by Handover saves/restores.
    try{hwKvSourceById_(id);return;}catch(e){if(!e.sourceMissing){failedIds.push(id);errors.push(String(e.message||e));return;}}
    var changed=false;groups[id].forEach(function(r){
-    if(String(sh.getRange(r.row,2).getValue())!==id||sh.getRange(r.row,5).getValue()!=='pending')return;
+    if(!hwKvQueueUnchanged_(sh,r))return;
     var cell=sh.getRange(r.row,5),note=cell.getNote();cell.setNote((note?note+'\n':'')+'원본 삭제로 전송 취소 · '+new Date().toISOString()+' · 기록 ID: '+id+'\n원본 저장 내용은 이 행의 json에 보존됩니다. 원본 복원·재저장 시 다시 전송합니다.');cell.setValue('source_deleted');changed=true;
    });if(changed)cancelledIds.push(id);
   });
  });
- if(sources.length){hwKvCall_('sources',{sources:sources});hwLock_(function(){var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);accepted.forEach(function(r){sh.getRange(r.row,5).setValue('sent');});});}
+ if(sources.length){hwKvCall_('sources',{sources:sources});hwLock_(function(){var sh=hwKvSheet_(HW_KV_QUEUE,['eventKey','recordId','version','json','state','createdAt']);accepted.forEach(function(r){if(hwKvQueueUnchanged_(sh,r))sh.getRange(r.row,5).setValue('sent');});});}
  return {failedIds:failedIds,error:errors.length?errors.length+'건 원본 확인 필요 · '+errors[0]:'',cancelledIds:cancelledIds};
 }
+function hwKvQueueUnchanged_(sh,r){var v=sh.getRange(r.row,1,1,6).getValues()[0];return String(v[0])===r.eventKey&&String(v[1])===r.id&&String(v[2])===r.version&&String(v[3])===r.json&&v[4]==='pending'&&String(v[5])===r.createdAt;}
 function hwKvHash_(value){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,JSON.stringify(value),Utilities.Charset.UTF_8).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');}
 function hwKvManifest_(data){var out={};['requests','history','operations'].forEach(function(k){var rows=data[k].map(function(x){if(k==='operations')return {id:x.id,actor:x.actor,fingerprint:x.fingerprint,response:x.response};return x;}).sort(function(a,b){return String(a.id).localeCompare(String(b.id),'en');});out[k]={count:rows.length,hash:hwKvHash_(rows)};});return out;}
 function hwKvSnapshot_(){

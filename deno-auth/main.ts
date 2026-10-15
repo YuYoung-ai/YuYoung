@@ -976,6 +976,7 @@ Deno.cron('baz-work-push-delivery', '* * * * *', async()=>{
   const kv=await getKv();if(!kv||(await createWorkStore(kv).status()).ready!==true)return;
   try{await (await notificationService(kv)).process();}catch{console.warn('접수 알림 발송은 다음 주기에 재시도합니다.');}
   try{await createWorkStore(kv).prepareIndexes();}catch{console.warn('업무 조회 준비는 다음 주기에 재시도합니다.');}
+  try{await createWorkStore(kv).processPendingMatches({backfill:true});}catch{console.warn('Handover 자동 연결은 다음 주기에 재시도합니다.');}
 });
 
 Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {

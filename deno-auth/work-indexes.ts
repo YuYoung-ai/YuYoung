@@ -19,13 +19,15 @@ export function updateRequestIndexes(tx:any,previous:Obj|null,next:Obj){
 }
 export function createWorkIndexes(kv:any){
  async function ready(){const [state,meta]=await Promise.all([kv.get(stateKey),kv.get(key('meta'))]);return state.value?.ready===true&&state.value.seq===meta.value?.seq;}
- async function write(tx:any,oldSeq:number,newSeq:number){
+ async function writeState(oldSeq:number,newSeq:number){
   const state=await kv.get(stateKey),old=state.value;
   // A rolled-back older writer advances the request sequence without updating
   // this marker. Fall back and rebuild, rather than trusting incomplete keys.
   const gap=old&&old.writeSeq!==oldSeq;
   const next=gap||!old?{v:1,ready:false,cursor:'',scanned:0}:old;
-  return tx.check(state).set(stateKey,{...next,writeSeq:newSeq,...(next.ready?{seq:newSeq}:{})});
+  // Return data, never an AtomicOperation: async return values are assimilated
+  // as promises, but Deno deliberately throws when an atomic builder is awaited.
+  return {entry:state,value:{...next,writeSeq:newSeq,...(next.ready?{seq:newSeq}:{})}};
  }
  async function invalidate(){await kv.set(stateKey,{v:1,ready:false,cursor:'',scanned:0});}
  async function prepare(){
@@ -57,5 +59,5 @@ export function createWorkIndexes(kv:any){
   const [hospital,appointments]=await Promise.all([read(['hospital',r.hospitalId]),r.engineer&&r.visitAt?read(['appointment',r.engineer,r.visitAt]):Promise.resolve([])]);
   return {duplicates:hospital.filter(x=>x.id!==r.id),overlaps:appointments.filter(x=>x.id!==r.id)};
  }
- return {ready,write,invalidate,prepare,conflicts,visits:(name:string,date:string)=>read(['visit',name,date])};
+ return {ready,writeState,invalidate,prepare,conflicts,visits:(name:string,date:string)=>read(['visit',name,date])};
 }

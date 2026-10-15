@@ -4,16 +4,22 @@ import assert from 'node:assert/strict';
 const properties={};const context={Date,Logger:{log(){}},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties[k]||'',setProperty:(k,v)=>{properties[k]=v;}})}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(new URL('../hospital_work_kv_gas.gs',import.meta.url),'utf8'),context);
 let rows=[{row:2,id:'renamed',state:'pending',createdAt:'2026-10-07T01:00:00Z'},{row:3,id:'renamed',state:'pending',createdAt:'2026-10-07T02:00:00Z'},{row:4,id:'missing',state:'pending',createdAt:'2026-10-07T03:00:00Z'},{row:5,id:'valid',state:'pending',createdAt:'2026-10-07T04:00:00Z'}],sent=[],calls=[];
+function snapshots(){rows.forEach(r=>{r.version='v'+r.row;r.eventKey=r.id+'_'+r.version;r.json=JSON.stringify({recordId:r.id,version:r.version,hospitalName:'저장 당시 병원명',detail:'저장 당시 본문 '+r.row});});}
+snapshots();
 context.hwKvPendingRows_=()=>rows.filter(r=>r.state==='pending');context.hwLock_=fn=>fn();
-context.hwKvSheet_=()=>({getRange:row=>({setValue:state=>{rows.find(r=>r.row===row).state=state;sent.push(row);}})});
+context.hwKvSheet_=()=>({getRange:row=>({getValues:()=>{const r=rows.find(r=>r.row===row);return [[r.eventKey,r.id,r.version,r.json,r.state,r.createdAt]];},setValue:state=>{rows.find(r=>r.row===row).state=state;sent.push(row);}})});
 context.hwKvSourceById_=id=>{if(id==='missing')throw new Error('원본 없음');return {recordId:id,hospitalName:'현재 병원명'};};
 context.hwKvCall_=(verb,payload)=>{calls.push({verb,payload});return {success:true};};context.hwKvControl_=()=>{};
 const delivered=context.hwKvDeliverSources_();assert.deepEqual(sent,[2,3,5],'one bad record does not block other records; repeated versions all acknowledged');
-assert.equal(calls[0].payload.sources.length,2,'one current source per stable ID');assert.equal(delivered.failedIds[0],'missing');
+assert.equal(calls[0].payload.sources.length,3,'every acknowledged event has its saved snapshot delivered');assert.equal(delivered.failedIds[0],'missing');
+assert.deepEqual(Array.from(calls[0].payload.sources,s=>s.detail),['저장 당시 본문 2','저장 당시 본문 3','저장 당시 본문 5']);
 context.hwKvPublishStatus_(delivered.error,delivered.failedIds);const snapshot=calls.at(-1).payload;assert.equal(snapshot.pendingCount,1);assert.equal(snapshot.pendingEvents,1);assert.equal(snapshot.failedCount,1);
 rows=Array.from({length:25},(_,i)=>({row:i+2,id:'id'+i,state:'pending',createdAt:'2026-10-07T01:00:00Z'}));sent=[];calls=[];
+snapshots();
 context.hwKvDeliverSources_();assert.equal(sent.length,20);context.hwKvPublishStatus_('',[]);assert.equal(calls.at(-1).payload.pendingCount,5,'counts entire remaining queue rather than just the batch');
-rows=[{row:2,id:'fail',state:'pending'}];context.hwKvCall_=()=>{throw new Error('전송 실패');};assert.throws(()=>context.hwKvDeliverSources_());assert.equal(rows[0].state,'pending','failed delivery retains durable retry');
+rows=[{row:2,id:'fail',state:'pending'}];snapshots();context.hwKvCall_=()=>{throw new Error('전송 실패');};assert.throws(()=>context.hwKvDeliverSources_());assert.equal(rows[0].state,'pending','failed delivery retains durable retry');
+context.hwKvCall_=()=>{rows[0].json=JSON.stringify({...JSON.parse(rows[0].json),detail:'전송 도중 복원한 이벤트'});return {success:true};};
+context.hwKvDeliverSources_();assert.equal(rows[0].state,'pending','late acknowledgment cannot clear a changed/requeued snapshot');
 // Exercise actual stable-ID lookup against a renamed source, independent of queue JSON/name.
 const finder={matchEntireCell:()=>finder,findAll:()=>[{getRow:()=>19}]};
 const sheet={getLastRow:()=>20,getLastColumn:()=>3,getRange:(row,col,n,width)=>width===1?{createTextFinder:id=>{assert.equal(id,'renamed');return finder;}}:{getValues:()=>{throw new Error('Raw Date cells must not bypass the existing formatted source parser');},getDisplayValues:()=>[['현재 병원명','renamed','2026. 10. 7']]}};

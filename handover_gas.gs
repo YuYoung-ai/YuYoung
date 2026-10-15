@@ -883,7 +883,12 @@ function doPost(e){
       photo: photoResult_(!!(payload && payload.snPhoto), false, '', String(err)),
       error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
-    try{ lock.releaseLock(); }catch(_){}
+    var workLockReleased=false;try{ lock.releaseLock();workLockReleased=true; }catch(_){}
+    // The response/receipt is already fixed. A status failure cannot turn the
+    // committed Handover into a failed save, and no HTTP call holds ScriptLock.
+    if(workLockReleased&&out&&out.workAuto&&out.workAuto.statusPending&&typeof hwKvPublishStatus_==='function'){
+      try{hwKvPublishStatus_();}catch(statusError){Logger.log('Handover 대기 집계 전달은 주기 작업에서 재시도합니다.');}
+    }
     /* 멱등성 정리는 응답 작성·전역 락 해제 뒤에만 확률 실행한다. */
     try{ reqPrune_(); }catch(_){}
   }
