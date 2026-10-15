@@ -314,11 +314,12 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js"></script>
+<script src="auth.js?v=244"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=244"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-inspection-workflow.js?v=244"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 </head>
 <body>
 <div class="wrap">
+  <section id="inspectionWorkFlow" class="work-flow-panel" hidden><h3>접수에서 내역서 이어쓰기</h3><p id="inspectionWorkFlowMessage" role="status"></p><div id="inspectionWorkFlowActions" class="work-flow-actions"></div></section>
   <header>
     <div class="logo-area">
       <div>
@@ -460,13 +461,13 @@
         </div>
         <div class="field-group">
           <label>조치 내용</label>
-          <textarea id="actionDetail" placeholder="점검 결과에 따른 조치 내용을 입력하세요." maxlength="200"></textarea>
-          <div class="char-counter"><span id="cc_action">0</span>/200</div>
+          <textarea id="actionDetail" placeholder="점검 결과에 따른 조치 내용을 입력하세요." maxlength="4000"></textarea>
+          <div class="char-counter"><span id="cc_action">0</span>/4000</div>
         </div>
         <div class="field-group">
           <label>권고 사항</label>
-          <textarea id="recommend" placeholder="병원에 안내할 권고 사항을 입력하세요." maxlength="150"></textarea>
-          <div class="char-counter"><span id="cc_recommend">0</span>/150</div>
+          <textarea id="recommend" placeholder="병원에 안내할 권고 사항을 입력하세요." maxlength="2000"></textarea>
+          <div class="char-counter"><span id="cc_recommend">0</span>/2000</div>
         </div>
         <div class="row-2">
           <div class="field-group">
@@ -577,6 +578,7 @@
     <div class="fname" id="doneFname"></div>
     <div class="fsize" id="doneFsize"></div>
     <p id="pdfShareStatus" role="status" aria-live="polite"></p>
+    <ol id="pdfFlowStages" class="document-flow-steps" aria-label="내역서 저장 진행" aria-live="polite"></ol>
     <p id="pdfUploadStatus" role="status" aria-live="polite"></p>
     <a id="pdfOpenLink" target="_blank" rel="noopener noreferrer" hidden>AS/점검 내역서</a>
     <button type="button" id="pdfUploadRetry" class="done-share" hidden>Drive 저장 다시 시도</button>
@@ -629,7 +631,7 @@
 <div id="pdfSheet"></div>
 
 <script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-upload.js?v=243"></script>
+<script src="js/baz-inspection-upload.js?v=244"></script>
 <script src="js/baz-inspection-hospitals.js"></script>
 <script>/* html2canvas 1.4.1 inlined */
 /*!
@@ -1786,7 +1788,7 @@ function collectFormData(){
 
 function applyFormData(d){
   if(!d) return;
-  handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId)}:null;
+  handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:''}:null;
   uploadedPdfDocument=d.pdfDocument||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
   syncPdfFormat();
@@ -1849,14 +1851,9 @@ function loadTasks(){
 function persistTasks(tasks){
   try{ localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); return true; }
   catch(err){
-    // 용량 초과 시 사진 제외하고 재시도
+    // Keep the last complete draft. A navigation must not silently remove photos.
     if(err && (err.name==='QuotaExceededError' || /quota/i.test(err.message||''))){
-      try{
-        const stripped=tasks.map(t=>({...t, data:{...t.data, photos:[]}}));
-        localStorage.setItem(TASKS_KEY, JSON.stringify(stripped));
-        showToast('저장공간 부족: 사진 제외하고 저장했습니다');
-        return true;
-      }catch(e2){ showToast('저장 실패: 저장공간이 부족합니다'); return false; }
+      showToast('사진을 포함한 초안을 저장할 공간이 부족합니다. 현재 화면을 유지하고 PDF를 먼저 저장하세요.');return false;
     }
     showToast('저장 실패'); console.warn('[작업저장] 실패:', err); return false;
   }
@@ -1927,7 +1924,9 @@ function clearForm(){
 }
 
 // 새 점검: 항상 새로운 Task 생성 (기존 작업은 보존)
-function newTask(){
+function newTask(opts){
+  if(_currentTaskId&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
+  const previous=collectFormData();
   exitSignMode();
   clearForm();
   const now=Date.now();
@@ -1935,26 +1934,32 @@ function newTask(){
   const task={ id:genTaskId(), createdAt:now, updatedAt:now, status:'draft', documentNo:'',
                hospital:'', product:'', serial:'', engineer:'', data:collectFormData() };
   tasks.push(task);
+  if(!persistTasks(tasks)){applyFormData(previous);showToast('새 작업을 보관하지 못했습니다. 기존 작성 내용을 유지합니다.');return false;}
   setCurrentTaskId(task.id);
-  persistTasks(tasks);
+  if(!opts?.keepRoute)history.replaceState(null,'',location.pathname);
   updateTaskStatusBar();
   goStep(1,{noScroll:true});          // 새 점검은 1단계부터
   window.scrollTo({top:0,behavior:'smooth'});
+  if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);
   showToast('새 점검 작업 생성');
+  return task.id;
 }
 
 // 작업 불러오기 (사인대기 작업이면 자동으로 사인 모드 진입)
 function openTask(id){
   const task=getTask(id);
   if(!task){ showToast('작업을 찾을 수 없습니다'); return; }
+  if(_currentTaskId&&_currentTaskId!==id&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
   setCurrentTaskId(id);
   applyFormData(task.data);
   closeTaskList();
+  if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);
   if(task.status==='waiting_signature') enterSignMode(); else exitSignMode();
   goStep(task.status==='waiting_signature' ? STEP_COUNT : 1, {noScroll:true});
   updateTaskStatusBar();
   window.scrollTo({top:0,behavior:'smooth'});
   showToast('작업 불러옴');
+  return true;
 }
 
 // 복제 (새 id, 작성중 상태)
@@ -2032,10 +2037,10 @@ function cloudUrl(){
 }
 function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
-const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,onSaved(saved,context){
+const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연결을 확인할 수 없습니다. 다시 열어 주세요.');return window.BazInspectionFlow.prepareContext(context);},confirmAttachment(saved,context){return window.BazInspectionFlow.confirmAttachment(saved,context);},onProgress(stages){if(window.BazInspectionFlow)window.BazInspectionFlow.progress(stages);},onSaved(saved,context){
   const tasks=loadTasks(),task=tasks.find(t=>t.id===context.taskId);
-  if(task){task.data.handover={recordId:saved.recordId};task.data.pdfDocument=saved.pdf;persistTasks(tasks);}
-  if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId};uploadedPdfDocument=saved.pdf;}
+  if(task){task.data.handover={...(task.data.handover||{}),recordId:saved.recordId,requestId:context.requestId||task.data.handover?.requestId||''};task.data.pdfDocument=saved.pdf;persistTasks(tasks);if(cloudConfigured())cloudSyncTask(task,{silent:true});}
+  if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId,requestId:context.requestId||handoverReference?.requestId||''};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
 }});
 
 function cloudPost(payload){
@@ -2604,7 +2609,7 @@ async function generatePDF(arg){
     const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}`;
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-    const uploadContext=!preview&&!blank?await pdfPublisher.prepare({hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),recordId:handoverReference&&handoverReference.recordId||'',taskId:_currentTaskId,pdfFormat:simplified?'simplified':'standard'}):null;
+    const uploadContext=!preview&&!blank?await pdfPublisher.prepare({hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),recordId:handoverReference&&handoverReference.recordId||'',taskId:_currentTaskId,requestId:handoverReference?.requestId||'',pdfFormat:simplified?'simplified':'standard'}):null;
     const {jsPDF}=window.jspdf;
     const pdf=new jsPDF('p','mm','a4');
 
@@ -2721,6 +2726,7 @@ masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 �
 
 // 현장 처리(handover.html) → 점검 내역서 이어쓰기 프리필 소비
 (function consumePrefill(){
+  if(window.BazWorkFlow.route(location.search)?.recordId)return;
   const PREFILL_KEY='insp_prefill_v1';
   let raw=null; try{ raw=localStorage.getItem(PREFILL_KEY); }catch(e){}
   if(!raw) return;

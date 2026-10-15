@@ -296,6 +296,7 @@
   function saveDraft(storage, form, extra) {
     try {
       var body = { v: 1, at: Date.now(), form: snapshot(form), hadPhoto: !!(extra && extra.hadPhoto) };
+      if(extra&&extra.workflow&&/^[A-Za-z0-9_-]{8,90}$/.test(extra.workflow.requestId||''))body.workflow={requestId:extra.workflow.requestId,recordId:String(extra.workflow.recordId||'')};
       storage.setItem(DRAFT_KEY, JSON.stringify(body));
       return true;
     } catch (e) { return false; }

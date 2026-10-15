@@ -2,7 +2,7 @@
  'use strict';var URL='https://yuyoung.yuyoung-ai.deno.net';
  async function call(action,params,write){
   var ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},action.indexOf('work_flow_')===0?45000:action.indexOf('work_handover_')===0||action==='work_references_refresh'?35000:15000);
-  try{var response=await fetch(URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({},params,{action:action,token:root.BazAuth.token()})),signal:ctl.signal,cache:'no-store'}),data=await response.json();if(!data||typeof data.success!=='boolean')throw new Error('업무 서버 응답을 확인하지 못했습니다.');return data;}
+  try{var token=root.BazAuth.token(),response=await fetch(URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({},params,{action:action,token:token})),signal:ctl.signal,cache:'no-store'}),data=await response.json();if(root.BazAuth.token()!==token)throw new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');if(!data||typeof data.success!=='boolean')throw new Error('업무 서버 응답을 확인하지 못했습니다.');return data;}
   catch(e){var error=new Error(e.name==='AbortError'?'응답 대기 시간이 지났습니다.':e.message||'연결 실패');error.unknown=!!write;throw error;}
   finally{clearTimeout(timer);}
  }

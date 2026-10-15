@@ -174,10 +174,10 @@ body.is-dirty .dirty-badge{display:inline-block}
 .ac-item[aria-selected="true"]{background:var(--teal-soft)}
 .ac-item:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
 </style>
-<script src="auth.js"></script>
+<script src="auth.js?v=244"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=244"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-handover-workflow.js?v=244"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
-<script src="js/baz-handover-core.js"></script>
+<script src="js/baz-handover-core.js?v=244"></script>
 </head>
 <body>
 <header>
@@ -190,6 +190,7 @@ body.is-dirty .dirty-badge{display:inline-block}
   <!-- 입력 -->
   <div class="card">
     <p class="sec-title">처리 내용 입력</p>
+    <section id="workFlow" class="work-flow-panel" hidden><h3>접수에서 현장 기록 작성</h3><p id="workFlowMessage" role="status"></p><div id="workFlowActions" class="work-flow-actions"></div></section><details id="workFlowArchives" class="work-flow-archives" hidden><summary>보관한 현장 기록 초안</summary><div></div></details>
     <div id="draftBar"></div>
     <p class="hint" style="margin:-6px 0 12px">병원 DB <span class="db-badge embed" id="dbBadge">내장 DB</span></p>
     <div class="grid">
@@ -404,11 +405,12 @@ function fillSub(){
 }
 function subName(){
   var s=document.getElementById('sub');
+  if(!s.value)return '';
   if(s.value==='__c')return val('subCustom');
   return (s.options[s.selectedIndex]||{}).textContent||'';
 }
 function itemCode(){var s=document.getElementById('sub');return s.value==='__c'?'':s.value;}
-function itemText(){var c=val('cat'),n=subName();return n?c+' / '+n:c;}
+function itemText(){var c=val('cat'),n=subName();return c&&n?c+' / '+n:n||c;}
 
 function toggleCustom(base){
   var sel=document.getElementById(base), c=document.getElementById(base+'Custom');
@@ -861,12 +863,14 @@ var FIELD_LABEL={eqKind:'장비 구분', verUI:'UI 버전', verHP:'HP 버전', n
                  result:'A/S 결과', remark:'비고', code:'유형 코드'};
 var SAVE_STATE=BazHandover.SAVE.IDLE;
 var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
+var SAVED_RECORD_ID='';
 var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
 var LAST_SAVE_PAYLOAD=null;   /* 결과 불명 재전송은 반드시 같은 reqId를 재사용 */
 var LAST_SENT_SNAPSHOT=null;  /* 서버가 실제로 받은 업무 필드 — 응답 대기 중 편집과 분리 */
 
 function setSaveState(state, info){
   SAVE_STATE=state;
+  if(window.BazHandoverFlow)window.BazHandoverFlow.pendingState(state);
   var card=el('saveStatusCard'), box=el('saveStatus'), acts=el('saveActions');
   if(!card||!box||!acts) return;
   info=info||{};
@@ -905,7 +909,7 @@ function setSaveState(state, info){
 function enableCopy(on){
   var b=el('btnCopy'), c=el('btnCont');
   if(b){ b.disabled=!on; b.title = on ? '복사' : '시트 기록 후 복사할 수 있어요'; }
-  if(c){ c.disabled=!on; c.title = on ? '점검 내역서 이어서 작성' : '시트 기록 후 이어서 작성할 수 있어요'; }
+  if(c){ c.disabled=!on||(window.BazHandoverFlow&&!window.BazHandoverFlow.canContinue()); c.title = on ? '점검 내역서 이어서 작성' : '시트 기록 후 이어서 작성할 수 있어요'; }
 }
 
 /* 저장 후 업무 필드가 바뀌면 "저장 후 변경됨" — 복사·이어쓰기를 다시 잠근다 */
@@ -932,6 +936,7 @@ function applySaveResult(res){
     var current=readForm();
     var sent=LAST_SENT_SNAPSHOT||BazHandover.snapshot(current);
     SAVED_SNAPSHOT=sent;
+    SAVED_RECORD_ID=(LAST_SAVE_PAYLOAD&&LAST_SAVE_PAYLOAD.reqId)||LAST_REQ_ID||SAVED_RECORD_ID;
     LAST_REQ_ID='';
     var textChanged=BazHandover.isDirty(sent, current);
     resetRecordId();
@@ -939,10 +944,11 @@ function applySaveResult(res){
     document.body.classList.toggle('is-dirty', hasUnsaved);
     enableCopy(!hasUnsaved);
     rememberRecentHandover_(sent);
-    if(hasUnsaved) BazHandover.saveDraft(localStorage, current);
+    if(hasUnsaved) BazHandover.saveDraft(localStorage, current,{workflow:window.BazHandoverFlow&&window.BazHandoverFlow.context()});
     else BazHandover.clearDraft(localStorage); /* 전송 뒤 바뀐 내용이 없을 때만 초안 정리 */
     LAST_SAVE_PAYLOAD=null;
     LAST_SENT_SNAPSHOT=null;
+    if(window.BazHandoverFlow)window.BazHandoverFlow.onSaved(SAVED_RECORD_ID,sent);
     var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
     if(hasUnsaved){
       if(badge) badge.textContent='· 전송한 내용은 기록됨 · 현재 변경은 미기록';
@@ -997,7 +1003,8 @@ function startNewRecord(){
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('on','warn'); b.setAttribute('aria-pressed','false'); });
   setHospSelection(null);
   resetRecordId();
-  SAVED_SNAPSHOT=null; LAST_REQ_ID='';
+  SAVED_SNAPSHOT=null; SAVED_RECORD_ID=''; LAST_REQ_ID='';
+  if(window.BazHandoverFlow)window.BazHandoverFlow.reset();
   LAST_SAVE_PAYLOAD=null; LAST_SENT_SNAPSHOT=null;
   document.body.classList.remove('is-dirty');
   enableCopy(false);
@@ -1071,6 +1078,7 @@ async function saveToSheet(){
   }
 
   var form=readForm();
+  if(window.BazHandoverFlow&&window.BazHandoverFlow.context()&&!String(form.detail||'').trim()&&!pick('result')){showErrors([{field:'detail',msg:'실제 처리 내용 또는 처리 결과를 입력하세요.'}]);return;}
   var v=BazHandover.validate(form);
   if(!v.ok){ showErrors(v.errors); toast('입력을 확인해 주세요 ('+v.errors.length+'건)'); return; }
   clearFieldErrors();
@@ -1101,6 +1109,7 @@ async function saveToSheet(){
 /* 신규 저장과 결과 불명 재전송이 같은 상태 전이를 사용한다. */
 async function submitSavePayload(payload){
   var btn=el('btnSave');
+  if(window.BazHandoverFlow&&window.BazHandoverFlow.pendingState(BazHandover.SAVE.SAVING)===false){setSaveState(BazHandover.SAVE.FAILED,{error:'저장 확인 정보를 보관할 공간이 부족합니다. 현재 내용을 유지하고 저장 공간을 확보하세요.'});return;}
   setSaveState(BazHandover.SAVE.SAVING);
   btn.disabled=true; btn.textContent='기록 중…';
   try{
@@ -1154,7 +1163,7 @@ function scheduleDraftSave(){
     /* 시트에 기록이 끝났고 그 뒤로 바뀐 게 없다면 초안을 다시 만들지 않는다. */
     var form=readForm();
     if(SAVED_SNAPSHOT && !BazHandover.isDirty(SAVED_SNAPSHOT, form)) return;
-    BazHandover.saveDraft(localStorage, form);
+    BazHandover.saveDraft(localStorage, form,{workflow:window.BazHandoverFlow&&window.BazHandoverFlow.context()});
   }, 600);
 }
 function offerDraftRestore(){
@@ -1189,7 +1198,7 @@ function restoreDraft(d){
     if(hit){ VER_AUTOFILLED={ui:false,hp:false}; setHospSelection(hit); }
     else setHospSelection(null);
   }
-  if(f.sn){ setVal('sn', f.sn); toggleCustom('sn'); }
+  if(f.sn){ var listed=Array.from(el('sn').options).some(function(o){return o.value===f.sn;});if(!listed&&f.sn!=='__c'){setVal('sn','__c');setVal('snCustom',f.sn);}else setVal('sn',f.sn);toggleCustom('sn'); }
   if(f.snCustom) setVal('snCustom', f.snCustom);
   SKILL={nsFill:f.nsFill||'', nsAmt:f.nsAmt||'', jet:f.jet||''};
   syncSkillButtons();
@@ -1208,6 +1217,8 @@ function syncSkillButtons(){
 /* ── 점검 내역서 이어쓰기: 현재 입력값을 inspection.html 새 작업으로 넘김 ── */
 var PREFILL_KEY='insp_prefill_v1';
 function contToInspection(){
+  if(!SAVED_SNAPSHOT||BazHandover.isDirty(SAVED_SNAPSHOT,readForm())){toast('현재 내용을 먼저 시트에 기록하세요.');return;}
+  if(window.BazHandoverFlow){if(!window.BazHandoverFlow.canContinue()){toast('해당 접수 연결을 먼저 확인하세요.');return;}location.href=window.BazWorkFlow.url('inspection.html',window.BazHandoverFlow.context().requestId,SAVED_RECORD_ID);return;}
   if(!val('hosp')){ toast('병원명을 입력하세요'); return; }
   var b=document.getElementById('btnCont'); if(b) b.disabled=true;   /* 이중 클릭 방지 */
   var demo = val('eqKind')==='데모 장비';
@@ -1219,7 +1230,7 @@ function contToInspection(){
   var snv = snVal();
   var rec = HOSPITAL_DB.filter(function(h){ return h.n===val('hosp'); })[0];
   var payload = { v:1, createdAt:Date.now(), source:'handover', form:{
-    handover:{recordId:LAST_REQ_ID},
+    handover:{recordId:SAVED_RECORD_ID},
     basic:{
       receiveDate: val('date')||todayISO(),
       inspectDate: val('date')||todayISO(),
@@ -1231,8 +1242,8 @@ function contToInspection(){
       cost:        costNum ? Number(costNum).toLocaleString() : '',
       subscription:(rec && rec.c) || '',
       product:     /^NV/i.test(snv) ? 'NOVOJET' : (/^B[VWXY]/i.test(snv) ? 'CUREJET' : ''),
-      actionDetail: action.slice(0,200),
-      recommend:   (remark && remark.toUpperCase()!=='N/A') ? remark.slice(0,150) : ''
+      actionDetail: action.slice(0,4000),
+      recommend:   (remark && remark.toUpperCase()!=='N/A') ? remark.slice(0,2000) : ''
     },
     pay:   (costNum && Number(costNum)>0) ? '유상' : '무상',
     types: [ val('gubun')==='점검' ? '장비 점검' : 'A/S' ]
@@ -1610,8 +1621,8 @@ function applyBootstrap(d){
   }
   autoFillDetail();
 }
-bootHandover();
-offerDraftRestore();
+window.handoverBoot=bootHandover();
+if(!window.BazWorkFlow.route(location.search))offerDraftRestore();
 
 function toast(msg){
   var el=document.getElementById('toast'); el.textContent=msg; el.classList.add('on');
