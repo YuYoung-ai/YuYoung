@@ -117,7 +117,8 @@ export function createWorkStore(kv:any){
    if(checks.length)tx=tx.check(...checks);
    const previousRequest=await get('request',ev.request.id);
    tx=updateRequestIndexes(tx.check(previousRequest),previousRequest.value,ev.request);
-   tx=await indexes.write(tx,Number(meta.value.seq||0),seq);
+   const indexState=await indexes.writeState(Number(meta.value.seq||0),seq);
+   tx=tx.check(indexState.entry).set(indexState.entry.key,indexState.value);
    if(previousRequest.value?.hospitalId&&previousRequest.value.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',previousRequest.value.hospitalId,ev.request.id));
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
    const alert=assignmentNotification(ev);
