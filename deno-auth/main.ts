@@ -51,7 +51,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.6.0-work-document-flow";
+const VER = "deno-1.7.0-work-performance";
 
 const enc = new TextEncoder();
 
@@ -514,7 +514,7 @@ function withCors(res: Response, req: Request): Response {
 /* 병원 업무 중계: DB는 Sheets 유지, ACL과 업무 변경은 GAS가 최종 검증한다.
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
-const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_document_status", "work_handover_candidates", "work_handover_detail", "work_handover_refresh", "work_flow_preview", "work_flow_relink_preview"]);
+const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_document_status", "work_index_prepare", "work_handover_candidates", "work_handover_detail", "work_handover_refresh", "work_flow_preview", "work_flow_relink_preview"]);
 const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_status", "work_source_review", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_field_result_link", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
 function workUpstream(): string {
   try {
@@ -559,7 +559,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           // Existing authenticated GAS read endpoint. Keep operational sync on KV;
           // only this explicit DB-refresh action reads the original spreadsheet.
           const url=new URL(WORK_GAS_URL);url.searchParams.set('action','hospdbrich');url.searchParams.set('force','1');url.searchParams.set('token',String(p.token||''));
-          const response=await fetch(url,{signal:ctl.signal,redirect:'follow'}),body=await response.json();
+          const upstreamAt=performance.now(),response=await fetch(url,{signal:ctl.signal,redirect:'follow'}),body=await response.json(),upstreamMs=Math.round(performance.now()-upstreamAt);
           if(!body.success||!Array.isArray(body.data))throw new Error('병원정보DB 조회 실패');
           const existing=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
           const hospitals=[];
@@ -571,7 +571,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           }
           await store.bridge('references',{hospitals,references:{referenceCheckedAt:new Date().toISOString()}});
           const data=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
-          return workReply({body:data as WorkBody,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-references',started);
+          return workReply({body:data as WorkBody,status:200,upstreamMs},'kv-references',started);
         }catch{return fail('병원정보DB 최신 조회에 실패했습니다. 기존 값은 보관되어 있습니다. 다시 시도하세요.',502);}
         finally{clearTimeout(timer);}
       }
@@ -594,12 +594,13 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         }
         const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
         try {
-          const upstream=await fetch(WORK_GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload),signal:ctl.signal,redirect:'follow'});
+          const upstreamAt=performance.now(),upstream=await fetch(WORK_GAS_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload),signal:ctl.signal,redirect:'follow'});
           const body=await upstream.json();
-          if (!body.success) return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
-          await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data);
+          const upstreamMs=Math.round(performance.now()-upstreamAt);
+          if (!body.success) return workReply({body,status:200,upstreamMs},'kv-handover',started);
+          await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data,undefined,p.requestId?String(p.requestId):undefined);
           if(p.requestId)body.workDetail=await store.handle({action:'work_detail',id:p.requestId},{name:verified.name||'',level:verified.level||0});
-          return workReply({body,status:200,upstreamMs:Math.round(performance.now()-started)},'kv-handover',started);
+          return workReply({body,status:200,upstreamMs},'kv-handover',started);
         } catch { return fail('Handover 원본 조회에 실패했습니다. 다시 불러오세요.',502); }
         finally {clearTimeout(timer);}
       }
@@ -955,6 +956,7 @@ async function handleAction(
       fp,
       creds: CREDS.length,
       kv: kv !== null,
+      queryIndexReady: kv ? await createWorkStore(kv).queryIndexReady() : false,
       deviceAuth: DEVICE_AUTH_ENABLED,
       googleAuth: GOOGLE_AUTH_ENABLED,
       originPolicy: ALLOWED_ORIGINS.size > 0 ? "allowlist" : "deny_browser",
@@ -968,6 +970,7 @@ async function handleAction(
 Deno.cron('baz-work-push-delivery', '* * * * *', async()=>{
   const kv=await getKv();if(!kv||(await createWorkStore(kv).status()).ready!==true)return;
   try{await (await notificationService(kv)).process();}catch{console.warn('접수 알림 발송은 다음 주기에 재시도합니다.');}
+  try{await createWorkStore(kv).prepareIndexes();}catch{console.warn('업무 조회 준비는 다음 주기에 재시도합니다.');}
 });
 
 Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {

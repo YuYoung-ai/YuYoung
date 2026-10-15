@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v244';
+const CACHE_VERSION = 'baz-cs-v245';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();
@@ -25,7 +25,7 @@ const ASSETS = [
 
 // 내용이 바뀌지 않는 자산 → 캐시 우선(있으면 네트워크를 타지 않음)
 // 폰트(2MB)·아이콘·로고가 재방문마다 다시 내려오는 것을 막는다.
-const IMMUTABLE = /\/(fonts\/|logo\.png|icon-192\.png|icon-512\.png)/;
+const IMMUTABLE = /\/(fonts\/|js\/vendor\/(?:html2canvas-1\.4\.1\.min|jspdf-2\.5\.1\.umd\.min)\.js(?:\?|$)|logo\.png|icon-192\.png|icon-512\.png)/;
 
 // VOC 유형별 대표 사진 중 "내용 해시 파일명"만 불변으로 본다.
 //   assets/type-examples/media/<sha256 앞 12자리>.webp

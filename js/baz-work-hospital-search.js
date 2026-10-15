@@ -2,14 +2,16 @@
   'use strict';
   function normalize(value){return String(value||'').normalize('NFKC').toLowerCase().replace(/[\s_·/()-]+/g,'');}
   function search(rows,value){
+    var measured=root.BazPerf?root.BazPerf.start('search'):function(){};
     var tokens=String(value||'').trim().split(/\s+/).map(normalize).filter(Boolean);
-    return rows.filter(function(h){
+    var result=rows.filter(function(h){
       var text=normalize([h.name,h.region||'지역 미기록',h.sn||'S/N 미기록'].join(' '));
       return h.origin!=='flow'&&tokens.every(function(token){return text.includes(token);});
     }).sort(function(a,b){
       var query=normalize(value),ap=normalize(a.name).startsWith(query),bp=normalize(b.name).startsWith(query);
       return Number(bp)-Number(ap);
     });
+    measured({count:result.length});return result;
   }
   function create(options){
     var doc=options.document||document,win=doc.defaultView,selector=options.selector;

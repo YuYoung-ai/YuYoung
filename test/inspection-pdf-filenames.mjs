@@ -22,5 +22,6 @@ state.types=new Set(['A/S']);
 fields.hospital='병원/이름:*?<>|"\\';fields.inspectDate='';
 assert.equal(context.inspectionPdfFilename(),'AS_병원이름_2026-10-14.pdf');
 assert.ok(!context.inspectionPdfFilename().includes(fields.csName));
-assert.match(source,/_lastFname=inspectionPdfFilename\(\);/);
+assert.match(source,/filename=inspectionPdfFilename\(\)/);
+assert.match(source,/_lastFname=filename;/);
 console.log('PASS: requested filename, inspection date, all types, multiple types, empty type/date and safe hospital name');

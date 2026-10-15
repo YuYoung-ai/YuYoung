@@ -7,15 +7,16 @@
     function message(s,text){if(current===s)status.textContent=text;}
     function progress(s,stage,value){s.stages[stage]=value;if(current===s&&options.onProgress)options.onProgress({...s.stages},s.context);}
     async function call(action,payload){
+      const measured=root.BazPerf?root.BazPerf.start(action):function(){};
       // Never use the Deno API, even as an error fallback: PDF bytes stay on Google's path.
       const url=new URL(options.url);if(url.origin!=='https://script.google.com'||!/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname))throw new Error('PDF 저장 서버 주소를 확인하세요.');
       const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),120000);
       try{
         const token=options.token(),response=await (options.fetch||fetch)(url.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...payload,action,token}),signal:ctl.signal});
         if(options.token()!==token){const changed=new Error('로그인 계정이 변경되었습니다. 다시 내역서를 열어 확인하세요.');changed.noRetry=true;throw changed;}
-        const data=await response.json();if(!data||!data.success){const error=new Error(data&&data.error||'PDF 저장 응답을 확인하지 못했습니다.');error.sourceConflict=!!data?.sourceConflict;throw error;}return data;
+        const data=await response.json();if(!data||!data.success){const error=new Error(data&&data.error||'PDF 저장 응답을 확인하지 못했습니다.');error.sourceConflict=!!data?.sourceConflict;error.noRetry=!!data?.conflict;throw error;}return data;
       }catch(e){if(e.name==='AbortError')throw new Error('응답 대기 시간이 지났습니다. 같은 파일로 다시 시도해 주세요.');throw e;}
-      finally{clearTimeout(timer);}
+      finally{clearTimeout(timer);measured();}
     }
     async function run(s){
       if(s.busy)return;s.busy=true;retry.hidden=true;newButton.disabled=true;
@@ -25,9 +26,11 @@
         if(s.context.sourcePreparationError)throw new Error(s.context.sourcePreparationError+' 원본을 확인한 뒤 PDF를 다시 생성하세요.');
         if(!s.context.hospital||!s.context.date)throw new Error('병원명과 점검일을 확인하세요.');
         message(s,'PDF 생성 완료 · Handover 기록을 확인하는 중…');
-        const resolved=await call('inspection_pdf_resolve',s.context);
-        s.context.recordId=resolved.recordId;
-        if(s.baseRevision==null)s.baseRevision=s.context.sourcePdfRevision??resolved.pdf?.revision??0;
+        // The pre-render resolve already fixed the source. The upload server
+        // rechecks its fingerprint/version under lock; another resolve adds no protection.
+        let resolved=null;
+        if(!s.context.recordId||!s.context.sourceFingerprint){resolved=await call('inspection_pdf_resolve',s.context);s.context.recordId=resolved.recordId;}
+        if(s.baseRevision==null)s.baseRevision=s.context.sourcePdfRevision??resolved?.pdf?.revision??0;
         if(!s.sha256){
           const bytes=await s.blob.arrayBuffer();s.sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
           s.base64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('PDF 파일을 읽지 못했습니다.'));reader.readAsDataURL(s.blob);});
