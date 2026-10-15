@@ -51,7 +51,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.8.0-workspace-roles";
+const VER = "deno-1.8.1-atomic-save";
 
 const enc = new TextEncoder();
 
