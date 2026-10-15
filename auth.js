@@ -420,9 +420,10 @@
 
   function goLogin_() {
     try{
-      if(currentPage_()==='hospital-work.html'&&(!BazAuth.token()||BazAuth.cachedLevel()>=requiredLevelFor_('hospital-work.html'))){
+      var page=currentPage_();
+      if(['hospital-work.html','handover.html','inspection.html'].includes(page)&&(!BazAuth.token()||BazAuth.cachedLevel()>=requiredLevelFor_(page))){
         var p=new URLSearchParams(global.location.search||''),id=p.get('request'),notice=p.get('notification');
-        if(/^[A-Za-z0-9_-]{8,90}$/.test(id||'')){var target='hospital-work.html?request='+encodeURIComponent(id);if(/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))target+='&notification='+encodeURIComponent(notice);BazAuth.rememberReturn(target);}
+        if(/^[A-Za-z0-9_-]{8,90}$/.test(id||'')){var target=page+'?request='+encodeURIComponent(id);if(page==='hospital-work.html'&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))target+='&notification='+encodeURIComponent(notice);if(page==='inspection.html')target+='&record='+encodeURIComponent(p.get('record')||'');BazAuth.rememberReturn(target);}
       }
     }catch(e){}
     global.location.replace('index.html');
@@ -473,12 +474,12 @@
   BazAuth.guard = guardPage_;
   BazAuth.rememberReturn=function(path){
     var url=new URL(path,global.location.href),base=new URL('index.html',global.location.href);
-    if(url.origin!==base.origin||!['hospital-work.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
-    var safe=url.pathname;if(url.pathname.endsWith('/hospital-work.html')){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);}
+    if(url.origin!==base.origin||!['hospital-work.html','handover.html','inspection.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
+    var safe=url.pathname;if(!url.pathname.endsWith('/install.html')){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(url.pathname.endsWith('/hospital-work.html')&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);if(url.pathname.endsWith('/inspection.html')){var record=url.searchParams.get('record');if(!/^[A-Za-z0-9_-]{8,90}$/.test(record||''))return false;safe+='&record='+encodeURIComponent(record);}}
     try{sessionStorage.setItem('baz_notification_return_v1',JSON.stringify({path:safe,expires:Date.now()+30*60000}));return true;}catch(e){return false;}
   };
   BazAuth.returnAfterLogin=function(){
-    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
+    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','handover.html','inspection.html','install.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
   };
 
   global.BazAuth = BazAuth;

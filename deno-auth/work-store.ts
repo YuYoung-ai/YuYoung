@@ -203,6 +203,7 @@ export function createWorkStore(kv:any){
   const src=await get('source',r.hospitalName,String(p.recordId)),s=src.value;
   if(!s||!kind(s))throw new Error('A/S 또는 점검 기록을 선택하세요.');
   if(s.version!==p.sourceVersion)throw new Error('Handover 원본이 바뀌었습니다. 다시 불러와 확인하세요.');
+  if(p.action==='work_field_result_link'&&(!Number.isFinite(Date.parse(s.observedAt||''))||Date.now()-Date.parse(s.observedAt)>120000))throw new Error('저장된 Handover 원본을 먼저 확인하세요.');
   const binding=await sourceLink(s.recordId),linked=binding.entry;
   if(automatic){
    const plan=autoSources(r,await values(['request']),await sources(r.hospitalName)),hs=(await history(r.id)).filter(h=>h.kind==='result');
@@ -211,12 +212,12 @@ export function createWorkStore(kv:any){
   if(binding.inUse&&linked.value.requestId!==r.id)throw new Error('이 결과는 다른 접수에 연결되어 있습니다. 해당 접수를 먼저 확인하세요.');
   const old=linked.value?.requestId===r.id?(await get('history',r.id,linked.value.historyId)).value:null;
   if(old&&String(old.revision)!==String(p.baseHistoryRevision||0))return {response:clash(old)};
-  const now=new Date().toISOString(),before=copy(r),h:Obj={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
+  const now=new Date().toISOString(),before=copy(r),h:Obj={id:old?.id||crypto.randomUUID(),requestId:r.id,kind:'result',source:s,body:s.detail||'',memo:automatic||p.action==='work_field_result_link'?old?.memo||'':text(p.memo,2000,'보완 메모'),auto:automatic||old?.auto||false,author:old?.author||who.name,createdAt:old?.createdAt||now,updatedAt:now,updatedBy:who.name,revision:(old?.revision||0)+1};
   if(old){const review=await sourceReview(old,s,r.status==='완료',now);if(review)h.sourceReview=review;r.handoverReviewCount=Math.max(0,Number(r.handoverReviewCount||0)+(review?.pending?1:0)-(old.sourceReview?.pending?1:0));}
   r.revision++;r.updatedAt=now;r.updatedBy=who.name;r.latest=s.result||s.detail?.slice(0,120)||'';r.gubun=workKind(s.gubun);
-  r.status=p.complete||r.status==='완료'?'완료':'결과확인';
+  r.status=p.complete||r.status==='완료'?'완료':p.action==='work_field_result_link'&&['보류','취소'].includes(r.status)?r.status:'결과확인';
   if(p.complete){r.completedAt=r.completedAt||now;r.completedBy=r.completedBy||who.name;}
-  return {kind:automatic?'result_auto':'result_save',before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,...(s.pdf?{pdfPending:{hospitalName:s.hospitalName,recordId:s.recordId}}:{}),checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
+  return {kind:automatic?'result_auto':'result_save',...(p.action==='work_field_result_link'?{compactResponse:true}:{}),before:old||null,requestBefore:before,request:r,history:h,link:s.recordId,...(s.pdf?{pdfPending:{hospitalName:s.hospitalName,recordId:s.recordId}}:{}),checks:[src,linked,...(binding.owner?[binding.owner]:[])],response:{success:true,request:r,history:h}};
  });}
  async function lifecycle(p:Obj,who:Actor){return mutate(p,who,async()=>{
   const r=copy((await request(p.requestId,p.action==='work_restore')).value);
@@ -402,6 +403,23 @@ export function createWorkStore(kv:any){
   const h={...copy(old),revision:old.revision+1,updatedAt:now,updatedBy:who.name,sourceReview:{...old.sourceReview,pending:false,reviewedAt:now,reviewedBy:who.name}};
   return {kind:'result_source_review',compactResponse:true,before:old,requestBefore:r,request:next,history:h,checks:[current,entry,src,owner.entry],response:{success:true,request:next,history:h}};
  });}
+ async function documentStatus(p:Obj){
+  const r=(await request(p.requestId)).value;
+  if(!p.recordId){
+   const records=(await history(r.id)).filter(h=>h.kind==='result'&&h.source?.origin!=='flow').map(h=>({recordId:h.source.recordId,sn:h.source.sn||'',date:h.source.date||'',hasPdf:!!h.source.pdf}));
+   if(records.length>100)throw new Error('연결된 현장 기록이 많습니다. 처리 이력에서 해당 장비를 선택하세요.');
+   return {success:true,request:r,records};
+  }
+  const recordId=text(p.recordId,120,'원본 기록'),owner=await sourceLink(recordId);
+  if(owner.entry.value?.requestId!==r.id)throw new Error('해당 현장 기록이 이 접수에 연결되어 있지 않습니다. 원본 연결을 확인하세요.');
+  const h=(await get('history',r.id,owner.entry.value.historyId)).value;
+  if(h?.kind!=='result'||h.source?.recordId!==recordId||h.source.origin==='flow')throw new Error('연결된 Handover 처리 기록을 확인하세요.');
+  const pointer=await get('sourceIndex',recordId),source=(await get('source',pointer.value?.hospitalName||h.source.hospitalName,recordId)).value;
+  if(!source)throw new Error('Handover 원본을 확인하지 못했습니다. 다시 불러오세요.');
+  const pdf=source.pdf,comment=(await get('history',r.id,'pdf_'+await hash(recordId))).value;
+  const matches=!!pdf&&(!p.sha256||pdf.sha256===p.sha256);
+  return {success:true,request:r,source,historyId:h.id,historyRevision:h.revision,sourceLinked:true,pdfStored:matches,commentAttached:!!(matches&&!comment?.deletedAt&&comment?.attachment?.sha256===pdf.sha256&&comment?.attachment?.revision===pdf.revision),commentDeleted:!!comment?.deletedAt,documentChanged:!!(p.sha256&&pdf&&pdf.sha256!==p.sha256)};
+ }
  async function handle(p:Obj,who:Actor){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
@@ -415,6 +433,7 @@ export function createWorkStore(kv:any){
     case 'work_flow_relink_preview':return await flowRelinkPreview(p,who);
     case 'work_flow_relink':return await flowRelink(p,who);
     case 'work_detail':return await detail(p);
+    case 'work_document_status':return await documentStatus(p);
     case 'work_save':case 'work_request_edit':{
      const saved=await save(p,who);
      if(!saved.success||!p.id)return saved;
@@ -427,7 +446,7 @@ export function createWorkStore(kv:any){
     case 'work_status':return await changeStatus(p,who);
     case 'work_source_review':return await reviewSource(p,who);
     case 'work_history_add':case 'work_history_update':return await comment(p,who);
-    case 'work_result_save':{
+    case 'work_result_save':case 'work_field_result_link':{
      const saved=await result(p,who);if(!saved.success)return saved;
      try{await reconcilePdfAttachments(p.requestId);const workDetail=await detail({id:p.requestId});return {...saved,request:workDetail.request,workDetail};}catch{return saved;}
     }

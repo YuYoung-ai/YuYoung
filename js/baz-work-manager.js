@@ -373,6 +373,7 @@
       '<dl class="facts">'+facts.map(function(x){return '<div class="fact '+(x[2]||'')+'"><dt>'+x[0]+'</dt><dd>'+x[1]+'</dd></div>';}).join('')+'</dl>',
       r.status==='완료'?'<div class="completion-progress"><span>진척도</span><div><progress max="100" value="100" aria-label="업무 완료 100%">100%</progress><strong>100%</strong></div></div>':'',
       '</div>',
+      !r.deletedAt&&!d.preview&&!editMode&&window.BazWorkFlow?'<section class="work-flow-panel"><h3>다음 작업</h3><div class="work-flow-main"><button type="button" data-action="work-flow">'+(results.some(function(h){return h.source.origin!=='flow';})?(results.some(function(h){return h.source.pdf;})?'내역서 확인':'내역서 작성'):'현장 기록 작성')+'</button><p>접수 정보 → 현장 기록 → PDF 저장·댓글 연결</p></div></section>':'',
       '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+editable(r,'symptom',r.symptom)+'</p>'+ (editMode?inlineActions(r):'')+'</section>',
       '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">처리 결과</h3><div class="detail-content"><div class="result-list">',
       d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+(window.BazSourceReview?window.BazSourceReview.markup(h,!!r.deletedAt):'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
@@ -622,6 +623,25 @@
     var data=await write(commentEdit?'work_history_update':'work_history_add',{requestId:r.id,body:body,historyId:commentEdit?commentEdit.id:'',baseHistoryRevision:commentEdit?commentEdit.revision:0},'comment');
     if(data&&!data.success)notify(data.error+(data.conflict?'\n최신 댓글을 확인한 뒤 다시 편집하세요. 입력한 내용은 초안에 남아 있습니다.':''));
   }
+  async function openDocumentFlow(){
+    if(busy||pending||syncing||bulkWorking||notificationOpening){notify('진행 중인 저장·동기화를 먼저 확인하세요.');return;}
+    if(!state.detail||state.detail.request.deletedAt)return;
+    var id=state.detail.request.id;notificationOpening=true;
+    try{
+      notify('이 접수의 최신 현장 기록을 확인하고 있습니다…');
+      var refresh=await api.get('work_handover_refresh',{requestId:id});if(!refresh.success)throw new Error(refresh.error||'원본 확인 실패');
+      var data=await api.get('work_document_status',{requestId:id});if(!data.success)throw new Error(data.error);
+      if(state.detail?.request.id!==id)return;
+      if(!data.records.length){location.href=window.BazWorkFlow.url('handover.html',id);return;}
+      if(data.records.length===1){location.href=window.BazWorkFlow.url('inspection.html',id,data.records[0].recordId);return;}
+      var dialog=document.createElement('dialog');dialog.className='work-flow-panel';
+      var heading=document.createElement('h3');heading.textContent='내역서를 작성할 현장 기록 선택';dialog.appendChild(heading);
+      var hint=document.createElement('p');hint.textContent='같은 병원의 여러 장비·방문 기록입니다. 처리일과 S/N을 확인하세요.';dialog.appendChild(hint);
+      var list=document.createElement('div');list.className='work-flow-records';data.records.forEach(function(record){var b=document.createElement('button');b.type='button';b.textContent=(record.date||'처리일 미기록')+' · '+(record.sn||'S/N 미기록')+(record.hasPdf?' · 내역서 있음':'');b.onclick=function(){location.href=window.BazWorkFlow.url('inspection.html',id,record.recordId);};list.appendChild(b);});dialog.appendChild(list);
+      var close=document.createElement('button');close.type='button';close.textContent='닫기';close.onclick=function(){dialog.close();};dialog.appendChild(close);dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();notify('');
+    }catch(e){notify('다음 작업을 열지 못했습니다. '+e.message);}
+    finally{notificationOpening=false;}
+  }
   async function refreshPdfReviews(d){
     if(!window.BazSourceReview||d.preview)return;
     var root=$('detail');
@@ -755,6 +775,7 @@
     if(b.dataset.action==='delete'||b.dataset.action==='restore'){changeLifecycle(b.dataset.action);return;}
     if(b.dataset.action==='more-history'){loadMoreHistory();return;}
     if(detailLoading||detailError)return;
+    if(b.dataset.action==='work-flow'){openDocumentFlow();return;}
     if(b.dataset.sourceReview){confirmSourceReview(b.dataset.sourceReview);return;}
     if(b.dataset.commentDelete){if(busy||pending||state.detail.request.deletedAt)return;b.closest('.entry').querySelector('.comment-delete-confirm').hidden=false;return;}
     if(b.dataset.commentCancel!==undefined){b.closest('.comment-delete-confirm').hidden=true;return;}
