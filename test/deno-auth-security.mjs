@@ -65,7 +65,7 @@ const env = new Map(Object.entries({
   LOGIN_FAILURE_DELAY_MS: '0',
   GOOGLE_CLIENT_ID: 'test-client.apps.googleusercontent.com',
   GOOGLE_AUTH_ENABLED: 'true',
-  GOOGLE_USERS: JSON.stringify([{ email: 'allowed@gmail.com', level: 2, name: '허용 사용자' }]),
+  GOOGLE_USERS: JSON.stringify([{ email: 'allowed@gmail.com', level: 2, name: '허용 사용자' },{ email:'admin@gmail.com',level:3,name:'테스트 관리자'}]),
 }));
 
 const kv = new MockKv();
@@ -143,7 +143,7 @@ async function googleIdToken(overrides = {}) {
 }
 
 {
-  const out = await post({ action: 'login', password: 'correct-password' }, {
+  const out = await post({ action: 'google_login', idToken: await googleIdToken({sub:'google-sub-admin',email:'admin@gmail.com'}) }, {
     origin: 'https://evil.example', ip: '203.0.113.2',
   });
   assert.equal(out.res.status, 403);
@@ -153,19 +153,17 @@ async function googleIdToken(overrides = {}) {
 }
 
 {
-  const first = await post({ action: 'login', password: 'wrong-1' });
-  const second = await post({ action: 'login', password: 'wrong-2' });
-  const blocked = await post({ action: 'login', password: 'correct-password' });
-  assert.equal(first.body.error, 'invalid_password');
-  assert.equal(second.body.error, 'invalid_password');
-  assert.equal(blocked.res.status, 429);
-  assert.equal(blocked.body.error, 'rate_limited');
-  assert.ok(blocked.body.retryAfter >= 1);
+  const retired = await post({action:'login',password:'correct-password',remember:true});
+  assert.equal(retired.res.status,403);assert.equal(retired.body.error,'google_login_required');assert.ok(!retired.body.token);
+  const first=await post({action:'google_login',idToken:'invalid-1'});
+  const second=await post({action:'google_login',idToken:'invalid-2'});
+  const blocked=await post({action:'google_login',idToken:await googleIdToken()});
+  assert.equal(first.body.error,'google_auth_failed');assert.equal(second.body.error,'google_auth_failed');assert.equal(blocked.res.status,429);assert.equal(blocked.body.error,'rate_limited');assert.ok(blocked.body.retryAfter>=1);
   ok('같은 IP의 연속 로그인 실패를 KV로 잠근다');
 }
 
 {
-  const out = await post({ action: 'login', password: 'correct-password', remember: true }, {
+  const out = await post({ action: 'google_login', idToken: await googleIdToken({sub:'google-sub-admin',email:'admin@gmail.com'}), remember: true }, {
     ip: '203.0.113.11',
   });
   assert.equal(out.body.ok, true);
@@ -205,8 +203,8 @@ async function googleIdToken(overrides = {}) {
 {
   const list = await post({ action: 'users', token: adminToken }, { ip: '203.0.113.23' });
   assert.equal(list.body.ok, true);
-  assert.equal(list.body.users.length, 1);
-  assert.equal(list.body.users[0].linked, true);
+  assert.equal(list.body.users.length, 2);
+  assert.ok(list.body.users.every(u=>u.linked));
   const saved = await post({
     action: 'user_save', token: adminToken,
     email: 'allowed@gmail.com', name: '허용 사용자', level: 2, status: 'disabled',
@@ -276,7 +274,7 @@ async function googleIdToken(overrides = {}) {
   } finally {
     fs.unlinkSync(rememberedSource);
   }
-  const admin = await post({ action: 'login', password: 'correct-password' }, { ip: '203.0.113.30' });
+  const admin = await post({ action: 'google_login', idToken: await googleIdToken({sub:'google-sub-admin',email:'admin@gmail.com'}) }, { ip: '203.0.113.30' });
   const google = await post({ action: 'google_login', idToken: await googleIdToken(), remember: true }, { ip: '203.0.113.31' });
   assert.equal(google.body.ok, true, JSON.stringify(google.body));
   assert.ok(google.body.device);
@@ -291,6 +289,22 @@ async function googleIdToken(overrides = {}) {
   assert.equal(revoked.res.status, 403);
   assert.equal(revoked.body.error, 'revoked');
   ok('Google에서 기억한 기기도 사용자 중지 시 다음 자동 로그인을 차단한다');
+  await rememberedKv.set(['dev','retired-password-device'],{n:'테스트 관리자',l:3,ep:1,created:Date.now(),seen:Date.now(),ua:'fixture'});
+  const oldDevice=await post({action:'device_login',device:'retired-password-device'});assert.equal(oldDevice.res.status,403);assert.equal(oldDevice.body.error,'google_login_required');
+  const deviceList=await post({action:'devices',token:admin.body.token});assert.equal(deviceList.body.devices.length,0,'retired password devices are absent from the active list');
+  // ACL/reference preparation is covered by the notification tests; no password
+  // account provider is generated in main.ts regardless of CREDENTIALS contents.
+  assert.ok(!SOURCE.includes('for(const cred of CREDS)'));assert.ok(!SOURCE.includes('Deno.env.get("CREDENTIALS")'));
+
+}
+
+{
+ const payload=Buffer.from(JSON.stringify({n:'테스트 관리자',l:3,e:Math.floor(Date.now()/1000)+3600,ep:1,u:'p:'+'A'.repeat(43)})).toString('base64url');
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(env.get('TOKEN_SECRET')),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const signature=Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(payload))).toString('base64url'),token=payload+'.'+signature;
+ const legacy=await post({action:'verify',token});assert.equal(legacy.body.ok,false);assert.equal(legacy.body.error,'google_login_required');
+ assert.equal((await post({action:'users',token})).body.ok,false);
+ ok('서명과 만료가 유효한 기존 비밀번호 세션도 중앙 인증에서 거부한다');
 }
 
 assert.ok(!SOURCE.includes('"Access-Control-Allow-Origin": "*"'));

@@ -7,7 +7,7 @@
  *        느린 회선에서 접속이 수십 초 걸리는 원인이었음)
  * 새 SW 즉시 활성(skipWaiting/claim) — 입력은 Draft 자동저장이 보호.
  ************************************************************/
-const V2_CACHE = 'ad2-cache-v3';
+const V2_CACHE = 'ad2-cache-v4';
 const SHELL = [
   './index.html', './app.html',
   './css/tokens.css', './css/app.css',

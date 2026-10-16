@@ -89,7 +89,7 @@ main{padding:12px 12px 60px;max-width:760px;margin:0 auto}
 .admin-box{background:#fff;border-radius:16px;width:100%;max-width:360px;padding:24px 22px;box-shadow:0 12px 40px rgba(16,29,61,.4)}
 .admin-box h3{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:6px}
 .admin-box p{font-size:12px;color:var(--sub);margin-bottom:16px;line-height:1.5}
-.admin-box input[type=password],.admin-box input[type=text],.admin-box textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:15px;font-family:inherit;color:var(--ink);outline:none}
+.admin-box input[type=text],.admin-box textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px 13px;font-size:15px;font-family:inherit;color:var(--ink);outline:none}
 .admin-box input:focus,.admin-box textarea:focus{border-color:var(--navy2)}
 .admin-box .err{color:#c0392b;font-size:12px;min-height:16px;margin-top:6px}
 .admin-row{display:flex;gap:8px;margin-top:14px}
@@ -118,7 +118,7 @@ body.editing .del-symptom{display:inline-flex;align-items:center;gap:3px;font-si
 .toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:var(--navy);color:#fff;font-size:13px;font-weight:600;padding:10px 18px;border-radius:20px;z-index:1100;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:1}
 </style>
-<script src="auth.js"></script>
+<script src="auth.js?v=251"></script>
 </head>
 <body>
 <header>
@@ -167,12 +167,11 @@ body.editing .del-symptom{display:inline-flex;align-items:center;gap:3px;font-si
     </div>
   </div>
 </main>
-<!-- 관리자: 비밀번호 입력 -->
+<!-- 관리자: Google 편집 권한 안내 -->
 <div class="admin-modal" id="pwModal">
   <div class="admin-box">
     <h3 id="pwTitle">관리자 모드</h3>
-    <p id="pwDesc">가이드 내용을 편집하려면 비밀번호를 입력하세요.</p>
-    <input type="password" id="pwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호">
+    <p id="pwDesc">편집 권한이 있는 Google 계정으로 로그인하세요.</p>
     <div class="err" id="pwErr"></div>
     <div class="admin-row">
       <button class="abtn ghost" id="pwCancel">취소</button>
@@ -502,23 +501,23 @@ function render(){
 applyGuideLang(); buildRules(); buildChips(); render();
 
 /* ════════ 관리자 모드 ════════ */
-// 가이드 편집은 관리자(레벨2) 권한. 비밀번호는 서버(auth.js)가 검증합니다.
+// 가이드 편집은 Google 로그인 계정의 레벨2 이상 권한을 확인합니다.
 
 const ADM = {
-  ko:{title:'관리자 모드',desc:'가이드 내용을 편집하려면 비밀번호를 입력하세요.',cancel:'취소',ok:'확인',
-    wrongpw:'비밀번호가 올바르지 않습니다.',tag:'편집 모드',add:'+ 증상',save:'저장',exp:'내보내기',exit:'종료',
+  ko:{title:'관리자 모드',desc:'편집 권한이 있는 Google 계정으로 로그인하세요.',cancel:'취소',ok:'Google 로그인',
+    wrongpw:'이 Google 계정에는 편집 권한이 없습니다.',tag:'편집 모드',add:'+ 증상',save:'저장',exp:'내보내기',exit:'종료',
     addTitle:'증상 추가',addDesc:'새 증상 이름과 카테고리를 입력하세요. 세부 내용은 추가 후 직접 편집할 수 있습니다.',
     addName:'증상 이름',addCat:'카테고리 (예: 노즐·출력)',needName:'증상 이름을 입력하세요.',addBtn:'추가',
     saved:'저장되었습니다 (이 기기)',exported:'JSON 파일로 내보냈습니다',delConfirm:'이 증상을 삭제할까요?',del:'삭제',
     exitConfirm:'편집을 종료할까요? 저장하지 않은 변경은 사라집니다.',enterEdit:'편집 모드 시작'},
-  en:{title:'Admin Mode',desc:'Enter the password to edit the guide.',cancel:'Cancel',ok:'OK',
-    wrongpw:'Incorrect password.',tag:'Editing',add:'+ Symptom',save:'Save',exp:'Export',exit:'Exit',
+  en:{title:'Admin Mode',desc:'Sign in with a Google account authorized to edit.',cancel:'Cancel',ok:'Google sign-in',
+    wrongpw:'This Google account cannot edit.',tag:'Editing',add:'+ Symptom',save:'Save',exp:'Export',exit:'Exit',
     addTitle:'Add Symptom',addDesc:'Enter a name and category. You can edit details after adding.',
     addName:'Symptom name',addCat:'Category (e.g. Nozzle·Output)',needName:'Please enter a name.',addBtn:'Add',
     saved:'Saved (this device)',exported:'Exported as JSON',delConfirm:'Delete this symptom?',del:'Delete',
     exitConfirm:'Exit editing? Unsaved changes will be lost.',enterEdit:'Editing started'},
-  ja:{title:'管理者モード',desc:'ガイドを編集するにはパスワードを入力してください。',cancel:'キャンセル',ok:'確認',
-    wrongpw:'パスワードが正しくありません。',tag:'編集モード',add:'+ 症状',save:'保存',exp:'書き出し',exit:'終了',
+  ja:{title:'管理者モード',desc:'編集権限のあるGoogleアカウントでログインしてください。',cancel:'キャンセル',ok:'Googleログイン',
+    wrongpw:'このGoogleアカウントには編集権限がありません。',tag:'編集モード',add:'+ 症状',save:'保存',exp:'書き出し',exit:'終了',
     addTitle:'症状を追加',addDesc:'名前とカテゴリを入力してください。詳細は追加後に編集できます。',
     addName:'症状名',addCat:'カテゴリ（例：ノズル·出力）',needName:'名前を入力してください。',addBtn:'追加',
     saved:'保存しました（この端末）',exported:'JSONで書き出しました',delConfirm:'この症状を削除しますか？',del:'削除',
@@ -561,40 +560,14 @@ function applyAdminLang(){
   trigger.addEventListener('contextmenu',e=>e.preventDefault());
 })();
 
-function openPw(){
-  applyAdminLang();
-  document.getElementById('pwInput').value='';
-  document.getElementById('pwErr').textContent='';
+async function openPw(){
+  const level=await BazAuth.currentLevel(true);
+  if(level>=2){enterEdit();return;}
+  applyAdminLang();document.getElementById('pwErr').textContent=level?A('wrongpw'):'';
   document.getElementById('pwModal').classList.add('show');
-  setTimeout(()=>document.getElementById('pwInput').focus(),50);
 }
 document.getElementById('pwCancel').onclick=()=>document.getElementById('pwModal').classList.remove('show');
-document.getElementById('pwOk').onclick=checkPw;
-document.getElementById('pwInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPw();});
-async function checkPw(){
-  const v=document.getElementById('pwInput').value;
-  if(!v) return;
-  const okBtn=document.getElementById('pwOk');
-  const prev=okBtn?okBtn.textContent:'';
-  if(okBtn){ okBtn.disabled=true; okBtn.textContent='...'; }
-  try{
-    const r=await BazAuth.login(v);
-    if(r.ok && r.level>=2){
-      document.getElementById('pwModal').classList.remove('show');
-      enterEdit();
-    }else if(r.ok && r.level<2){
-      document.getElementById('pwErr').textContent=A('wrongpw');
-    }else if(r.error==='auth_url_missing'){
-      document.getElementById('pwErr').textContent='인증 서버 미설정 (auth.js의 AUTH_URL 입력)';
-    }else if(r.error==='network'){
-      document.getElementById('pwErr').textContent='네트워크 오류. 연결을 확인해 주세요.';
-    }else{
-      document.getElementById('pwErr').textContent=A('wrongpw');
-    }
-  }finally{
-    if(okBtn){ okBtn.disabled=false; okBtn.textContent=prev; }
-  }
-}
+document.getElementById('pwOk').onclick=function(){BazAuth.rememberReturn('guide.html');location.href='index.html';};
 
 function enterEdit(){
   editing=true;

@@ -2,12 +2,12 @@
  * BAZ BIOMEDIC CS PWA — 공통 인증 라이브러리 (auth.js)
  * ----------------------------------------------------------
  * 모든 화면(index/hospital/guide/survey)이 함께 사용합니다.
- * 비밀번호는 더 이상 이 코드에 없습니다. 서버(Apps Script)에
- * 비번을 보내 토큰을 받고, 토큰만 기기에 보관해서 사용합니다.
+ * 등록된 Google 계정을 Deno에서 검증한 뒤 발급한 세션을 사용합니다.
+ * 비밀번호 인증은 제공하지 않으며 Google 기기 로그인만 기억합니다.
  *
  * 사용법(각 HTML에서):
  *   <script src="auth.js"></script>
- *   const r = await BazAuth.login(inputPassword);   // 로그인
+ *   const r = await BazAuth.loginWithGoogle(googleIdToken); // Google 로그인
  *   if (r.ok) { ... r.level ... }                    // level 1=일반, 2=관리자
  *   const lv = await BazAuth.currentLevel();         // 저장된 토큰의 현재 레벨(0=없음/만료)
  *   BazAuth.logout();                                // 로그아웃
@@ -37,7 +37,7 @@
   var NAME_KEY  = 'baz_auth_name';
   var EXP_KEY   = 'baz_auth_expires';
   var LOGIN_KEY = 'baz_auth_login_time';
-  var VERIFY_KEY = 'baz_auth_verified_ts';   // 마지막 서버 검증 성공 시각(ms) — 재검증 스로틀용
+  var VERIFY_KEY = 'baz_auth_google_verified_ts';   // 마지막 서버 검증 성공 시각(ms) — 재검증 스로틀용
 
   // ── [기기 자동 로그인] 프런트 노출 스위치 ─────────────────────────
   // false = 체크박스·자동 시도를 끈다. 서버 엔드포인트까지 차단하는 보안 스위치는
@@ -45,7 +45,7 @@
   //   켜기 전 준비: (1) Deno 에 KV 사용 설정  (2) main.ts 재배포(ver deno-1.1.0)
   //   확인: AUTH_URL/?action=ping 응답에 "kv":true 가 보이면 준비 완료.
   // 켜면: '이 기기 기억하기' 체크 시 기기 토큰을 localStorage 에 저장하고,
-  //   다음 접속부터 비밀번호 없이 자동 로그인(30일 슬라이딩, Deno KV 에서 개별 해지 가능).
+  //   다음 접속부터 Google 기기 자동 로그인(30일 슬라이딩, Deno KV 에서 개별 해지 가능).
   var DEVICE_REMEMBER = true;   // [활성] Deno KV 준비 완료(ping kv:true) — 기기 자동 로그인 ON
   var DEVICE_KEY = 'baz_device_token';       // localStorage(영구) — 기억된 기기 토큰
 
@@ -136,7 +136,7 @@
   function deviceToken() { try { return localStorage.getItem(DEVICE_KEY) || ''; } catch (e) { return ''; } }
 
   // [콜드스타트 선제 예열] 페이지가 열리는 '즉시' 인증·데이터 백엔드를 깨워 둔다.
-  // 사용자가 비밀번호를 입력하는 몇 초 사이 백엔드가 이미 웜업되므로, 로그인 버튼을
+  // 사용자가 Google 계정을 선택하는 사이 백엔드가 이미 웜업되므로, 로그인 버튼을
   // 누를 때는 콜드스타트가 이미 끝나 있다(첫 로그인·첫 시트가 빨라진다).
   // 서버측 keepWarm(1분 트리거)이 놓친 공백을 클라이언트가 접속 순간에 메운다.
   var _lastPrewarm = 0;
@@ -164,7 +164,7 @@
     //   no-cors·keepalive 조합은 Apps Script 의 302 리다이렉트에서 브라우저가
     //   ERR_ABORTED 로 요청을 취소해(서버에 닿지도 못함) 예열이 전혀 안 됐다.
     //   평범한 fetch 는 리다이렉트를 따라가 서버에 실제로 도달하므로, 콜드면 그
-    //   요청이 콜드스타트를 '대신' 흡수한다(사용자가 비번 입력하는 사이 웜업 완료).
+    //   요청이 콜드스타트를 '대신' 흡수한다(사용자가 Google 계정을 선택하는 사이 웜업 완료).
     //   응답은 읽지 않는다(.catch 로 흡수) — 목적은 서버를 미리 깨우는 것뿐이다.
     // 포커스 복귀 등으로 여러 번 불려도 15초 안에는 실제 요청을 한 번만 보낸다.
     //   extraUrls: 문자열 1개 또는 배열(예: handover 배포 URL)
@@ -185,31 +185,6 @@
             .catch(function () {});   // 콜드스타트 중 404/HTML 이어도 무시 — 예열은 이미 시작됨
         } catch (e) {}
       });
-    },
-
-    // 로그인: 비번 → 토큰. 성공 시 {ok:true, level} 반환
-    // onAttempt(n, tries): 재시도 진행 상황(화면에 '깨우는 중' 안내를 띄우는 용도)
-    // remember: true & 기능 활성 시, 이 기기를 기억(기기 토큰을 localStorage 에 저장)
-    // 실패 코드: 'network'(정말 연결 안 됨) / 'server_busy'(서버 콜드스타트·응답 지연)
-    login: function (password, onAttempt, remember) {
-      if (!AUTH_URL) {
-        return Promise.resolve({ ok: false, error: 'auth_url_missing' });
-      }
-      var wantRemember = DEVICE_REMEMBER && !!remember;
-      var payload = { action: 'login', password: password };
-      if (wantRemember) payload.remember = true;
-      return postJSON(payload, { tries: 3, timeoutMs: 25000, onAttempt: onAttempt })
-        .then(function (r) {
-          if (r && r.ok) {
-            saveSession(r.token, r.level, r.expires, r.name);
-            if (wantRemember && r.device) saveDevice(r.device);   // 기기 기억
-          }
-          return r || { ok: false, error: 'no_response' };
-        })
-        .catch(function (e) {
-          var kind = (e && e.kind) || 'network';
-          return { ok: false, error: (kind === 'network' ? 'network' : 'server_busy'), detail: kind };
-        });
     },
 
     // Google Identity Services가 발급한 ID 토큰을 Deno에서 검증한 뒤 기존 HMAC 세션으로 바꾼다.
@@ -241,7 +216,7 @@
     deviceEnabled: function () { return !!DEVICE_REMEMBER; },
     hasDevice: function () { return DEVICE_REMEMBER && !!deviceToken(); },
 
-    // 기기 자동 로그인: 저장된 기기 토큰으로 세션을 복구한다(비밀번호 불필요).
+    // 기기 자동 로그인: 저장된 기기 토큰으로 세션을 복구한다(Google 인증 기기 전용).
     // 성공 시 level(1/2/3), 실패/미보유/비활성 시 0. 화면을 막지 않도록 실패는 조용히 0.
     tryDeviceLogin: function () {
       if (!DEVICE_REMEMBER || !AUTH_URL) return Promise.resolve(0);
@@ -256,7 +231,7 @@
           }
           // 기기가 해지/만료됨 → 저장된 토큰 폐기(다음엔 정상 로그인 유도)
           if (r && (r.error === 'device_not_found' || r.error === 'revoked' ||
-                    r.error === 'device_auth_disabled')) clearDevice();
+                    r.error === 'device_auth_disabled' || r.error === 'google_login_required')) clearDevice();
           return 0;
         })
         .catch(function () { return 0; });   // 네트워크 오류 등은 조용히(정상 로그인으로 폴백)
@@ -320,7 +295,7 @@
       try { return sessionStorage.getItem(EXP_KEY) || ''; } catch (e) { return ''; }
     },
 
-    // 로그인한 사람 이름 (서버 Credentials의 name)
+    // 로그인한 사람 이름 (등록된 Google 계정의 name)
     name: function () {
       try { return sessionStorage.getItem(NAME_KEY) || ''; } catch (e) { return ''; }
     },
@@ -475,12 +450,12 @@
   BazAuth.guard = guardPage_;
   BazAuth.rememberReturn=function(path){
     var url=new URL(path,global.location.href),base=new URL('index.html',global.location.href);
-    if(url.origin!==base.origin||!['hospital-work.html','handover.html','inspection.html','install.html','notification.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
-    var safe=url.pathname;if(url.pathname.endsWith('/notification.html')){var noticeId=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(noticeId||''))return false;safe+='?notification='+encodeURIComponent(noticeId);}else if(!url.pathname.endsWith('/install.html')){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(url.pathname.endsWith('/hospital-work.html')&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);if(url.pathname.endsWith('/inspection.html')){var record=url.searchParams.get('record');if(!/^[A-Za-z0-9_-]{8,90}$/.test(record||''))return false;safe+='&record='+encodeURIComponent(record);}}
+    if(url.origin!==base.origin||!['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
+    var safe=url.pathname;if(url.pathname.endsWith('/notification.html')){var noticeId=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(noticeId||''))return false;safe+='?notification='+encodeURIComponent(noticeId);}else if(!['install.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname.endsWith('/'+page);})){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(url.pathname.endsWith('/hospital-work.html')&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);if(url.pathname.endsWith('/inspection.html')){var record=url.searchParams.get('record');if(!/^[A-Za-z0-9_-]{8,90}$/.test(record||''))return false;safe+='&record='+encodeURIComponent(record);}}
     try{sessionStorage.setItem('baz_notification_return_v1',JSON.stringify({path:safe,expires:Date.now()+30*60000}));return true;}catch(e){return false;}
   };
   BazAuth.returnAfterLogin=function(){
-    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','handover.html','inspection.html','install.html','notification.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
+    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
   };
 
   global.BazAuth = BazAuth;

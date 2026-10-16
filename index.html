@@ -179,7 +179,7 @@
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
 <link rel="stylesheet" href="css/baz-notifications.css?v=246">
-<script src="auth.js?v=250"></script>
+<script src="auth.js?v=251"></script>
 <script src="js/baz-notification-route.js?v=250"></script>
 <script src="js/baz-notifications.js?v=250"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
@@ -378,20 +378,14 @@
     <button type="button" id="backToApps" style="background:none;border:none;color:#8EA0C8;font-size:12px;cursor:pointer;font-family:inherit;">← 도구 선택으로 돌아가기</button>
   </div>
 
-  <!-- 비밀번호 입력 모달 -->
+  <!-- Google 로그인 모달 -->
   <div id="hubPwModal" style="position:fixed;inset:0;z-index:10000;background:rgba(10,20,45,.6);display:none;align-items:center;justify-content:center;padding:24px;">
     <div style="background:#fff;border-radius:16px;width:100%;max-width:340px;padding:24px 22px;">
       <h3 style="font-size:16px;font-weight:800;color:#1B2F5E;margin:0 0 6px;" id="hubPwTitle">잠금 해제</h3>
-      <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">비밀번호를 입력하세요.</p>
+      <p style="font-size:12px;color:#6B7A99;margin:0 0 16px;line-height:1.5;" id="hubPwDesc">등록된 Google 계정으로 로그인하세요.</p>
       <div id="hubGoogleWrap" style="display:none;margin-bottom:14px;">
         <div id="hubGoogleButton" style="display:flex;justify-content:center;min-height:40px;"></div>
-        <div style="display:flex;align-items:center;gap:9px;margin-top:13px;color:#9AA6B8;font-size:11px;">
-          <i style="height:1px;background:#E2E7EF;flex:1;"></i>
-          <span id="hubOrText">또는 기존 비밀번호</span>
-          <i style="height:1px;background:#E2E7EF;flex:1;"></i>
-        </div>
       </div>
-      <input type="password" id="hubPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" style="width:100%;border:1.5px solid #DDE3EE;border-radius:9px;padding:12px 13px;font-size:16px;font-family:inherit;color:#1A1A2E;outline:none;text-align:center;letter-spacing:2px;">
       <div id="hubPwErr" style="color:#C0392B;font-size:12px;min-height:16px;margin-top:6px;text-align:center;"></div>
       <label id="hubRememberWrap" style="display:none;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:#4A5A7A;cursor:pointer;justify-content:center;">
         <input type="checkbox" id="hubRemember" checked style="width:16px;height:16px;cursor:pointer;">
@@ -399,7 +393,7 @@
       </label>
       <div style="display:flex;gap:8px;margin-top:12px;">
         <button type="button" id="hubPwCancel" style="flex:1;padding:12px;border-radius:9px;border:1.5px solid #DDE3EE;background:#fff;color:#6B7A99;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">취소</button>
-        <button type="button" id="hubPwOk" style="flex:1;padding:12px;border-radius:9px;border:none;background:#1B2F5E;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">확인</button>
+
       </div>
     </div>
   </div>
@@ -1788,21 +1782,21 @@ initCounters();
 // ===== 허브: 다국어 =====
 const HUB_I18N = {
   ko:{ subtitle:'CS Field Tools', lockHint:'로고를 눌러 잠금을 해제하세요', chooseTool:'사용할 도구를 선택하세요',
-    pwTitle:'잠금 해제', pwDesc:'Google 계정 또는 기존 비밀번호로 로그인하세요.', orPassword:'또는 기존 비밀번호', cancel:'취소', ok:'확인', wrongPw:'비밀번호가 올바르지 않습니다.', rateLimited:'로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.', googleChecking:'Google 계정 확인 중...', googleDenied:'등록되지 않았거나 사용 중지된 Google 계정입니다.', googleFailed:'Google 로그인을 확인하지 못했습니다. 다시 시도해 주세요.', checking:'확인 중...', warming:'서버를 깨우는 중…', sec:'초', retry:'재시도', serverBusy:'서버 응답이 지연됩니다(첫 접속은 30초까지 걸릴 수 있습니다). 잠시 후 다시 눌러 주세요.', netErr:'네트워크 오류. 연결을 확인해 주세요.',
+    pwTitle:'잠금 해제', pwDesc:'등록된 Google 계정으로 로그인하세요.', cancel:'취소', ok:'확인', rateLimited:'로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.', googleChecking:'Google 계정 확인 중...', googleDenied:'등록되지 않았거나 사용 중지된 Google 계정입니다.', googleFailed:'Google 로그인을 확인하지 못했습니다. 다시 시도해 주세요.', checking:'확인 중...', warming:'서버를 깨우는 중…', sec:'초', retry:'재시도', serverBusy:'서버 응답이 지연됩니다(첫 접속은 30초까지 걸릴 수 있습니다). 잠시 후 다시 눌러 주세요.', netErr:'네트워크 오류. 연결을 확인해 주세요.',
     'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
     'hosp-name':'병원 데이터센터','hosp-desc':'병원 검색 · 점검 현황 · 지도',
     'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
-    pwTitle:'Unlock', pwDesc:'Sign in with Google or your existing password.', orPassword:'or existing password', cancel:'Cancel', ok:'OK', wrongPw:'Incorrect password.', rateLimited:'Too many login attempts. Please try again shortly.', googleChecking:'Checking your Google account...', googleDenied:'This Google account is not registered or has been disabled.', googleFailed:'Google sign-in could not be verified. Please try again.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
+    pwTitle:'Unlock', pwDesc:'Sign in with your registered Google account.', cancel:'Cancel', ok:'OK', rateLimited:'Too many login attempts. Please try again shortly.', googleChecking:'Checking your Google account...', googleDenied:'This Google account is not registered or has been disabled.', googleFailed:'Google sign-in could not be verified. Please try again.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
     'hosp-name':'Hospital Data Center','hosp-desc':'Search · Status · Map',
     'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
-    pwTitle:'ロック解除', pwDesc:'Googleアカウントまたは既存のパスワードでログインしてください。', orPassword:'または既存のパスワード', cancel:'キャンセル', ok:'確認', wrongPw:'パスワードが正しくありません。', rateLimited:'ログイン試行回数が多すぎます。しばらくしてから再試行してください。', googleChecking:'Googleアカウントを確認中...', googleDenied:'登録されていないか、無効化されたGoogleアカウントです。', googleFailed:'Googleログインを確認できませんでした。もう一度お試しください。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
+    pwTitle:'ロック解除', pwDesc:'登録済みのGoogleアカウントでログインしてください。', cancel:'キャンセル', ok:'確認', rateLimited:'ログイン試行回数が多すぎます。しばらくしてから再試行してください。', googleChecking:'Googleアカウントを確認中...', googleDenied:'登録されていないか、無効化されたGoogleアカウントです。', googleFailed:'Googleログインを確認できませんでした。もう一度お試しください。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
@@ -1819,9 +1813,7 @@ function applyHubLang(){
   document.getElementById('chooseToolText').textContent=d.chooseTool;
   document.getElementById('hubPwTitle').textContent=d.pwTitle;
   document.getElementById('hubPwDesc').textContent=d.pwDesc;
-  document.getElementById('hubOrText').textContent=d.orPassword;
   document.getElementById('hubPwCancel').textContent=d.cancel;
-  document.getElementById('hubPwOk').textContent=d.ok;
   document.querySelectorAll('[data-tool]').forEach(el=>{
     const k=el.getAttribute('data-tool'); if(d[k]) el.textContent=d[k];
   });
@@ -1837,7 +1829,7 @@ document.getElementById('hubLangSwitch').addEventListener('click',e=>{
 });
 
 // ===== 허브: 잠금 (서버 토큰 인증) =====
-// 비밀번호는 더 이상 코드에 없습니다. 서버(auth.js)가 검증합니다.
+// Google 계정의 인증과 권한은 서버에서 검증합니다.
 let unlockLevel=0;           // 0=잠김, 1=일반, 2=관리자, 3=수석 매니저
 
 function unlockTools(level){
@@ -1862,6 +1854,7 @@ async function handleHubGoogleCredential(resp){
   if(r.ok){ closeHubPw(); unlockTools(r.level); return; }
   errEl.style.color='#C0392B';
   if(r.error==='access_denied') errEl.textContent=L.googleDenied||'등록되지 않은 Google 계정입니다.';
+  else if(r.error==='rate_limited') errEl.textContent=L.rateLimited;
   else if(r.error==='network') errEl.textContent=L.netErr||'네트워크 오류. 연결을 확인해 주세요.';
   else errEl.textContent=L.googleFailed||'Google 로그인을 확인하지 못했습니다. 다시 시도해 주세요.';
 }
@@ -1870,96 +1863,35 @@ async function initHubGoogle(){
   hubGoogleStarting=true;
   try{
     const cfg=await BazAuth.config();
-    if(!cfg.googleAuth||!cfg.googleClientId) return;
+    if(!cfg.googleAuth||!cfg.googleClientId){document.getElementById('hubPwErr').textContent='Google 로그인 설정을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';return;}
     for(let i=0;i<40&&!(window.google&&google.accounts&&google.accounts.id);i++){
       await new Promise(r=>setTimeout(r,100));
     }
-    if(!(window.google&&google.accounts&&google.accounts.id)) return;
+    if(!(window.google&&google.accounts&&google.accounts.id)){document.getElementById('hubPwErr').textContent='Google 로그인 버튼을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 열어 주세요.';return;}
     google.accounts.id.initialize({client_id:cfg.googleClientId,callback:handleHubGoogleCredential});
     google.accounts.id.renderButton(document.getElementById('hubGoogleButton'),{
       type:'standard',theme:'outline',size:'large',shape:'rectangular',width:296
     });
     document.getElementById('hubGoogleWrap').style.display='block';
     hubGoogleReady=true;
-  }catch(e){}finally{hubGoogleStarting=false;}
+  }catch(e){document.getElementById('hubPwErr').textContent=(HUB_I18N[HUBLANG]||HUB_I18N.ko).netErr;}finally{hubGoogleStarting=false;}
 }
 function openHubPw(){
   applyHubLang();
-  document.getElementById('hubPwInput').value='';
   document.getElementById('hubPwErr').textContent='';
   /* '이 기기 기억하기'는 기능이 켜졌을 때만 노출(기본 비활성 시 숨김 → 현행과 동일) */
   try{
     var rw=document.getElementById('hubRememberWrap');
     if(rw) rw.style.display=(window.BazAuth&&BazAuth.deviceEnabled&&BazAuth.deviceEnabled())?'flex':'none';
   }catch(e){}
-  hubPwModal.style.display='flex';
+  hubPwModal.style.display='flex';document.getElementById('hubPwCancel').focus();
   initHubGoogle();
-  setTimeout(()=>document.getElementById('hubPwInput').focus(),50);
 }
 function closeHubPw(){ hubPwModal.style.display='none'; }
-async function checkHubPw(){
-  const inp=document.getElementById('hubPwInput');
-  const v=inp.value.trim();
-  if(!v) return;
-  const okBtn=document.getElementById('hubPwOk');
-  const prev=okBtn.textContent;
-  const errEl=document.getElementById('hubPwErr');
-  // 로딩 표시: 버튼/입력칸 잠그고 "확인 중..." 안내
-  okBtn.disabled=true; inp.disabled=true;
-  okBtn.textContent=(HUB_I18N[HUBLANG].checking||'확인 중...');
-  errEl.textContent='';
-  errEl.style.color='#6B7A99';
-  errEl.textContent=(HUB_I18N[HUBLANG].checking||'확인 중...');
-  const t0=performance.now();
-  // 인증 GAS는 한동안 호출이 없으면 잠들고, 깨우는 첫 로그인이 30초 넘게 걸릴 수 있다.
-  // 멈춘 것처럼 보이지 않도록 경과 시간을 세어 보여준다(재시도 횟수도 함께).
-  let attemptN=1, tick=null;
-  const L=()=>HUB_I18N[HUBLANG]||HUB_I18N.ko;
-  function showWaiting(){
-    const s=Math.round((performance.now()-t0)/1000);
-    errEl.style.color='#6B7A99';
-    errEl.textContent = (s<4)
-      ? (L().checking||'확인 중...')
-      : (L().warming||'서버를 깨우는 중…')+' '+s+(L().sec||'초')+(attemptN>1?' ('+(L().retry||'재시도')+' '+attemptN+')':'');
-  }
-  try{
-    tick=setInterval(showWaiting, 500);
-    const rememberEl=document.getElementById('hubRemember');
-    const remember=!!(rememberEl && rememberEl.checked);
-    const r=await BazAuth.login(v, function(n){ attemptN=n; }, remember);
-    console.log('[로그인 소요] '+Math.round(performance.now()-t0)+'ms / 시도 '+attemptN+'회');
-    clearInterval(tick); tick=null;
-    errEl.style.color='#C0392B';
-    errEl.textContent='';
-    if(r.ok){ closeHubPw(); unlockTools(r.level); }
-    else if(r.error==='auth_url_missing'){
-      errEl.textContent='인증 서버 미설정 (auth.js의 AUTH_URL을 입력하세요)';
-    }
-    else if(r.error==='server_busy'){
-      // 연결은 되는데 서버가 아직 안 깨어난 경우 — 연결을 탓하지 않는다
-      errEl.textContent=L().serverBusy||'서버 응답이 지연됩니다. 잠시 후 다시 눌러 주세요.';
-    }
-    else if(r.error==='network'){
-      errEl.textContent=L().netErr||'네트워크 오류. 연결을 확인해 주세요.';
-    }
-    else if(r.error==='rate_limited'){
-      errEl.textContent=L().rateLimited||'로그인 시도가 많습니다. 잠시 후 다시 시도해 주세요.';
-    }
-    else{ errEl.textContent=L().wrongPw; }
-  }catch(e){
-    errEl.style.color='#C0392B';
-    errEl.textContent=L().netErr||'네트워크 오류. 연결을 확인해 주세요.';
-  }finally{
-    if(tick) clearInterval(tick);
-    okBtn.disabled=false; inp.disabled=false; okBtn.textContent=prev;
-  }
-}
 document.getElementById('hubLogo').addEventListener('click', ()=>{
   if(unlockLevel===0) openHubPw();
 });
-document.getElementById('hubPwOk').addEventListener('click', checkHubPw);
 document.getElementById('hubPwCancel').addEventListener('click', closeHubPw);
-document.getElementById('hubPwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') checkHubPw(); });
 
 // ===== 초기 진입: 잠긴 상태로 시작 (단, 도구에서 돌아온 경우 해제 복원) =====
 document.getElementById('langSelect').style.display='flex';
@@ -1970,7 +1902,7 @@ if(LANG) applyLang();
 (async function(){
   try{
     let lv = await BazAuth.currentLevel();   // 0=미인증/만료, 1=일반, 2=관리자
-    // 세션이 없고 '기억된 기기'가 있으면 비밀번호 없이 자동 로그인 시도(기능 켜졌을 때만)
+    // 세션이 없고 '기억된 기기'가 있으면 Google 기기 자동 로그인 시도(기능 켜졌을 때만)
     if(lv<1 && window.BazAuth && BazAuth.hasDevice && BazAuth.hasDevice()){
       lv = await BazAuth.tryDeviceLogin();
     }
@@ -2004,7 +1936,7 @@ document.getElementById('appBtnDashboard').addEventListener('click', function(){
 // handover 확장 웹앱(action=master/guide)을 사용합니다.
 var MGR_GAS_URL='https://script.google.com/macros/s/AKfycbwhf3fnxQPSM4cDLVEls0gtGgVGIpNOP83gMiBn-7JZmWciIsAlxyf4cYmPRiA2Ct0/exec';   /* handover_gas.gs 배포 URL — HANDOVER_URL과 동일 값 입력 */
 /* [콜드스타트 제거] 페이지가 열리는 '즉시' auth·handover 백엔드를 선제 예열한다.
-   비밀번호를 입력하는 사이 백엔드가 깨어나므로 첫 로그인·첫 시트가 빨라진다.
+   Google 계정을 선택하는 사이 백엔드가 깨어나므로 첫 로그인·첫 시트가 빨라진다.
    탭을 오래 열어 둬 백엔드가 다시 잠든 경우엔 포커스 복귀 때 다시 예열한다(15초 스로틀). */
 function _prewarmBackends(){ try{ if(window.BazAuth&&BazAuth.prewarm) BazAuth.prewarm(MGR_GAS_URL); }catch(e){} }
 _prewarmBackends();
@@ -2205,7 +2137,7 @@ function renderSecurityAudits_(items,error){
   var box=document.getElementById('securityAuditList');
   if(error){box.innerHTML='<div style="padding:11px;text-align:center;color:#C0392B;border:1px dashed #E6C6C3;border-radius:9px;font-size:11.5px;">보안 기록을 불러오지 못했습니다.</div>';return;}
   if(!items||!items.length){box.innerHTML='<div style="padding:11px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:11.5px;">아직 보안 기록이 없습니다.</div>';return;}
-  var labels={google_login:'Google 로그인',password_login:'비밀번호 로그인',device_login:'기기 자동 로그인',user_save:'사용자 변경',device_revoke:'기기 해지'};
+  var labels={google_login:'Google 로그인',password_login:'이전 인증 기록',device_login:'기기 자동 로그인',user_save:'사용자 변경',device_revoke:'기기 해지'};
   box.innerHTML=items.map(function(a){
     var ok=a.result==='ok', target=a.target?' → '+securityEsc_(a.target):'';
     return '<div style="display:flex;gap:8px;align-items:flex-start;border:1px solid #E5E9F0;border-radius:8px;padding:8px;background:#FAFBFC;">'

@@ -500,7 +500,7 @@
   .h-skill.warn{background:#FBEAE8;color:#C0392B;border-color:#E8B4AD;}
   .h-skill.ok{background:var(--ok-soft,#EAF6EE);color:var(--ok,#1E7E4E);border-color:#BFE3CC;}
   /* 병원 상세 모달 (표 전체화면 뷰에서 행 클릭 시) */
-  #pcDetailModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:190;display:none;align-items:center;justify-content:center;padding:20px;}   /* 이력 편집(histModal 200)·비번(300) 모달이 위에 스택되도록 190 */
+  #pcDetailModal{position:fixed;inset:0;background:rgba(20,34,66,.5);z-index:190;display:none;align-items:center;justify-content:center;padding:20px;}   /* 이력 편집(histModal 200)·권한 안내(300) 모달이 위에 스택되도록 190 */
   #pcDetailModal.show{display:flex;}
   .pc-dm-sheet{position:relative;background:var(--surface);width:100%;max-width:560px;max-height:88vh;overflow:auto;overscroll-behavior:contain;border-radius:16px;padding:18px;box-shadow:var(--sh-2);animation:slideUp .2s ease;}
   .pc-dm-close{position:absolute;top:10px;right:12px;border:0;background:transparent;font-size:18px;line-height:1;color:var(--text-muted);cursor:pointer;padding:4px;z-index:1;}
@@ -746,7 +746,7 @@
     color:var(--txt,#1B2F5E);padding:5px 10px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;}
   .hist-only-bar button:hover{background:var(--gray-bg);}
 </style>
-<script src="auth.js"></script>
+<script src="auth.js?v=251"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 호스팅 그대로 동작 · sw.js 는 런타임 캐시)
      각 파일은 window.Baz* 로 노출되고 node require() 로도 로드된다(테스트 공유). -->
 <script src="js/baz-dom.js"></script>
@@ -878,16 +878,15 @@
   </div>
 </div>
 
-<!-- 이력 편집 비밀번호 모달 -->
+<!-- 이력 편집 Google 권한 안내 -->
 <div id="histPwModal">
   <div class="pw-box" role="dialog" aria-modal="true" aria-labelledby="histPwTitle" aria-describedby="histPwDesc" tabindex="-1">
     <h3 id="histPwTitle">이력 편집</h3>
-    <p id="histPwDesc">이력을 편집하려면 비밀번호를 입력하세요.</p>
-    <input type="password" id="histPwInput" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="비밀번호" aria-label="비밀번호">
+    <p id="histPwDesc">편집 권한이 있는 Google 계정으로 로그인하세요.</p>
     <div class="pw-err" id="histPwErr" role="alert"></div>
     <div class="pw-btns">
       <button id="histPwCancel" type="button">취소</button>
-      <button class="primary" id="histPwOk" type="button">확인</button>
+      <button class="primary" id="histPwOk" type="button">Google 로그인</button>
     </div>
   </div>
 </div>
@@ -1035,7 +1034,7 @@ const I18N = {
     dayAgo:'{d}일 경과', overDue:'⚠ 점검기한 초과', nearDue:'점검기한 임박',
     histBtn:'이력', histTitle:'처리 이력', histCount:'총 {n}건', histEmpty:'처리 이력이 없습니다',
     histFse:'FSE', histPart:'교체품', histCost:'비용',
-    histEditMode:'편집 중', histSaved:'저장되었습니다 (이 기기)', histWrongPw:'비밀번호가 올바르지 않습니다.',
+    histEditMode:'편집 중', histSaved:'저장되었습니다 (이 기기)', histWrongPw:'이 Google 계정에는 편집 권한이 없습니다.',
     dashInspTitle:'N-CARE 점검 경과 현황', dashStatusTitle:'점검 상태 분포', dashSalesTitle:'영업담당별 N-CARE',
     dashOverview:'N-CARE 점검 개요', dashSubOpRate:'점검 운영률', dashSubStatus:'점검 상태 분포', dashSubAge:'점검 경과 현황',
     ncsTitle:'N-CARE 전용 서비스 현황', ncsInspTitle:'정기점검 현황', ncsGradeTitle:'N-CARE 등급 분포', ncsRegionTitle:'지역별 N-CARE',
@@ -1087,7 +1086,7 @@ const I18N = {
     dayAgo:'{d}d ago', overDue:'⚠ Overdue', nearDue:'Due soon',
     histBtn:'History', histTitle:'Service history', histCount:'{n} records', histEmpty:'No service history',
     histFse:'FSE', histPart:'Part', histCost:'Cost',
-    histEditMode:'Editing', histSaved:'Saved (this device)', histWrongPw:'Incorrect password.',
+    histEditMode:'Editing', histSaved:'Saved (this device)', histWrongPw:'This Google account cannot edit.',
     dashInspTitle:'N-CARE inspection age', dashStatusTitle:'Status distribution', dashSalesTitle:'N-CARE by sales rep',
     dashOverview:'N-CARE inspection overview', dashSubOpRate:'Operation rate', dashSubStatus:'Status distribution', dashSubAge:'Inspection age',
     ncsTitle:'N-CARE service status', ncsInspTitle:'Periodic inspection', ncsGradeTitle:'N-CARE grade', ncsRegionTitle:'N-CARE by region',
@@ -1138,7 +1137,7 @@ const I18N = {
     dayAgo:'{d}日経過', overDue:'⚠ 点検期限超過', nearDue:'点検期限間近',
     histBtn:'履歴', histTitle:'対応履歴', histCount:'計{n}件', histEmpty:'対応履歴がありません',
     histFse:'FSE', histPart:'交換品', histCost:'費用',
-    histEditMode:'編集中', histSaved:'保存しました (この端末)', histWrongPw:'パスワードが正しくありません。',
+    histEditMode:'編集中', histSaved:'保存しました (この端末)', histWrongPw:'このGoogleアカウントには編集権限がありません。',
     dashInspTitle:'N-CARE点検経過状況', dashStatusTitle:'点検状態分布', dashSalesTitle:'営業担当別N-CARE',
     dashOverview:'N-CARE点検概要', dashSubOpRate:'点検運営率', dashSubStatus:'点検状態分布', dashSubAge:'点検経過状況',
     ncsTitle:'N-CARE専用サービス状況', ncsInspTitle:'定期点検状況', ncsGradeTitle:'N-CAREグレード分布', ncsRegionTitle:'地域別N-CARE',
@@ -2137,7 +2136,7 @@ function bindRecent(){
 }
 
 // ===== 점검 이력 모달 =====
-// 이력 편집은 관리자(레벨2) 권한. 비밀번호는 서버(auth.js)가 검증합니다.
+// 이력 편집은 Google 로그인 계정의 레벨2 이상 권한을 확인합니다.
 let histEditing = false;
 let histCurName = null;
 
@@ -2500,13 +2499,12 @@ document.getElementById('histAiBtn').addEventListener('click', ()=>{
   location.href = 'chatbot.html?' + params.toString();
 });
 
-// 잠금 버튼 → 비밀번호 모달
-function histOpenPwModal(){
-  document.getElementById('histPwInput').value='';
-  document.getElementById('histPwErr').textContent='';
-  BazModal.open(document.getElementById('histPwModal'), {
-    name:'histPw', sheet:'.pw-box', initialFocus:'#histPwInput'
-  });
+// 잠금 버튼 → Google 편집 권한 확인
+async function histOpenPwModal(){
+  const level=await BazAuth.currentLevel(true);
+  if(level>=2){var pending=histPendingDraftApply;histPendingDraftApply=false;histEnterEdit();if(pending)histApplyDraft();return;}
+  document.getElementById('histPwErr').textContent=level?t('histWrongPw'):'';
+  BazModal.open(document.getElementById('histPwModal'),{name:'histGoogle',sheet:'.pw-box',initialFocus:'#histPwOk'});
 }
 function histClosePwModal(){
   histPendingDraftApply=false;
@@ -2516,36 +2514,8 @@ document.getElementById('histLock').addEventListener('click', ()=>{
   if(histEditing){ histExitEdit(); return; }
   histOpenPwModal();
 });
-async function histCheckPw(){
-  const v=document.getElementById('histPwInput').value;
-  if(!v) return;
-  const okBtn=document.getElementById('histPwOk');
-  const prev=okBtn.textContent;
-  okBtn.disabled=true; okBtn.textContent='...';
-  try{
-    const r=await BazAuth.login(v);
-    if(r.ok && r.level>=2){
-      var pending=histPendingDraftApply; histPendingDraftApply=false;
-      BazModal.close(document.getElementById('histPwModal'));
-      histEnterEdit();
-      if(pending) histApplyDraft();
-    }else if(r.ok && r.level<2){
-      // 일반 비번으로는 편집 불가 (관리자 전용)
-      document.getElementById('histPwErr').textContent=t('histWrongPw');
-    }else if(r.error==='auth_url_missing'){
-      document.getElementById('histPwErr').textContent='인증 서버 미설정 (auth.js의 AUTH_URL 입력)';
-    }else if(r.error==='network'){
-      document.getElementById('histPwErr').textContent='네트워크 오류. 연결을 확인해 주세요.';
-    }else{
-      document.getElementById('histPwErr').textContent=t('histWrongPw');
-    }
-  }finally{
-    okBtn.disabled=false; okBtn.textContent=prev;
-  }
-}
-document.getElementById('histPwOk').addEventListener('click', histCheckPw);
+document.getElementById('histPwOk').addEventListener('click',function(){BazAuth.rememberReturn('hospital-pc.html');location.href='index.html';});
 document.getElementById('histPwCancel').addEventListener('click', histClosePwModal);
-document.getElementById('histPwInput').addEventListener('keydown', e=>{ if(e.key==='Enter') histCheckPw(); });
 document.getElementById('histPwModal').addEventListener('click', e=>{
   if(e.target.id==='histPwModal') histClosePwModal();
 });
@@ -5168,7 +5138,7 @@ window.addEventListener('load', pcSetHdrH);
 
 /* ══════ 대시보드 → 병원 딥링크 (hospital-pc.html?hosp=병원명) ══════
    대시보드 처리이력 표의 병원 버튼이 이 페이지를 새 창으로 연다.
-   · 조회 전용이다 — 이력 "보기" 창만 열고 비밀번호 편집 화면은 절대 자동 실행하지 않는다.
+   · 조회 전용이다 — 이력 "보기" 창만 열고 편집 권한 화면은 절대 자동 실행하지 않는다.
    · 병원명은 대시보드와 같은 규칙(공백 제거 + 소문자)으로 정확히 일치할 때만 연다.
      부분 일치로 다른 지점을 추정하지 않는다. 정규화 후 2곳 이상이면 임의 선택하지 않고 알린다.
    · bazBootReady 가 늦거나 실패해도 일반 병원 화면은 그대로 쓸 수 있어야 하므로
@@ -5237,7 +5207,7 @@ function pcDeepLinkNotice_(msg){
   el.hidden=false;
 }
 /* 열려 있는 모달 정리 — 같은 병원 이력이 이미 열려 있으면 다시 열지 않는다.
-   다른 모달(비밀번호·상세 등)이 열려 있으면 안전하게 모두 닫고 이력만 연다. */
+   다른 모달(편집 권한·상세 등)이 열려 있으면 안전하게 모두 닫고 이력만 연다. */
 function pcDeepLinkOpen_(name,histOnly){
   var modal=document.getElementById('histModal');
   if(modal && typeof BazModal!=='undefined' && BazModal.isOpen(modal) && histCurName===name){
