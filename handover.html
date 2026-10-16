@@ -177,7 +177,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 <script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-handover-workflow.js?v=244"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
-<script src="js/baz-handover-core.js?v=244"></script>
+<script src="js/baz-handover-core.js?v=252"></script>
 </head>
 <body>
 <header>
@@ -716,7 +716,7 @@ function loadLiveDB(){
 }
 
 /* 교체품 마스터 (병원 점검 현황 시트 기준) */
-var PARTS=["없음","Handpiece Ass'y","Foot-SW Ass'y","Foot-SW Connector(장비)","Top Cover Ass'y","Main Board","RFID Module","LCD + Raspberry Pi Ass'y","SD Card","HP / SD Card","On / Off Swich","On / Off Key","Emergency Switch","Power Adaptor","Power Cable","Water Tank","Water Pump","Caster","Arm","Arm Holder","AC Cord","Cradle (거치대)","Nozzle","Nozzle Spanner","Perm-Holder","Piston (V 1.0)","Piston (V 1.1)","Piston (V 1.2)","Bush Bobbin","Spring","Plunger (V 1.2.1)","Plunger (V 1.2.2)","Adaptor(1.0)","Adaptor(1.1)","Damper","Spacer","Wrench Bolt (수평)","Wrench Bolt (수직)","대체장비입고","재체결","내부 세척"];
+var PARTS=["없음","Handpiece Ass'y","Foot-SW Ass'y","Foot-SW Connector(장비)","Top Cover Ass'y","Main Board","RFID Module","LCD + Raspberry Pi Ass'y","SD Card","HP / SD Card","On / Off Swich","On / Off Key","Emergency Switch","Power Adaptor","Power Cable","Water Tank","Water Pump","Caster","Arm","Arm Holder","AC Cord","Cradle (거치대)","Nozzle","Nozzle Spanner","Perm-Holder","Piston (V 1.0)","Piston (V 1.1)","Piston (V 1.2)","Bush Bobbin","Spring","Plunger (V 1.2.1)","Plunger (V 1.2.2)","Adaptor(1.0)","Adaptor(1.1)","Damper","Spacer","Wrench Bolt (수평)","Wrench Bolt (수직)","대체장비입고","재체결","내부 세척","Spring(1.0)","Power Key","Plunger(1.2.1)","HP-Cradle Ass'y(거치대)","Adaptor","Holder","Water tank Ass'y","RFID Module A'ssy","Fan","Foot-SW cable","Foot-SW Ass'y (Repair)"];
 function fillParts(){ var s=document.getElementById('part'); PARTS.forEach(function(p){var o=document.createElement('option');o.textContent=p;s.appendChild(o);}); }
 function todayISO(){ var d=new Date(),z=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
 
