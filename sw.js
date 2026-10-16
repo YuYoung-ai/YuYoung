@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v251';
+const CACHE_VERSION = 'baz-cs-v252';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();

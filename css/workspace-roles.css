@@ -71,6 +71,29 @@ html[data-theme=dark] #detail{--detail-accent:var(--accent);--detail-soft:var(--
  .workspace:has(.detail-panel:not([hidden])) .list-panel{display:block}.list-caption{padding:16px 14px 9px;align-items:flex-start;gap:10px}.list-sort{gap:4px;flex-wrap:wrap;justify-content:flex-end}.list-sort select{min-height:40px;font-size:11px;max-width:105px}
  .list-tools{padding:5px 14px;flex-wrap:nowrap;align-items:center}.list-tools .search{flex:1 1 auto;min-width:0}.list-actions{gap:4px;width:auto;flex-wrap:nowrap}.list-actions button{font-size:11px;min-height:42px;padding:6px 8px}.period-caption{padding:0 14px;margin-bottom:12px;line-height:1.7}
  .mobile-card{padding:17px 15px}.card-top{font-size:15px}.card-summary,.card-meta{font-size:12px;line-height:1.7}.mobile-status{right:15px;top:16px}.mobile-card .card-top{padding-right:103px}
+ /* Editing is a vertical form, rather than the selectable card's flex row. */
+ .mobile-card.editable-card{display:block;min-width:0;padding:18px 15px 20px}
+ .mobile-edit-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:5px}
+ .mobile-edit-label{display:block;color:var(--muted);font-size:11px;font-weight:600;line-height:1.5;margin-bottom:5px}
+ .mobile-edit-heading .mobile-edit-label{margin:0}
+ .editable-card .row-detail-link{width:auto;min-height:36px;padding:4px 0 4px 12px;margin:0;font-size:12px;color:var(--accent);flex:none}
+ .mobile-edit-hospital{margin-bottom:14px;min-width:0;font-size:16px;font-weight:650;line-height:1.6}
+ .mobile-edit-field{min-width:0;font-size:14px;line-height:1.6}
+ .mobile-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 12px;margin-top:14px}
+ .editable-card .editable-value{display:block;width:100%;min-height:44px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit;line-height:1.6;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere}
+ .editable-card .editable-value:hover,.editable-card .editable-value:focus-visible{border-color:var(--accent);background:var(--soft)}
+ .editable-card .field-editor{width:100%;min-width:0;flex-wrap:nowrap;gap:6px}
+ .editable-card .field-editor>input,.editable-card .field-editor>select,.editable-card .field-editor>textarea{flex:1;min-width:0;font-size:16px;min-height:44px}
+ .editable-card .field-editor>button{width:38px;flex:none;min-height:44px;padding:6px;border:1px solid var(--accent);border-radius:8px;background:var(--soft);color:var(--text);text-align:center}
+ .mobile-edit-field--visit:has(.field-editor){grid-column:1/-1}
+ .editable-card .edit-datetime{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+ .editable-card .edit-datetime input{min-height:44px;font-size:16px;max-width:100%}
+ .editable-card .edit-datetime input[type=text]{width:100%}
+ .editable-card .inline-actions{display:flex;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);gap:8px}
+ .editable-card .inline-actions .hint{flex-basis:100%;margin:0;font-size:11px}
+ .editable-card .inline-actions>button{flex:1;width:auto;min-height:44px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);text-align:center;font-size:13px}
+ .editable-card .inline-actions>button.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+ .editable-card .inline-actions .check,.editable-card .inline-conflict{width:100%;min-width:0;overflow-wrap:anywhere}
  dialog#detail{width:100%;max-width:100%;border:0;border-radius:0}#detail .detail-summary,#detail .detail-content,#detail .detail-section{padding:22px 20px}#detail .detail-heading h2{font-size:25px}#detail .facts{gap:20px 12px}
  #detail .section-divider{padding:12px 20px}#detail .claim-panel{padding:16px 20px}#detail .work-flow-panel{position:sticky;bottom:0;z-index:2;padding:12px 20px max(12px,env(safe-area-inset-bottom));border-top:1px solid var(--line)}#detail .work-flow-main p{display:none}#detail .work-flow-panel h3{display:none}#detail .work-flow-main>button{width:100%}
 }
