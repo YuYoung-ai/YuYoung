@@ -630,8 +630,8 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=245"></script><script src="js/baz-inspection-pdf.js?v=245"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-upload.js?v=245"></script>
+<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=255"></script><script src="js/baz-inspection-pdf.js?v=255"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-inspection-upload.js?v=255"></script>
 <script src="js/baz-inspection-hospitals.js"></script>
 
 
@@ -2049,20 +2049,16 @@ async function renderSheetCanvas(html){
   const sheet=els.pdfSheet;
   sheet.innerHTML=html;
   const target=sheet.firstElementChild;
-  // 고정 시간 대기 대신 원본 이미지 로딩을 완료한 뒤 캡처한다.
-  await Promise.all(Array.from(target.querySelectorAll('img'),img=>new Promise((resolve,reject)=>{
-    const ready=()=>img.naturalWidth>0?resolve():reject(new Error('PDF 사진을 불러오지 못했습니다. 다시 생성해 주세요.'));
-    if(img.complete){ready();return;}
-    img.onload=ready;
-    img.onerror=()=>reject(new Error('PDF 사진을 불러오지 못했습니다. 다시 생성해 주세요.'));
-  })));
+  try{
+  // Bound stalled image loads as well as explicit errors, then release the sheet.
+  await window.BazInspectionPdf.waitImages(target.querySelectorAll('img'));
   // html2canvas는 object-fit을 지원하지 않으므로 실제 비율로 너비·높이를 지정한다.
   target.querySelectorAll('img[data-pdf-photo]').forEach(img=>{
     const scale=Math.min(img.parentElement.clientWidth/img.naturalWidth,img.parentElement.clientHeight/img.naturalHeight);
     img.style.width=(img.naturalWidth*scale)+'px';
     img.style.height=(img.naturalHeight*scale)+'px';
   });
-  try{return await html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
+  return await html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
     width:SHEET_WIDTH, windowWidth:SHEET_WIDTH});}
   finally{sheet.innerHTML='';}
 }
@@ -2102,6 +2098,8 @@ async function generatePDF(arg){
   if(!blank && !validate({simplified})) return;
   const captured=collectFormData(),photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(),basis=handoverReference?{...handoverReference}:null;
   const totalDone=window.BazPerf.start('pdf_total');_pdfBusy=true;
+  let stage='준비';
+  async function step(label,metric,run,details){stage=label;showLoading(label+' 중…');await new Promise(r=>setTimeout(r,0));const end=window.BazPerf.start(metric);let result;try{result=await run();return result;}finally{end(result&&details?details(result):undefined);}}
   showLoading(blank?'수기 양식 생성 중...':(preview?'미리보기 생성 중...':'PDF 생성 중...'));
   await new Promise(r=>setTimeout(r,50));
 
@@ -2117,14 +2115,11 @@ async function generatePDF(arg){
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
     const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt});
-    const libraryDone=window.BazPerf.start('pdf_libraries');await window.BazInspectionPdf.libraries();libraryDone();
-    const sourceDone=window.BazPerf.start('pdf_source');
-    const uploadContext=!preview&&!blank?await pdfPublisher.prepare({hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',pdfFormat:simplified?'simplified':'standard'}):null;sourceDone();
-    const bodyDone=window.BazPerf.start('pdf_body');
-    const mainPages=await window.BazInspectionPdf.body(mainHTML,renderSheetCanvas);bodyDone();
-    const assembleDone=window.BazPerf.start('pdf_assemble');
-    const generated=await window.BazInspectionPdf.assemble(mainPages,photoSnapshot,{logo:_logoDataUrl,docNo,genAt,footers:addPdfFooters,progress:showLoading});
-    const pdf=generated.pdf;assembleDone({count:photoSnapshot.length,bytes:generated.blob.size,pass:generated.passes});
+    await step('PDF 도구·글꼴 준비','pdf_libraries',()=>window.BazInspectionPdf.libraries());
+    const uploadContext=!preview&&!blank?await step('AS 처리 현황 연결 확인','pdf_source',()=>pdfPublisher.prepare({hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',pdfFormat:simplified?'simplified':'standard'})):null;
+    const mainPages=await step('본문·서명 페이지 생성','pdf_body',()=>window.BazInspectionPdf.body(mainHTML,renderSheetCanvas));
+    const generated=await step('사진·최종 파일 생성','pdf_assemble',()=>window.BazInspectionPdf.assemble(mainPages,photoSnapshot,{logo:_logoDataUrl,docNo,genAt,footers:addPdfFooters,progress:showLoading}),r=>({count:photoSnapshot.length,bytes:r.blob.size,pass:r.passes}));
+    const pdf=generated.pdf;
 
     // 파일명
     if(blank){
@@ -2151,7 +2146,7 @@ async function generatePDF(arg){
       exitSignMode();
       const unchanged=JSON.stringify(captured)===JSON.stringify(collectFormData());
       saveCurrentTask(unchanged?{status:'completed', documentNo:docNo}:{});
-      pdfPublisher.publish(pdfBlob,shareFilename,{...uploadContext,taskId:_currentTaskId});
+      pdfPublisher.publish(pdfBlob,shareFilename,uploadContext);
       // Google Sheets 도 완료 처리 (설정 시). 다른 기기에서 조회·재생성 가능
       if(_currentTaskId) cloudSyncTask(getTask(_currentTaskId), {silent:true});
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
@@ -2159,7 +2154,7 @@ async function generatePDF(arg){
     }
   }catch(e){
     hideLoading();
-    showToast('생성 중 오류: '+e.message);
+    showToast(stage+' 실패: '+e.message);
     console.error(e);
   }
   finally{els.pdfSheet.innerHTML='';_pdfBusy=false;totalDone({count:photoSnapshot.length});}
