@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v249';
+const CACHE_VERSION = 'baz-cs-v250';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();
@@ -88,11 +88,11 @@ self.addEventListener('push',(event)=>{
   await pushBindingTask.catch(()=>{});
   const binding=await (await caches.open(PUSH_BINDING_CACHE)).match(PUSH_BINDING_URL);
   if(!binding||await binding.text()!==p.recipient)return;
-  if(!p.test&&!/^[A-Za-z0-9_-]{8,90}$/.test(p.requestId||''))return;
+  if(!p.test&&!/^[A-Za-z0-9_-]{8,90}$/.test(p.requestId||'')&&!(['handover','roster'].includes(p.kind)&&/^[A-Za-z0-9_-]{8,90}$/.test(p.notificationId||'')))return;
   await self.registration.showNotification(String(p.title||'BAZ CS 접수 알림').slice(0,100),{
    body:String(p.body||'').slice(0,300),icon:new URL('icon-192.png',self.registration.scope).href,
-   tag:p.test?'baz-push-test':'baz-work-'+p.requestId,
-   data:{requestId:p.requestId||'',notificationId:p.notificationId||'',test:!!p.test}
+   tag:p.test?'baz-push-test':'baz-work-'+(p.notificationId||p.requestId),
+   data:{requestId:p.requestId||'',notificationId:p.notificationId||'',kind:p.kind||'',test:!!p.test}
   });
   for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage({type:'BAZ_NOTIFICATION_RECEIVED'});
  })());
@@ -102,12 +102,13 @@ self.addEventListener('notificationclick',(event)=>{
  event.notification.close();
  event.waitUntil((async()=>{
   const p=event.notification.data||{},valid=v=>/^[A-Za-z0-9_-]{8,90}$/.test(v||'');
-  if(!p.test&&!valid(p.requestId))return;
-  const url=new URL(p.test?'install.html':'hospital-work.html',self.registration.scope);
-  if(!p.test){url.searchParams.set('request',p.requestId);if(valid(p.notificationId))url.searchParams.set('notification',p.notificationId);}
+  const standalone=!valid(p.requestId)&&['handover','roster'].includes(p.kind)&&valid(p.notificationId);
+  if(!p.test&&!valid(p.requestId)&&!standalone)return;
+  const url=new URL(p.test?'install.html':standalone?'notification.html':'hospital-work.html',self.registration.scope);
+  if(!p.test){if(valid(p.requestId))url.searchParams.set('request',p.requestId);if(valid(p.notificationId))url.searchParams.set('notification',p.notificationId);}
   const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
-  const existing=windows.find(c=>{const u=new URL(c.url);return u.origin===url.origin&&u.pathname===url.pathname;});
-  if(existing){await existing.focus();if(!p.test)existing.postMessage({type:'BAZ_OPEN_NOTIFICATION',...p});return;}
+  const existing=windows.find(c=>{const u=new URL(c.url);return u.origin===url.origin&&u.pathname===url.pathname&&(!standalone||u.search===url.search);});
+  if(existing){await existing.focus();if(standalone)await existing.navigate(url.href);else if(!p.test)existing.postMessage({type:'BAZ_OPEN_NOTIFICATION',...p});return;}
   await self.clients.openWindow(url.href);
  })());
 });

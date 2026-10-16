@@ -1,7 +1,7 @@
 // Shared work data only. Authentication keys and databases are never changed here.
 import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
 import {createWorkRoster} from './work-roster.ts';
-import {assignmentNotification,notificationKey,removeRequestNotifications} from './work-notifications.ts';
+import {requestNotifications,appendNotification,notificationActivation,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 import {sourceReview,pdfBasis} from './work-source-review.ts';
 import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
 import {createWorkMatching} from './work-matching.ts';
@@ -126,12 +126,10 @@ export function createWorkStore(kv:any,options:Obj={}){
    tx=tx.check(indexState.entry).set(indexState.entry.key,indexState.value);
    if(previousRequest.value?.hospitalId&&previousRequest.value.hospitalId!==ev.request.hospitalId)tx=tx.delete(key('hospital',previousRequest.value.hospitalId,ev.request.id));
    if(ev.kind==='purge')tx=tx.set(key('purgeCleanup',ev.request.id),ev.request).delete(key('hospital',ev.request.hospitalId,ev.request.id));
-   const alert=assignmentNotification(ev);
-   if(alert)tx=tx.set(notificationKey('event',alert.id),alert,{expireIn:30*86400000})
-    .set(notificationKey('pending',alert.id),{id:alert.id,due:Date.parse(alert.createdAt)},{expireIn:30*86400000})
-    .set(notificationKey('fanoutDue',Date.parse(alert.createdAt),alert.id),true,{expireIn:30*86400000})
-    .set(notificationKey('requestEvent',alert.requestId,alert.id),true,{expireIn:30*86400000})
-    .set(notificationKey('latest',alert.requestId),alert.id,{expireIn:30*86400000});
+   for(const alert of requestNotifications(ev)){
+    if(alert.kind==='pdf'&&!(ev.history?.attachment?.uploadedAt>=(await notificationActivation(kv)).since))continue;
+    if(alert.id.length>90)alert.id='notice_'+await hash(alert.id);tx=appendNotification(tx,alert);
+   }
    if((await tx.commit()).ok)return response;
   }
   const e:any=new Error('다른 저장과 겹쳤습니다. 같은 기록으로 다시 시도하세요.');e.retrySameOperation=true;throw e;
@@ -500,6 +498,7 @@ export function createWorkStore(kv:any,options:Obj={}){
   }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',code:e.code,retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString(),requestId?:string){
+  const activation=await notificationActivation(kv);
   for(const item of items){let s:Obj={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;const incoming=copy(s);for(let tries=0;tries<12;tries++){s=copy(incoming);
    const index=await get('sourceIndex',s.recordId),binding=await sourceLink(s.recordId);
    const linkedHistory=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
@@ -524,6 +523,12 @@ export function createWorkStore(kv:any,options:Obj={}){
    if(previousName!==String(old.key[2]))tx=tx.delete(previous.key);
    if(s.pdf&&(old.value?.pdf?.kind!=='inspection_pdf'||s.pdf.revision!==old.value?.pdf?.revision||s.pdf.sha256!==old.value?.pdf?.sha256))tx=tx.set(key('pdfPending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId});
    tx=matching.enqueue(tx,[previous.value,s,binding.owner?.value]);
+   // Only a new, authenticated original saved after activation produces a receipt.
+   // Refreshes, review publication, legacy imports and PDF updates never replay it.
+   if(incoming.schemaVersion>=2&&incoming.originalAuthor&&incoming.createdAt>=activation.since&&Date.parse(incoming.createdAt)<=Date.now()+60000){
+    const marker=await kv.get(notificationKey('handoverReceipt',s.recordId));tx=tx.check(marker);
+    if(!marker.value){const id='handover_'+await hash(s.recordId);tx=appendNotification(tx,{schema:2,id,kind:'handover',audience:'author',author:incoming.originalAuthor,recordId:s.recordId,hospitalName:s.hospitalName,gubun:s.gubun,visitAt:s.date,createdAt:incoming.createdAt});tx=tx.set(marker.key,{id});}
+   }
    if((await tx.commit()).ok)break;
    if(tries===11)throw new Error('원본 전달이 겹쳤습니다. 다시 연동하세요.');
   }}

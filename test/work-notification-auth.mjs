@@ -22,6 +22,8 @@ assert.equal(auth.rememberReturn('handover.html?request=request_123&next=https:/
 assert.equal(auth.rememberReturn('inspection.html?request=request_123&record=<bad>'),false);assert.equal(auth.rememberReturn('inspection.html?request=request_123&record=record_123&token=must-not-copy'),true);assert.equal(JSON.parse(session.get('baz_notification_return_v1')).path,'/YuYoung/inspection.html?request=request_123&record=record_123');
 location.href='https://app.example/YuYoung/inspection.html?request=request_123&record=record_123';location.pathname='/YuYoung/inspection.html';location.search='?request=request_123&record=record_123';auth.guard();assert.equal(redirects.at(-1),'index.html');assert.equal(JSON.parse(session.get('baz_notification_return_v1')).path,'/YuYoung/inspection.html?request=request_123&record=record_123');
 console.log('work-flow-auth: same-folder handover/inspection targets, valid request/source IDs, query sanitization and expired-login restoration passed.');
+assert.equal(auth.rememberReturn('notification.html?notification=handover_notice_123&token=must-not-copy'),true);assert.equal(JSON.parse(session.get('baz_notification_return_v1')).path,'/YuYoung/notification.html?notification=handover_notice_123');
+assert.equal(auth.rememberReturn('notification.html?notification=https://evil.test'),false);
 const client=fs.readFileSync(new URL('../js/baz-notifications.js',import.meta.url),'utf8');
 const callCode=client.slice(client.indexOf(' async function call('),client.indexOf(' async function worker('));
 let currentToken='account_A',release;

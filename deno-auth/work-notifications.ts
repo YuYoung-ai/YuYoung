@@ -1,5 +1,6 @@
 // Notification records are isolated from authentication, work audit and Sheet mirror keys.
 type Obj = Record<string, any>;
+import {createWorkRoster} from './work-roster.ts';
 export const PUSH_NS = 'work-notifications-v1';
 export const notificationKey = (...p:any[]) => [PUSH_NS,...p];
 export async function removeRequestNotifications(kv:any,requestId:string){
@@ -37,6 +38,34 @@ export function assignmentNotification(ev:Obj){
  return {id:ev.id,requestId:r.id,revision:r.revision,createdAt:ev.at,engineer:r.engineer||'',audience:r.engineer?'assigned':'all',hospitalName:r.hospitalName,visitAt:r.visitAt||'',gubun:r.gubun||'A/S',kind:b?'assignment':'receipt'};
 }
 
+export const NOTIFICATION_TYPES=['receipt','visit','status','handover','pdf','roster'];
+export async function notificationActivation(kv:any,at=Date.now()){
+ const k=notificationKey('activationV2');for(let i=0;i<8;i++){const e=await kv.get(k);if(e.value)return e.value;if((await kv.atomic().check(e).set(k,{since:new Date(at).toISOString()}).commit()).ok)return {since:new Date(at).toISOString()};}throw new Error('알림 시작 설정을 다시 확인하세요.');
+}
+// Synchronous builder only: callers commit the event together with the saved record.
+export function appendNotification(tx:any,e:Obj){
+ const due=Date.parse(e.createdAt),key=notificationKey,o={expireIn:TTL};
+ tx=tx.set(key('event',e.id),e,o).set(key('pending',e.id),{id:e.id,due},o).set(key('fanoutDue',due,e.id),true,o);
+ if(e.requestId)tx=tx.set(key('requestEvent',e.requestId,e.id),true,o);
+ if(['receipt','assignment'].includes(e.kind))tx=tx.set(key('latest',e.requestId),e.id,o);
+ return tx;
+}
+export function requestNotifications(ev:Obj){
+ const r=ev.request,b=ev.requestBefore||ev.before,events:Obj[]=[];
+ if(!r||r.deletedAt||r.purgedAt||ev.kind==='flow_import')return events;
+ const base={schema:2,requestId:r.id,revision:r.revision,createdAt:ev.at,engineer:r.engineer||'',hospitalName:r.hospitalName,visitAt:r.visitAt||'',gubun:r.gubun||'A/S',actor:ev.actor};
+ const assignment=assignmentNotification(ev);if(assignment)events.push({...base,...assignment});
+ if(['request_create','request_update'].includes(ev.kind)&&r.visitAt&&b?.visitAt!==r.visitAt)events.push({...base,id:ev.id+'_visit',kind:'visit',audience:'assigned'});
+ if(b?.status&&b.status!==r.status)events.push({...base,id:ev.id+'_status',kind:'status',audience:'assigned',previousStatus:b.status,status:r.status});
+ if(ev.kind==='pdf_attachment')events.push({...base,id:ev.id+'_pdf',kind:'pdf',audience:'author',author:r.updatedBy||ev.history?.attachment?.uploadedBy||ev.actor,recordId:ev.history?.sourceRecordId});
+ return events;
+}
+function category(e:Obj){return e.kind==='assignment'?'receipt':e.kind;}
+export function notificationText(e:Obj){
+ const titles:Obj={receipt:e.audience==='all'?'담당자 미지정 접수가 등록되었습니다':'새 접수가 배정되었습니다',assignment:'담당자가 변경되었습니다',visit:'방문 일정이 등록·변경되었습니다',status:'업무 상태가 변경되었습니다',handover:'AS 처리 현황 작성이 완료되었습니다',pdf:'AS/점검 내역서·댓글 등록이 완료되었습니다',roster:'오늘의 휴무·당직 안내'};
+ return {title:titles[e.kind]||'업무 알림',body:e.kind==='roster'?e.summary:e.hospitalName+' · '+(e.kind==='status'?e.previousStatus+' → '+e.status:e.kind==='pdf'?'AS/점검 내역서':e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'))};
+}
+
 export function validateSubscription(value:any){
  if(!value||JSON.stringify(value).length>4096)throw new Error('알림 기기 정보를 확인하세요.');
  let u:URL;try{u=new URL(value.endpoint);}catch{throw new Error('알림 주소가 올바르지 않습니다.');}
@@ -61,7 +90,8 @@ export function createWorkNotifications(kv:any,options:Obj){
    const candidates=engineers.filter((n:string)=>norm(n)===norm(a.name));
    const unique=accounts.filter((x:Obj)=>norm(x.name)===norm(a.name)).length===1;
    const engineer=binding?String(binding.engineer||''):unique&&candidates.length===1?candidates[0]:'';
-   output.push({...a,engineer:engineers.includes(engineer)?engineer:'',explicit:!!binding});
+   const preferences=a.level>=3?(await get('preferences',a.uid)).value?.types||{}:{};
+   output.push({...a,engineer:engineers.includes(engineer)?engineer:'',explicit:!!binding,preferences});
   }
   return {accounts:output,engineers};
  }
@@ -72,7 +102,37 @@ export function createWorkNotifications(kv:any,options:Obj){
   const a=matches[0];await options.store.checkAccess({name:a.name,level:Math.min(a.level,who.level)});return {a,d};
  }
  async function currentEvent(e:Obj){
+  if(e.schema===2&&!['receipt','assignment'].includes(e.kind)){
+   if(e.kind==='roster')return e.date===new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date(now()))&&now()<Date.parse(e.date+'T09:00:00+09:00');
+   if(e.kind==='handover')return (await options.store.sources(e.hospitalName)).some((s:Obj)=>s.recordId===e.recordId);
+   try{const r=(await options.store.request(e.requestId)).value;return !r.deletedAt&&!r.purgedAt&&(e.kind!=='visit'||r.visitAt===e.visitAt&&norm(r.engineer)===norm(e.engineer));}catch{return false;}
+  }
   try{const r=(await options.store.request(e.requestId)).value;return live(r)&&norm(r.engineer)===norm(e.engineer)&&(await get('latest',e.requestId)).value===e.id;}catch{return false;}
+ }
+ function eligible(e:Obj,a:Obj,d:Obj){
+  if(e.kind==='roster'&&(e.offPeople||[]).some((name:string)=>norm(name)===norm(a.engineer)||norm(name)===norm(a.name)))return false;
+  if(a.level>=3&&e.schema===2)return a.preferences?.[category(e)]!==false;
+  if(e.audience==='author')return !!e.author&&norm(a.name)===norm(e.author)&&d.accounts.filter((x:Obj)=>norm(x.name)===norm(e.author)).length===1;
+  return e.audience==='all'||!!e.engineer&&norm(a.engineer)===norm(e.engineer);
+ }
+ async function rosterReminder(){
+  const time=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(now())),date=time.slice(0,10),hm=time.slice(11,16);
+  // Retry the same day after transient errors; never send yesterday's reminder.
+  if(hm<'08:30'||hm>='09:00')return;
+  const id='roster_'+date,marker=await get('rosterDay',date);if(marker.value)return;
+  const data=await createWorkRoster(kv).read(date.slice(0,7)),today=data.roster.filter((r:Obj)=>!r.deletedAt&&r.date===date),entry=await kv.get(['hospitalwork-v2','rosterMonth',date.slice(0,7)]);
+  if(Number(entry.value?.revision||0)!==data.rosterRevision)return;
+  const offPeople=today.filter((r:Obj)=>r.type==='휴무').map((r:Obj)=>r.person),duty=today.filter((r:Obj)=>r.type==='당직').map((r:Obj)=>r.person);
+  let tx=kv.atomic().check(marker,entry).set(marker.key,true,{expireIn:32*86400000});
+  if(today.length)tx=appendNotification(tx,{schema:2,id,kind:'roster',audience:'all',date,createdAt:new Date(now()).toISOString(),hospitalName:'오늘의 휴무·당직',offPeople,summary:'휴무: '+(offPeople.join(', ')||'없음')+' · 당직: '+(duty.join(', ')||'없음')});
+  await tx.commit();
+ }
+ async function detail(p:Obj,a:Obj){
+  const idx=(await get('index',a.uid,String(p.notificationId||''))).value,event=idx?(await get('inbox',a.uid,idx)).value:null;
+  if(!event)throw new Error('알림을 찾지 못했거나 보관 기간이 지났습니다.');
+  if(event.kind==='roster')return {success:true,event,roster:(await createWorkRoster(kv).read(event.date.slice(0,7))).roster.filter((r:Obj)=>!r.deletedAt&&r.date===event.date)};
+  if(event.kind==='handover'){const source=(await options.store.sources(event.hospitalName)).find((s:Obj)=>s.recordId===event.recordId);if(!source)throw new Error('AS 처리 현황 기록을 찾지 못했습니다.');return {success:true,event,source};}
+  return {success:true,event};
  }
  async function subscribe(p:Obj,a:Obj){
   const subscription=validateSubscription(p.subscription),id=await digest(subscription.endpoint);
@@ -152,12 +212,12 @@ export function createWorkNotifications(kv:any,options:Obj){
   for(const p of pending){
    if(!p.value)continue;const e=(await get('event',p.value.id)).value;
    if(!e){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,p.value.id)).commit();continue;}
-   const eligible=d.accounts.filter(a=>e.audience==='all'||a.engineer===e.engineer);
+   const recipients=d.accounts.filter(a=>eligible(e,a,d));
    const valid=await currentEvent(e);
    if(!valid){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();continue;}
-   const guard=await get('latest',e.requestId);if(guard.value!==e.id)continue;
+   const guard=await get(e.schema===2&&!['receipt','assignment'].includes(e.kind)?'event':'latest',e.schema===2&&!['receipt','assignment'].includes(e.kind)?e.id:e.requestId);if(!guard.value||guard.value!==e.id&&guard.value.id!==e.id)continue;
    let complete=true;
-   for(const a of eligible){
+   for(const a of recipients){
     const idx=e.createdAt+'|'+e.id,existing=await get('inbox',a.uid,idx);
     if(existing.value)continue;
     const remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
@@ -171,9 +231,10 @@ export function createWorkNotifications(kv:any,options:Obj){
     if(!(await tx.commit()).ok)complete=false;
    }
    // Missing assigned-account mapping can be repaired by an admin before this expires.
-   if(complete&&(eligible.length||e.audience==='all'))await kv.atomic().check(p).delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();
+   const missingAssignee=e.audience==='assigned'&&e.engineer&&!recipients.some(a=>norm(a.engineer)===norm(e.engineer));
+   if(complete&&!missingAssignee&&(recipients.length||e.audience==='all'||e.schema===2&&e.audience==='author'))await kv.atomic().check(p).delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();
    else{
-    const due=now()+(eligible.length?60000:300000),remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
+    const due=now()+(missingAssignee||!recipients.length?300000:60000),remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
     await kv.atomic().check(p).set(p.key,{id:e.id,due},{expireIn:remaining}).delete(key('fanoutDue',p.value.due,e.id)).set(key('fanoutDue',due,e.id),true,{expireIn:remaining}).commit();
    }
   }
@@ -186,9 +247,11 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(!(await kv.atomic().check(entry).set(entry.key,{...j,lease:leaseDue,claim},{expireIn:PUSH_TTL}).delete(due.key).set(key('due',leaseDue,id),true,{expireIn:PUSH_TTL}).commit()).ok)return;
   const e=(await get('event',j.eventId)).value,sub=(await get('subscription',j.deviceId)).value,a=d.accounts.find((x:Obj)=>x.uid===j.uid);
   let retry=false,expired=false;
-  if(e&&now()-Date.parse(e.createdAt)<PUSH_TTL&&a&&(e.audience==='all'||a.engineer===e.engineer)&&sub?.uid===j.uid&&sub.binding===j.binding&&!(await get('read',j.uid,e.id)).value&&await currentEvent(e)){
+  const roster=e?.kind==='roster'?(await createWorkRoster(kv).read(e.date.slice(0,7))).roster:[];
+  const off=roster.some((r:Obj)=>!r.deletedAt&&r.date===e.date&&r.type==='휴무'&&[a?.engineer,a?.name].some(n=>norm(n)===norm(r.person)));
+  if(e&&now()-Date.parse(e.createdAt)<PUSH_TTL&&a&&eligible(e,a,d)&&!off&&sub?.uid===j.uid&&sub.binding===j.binding&&!(await get('read',j.uid,e.id)).value&&await currentEvent(e)){
    try{
-    await options.send(sub.subscription,{title:e.audience==='all'?'담당자 미지정 접수가 등록되었습니다':'새 접수가 배정되었습니다',body:e.hospitalName+' · '+e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'),requestId:e.requestId,notificationId:e.id,recipient:j.uid},Math.max(1,Math.floor((PUSH_TTL-(now()-Date.parse(e.createdAt)))/1000)));
+    await options.send(sub.subscription,{...notificationText(e),requestId:e.requestId||'',notificationId:e.id,kind:e.kind,recipient:j.uid},Math.max(1,Math.floor(((e.kind==='roster'?Math.min(PUSH_TTL,Date.parse(e.date+'T09:00:00+09:00')-Date.parse(e.createdAt)):PUSH_TTL)-(now()-Date.parse(e.createdAt)))/1000)));
    }catch(error:any){expired=[404,410].includes(Number(error.statusCode));retry=!expired&&(!error.statusCode||error.statusCode===429||error.statusCode>=500);}
   }
   if(expired)await removeDevice(j.deviceId,j.uid,j.binding);
@@ -199,6 +262,8 @@ export function createWorkNotifications(kv:any,options:Obj){
   await tx.commit();
  }
  async function process(eventId?:string,limit=20){
+  await notificationActivation(kv,now());
+  try{await rosterReminder();}catch{console.warn('휴무·당직 알림은 다음 주기에 재시도합니다.');}
   await fanout(eventId);
   const entries=[];
   for await(const x of kv.list({start:key('due',0),end:key('due',now()+1)},{limit}))entries.push(x);
@@ -207,9 +272,16 @@ export function createWorkNotifications(kv:any,options:Obj){
   for(let i=0;i<entries.length;i+=4)await Promise.all(entries.slice(i,i+4).map(e=>deliver(e,d)));
  }
  async function handle(p:Obj,who:Obj){
+  await notificationActivation(kv,now());
   const {a,d}=await actor(who);
   switch(p.action){
-   case 'notification_config':return {success:true,uid:a.uid,name:a.name,engineer:a.engineer||'',broadcast:true,publicKey:await options.publicKey(),devices:(await rows(['device',a.uid],10)).map(x=>({id:x.value.id})),admin:Math.min(a.level,who.level)>=3};
+   case 'notification_config':return {success:true,uid:a.uid,name:a.name,engineer:a.engineer||'',broadcast:true,publicKey:await options.publicKey(),devices:(await rows(['device',a.uid],10)).map(x=>({id:x.value.id})),admin:Math.min(a.level,who.level)>=3,notificationTypes:NOTIFICATION_TYPES,preferences:a.preferences};
+   case 'notification_detail':return await detail(p,a);
+   case 'notification_preferences':{
+    if(Math.min(a.level,who.level)<3)throw new Error('관리자 권한이 필요합니다.');
+    if(!p.types||Object.keys(p.types).length!==NOTIFICATION_TYPES.length||NOTIFICATION_TYPES.some(t=>typeof p.types[t]!=='boolean')||Object.keys(p.types).some(t=>!NOTIFICATION_TYPES.includes(t)))throw new Error('알림 종류별 수신 설정을 확인하세요.');
+    await kv.set(key('preferences',a.uid),{types:p.types,updatedAt:new Date(now()).toISOString()});return {success:true};
+   }
    case 'notification_subscribe':return await subscribe(p,a);
    case 'notification_unsubscribe':{
     const id=await digest(String(p.endpoint||''));await removeDevice(id,a.uid);return {success:true};

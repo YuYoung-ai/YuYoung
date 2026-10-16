@@ -22,3 +22,12 @@ await fire('notificationclick',{notification:{data:{requestId:'https://evil.test
 await fire('message',{source,data:{type:'BAZ_PUSH_LOGOUT'},ports:[]});assert.equal(unsubscribed,1);await fire('push',{data:{json:()=>({recipient:uid,requestId:req})}});assert.equal(shown.length,1);
 await fire('message',{source,data:{type:'BAZ_PUSH_BINDING',uid},ports:[]});maps.set('old-shell',new Map());await fire('activate');assert.equal(maps.has('old-shell'),false);assert.equal(maps.has('baz-push-binding-v1'),true,'updating app assets preserves push binding');
 console.log('work-notification-sw: validated target routes, recipient binding, logout unsubscribe, safe notification click, existing-window draft preservation and cache upgrade passed.');
+windows=[];const count=shown.length;
+for(const kind of ['handover','roster']){
+ const notificationId='notice_'+kind+'_123';await fire('push',{data:{json:()=>({recipient:uid,kind,notificationId,title:'업무 알림'})}});
+ assert.equal(shown.at(-1).o.tag,'baz-work-'+notificationId);
+ await fire('notificationclick',{notification:{data:{kind,notificationId},close:()=>{}}});
+ assert.equal(opened.at(-1),scope+'notification.html?notification='+notificationId);
+}
+assert.equal(shown.length,count+2);assert.equal(route.url({notificationId:'notice_handover_123'}),'notification.html?notification=notice_handover_123');
+await fire('push',{data:{json:()=>({recipient:uid,kind:'roster',notificationId:'https://evil.test'})}});assert.equal(shown.length,count+2);

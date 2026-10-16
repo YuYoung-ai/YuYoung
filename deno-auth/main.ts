@@ -49,9 +49,9 @@
  ************************************************************/
 
 import { createWorkStore } from './work-store.ts';
-import { createWorkNotifications } from './work-notifications.ts';
+import { createWorkNotifications,notificationActivation } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.9.0-handover-review";
+const VER = "deno-1.10.0-work-notifications";
 
 const enc = new TextEncoder();
 
@@ -599,6 +599,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           const upstreamMs=Math.round(performance.now()-upstreamAt);
           if (!body.success) return workReply({body,status:200,upstreamMs},'kv-handover',started);
           await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data,undefined,p.requestId?String(p.requestId):undefined);
+          try{await (await notificationService(kv)).process(undefined,4);}catch{body.notificationPending=true;}
           if(action==='work_handover_detail')body.source=(await store.sources(String(payload.hospitalName||body.source.hospitalName))).find((s:any)=>s.recordId===body.source.recordId)||body.source;
           else if(action==='work_handover_candidates')body.data=await store.sources(String(payload.hospitalName||''));
           if(p.requestId)body.workDetail=await store.handle({action:'work_detail',id:p.requestId},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
@@ -611,9 +612,9 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         catch{return fail('본인의 담당자 연결을 확인하지 못했습니다. 앱 설치·알림 설정을 확인하세요.',403);}
       }
       const body=await store.handle({...p,action},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0,engineer});
-      if(body.success&&['work_save','work_request_edit','work_claim'].includes(action)){
+      if(body.success&&WORK_WRITES.has(action)){
         // Delivery failure must never roll back a successfully saved request.
-        try{await (await notificationService(kv)).process(String(p.operationId||''),4);}
+        try{await (await notificationService(kv)).process(undefined,4);}
         catch{body.notificationPending=true;}
       }
       return workReply({body:body as WorkBody,status:200,upstreamMs:0},'kv',started);
@@ -719,7 +720,7 @@ async function handleAction(
     if (!Number.isFinite(at)||Math.abs(Date.now()-at)>300000||!/^[A-Za-z0-9_-]{8,90}$/.test(nonce)||!safeEq(await hmacB64u('baz-work-bridge-v1\n'+JSON.stringify(clean)),String(p.signature||'')))return json({success:false,error:'연동 인증 실패'},403);
     const nonceKey=['hospitalwork-v2','bridgeNonce',nonce],entry=await kv.get(nonceKey);
     if(entry.value!==null||!(await kv.atomic().check(entry).set(nonceKey,true,{expireIn:600000}).commit()).ok)return json({success:false,error:'이미 처리한 연동 요청입니다.'},409);
-    try{return json(await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).bridge(String(p.verb||''),(p.payload||{}) as Record<string,any>));}
+    try{const body=await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).bridge(String(p.verb||''),(p.payload||{}) as Record<string,any>);if(body.success&&['sources','documents'].includes(String(p.verb))){try{await (await notificationService(kv)).process(undefined,4);}catch{Object.assign(body,{notificationPending:true});}}return json(body);}
     catch(e){return json({success:false,error:e instanceof Error?e.message:'업무 연동 실패'},500);}
   }
   if (action.startsWith("work_")) return workForward(action, p);
@@ -981,7 +982,11 @@ Deno.cron('baz-work-push-delivery', '* * * * *', async()=>{
   try{await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).processPendingMatches({backfill:true});}catch{console.warn('Handover 자동 연결은 다음 주기에 재시도합니다.');}
 });
 
+// Establish the historical cutoff before accepting the first new save.
+const notificationStartupAt=Date.now();
+const notificationStartup=getKv().then(kv=>kv?notificationActivation(kv,notificationStartupAt):null).catch(()=>{console.warn('업무 알림 시작 설정은 다음 요청에서 다시 확인합니다.');});
 Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
+  await notificationStartup;
   if (!originAllowed(req)) return withCors(json({ ok: false, error: "origin_not_allowed" }, 403), req);
   if (req.method === "OPTIONS") return withCors(new Response(null, { status: 204 }), req);
 
