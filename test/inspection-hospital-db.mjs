@@ -53,11 +53,27 @@ let config;
 const picker=vm.createContext({HOSPITAL_DB:[],HANDOVER_URL:'https://example.invalid/exec',
   document:{getElementById:node},window:{BazInspectionHospitals:{create:()=>({load(){}})}},
   setupAutocomplete:cfg=>{config=cfg;return {refresh(){}};},esc:x=>x,loadRecentHistory(){},autoSave(){},setTimeout(){}});
-const pickSource=html.slice(html.indexOf('// 병원명 자동완성'),html.indexOf('// ===== 부품 단가표'));
+vm.runInContext(moduleSource,picker);
+vm.runInContext('window.BazInspectionHospitals.create=()=>({load(){}});',picker);
+const pickSource=html.slice(html.indexOf('const hospitalBinding='),html.indexOf('// ===== 부품 단가표'));
 vm.runInContext(pickSource,picker);
 config.onPick({n:'빈 정보 병원',s:'',c:'',sa:''});
 assert.equal(node('hospital').value,'빈 정보 병원');
 for(const id of ['serialNo','subscription','receiver'])assert.equal(node(id).value,'');
+config.onPick({n:'같은 이름 병원',s:'SN-A',c:'Basic',sa:'영업 A'});
+node('hospital').value='다른 병원';config.onInput();
+for(const id of ['serialNo','subscription','receiver'])assert.equal(node(id).value,'','old hospital autofill must not remain');
+node('serialNo').value='MANUAL';config.onInput();assert.equal(node('serialNo').value,'MANUAL','continuing to type the hospital does not repeatedly erase a manually entered serial');
+config.onPick({n:'같은 이름 병원',s:'SN-B',c:'Premium',sa:'영업 B'});
+assert.equal(node('serialNo').value,'SN-B','an explicit equipment pick is applied atomically');
+node('receiver').value='수동 영업';node('subscription').value='수동 구독';node('hospital').value='새 병원';config.onInput();
+assert.equal(node('serialNo').value,'');assert.equal(node('receiver').value,'수동 영업');assert.equal(node('subscription').value,'수동 구독');
+vm.runInContext("hospitalBinding.restore({hospital:'보관 병원',serialNo:'OLD',receiver:'담당',subscription:'Basic'});",picker);
+node('hospital').value='보관 병원 수정';node('serialNo').value='OLD';node('receiver').value='담당';node('subscription').value='Basic';config.onInput();
+assert.equal(node('serialNo').value,'','restored tasks also invalidate the former hospital serial');
+vm.runInContext('hospitalBinding.restore({});',picker);node('hospital').value='직접 입력 병원';node('serialNo').value='NEW-MANUAL';config.onInput();
+assert.equal(node('serialNo').value,'NEW-MANUAL','manual entry from a new task remains supported');
+assert.ok(html.includes('hospitalAutocomplete.reset();partAutocomplete.reset();'));
 assert.match(html,/const HOSPITAL_DB = \[\];/);
 assert.match(html,/hospitalDb.load\(false\)/);
 console.log('PASS: authenticated Sheet source, refresh deduplication, same-name equipment, deleted/cleared rows, offline cache, auth errors and selection fields');
