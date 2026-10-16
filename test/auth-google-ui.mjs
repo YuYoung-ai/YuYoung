@@ -22,7 +22,7 @@ ck('index의 인라인 스크립트 구문이 유효하다', inlineScripts.lengt
 ck('Google 로그인 버튼 컨테이너가 있다', index.includes('id="hubGoogleButton"'));
 ck('Google ID credential을 서버 로그인으로 교환한다', index.includes('BazAuth.loginWithGoogle(resp&&resp.credential,'));
 ck('Google 로그인도 선택 시 이 기기를 기억한다', index.includes("document.getElementById('hubRemember')") && auth.includes("action: 'google_login', idToken: idToken, remember: wantRemember"));
-ck('서버 config가 활성일 때만 Google 버튼을 표시한다', index.includes('if(!cfg.googleAuth||!cfg.googleClientId) return;'));
+ck('서버 config가 활성일 때만 Google 버튼을 표시한다', index.includes('if(!cfg.googleAuth||!cfg.googleClientId)'));
 ck('미등록 Google 계정 전용 안내가 있다', index.includes("r.error==='access_denied'"));
 ck('Lv.3 보안 관리 버튼과 모달이 있다', index.includes('id="appBtnSecurityAdmin"') && index.includes('id="securityAdminModal"'));
 ck('사용자 추가·권한·중지 요청이 서버 API를 사용한다', index.includes("adminRequest('user_save'") && index.includes("adminRequest('users'"));
@@ -37,3 +37,9 @@ ck(`서비스워커 캐시가 새 인증 UI 버전(≥123) 이상이다 — 현�
 
 console.log(`\n통과 ${passed}/${passed}`);
 console.log('Google 로그인·보안 관리 UI 회귀 테스트 통과 ✅');
+
+for(const page of ['index.html','guide.html','hospital-pc.html']){const html=fs.readFileSync(path.join(root,page),'utf8');ck(page+' 비밀번호 입력·로그인 호출 제거',!html.includes('type="password"')&&!html.includes('BazAuth.login('));[...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].forEach(m=>new Function(m[1]));}
+ck('공통 인증 클라이언트에 비밀번호 로그인 API가 없다',!/login:\s*function/.test(auth));
+
+const autodoc=fs.readFileSync(path.join(root,'autodoc/v2/index.html'),'utf8');
+ck('AutoDoc도 비밀번호 입력 대신 Google 허브로 안내한다',!autodoc.includes('type="password"')&&!autodoc.includes('auth.login(')&&autodoc.includes('href="../../index.html"'));

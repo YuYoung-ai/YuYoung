@@ -26,7 +26,7 @@ globalThis.fetch=async(url,options)=>{
   else body={success:true,request:{id:'work',revision:++revision},history:[]};
   return new Response(JSON.stringify(body));
 };
-function token(name){const payload=Buffer.from(JSON.stringify({n:name,l:1,e:Math.floor(Date.now()/1000)+3600,ep:1})).toString('base64url');return payload+'.'+crypto.createHmac('sha256',secret).update(payload).digest('base64url');}
+function token(name){const payload=Buffer.from(JSON.stringify({n:name,l:1,e:Math.floor(Date.now()/1000)+3600,ep:1,u:'g:'+crypto.createHash('sha256').update(name).digest('base64url')})).toString('base64url');return payload+'.'+crypto.createHmac('sha256',secret).update(payload).digest('base64url');}
 const alice=token('A'),bob=token('B');
 const originalSource=stripTypeScriptTypes(fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8')).replace(/^import .* from .*;\s*$/gm,'');
 // Observe the join boundary in the VM only. Authentication and digest use real

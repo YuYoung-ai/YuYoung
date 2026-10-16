@@ -27,7 +27,7 @@ const TTL = 30*86400000, DEVICE_TTL = 90*86400000, PUSH_TTL = 86400000;
 const norm = (v:any) => String(v||'').normalize('NFKC').trim().replace(/\s+/g,'');
 const clone = (v:any) => structuredClone(v);
 const live = (r:Obj) => r&&!r.deletedAt&&!r.purgedAt&&!['완료','취소'].includes(r.status);
-const uidOK = (v:any) => /^[gp]:[A-Za-z0-9_-]{43}$/.test(String(v));
+const uidOK = (v:any) => /^g:[A-Za-z0-9_-]{43}$/.test(String(v));
 async function digest(v:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 
 // Called inside the existing work transaction. Source/Flow imports never produce alerts.
@@ -112,7 +112,9 @@ export function createWorkNotifications(kv:any,options:Obj){
  function eligible(e:Obj,a:Obj,d:Obj){
   if(e.kind==='roster'&&(e.offPeople||[]).some((name:string)=>norm(name)===norm(a.engineer)||norm(name)===norm(a.name)))return false;
   if(a.level>=3&&e.schema===2)return a.preferences?.[category(e)]!==false;
-  if(e.audience==='author')return !!e.author&&norm(a.name)===norm(e.author)&&d.accounts.filter((x:Obj)=>norm(x.name)===norm(e.author)).length===1;
+  // Work ownership is the authenticated account name. A staff member may have
+  // several authorized Google accounts; each active login needs its own inbox.
+  if(e.audience==='author')return !!e.author&&norm(a.name)===norm(e.author);
   return e.audience==='all'||!!e.engineer&&norm(a.engineer)===norm(e.engineer);
  }
  async function rosterReminder(){

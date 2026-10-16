@@ -41,18 +41,6 @@ async function refresh() {
 }
 
 export const auth = {
-  async login(password) {
-    const b = baz();
-    if (!b) throw new Error('BazAuth 미로드');
-    const r = await b.login(password);
-    if (r && r.ok) {
-      cachedSession = buildSession(r.level);
-      workspaceContext.setActive(cachedSession ? cachedSession.workspaceId : CONFIG.DEFAULT_WORKSPACE);
-      this._startWatch();
-    }
-    return r;
-  },
-
   logout() {
     const b = baz();
     if (b) b.logout();

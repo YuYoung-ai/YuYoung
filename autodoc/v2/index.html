@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/app.css">
   <!-- v1 전역 인증 라이브러리 (무수정 재사용) -->
-  <script src="../../auth.js"></script>
+  <script src="../../auth.js?v=251"></script>
 </head>
 <body>
   <div id="root"></div>
@@ -188,25 +188,10 @@
       root.appendChild(el(`
         <div class="login-wrap"><div class="card login-card">
           <div class="brand" style="font-size:var(--font-h1);font-weight:700">⌂ AutoDoc</div>
-          <p style="color:var(--ui-text-weak)">접속 비밀번호를 입력하세요.</p>
-          <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
-          <button class="btn primary" id="go" style="width:100%">로그인</button>
-          <p id="err" style="color:var(--ui-danger);min-height:1.2em"></p>
+          <p style="color:var(--ui-text-weak)">등록된 Google 계정으로 로그인한 뒤 AutoDoc을 열어 주세요.</p>
+          <a class="btn primary" href="../../index.html" style="width:100%">Google 로그인</a>
         </div></div>
       `));
-      const doLogin = async () => {
-        const pw = document.getElementById('pw').value;
-        const err = document.getElementById('err');
-        err.textContent = '';
-        try {
-          const r = await auth.login(pw);
-          if (r && r.ok) renderShell();
-          else err.textContent = (r && r.message) || '로그인 실패 — 비밀번호를 확인하세요.';
-        } catch (e) { err.textContent = '인증 서버에 연결할 수 없습니다.'; }
-      };
-      document.getElementById('go').onclick = doLogin;
-      document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-      setTimeout(() => { const p = document.getElementById('pw'); if (p) p.focus(); }, 50);
     }
 
     (async () => {

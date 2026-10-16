@@ -10,14 +10,14 @@
  *
  * 토큰 형식(기존과 동일):
  *   token   = base64url(payload) + "." + base64url(HMAC_SHA256(secret, base64url(payload)))
- *   payload = {"n":이름,"l":레벨,"e":만료(초),"ep":에폭}
+ *   payload = {"n":이름,"l":레벨,"e":만료(초),"ep":에폭,"u":"g:계정식별자"}
  *
  * API 계약:
- *   POST {action:'login',  password, remember?} → {ok, token, level, name, expires, device?}
  *   POST {action:'verify', token}               → {ok, level, name}
  *   POST {action:'logout', token}               → {ok:true}
  *   GET  ?action=verify&token=…                 → {ok, level, name}   (데이터 GAS용)
- *   GET  ?action=ping                           → {ok, ver, mode, fp, creds, kv}
+ *   POST {action:'google_login', idToken, remember?} → {ok, token, level, name, expires, device}
+ *   GET  ?action=ping                           → {ok, ver, mode, passwordAuth:false, kv}
  *   ── 기기 자동 로그인(선택 기능, Deno KV 필요) ──
  *   POST {action:'device_login',  device}       → {ok, token, level, name, expires, device}
  *   POST {action:'device_logout', device}       → {ok:true}
@@ -28,9 +28,6 @@
  *   TOKEN_SECRET     : 보안시트 Config 의 TOKEN_SECRET 과 '동일'(필수)
  *   TOKEN_EPOCH      : 보안시트와 동일(기본 "1"). 전원 로그아웃 시 양쪽 다 올린다
  *   TOKEN_TTL_HOURS  : 세션 토큰 유효시간(기본 "6")
- *   CREDENTIALS      : 계정 목록 JSON 배열
- *       [{"pwsha":"<sha256(base64url)>","level":2,"name":"홍길동"}, ...]  (해시 권장)
- *       또는 [{"pw":"평문","level":1,"name":"홍길동"}, ...]              (편의용)
  *   DEVICE_TTL_DAYS  : 기억된 기기 유효기간(기본 "30", 사용 시마다 슬라이딩 갱신)
  *   DEVICE_AUTH_ENABLED: 기기 로그인 서버 스위치(기본 "true"). false면 device_* 전부 거부
  *   ALLOWED_ORIGINS  : 브라우저 호출 허용 Origin(쉼표 구분, 기본 GitHub Pages Origin)
@@ -51,7 +48,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications,notificationActivation } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.10.0-work-notifications";
+const VER = "deno-1.11.0-google-only";
 
 const enc = new TextEncoder();
 
@@ -137,23 +134,6 @@ try {
   console.error("GOOGLE_USERS 환경변수 JSON 파싱 실패 — Google 로그인 허용 명단 seed를 만들 수 없습니다");
 }
 
-type Cred = { pw?: string; pwsha?: string; level: number; name: string };
-let CREDS: Cred[] = [];
-try {
-  const raw = Deno.env.get("CREDENTIALS") || "[]";
-  const parsed = JSON.parse(raw);
-  if (Array.isArray(parsed)) {
-    CREDS = parsed.map((c) => ({
-      pw: typeof c.pw === "string" ? c.pw : undefined,
-      pwsha: typeof c.pwsha === "string" ? c.pwsha : undefined,
-      level: Number(c.level) || 1,
-      name: String(c.name || ""),
-    }));
-  }
-} catch (_e) {
-  console.error("CREDENTIALS 환경변수 JSON 파싱 실패 — 로그인 전부 거부됩니다");
-}
-
 /* ── Deno KV (지연 오픈 — 없으면 null, 기기 기능만 비활성) ── */
 let _kv: Deno.Kv | null | undefined = undefined;
 async function getKv(): Promise<Deno.Kv | null> {
@@ -213,21 +193,8 @@ async function verifyToken(token: string) {
   if (!o || typeof o.e === "undefined") return { ok: false, error: "bad_payload" };
   if (Math.floor(Date.now() / 1000) > Number(o.e)) return { ok: false, error: "expired" };
   if (Number(o.ep || 0) < EPOCH) return { ok: false, error: "revoked" };
+  if (!/^g:[A-Za-z0-9_-]{43}$/.test(String(o.u||""))) return {ok:false,error:"google_login_required"};
   return { ok: true, level: Number(o.l) || 0, name: String(o.n || ""), uid:String(o.u||'') };
-}
-
-/* ── 비밀번호 대조 ── */
-async function matchCred(password: string): Promise<Cred | null> {
-  const pw = String(password == null ? "" : password).trim();
-  if (!pw) return null;
-  const inHash = await sha256B64u(pw);
-  let hit: Cred | null = null;
-  /* 조기 반환 없이 전체 순회 — 계정 수에 따른 타이밍 노출 완화 */
-  for (const c of CREDS) {
-    if (c.pwsha && safeEq(c.pwsha, inHash)) hit = hit || c;
-    else if (c.pw && safeEq(c.pw, pw)) hit = hit || c;
-  }
-  return hit;
 }
 
 /* ── Google OpenID Connect ID 토큰 검증 ── */
@@ -685,11 +652,6 @@ async function notificationAccounts(kv:Deno.Kv){
     const user=entry.value;if(user.status!=='active')continue;
     const uid=await notificationUid('g',user.email);accounts.set(uid,{uid,name:user.name||user.email,level:user.level,label:'Google · '+user.email});
   }
-  for(const cred of CREDS){
-    if(!cred.name||(!cred.pw&&!cred.pwsha))continue;
-    const uid=await notificationUid('p',cred.name),old=accounts.get(uid);
-    accounts.set(uid,{uid,name:cred.name,level:Math.max(old?.level||0,cred.level),label:'비밀번호 계정'});
-  }
   return [...accounts.values()];
 }
 let notificationInstance:ReturnType<typeof createWorkNotifications>|null=null;
@@ -728,6 +690,7 @@ async function handleAction(
     return json({
       ok: true,
       googleAuth: GOOGLE_AUTH_ENABLED,
+      passwordAuth: false,
       googleClientId: GOOGLE_AUTH_ENABLED ? GOOGLE_CLIENT_ID : "",
       deviceAuth: DEVICE_AUTH_ENABLED,
       workApi: WORK_API_ENABLED,
@@ -737,15 +700,19 @@ async function handleAction(
 
   if (action === "google_login") {
     if (!GOOGLE_AUTH_ENABLED) return json({ ok: false, error: "google_auth_disabled" }, 403);
+    const started=Date.now(),rate=await loginRateStatus(clientIp);
+    if(rate.blocked)return json({ok:false,error:'rate_limited',retryAfter:Math.ceil(rate.retryAfterMs/1000)},429);
     try {
       const claims = await verifyGoogleIdToken(String(p.idToken ?? ""));
       const kv = await getKv();
       if (!kv) return json({ ok: false, error: "kv_unavailable" });
       const user = await findAndBindGoogleUser(kv, claims);
       if (!user) {
+        await recordLoginFailure(clientIp);
         await writeAudit("google_login", String(claims.email || "unknown"), "", "denied", clientIp);
         return json({ ok: false, error: "access_denied" }, 403);
       }
+      await clearLoginFailures(clientIp);
       const iss = await issueToken(user.name || user.email, user.level, TTL_HOURS, await notificationUid('g',user.email));
       let device = "";
       if (p.remember && DEVICE_AUTH_ENABLED) {
@@ -773,43 +740,15 @@ async function handleAction(
         device,
       });
     } catch (e) {
+      await recordLoginFailure(clientIp);
+      await sleep(Math.max(0,LOGIN_FAILURE_DELAY_MS-(Date.now()-started)));
       console.warn("Google ID 토큰 검증 실패:", e instanceof Error ? e.message : String(e));
       await writeAudit("google_login", "unknown", "", "invalid_token", clientIp);
       return json({ ok: false, error: "google_auth_failed" }, 401);
     }
   }
 
-  if (action === "login") {
-    const started = Date.now();
-    if (!SECRET) return json({ ok: false, error: "server_misconfigured" });
-    if (!CREDS.length) return json({ ok: false, error: "no_credentials" });
-    const rate = await loginRateStatus(clientIp);
-    if (rate.blocked) {
-      await sleep(Math.max(0, LOGIN_FAILURE_DELAY_MS - (Date.now() - started)));
-      return json({ ok: false, error: "rate_limited", retryAfter: Math.ceil(rate.retryAfterMs / 1000) }, 429);
-    }
-    const hit = await matchCred(String(p.password ?? ""));
-    if (!hit) {
-      await recordLoginFailure(clientIp);
-      await writeAudit("password_login", "unknown", "", "denied", clientIp);
-      await sleep(Math.max(0, LOGIN_FAILURE_DELAY_MS - (Date.now() - started)));
-      return json({ ok: false, error: "invalid_password" });
-    }
-    await clearLoginFailures(clientIp);
-    const iss = await issueToken(hit.name, hit.level, TTL_HOURS, await notificationUid('p',hit.name));
-    let device = "";
-    if (p.remember && DEVICE_AUTH_ENABLED) {
-      const kv = await getKv();
-      if (kv) {
-        device = newDeviceToken();
-        const now = Date.now();
-        const rec: DevRec = { n: hit.name, l: hit.level, ep: EPOCH, created: now, seen: now, ua: String(p.__ua || "") };
-        await kv.set(["dev", device], rec, { expireIn: DEVICE_TTL_MS });
-      }
-    }
-    await writeAudit("password_login", hit.name, "", "ok", clientIp, { level: hit.level });
-    return json({ ok: true, token: iss.token, level: hit.level, name: hit.name, expires: iss.expires, device });
-  }
+  if (action === "login") return json({ok:false,error:"google_login_required"},403);
 
   if (action === "verify") {
     const r = await verifyToken(String(p.token ?? ""));
@@ -829,6 +768,7 @@ async function handleAction(
     const r = await kv.get<DevRec>(["dev", dev]);
     const v = r.value;
     if (!v) return json({ ok: false, error: "device_not_found" });
+    if(!v.uid)return json({ok:false,error:"google_login_required"},403);
     if (Number(v.ep || 0) < EPOCH) { await kv.delete(["dev", dev]); return json({ ok: false, error: "revoked" }); }
     let name = v.n;
     let level = v.l;
@@ -842,7 +782,7 @@ async function handleAction(
       name = user.name || user.email;
       level = user.level; // 관리 화면에서 바꾼 최신 권한을 즉시 반영한다.
     }
-    const iss = await issueToken(name, level, TTL_HOURS, await notificationUid(v.uid?'g':'p',v.uid||name));
+    const iss = await issueToken(name, level, TTL_HOURS, await notificationUid('g',v.uid));
     await kv.set(["dev", dev], { ...v, n: name, l: level, seen: Date.now() }, { expireIn: DEVICE_TTL_MS });
     await writeAudit("device_login", v.uid || name, "", "ok", clientIp, { level });
     return json({ ok: true, token: iss.token, level, name, expires: iss.expires, device: dev });
@@ -865,7 +805,7 @@ async function handleAction(
     for await (const e of kv.list<DevRec>({ prefix: ["dev"] })) {
       const tok = String(e.key[1]);
       const did = (await sha256B64u(tok)).slice(0, 10);
-      const v = e.value;
+      const v = e.value;if(!v.uid)continue;
       out.push({ did, name: v.n, email: v.uid || "", level: v.l, created: v.created, seen: v.seen, ua: v.ua });
     }
     out.sort((a, b) => Number(b.seen || 0) - Number(a.seen || 0));
@@ -962,7 +902,7 @@ async function handleAction(
       ver: VER,
       mode: SECRET ? "signed" : "no_secret",
       fp,
-      creds: CREDS.length,
+      passwordAuth: false,
       kv: kv !== null,
       queryIndexReady: kv ? await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).queryIndexReady() : false,
       deviceAuth: DEVICE_AUTH_ENABLED,
