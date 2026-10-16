@@ -51,7 +51,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.8.2-work-sync-jobs";
+const VER = "deno-1.9.0-handover-review";
 
 const enc = new TextEncoder();
 
@@ -514,8 +514,8 @@ function withCors(res: Response, req: Request): Response {
 /* 병원 업무 중계: DB는 Sheets 유지, ACL과 업무 변경은 GAS가 최종 검증한다.
  * 기준 정보만 짧게 재사용한다. 요청/이력/자동 완료 응답은 저장하지 않는다.
  * KV·CDN에 업무/토큰을 저장하지 않고, 토큰은 upstream POST 본문에만 전달한다. */
-const WORK_READS = new Set(["work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_document_status", "work_index_prepare", "work_handover_candidates", "work_handover_detail", "work_handover_refresh", "work_flow_preview", "work_flow_relink_preview"]);
-const WORK_WRITES = new Set(["work_save", "work_request_edit", "work_claim", "work_status", "work_source_review", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_field_result_link", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
+const WORK_READS = new Set(["work_review_config", "work_review_get", "work_review_history", "work_review_receipt", "work_review_inbox", "work_bootstrap", "work_sync", "work_references_refresh", "work_roster", "work_detail", "work_document_status", "work_index_prepare", "work_handover_candidates", "work_handover_detail", "work_handover_refresh", "work_flow_preview", "work_flow_relink_preview"]);
+const WORK_WRITES = new Set(["work_document_retry", "work_review_save", "work_review_activate", "work_save", "work_request_edit", "work_claim", "work_status", "work_source_review", "work_roster_save", "work_roster_delete", "work_history_add", "work_history_update", "work_result_save", "work_field_result_link", "work_complete", "work_delete", "work_restore", "work_purge", "work_flow_import", "work_flow_relink"]);
 function workUpstream(): string {
   try {
     const u = new URL(Deno.env.get("WORK_GAS_URL") || "");
@@ -549,10 +549,10 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
   if (!verified.ok) return fail("로그인이 만료되었습니다.", 401);
   const kv = await getKv();
   if (kv) {
-    const store = createWorkStore(kv);
+    const store = createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''});
     if ((await store.status()).ready) {
       if(action==='work_references_refresh'){
-        try{await store.checkAccess({name:verified.name||'',level:verified.level||0});}
+        try{await store.checkAccess({uid:verified.uid||'',name:verified.name||'',level:verified.level||0});}
         catch{return fail('업무관리 접근 권한이 없습니다.',403);}
         const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
         try{
@@ -561,7 +561,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           const url=new URL(WORK_GAS_URL);url.searchParams.set('action','hospdbrich');url.searchParams.set('force','1');url.searchParams.set('token',String(p.token||''));
           const upstreamAt=performance.now(),response=await fetch(url,{signal:ctl.signal,redirect:'follow'}),body=await response.json(),upstreamMs=Math.round(performance.now()-upstreamAt);
           if(!body.success||!Array.isArray(body.data))throw new Error('병원정보DB 조회 실패');
-          const existing=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
+          const existing=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
           const hospitals=[];
           for(const row of body.data){
             const key=[row.name,row.sn,row.region].map(x=>String(x||'').trim()).join('\u001f');
@@ -570,13 +570,13 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
             hospitals.push({id,key,name:String(row.name||'').trim(),sn:String(row.sn||'').trim(),region:String(row.region||'').trim(),sales:String(row.sales||'').trim(),asType:String(row.asType||'').trim(),ncare:String(row.ncare||'').trim()});
           }
           await store.bridge('references',{hospitals,references:{referenceCheckedAt:new Date().toISOString()}});
-          const data=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{name:verified.name||'',level:verified.level||0});
+          const data=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
           return workReply({body:data as WorkBody,status:200,upstreamMs},'kv-references',started);
         }catch{return fail('병원정보DB 최신 조회에 실패했습니다. 기존 값은 보관되어 있습니다. 다시 시도하세요.',502);}
         finally{clearTimeout(timer);}
       }
       if (action === 'work_handover_candidates' || action === 'work_handover_detail' || action === 'work_handover_refresh') {
-        try {await store.checkAccess({name:verified.name||'',level:verified.level||0});}
+        try {await store.checkAccess({uid:verified.uid||'',name:verified.name||'',level:verified.level||0});}
         catch {return fail('업무관리 접근 권한이 없습니다.',403);}
         const payload:Record<string,unknown>={...p,action};
         delete payload.__ua;delete payload.target;
@@ -599,7 +599,9 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
           const upstreamMs=Math.round(performance.now()-upstreamAt);
           if (!body.success) return workReply({body,status:200,upstreamMs},'kv-handover',started);
           await store.ingestSources(action==='work_handover_detail'?[body.source]:body.data,undefined,p.requestId?String(p.requestId):undefined);
-          if(p.requestId)body.workDetail=await store.handle({action:'work_detail',id:p.requestId},{name:verified.name||'',level:verified.level||0});
+          if(action==='work_handover_detail')body.source=(await store.sources(String(payload.hospitalName||body.source.hospitalName))).find((s:any)=>s.recordId===body.source.recordId)||body.source;
+          else if(action==='work_handover_candidates')body.data=await store.sources(String(payload.hospitalName||''));
+          if(p.requestId)body.workDetail=await store.handle({action:'work_detail',id:p.requestId},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
           return workReply({body,status:200,upstreamMs},'kv-handover',started);
         } catch { return fail('Handover 원본 조회에 실패했습니다. 다시 불러오세요.',502); }
         finally {clearTimeout(timer);}
@@ -608,7 +610,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         try{const mapping=await (await notificationService(kv)).handle({action:'notification_config'},verified);engineer='engineer' in mapping?String(mapping.engineer||''):'';}
         catch{return fail('본인의 담당자 연결을 확인하지 못했습니다. 앱 설치·알림 설정을 확인하세요.',403);}
       }
-      const body=await store.handle({...p,action},{name:verified.name||'',level:verified.level||0,engineer});
+      const body=await store.handle({...p,action},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0,engineer});
       if(body.success&&['work_save','work_request_edit','work_claim'].includes(action)){
         // Delivery failure must never roll back a successfully saved request.
         try{await (await notificationService(kv)).process(String(p.operationId||''),4);}
@@ -693,7 +695,7 @@ let notificationInstance:ReturnType<typeof createWorkNotifications>|null=null;
 async function notificationService(kv:Deno.Kv){
   if(!notificationInstance){
     const sender=createPushSender(kv);
-    notificationInstance=createWorkNotifications(kv,{store:createWorkStore(kv),accounts:()=>notificationAccounts(kv),publicKey:sender.publicKey,send:sender.send});
+    notificationInstance=createWorkNotifications(kv,{store:createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}),accounts:()=>notificationAccounts(kv),publicKey:sender.publicKey,send:sender.send});
   }
   return notificationInstance;
 }
@@ -717,7 +719,7 @@ async function handleAction(
     if (!Number.isFinite(at)||Math.abs(Date.now()-at)>300000||!/^[A-Za-z0-9_-]{8,90}$/.test(nonce)||!safeEq(await hmacB64u('baz-work-bridge-v1\n'+JSON.stringify(clean)),String(p.signature||'')))return json({success:false,error:'연동 인증 실패'},403);
     const nonceKey=['hospitalwork-v2','bridgeNonce',nonce],entry=await kv.get(nonceKey);
     if(entry.value!==null||!(await kv.atomic().check(entry).set(nonceKey,true,{expireIn:600000}).commit()).ok)return json({success:false,error:'이미 처리한 연동 요청입니다.'},409);
-    try{return json(await createWorkStore(kv).bridge(String(p.verb||''),(p.payload||{}) as Record<string,any>));}
+    try{return json(await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).bridge(String(p.verb||''),(p.payload||{}) as Record<string,any>));}
     catch(e){return json({success:false,error:e instanceof Error?e.message:'업무 연동 실패'},500);}
   }
   if (action.startsWith("work_")) return workForward(action, p);
@@ -961,7 +963,7 @@ async function handleAction(
       fp,
       creds: CREDS.length,
       kv: kv !== null,
-      queryIndexReady: kv ? await createWorkStore(kv).queryIndexReady() : false,
+      queryIndexReady: kv ? await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).queryIndexReady() : false,
       deviceAuth: DEVICE_AUTH_ENABLED,
       googleAuth: GOOGLE_AUTH_ENABLED,
       originPolicy: ALLOWED_ORIGINS.size > 0 ? "allowlist" : "deny_browser",
@@ -973,10 +975,10 @@ async function handleAction(
 }
 
 Deno.cron('baz-work-push-delivery', '* * * * *', async()=>{
-  const kv=await getKv();if(!kv||(await createWorkStore(kv).status()).ready!==true)return;
+  const kv=await getKv();if(!kv||(await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).status()).ready!==true)return;
   try{await (await notificationService(kv)).process();}catch{console.warn('접수 알림 발송은 다음 주기에 재시도합니다.');}
-  try{await createWorkStore(kv).prepareIndexes();}catch{console.warn('업무 조회 준비는 다음 주기에 재시도합니다.');}
-  try{await createWorkStore(kv).processPendingMatches({backfill:true});}catch{console.warn('Handover 자동 연결은 다음 주기에 재시도합니다.');}
+  try{await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).prepareIndexes();}catch{console.warn('업무 조회 준비는 다음 주기에 재시도합니다.');}
+  try{await createWorkStore(kv,{reviewAdminUid:Deno.env.get('HANDOVER_REVIEW_ADMIN_UID')||''}).processPendingMatches({backfill:true});}catch{console.warn('Handover 자동 연결은 다음 주기에 재시도합니다.');}
 });
 
 Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {

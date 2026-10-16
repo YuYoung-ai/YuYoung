@@ -15,7 +15,7 @@ function fixture(options={}){
  vm.createContext(context);vm.runInContext(actual,context);
  return {context,nodes,calls,target,open:()=>context.queueNotification(target)};
 }
-const good=fixture();await good.open();assert.deepEqual(good.calls.map(x=>x.a),['work_handover_refresh','sync','detail','notification_read']);assert.equal(good.calls[0].p.requestId,'request_123');assert.equal(good.calls[2].force,true);assert.equal(good.calls[3].p.revision,2);assert.equal(good.context.notificationTarget,null);
+const good=fixture();await good.open();assert.deepEqual(good.calls.map(x=>x.a),['work_detail','sync','detail','notification_read']);assert.equal(good.calls[0].p.id,'request_123');assert.equal(good.calls[2].force,true);assert.equal(good.calls[3].p.revision,2);assert.equal(good.context.notificationTarget,null);
 for(const options of [{dialog:true},{claiming:true},{comment:'작성 중 댓글'}]){const f=fixture(options);await f.open();assert.equal(f.calls.length,0);assert.equal(f.context.notificationTarget.requestId,f.target.requestId);assert.match(f.nodes.get('notification-launch-message').textContent,/유지/);}
 for(const options of [{sourceFailure:true},{syncFailure:true},{midDraft:true}]){const f=fixture(options);await f.open();assert.ok(!f.calls.some(x=>x.a==='notification_read'));assert.ok(!f.calls.some(x=>x.a==='detail'));assert.ok(f.context.notificationTarget);assert.match(f.nodes.get('notification-launch-message').textContent,/실패/);}
 const race=fixture({readFailure:true});await race.open();assert.ok(race.context.notificationTarget,'revision race keeps the retry target');assert.match(race.nodes.get('notification-launch-message').textContent,/리비전 변경/);

@@ -5,8 +5,9 @@ import {assignmentNotification,notificationKey,removeRequestNotifications} from 
 import {sourceReview,pdfBasis} from './work-source-review.ts';
 import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
 import {createWorkMatching} from './work-matching.ts';
+import {createHandoverReview,reviewBody,bodyHash} from './work-handover-review.ts';
 type Obj = Record<string, any>;
-type Actor = {name:string;level:number;engineer?:string};
+type Actor = {name:string;level:number;engineer?:string;uid?:string};
 const NS='hospitalwork-v2',STATES=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
 const key=(...parts:any[])=>[NS,...parts];
 const copy=(v:any)=>JSON.parse(JSON.stringify(v));
@@ -50,10 +51,11 @@ function datetime(v:any,required:boolean,label:string){
 async function hash(v:any){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(v))))].map(b=>b.toString(16).padStart(2,'0')).join('');}
 function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48000)throw new Error('기록이 너무 큽니다. 내용을 줄여주세요.');return v;}
 
-export function createWorkStore(kv:any){
+export function createWorkStore(kv:any,options:Obj={}){
  const roster=createWorkRoster(kv);
  const indexes=createWorkIndexes(kv);
  const matching=createWorkMatching(kv);
+ const review=createHandoverReview(kv,options);
  async function get(...parts:any[]){return kv.get(key(...parts));}
  async function values(parts:any[],options:Obj={}){const out:Obj[]=[];for await(const e of kv.list({prefix:key(...parts)},options))out.push(e.value);return out;}
  async function status(){return (await get('meta')).value||{ready:false,seq:0};}
@@ -298,7 +300,7 @@ export function createWorkStore(kv:any){
  async function detail(p:Obj){
   const e=await request(p.id,true),r=e.value;
   const limit=100,his=kv.list({prefix:key('history',r.id)},{limit,cursor:p.historyCursor||undefined}),audit=kv.list({prefix:key('audit',r.id)},{limit,cursor:p.auditCursor||undefined,reverse:true});
-  const hs:Obj[]=[],logs:Obj[]=[];for await(const x of his)hs.push(x.value);for await(const x of audit){const ev=x.value;logs.push({id:ev.id,kind:ev.kind,at:ev.at||ev.request.updatedAt,actor:ev.actor||ev.request.updatedBy,before:ev.before,requestBefore:ev.requestBefore,after:ev.history||ev.request});}
+  const hs:Obj[]=[],logs:Obj[]=[];for await(const x of his){const h=x.value;if(h.kind==='result'&&h.source?.recordId){const doc=(await get('document',h.source.recordId)).value;if(doc)h.source={...h.source,pdf:doc.pdf};}hs.push(h);}for await(const x of audit){const ev=x.value;logs.push({id:ev.id,kind:ev.kind,at:ev.at||ev.request.updatedAt,actor:ev.actor||ev.request.updatedBy,before:ev.before,requestBefore:ev.requestBefore,after:ev.history||ev.request});}
   logs.reverse();const ref=await refs();
   return {success:true,request:r,history:hs,logs,requests:(await hospitalRequests(r.hospitalId)).filter(live),historyCursor:hs.length===limit?his.cursor:null,auditCursor:logs.length===limit?audit.cursor:null,updatedAt:new Date().toISOString(),sourceCheckedAt:ref?.sourceCheckedAt||'',storage:'kv'};
  }
@@ -311,7 +313,7 @@ export function createWorkStore(kv:any){
   const meta=await status(),after=Number(p.revision||0),upper=Number(p.snapshotSeq??meta.seq);
   if(!Number.isSafeInteger(after)||after<0||!Number.isSafeInteger(upper)||upper<after||upper>meta.seq)return {success:false,code:'REVISION_INVALID',error:'동기화 기준이 잘못됐습니다. 전체 동기화를 실행하세요.'};
   const rows:Obj[]=[],it=kv.list({start:key('change',after+1),end:key('change',upper+1)},{limit:100});for await(const e of it)rows.push(e.value);
-  const map=new Map();rows.forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
+  const map=new Map();rows.filter(x=>x.request).forEach(x=>map.set(x.request.id,x.request));const revision=rows.length?rows.at(-1)!.seq:after,reference=await refs();
   return {...await roster.read(p.rosterMonth),success:true,storage:'kv',requests:[...map.values()],revision:String(revision),snapshotSeq:String(upper),nochange:!rows.length,more:revision<upper,queryIndexReady:await indexes.ready(),hospitals:await values(['hospitalRef']),engineers:reference.engineers,updatedAt:new Date().toISOString(),sourceCheckedAt:reference.sourceCheckedAt||'',bridgeStatus:(await get('bridgeStatus')).value};
  }
  async function flowContext(writing=false){return {hospitals:await values(['hospitalRef']),requests:writing?null:await values(['request']),imports:writing?null:new Map((await values(['flowImport'])).map(r=>[r.sourceId,r]))};}
@@ -437,7 +439,8 @@ export function createWorkStore(kv:any){
    if(records.length>100)throw new Error('연결된 현장 기록이 많습니다. 처리 이력에서 해당 장비를 선택하세요.');
    return {success:true,request:r,records};
   }
-  const recordId=text(p.recordId,120,'원본 기록'),owner=await sourceLink(recordId);
+  const recordId=text(p.recordId,120,'원본 기록'),registered=await get('document',recordId),owner=await sourceLink(recordId);
+  if(registered.value){const doc=registered.value;if(doc.requestId&&doc.requestId!==r.id||owner.inUse&&owner.entry.value?.requestId!==r.id)throw new Error('이 문서는 다른 접수에 연결되어 있습니다.');const comment=(await get('history',r.id,'pdf_'+await hash(recordId))).value,pdf=doc.pdf,matches=!p.sha256||pdf.sha256===p.sha256;return {success:true,request:r,source:{...((await get('source',doc.context.hospitalName,recordId)).value||doc.context),recordId,pdf},documentVersions:await values(['documentVersion',recordId]),sourceLinked:owner.entry.value?.requestId===r.id,documentRegistered:true,pdfStored:matches,commentAttached:!!(matches&&!comment?.deletedAt&&comment?.attachment?.sha256===pdf.sha256),commentDeleted:!!comment?.deletedAt,documentChanged:!!(p.sha256&&pdf.sha256!==p.sha256)};}
   if(owner.entry.value?.requestId!==r.id)throw new Error('해당 현장 기록이 이 접수에 연결되어 있지 않습니다. 원본 연결을 확인하세요.');
   const h=(await get('history',r.id,owner.entry.value.historyId)).value;
   if(h?.kind!=='result'||h.source?.recordId!==recordId||h.source.origin==='flow')throw new Error('연결된 Handover 처리 기록을 확인하세요.');
@@ -451,6 +454,13 @@ export function createWorkStore(kv:any){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
    switch(p.action){
+    case 'work_review_config':return await review.config(who);
+    case 'work_review_get':return await review.read(p,who);
+    case 'work_review_history':return await review.history(p,who);
+    case 'work_review_save':return await review.save(p,who);
+    case 'work_review_receipt':return await review.receipt(p,who);
+    case 'work_review_inbox':return await review.inbox(p,who);
+    case 'work_review_activate':return await review.activate(who);
     case 'work_index_prepare':return await indexes.prepare();
     case 'work_bootstrap':return await bootstrap(p,who);
     case 'work_sync':return await sync(p);
@@ -462,6 +472,7 @@ export function createWorkStore(kv:any){
     case 'work_flow_relink':return await flowRelink(p,who);
     case 'work_detail':return await detail(p);
     case 'work_document_status':return await documentStatus(p);
+    case 'work_document_retry':await reconcileDocuments();return await documentStatus(p);
     case 'work_save':case 'work_request_edit':{
      const saved=await save(p,who);
      if(!saved.success||!p.id)return saved;
@@ -486,19 +497,31 @@ export function createWorkStore(kv:any){
     case 'work_purge':return await purge(p,who);
     default:throw new Error('지원하지 않는 업무 API입니다.');
    }
-  }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
+  }catch(e:any){return {success:false,error:e.message||'업무 처리 실패',code:e.code,retrySameOperation:!!e.retrySameOperation,deleted:!!e.deleted,purged:!!e.purged,current:e.current};}
  }
  async function ingestSources(items:Obj[],checkedAt=new Date().toISOString(),requestId?:string){
-  for(const item of items){const s:Obj={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;for(let tries=0;tries<12;tries++){
+  for(const item of items){let s:Obj={...item,gubun:workKind(item.gubun)};if(s.pdf)s.pdf=inspectionPdf(s.pdf);if(!s.recordId||!s.hospitalName||!kind(s)||s.recordId.startsWith('legacy_'))continue;const incoming=copy(s);for(let tries=0;tries<12;tries++){s=copy(incoming);
    const index=await get('sourceIndex',s.recordId),binding=await sourceLink(s.recordId);
    const linkedHistory=binding.entry.value?await get('history',binding.entry.value.requestId,binding.entry.value.historyId):null;
    const previousName=index.value?.hospitalName||linkedHistory?.value?.source?.hospitalName||s.hospitalName;
    const previous=await get('source',previousName,s.recordId),old=previousName===s.hospitalName?previous:await get('source',s.hospitalName,s.recordId),meta=await get('meta');
    const observed=index.value?.observedAt||previous.value?.observedAt||old.value?.observedAt;
    if(observed&&(!s.observedAt||observed>s.observedAt))break;
+   const policy=await get('reviewPolicy'),canonical=await get('reviewRecord',s.recordId);
+   let record=canonical.value,exception:Obj|null=null;
+   if(policy.value?.active||record){
+    if(!record){const baseline=reviewBody(linkedHistory?.value?.source||previous.value||s);record={recordId:s.recordId,original:baseline,published:baseline,bodyVersion:await bodyHash(baseline),originalVersion:await bodyHash(baseline),reviewVersion:0,provenance:previous.value||linkedHistory?.value?'이전 연동본':'현장 최초 저장본',originalMetadata:{author:s.originalAuthor||'',createdAt:s.createdAt||'',legacyVersion:s.version||''}};}
+    if(await bodyHash(s)!==record.originalVersion)exception={source:copy(s),reason:'IMMUTABLE_SOURCE_CHANGED',receivedAt:checkedAt};
+    s={...s,...record.published,version:record.bodyVersion,bodyVersion:record.bodyVersion,schemaVersion:2,reviewVersion:record.reviewVersion,reviewedBy:record.reviewedBy||'',reviewedAt:record.reviewedAt||''};
+   }
+   const document=await get('document',s.recordId);
+   if(document.value)s.pdf=document.value.pdf;
    // Source changes invalidate in-flight automatic matching as well as older source deliveries.
-   let tx=kv.atomic().check(old,previous,index,meta,binding.entry,...(linkedHistory?[linkedHistory]:[])).set(old.key,bounded(s)).set(index.key,{hospitalName:s.hospitalName,observedAt:s.observedAt||''}).set(key('sourcePending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId}).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
-   if(previousName!==s.hospitalName)tx=tx.delete(previous.key);
+   let tx=kv.atomic().check(old,previous,index,meta,binding.entry,...(linkedHistory?[linkedHistory]:[])).set(old.key,bounded(s)).set(index.key,{hospitalName:String(old.key[2]),observedAt:s.observedAt||''}).set(key('sourcePending',s.recordId),{hospitalName:String(old.key[2]),recordId:s.recordId}).set(meta.key,{...(meta.value||{ready:false,seq:0}),sourceGeneration:Number(meta.value?.sourceGeneration||0)+1});
+   tx=tx.check(policy,canonical,document);
+   if(record&&!canonical.value)tx=tx.set(canonical.key,bounded(record)).set(key('sourceArchive',s.recordId,record.originalVersion),bounded(linkedHistory?.value?.source||previous.value||item));
+   if(exception)tx=tx.set(key('sourceException',s.recordId,await bodyHash(item)),bounded(exception));
+   if(previousName!==String(old.key[2]))tx=tx.delete(previous.key);
    if(s.pdf&&(old.value?.pdf?.kind!=='inspection_pdf'||s.pdf.revision!==old.value?.pdf?.revision||s.pdf.sha256!==old.value?.pdf?.sha256))tx=tx.set(key('pdfPending',s.recordId),{hospitalName:s.hospitalName,recordId:s.recordId});
    tx=matching.enqueue(tx,[previous.value,s,binding.owner?.value]);
    if((await tx.commit()).ok)break;
@@ -521,6 +544,7 @@ export function createWorkStore(kv:any){
   await reconcileSourceUpdates();
   const matched=await matching.process(reconcileVisit);
   await reconcilePdfAttachments();
+  await reconcileDocuments();
   return matched;
  }
  async function reconcileVisit(name:string,date:string){
@@ -582,6 +606,41 @@ export function createWorkStore(kv:any){
    await kv.atomic().check(pending,src,binding.entry).delete(pending.key).commit();
   }
  }
+ async function registerDocuments(items:Obj[]){
+  if(!Array.isArray(items)||items.length>20)throw new Error('문서 전송 수를 확인하세요.');
+  for(const item of items){const recordId=text(item.recordId,120,'기록 ID'),pdf=inspectionPdf(item.pdf),context={hospitalName:text(item.context?.hospitalName,300,'병원'),date:text(item.context?.date,10,'처리일'),sn:text(item.context?.sn,300,'S/N')};if(!pdf||!recordId||!context.hospitalName||!/^\d{4}-\d{2}-\d{2}$/.test(context.date))throw new Error('문서 등록 정보를 확인하세요.');
+   for(let attempt=0;attempt<12;attempt++){
+    const old=await get('document',recordId),version=await get('documentVersion',recordId,pdf.revision),owner=await sourceLink(recordId);
+    if(version.value&&version.value.pdf.sha256!==pdf.sha256)throw new Error('같은 문서 버전의 파일이 다릅니다.');
+    if(old.value&&old.value.pdf.revision>=pdf.revision)break;
+    const requestId=String(item.requestId||owner.entry.value?.requestId||''),r=requestId?await request(requestId):null;
+    if(r&&(r.value.hospitalName!==context.hospitalName||r.value.visitAt?.slice(0,10)!==context.date||context.sn&&r.value.sn&&!serialMatch(context.sn,r.value.sn)))throw new Error('문서와 접수의 병원·처리일·장비가 다릅니다.');
+    if(owner.inUse&&owner.entry.value?.requestId!==requestId)throw new Error('다른 접수에 연결된 문서입니다.');
+    const doc=bounded({recordId,pdf,context,requestId,registeredAt:new Date().toISOString()});
+    let tx=kv.atomic().check(old,version,owner.entry,...(r?[r]:[])).set(old.key,doc).set(version.key,doc).set(key('documentPending',recordId),{recordId});
+    if((await tx.commit()).ok)break;if(attempt===11)throw new Error('문서 등록이 겹쳤습니다. 같은 파일로 재시도하세요.');
+   }
+  }
+  await reconcileDocuments();return {success:true};
+ }
+ async function reconcileDocuments(){
+  for await(const pending of kv.list({prefix:key('documentPending')})){
+   const doc=await get('document',pending.value.recordId),d=doc.value;if(!d)continue;
+   const owner=await sourceLink(d.recordId),requestId=d.requestId||owner.entry.value?.requestId;if(!requestId)continue;
+   const r=await get('request',requestId);if(!r.value||!live(r.value))continue;
+   if(owner.inUse&&owner.entry.value?.requestId!==requestId)continue;
+   const id='pdf_'+await hash(d.recordId),entry=await get('history',requestId,id);
+   if(!entry.value?.deletedAt&&(entry.value?.attachment?.sha256!==d.pdf.sha256||entry.value?.attachment?.revision!==d.pdf.revision)){
+    const saved=await mutate({action:'work_document_attach',recordId:d.recordId,requestId,documentRevision:d.pdf.revision,operationId:'doc_'+await hash([requestId,d.recordId,d.pdf.revision,d.pdf.sha256])},{name:d.pdf.uploadedBy||'내역서 자동 연결',level:0},async()=>{
+     const current=await request(requestId),latest=await get('document',d.recordId),comment=await get('history',requestId,id),link=await sourceLink(d.recordId);
+     if(latest.value?.pdf.sha256!==d.pdf.sha256||latest.value?.pdf.revision!==d.pdf.revision||link.inUse&&link.entry.value?.requestId!==requestId)return {response:{success:false}};
+     const now=new Date().toISOString(),next={...current.value,revision:current.value.revision+1,updatedAt:now,updatedBy:d.pdf.uploadedBy,latest:'AS/점검 내역서'},h={id,requestId,kind:'comment',body:'AS/점검 내역서',sourceRecordId:d.recordId,attachment:d.pdf,author:comment.value?.author||d.pdf.uploadedBy,createdAt:comment.value?.createdAt||now,updatedAt:now,revision:(comment.value?.revision||0)+1,deletedAt:'',deletedBy:''};
+     return {kind:'pdf_attachment',request:next,history:h,before:comment.value,checks:[current,latest,comment,link.entry],response:{success:true,request:next,history:h}};
+    });if(!saved.success)continue;
+   }
+   await kv.atomic().check(pending,doc,owner.entry).delete(pending.key).commit();
+  }
+ }
  async function seed(p:Obj){
   if((await status()).ready)throw new Error('활성화된 KV에는 기존 시트를 다시 가져올 수 없습니다.');
   await indexes.invalidate();
@@ -612,14 +671,15 @@ export function createWorkStore(kv:any){
    const checkedAt=String(p.checkedAt||'');if(!checkedAt||!Number.isFinite(Date.parse(checkedAt))||Date.parse(checkedAt)>Date.now()+60000)throw new Error('연동 확인 시각을 확인하세요.');
    for(const field of ['pendingCount','pendingEvents','failedCount'])if(!Number.isSafeInteger(p[field])||p[field]<0)throw new Error('연동 대기 건수를 확인하세요.');
    if(p.failedCount>p.pendingCount||p.pendingCount>p.pendingEvents)throw new Error('연동 대기 집계가 다릅니다.');
-   const value={checkedAt,pendingCount:p.pendingCount,pendingEvents:p.pendingEvents,failedCount:p.failedCount,oldestPendingAt:text(p.oldestPendingAt,40,'최초 대기 시각'),lastSuccessAt:text(p.lastSuccessAt,40,'연동 성공 시각'),error:text(p.error,500,'연동 오류'),intervalMinutes:5,batchSize:20};
+   const value={legacyHistoryEdits:Number(p.legacyHistoryEdits||0),reviewSchema:p.reviewSchema===2?2:1,checkedAt,pendingCount:p.pendingCount,pendingEvents:p.pendingEvents,failedCount:p.failedCount,oldestPendingAt:text(p.oldestPendingAt,40,'최초 대기 시각'),lastSuccessAt:text(p.lastSuccessAt,40,'연동 성공 시각'),error:text(p.error,500,'연동 오류'),intervalMinutes:5,batchSize:20};
    for(let i=0;i<12;i++){const old=await get('bridgeStatus');if(old.value&&Date.parse(old.value.checkedAt)>=Date.parse(checkedAt))return {success:true,stale:true};if((await kv.atomic().check(old).set(old.key,value).commit()).ok)return {success:true};}
    throw new Error('연동 현황 저장이 겹쳤습니다.');
   }
+  if(verb==='documents')return registerDocuments(p.documents||[]);
   if(verb==='sources')return {success:true,...await ingestSources(p.sources||[])};
   if(verb==='pending'){for(const r of await values(['purgeCleanup'],{limit:2}))await cleanupPurge(r);const rows=await values(['outbox'],{limit:21});return {success:true,events:rows.slice(0,20),more:rows.length>20,seq:(await status()).seq};}
   if(verb==='ack'){
-   for(const item of p.items||[]){const e=await get('outbox',Number(item.seq));if(e.value?.id===item.id)await kv.atomic().check(e).delete(e.key).commit();}
+   for(const item of p.items||[]){const e=await get('outbox',Number(item.seq));if(e.value?.id===item.id){let tx=kv.atomic().check(e).delete(e.key);if(e.value.projection){const applied=await get('reviewApplied',e.value.projection.recordId);tx=tx.check(applied).set(applied.key,{version:Math.max(Number(applied.value?.version||0),e.value.projection.version),appliedAt:new Date().toISOString()});}await tx.commit();}}
    return {success:true};
   }
   throw new Error('지원하지 않는 연동 작업입니다.');
