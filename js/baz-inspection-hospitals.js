@@ -53,5 +53,31 @@
     }
     return {load};
   }
-  global.BazInspectionHospitals={create,normalize};
+  function createBinding(cfg){
+    const fields=cfg.fields;let bound=null,invalidated=false;
+    function restore(basic){bound=basic&&text(basic.hospital)?{n:text(basic.hospital),s:text(basic.serialNo),c:text(basic.subscription),sa:text(basic.receiver)}:null;invalidated=false;cfg.status('');}
+    function pick(row){
+      bound={n:text(row.n),s:text(row.s),c:text(row.c),sa:text(row.sa)};invalidated=false;
+      fields.hospital.value=bound.n;fields.serialNo.value=bound.s;fields.subscription.value=bound.c;fields.receiver.value=bound.sa;
+      cfg.status('✓ 병원 선택됨'+(row.r?' · '+text(row.r):'')+(bound.s?' · S/N '+bound.s:' · S/N 미기록'));
+    }
+    function input(){
+      if(!bound)return;
+      if(text(fields.hospital.value)===bound.n){
+        if(invalidated){for(const [id,key]of [['serialNo','s'],['subscription','c'],['receiver','sa']])if(!text(fields[id].value))fields[id].value=bound[key];invalidated=false;cfg.status('✓ 기존 병원 정보 복원됨');}
+        return;
+      }
+      if(!invalidated){
+        // A serial identifies this hospital's equipment and must be entered or
+        // selected again. Preserve manually overridden non-identity fields.
+        fields.serialNo.value='';
+        if(text(fields.subscription.value)===bound.c)fields.subscription.value='';
+        if(text(fields.receiver.value)===bound.sa)fields.receiver.value='';
+        invalidated=true;
+      }
+      cfg.status('병원명이 변경되었습니다. 목록에서 병원을 선택하거나 S/N을 다시 입력하세요.');
+    }
+    return {pick,input,restore};
+  }
+  global.BazInspectionHospitals={create,normalize,createBinding};
 })(window);

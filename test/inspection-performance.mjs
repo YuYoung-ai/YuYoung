@@ -5,7 +5,7 @@ const doc={createElement:type=>type==='canvas'?canvas():{remove(){}},head:{appen
 const pdfs=[];class Pdf{constructor(){this.images=[];this.pages=1;pdfs.push(this);}addPage(){this.pages++;}addImage(...args){this.images.push(args);}setDrawColor(){}setLineWidth(){}roundedRect(){}output(){return {size:large&&this.images.some(a=>String(a[0]).includes('raw'))?8*1024*1024:1024};}}
 class Img{set src(v){this.naturalWidth=v.includes('portrait')?900:1600;this.naturalHeight=v.includes('portrait')?1600:900;queueMicrotask(()=>this.onload());}}
 const compress=[];const window={BazInspectionMedia:{fromData:async(data,opts)=>{compress.push({data,...opts});return {data:'data:image/jpeg;base64,compressed',width:900,height:1600};}}};
-vm.runInNewContext(code,{window,document:doc,Image:Img,console,Set,Array,Promise});const api=window.BazInspectionPdf;
+vm.runInNewContext(code,{window,document:doc,Image:Img,console,Set,Array,Promise,setTimeout,clearTimeout});const api=window.BazInspectionPdf;
 assert.equal(scripts.length,0,'opening the form must not load PDF libraries');await Promise.all([api.libraries(),api.libraries()]);await api.libraries();assert.equal(scripts.length,2,'first generation loads each library once');
 for(const [w,h]of [[900,1600],[1600,900],[1,2000],[2000,1]]){const fit=api.fit(w,h,194,240);assert.ok(Math.abs(fit.width/fit.height-w/h)<1e-8);assert.ok(fit.width<=194&&fit.height<=240);}
 const groups=api.photoGroups([{id:1,width:900,height:1600},{id:2,width:1600,height:900},{id:3,width:1000,height:1000},{id:4,width:500,height:2000}]);assert.deepEqual(Array.from(groups,g=>Array.from(g,p=>p.id)),[[1],[2,3],[4]]);
