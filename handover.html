@@ -949,6 +949,9 @@ function applySaveResult(res){
     LAST_SAVE_PAYLOAD=null;
     LAST_SENT_SNAPSHOT=null;
     if(window.BazHandoverFlow)window.BazHandoverFlow.onSaved(SAVED_RECORD_ID,sent);
+    // A verified read accelerates notification ingestion; the durable Sheet queue
+    // remains the fallback if this tab closes or the network request fails.
+    else if(window.BazWorkAPI&&SAVED_RECORD_ID)window.BazWorkAPI.get('work_handover_detail',{hospitalName:sent.hosp,recordId:SAVED_RECORD_ID}).catch(function(){});
     var badge=el('syncBadge'); if(badge) badge.textContent='· 시트 기록 완료';
     if(hasUnsaved){
       if(badge) badge.textContent='· 전송한 내용은 기록됨 · 현재 변경은 미기록';

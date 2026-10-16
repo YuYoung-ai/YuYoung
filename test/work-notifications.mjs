@@ -32,23 +32,23 @@ await assert.rejects(()=>service.handle({action:'notification_config'},low),/로
 
 const form={hospitalKey:h.key,symptom:'검증용 접수',cs:'CS',engineer:'담당 A',registeredAt:'2026-10-14T09:00',visitAt:'2026-10-14T12:00',status:'접수'};
 async function create(engineer,operationId=crypto.randomUUID()){const op={action:'work_save',operationId,acknowledgeDuplicates:true,form:{...form,engineer}};const saved=await store.handle(op,admin);assert.equal(saved.success,true);return {op,saved};}
-async function events(){return [...kv.data.values()].filter(x=>x.key[0]===key()[0]&&x.key[1]==='event');}
+async function events(){return [...kv.data.values()].filter(x=>x.key[0]===key()[0]&&x.key[1]==='event'&&['receipt','assignment'].includes(x.value.kind));}
 const first=await create('담당 A');assert.equal((await events()).length,1,'notification event committed with receipt');
 await store.handle(first.op,admin);assert.equal((await events()).length,1,'operation replay does not produce a new alert');
-await service.process(first.op.operationId);assert.equal(sent.length,1);assert.equal(sent[0].p.recipient,alice.uid);
-await service.process(first.op.operationId);assert.equal(sent.length,1,'redelivery keeps one inbox and completed job');
-const concurrent=await create('담당 A');const beforeConcurrent=sent.length;await Promise.all([service.process(concurrent.op.operationId),service.process(concurrent.op.operationId)]);assert.equal(sent.length,beforeConcurrent+1,'concurrent workers claim a device job once');
-const unassigned=await create('');await service.process(unassigned.op.operationId);assert.equal(sent.length,5,'unassigned receipt sends to all work users');
+await service.process(first.op.operationId);assert.equal(sent.length,2);assert.deepEqual(new Set(sent.map(x=>x.p.recipient)),new Set([alice.uid,admin.uid]));
+await service.process(first.op.operationId);assert.equal(sent.length,2,'redelivery keeps one inbox and completed job');
+const concurrent=await create('담당 A');const beforeConcurrent=sent.length;await Promise.all([service.process(concurrent.op.operationId),service.process(concurrent.op.operationId)]);assert.equal(sent.length,beforeConcurrent+2,'concurrent workers claim a device job once');
+const unassigned=await create('');await service.process(unassigned.op.operationId);assert.equal(sent.length,7,'unassigned receipt sends to all work users');
 for(const who of [alice,bob,admin])assert.ok((await service.handle({action:'notification_list'},who)).items.some(x=>x.id===unassigned.op.operationId));
 assert.ok(!kv.data.has(kv.id(key('unread',low.uid,unassigned.op.operationId))),'users below work ACL excluded');
 
 const edit={action:'work_save',id:first.saved.request.id,baseRevision:first.saved.request.revision,operationId:crypto.randomUUID(),acknowledgeDuplicates:true,form:{...form,symptom:'접수 내용만 수정'}};
 assert.equal((await store.handle(edit,admin)).success,true);assert.equal((await events()).length,3,'content updates do not notify');
 const change={...edit,baseRevision:2,operationId:crypto.randomUUID(),form:{...form,engineer:'담당 B'}};
-assert.equal((await store.handle(change,admin)).success,true);await service.process(change.operationId);assert.equal(sent.at(-1).p.recipient,bob.uid);
+assert.equal((await store.handle(change,admin)).success,true);await service.process(change.operationId);assert.ok(sent.some(x=>x.p.notificationId===change.operationId&&x.p.recipient===bob.uid));
 const stale=await create('담당 A');const moved=await store.handle({...change,id:stale.saved.request.id,baseRevision:1,operationId:crypto.randomUUID()},admin);assert.equal(moved.success,true);
 let count=sent.length;await service.process(stale.op.operationId);assert.equal(sent.length,count,'obsolete assignment is not sent');
-await service.process(moved.event.id);assert.equal(sent.at(-1).p.recipient,bob.uid);
+await service.process(moved.event.id);assert.ok(sent.some(x=>x.p.notificationId===moved.event.id&&x.p.recipient===bob.uid));
 
 // Read only after the latest request and successful source check; no status mutation.
 const current=(await store.request(unassigned.saved.request.id)).value;
@@ -67,7 +67,7 @@ assert.equal((await service.handle({action:'notification_config'},alice)).device
 
 // A browser endpoint belongs to exactly one account; stale queued jobs cannot follow a switch.
 await service.handle({action:'notification_subscribe',subscription:sub('shared')},alice);const switched=await create('담당 A');
-await service.handle({action:'notification_subscribe',subscription:sub('shared')},bob);count=sent.length;await service.process(switched.op.operationId);assert.equal(sent.length,count);
+await service.handle({action:'notification_subscribe',subscription:sub('shared')},bob);count=sent.length;await service.process(switched.op.operationId);assert.equal(sent.length,count,'switched staff device and expired administrator device receive no push');
 assert.equal((await service.handle({action:'notification_config'},alice)).devices.length,0);
 await service.handle({action:'notification_unsubscribe',endpoint:sub('shared').endpoint},alice);
 assert.equal((await service.handle({action:'notification_config'},bob)).devices.length,2,'one user cannot detach another account');
@@ -80,7 +80,7 @@ accounts=accounts.filter(x=>x.uid!==bob.uid);await assert.rejects(()=>service.ha
 await service.handle({action:'notification_mapping',uid:alice.uid,engineer:''},admin);
 await service.handle({action:'notification_mapping',uid:admin.uid,engineer:'담당 B'},admin);
 for(let i=0;i<25;i++)await create('담당 A','aaaa_unmapped_'+String(i).padStart(3,'0'));
-await service.process();const mapped=await create('담당 B','zzzz_mapped_001');await service.process();
+await service.process();const mapped=await create('담당 B','zzzz_mapped_001');await service.process();await service.process();
 assert.ok((await service.handle({action:'notification_list'},admin)).items.some(x=>x.id===mapped.op.operationId),'unmapped events are deferred so mapped accounts can still receive later notifications');
 // Public configuration exposes only the public key. Concurrent initialization keeps one key.
 const sender1=createPushSender(kv),sender2=createPushSender(kv),publicKeys=await Promise.all([sender1.publicKey(),sender2.publicKey()]);assert.equal(publicKeys[0],publicKeys[1]);assert.equal(Buffer.from(publicKeys[0],'base64url').length,65);

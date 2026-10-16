@@ -18,7 +18,7 @@
     installing.addEventListener('statechange',changed);changed();
    });
    return navigator.serviceWorker.ready;
-  })().catch(function(e){workerReady=null;throw e;});
+  })().catch(function(e){workerReady=null;if(/ServiceWorker|service worker/i.test(e.message||''))throw new Error('앱 알림 연결을 준비하지 못했습니다. 인터넷 연결을 확인한 뒤 앱을 다시 열어 주세요.');throw e;});
   return workerReady;
  }
  async function binding(uid){
@@ -77,13 +77,13 @@
  }
  function renderInbox(d,append){
   cursor=d.cursor||'';items=Array.from(new Map((append?items:[]).concat(d.items||[]).map(function(n){return [n.id,n];})).values());inboxUnread=d.unread||0;if(!append){readThrough=d.readThrough||'';selected.clear();}counts(d);
-  dialog.querySelector('[data-inbox-list]').innerHTML=items.length?items.map(function(n){return '<article class="baz-notification-row'+(n.readAt?'':' unread')+'"><label class="baz-inbox-check"><input type="checkbox" data-inbox-check="'+esc(n.id)+'" aria-label="'+esc(n.hospitalName)+' 알림 선택"'+(n.readAt?' disabled':'')+'></label><a class="baz-notification-item" href="'+esc(root.BazNotificationRoute.url({requestId:n.requestId,notificationId:n.id}))+'" data-notification-id="'+esc(n.id)+'" data-request-id="'+esc(n.requestId)+'"><div><strong>'+esc(n.hospitalName)+'</strong><span>'+esc(n.audience==='all'?'전체 알림 · 담당자 미지정':'담당 업무 배정')+'</span></div><p>'+esc(n.gubun)+' · '+esc(n.visitAt?n.visitAt.replace('T',' '):'방문일 미정')+'</p><small>'+esc(new Date(n.createdAt).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}))+' · '+(n.readAt?'읽음':'안 읽음')+'</small></a></article>';}).join(''):'<p class="baz-notification-empty">최근 30일 동안 받은 알림이 없습니다.</p>';
+  dialog.querySelector('[data-inbox-list]').innerHTML=items.length?items.map(function(n){return '<article class="baz-notification-row'+(n.readAt?'':' unread')+'"><label class="baz-inbox-check"><input type="checkbox" data-inbox-check="'+esc(n.id)+'" aria-label="'+esc(n.hospitalName)+' 알림 선택"'+(n.readAt?' disabled':'')+'></label><a class="baz-notification-item" href="'+esc(root.BazNotificationRoute.url({requestId:n.requestId,notificationId:n.id}))+'" data-notification-id="'+esc(n.id)+'" data-request-id="'+esc(n.requestId)+'"><div><strong>'+esc(n.hospitalName)+'</strong><span>'+esc(({receipt:n.audience==='all'?'전체 알림 · 담당자 미지정':'접수 배정',assignment:'담당자 배정',visit:'방문 일정 등록·변경',status:'상태 변경',handover:'AS 처리 현황 작성 완료',pdf:'AS/점검 내역서·댓글 등록 완료',roster:'휴무·당직 안내'})[n.kind]||'업무 알림')+'</span></div><p>'+esc(n.kind==='roster'?n.summary:n.kind==='status'?n.previousStatus+' → '+n.status:(n.gubun||'A/S')+' · '+(n.visitAt?n.visitAt.replace('T',' '):'방문일 미정'))+'</p><small>'+esc(new Date(n.createdAt).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'}))+' · '+(n.readAt?'읽음':'안 읽음')+'</small></a></article>';}).join(''):'<p class="baz-notification-empty">최근 30일 동안 받은 알림이 없습니다.</p>';
   dialog.querySelector('[data-inbox-more]').hidden=!cursor;
   selected.forEach(function(id){if(!items.some(function(n){return n.id===id&&!n.readAt;}))selected.delete(id);});inboxControls();
  }
  async function loadInbox(append){
   if(inboxBusy)return;var seq=inboxSeq,status=dialog.querySelector('[data-inbox-status]');inboxBusy=true;inboxControls();status.textContent='알림을 확인하고 있습니다…';
-  try{var data=await call('notification_list',append?{cursor:cursor}:{});if(seq!==inboxSeq)return;renderInbox(data,append);status.textContent='최근 30일 · 병원을 누르면 최신 접수와 Handover를 확인합니다. 읽음 처리는 업무 상태를 바꾸지 않습니다.';}
+  try{var data=await call('notification_list',append?{cursor:cursor}:{});if(seq!==inboxSeq)return;renderInbox(data,append);status.textContent='최근 30일 · 알림을 누르면 해당 업무나 근무 일정의 최신 내용을 확인합니다. 읽음 처리는 업무 상태를 바꾸지 않습니다.';}
   catch(e){if(seq===inboxSeq)status.textContent=e.message;}
   finally{if(seq===inboxSeq){inboxBusy=false;inboxControls();}}
  }
@@ -104,13 +104,13 @@
  function showInbox(){
   if(!dialog){
    dialog=document.createElement('dialog');dialog.className='baz-notification-dialog';dialog.setAttribute('aria-labelledby','baz-inbox-title');
-   dialog.innerHTML='<div class="baz-notification-heading"><div><small>BAZ CS</small><h2 id="baz-inbox-title">접수 알림</h2></div><button type="button" data-inbox-close aria-label="알림 닫기">✕</button></div><div class="baz-notification-toolbar"><a href="install.html">앱 설치·알림 설정</a><div class="baz-inbox-actions"><button type="button" data-inbox-refresh>새로고침</button><button type="button" data-inbox-selected disabled>선택 읽음</button><button type="button" data-inbox-all disabled>모두 읽음</button></div></div><p data-inbox-status role="status" aria-live="polite"></p><label class="baz-inbox-select-all"><input type="checkbox" data-inbox-select-page>불러온 안 읽은 알림 전체 선택</label><div data-inbox-list></div><button type="button" data-inbox-more hidden>이전 알림 더 보기</button>';
+   dialog.innerHTML='<div class="baz-notification-heading"><div><small>BAZ CS</small><h2 id="baz-inbox-title">업무 알림</h2></div><button type="button" data-inbox-close aria-label="알림 닫기">✕</button></div><div class="baz-notification-toolbar"><a href="install.html">앱 설치·알림 설정</a><div class="baz-inbox-actions"><button type="button" data-inbox-refresh>새로고침</button><button type="button" data-inbox-selected disabled>선택 읽음</button><button type="button" data-inbox-all disabled>모두 읽음</button></div></div><p data-inbox-status role="status" aria-live="polite"></p><label class="baz-inbox-select-all"><input type="checkbox" data-inbox-select-page>불러온 안 읽은 알림 전체 선택</label><div data-inbox-list></div><button type="button" data-inbox-more hidden>이전 알림 더 보기</button>';
    var heading=document.createElement('div');heading.className='baz-inbox-top';heading.append(dialog.querySelector('.baz-notification-heading'),dialog.querySelector('.baz-notification-toolbar'));dialog.prepend(heading);
    document.body.appendChild(dialog);dialog.querySelector('[data-inbox-close]').onclick=function(){dialog.close();};dialog.querySelector('[data-inbox-refresh]').onclick=function(){return loadInbox(false);};dialog.querySelector('[data-inbox-more]').onclick=function(){return loadInbox(true);};
    dialog.querySelector('[data-inbox-selected]').onclick=function(){return readInbox(false);};dialog.querySelector('[data-inbox-all]').onclick=function(){return readInbox(true);};
    dialog.addEventListener('close',function(){inboxSeq++;inboxBusy=false;});
    dialog.addEventListener('change',function(event){var c=event.target;if(c.matches('[data-inbox-select-page]')){items.filter(function(n){return !n.readAt;}).forEach(function(n){if(c.checked)selected.add(n.id);else selected.delete(n.id);});}else if(c.dataset.inboxCheck){if(c.checked)selected.add(c.dataset.inboxCheck);else selected.delete(c.dataset.inboxCheck);}inboxControls();});
-   dialog.addEventListener('click',function(event){var a=event.target.closest('[data-notification-id]');if(a&&root.location.pathname.endsWith('/hospital-work.html')){event.preventDefault();dialog.close();root.dispatchEvent(new CustomEvent('baz-open-notification',{detail:{requestId:a.dataset.requestId,notificationId:a.dataset.notificationId}}));}});
+   dialog.addEventListener('click',function(event){var a=event.target.closest('[data-notification-id]');if(a&&root.BazNotificationRoute.valid(a.dataset.requestId)&&root.location.pathname.endsWith('/hospital-work.html')){event.preventDefault();dialog.close();root.dispatchEvent(new CustomEvent('baz-open-notification',{detail:{requestId:a.dataset.requestId,notificationId:a.dataset.notificationId}}));}});
   }
   clearInbox();dialog.showModal();return loadInbox(false);
  }
