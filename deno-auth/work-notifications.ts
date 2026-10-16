@@ -63,7 +63,7 @@ export function requestNotifications(ev:Obj){
 function category(e:Obj){return e.kind==='assignment'?'receipt':e.kind;}
 export function notificationText(e:Obj){
  const titles:Obj={receipt:e.audience==='all'?'담당자 미지정 접수가 등록되었습니다':'새 접수가 배정되었습니다',assignment:'담당자가 변경되었습니다',visit:'방문 일정이 등록·변경되었습니다',status:'업무 상태가 변경되었습니다',handover:'AS 처리 현황 작성이 완료되었습니다',pdf:'AS/점검 내역서·댓글 등록이 완료되었습니다',roster:'오늘의 휴무·당직 안내'};
- return {title:titles[e.kind]||'업무 알림',body:e.kind==='roster'?e.summary:e.hospitalName+' · '+(e.kind==='status'?e.previousStatus+' → '+e.status:e.kind==='pdf'?'AS/점검 내역서':e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'))};
+ return {title:titles[e.kind]||'업무 알림',body:String(e.kind==='roster'?e.summary:e.hospitalName+' · '+(e.kind==='status'?e.previousStatus+' → '+e.status:e.kind==='pdf'?'AS/점검 내역서':e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'))).slice(0,280)};
 }
 
 export function validateSubscription(value:any){
@@ -124,7 +124,7 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(Number(entry.value?.revision||0)!==data.rosterRevision)return;
   const offPeople=today.filter((r:Obj)=>r.type==='휴무').map((r:Obj)=>r.person),duty=today.filter((r:Obj)=>r.type==='당직').map((r:Obj)=>r.person);
   let tx=kv.atomic().check(marker,entry).set(marker.key,true,{expireIn:32*86400000});
-  if(today.length)tx=appendNotification(tx,{schema:2,id,kind:'roster',audience:'all',date,createdAt:new Date(now()).toISOString(),hospitalName:'오늘의 휴무·당직',offPeople,summary:'휴무: '+(offPeople.join(', ')||'없음')+' · 당직: '+(duty.join(', ')||'없음')});
+  if(today.length)tx=appendNotification(tx,{schema:2,id,kind:'roster',audience:'all',date,createdAt:new Date(now()).toISOString(),hospitalName:'오늘의 휴무·당직',summary:('휴무: '+(offPeople.join(', ')||'없음')+' · 당직: '+(duty.join(', ')||'없음')).slice(0,1000)});
   await tx.commit();
  }
  async function detail(p:Obj,a:Obj){
@@ -212,7 +212,8 @@ export function createWorkNotifications(kv:any,options:Obj){
   for(const p of pending){
    if(!p.value)continue;const e=(await get('event',p.value.id)).value;
    if(!e){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,p.value.id)).commit();continue;}
-   const recipients=d.accounts.filter(a=>eligible(e,a,d));
+   const roster=e.kind==='roster'?(await createWorkRoster(kv).read(e.date.slice(0,7))).roster:[];
+   const recipients=d.accounts.filter(a=>eligible(e,a,d)&&!roster.some((r:Obj)=>!r.deletedAt&&r.date===e.date&&r.type==='휴무'&&[a.engineer,a.name].some(n=>norm(n)===norm(r.person))));
    const valid=await currentEvent(e);
    if(!valid){await kv.atomic().delete(p.key).delete(key('fanoutDue',p.value.due,e.id)).commit();continue;}
    const guard=await get(e.schema===2&&!['receipt','assignment'].includes(e.kind)?'event':'latest',e.schema===2&&!['receipt','assignment'].includes(e.kind)?e.id:e.requestId);if(!guard.value||guard.value!==e.id&&guard.value.id!==e.id)continue;
