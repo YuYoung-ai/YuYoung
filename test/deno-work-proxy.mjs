@@ -9,7 +9,7 @@ import {createPushSender} from '../deno-auth/work-push.ts';
 
 const secret='test-work-secret', upstream='https://script.google.com/macros/s/test-deployment/exec';
 const env=new Map(Object.entries({TOKEN_SECRET:secret,TOKEN_EPOCH:'1',WORK_API_ENABLED:'true',WORK_GAS_URL:upstream,WORK_REFERENCE_TTL_SEC:'1',ALLOWED_ORIGINS:'https://allowed.example'}));
-let handler, gate=null, failed=false, denied=false, hanging=false, revision=0;
+let handler, gate=null, failed=false, denied=false, hanging=false, revision=0,readJoins=0;
 const calls=[],logs=[];
 globalThis.Deno={cron:()=>Promise.resolve(),env:{get:n=>env.get(n)},serve:fn=>{handler=fn;},openKv:async()=>null};
 const originalInfo=console.info;
@@ -28,8 +28,13 @@ globalThis.fetch=async(url,options)=>{
 };
 function token(name){const payload=Buffer.from(JSON.stringify({n:name,l:1,e:Math.floor(Date.now()/1000)+3600,ep:1})).toString('base64url');return payload+'.'+crypto.createHmac('sha256',secret).update(payload).digest('base64url');}
 const alice=token('A'),bob=token('B');
-const source=stripTypeScriptTypes(fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8')).replace(/^import .* from .*;\s*$/gm,'');
-function load(){vm.runInNewContext(source,{createWorkStore,createWorkNotifications,createPushSender,Deno:globalThis.Deno,fetch:(...a)=>globalThis.fetch(...a),console,crypto:globalThis.crypto,TextEncoder,TextDecoder,URL,Response,Headers,AbortController,Error,performance,Date,Uint8Array,atob,btoa,setTimeout:(...a)=>globalThis.setTimeout(...a),clearTimeout});}
+const originalSource=stripTypeScriptTypes(fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8')).replace(/^import .* from .*;\s*$/gm,'');
+// Observe the join boundary in the VM only. Authentication and digest use real
+// async crypto: reaching the first fetch does not mean the second read joined.
+const joinPoint='let task = key ? workInFlight.get(key) : undefined;';
+assert.ok(originalSource.includes(joinPoint));
+const source=originalSource.replace(joinPoint,'testReadJoin(); '+joinPoint);
+function load(){vm.runInNewContext(source,{testReadJoin:()=>readJoins++,createWorkStore,createWorkNotifications,createPushSender,Deno:globalThis.Deno,fetch:(...a)=>globalThis.fetch(...a),console,crypto:globalThis.crypto,TextEncoder,TextDecoder,URL,Response,Headers,AbortController,Error,performance,Date,Uint8Array,atob,btoa,setTimeout:(...a)=>globalThis.setTimeout(...a),clearTimeout});}
 load();
 async function send(action,p={},options={}){
   const res=await handler(new Request('https://auth.example/',{method:'POST',headers:{origin:options.origin||'https://allowed.example','Content-Type':'text/plain'},body:JSON.stringify({token:alice,action,...p})}),{remoteAddr:{hostname:'203.0.113.1'}});
@@ -37,6 +42,7 @@ async function send(action,p={},options={}){
 }
 function block(){let resolve;const promise=new Promise(r=>resolve=r);gate={promise,resolve};}
 async function started(n){const deadline=Date.now()+2000;while(calls.length<n&&Date.now()<deadline)await new Promise(r=>setTimeout(r,1));assert.equal(calls.length,n);}
+async function joined(n){const deadline=Date.now()+2000;while(readJoins<n&&Date.now()<deadline)await new Promise(r=>setTimeout(r,1));assert.equal(readJoins,n);}
 
 const first=await send('work_bootstrap');assert.equal(first.res.headers.get('X-Baz-Work-Mode'),'live');assert.equal(first.body.requests[0].status,'방문예정');
 const second=await send('work_bootstrap');assert.equal(second.res.headers.get('X-Baz-Work-Mode'),'references-hit');assert.equal(calls.at(-1).omitReferences,'1');assert.deepEqual(second.body.hospitals,first.body.hospitals);assert.equal(second.body.requests[0].status,'완료','state remains live with cached references');
@@ -47,8 +53,8 @@ assert.equal((await send('work_detail',{}, {origin:'https://evil.example'})).res
 assert.equal((await send('work_unknown')).res.status,400);assert.equal(calls.length,count);
 const get=await handler(new Request('https://auth.example/?action=work_detail&token=invalid'),{remoteAddr:{hostname:'test'}});assert.equal(get.status,405);assert.equal(calls.length,count);
 
-block();count=calls.length;
-const a=send('work_detail',{id:'work'}),b=send('work_detail',{id:'work'});await started(count+1);gate.resolve();gate=null;
+block();count=calls.length;const beforeJoin=readJoins;
+const a=send('work_detail',{id:'work'}),b=send('work_detail',{id:'work'});await started(count+1);await joined(beforeJoin+2);gate.resolve();gate=null;
 const pair=await Promise.all([a,b]);assert.deepEqual(pair[0].body,pair[1].body);assert.ok(pair.some(x=>x.res.headers.get('X-Baz-Work-Mode')==='coalesced'));
 block();count=calls.length;
 const separate=Promise.all([send('work_detail',{id:'work'}),send('work_detail',{id:'work',token:bob})]);await started(count+2);gate.resolve();gate=null;await separate;

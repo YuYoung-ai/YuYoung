@@ -41,9 +41,8 @@ function inspectionPdfBasis_(source,format){
   if(selected==='standard')printed.push('engineer');printed.forEach(function(name){relevant[name]=fields[name];});
   return {v:1,recordId:source.recordId,fields:fields,fingerprint:inspectionPdfHash_(JSON.stringify(relevant)),capturedAt:new Date().toISOString(),format:selected,template:1};
 }
-function inspectionPdfCheckBasis_(p,source){
-  if(p.sourceFingerprint&&p.sourceFingerprint!==inspectionPdfBasis_(source,p.pdfFormat).fingerprint){var e=new Error('PDF 생성 중 Handover 원본이 변경되었습니다. 최신 내용을 확인하고 PDF를 다시 생성하세요.');e.sourceConflict=true;throw e;}
-}
+// The generated file is a fixed snapshot. Body edits never invalidate its upload.
+function inspectionPdfCheckBasis_(p,source){}
 function inspectionPdfStored_(raw,strict){
   var value=pickH_(raw,[INSPECTION_PDF.META]);if(!value)return null;
   var p;try{p=JSON.parse(value);}catch(e){if(strict)throw new Error('PDF 정보 형식이 잘못되었습니다.');return null;}
@@ -69,7 +68,7 @@ function inspectionPdfRecord_(p){
     hit=matches[0];hwKvStableSource_(hit);
   }
   var s=hit.source;
-  if(hwSourceName_(s.hospitalName)!==hwSourceName_(p.hospital)||s.date!==_issueDateNorm_(p.date)||!inspectionPdfSerialMatch_(s.sn,p.sn)||['A/S','점검'].indexOf(s.gubun)<0)throw new Error('내역서와 Handover의 병원·처리일·S/N이 다릅니다. 원본 기록을 확인하세요.');
+  if(!p.recordId&&(hwSourceName_(s.hospitalName)!==hwSourceName_(p.hospital)||s.date!==_issueDateNorm_(p.date)||!inspectionPdfSerialMatch_(s.sn,p.sn)||['A/S','점검'].indexOf(s.gubun)<0))throw new Error('내역서와 Handover의 병원·처리일·S/N이 다릅니다. 원본 기록을 확인하세요.');
   var link=colBy_(hdr,[INSPECTION_PDF.LINK]),meta=colBy_(hdr,[INSPECTION_PDF.META]);
   if(!link||!meta)throw new Error('PDF 열 초기화가 필요합니다. setupInspectionPdf를 실행하세요.');
   return {sheet:sh,row:hit.raw._row,linkCol:link,metaCol:meta,source:s,pdf:inspectionPdfStored_(hit.raw,true)};
@@ -82,20 +81,20 @@ function inspectionPdfActor_(p){
   var auth=typeof bazVerifyLocal_==='function'?bazVerifyLocal_(p.token||''):null;
   if(!auth||!auth.ok||Number(auth.level)<1)throw new Error('로그인이 필요합니다. 다시 로그인하세요.');return auth;
 }
-function inspectionPdfPublish_(hit,pdf){
+function inspectionPdfPublish_(hit,pdf,p){
   // Metadata is the durable receipt: a lost response retries the same file, not a new upload.
   hit.sheet.getRange(hit.row,hit.metaCol).setValue(JSON.stringify(pdf));
   hit.sheet.getRange(hit.row,hit.linkCol).setValue(pdf.url);SpreadsheetApp.flush();
   try{bazDropHandoverCaches_(hit.source.hospitalName);}catch(e){}
   var queued=false,warning='';
-  try{hospitalWorkHandoverSaved_(hit.source.hospitalName,hit.source.date);queued=true;}
+  try{hwKvQueueDocument_(hit,pdf,p);queued=true;}
   catch(e){warning='PDF는 저장되었습니다. Handover 연동을 다시 실행하면 댓글에 반영됩니다.';Logger.log('[inspection-pdf] queue: '+String(e.message||e));}
   return {success:true,recordId:hit.source.recordId,pdf:pdf,queued:queued,warning:warning};
 }
 function inspectionPdfPost_(p){
   var result=inspectionPdfStore_(p);
   if(result.success&&p.action==='inspection_pdf_upload'&&hwKvMode_()){
-    try{var delivered=hwKvDeliverSources_(result.recordId);hwKvPublishStatus_(delivered.error,delivered.failedIds);result.queued=false;result.warning=delivered.error||'';}
+    try{hwKvDeliverDocuments_();result.queued=false;result.warning='';}
     catch(e){result.warning='PDF는 저장되었습니다. Handover 연동 재시도 또는 동기화 후 댓글을 확인하세요.';}
   }
   return result;
@@ -124,7 +123,7 @@ function inspectionPdfStore_(p){
     lock=LockService.getScriptLock();lock.waitLock(20000);
     var hit=inspectionPdfRecord_(p);
     if(p.action==='inspection_pdf_resolve')return {success:true,recordId:hit.source.recordId,pdf:hit.pdf,sourceBasis:inspectionPdfBasis_(hit.source,p.pdfFormat)};
-    if(hit.pdf&&hit.pdf.sha256===p.sha256){committed=true;return inspectionPdfPublish_(hit,hit.pdf);}
+    if(hit.pdf&&hit.pdf.sha256===p.sha256){committed=true;return inspectionPdfPublish_(hit,hit.pdf,p);}
     inspectionPdfCheckBasis_(p,hit.source);
     if(Number(p.baseRevision||0)!==Number(hit.pdf&&hit.pdf.revision||0))return {success:false,conflict:true,error:'다른 PDF가 먼저 저장되었습니다. 최신 정보를 확인한 뒤 다시 생성하세요.'};
     var filename=String(p.filename||'').replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim().slice(0,240);
@@ -136,14 +135,14 @@ function inspectionPdfStore_(p){
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);
     var key=typeof file.getResourceKey==='function'?file.getResourceKey():'';
     lock=LockService.getScriptLock();lock.waitLock(20000);hit=inspectionPdfRecord_(p);
-    if(hit.pdf&&hit.pdf.sha256===p.sha256)return inspectionPdfPublish_(hit,hit.pdf);
+    if(hit.pdf&&hit.pdf.sha256===p.sha256)return inspectionPdfPublish_(hit,hit.pdf,p);
     inspectionPdfCheckBasis_(p,hit.source);
     if(Number(p.baseRevision||0)!==Number(hit.pdf&&hit.pdf.revision||0))return {success:false,conflict:true,error:'다른 PDF가 먼저 저장되었습니다. 최신 정보를 확인한 뒤 다시 생성하세요.'};
     var pdf={fileId:file.getId(),url:'https://drive.google.com/file/d/'+file.getId()+'/view'+(key?'?resourcekey='+key:''),filename:filename,bytes:bytes.length,sha256:p.sha256,revision:Number(hit.pdf&&hit.pdf.revision||0)+1,uploadedAt:new Date().toISOString(),uploadedBy:actor.name,uploadId:p.uploadId};
-    if(p.sourceFingerprint)pdf.sourceBasis=inspectionPdfBasis_(hit.source,p.pdfFormat);
+    if(p.sourceBasis)pdf.sourceBasis=p.sourceBasis;
     // Set the durable receipt first; if the visible link write fails, retry repairs it.
     hit.sheet.getRange(hit.row,hit.metaCol).setValue(JSON.stringify(pdf));committed=true;
-    return inspectionPdfPublish_(hit,pdf);
+    return inspectionPdfPublish_(hit,pdf,p);
   }catch(e){
     return {success:false,error:String(e.message||e),sourceConflict:!!e.sourceConflict};
   }finally{if(lock){try{lock.releaseLock();}catch(ignore){}}if(file&&!committed){try{file.setTrashed(true);}catch(ignore){}}}

@@ -29,7 +29,7 @@
         // The pre-render resolve already fixed the source. The upload server
         // rechecks its fingerprint/version under lock; another resolve adds no protection.
         let resolved=null;
-        if(!s.context.recordId||!s.context.sourceFingerprint){resolved=await call('inspection_pdf_resolve',s.context);s.context.recordId=resolved.recordId;}
+        if(!s.context.recordId){resolved=await call('inspection_pdf_resolve',s.context);s.context.recordId=resolved.recordId;}
         if(s.baseRevision==null)s.baseRevision=s.context.sourcePdfRevision??resolved?.pdf?.revision??0;
         if(!s.sha256){
           const bytes=await s.blob.arrayBuffer();s.sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
@@ -53,7 +53,7 @@
     }
     retry.addEventListener('click',()=>current?run(current):undefined);
     return {async prepare(context){
-      try{if(options.prepareContext&&context.requestId)await options.prepareContext(context);const resolved=await call('inspection_pdf_resolve',context);if(!resolved.sourceBasis?.fingerprint)throw new Error('원본 비교 서버가 아직 준비되지 않았습니다.');return {...context,recordId:resolved.recordId,sourceFingerprint:resolved.sourceBasis.fingerprint,sourcePdfRevision:resolved.pdf?.revision||0};}
+      try{const resolved=await call('inspection_pdf_resolve',context);return {...context,recordId:resolved.recordId,sourceBasis:resolved.sourceBasis,sourcePdfRevision:resolved.pdf?.revision||0};}
       catch(e){return {...context,sourcePreparationError:e.message||'Handover 원본 확인 실패'};}
     },publish(blob,filename,context){link.hidden=true;current={blob,filename,context:{...context},uploadId:crypto.randomUUID(),busy:false,stages:{pdf:'done'}};return run(current);},resume(saved,context){link.hidden=true;current={saved,recorded:true,context:{...context},busy:false,stages:{pdf:'done',drive:'done',handover:'done'}};return run(current);},reset(){current=null;status.textContent='';retry.hidden=true;link.hidden=true;newButton.disabled=false;if(options.onProgress)options.onProgress({},{});}};
   }

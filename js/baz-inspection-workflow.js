@@ -13,7 +13,7 @@
    var params={requestId:context.requestId,recordId:context.recordId,sha256:saved.pdf.sha256};
    var status=await api.get('work_document_status',params);
    if(!status.success||!status.commentAttached){
-    var refreshed=await api.get('work_handover_detail',{requestId:context.requestId,recordId:context.recordId});if(!refreshed.success)throw new Error(refreshed.error||'문서 원본 갱신 실패');
+    await api.post('work_document_retry',{requestId:context.requestId,recordId:context.recordId});
     status=await api.get('work_document_status',params);
    }
    if(!status.success)throw new Error(status.error||'접수 첨부 확인 실패');
@@ -41,7 +41,6 @@
    function track(){edited=true;}document.querySelector('.wrap').addEventListener('input',track,{once:true});document.querySelector('.wrap').addEventListener('change',track,{once:true});
    document.getElementById('generateBtn').addEventListener('click',track,{once:true});
    try{
-    var fresh=await api.get('work_handover_detail',{requestId:target.requestId,recordId:target.recordId});if(!fresh.success)throw new Error(fresh.error);
     var status=await api.get('work_document_status',{requestId:target.requestId,recordId:target.recordId});if(!status.success||status.request?.id!==target.requestId||status.source?.recordId!==target.recordId)throw new Error(status.error||'접수와 원본 연결 정보가 다릅니다.');
     if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다.');
     function apply(){

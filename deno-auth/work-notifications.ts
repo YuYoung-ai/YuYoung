@@ -122,11 +122,12 @@ export function createWorkNotifications(kv:any,options:Obj){
  async function markRead(p:Obj,a:Obj){
   const id=String(p.notificationId||''),idx=(await get('index',a.uid,id)).value;
   if(!idx)throw new Error('알림을 찾지 못했거나 보관 기간이 지났습니다.');
-  const e=await get('inbox',a.uid,idx),r=(await options.store.request(e.value?.requestId,true)).value;
+  const e=await get('inbox',a.uid,idx),requestEntry=await options.store.request(e.value?.requestId,true),r=requestEntry.value;
   if(String(r.revision)!==String(p.revision))return {success:false,error:'접수 내용이 변경되었습니다. 최신 내용을 다시 확인하세요.'};
-  if(!r.deletedAt&&(!Number.isFinite(Date.parse(p.sourceCheckedAt||''))||now()-Date.parse(p.sourceCheckedAt)>120000||Date.parse(p.sourceCheckedAt)>now()+10000))throw new Error('Handover 최신 확인 후 알림을 열람 처리하세요.');
+  // The committed request revision is the read boundary; raw GAS freshness
+  // must never be a prerequisite for viewing published review data.
   const ttl=Math.max(1,Date.parse(e.value.createdAt)+TTL-now()),stamp=(await get('read',a.uid,id));
-  const result=await kv.atomic().check(e,stamp).set(key('read',a.uid,id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,id)).commit();
+  const result=await kv.atomic().check(e,stamp,requestEntry).set(key('read',a.uid,id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,id)).commit();
   return result.ok?{success:true}:{success:false,error:'알림 확인 기록을 다시 시도하세요.'};
  }
  async function migratePending(){

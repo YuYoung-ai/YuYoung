@@ -52,7 +52,7 @@ await service.process(moved.event.id);assert.equal(sent.at(-1).p.recipient,bob.u
 
 // Read only after the latest request and successful source check; no status mutation.
 const current=(await store.request(unassigned.saved.request.id)).value;
-await assert.rejects(()=>service.handle({action:'notification_read',notificationId:unassigned.op.operationId,revision:current.revision},alice),/Handover/);
+assert.equal((await service.handle({action:'notification_read',notificationId:unassigned.op.operationId,revision:current.revision},alice)).success,true,'committed revision allows viewing without a GAS read');
 assert.equal((await service.handle({action:'notification_read',notificationId:unassigned.op.operationId,revision:current.revision-1,sourceCheckedAt:new Date(kv.clock).toISOString()},alice)).success,false);
 assert.equal((await service.handle({action:'notification_read',notificationId:unassigned.op.operationId,revision:current.revision,sourceCheckedAt:new Date(kv.clock).toISOString()},alice)).success,true);
 assert.equal((await store.request(current.id)).value.status,'접수');

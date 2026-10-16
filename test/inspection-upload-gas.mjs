@@ -25,7 +25,7 @@ assert.equal(post({...upload,token:''}).success,false);assert.equal(files.length
 assert.equal(post({...common,action:'inspection_pdf_resolve'}).recordId,'report-1');
 const saved=post(upload);assert.ok(saved.success,saved.error);assert.equal(saved.pdf.bytes,body.length);assert.equal(files.length,1);assert.equal(files[0].blob.bytes.length,body.length);assert.equal(handover.data[1][linkCol-1],saved.pdf.url);
 assert.equal(post(upload).success,true);assert.equal(files.length,1,'lost-response retry uses the durable same-file receipt');
-assert.equal(post({...upload,bytes:body.length+1}).success,false);assert.equal(post({...upload,sha256:'f'.repeat(64)}).success,false);assert.equal(post({...upload,sn:'SN2'}).success,false);assert.equal(files.length,1);
+assert.equal(post({...upload,bytes:body.length+1}).success,false);assert.equal(post({...upload,sha256:'f'.repeat(64)}).success,false);assert.equal(post({...upload,sn:'SN2'}).success,true,'immutable record ID keeps a captured PDF valid after a later identity correction');assert.equal(files.length,1);
 assert.equal(post({...common,action:'inspection_pdf_resolve',recordId:'missing'}).success,false);
 assert.equal(post({...common,action:'inspection_pdf_resolve',recordId:''}).recordId,'report-1','direct inspection can resolve one unique existing visit');
 const changed=Buffer.from('%PDF-1.7\nsecond version\n%%EOF'),next={...upload,bytes:changed.length,base64:changed.toString('base64'),sha256:crypto.createHash('sha256').update(changed).digest('hex'),uploadId:'upload-second',baseRevision:1};
@@ -50,9 +50,7 @@ const basis=post({...common,action:'inspection_pdf_resolve',pdfFormat:'simplifie
 assert.equal(basis.format,'simplified');assert.equal(basis.recordId,common.recordId);
 const freshBytes=Buffer.from('%PDF-1.7\nsource basis test\n%%EOF'),verified={...upload,bytes:freshBytes.length,base64:freshBytes.toString('base64'),sha256:crypto.createHash('sha256').update(freshBytes).digest('hex'),uploadId:'upload-verified',baseRevision:4,sourceFingerprint:basis.fingerprint,pdfFormat:'simplified'};
 const originalDetail=handover.data[1][8],beforeConflict=files.length;
-handover.data[1][8]='생성 후 변경';assert.equal(post(verified).sourceConflict,true);assert.equal(files.length,beforeConflict,'source changed before upload cannot create a file');
-handover.data[1][8]=originalDetail;onCreate=()=>{handover.data[1][8]='전송 중 변경';};assert.equal(post(verified).sourceConflict,true);assert.equal(files.at(-1).trashed,true,'source changed during transfer cleans up only the uncommitted new file');
-handover.data[1][8]=originalDetail;const final=post(verified);assert.ok(final.success,final.error);assert.equal(final.pdf.sourceBasis.fingerprint,basis.fingerprint);assert.equal(final.pdf.sourceBasis.format,'simplified');
-assert.equal(post({...common,action:'inspection_pdf_resolve',pdfFormat:'simplified'}).sourceBasis.fingerprint,basis.fingerprint,'PDF metadata changes do not affect the clinical fingerprint');
-handover.data[1][8]='저장 후 원본 수정';const replay=post(verified);assert.ok(replay.success);assert.equal(replay.pdf.sourceBasis.fingerprint,basis.fingerprint,'lost-response retries preserve the original basis instead of claiming newer content');
-console.log('inspection-upload-gas: source basis, metadata exclusion, pre-transfer and concurrent source conflicts, uncommitted cleanup and idempotent old-basis recovery passed.');
+handover.data[1][8]='생성 후 변경';const firstFixed=post({...verified,sourceBasis:basis});assert.ok(firstFixed.success,firstFixed.error);assert.equal(files.length,beforeConflict+1,'a body correction does not invalidate an already-generated file');
+onCreate=()=>{handover.data[1][8]='전송 중 변경';};const duringBytes=Buffer.from('%PDF-1.7\nfixed concurrent snapshot\n%%EOF');const during={...verified,bytes:duringBytes.length,base64:duringBytes.toString('base64'),sha256:crypto.createHash('sha256').update(duringBytes).digest('hex'),uploadId:'upload-during',baseRevision:5,sourceBasis:basis};const final=post(during);assert.ok(final.success,final.error);assert.equal(files.at(-1).trashed,false);assert.equal(final.pdf.sourceBasis.fingerprint,basis.fingerprint,'the capture basis is retained instead of recalculated at upload');
+handover.data[1][8]='저장 후 원본 수정';const replay=post(during);assert.ok(replay.success);assert.equal(replay.pdf.fileId,final.pdf.fileId);assert.equal(replay.pdf.sha256,final.pdf.sha256);
+console.log('inspection-upload-gas: fixed capture basis, body edits before/during/after upload, same-file retry and document revision/integrity protection passed.');

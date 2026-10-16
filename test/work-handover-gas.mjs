@@ -1,0 +1,16 @@
+import fs from 'node:fs';import vm from 'node:vm';import crypto from 'node:crypto';import assert from 'node:assert/strict';
+const root=new URL('../',import.meta.url),read=p=>fs.readFileSync(new URL(p,root),'utf8'),fixture=read('test/hospital-work.mjs'),context=vm.createContext({vm,read,crypto,assert,console});
+vm.runInContext(fixture.slice(fixture.indexOf('let failSheet='),fixture.indexOf('const assessmentSource=')),context);
+const sandbox=vm.runInContext('sandbox',context),original=vm.runInContext('handover',context);sandbox.bazDropHandoverCaches_=()=>{};sandbox.setupHospitalWork();
+const raw=Object.fromEntries(original.data[0].map((h,i)=>[h,original.data[1][i]]));
+const before=JSON.stringify(original.data),body={hospitalName:'검수 병원',date:'2026-10-02',sn:'SN1',engineer:'엔지니어 A',gubun:'A/S',cat:'점검',type:'누수',part:'교체품 정정',cost:'2000',detail:'공식 검수 내용',result:'수리',remark:'검수 비고',nozzleReuse:'O',nsFill:'X',nsAmt:'부족',jet:'교육 필요'};
+const projection={recordId:'report-1',version:2,source:body,reviewedAt:new Date().toISOString(),reviewedBy:'관리자'};
+sandbox.hwReviewApply_(projection);sandbox.hwReviewApply_({...projection,version:1,source:{...body,detail:'늦은 버전'}});sandbox.hwReviewApply_(projection);
+assert.equal(JSON.stringify(original.data),before,'report projection never changes the original source or PDF cells');
+const projected=sandbox.hwReviewRows_([raw])[0];assert.equal(projected['내용'],body.detail);assert.equal(projected['병원명'],body.hospitalName);assert.equal(projected['교체비용'],body.cost);assert.equal(projected._reviewVersion,2);assert.equal(sandbox.slim_(projected).detail,body.detail);
+assert.equal(sandbox.hwReviewRows_([{...raw,'기록 ID':'other'}])[0]['내용'],raw['내용'],'unreviewed rows retain their saved original fallback');
+const sourceBefore=sandbox.hwSource_(raw);sandbox.inspectionPdfSource_=()=>({fileId:'f',revision:99});const sourceAfter=sandbox.hwSource_(raw);assert.equal(sourceAfter.version,sourceBefore.version,'PDF metadata cannot change body hashes');assert.equal(sourceAfter.schemaVersion,2);
+const call=sandbox.hwKvCall_;let docs;sandbox.hwKvSourceById_=()=>({recordId:'report-1'});sandbox.hwKvCall_=(verb,payload)=>{assert.equal(verb,'documents');docs=payload.documents;};
+const pdf={fileId:'file',revision:1,uploadId:'upload',sha256:'a'.repeat(64)};sandbox.hwKvQueueDocument_({source:{...body,recordId:'report-1'}},pdf,{requestId:'exact-request'});sandbox.hwKvDeliverDocuments_();assert.equal(docs[0].recordId,'report-1');assert.equal(docs[0].requestId,'exact-request');assert.equal(docs[0].pdf.fileId,'file');assert.equal(docs[0].detail,undefined,'document bridge never transfers a treatment body');sandbox.hwKvCall_=call;
+assert.ok(read('handover_gas.gs').includes('hwReviewRows_(all.rows)'));assert.ok(read('handover_gas.gs').includes('hwReviewRows_(readAll_(true).rows)'));assert.ok(read('handover_gas.gs').includes('hwKvPrepareField_(reqId,row)'));assert.ok(read('hospital_work_kv_gas.gs').includes('meta.snapshot'));
+console.log('handover GAS: immutable originals, report projection/fallback, monotonic versions, deduplication, body/PDF hash separation, exact independent document context and field recovery journal passed.');

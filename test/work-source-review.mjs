@@ -27,12 +27,7 @@ await s.ingestSources([{...changed,version:'v4',observedAt:new Date(Date.now()-6
 const window={};vm.runInNewContext(fs.readFileSync(new URL('../js/baz-source-review.js',import.meta.url),'utf8'),{window,crypto,TextEncoder,Uint8Array,Date});
 const ui=window.BazSourceReview,fields={};for(const field of sourceFields)fields[field]=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(source[field]||'')))).toString('hex');
 const attachment={sourceBasis:{v:1,recordId:source.recordId,fields}};
-assert.equal((await ui.comparePdf({},source)).state,'unknown');assert.equal((await ui.comparePdf(attachment,null)).state,'unknown');assert.equal((await ui.comparePdf(attachment,source)).state,'current');
-assert.equal((await ui.comparePdf(attachment,{...source,hospitalName:'검증_병원의원',sourceHospitalName:source.hospitalName})).state,'current','DB aliases do not change the physical source name');
-assert.match((await ui.comparePdf(attachment,{...source,result:''})).text,/처리 결과/);
-assert.equal((await ui.comparePdf(attachment,{...source,recordId:'different'})).state,'unknown');
-assert.equal((await ui.comparePdf(attachment,{...source,nsAmt:'추가 평가'})).state,'current','nonprinted assessment fields do not require PDF regeneration');
-assert.equal((await ui.comparePdf({...attachment,sourceBasis:{...attachment.sourceBasis,format:'simplified'}},{...source,engineer:'다른 담당자'})).state,'current','simplified PDF excludes its omitted engineer field');
+for(const original of [null,source,{...source,result:'정정',recordId:'different'},{...source,engineer:'다른 담당자'}]){const before=JSON.stringify(attachment);const fixed=await ui.comparePdf(attachment,original);assert.equal(fixed.state,'snapshot');assert.match(fixed.text,/고정/);assert.equal(JSON.stringify(attachment),before,'comparison never alters the generated PDF metadata');}
 const markup=ui.markup({id:'safe',sourceReview:{pending:true,changes:[{field:'detail',before:'<script>x</script>',after:'&new'}]}},true);assert.ok(!markup.includes('<script>'));assert.ok(markup.includes('disabled'));assert.ok(markup.includes('&lt;script&gt;'));
 const longA={...changed,detail:'A'.repeat(3500),remark:'가'.repeat(3500),version:'long-a',observedAt:new Date(Date.now()-5000).toISOString()};
 await s.ingestSources([longA]);d=await s.handle({action:'work_detail',id},who);h=d.history.find(x=>x.kind==='result');

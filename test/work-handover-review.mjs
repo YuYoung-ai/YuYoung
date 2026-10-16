@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import vm from 'node:vm';
+import {createWorkStore} from '../deno-auth/work-store.ts';
+const fixture=fs.readFileSync(new URL('work-kv.mjs',import.meta.url),'utf8');
+const Kv=vm.runInNewContext('('+fixture.slice(fixture.indexOf('class Kv{'),fixture.indexOf('const kv=new Kv()')).trim()+')',{Map,structuredClone,JSON,String,Number,Infinity});
+const admin={name:'지정 관리자',level:3,uid:'fixture-admin'},staff={name:'현장',level:1,uid:'fixture-staff'};
+const hospital={id:'h',key:'h',name:'검증 병원',sn:'SN1'},form={hospitalKey:'h',symptom:'증상',cs:'CS',engineer:'현장',registeredAt:'2026-10-16T09:00',visitAt:'2026-10-16T12:00',status:'방문예정'};
+const source={recordId:'field-record',hospitalName:hospital.name,date:'2026-10-16',sn:'SN1',gubun:'A/S',cat:'분류',type:'유형',engineer:'현장',detail:'유효한 이전 정정본',result:'정상',version:'legacy-v2',observedAt:new Date(Date.now()-20000).toISOString()};
+const databases=[];
+async function setup(link=true){const db=globalThis.Deno?await Deno.openKv(':memory:'):new Kv();databases.push(db);const store=createWorkStore(db,{reviewAdminUid:admin.uid});await store.bridge('seed',{hospitals:[hospital],references:{minimumLevel:1,engineers:['현장'],reviewCatalog:{taxonomy:{분류:[['','유형']]},parts:[]}}});await store.bridge('activate',{manifest:await store.manifest()});let request;if(link){const saved=await store.handle({action:'work_save',form,operationId:crypto.randomUUID()},staff);assert.ok(saved.success,saved.error);request=saved.request;}await store.ingestSources([source]);if(request)request=(await store.handle({action:'work_detail',id:request.id},staff)).request;return {db,store,request};}
+async function enable(store){await store.bridge('sync_status',{checkedAt:new Date().toISOString(),pendingCount:0,pendingEvents:0,failedCount:0,reviewSchema:2,legacyHistoryEdits:0,error:''});const a=await store.handle({action:'work_review_activate'},admin);assert.ok(a.success,a.error);}
+const get=(s,id=source.recordId,who=admin)=>s.handle({action:'work_review_get',recordId:id},who);
+const write=(s,v,body,extra={},who=admin)=>s.handle({action:'work_review_save',recordId:v.recordId,requestId:v.requestId,baseReviewVersion:v.reviewVersion,baseBodyVersion:v.bodyVersion,body,operationId:crypto.randomUUID(),...extra},who);
+try{
+const {db,store:s,request}=await setup();
+assert.equal((await s.handle({action:'work_review_activate'},admin)).success,false,'activation requires fresh schema-2 drained queue status');await enable(s);
+const original=await get(s);assert.equal(original.published.detail,source.detail);assert.equal(original.provenance,'이전 연동본','do not invent an unavailable historical first original');
+for(const who of [{...admin,uid:''},{...admin,uid:'another-admin'},staff])assert.equal((await write(s,original,original.published,{},who)).success,false,'authenticated UID and admin role are both required');
+assert.equal((await createWorkStore(db).handle({action:'work_review_save',...original,body:original.published,operationId:crypto.randomUUID()},admin)).code,'ADMIN_NOT_CONFIGURED');
+const edited={...original.published,detail:'관리자 정정 전체 본문',result:'교체 확인'};
+assert.equal((await get(s,source.recordId,staff)).published.detail,source.detail,'drafts remain local until a commit');
+const op=crypto.randomUUID(),payload={operationId:op};
+const [saved,comment]=await Promise.all([write(s,original,edited,payload),s.handle({action:'work_history_add',requestId:request.id,body:'검수와 동시에 추가된 댓글',operationId:crypto.randomUUID()},staff)]);
+assert.ok(saved.success,saved.error);assert.ok(comment.success,comment.error);
+let current=await get(s);assert.equal(current.reviewVersion,1);assert.equal(current.published.detail,edited.detail);assert.equal(current.original.detail,source.detail);
+const audit=await s.handle({action:'work_review_history',recordId:source.recordId},staff);assert.equal(audit.items[0].before.detail,source.detail);assert.equal(audit.items[0].after.detail,edited.detail);
+assert.deepEqual(await write(s,original,edited,payload),saved,'lost-response same-ID replay returns the same receipt');
+assert.equal((await write(s,original,{...edited,detail:'ID 재사용'},payload)).success,false,'same operation cannot carry a different payload');
+assert.equal((await s.handle({action:'work_review_receipt',operationId:op},admin)).result.reviewVersion,1);
+assert.equal((await write(s,original,{...edited,detail:'뒤늦은 두 번째 창'})).code,'REVIEW_CONFLICT');
+let detail=await s.handle({action:'work_detail',id:request.id},staff);assert.ok(detail.history.some(h=>h.body==='검수와 동시에 추가된 댓글'));assert.equal(detail.request.status,'결과확인');
+const seq=(await s.status()).seq,pending=(await s.bridge('pending',{})).events.length;
+const unchanged=await write(s,current,current.published);assert.equal(unchanged.noChange,true);assert.equal((await s.status()).seq,seq);assert.equal((await s.bridge('pending',{})).events.length,pending,'a repeated unchanged review creates no event/version');
+await s.ingestSources([{...source,detail:'구형 클라이언트 원본 덮어쓰기',version:'late-source',observedAt:new Date().toISOString()}]);
+assert.equal((await get(s)).published.detail,edited.detail);assert.equal((await s.sources(hospital.name))[0].detail,edited.detail);
+let exceptions=0;for await(const e of db.list({prefix:[s.NS,'sourceException']})){exceptions++;assert.equal(e.value.source.detail,'구형 클라이언트 원본 덮어쓰기');}assert.equal(exceptions,1);
+const beforePdf=(await get(s)).bodyVersion,pdf={kind:'inspection_pdf',fileId:'fixture-file',url:'https://drive.google.com/file/d/fixture-file/view',filename:'fixture.pdf',bytes:100,sha256:'a'.repeat(64),revision:1,uploadedAt:new Date().toISOString(),uploadedBy:'현장',uploadId:'fixture-upload'};
+await s.bridge('documents',{documents:[{recordId:source.recordId,context:{hospitalName:hospital.name,date:source.date,sn:source.sn},requestId:request.id,pdf}]});
+assert.equal((await get(s)).bodyVersion,beforePdf,'document registration does not change the body version');
+assert.equal((await s.handle({action:'work_document_status',requestId:request.id,recordId:source.recordId,sha256:pdf.sha256},staff)).commentAttached,true);
+current=await get(s);assert.ok((await write(s,current,{...current.published,remark:'PDF 이후 검수'})).success,'PDF and comments do not create review conflicts');
+await s.ingestSources([{...source,pdf:{...pdf,revision:1},version:'old-pdf-source',observedAt:new Date(Date.now()+1).toISOString()}]);assert.equal((await get(s)).reviewVersion,2);
+assert.equal((await write(s,await get(s),{...(await get(s)).published,cat:'없는 분류'})).success,false);
+assert.equal((await write(s,await get(s),{...(await get(s)).published,sn:'SN2'})).success,false,'identity edits require explicit confirmation without moving links');
+assert.equal((await write(s,await get(s),{...(await get(s)).published,detail:'가'.repeat(8000)})).success,false,'oversized review is rejected before committing');
+const events=(await s.bridge('pending',{})).events.filter(e=>e.kind==='handover_review');assert.equal(events.length,2);assert.equal((await get(s)).mirrorPending,true);
+await s.bridge('ack',{items:[{id:events[1].id,seq:events[1].seq}]});await s.bridge('ack',{items:[{id:events[0].id,seq:events[0].seq}]});assert.equal((await get(s)).appliedVersion,2,'late report acknowledgments never decrease the applied version');
+const archived=(await db.get([s.NS,'sourceArchive',source.recordId,original.originalVersion])).value;assert.equal(archived.detail,source.detail);
+const isolated=await setup(false);await enable(isolated.store);const alone=await get(isolated.store);const reviewed=await write(isolated.store,alone,{...alone.published,detail:'접수 없는 기록 검수'});assert.ok(reviewed.success,reviewed.error);assert.equal(reviewed.request,undefined);
+const delta=await isolated.store.handle({action:'work_sync',revision:'0'},staff);assert.equal(delta.requests.length,0);assert.equal(delta.more,false);assert.equal(delta.revision,'1','standalone reviews advance a cursor without creating a fake request');
+const firstDoc=await setup(false);await firstDoc.store.bridge('documents',{documents:[{recordId:source.recordId,context:{hospitalName:hospital.name,date:source.date,sn:source.sn},pdf}]});
+const later=await firstDoc.store.handle({action:'work_save',form,operationId:crypto.randomUUID()},staff);await firstDoc.store.processPendingMatches();assert.equal((await firstDoc.store.handle({action:'work_document_status',requestId:later.request.id,recordId:source.recordId},staff)).commentAttached,true,'independent document waits for the exact future source link');
+console.log('handover-review: UID ACL, legacy preservation, atomic publication, comments/PDF isolation, two-window CAS, receipts, no-op versions, raw-source quarantine, 14KB bound, taxonomy/identity validation, standalone review/documents and monotonic report acknowledgments passed.');
+}finally{for(const db of databases)db.close?.();}

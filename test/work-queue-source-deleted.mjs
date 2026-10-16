@@ -34,7 +34,7 @@ function fixture(ids=['gone','valid','duplicate','read-failure']){
  for(const file of ['handover_gas.gs','hospital_work_gas.gs','hospital_work_kv_gas.gs'])vm.runInContext(fs.readFileSync(new URL('../'+file,import.meta.url),'utf8'),context);
  context.hwSS_=()=>({getSheetByName:()=>original});context.hwKvSheet_=()=>queue;
  context.findHeader_=()=>({row:1,headers:sourceHeaders});context.colBy_=()=>7;context.lastDataRow_=()=>3;
- context.hwKvStableSource_=()=>{};context.hwKvControl_=()=>{};context.hwLock_=fn=>fn();
+ context.histReadAll_=()=>({});context.hwKvStableSource_=()=>{};context.hwKvControl_=()=>{};context.hwLock_=fn=>fn();
  context.hwKvCall_=(verb,payload)=>{calls.push({verb,payload});return {success:true};};
  return {original,queue,calls,context};
 }

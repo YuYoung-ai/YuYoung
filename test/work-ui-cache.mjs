@@ -4,13 +4,18 @@ import assert from 'node:assert/strict';
 const fieldApi=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
+ const intervals=new Map(),listeners=new Map(),rosterCalls=[];let timerId=0;
+ const workspaceAll={dataset:{workspace:'all'},setAttribute(){}};
  let searchOptions;const hospitalSearch={create:config=>{searchOptions=config;return {refresh(){}};}};
  const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['all','active','today','week','lastweek','month','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
  function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
- const api={id:()=>String(posts.length+1),get:async(action,p)=>{calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
- vm.runInNewContext(source,{window:{BazWorkHospitalSearch:hospitalSearch,BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=> '사용자 A',cachedLevel:()=>options.level||1}},document:{getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}},localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date,Intl,JSON,Array,Number,Promise,console});
- return {nodes,calls,writes,detailWrites,posts,filters,local,searchOptions};
+ const api={id:()=>String(posts.length+1),get:async(action,p)=>{if(action==='work_roster'&&p.rosterMonth===new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit'}).format(new (options.Date||Date)())){rosterCalls.push({action,p});return options.rosterGet?options.rosterGet(p):{success:true,roster:[],rosterMonth:p.rosterMonth};}calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
+ const document={hidden:false,addEventListener:(type,fn)=>listeners.set(type,fn),getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-workspace')?[workspaceAll]:selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}};
+ vm.runInNewContext(source,{window:{BazWorkHospitalSearch:hospitalSearch,BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=>options.account?options.account():'사용자 A',cachedLevel:()=>options.level||1}},document,setInterval:(fn,ms)=>{intervals.set(++timerId,{fn,ms});return timerId;},clearInterval:id=>intervals.delete(id),localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date:options.Date||Date,Intl,JSON,Array,Number,Promise,console});
+ // These cache/edit tests exercise the full list; role-specific views have their own suite.
+ workspaceAll.onclick();filters.find(f=>f.dataset.filter==='all').onclick();
+ return {nodes,calls,rosterCalls,writes,detailWrites,posts,filters,local,searchOptions,document,intervals,tick:()=>{for(const timer of intervals.values())timer.fn();},visibility:hidden=>{document.hidden=hidden;listeners.get('visibilitychange')?.();},dispose:()=>intervals.clear()};
 }
 {
  const escapeCode=source.split('\n').find(line=>line.trim().startsWith('function esc('));
@@ -65,11 +70,11 @@ const withRows=rows=>({...saved,requests:rows});
  const f=fixture(withRows(rows));await flush();
  const choose=filter=>f.filters.find(x=>x.dataset.filter===filter).onclick();
  const ids=()=>Array.from(f.nodes.get('list').innerHTML.matchAll(/class="row-open" data-open="([^"]+)"/g),x=>x[1]).filter(id=>id!=='cancelled');
- choose('today');assert.deepEqual(ids(),['earlier','later']);assert.equal(f.nodes.get('count-today').textContent,2,'today metric includes completed visits but excludes trash/cancellation');
+ choose('today');assert.deepEqual(ids(),['earlier','later']);assert.equal(f.nodes.get('count-total').textContent,3,'today metric includes completed visits but excludes trash/cancellation');
  choose('all');assert.ok(ids().includes('missing'));
  choose('all');
  choose('active');assert.deepEqual(ids(),['later'],'active filter still excludes completion');
- choose('all');f.nodes.get('status-filter').value='완료';f.nodes.get('status-filter').onchange();assert.deepEqual(ids(),['earlier','missing'],'status intersection is preserved');f.nodes.get('status-filter').value='';
+ choose('all');f.nodes.get('advanced-groups').onclick({target:{closest:()=>({dataset:{advanced:'status',value:'완료'}})}});assert.deepEqual(ids(),['earlier','missing'],'status intersection is preserved');f.nodes.get('advanced-groups').onclick({target:{closest:()=>({dataset:{advanced:'status',value:''}})}});
  for(const sort of ['visit','updated','deadline']){
   f.nodes.get('sort').value=sort;f.nodes.get('sort-direction').value='asc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),sort==='updated'?['missing','earlier','later']:['earlier','later','missing']);
   f.nodes.get('sort-direction').value='desc';f.nodes.get('sort-direction').onchange();assert.deepEqual(ids(),['later','earlier','missing'],'descending dates with unset dates kept last');
@@ -164,27 +169,27 @@ const rosterSaved={...saved,rosterMonth:'2026-08',rosterLoaded:true,roster:[duty
  const days=f.nodes.get('roster-calendar-days').innerHTML;assert.equal((days.match(/data-calendar-date=/g)||[]).length,31);assert.equal((days.split('data-calendar-date="2026-08-01"')[0].match(/calendar-blank/g)||[]).length,6,'August 2026 begins on Saturday');
  assert.ok(days.includes('양승주 휴무'));assert.ok(days.includes('양승주 당직'));assert.ok(!days.includes('8월 18일 · 양승주'),'deleted schedules do not create calendar marks');
  f.nodes.get('roster-calendar-days').onclick({target:{closest:()=>({dataset:{calendarDate:'2026-08-17'},disabled:false})}});assert.ok(f.nodes.get('roster-calendar-selection').innerHTML.includes('양승주 휴무'));assert.equal(f.calls.length,0,'selecting a date is local');
- await f.nodes.get('roster-calendar-edit').onclick();assert.equal(f.nodes.get('roster-date').value,'2026-08-17');assert.equal(f.nodes.get('roster-dialog').open,true);f.nodes.get('roster-close').onclick();
- await f.nodes.get('roster-calendar-next').onclick();assert.equal(f.calls[0].action,'work_roster');assert.equal(f.calls[0].p.rosterMonth,'2026-09');assert.equal(f.nodes.get('roster-calendar-month').textContent,'2026. 09');assert.ok(!f.nodes.get('roster-calendar-days').innerHTML.includes('양승주'));
+ await f.nodes.get('roster-open').onclick();await f.nodes.get('roster-calendar-edit').onclick();assert.equal(f.nodes.get('roster-date').value,'2026-08-17');assert.equal(f.nodes.get('roster-dialog').open,true);f.nodes.get('roster-close').onclick();
+ await f.nodes.get('roster-calendar-next').onclick();assert.equal(f.calls[0].action,'work_roster');assert.equal(f.calls[0].p.rosterMonth,'2026-09');assert.equal(f.nodes.get('roster-month').value,'2026-09');assert.ok(!f.nodes.get('roster-calendar-days').innerHTML.includes('양승주'));
  const leap=fixture({...saved,rosterMonth:'2024-02',rosterLoaded:true,roster:[]});await flush();assert.ok(leap.nodes.get('roster-calendar-days').innerHTML.includes('2024-02-29'));assert.ok(!leap.nodes.get('roster-calendar-days').innerHTML.includes('2024-02-30'));
  const year=fixture({...saved,rosterMonth:'2026-12',rosterLoaded:true,roster:[]});await flush();await year.nodes.get('roster-calendar-next').onclick();assert.equal(year.calls[0].p.rosterMonth,'2027-01');
- const failed=fixture(rosterSaved,{get:async()=>({success:false,error:'일정 조회 실패'})});await flush();await failed.nodes.get('roster-calendar-next').onclick();assert.equal(failed.nodes.get('roster-calendar-month').textContent,'2026. 08');assert.equal(failed.nodes.get('roster-calendar-error').hidden,false);assert.equal(failed.nodes.get('roster-calendar-error').textContent,'일정 조회 실패');
+ const failed=fixture(rosterSaved,{get:async()=>({success:false,error:'일정 조회 실패'})});await flush();await failed.nodes.get('roster-calendar-next').onclick();assert.equal(failed.nodes.get('roster-month').value,'2026-08');assert.equal(failed.nodes.get('roster-error').hidden,false);assert.equal(failed.nodes.get('roster-error').textContent,'일정 조회 실패');
  console.log('roster calendar: weekday alignment, leap day/year rollover, date-local details, cached startup, deleted-entry exclusion, prefilled schedule management and explicit month load/failure preservation passed.');
 }
 const rosterFixture=fixture(rosterSaved,{post:async(action,p)=>rosterUnknown?{success:false,retrySameOperation:true,error:'응답 확인 필요'}:{success:true,schedule:{id:p.date==='2026-08-17'?'off':'added',date:p.date,person:p.person,type:p.type||'휴무',revision:p.baseRevision+1,updatedAt:'2026-10-06T02:00:00Z',deletedAt:action==='work_roster_delete'?'now':''}}});await flush();
 assert.equal(rosterFixture.calls.length,0,'cached roster opens without polling');
-const rosterHeader=rosterFixture.nodes.get('roster-summary').innerHTML;assert.ok(rosterHeader.indexOf('8/17 양승주 휴무')<rosterHeader.indexOf('8/19 양승주 당직'),'header is sorted by date');
+const rosterHeader=rosterFixture.nodes.get('roster-rows').innerHTML;assert.ok(rosterHeader.indexOf('8/17 양승주 휴무')<rosterHeader.indexOf('8/19 양승주 당직'),'header is sorted by date');
 await rosterFixture.nodes.get('roster-open').onclick();assert.equal(rosterFixture.nodes.get('roster-dialog').open,true);assert.equal(rosterFixture.nodes.get('roster-month').value,'2026-08');assert.equal(rosterFixture.calls.length,0);
 const fillRoster=(f,date,person,type)=>{f.nodes.get('roster-date').value=date;f.nodes.get('roster-person').value=person;f.nodes.get('roster-type').value=type;};
 fillRoster(rosterFixture,'2026-08-17','양승주','당직');await rosterFixture.nodes.get('roster-form').onsubmit({preventDefault(){}});assert.equal(rosterFixture.posts.length,0,'duplicate must use explicit edit');assert.ok(rosterFixture.nodes.get('roster-error').textContent.includes('이미 등록'));
 rosterFixture.nodes.get('roster-rows').onclick({target:{closest:()=>({dataset:{rosterEdit:'off'}})}});assert.equal(rosterFixture.nodes.get('roster-date').disabled,true);assert.equal(rosterFixture.nodes.get('roster-person').disabled,true);
-rosterFixture.nodes.get('roster-type').value='당직';await rosterFixture.nodes.get('roster-form').onsubmit({preventDefault(){}});assert.equal(rosterFixture.posts[0].action,'work_roster_save');assert.equal(rosterFixture.posts[0].p.baseRevision,1);assert.ok(rosterFixture.nodes.get('roster-summary').innerHTML.includes('8/17 양승주 당직'));assert.equal(rosterFixture.writes.at(-1).value.requests.length,0,'schedule response never becomes a service row');assert.equal(rosterFixture.writes.at(-1).value.roster.find(r=>r.id==='off').revision,2);
+rosterFixture.nodes.get('roster-type').value='당직';await rosterFixture.nodes.get('roster-form').onsubmit({preventDefault(){}});assert.equal(rosterFixture.posts[0].action,'work_roster_save');assert.equal(rosterFixture.posts[0].p.baseRevision,1);assert.ok(rosterFixture.nodes.get('roster-rows').innerHTML.includes('양승주 당직'));assert.equal(rosterFixture.writes.at(-1).value.requests.length,0,'schedule response never becomes a service row');assert.equal(rosterFixture.writes.at(-1).value.roster.find(r=>r.id==='off').revision,2);
 fillRoster(rosterFixture,'2026-09-01','양승주','휴무');await rosterFixture.nodes.get('roster-form').onsubmit({preventDefault(){}});assert.equal(rosterFixture.posts.length,1,'form cannot save to an unseen month');
 rosterFixture.nodes.get('roster-rows').onclick({target:{closest:()=>({dataset:{rosterDelete:'off'}})}});assert.equal(rosterFixture.nodes.get('roster-delete-confirm').hidden,false);assert.equal(rosterFixture.posts.length,1);rosterFixture.nodes.get('roster-delete-cancel').onclick();assert.equal(rosterFixture.posts.length,1,'cancel preserves schedule');
-rosterFixture.nodes.get('roster-rows').onclick({target:{closest:()=>({dataset:{rosterDelete:'off'}})}});await rosterFixture.nodes.get('roster-delete-submit').onclick();assert.equal(rosterFixture.posts[1].action,'work_roster_delete');assert.equal(rosterFixture.posts[1].p.baseRevision,2);assert.ok(!rosterFixture.nodes.get('roster-summary').innerHTML.includes('8/17 양승주'));
+rosterFixture.nodes.get('roster-rows').onclick({target:{closest:()=>({dataset:{rosterDelete:'off'}})}});await rosterFixture.nodes.get('roster-delete-submit').onclick();assert.equal(rosterFixture.posts[1].action,'work_roster_delete');assert.equal(rosterFixture.posts[1].p.baseRevision,2);assert.ok(!rosterFixture.nodes.get('roster-rows').innerHTML.includes('8/17 양승주'));
 rosterUnknown=true;fillRoster(rosterFixture,'2026-08-21','양승주','휴무');await rosterFixture.nodes.get('roster-form').onsubmit({preventDefault(){}});assert.equal(rosterFixture.nodes.get('pending').hidden,false);assert.equal(rosterFixture.nodes.get('roster-save').disabled,true);assert.equal(rosterFixture.nodes.get('roster-month').disabled,true);assert.equal(rosterFixture.writes.at(-1).value.roster.filter(r=>r.date==='2026-08-21').length,0,'uncertain response does not fabricate a saved entry');
-const firstOperation=rosterFixture.posts.at(-1).p.operationId;rosterUnknown=false;await rosterFixture.nodes.get('retry').onclick();assert.equal(rosterFixture.posts.at(-1).p.operationId,firstOperation,'same operation retry');assert.ok(rosterFixture.nodes.get('roster-summary').innerHTML.includes('8/21 양승주 휴무'));
-rosterFixture.nodes.get('roster-month').value='2026-09';await rosterFixture.nodes.get('roster-month').onchange.call(rosterFixture.nodes.get('roster-month'));assert.equal(rosterFixture.calls.at(-1).action,'work_roster');assert.equal(rosterFixture.calls.at(-1).p.rosterMonth,'2026-09');assert.ok(rosterFixture.nodes.get('roster-summary').innerHTML.includes('9월'));assert.ok(!rosterFixture.nodes.get('roster-summary').innerHTML.includes('양승주'));
+const firstOperation=rosterFixture.posts.at(-1).p.operationId;rosterUnknown=false;await rosterFixture.nodes.get('retry').onclick();assert.equal(rosterFixture.posts.at(-1).p.operationId,firstOperation,'same operation retry');assert.ok(rosterFixture.nodes.get('roster-rows').innerHTML.includes('8/21 양승주 휴무'));
+rosterFixture.nodes.get('roster-month').value='2026-09';await rosterFixture.nodes.get('roster-month').onchange.call(rosterFixture.nodes.get('roster-month'));assert.equal(rosterFixture.calls.at(-1).action,'work_roster');assert.equal(rosterFixture.calls.at(-1).p.rosterMonth,'2026-09');assert.equal(rosterFixture.nodes.get('roster-month').value,'2026-09');assert.ok(!rosterFixture.nodes.get('roster-rows').innerHTML.includes('양승주'));
 const html=fs.readFileSync(new URL('../hospital-work.html',import.meta.url),'utf8');assert.ok(html.indexOf('id="sync"')<html.indexOf('id="roster-open"'));assert.ok(html.indexOf('id="roster-open"')<html.indexOf('메인으로'));
 console.log('work-roster UI: cached startup, header date ordering, adjacent button, duplicate guard, explicit edit/delete, snapshot persistence, month switch and durable unknown-save retry passed.');
 
@@ -209,3 +214,47 @@ assert.equal(resultUi.posts.at(-1).p.baseRevision,5);
 assert.deepEqual(Array.from(resultUi.detailWrites.at(-1).history,h=>h.id).sort(),['auto-history','manual-history']);
 assert.equal(resultUi.detailWrites.at(-1).preview,false,'latest source response keeps a complete current local history after save');
 console.log('Handover read-triggered linking: latest detail persists before the next write and retains all device histories.');
+
+// Delta pages are staged until the whole bounded snapshot succeeds.
+{
+ const row=makeRequest('page'),initial=withRows([row]);let failing=true;
+ const f=fixture(initial,{get:async(action,p)=>{
+  assert.equal(action,'work_sync','GAS outage cannot become a list dependency');
+  if(p.revision==='6')return {success:true,storage:'kv',requests:[{...row,revision:5}],revision:'7',snapshotSeq:'8',more:true};
+  assert.equal(p.snapshotSeq,'8');if(failing)throw new Error('중간 페이지 통신 실패');
+  return {success:true,storage:'kv',requests:[],revision:'8',snapshotSeq:'8',more:false};
+ }});await flush();await f.nodes.get('sync').onclick();
+ assert.equal(f.writes.length,0,'partial snapshot never commits records or revision');
+ assert.equal(f.nodes.get('sync-state').dataset.state,'error');
+ failing=false;await f.nodes.get('sync').onclick();
+ assert.equal(f.calls[2].p.revision,'6','retry resumes from the last fully saved revision');
+ assert.equal(f.writes.at(-1).value.revision,'8');assert.equal(f.writes.at(-1).value.requests[0].revision,5);
+}
+for(const mode of ['invalid','auth','network','stalled']){
+ const f=fixture(saved,{get:async(action,p)=>{
+  if(action==='work_bootstrap')return {success:true,storage:'kv',requests:[],revision:'3',hospitals:[],engineers:[]};
+  if(mode==='invalid')return {success:false,code:'REVISION_INVALID',error:'잘못된 기준'};
+  if(mode==='auth')return {success:false,code:'AUTH_REQUIRED',error:'로그인 필요'};
+  if(mode==='network')throw new Error('오프라인');
+  return {success:true,storage:'kv',requests:[],revision:p.revision,snapshotSeq:'9',more:true};
+ }});await flush();await f.nodes.get('sync').onclick();
+ assert.equal(f.calls.filter(c=>c.action==='work_bootstrap').length,mode==='invalid'?1:0);
+ assert.equal(f.writes.length,mode==='invalid'?1:0,'only structured invalid revisions trigger a full reload');
+ assert.equal(f.calls.filter(c=>c.action==='work_sync').length,1,'stalled cursor cannot loop');
+}
+{
+ let resolve,account='사용자 A';const f=fixture(saved,{account:()=>account,get:()=>new Promise(r=>resolve=r)});await flush();
+ const sync=f.nodes.get('sync').onclick();await flush();account='사용자 B';resolve({success:true,storage:'kv',requests:[],revision:'7'});await sync;
+ assert.equal(f.writes.length,0,'previous-account response cannot update cache');
+}
+{
+ let now=Date.parse('2026-10-16T01:00:00Z');
+ class Clock extends Date{constructor(...args){super(...(args.length?args:[now]));}static now(){return now;}}
+ const f=fixture(saved,{Date:Clock});await flush();assert.equal(f.intervals.size,1);assert.equal([...f.intervals.values()][0].ms,60000);
+ const before=f.rosterCalls.length;f.tick();await flush();assert.equal(f.rosterCalls.length,before,'same-day timer does not poll work or roster');
+ now+=86400000;f.visibility(true);f.tick();await flush();assert.equal(f.rosterCalls.length,before,'hidden document defers day rollover');
+ f.visibility(false);await flush();assert.equal(f.rosterCalls.length,before+1,'visibility resumes the deferred roster refresh');
+ assert.equal(f.calls.length,0,'roster timer never synchronizes work records');
+ f.dispose();assert.equal(f.intervals.size,0);f.tick();assert.equal(f.rosterCalls.length,before+1);
+}
+console.log('sync isolation: staged pages, fixed snapshot range, failed-page retry, one invalid-revision reload, auth/network preservation, stalled cursors, account changes and modeled roster timer/visibility/cleanup passed.');

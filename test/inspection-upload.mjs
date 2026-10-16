@@ -22,8 +22,8 @@ assert.ok(html.includes('handover:handoverReference'));assert.ok(html.includes('
 console.log('inspection-upload: exact 7MB body/digest, direct Google transport, same-file retry, status/link, task identity, size/endpoint guard and page script syntax passed.');
 const verifiedCalls=[];let sourceConflict=false;
 const verified=window.BazInspectionUpload.create({url,token:()=> 'fixture-token',onSaved(){},fetch:async(endpoint,options)=>{const p=JSON.parse(options.body);verifiedCalls.push(p);return {json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:'record-123',sourceBasis:{fingerprint:'a'.repeat(64)},pdf:null}:sourceConflict?{success:false,sourceConflict:true,error:'원본이 바뀌었습니다. PDF를 다시 생성하세요.'}:{success:true,recordId:'record-123',pdf}};}});
-const prepared=await verified.prepare({hospital:'검증',date:'2026-10-14',pdfFormat:'simplified'});assert.equal(prepared.sourceFingerprint,'a'.repeat(64));
-await verified.publish(new Blob(['%PDF-1.7']), 'verified.pdf',prepared);assert.equal(verifiedCalls.at(-1).sourceFingerprint,prepared.sourceFingerprint);assert.equal(verifiedCalls.at(-1).pdfFormat,'simplified');
+const prepared=await verified.prepare({hospital:'검증',date:'2026-10-14',pdfFormat:'simplified'});assert.equal(prepared.sourceBasis.fingerprint,'a'.repeat(64));
+await verified.publish(new Blob(['%PDF-1.7']), 'verified.pdf',prepared);assert.equal(verifiedCalls.at(-1).sourceBasis.fingerprint,prepared.sourceBasis.fingerprint);assert.equal(verifiedCalls.at(-1).pdfFormat,'simplified');
 assert.equal(verifiedCalls.filter(p=>p.action==='inspection_pdf_resolve').length,1,'a prepared source needs no redundant Google resolve before upload');
 sourceConflict=true;await verified.publish(new Blob(['%PDF-1.7 changed']), 'verified.pdf',prepared);assert.equal(nodes.pdfUploadRetry.hidden,true,'a changed source requires regeneration, not a doomed same-file retry');
 const beforePrepareError=verifiedCalls.length;await verified.publish(new Blob(['%PDF-1.7']), 'offline.pdf',{...prepared,sourcePreparationError:'원본 확인 실패'});assert.equal(verifiedCalls.length,beforePrepareError);assert.match(nodes.pdfUploadStatus.textContent,/다시 생성/);

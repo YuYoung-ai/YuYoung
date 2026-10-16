@@ -182,8 +182,9 @@ function hwSource_(o){
   var out={date:_issueDateNorm_(s.date),hospitalName:s.hosp,engineer:s.fse,sn:pickH_(o,['장비SN','장비 SN','장비 S/N','S/N(장비)','SN']),gubun:hwKind_(pickH_(o,['점검/AS','점검/A/S','구분'])||s.gubun),cat:s.cat,type:s.type,
     part:s.part,cost:s.cost,detail:s.detail,result:pickH_(o,HANDOVER_FIELD_COLS.result)||'',remark:pickH_(o,HANDOVER_FIELD_COLS.remark)||'',
     nozzleReuse:pickH_(o,['노즐 재사용','노즐재사용'])||'',nsFill:s.nsFill||'',nsAmt:s.nsAmt||'',jet:s.jet||''};
-  if(typeof inspectionPdfSource_==='function'){var pdf=inspectionPdfSource_(o);if(pdf)out.pdf=pdf;}
-  out.version=hwHash_(out); out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
+  out.schemaVersion=2;out.version=hwHash_(out);out.bodyVersion=out.version;
+  var originalMeta=pickH_(o,['원본 저장 정보']);if(originalMeta){try{var savedMeta=JSON.parse(originalMeta);out.originalAuthor=savedMeta.createdBy||'';out.createdAt=savedMeta.createdAt||'';}catch(ignore){}}
+  if(typeof inspectionPdfSource_==='function'){var pdf=inspectionPdfSource_(o);if(pdf)out.pdf=pdf;} out.recordId=String(pickH_(o,REC_ID_COLS)||'').trim();
   if(!out.recordId) out.recordId='legacy_'+Number(o._row)+'_'+out.version;
   return out;
 }
@@ -325,11 +326,10 @@ function hwAutoHistories_(eligible,sources){
 // doPost가 원본 행/사진 저장을 확정한 뒤, 기존 ScriptLock 안에서 호출한다.
 function hospitalWorkHandoverSaved_(hospitalName,date){
   if(hwKvMode_()){
-    var added=hwKvQueueSources_(hospitalName,date),statusPublished=false;
-    // Publish before the background worker drains the queue. A status failure
-    // must not turn a successful Handover save into a retry of the original.
-    if(added){try{hwKvPublishStatus_();statusPublished=true;}catch(e){Logger.log('Handover 대기 집계 전달 실패: '+String(e.message||e));}}
-    return {enabled:true,pending:true,completed:0,statusPublished:statusPublished};
+    var added=hwKvQueueSources_(hospitalName,date);
+    // Only durable Sheet writes here: doPost still holds its ScriptLock.
+    // Status publication runs after releaseLock, or in the periodic worker.
+    return {enabled:true,pending:true,completed:0,statusPending:added>0};
   }
   hwResetContext_();
   if(!PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_SS_ID'))return {enabled:false};

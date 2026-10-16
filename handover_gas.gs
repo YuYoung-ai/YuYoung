@@ -580,12 +580,13 @@ function doPost(e){
         photo:photoResult_(true, false, '', 'reqId-missing'),
         error:'안전한 중복 방지를 위해 reqId가 필요합니다 — 화면을 새로고침한 뒤 다시 저장해 주세요.'});
     }
+    var requestClean=JSON.parse(JSON.stringify(payload));delete requestClean.token;delete requestClean.__ua;var requestFingerprint=syncRevOf_(requestClean);
     /* 빠른 경로: 이미 처리된 요청이면 사진 업로드도 하지 않고 첫 결과를 그대로 돌려준다.
        ★ 이것만으로는 부족하다 — 동시 요청 두 개는 둘 다 여기를 통과한다.
          락을 잡은 뒤 아래에서 한 번 더 확인한다(double-checked). */
     if(reqId){
       var early = reqGet_(reqId);
-      if(early) return json_(early.result);
+      if(early){if(early.fingerprint&&early.fingerprint!==requestFingerprint)return json_({success:false,error:'이미 저장한 작업 ID의 본문이 다릅니다. 관리자 검수를 사용하세요.'});return json_(early.result);}
     }
 
     /* [v2.8] 사진 업로드는 락 "밖"에서 먼저 끝낸다.
@@ -664,6 +665,7 @@ function doPost(e){
     if(reqId){
       var dup = reqGet_(reqId);
       if(dup){
+      if(dup.fingerprint&&dup.fingerprint!==requestFingerprint)throw new Error('같은 저장 ID에 다른 본문이 전달되었습니다.');
         photoDiscard_(photoFile);            /* 중복 업로드된 Drive 파일 정리 */
         return json_(dup.result);
       }
@@ -717,15 +719,17 @@ function doPost(e){
     /* 신규 참조 경로는 기록 ID가 조인 키다. 일반 셀을 한 칸이라도 쓰기 전에
        초기 설정 누락을 확인해 실패 행이 시트에 일부 남지 않게 한다. */
     var recCol = colBy_(hdr, REC_ID_COLS);
-    if(usesRefs && !recCol){
+    if(isHandover && !recCol){
       return json_({success:false, row:null,
         photo:photoResult_(true,false,'','no-record-id-column'),
         error:'시트에 기록 ID 열이 없습니다 — setupPhotoSheet() 를 실행한 뒤 다시 저장하세요.'});
     }
 
+    if(isHandover&&recCol&&sh.getLastRow()>hdr.row){var existingRecord=sh.getRange(hdr.row+1,recCol,sh.getLastRow()-hdr.row,1).createTextFinder(reqId).matchEntireCell(true).findNext();if(existingRecord){var existingMetaCol=colBy_(hdr,['원본 저장 정보']),existingMeta=null;if(existingMetaCol){try{existingMeta=JSON.parse(sh.getRange(existingRecord.getRow(),existingMetaCol).getValue()||'null');}catch(ignore){}}if(existingMeta&&existingMeta.committed&&existingMeta.operationFingerprint===requestFingerprint){photoDiscard_(photoFile);return json_({success:true,row:existingRecord.getRow(),recordId:reqId,savedFields:existingMeta.savedFields||{},photo:photoResult_(photoRequired,photoRequired,snPhotoFileId||'', ''),recovered:true,msg:'이미 확정된 원본 저장을 확인했습니다.'});}throw new Error('이 기록 ID는 이미 저장되었습니다. 본문 수정은 앱 관리자 검수를 사용하세요.');}}
     var row = lastDataRow_(sh, hdr) + 1;
     if(row > sh.getMaxRows()) sh.insertRowAfter(sh.getMaxRows());
     writeSheet = sh; writeRow = row;
+    if(isHandover&&typeof hwKvMode_==='function'&&hwKvMode_())hwKvPrepareField_(reqId,row);
 
     written = [];   /* 롤백 대상 열 */
     function put_(col, value){
@@ -775,6 +779,7 @@ function doPost(e){
     /* [v3.1] 화면에는 있는데 시트에 저장되지 않던 필드들 —
        열이 있으면 저장하고, 없으면 warnings 로 알린다(프런트가 '저장됨'이라 하지 않게). */
     var authUser = authName_(payload && payload.token);
+    if(isHandover){var originalCol=colBy_(hdr,['원본 저장 정보']);if(!originalCol){originalCol=sh.getLastColumn()+1;if(typeof sh.getMaxColumns==='function'&&originalCol>sh.getMaxColumns())sh.insertColumnsAfter(sh.getMaxColumns(),originalCol-sh.getMaxColumns());sh.getRange(hdr.row,originalCol).setValue('원본 저장 정보');}put_(originalCol,JSON.stringify({recordId:reqId,createdAt:new Date().toISOString(),createdBy:authUser||P.fse,operationFingerprint:requestFingerprint}));}
     var extras = {
       eqKind:P.eqKind, verUI:P.verUI, verHP:P.verHP, nozzleDate:P.nozzleDate,
       result:P.result, remark:P.remark, code:P.code,
@@ -842,6 +847,7 @@ function doPost(e){
       }
     }
     /* 여기부터는 행과 사진 메타데이터가 함께 확정됐다. */
+    if(isHandover&&typeof hwKvMode_==='function'&&hwKvMode_()){var committedMeta={recordId:reqId,createdAt:new Date().toISOString(),createdBy:authUser||P.fse,operationFingerprint:requestFingerprint,committed:true,savedFields:savedFields,snapshot:hwKvSourceById_(reqId)};put_(originalCol,JSON.stringify(committedMeta));}
     committed = true;
     log_('OK', hdr, logSafe_(payload));
     /* 방금 쓴 기록이 조회에 바로 보이도록 관련 캐시를 전부 비운다.
@@ -872,7 +878,7 @@ function doPost(e){
       }
     }
     /* 재전송·동시 요청이 같은 결과를 받도록 영속 저장 (위 double-checked 확인과 한 쌍) */
-    if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row});
+    if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row,fingerprint:requestFingerprint});
     return json_(out);
   }catch(err){
     log_('ERR:'+err, null, logSafe_(payload));
@@ -883,7 +889,12 @@ function doPost(e){
       photo: photoResult_(!!(payload && payload.snPhoto), false, '', String(err)),
       error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
-    try{ lock.releaseLock(); }catch(_){}
+    var workLockReleased=false;try{ lock.releaseLock();workLockReleased=true; }catch(_){}
+    // The response/receipt is already fixed. A status failure cannot turn the
+    // committed Handover into a failed save, and no HTTP call holds ScriptLock.
+    if(workLockReleased&&out&&out.workAuto&&out.workAuto.statusPending&&typeof hwKvPublishStatus_==='function'){
+      try{hwKvPublishStatus_();}catch(statusError){Logger.log('Handover 대기 집계 전달은 주기 작업에서 재시도합니다.');}
+    }
     /* 멱등성 정리는 응답 작성·전역 락 해제 뒤에만 확률 실행한다. */
     try{ reqPrune_(); }catch(_){}
   }
@@ -916,7 +927,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.9.0', warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -1965,7 +1976,7 @@ function asReport_(p){
   try{ photoMap = photoMapByRecord_(); }catch(e){ Logger.log('[asreport] 사진 맵 실패(무시): '+e); }
 
   var groups = {}, order = [], total = 0;
-  readAll_(true).rows.forEach(function(o){
+  (typeof hwReviewRows_==='function'?hwReviewRows_(readAll_(true).rows):readAll_(true).rows).forEach(function(o){
     var r = slim_(o);
     var d = parseD_(r.date);
     if(!d || d < from || d > to) return;
@@ -2069,7 +2080,7 @@ function labelList_(p){
   /* [v3.4] 기록 ID 를 함께 읽는다. slim_ 에 넣지 않는 이유는 대시보드가 쓰는
      ?action=all 응답이 행마다 커지기 때문 — 여기서만 원본 행에서 꺼낸다. */
   var hit = [];
-  readAll_(true).rows.forEach(function(o){                      /* true = 사진 열까지 읽기 */
+  (typeof hwReviewRows_==='function'?hwReviewRows_(readAll_(true).rows):readAll_(true).rows).forEach(function(o){                      /* true = 사진 열까지 읽기 */
     var r = slim_(o);
     var d = parseD_(r.date);
     if(!d || d < from || d > to) return;
@@ -2337,7 +2348,7 @@ function getAll_(p){
   if(same) return syncObserved_(same,started,same._rows,'hit');
   var hit = (!syncForce_(p) && typeof bazCacheGet_ === 'function') ? bazCacheGet_('handover_all') : null;
   if(hit){ try{ var old=JSON.parse(hit), nc=syncNochangeFrom_(old,p,'rev'); syncBytesFrom_(old,hit); return syncObserved_(nc||old,started,old._rows||old.count,'hit'); }catch(e){} }
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   var out = {success:true, count:all.rows.length,
              updated:Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd HH:mm'),
              data:all.rows.map(slim_), _rows:all.rows.length};
@@ -2498,7 +2509,7 @@ function getIssueHist_(p, revParam){
  *  _srcRow 는 서버 병합/충돌 판정에만 쓰고 histPublicList_ 에서 제거한다. 날짜만으로
  *  cutoff 를 잡으면 같은 날 뒤늦게 들어온 기록을 구분할 수 없어 원본 행 번호를 쓴다. */
 function histDerivedRaw_(){
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   var history = {};
   all.rows.forEach(function(o){
     var name = String(o['병원명']||'').trim();
@@ -2659,6 +2670,7 @@ function histMerge_(edit, derived){
  *  · 허용 목록 밖 필드는 서버에서도 한 번 더 제거
  */
 function histSave_(p){
+  if(typeof hwKvMode_==='function'&&hwKvMode_())return {success:false,error:'저장된 Handover 정정은 CS 서비스 현황의 지정 관리자 본문 검수를 사용하세요.'};
   var lv = verifyLevel_((p && p.token) || '');
   if(lv < 2){
     return {success:false, error: MENU.AUTH_VERIFY_URL
@@ -2766,7 +2778,7 @@ function getRecent_(hosp, limit){
   var _k = 'hv_recent_' + norm_(hosp) + '_' + (Number(limit)||0);
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   var q = norm_(hosp);
   var hit = all.rows.filter(function(o){ return norm_(o['병원명'])===q || norm_(o['병원명']).indexOf(q)>=0; });
   hit = hit.slice(-Math.min(limit, CONFIG.RECENT_MAX)).reverse().map(slim_);
@@ -2794,7 +2806,7 @@ function getToday_(fse, token){
   var _k = 'hv_today_' + today + '_' + norm_(fse||'');
   var _c = (typeof bazCacheGet_ === 'function') ? bazCacheGet_(_k) : null;
   if(_c){ try{ return JSON.parse(_c); }catch(e){} }
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   var hit = all.rows.filter(function(o){
     var d = String(o['처리일']||'').replace(/\./g,'-').replace(/\s/g,'');
     var okDate = d.indexOf(today)===0;
@@ -2881,7 +2893,7 @@ function getMaster_(p){
     out.source='유형마스터 시트';
   }
   /* 데이터 기반 보강: 실제 기록에서 대분류/유형·교체품·담당자 유니크 추출 */
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   all.rows.forEach(function(o){
     var cat=String(o['대분류']||'').trim(), typ=String(o['유형']||'').trim();
     if(cat&&typ){
@@ -3249,7 +3261,7 @@ function getGuide_(type){
   if(!type) return {success:false, error:'type 파라미터 필요'};
   var m = getMaster_();
   var g = m.guides[type];
-  var all = readAllMemo_();
+  var all = readAllMemo_();if(typeof hwReviewRows_==='function')all={rows:hwReviewRows_(all.rows)};
   var q = norm_(type);
   var cases = all.rows.filter(function(o){ return norm_(o['유형'])===q; }).slice(-3).reverse().map(slim_);
   var text =
@@ -3467,7 +3479,7 @@ function wkGetWeekly_(p){
   var sat = new Date(mon); sat.setDate(sat.getDate()-2);            /* 전주 토요일부터 */
   var fri = new Date(mon); fri.setDate(fri.getDate()+4); fri.setHours(23,59,59,0);
   var qf = norm_(fse);
-  var rows = readAllMemo_().rows.map(slim_).filter(function(r){
+  var rows = (typeof hwReviewRows_==='function'?hwReviewRows_(readAllMemo_().rows):readAllMemo_().rows).map(slim_).filter(function(r){
     var d = parseD_(r.date);
     if(!d || d<sat || d>fri) return false;
     if(!qf) return true;

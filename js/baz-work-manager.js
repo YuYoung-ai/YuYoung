@@ -354,25 +354,43 @@
     function rowCheck(r){return '<input type="checkbox" data-select-request="'+esc(r.id)+'" aria-label="'+esc(r.hospitalName+' · '+time(r.visitAt)+' · '+r.symptom.slice(0,60)+' 접수 선택')+'"'+(checkedRequests.has(r.id)?' checked':'')+(canManage(r)?'':' disabled title="등록자 또는 관리자만 선택할 수 있습니다."')+'>';}
     $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th class="selection-cell"><span class="sr-only">접수 선택</span></th><th>병원 / 접수 증상</th><th>상태</th><th>방문 일시</th><th>엔지니어</th><th>CS 담당</th><th class="recent-column">최근 기록</th></tr></thead><tbody>'+shown.map(function(r){return '<tr data-inline-form="'+esc(r.id)+'" class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><td class="selection-cell">'+rowCheck(r)+'</td><td>'+rowButton(r)+'</td><td>'+statusPicker(r)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date">'+editable(r,'visit',time(r.visitAt))+'</td><td>'+editable(r,'engineer',r.engineer||'미배정')+'</td><td>'+editable(r,'cs',r.cs)+'</td><td class="recent-column"><div class="summary">'+esc(r.latest||'—')+'</div></td></tr>'+(editMode&&inlineDrafts[r.id]?'<tr class="edit-save-row" data-inline-form="'+esc(r.id)+'"><td colspan="7">'+inlineActions(r)+'</td></tr>':'');}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){if(editMode)return '<div class="mobile-card editable-card" data-inline-form="'+esc(r.id)+'">'+rowButton(r)+'<div class="card-meta">'+editable(r,'status',r.status)+' '+editable(r,'visit',time(r.visitAt))+' '+editable(r,'engineer',r.engineer||'미배정')+' '+editable(r,'cs',r.cs)+'</div>'+inlineActions(r)+'</div>';return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><div class="mobile-status">'+statusPicker(r)+'</div><label class="mobile-select">'+rowCheck(r)+'<span class="sr-only">접수 선택</span></label><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(displayRequest(r).hospitalName)+'</span>'+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(r.symptom.slice(0,130))+'</div></button></div>';}).join('')+'</div>';updateSelection();
   }
-  async function sync(force,refreshSources){
+  async function readSyncData(force){
+    var data,nextRevision;
+    if(state.loaded&&kvReady&&force!==true){
+      var merged=new Map(state.requests.map(function(r){return [r.id,r];})),next=revision,upper;
+      do{
+        data=await api.get('work_sync',Object.assign({revision:next,rosterMonth:state.rosterMonth},upper===undefined?{}:{snapshotSeq:upper}));
+        if(!data.success){if(data.code==='REVISION_INVALID')return readSyncData(true);throw new Error(data.error);}
+        if(upper===undefined)upper=data.snapshotSeq;
+        if(!Number.isSafeInteger(Number(data.revision))||Number(data.revision)<Number(next)||data.more&&Number(data.revision)<=Number(next))throw new Error('동기화 커서가 전진하지 않습니다. 다시 시도하세요.');
+        if(upper!==undefined&&(String(data.snapshotSeq)!==String(upper)||Number(data.revision)>Number(upper)))throw new Error('동기화 조회 범위가 변경되었습니다. 다시 시도하세요.');
+        (data.requests||[]).forEach(function(r){var old=merged.get(r.id);if(!old||old.revision<=r.revision)merged.set(r.id,r);});next=data.revision;
+      }while(data.more);
+      data.requests=Array.from(merged.values());nextRevision=next;
+    }else{
+      var all=[],page='',base,seen=new Set();
+      do{
+        data=await api.get('work_bootstrap',Object.assign({rosterMonth:state.rosterMonth},page?{pageCursor:page,snapshotSeq:base}:{}));
+        if(!data.success)throw new Error(data.error);
+        if(base===undefined)base=data.revision;
+        all=all.concat(data.requests||[]);page=data.pageCursor;
+        if(page&&seen.has(page))throw new Error('전체 조회 커서가 전진하지 않습니다. 다시 시도하세요.');
+        if(page)seen.add(page);
+      }while(page);
+      data.requests=all;nextRevision=base||'0';
+    }
+    return {data:data,revision:nextRevision};
+  }
+  async function sync(force){
     if(syncing||busy||bulkWorking||rosterLoading)return;syncing=true;updateSelection();$('sync').disabled=true;$('sync').textContent='동기화 중…';showSyncState('loading');notify('');
     try{
-      var data;
-      if(refreshSources){notify('Handover 원본 변경을 확인하고 있습니다…');var refreshed=await api.get('work_handover_refresh',{});if(!refreshed.success)throw new Error(refreshed.error||'Handover 원본 확인 실패');notify('');}
-      if(state.loaded&&kvReady&&force!==true){
-        var merged=new Map(state.requests.map(function(r){return [r.id,r];})),next=revision;
-        do{data=await api.get('work_sync',{revision:next,rosterMonth:state.rosterMonth});if(!data.success)throw new Error(data.error);(data.requests||[]).forEach(function(r){var old=merged.get(r.id);if(!old||old.revision<=r.revision)merged.set(r.id,r);});next=data.revision;}while(data.more);
-        data.requests=Array.from(merged.values());revision=next;
-      }else{
-        var all=[],page='',base;
-        do{data=await api.get('work_bootstrap',Object.assign({rosterMonth:state.rosterMonth},page?{pageCursor:page,snapshotSeq:base}:{}));if(!data.success)throw new Error(data.error);if(base===undefined)base=data.revision;all=all.concat(data.requests||[]);page=data.pageCursor;}while(page);
-        data.requests=all;revision=base||'0';
-      }
+      var loaded=await readSyncData(force),data=loaded.data;
+      if(window.BazAuth.name()!==account)throw new Error('계정이 변경되었습니다. 다시 접속하세요.');
       // 늦게 도착한 목록으로 이 PC에서 저장한 더 높은 버전을 덮지 않는다.
       var newer=state.requests;state.requests=data.requests;
       newer.forEach(function(r){var x=state.requests.find(function(v){return v.id===r.id;});if(x&&x.revision<r.revision)upsert(r);});
       for(var removed of state.requests.filter(function(r){return r.purgedAt;}))await forgetPurged(removed.id);
-      kvReady=data.storage==='kv';sourceCheckedAt=data.sourceCheckedAt||sourceCheckedAt;if(Object.prototype.hasOwnProperty.call(data,'bridgeStatus'))bridgeStatus=data.bridgeStatus;state.hospitals=data.hospitals;state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
+      revision=loaded.revision;kvReady=data.storage==='kv';sourceCheckedAt=data.sourceCheckedAt||sourceCheckedAt;if(Object.prototype.hasOwnProperty.call(data,'bridgeStatus'))bridgeStatus=data.bridgeStatus;if(Array.isArray(data.hospitals))state.hospitals=data.hospitals;if(Array.isArray(data.engineers))state.engineers=data.engineers;state.loaded=true;fillPeople();renderList();
       if(Array.isArray(data.roster)){state.roster=data.roster;state.rosterMonth=data.rosterMonth;state.rosterLoaded=true;}renderRoster();await refreshTodayRoster();
       $('new').disabled=false;
       if(data.autoMatch){
@@ -426,7 +444,7 @@
       !r.deletedAt&&!d.preview&&!editMode&&window.BazWorkFlow?'<section class="work-flow-panel"><h3>다음 작업</h3><div class="work-flow-main"><button type="button" data-action="work-flow">'+(results.some(function(h){return h.source.origin!=='flow';})?(results.some(function(h){return h.source.pdf;})?'내역서 확인':'내역서 작성'):'현장 기록 작성')+'</button><p>접수 정보 → 현장 기록 → PDF 저장·댓글 연결</p></div></section>':'',
       '<section class="receipt-section detail-content"><h3>접수 내용</h3><p class="entry-body">'+editable(r,'symptom',r.symptom)+'</p>'+ (editMode?inlineActions(r):'')+'</section>',
       '<section class="results-section" aria-labelledby="as-result-heading"><h3 id="as-result-heading" class="section-divider">처리 결과</h3><div class="detail-content"><div class="result-list">',
-      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+(window.BazSourceReview?window.BazSourceReview.markup(h,!!r.deletedAt):'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
+      d.preview?'<p class="result-empty hint">처리 결과를 불러오는 중…</p>':results.length?results.map(function(h){return '<article class="detail-result">'+(h.source.origin==='flow'?'<span class="result-origin">Flow 이전 기록</span>':'')+(h.source.origin!=='flow'?'<p class="review-label">'+(h.source.reviewVersion?'검수 완료 v'+esc(h.source.reviewVersion)+' · '+esc(h.source.reviewedBy):'미검수')+'</p>'+((editMode&&window.BazHandoverReview&&!r.deletedAt)?'<button type="button" data-review-record="'+esc(h.source.recordId)+'" data-review-request="'+esc(r.id)+'">Handover 본문 검수</button>':''):'')+(window.BazSourceReview?window.BazSourceReview.markup(h,!!r.deletedAt):'')+resultFields(h.source,h.memo)+(h.memo?(h.source.origin==='flow'?'<details class="result-memo"><summary>Flow 원문 보기</summary><p class="entry-body">'+esc(h.memo)+'</p></details>':'<div class="result-memo"><strong>고객센터 보완</strong><p class="entry-body">'+esc(h.memo)+'</p></div>'):'')+'</article>';}).join(''):'<div class="result-empty"><strong>등록된 처리 결과가 없습니다.</strong></div>',
       '</div>'+((d.historyCursor||d.auditCursor)?'<button data-action="more-history">이력 더 보기</button>':'')+'</div></section>',
       '<section class="detail-section comments-section"><h3>댓글 <span class="muted">'+(d.preview?'확인 중':comments.length)+'</span></h3><div class="timeline">',
       d.preview?'<p class="hint">댓글을 불러오는 중…</p>':comments.map(function(h){return '<article class="entry"><div class="entry-meta"><strong>'+esc(h.author)+'</strong><span>'+esc(time(h.createdAt))+'</span>'+(h.revision>1?'<span>수정됨 '+esc(time(h.updatedAt))+'</span>':'')+'</div><div class="entry-body">'+(h.attachment&&h.attachment.kind==='inspection_pdf'?(window.BazWorkComments&&window.BazWorkComments.renderPdf?window.BazWorkComments.renderPdf(h.attachment)+'<p class="pdf-review" data-pdf-review="'+esc(h.id)+'">원본 비교 중…</p>':esc('AS/점검 내역서')):(window.BazWorkComments?window.BazWorkComments.render(h.body):commentMarkup(h.body)))+'</div>'+((!h.attachment&&(h.author===account||BazAuth.cachedLevel()>=3))?'<div class="comment-controls"><button data-comment="'+esc(h.id)+'">댓글 수정</button><button data-comment-delete="'+esc(h.id)+'">댓글 삭제</button></div><div class="comment-delete-confirm" hidden><span>이 댓글을 삭제할까요? 삭제 후 복원할 수 있습니다.</span><button class="danger" data-comment-confirm="'+esc(h.id)+'">삭제 확인</button><button data-comment-cancel>취소</button></div>':'')+'</article>';}).join(''),
@@ -445,6 +463,7 @@
     ].join('');
   }
   function auditText(log){
+    if(log.kind==='handover_review')return 'Handover 본문 검수 저장 · '+log.actor;
     if(log.kind==='result_source_review')return 'Handover 변경 내용 확인 · '+log.actor;
     if(log.kind==='pdf_attachment')return 'AS/점검 내역서 자동 첨부';
     if(log.kind==='result_auto')return 'Handover 결과 자동 연결 · 고객센터 결과 확인 대기';if(log.kind==='status_change')return '상태 수동 변경 · '+(log.before&&log.before.status||'미기록')+' → '+(log.after&&log.after.status||'미기록');if(log.kind==='delete')return '접수 휴지통 이동';if(log.kind==='restore')return '접수 복원';
@@ -550,7 +569,7 @@
     const target={...notificationTarget};notificationOpening=true;
     $('notification-launch').hidden=false;$('notification-launch-open').disabled=true;$('notification-launch-message').textContent='해당 접수와 Handover의 최신 내용을 확인하고 있습니다…';
     try{
-      const refreshed=await api.get('work_handover_refresh',{requestId:target.requestId});
+      const refreshed=await api.get('work_detail',{id:target.requestId});
       if(refreshed.deleted&&refreshed.current?.deletedAt){
         upsert(refreshed.current);await persistSnapshot();renderList();
         if(state.detail?.request.id===target.requestId)closeDetail(false);
@@ -564,7 +583,7 @@
       await openDetail(target.requestId,true);
       if(detailError||!state.detail||state.detail.request.id!==target.requestId||state.detail.preview)throw new Error(detailError||'최신 접수 상세를 확인하지 못했습니다.');
       let readConfirmed=true;
-      $('notification-launch-message').textContent=state.detail.request.hospitalName+' · 최신 접수·Handover 확인 완료 · '+time(refreshed.sourceCheckedAt);
+      $('notification-launch-message').textContent=state.detail.request.hospitalName+' · 최신 접수·Handover 확인 완료 · '+time(refreshed.updatedAt);
       if(target.notificationId&&window.BazNotifications){
         try{await window.BazNotifications.call('notification_read',{notificationId:target.notificationId,revision:state.detail.request.revision,sourceCheckedAt:refreshed.sourceCheckedAt});window.BazNotifications.refresh();}
         catch(e){readConfirmed=false;$('notification-launch-message').textContent+=' · 알림 확인 기록: '+e.message;}
@@ -692,7 +711,6 @@
     var id=state.detail.request.id;notificationOpening=true;
     try{
       notify('이 접수의 최신 현장 기록을 확인하고 있습니다…');
-      var refresh=await api.get('work_handover_refresh',{requestId:id});if(!refresh.success)throw new Error(refresh.error||'원본 확인 실패');
       var data=await api.get('work_document_status',{requestId:id});if(!data.success)throw new Error(data.error);
       if(state.detail?.request.id!==id)return;
       if(!data.records.length){location.href=window.BazWorkFlow.url('handover.html',id);return;}
@@ -710,7 +728,7 @@
     var root=$('detail');
     await Promise.all((d.history||[]).filter(function(h){return h.attachment?.kind==='inspection_pdf'&&!h.deletedAt;}).map(async function(h){
       var node=Array.from(root.querySelectorAll('[data-pdf-review]')).find(function(n){return n.dataset.pdfReview===h.id;});if(!node)return;
-      try{var source=d.history.find(function(x){return x.kind==='result'&&x.source?.recordId===h.sourceRecordId;});var result=await window.BazSourceReview.comparePdf(h.attachment,source&&source.source);if(!node.isConnected||state.detail!==d)return;node.textContent=result.text+' · 사진·서명은 비교 대상에서 제외';node.dataset.state=result.state;}
+      try{var source=d.history.find(function(x){return x.kind==='result'&&x.source?.recordId===h.sourceRecordId;});var result=await window.BazSourceReview.comparePdf(h.attachment,source&&source.source);if(!node.isConnected||state.detail!==d)return;node.textContent=result.text;node.dataset.state=result.state;}
       catch(e){if(node.isConnected)node.textContent='PDF 원본 비교 실패 · 다시 확인하세요.';}
     }));
   }
@@ -780,7 +798,7 @@
   try{document.documentElement.dataset.theme=localStorage.getItem('baz_work_theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');}catch(e){}
   $('theme').onclick=function(){var value=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=value;try{localStorage.setItem('baz_work_theme',value);}catch(e){}};
   statuses.forEach(function(s){$('status').add(new Option(s,s));});
-  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=function(){return sync(false,true);};
+  $('new').disabled=true;$('new').onclick=function(){openEditor(null);};$('sync').onclick=function(){return sync(false);};
   $('edit-mode').onclick=function(){if(!state.loaded||busy||syncing||bulkWorking||pending||state.filter==='trash')return;editMode=!editMode;selectionMode=false;checkedRequests.clear();activeField=null;renderEdits();};
   $('roster-open').onclick=function(){return openRoster();};
   $('roster-calendar-prev').onclick=function(){return moveRosterMonth(-1);};$('roster-calendar-next').onclick=function(){return moveRosterMonth(1);};
@@ -925,5 +943,7 @@
   setInterval(checkRosterDay,60000);document.addEventListener('visibilitychange',function(){if(!document.hidden)checkRosterDay();});
   if($('notification-launch-open'))$('notification-launch-open').onclick=openNotification;
   if(window.addEventListener)window.addEventListener('baz-open-notification',function(event){$('notification-launch-open').hidden=false;queueNotification(event.detail||{});});
+  if(window.BazHandoverReview)window.BazHandoverReview.onSaved=async function(data,requestId){if(data.request)upsert(data.request);await persistSnapshot();renderList();if(requestId&&state.detail?.request.id===requestId)await openDetail(requestId,true);};
+  document.addEventListener('click',function(event){var button=event.target.closest('[data-review-record]');if(button&&window.BazHandoverReview)window.BazHandoverReview.open(button.dataset.reviewRecord,button.dataset.reviewRequest||'').catch(function(e){notify(e.message);});});
   start();
 })();
