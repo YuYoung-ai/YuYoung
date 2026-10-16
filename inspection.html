@@ -153,7 +153,7 @@
 
   /* 자동완성 드롭다운 공통 (기존 인라인 스타일과 동일) */
   .ac-dropdown{display:none;position:relative;margin-top:4px;background:#fff;border:1.5px solid var(--teal);
-    border-radius:8px;overflow-y:auto;box-shadow:0 4px 12px rgba(16,29,61,.10);}
+    border-radius:8px;overflow-y:auto;touch-action:pan-y;overscroll-behavior:contain;box-shadow:0 4px 12px rgba(16,29,61,.10);}
   .ac-opt{padding:10px 12px;cursor:pointer;border-bottom:1px solid #F0F2F6;font-size:14px;}
 
   /* 임시저장 도구 바 */
@@ -420,7 +420,7 @@
         </div>
         <div class="row-2" style="position:relative;z-index:100;">
           <div class="field-group" id="hospFieldGroup" style="position:relative;">
-            <label>병원명 <span class="req">*</span> <span id="hospMatch" style="font-weight:500;font-size:11px;color:var(--teal);"></span></label>
+            <label>병원명 <span class="req">*</span> <span id="hospMatch" role="status" aria-live="polite" style="font-weight:500;font-size:11px;color:var(--teal);"></span></label>
             <input type="text" id="hospital" placeholder="병원명 입력 (자동완성)" maxlength="25" autocomplete="off">
             <div id="hospDropdown" class="ac-dropdown" style="max-height:260px;"></div>
             <div class="hospital-db-info"><span id="hospitalDbStatus" role="status" aria-live="polite">병원정보DB 불러오는 중…</span><button type="button" id="hospitalDbRefresh">DB 새로고침</button></div>
@@ -630,9 +630,9 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=255"></script><script src="js/baz-inspection-pdf.js?v=255"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-upload.js?v=255"></script>
-<script src="js/baz-inspection-hospitals.js"></script>
+<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=257"></script><script src="js/baz-inspection-pdf.js?v=257"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-inspection-upload.js?v=257"></script>
+<script src="js/baz-inspection-hospitals.js?v=257"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
 <script>
@@ -690,79 +690,13 @@ const HOSPITAL_DB = []; // 병원정보DB 시트 조회 결과만 사용
 
 // ===== 자동완성 공통 팩토리 (병원/부품 동일 동작 유지) =====
 function setupAutocomplete(cfg){
-  const input = document.getElementById(cfg.inputId);
-  const dropdown = document.getElementById(cfg.dropdownId);
-  let activeIdx = -1, currentMatches = [];
-
-  function hideDropdown(){
-    dropdown.style.display='none'; activeIdx=-1; currentMatches=[];
-  }
-
-  function renderDropdown(matches){
-    if(!matches.length){ hideDropdown(); return; }
-    currentMatches = matches;
-    dropdown.innerHTML = matches.map((item,i)=>`
-      <div class="ac-opt" data-i="${i}"${cfg.optStyle?` style="${cfg.optStyle}"`:''}>${cfg.renderItem(item)}</div>
-    `).join('');
-    dropdown.style.display='block';
-    activeIdx = -1;
-  }
-
-  function search(q){
-    const measured=window.BazPerf.start('search');
-    const nq = normalize(q);
-    if(nq.length < 1){ hideDropdown(); measured({count:0});return; }
-    // 시작 일치 우선, 그다음 부분 일치
-    const starts=[], contains=[];
-    for(const item of cfg.db){
-      const nn = normalize(cfg.itemText(item));
-      if(nn.startsWith(nq)) starts.push(item);
-      else if(nn.includes(nq)) contains.push(item);
-      if(cfg.startsLimit && starts.length >= cfg.startsLimit) break;
-    }
-    renderDropdown(starts.concat(contains).slice(0, AC_MAX_RESULTS));
-    measured({count:starts.length+contains.length});
-  }
-  const debouncedSearch = debounce(search, AC_SEARCH_DELAY);
-
-  function pick(item){ cfg.onPick(item); hideDropdown(); }
-
-  input.addEventListener('input', ()=>{ if(cfg.onInput) cfg.onInput(); debouncedSearch(input.value); });
-  input.addEventListener('focus', ()=>{ if(input.value) search(input.value); });
-  // 한글 IME 조합 대응 (모바일에서 조합 중/완료 시점 모두 검색 — debounce 없이 즉시)
-  input.addEventListener('compositionupdate', ()=>{ search(input.value); });
-  input.addEventListener('compositionend', ()=>{ search(input.value); });
-  input.addEventListener('keyup', (e)=>{
-    if(['ArrowDown','ArrowUp','Enter','Escape'].includes(e.key)) return;
-    debouncedSearch(input.value);
-  });
-
-  // 드롭다운 클릭
-  dropdown.addEventListener('mousedown', (e)=>{
-    const opt = e.target.closest('.ac-opt');
-    if(opt){ e.preventDefault(); pick(currentMatches[parseInt(opt.getAttribute('data-i'))]); }
-  });
-
-  // 키보드 탐색
-  input.addEventListener('keydown', (e)=>{
-    if(dropdown.style.display!=='block') return;
-    const opts = dropdown.querySelectorAll('.ac-opt');
-    if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx=Math.min(activeIdx+1, opts.length-1); }
-    else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx=Math.max(activeIdx-1, 0); }
-    else if(e.key==='Enter'){ if(activeIdx>=0){ e.preventDefault(); pick(currentMatches[activeIdx]); } return; }
-    else if(e.key==='Escape'){ hideDropdown(); return; }
-    else return;
-    opts.forEach((o,i)=>{ o.style.background = i===activeIdx ? '#EAF4F8' : '#fff'; });
-    if(opts[activeIdx]) opts[activeIdx].scrollIntoView({block:'nearest'});
-  });
-
-  // 바깥 클릭 시 닫기
-  document.addEventListener('click', (e)=>{
-    if(!e.target.closest('#'+cfg.inputId) && !e.target.closest('#'+cfg.dropdownId)) hideDropdown();
-  });
-  return {refresh(){if(document.activeElement===input)search(input.value);else hideDropdown();}};
+  return window.BazAutocomplete.create({...cfg,maxResults:AC_MAX_RESULTS,delay:AC_SEARCH_DELAY,normalize});
 }
 
+const hospitalBinding=window.BazInspectionHospitals.createBinding({
+  fields:Object.fromEntries(['hospital','serialNo','subscription','receiver'].map(id=>[id,document.getElementById(id)])),
+  status:message=>{document.getElementById('hospMatch').textContent=message;}
+});
 // 병원명 자동완성 (선택 시 S/N·구독·접수처 자동 입력)
 const hospitalAutocomplete=setupAutocomplete({
   inputId:'hospital', dropdownId:'hospDropdown',
@@ -774,16 +708,10 @@ const hospitalAutocomplete=setupAutocomplete({
         <div style="font-size:11px;color:#6B7A99;margin-top:1px;">
           ${h.s?'S/N '+esc(h.s):'<span style=\'color:#C0392B\'>S/N 없음</span>'} · ${esc(h.c||'미가입')}${h.sa?' · '+esc(h.sa):''}
         </div>`,
-  onInput: ()=>{ document.getElementById('hospMatch').textContent=''; },
+  onInput: ()=>hospitalBinding.input(),
   onPick: (h)=>{
-    document.getElementById('hospital').value = h.n;
-    document.getElementById('serialNo').value = h.s||'';
-    document.getElementById('subscription').value = h.c||'';
-    document.getElementById('receiver').value = h.sa||'';
-    loadRecentHistory(h.n);            // 이 병원 최근 방문 이력 자동 조회
-    const matchInfo = document.getElementById('hospMatch');
-    matchInfo.textContent = '✓ 자동 입력됨';
-    setTimeout(()=>{ matchInfo.textContent=''; }, 2500);
+    hospitalBinding.pick(h);
+    loadRecentHistory(h.n);
     autoSave();
   },
 });
@@ -799,7 +727,7 @@ document.getElementById('hospitalDbRefresh').addEventListener('click',()=>hospit
 const PARTS_DB = [{"p":"Handpiece Ass'y","c":"HP","pr":1650000},{"p":"Permanent-Holder","c":"HP","pr":88000},{"p":"Spring(1.0)","c":"HP","pr":10000},{"p":"Plunger","c":"HP","pr":30000},{"p":"Piston","c":"HP","pr":66000},{"p":"HP-Cradle Ass'y","c":"BODY","pr":50000},{"p":"Cable-ARM Ass'y","c":"BODY","pr":400000},{"p":"Raspberry Pi Touch Display","c":"BODY","pr":190000},{"p":"Raspberry Pi 4 4G","c":"BODY","pr":160000},{"p":"RFID Module Ass'y","c":"BODY","pr":150000},{"p":"Main Board Ass'y","c":"BODY","pr":1000000},{"p":"Power Supply","c":"BODY","pr":1500000},{"p":"Water hose (200mm→350mm)","c":"BODY","pr":80000},{"p":"원터치 피팅 PLM-06C","c":"BODY","pr":10000},{"p":"원터치 피팅 PMM-06C","c":"BODY","pr":10000},{"p":"Key Switch","c":"BODY","pr":15158},{"p":"ON/OFF KEY","c":"BODY","pr":10000},{"p":"Emergency Switch","c":"BODY","pr":50000},{"p":"POWER ADAPTOR Ass'y","c":"BODY","pr":200000},{"p":"Caster","c":"BODY","pr":50000},{"p":"Water pump Assy","c":"모듈","pr":300000},{"p":"Touch screen Assy","c":"모듈","pr":450000},{"p":"Foot-SW-Assy (BAZ, Linemaster)","c":"모듈","pr":500000}];
 
 // 교환품(부품) 자동완성 + 단가 자동입력
-setupAutocomplete({
+const partAutocomplete=setupAutocomplete({
   inputId:'replacedPart', dropdownId:'partDropdown',
   db: PARTS_DB,
   itemText: p => p.p,
@@ -1362,12 +1290,14 @@ function collectFormData(){
 
 function applyFormData(d){
   if(!d) return;
+  hospitalAutocomplete.reset();partAutocomplete.reset();
   handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:''}:null;
   uploadedPdfDocument=d.pdfDocument||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
   syncPdfFormat();
   // 기본 입력
   BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el && d.basic && d.basic[id]!=null) el.value=d.basic[id]; });
+  hospitalBinding.restore(d.basic);
   // A/S 분류: 대분류를 먼저 반영해 유형 옵션을 만든 뒤 유형 값을 복원
   const savedCat=(d.basic&&d.basic.asCat)||'', savedSub=(d.basic&&d.basic.asSub)||'';
   document.getElementById('asCat').value=savedCat;
