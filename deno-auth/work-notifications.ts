@@ -112,7 +112,9 @@ export function createWorkNotifications(kv:any,options:Obj){
  function eligible(e:Obj,a:Obj,d:Obj){
   if(e.kind==='roster'&&(e.offPeople||[]).some((name:string)=>norm(name)===norm(a.engineer)||norm(name)===norm(a.name)))return false;
   if(a.level>=3&&e.schema===2)return a.preferences?.[category(e)]!==false;
-  if(e.audience==='author')return !!e.author&&norm(a.name)===norm(e.author)&&d.accounts.filter((x:Obj)=>norm(x.name)===norm(e.author)).length===1;
+  // Work ownership is the authenticated account name. A staff member may have
+  // both Google and password accounts; each active login needs its own inbox.
+  if(e.audience==='author')return !!e.author&&norm(a.name)===norm(e.author);
   return e.audience==='all'||!!e.engineer&&norm(a.engineer)===norm(e.engineer);
  }
  async function rosterReminder(){

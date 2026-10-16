@@ -35,6 +35,11 @@ try{
  await store.bridge('documents',{documents:[{recordId:source.recordId,context:{hospitalName:'검증 병원',date:source.date,sn:'SN1'},requestId:created.request.id,pdf}]});await flush();
  assert.equal((await inbox(bob)).filter(x=>x.kind==='pdf').length,1);assert.equal((await inbox(alice)).filter(x=>x.kind==='pdf').length,0);assert.equal((await inbox(admin)).filter(x=>x.kind==='pdf').length,1);
  await store.bridge('documents',{documents:[{recordId:source.recordId,context:{hospitalName:'검증 병원',date:source.date,sn:'SN1'},requestId:created.request.id,pdf}]});await flush();assert.equal((await inbox(bob)).filter(x=>x.kind==='pdf').length,1,'PDF retry does not create another completion');
+ // A person can use both an existing password account and a Google login.
+ const secondLogin={...bob,uid:'p:'+'D'.repeat(43)};accounts.push(secondLogin);
+ await store.ingestSources([{...source,recordId:'source_dual_login',createdAt:new Date(clock+50).toISOString()}]);await flush();
+ for(const a of [bob,secondLogin])assert.ok((await inbox(a)).some(x=>x.recordId==='source_dual_login'),'each authenticated login for the author receives its own inbox item');
+ assert.ok(!(await inbox(alice)).some(x=>x.recordId==='source_dual_login'));
  // Korea 08:30: off-duty recipient (including an administrator) never receives.
  clock=Date.parse('2026-10-18T08:29:00+09:00');
  for(const [person,type] of [[alice.name,'휴무'],[admin.name,'휴무'],[bob.name,'당직']])await save('work_roster_save',{date:'2026-10-18',person,type,baseRevision:0});
