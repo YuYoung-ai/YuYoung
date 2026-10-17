@@ -13,7 +13,7 @@ export async function removeRequestNotifications(kv:any,requestId:string){
   if(pending.value?.due)await kv.delete(key('fanoutDue',pending.value.due,id));
   for await(const recipient of kv.list({prefix:key('recipient',id)})){
    const uid=String(recipient.key[recipient.key.length-1]);
-   if(!(await kv.atomic().delete(key('inbox',uid,recipient.value)).delete(key('index',uid,id)).delete(key('unread',uid,id)).delete(key('read',uid,id)).delete(recipient.key).commit()).ok)throw new Error('접수 알림 삭제 정리를 다시 시도합니다.');
+   if(!(await kv.atomic().delete(key('inbox',uid,recipient.value)).delete(key('index',uid,id)).delete(key('unread',uid,id)).delete(key('read',uid,id)).delete(key('recipientName',id,uid)).delete(recipient.key).commit()).ok)throw new Error('접수 알림 삭제 정리를 다시 시도합니다.');
   }
   for await(const jobIndex of kv.list({prefix:key('eventJob',id)})){
    const job=await kv.get(key('job',jobIndex.value));let tx=kv.atomic().check(job).delete(job.key).delete(jobIndex.key);
@@ -136,6 +136,36 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(event.kind==='handover'){const source=(await options.store.sources(event.hospitalName)).find((s:Obj)=>s.recordId===event.recordId);if(!source)throw new Error('AS 처리 현황 기록을 찾지 못했습니다.');return {success:true,event,source};}
   return {success:true,event};
  }
+ // Receipt lookup is read-only: querying it must not acknowledge any inbox.
+ async function receipts(p:Obj,d:Obj){
+  const requestId=String(p.requestId||'');
+  if(!/^[A-Za-z0-9_-]{8,90}$/.test(requestId))throw new Error('접수 번호를 확인하세요.');
+  const r=(await options.store.request(requestId,true)).value;
+  const indexes=await rows(['requestEvent',requestId],1001);
+  if(indexes.length>1000)throw new Error('알림 이력이 많아 조회할 수 없습니다. 관리자에게 문의하세요.');
+  const ids=new Set(indexes.map(x=>String(x.key[x.key.length-1])));
+  // Original handover events predate the request link; include only linked records.
+  for(const recordId of await options.store.notificationSources(requestId))ids.add('handover_'+await digest(JSON.stringify(recordId)));
+  const events:Obj[]=[];
+  for(const id of ids){const e=(await get('event',id)).value;if(e&&Date.parse(e.createdAt)+TTL>now())events.push(e);}
+  events.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));
+  const selected=p.notificationId?events.find(e=>e.id===p.notificationId):events[0];
+  if(p.notificationId&&!selected)throw new Error('이 접수에 연결된 알림을 찾지 못했거나 보관 기간이 지났습니다.');
+  const eventList=events.map(e=>({id:e.id,kind:e.kind,title:notificationText(e).title,createdAt:e.createdAt}));
+  if(!selected)return {success:true,requestId,hospitalName:r.hospitalName,events:eventList,selected:null,recipients:[],read:0,unread:0,total:0,retentionDays:30};
+  const recipients=await rows(['recipient',selected.id],1001);
+  if(recipients.length>1000)throw new Error('알림 수신 계정이 많아 조회할 수 없습니다. 관리자에게 문의하세요.');
+  const people:Obj[]=[];
+  for(const entry of recipients){
+   const uid=String(entry.key[entry.key.length-1]);
+   const name=(await get('recipientName',selected.id,uid)).value||d.accounts.find((a:Obj)=>a.uid===uid)?.name||'이전 수신 계정';
+   const readAt=(await get('read',uid,selected.id)).value||'';
+   people.push({name:String(name),readAt});
+  }
+  people.sort((a,b)=>a.name.localeCompare(b.name,'ko')||a.readAt.localeCompare(b.readAt));
+  const read=people.filter(x=>x.readAt).length;
+  return {success:true,requestId,hospitalName:r.hospitalName,events:eventList,selected:eventList.find(e=>e.id===selected.id),recipients:people,read,unread:people.length-read,total:people.length,pending:!!(await get('pending',selected.id)).value,retentionDays:30};
+ }
  async function subscribe(p:Obj,a:Obj){
   const subscription=validateSubscription(p.subscription),id=await digest(subscription.endpoint);
   for(let tries=0;tries<8;tries++){
@@ -224,7 +254,7 @@ export function createWorkNotifications(kv:any,options:Obj){
     const idx=e.createdAt+'|'+e.id,existing=await get('inbox',a.uid,idx);
     if(existing.value)continue;
     const remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
-    let tx=kv.atomic().check(existing,guard).set(existing.key,e,{expireIn:remaining}).set(key('index',a.uid,e.id),idx,{expireIn:remaining}).set(key('unread',a.uid,e.id),true,{expireIn:remaining}).set(key('recipient',e.id,a.uid),idx,{expireIn:remaining});
+    let tx=kv.atomic().check(existing,guard).set(existing.key,e,{expireIn:remaining}).set(key('index',a.uid,e.id),idx,{expireIn:remaining}).set(key('unread',a.uid,e.id),true,{expireIn:remaining}).set(key('recipient',e.id,a.uid),idx,{expireIn:remaining}).set(key('recipientName',e.id,a.uid),a.name,{expireIn:remaining});
     if(now()-Date.parse(e.createdAt)<PUSH_TTL){
      for(const device of await rows(['device',a.uid],10)){
       const id=await digest(e.id+'|'+a.uid+'|'+device.value.id),job={id,eventId:e.id,uid:a.uid,deviceId:device.value.id,binding:device.value.binding,attempt:0,due:now(),lease:0};
@@ -280,6 +310,7 @@ export function createWorkNotifications(kv:any,options:Obj){
   switch(p.action){
    case 'notification_config':return {success:true,uid:a.uid,name:a.name,engineer:a.engineer||'',broadcast:true,publicKey:await options.publicKey(),devices:(await rows(['device',a.uid],10)).map(x=>({id:x.value.id})),admin:Math.min(a.level,who.level)>=3,notificationTypes:NOTIFICATION_TYPES,preferences:a.preferences};
    case 'notification_detail':return await detail(p,a);
+   case 'notification_receipts':return await receipts(p,d);
    case 'notification_preferences':{
     if(Math.min(a.level,who.level)<3)throw new Error('관리자 권한이 필요합니다.');
     if(!p.types||Object.keys(p.types).length!==NOTIFICATION_TYPES.length||NOTIFICATION_TYPES.some(t=>typeof p.types[t]!=='boolean')||Object.keys(p.types).some(t=>!NOTIFICATION_TYPES.includes(t)))throw new Error('알림 종류별 수신 설정을 확인하세요.');

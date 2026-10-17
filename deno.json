@@ -7,6 +7,7 @@
     "test:review": "deno run --allow-read --unstable-kv test/work-handover-review.mjs",
     "test:push": "deno run --allow-env --allow-read --unstable-kv test/work-push-deno.ts",
     "test:work-kv": "deno run --allow-read --unstable-kv test/work-indexes.mjs",
-    "test:notifications": "deno run --allow-read --unstable-kv test/work-notification-events.ts"
+    "test:notifications": "deno run --allow-read --unstable-kv test/work-notification-events.ts",
+    "test:read-receipts": "deno run --allow-read --unstable-kv test/work-read-receipts.ts"
   }
 }
