@@ -1,13 +1,31 @@
 (function(root){
  'use strict';
- let loading=null,cachedBody=null;const labels=new Map();
+ let loading=null,cachedBody=null;const labels=new Map(),scripts=new Map();
  const MAX_BYTES=7*1024*1024,W=210,H=297,M=8,CW=W-2*M,CH=H-2*M;
- function load(src,ready){if(ready())return Promise.resolve();return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=()=>ready()?resolve():reject(new Error('PDF 도구를 불러오지 못했습니다.'));s.onerror=()=>{s.remove();reject(new Error('PDF 도구를 내려받지 못했습니다. 연결을 확인하고 다시 생성하세요.'));};document.head.appendChild(s);});}
+ function bounded(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
+ function load(src,ready){
+  if(ready())return Promise.resolve();if(scripts.has(src))return scripts.get(src);
+  const job=new Promise((resolve,reject)=>{
+   const s=document.createElement('script');let timer;
+   function finish(error){clearTimeout(timer);s.onload=s.onerror=null;if(error){s.remove();reject(error);}else resolve();}
+   s.src=src;s.onload=()=>finish(ready()?null:new Error('PDF 도구를 불러오지 못했습니다.'));s.onerror=()=>finish(new Error('PDF 도구를 내려받지 못했습니다. 연결을 확인하고 다시 생성하세요.'));
+   timer=setTimeout(()=>finish(new Error('PDF 도구 다운로드가 지연되고 있습니다. 연결을 확인하고 다시 생성하세요.')),30000);document.head.appendChild(s);
+  }).finally(()=>scripts.delete(src));scripts.set(src,job);return job;
+ }
  async function libraries(){
   if(!loading)loading=Promise.all([load('js/vendor/html2canvas-1.4.1.min.js',()=>!!root.html2canvas),load('js/vendor/jspdf-2.5.1.umd.min.js',()=>!!root.jspdf?.jsPDF)]).catch(e=>{loading=null;throw e;});
-  await loading;if(document.fonts)await document.fonts.ready;
+  await loading;if(document.fonts)await bounded(document.fonts.ready,15000,'글꼴 준비가 지연되고 있습니다. 연결을 확인하고 다시 생성하세요.');
  }
- function image(data){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>img.naturalWidth&&img.naturalHeight?resolve(img):reject(new Error('사진 크기를 확인하지 못했습니다.'));img.onerror=()=>reject(new Error('PDF 사진을 불러오지 못했습니다. 다시 선택해 주세요.'));img.src=data;});}
+ function waitImage(img,src){return new Promise((resolve,reject)=>{
+  let timer;
+  function finish(error){clearTimeout(timer);img.onload=img.onerror=null;error?reject(error):resolve(img);}
+  function ready(){finish(img.naturalWidth&&img.naturalHeight?null:new Error('PDF 사진 크기를 확인하지 못했습니다. 사진을 다시 선택해 주세요.'));}
+  img.onload=ready;img.onerror=()=>finish(new Error('PDF 사진을 불러오지 못했습니다. 사진을 다시 선택해 주세요.'));
+  timer=setTimeout(()=>finish(new Error('PDF 사진 준비가 지연되고 있습니다. 사진을 확인한 뒤 다시 생성하세요.')),30000);
+  if(src!==undefined)img.src=src;else if(img.complete)ready();
+ });}
+ function image(data){return waitImage(new Image(),data);}
+ function waitImages(images){return Promise.all(Array.from(images,img=>waitImage(img)));}
  function fit(width,height,maxWidth,maxHeight){const ratio=Math.min(maxWidth/width,maxHeight/height);return {width:width*ratio,height:height*ratio};}
  function photoGroups(photos){const groups=[];for(let i=0;i<photos.length;){const portrait=photos[i].height>photos[i].width*1.1;const pair=!portrait&&photos[i+1]&&photos[i+1].height<=photos[i+1].width*1.1;groups.push(photos.slice(i,i+(pair?2:1)));i+=pair?2:1;}return groups;}
  function bodyPages(canvas){
@@ -56,5 +74,5 @@
   if(cachedBody?.html===html)return cachedBody.pages;
   const c=await render(html);try{const pages=bodyPages(c);cachedBody={html,pages};return pages;}finally{c.width=c.height=0;}
  }
- root.BazInspectionPdf={libraries,assemble,body,fit,photoGroups,bodyPages,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
+ root.BazInspectionPdf={libraries,assemble,body,waitImages,fit,photoGroups,bodyPages,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
 })(window);

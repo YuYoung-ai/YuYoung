@@ -55,7 +55,7 @@
 3. 두 파일을 저장한 뒤 **setupReplacementInventory**를 한 번 실행한다. 기존 내용은 보존하고 필요한 탭·추적 헤더·대기목록을 확인하며 5분 트리거 1개를 설치한다.
 4. 기존 웹앱 배포를 편집해 새 버전으로 배포한다. 기존 /exec URL을 유지한다.
 5. /exec?action=ping 응답에서 **inventorySchema:1**을 확인한다. 새 모듈 파일이 없으면 0이다.
-6. 그 뒤 프런트 변경(handover.html·js/baz-handover-core.js·sw.js)을 main에 반영한다. 캐시 버전은 v252다.
+6. 그 뒤 프런트 변경(handover.html·js/baz-handover-core.js·sw.js)을 main에 반영한다. 캐시 버전은 v258이다.
 7. 실제 업무에서 새 부품 기록을 저장한 뒤 원장 기록 ID 및 대기목록 상태를 대조한다. 운영 시트에 가상 Handover 기록을 넣지 않는다.
 
 시트 구성만 바뀌어도 이미 배포된 구형 GAS의 문자열 FOOT 분기는 바뀌지 않는다. 웹앱 배포 전에는 새 자동 반영이 동작한다고 판단하면 안 된다.

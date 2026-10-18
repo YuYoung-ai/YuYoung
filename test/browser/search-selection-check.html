@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#14223a"><title>병원 검색 검증 | BAZ CS</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f4f6fa;color:#192a42;font:15px/1.6 system-ui,-apple-system,sans-serif}main{max-width:720px;margin:auto;padding:24px 16px 60px}h1{font-size:25px;line-height:1.4;margin:0 0 10px}.hint{color:#62728a;font-size:13px}.notice{background:#fff8df;color:#715a23;border:1px solid #ead99b;border-radius:10px;padding:12px 14px}section{margin:18px 0;padding:18px;background:#fff;border:1px solid #dce3ed;border-radius:12px}h2{font-size:17px;margin:0 0 14px}label{display:block;font-size:13px;font-weight:600}input,button{font:inherit;font-size:16px;min-height:46px;border:1px solid #cdd7e5;border-radius:8px;padding:10px 12px;background:#fff;color:#192a42}input{width:100%;margin:5px 0 12px}button{cursor:pointer;font-size:13px}.tools{display:flex;flex-wrap:wrap;gap:8px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}.grid>*{min-width:0}#hospMatch{display:block;min-height:24px;color:#2359a8;font-size:13px;margin:6px 0 12px}.ac-dropdown{display:none;max-height:260px;overflow-y:auto;touch-action:pan-y;overscroll-behavior:contain;border:1px solid #245cce;border-radius:8px;margin-bottom:12px}.ac-opt{padding:12px;border-bottom:1px solid #e1e7ef;cursor:pointer;min-height:62px}.ac-opt[aria-selected=true]{background:#eaf4f8}.ac-opt strong,.ac-opt small{display:block}.ac-opt small{color:#62728a}.result{background:#edf3fc;border-radius:8px;padding:12px;margin-top:12px;overflow-wrap:anywhere}.check{display:flex;gap:9px;align-items:flex-start;margin:12px 0;font-weight:400}.check input{width:20px;min-height:20px;margin:3px 0;flex:none}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 ui-monospace,monospace;max-height:260px;overflow:auto}code{overflow-wrap:anywhere}button:focus-visible,input:focus-visible{outline:2px solid #245cce;outline-offset:2px}@media(max-width:380px){.grid{grid-template-columns:minmax(0,1fr)}}</style></head>
+<body><main><p class="hint">BAZ CS · 검색 수정본 검증 · v253 후보</p><h1>병원 검색·선택 확인</h1><p class="notice">가상 데이터만 사용하는 검증 화면입니다. 입력·선택 내용은 접수·시트·Drive에 전송하지 않습니다. 운영 검색과 PDF 기능은 변경되지 않습니다.</p><p id="environment" class="hint"></p>
+<section><h2>1. 병원을 검색하고 한 번 선택</h2><div class="tools"><button type="button" id="example">예시 검색어 넣기</button><button type="button" id="reset">초기화</button></div><p class="hint">‘검증’을 입력하세요. 같은 병원명의 S/N-A와 S/N-B를 각각 선택해 보세요. 목록을 스크롤한 뒤에는 선택 횟수가 증가하지 않아야 합니다.</p><label for="hospital">병원명</label><input id="hospital" autocomplete="off" placeholder="검증 피부과"><div id="hospDropdown" class="ac-dropdown"></div><span id="hospMatch" role="status" aria-live="polite"></span><div class="grid"><label>S/N<input id="serialNo" autocomplete="off"></label><label>구독<input id="subscription" autocomplete="off"></label></div><label>영업 담당자<input id="receiver" autocomplete="off"></label><div id="selection" class="result" role="status">선택 횟수 0회</div></section>
+<section><h2>2. 실제 휴대폰에서 확인</h2><label class="check"><input type="checkbox">한글 입력 직후 선택해도 값이 유지되고 목록이 다시 열리지 않음</label><label class="check"><input type="checkbox">같은 병원명의 S/N-A · S/N-B가 정확히 반영됨</label><label class="check"><input type="checkbox">한 번 탭은 한 번 적용되고, 목록 스크롤은 선택되지 않음</label><label class="check"><input type="checkbox">선택 후 병원명을 바꾸면 이전 S/N이 비워짐</label><label class="check"><input type="checkbox">키보드가 열린 상태에서도 결과를 보고 선택할 수 있음</label><label class="check"><input type="checkbox">검색을 지우거나 다른 칸을 누르면 목록이 닫힘</label><p class="hint">이 검증은 실제 IME·터치 확인용입니다. PDF 생성 속도나 로그인 검증을 대신하지 않습니다.</p></section>
+<section><h2>3. 선택 기록</h2><p class="hint">가상 입력값과 선택 이벤트만 이 화면에 표시합니다. 자동 전송하지 않습니다.</p><pre id="log">아직 선택하지 않았습니다.</pre><p class="hint">수정 코드 SHA-256<br><code>aa1d2529c839a13c8eb23bd8b1b504ade19cd661bc99514f780736b62ddcc905</code></p></section></main>
+<script id="candidate-autocomplete">(function(root){
+  'use strict';
+  function create(cfg){
+    var doc=cfg.document||document,win=doc.defaultView||root,input=doc.getElementById(cfg.inputId),dropdown=doc.getElementById(cfg.dropdownId);
+    var matches=[],active=-1,timer=null,generation=0,press=null,composing=false,picking=false,committed=null,lastTouch=0,blockedClick=false;
+    var normalize=cfg.normalize||function(v){return String(v||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');};
+    input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-controls',cfg.dropdownId);input.setAttribute('aria-expanded','false');
+    dropdown.setAttribute('role','listbox');
+    function cancel(){generation++;if(timer!==null)win.clearTimeout(timer);timer=null;}
+    function hide(){cancel();dropdown.style.display='none';active=-1;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
+    function search(){
+      if(picking||press||doc.activeElement!==input)return;
+      var measured=root.BazPerf?root.BazPerf.start('search'):function(){},query=normalize(input.value),starts=[],contains=[];
+      if(!query){matches=[];hide();measured({count:0});return;}
+      (cfg.getRows?cfg.getRows():cfg.db).forEach(function(item){var text=normalize(cfg.itemText(item));if(text.startsWith(query))starts.push(item);else if(text.includes(query))contains.push(item);});
+      matches=starts.concat(contains).slice(0,cfg.maxResults||20);active=-1;
+      dropdown.innerHTML=matches.map(function(item,i){return '<div class="ac-opt" role="option" aria-selected="false" id="'+cfg.dropdownId+'-'+i+'" data-i="'+i+'"'+(cfg.optStyle?' style="'+cfg.optStyle+'"':'')+'>'+cfg.renderItem(item)+'</div>';}).join('');
+      dropdown.style.display=matches.length?'block':'none';dropdown.scrollTop=0;input.setAttribute('aria-expanded',String(!!matches.length));input.removeAttribute('aria-activedescendant');measured({count:starts.length+contains.length});
+    }
+    function schedule(immediate){cancel();if(immediate){search();return;}var token=generation;timer=win.setTimeout(function(){timer=null;if(token===generation)search();},cfg.delay==null?120:cfg.delay);}
+    function restoreCommit(){
+      // A final IME event may arrive after blur. Keep the explicitly picked value
+      // until a new focus starts a new editing session.
+      if(committed!==null&&doc.activeElement!==input){input.value=committed;return true;}return false;
+    }
+    function pick(item,finishComposition){
+      if(!item||picking||dropdown.style.display!=='block')return;
+      if(!(cfg.getRows?cfg.getRows():cfg.db).includes(item)){press=null;hide();search();return;}
+      cancel();press=null;picking=true;
+      try{if((composing||finishComposition)&&input.blur)input.blur();cfg.onPick(item);committed=input.value;composing=false;hide();}
+      finally{picking=false;}
+    }
+    function changed(e){if(picking||restoreCommit())return;committed=null;if(e&&e.isComposing)composing=true;if(cfg.onInput)cfg.onInput();schedule(composing);}
+    input.addEventListener('input',changed);
+    input.addEventListener('focus',function(){committed=null;press=null;blockedClick=false;if(input.value)schedule(true);});
+    input.addEventListener('blur',function(){if(!picking&&!press)hide();});
+    input.addEventListener('compositionstart',function(){composing=true;committed=null;});
+    input.addEventListener('compositionupdate',function(){if(!picking&&!restoreCommit())schedule(true);});
+    input.addEventListener('compositionend',function(){composing=false;if(!picking&&!restoreCommit())schedule(true);});
+    input.addEventListener('keydown',function(e){
+      if(e.isComposing||composing||e.keyCode===229)return;
+      if(e.key==='Escape'){hide();return;}
+      if(dropdown.style.display!=='block')return;
+      if(e.key==='Enter'){e.preventDefault();if(active>=0)pick(matches[active]);return;}
+      if(e.key==='Tab'){hide();return;}
+      if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+      e.preventDefault();active=e.key==='ArrowDown'?Math.min(active+1,matches.length-1):Math.max(active-1,0);
+      var options=dropdown.querySelectorAll('.ac-opt');options.forEach(function(option,i){option.setAttribute('aria-selected',String(i===active));option.style.background=i===active?'#EAF4F8':'';});
+      if(options[active]){input.setAttribute('aria-activedescendant',options[active].id);options[active].scrollIntoView({block:'nearest'});}
+    });
+    function point(e){var p=e.touches&&e.touches[0]||e;return {x:p.clientX||0,y:p.clientY||0};}
+    function start(e){
+      var option=e.target.closest('.ac-opt');if(!option||dropdown.style.display!=='block'||e.isPrimary===false||e.button>0)return;
+      if(e.type==='touchstart')lastTouch=Date.now();
+      if(e.type==='mousedown'&&Date.now()-lastTouch<700)return;
+      cancel();blockedClick=false;var p=point(e);press={item:matches[Number(option.getAttribute('data-i'))],x:p.x,y:p.y,moved:false,pointerId:e.pointerId,composing:composing};
+      // Retain focus through a tap; touch-action:pan-y still permits scrolling,
+      // which produces pointercancel instead of applying a selection.
+      if(e.type==='pointerdown'||e.type==='mousedown')e.preventDefault();
+    }
+    function move(e){if(!press)return;var p=point(e);if(Math.abs(p.x-press.x)>10||Math.abs(p.y-press.y)>10)press.moved=true;}
+    function cancelPress(){if(press){blockedClick=true;press=null;if(doc.activeElement!==input)hide();}}
+    if(win.PointerEvent){dropdown.addEventListener('pointerdown',start);dropdown.addEventListener('pointermove',move);dropdown.addEventListener('pointercancel',cancelPress);}
+    else{dropdown.addEventListener('mousedown',start);dropdown.addEventListener('touchstart',start,{passive:true});dropdown.addEventListener('touchmove',move,{passive:true});dropdown.addEventListener('touchcancel',cancelPress);}
+    dropdown.addEventListener('scroll',cancelPress,{passive:true});
+    dropdown.addEventListener('click',function(e){
+      var option=e.target.closest('.ac-opt');if(!option)return;e.preventDefault();
+      if(blockedClick){blockedClick=false;return;}
+      var gesture=press;press=null;
+      if(gesture&&gesture.moved){if(doc.activeElement!==input)hide();return;}
+      pick(gesture?gesture.item:matches[Number(option.getAttribute('data-i'))],gesture&&gesture.composing);
+    });
+    doc.addEventListener(win.PointerEvent?'pointerdown':'mousedown',function(e){if(e.target!==input&&!dropdown.contains(e.target)){press=null;hide();}});
+    doc.addEventListener('click',function(e){if(e.target!==input&&!dropdown.contains(e.target)){press=null;hide();}});
+    return {refresh:function(){if(doc.activeElement===input&&committed===null)schedule(true);else hide();},reset:function(){press=null;blockedClick=false;committed=null;composing=false;matches=[];hide();}};
+  }
+  var api={create:create};if(typeof module==='object'&&module.exports)module.exports=api;else root.BazAutocomplete=api;
+})(typeof window==='object'?window:this);
+</script><script id="candidate-hospitals">(function(global){
+  'use strict';
+  const CACHE_KEY='baz_inspection_hospital_db_v1';
+  const text=value=>value==null?'':String(value).trim();
+  function normalize(rows){
+    if(!Array.isArray(rows))throw new Error('병원정보DB 응답을 확인할 수 없습니다.');
+    const seen=new Set(),list=[];
+    rows.forEach(row=>{
+      if(!row || typeof row!=='object' || !text(row.name))return;
+      const h={n:text(row.name),s:text(row.sn),c:text(row.ncare),sa:text(row.sales),r:text(row.region)};
+      const key=JSON.stringify(h);
+      if(!seen.has(key)){seen.add(key);list.push(h);}
+    });
+    if(rows.length && !list.length)throw new Error('병원정보DB 응답을 확인할 수 없습니다.');
+    return list;
+  }
+  function create(cfg){
+    let cachedAt='',inFlight=null;
+    function replace(rows){cfg.rows.splice(0,cfg.rows.length,...rows);cfg.changed();}
+    try{
+      const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+      if(cached && typeof cached.at==='string' && Array.isArray(cached.data)){
+        const rows=normalize(cached.data);cachedAt=cached.at;replace(rows);
+      }
+    }catch(e){}
+    async function load(force){
+      if(inFlight)return inFlight;
+      inFlight=(async()=>{
+        cfg.busy(true);
+        cfg.status(cachedAt?'저장된 병원정보DB를 최신 목록과 확인 중…':'병원정보DB 불러오는 중…');
+        const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+        try{
+          if(!global.BazAuth || typeof global.BazAuth.withToken!=='function')throw new Error('로그인 상태를 확인해 주세요.');
+          const url=cfg.url+'?action=hospdbrich'+(force?'&force=1':'');
+          const response=await fetch(global.BazAuth.withToken(url),{signal:controller.signal,cache:'no-store'});
+          if(!response.ok)throw new Error('병원정보DB 연결에 실패했습니다.');
+          const body=await response.json();
+          if(!body || body.success!==true)throw new Error(/unauthorized|토큰|로그인/i.test(text(body&&body.error))?'로그인 상태를 확인해 주세요.':'병원정보DB를 불러오지 못했습니다.');
+          const rows=normalize(body.data);
+          replace(rows);
+          cachedAt=new Date().toLocaleString('ko-KR',{timeZone:'Asia/Seoul'});
+          // Store only the autocomplete fields returned by the Sheet, without credentials.
+          try{localStorage.setItem(CACHE_KEY,JSON.stringify({at:cachedAt,data:rows.map(h=>({name:h.n,sn:h.s,ncare:h.c,sales:h.sa,region:h.r}))}));}catch(e){}
+          cfg.status(rows.length?'병원정보DB · '+rows.length+'건 · 방금 조회':'병원정보DB에 등록된 병원이 없습니다.');
+          return true;
+        }catch(e){
+          const reason=e.name==='AbortError'?'조회 시간이 초과되었습니다.':/로그인|병원정보DB/.test(e.message)?e.message:'병원정보DB 연결에 실패했습니다.';
+          cfg.status(cachedAt?'저장된 병원정보DB · '+cachedAt+' 조회 · '+reason:reason+' DB 새로고침을 눌러 주세요.');
+          return false;
+        }finally{clearTimeout(timer);cfg.busy(false);}
+      })();
+      try{return await inFlight;}finally{inFlight=null;}
+    }
+    return {load};
+  }
+  function createBinding(cfg){
+    const fields=cfg.fields;let bound=null,invalidated=false;
+    function restore(basic){bound=basic&&text(basic.hospital)?{n:text(basic.hospital),s:text(basic.serialNo),c:text(basic.subscription),sa:text(basic.receiver)}:null;invalidated=false;cfg.status('');}
+    function pick(row){
+      bound={n:text(row.n),s:text(row.s),c:text(row.c),sa:text(row.sa)};invalidated=false;
+      fields.hospital.value=bound.n;fields.serialNo.value=bound.s;fields.subscription.value=bound.c;fields.receiver.value=bound.sa;
+      cfg.status('✓ 병원 선택됨'+(row.r?' · '+text(row.r):'')+(bound.s?' · S/N '+bound.s:' · S/N 미기록'));
+    }
+    function input(){
+      if(!bound)return;
+      if(text(fields.hospital.value)===bound.n){
+        if(invalidated){for(const [id,key]of [['serialNo','s'],['subscription','c'],['receiver','sa']])if(!text(fields[id].value))fields[id].value=bound[key];invalidated=false;cfg.status('✓ 기존 병원 정보 복원됨');}
+        return;
+      }
+      if(!invalidated){
+        // A serial identifies this hospital's equipment and must be entered or
+        // selected again. Preserve manually overridden non-identity fields.
+        fields.serialNo.value='';
+        if(text(fields.subscription.value)===bound.c)fields.subscription.value='';
+        if(text(fields.receiver.value)===bound.sa)fields.receiver.value='';
+        invalidated=true;
+      }
+      cfg.status('병원명이 변경되었습니다. 목록에서 병원을 선택하거나 S/N을 다시 입력하세요.');
+    }
+    return {pick,input,restore};
+  }
+  global.BazInspectionHospitals={create,normalize,createBinding};
+})(window);
+</script>
+<script>
+(function(){'use strict';var $=id=>document.getElementById(id),count=0,log=[];
+var rows=[{n:'검증 피부과 강남점',s:'S/N-A',c:'Basic',sa:'검증 영업 A',r:'서울'},{n:'검증 피부과 강남점',s:'S/N-B',c:'Premium',sa:'검증 영업 B',r:'서울'}];
+for(var i=1;i<=24;i++)rows.push({n:'검증 병원 '+String(i).padStart(2,'0'),s:'TEST-'+i,c:i%2?'Basic':'Premium',sa:'검증 담당 '+i,r:'가상 지역'});
+var binding=BazInspectionHospitals.createBinding({fields:Object.fromEntries(['hospital','serialNo','subscription','receiver'].map(id=>[id,$(id)])),status:message=>$('hospMatch').textContent=message});
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+var autocomplete=BazAutocomplete.create({inputId:'hospital',dropdownId:'hospDropdown',db:rows,itemText:h=>h.n,renderItem:h=>'<strong>'+esc(h.n)+'</strong><small>'+esc(h.s+' · '+h.c+' · '+h.r)+'</small>',onInput:()=>binding.input(),onPick:function(h){binding.pick(h);count++;$('selection').textContent='선택 횟수 '+count+'회 · '+h.n+' · '+h.s;log.unshift(new Date().toLocaleTimeString()+' #'+count+' '+h.n+' / '+h.s);$('log').textContent=log.slice(0,20).join(String.fromCharCode(10));}});
+$('example').onclick=function(){$('hospital').focus();$('hospital').value='검증';$('hospital').dispatchEvent(new Event('input',{bubbles:true}));};
+$('reset').onclick=function(){autocomplete.reset();for(var id of ['hospital','serialNo','subscription','receiver'])$(id).value='';binding.restore({});count=0;log=[];$('selection').textContent='선택 횟수 0회';$('log').textContent='초기화했습니다.';document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false);};
+$('environment').textContent=(/iPhone|iPad|iPod/.test(navigator.userAgent)?'iPhone/iPad':/Android/.test(navigator.userAgent)?'Android':'데스크톱/기타')+' · '+(matchMedia('(display-mode: standalone)').matches||navigator.standalone?'홈 화면 실행':'브라우저 실행')+' · Pointer Events '+('PointerEvent'in window?'지원':'대체 경로');
+})();
+</script></body></html>
