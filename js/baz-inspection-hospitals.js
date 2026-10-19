@@ -79,5 +79,17 @@
     }
     return {pick,input,restore};
   }
-  global.BazInspectionHospitals={create,normalize,createBinding};
+  function salesFor(basic,rows,requestSales){
+    if(text(basic&&basic.receiver))return text(basic.receiver);
+    if(text(requestSales))return text(requestSales);
+    const name=value=>text(value).normalize('NFKC').replace(/[\s_]+/g,''),serials=value=>text(value).normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean);
+    const hospital=name(basic&&basic.hospital);if(!hospital)return '';
+    let candidates=rows.filter(h=>name(h.n)===hospital);
+    const sn=serials(basic.serialNo),matched=sn.length?candidates.filter(h=>serials(h.s).some(s=>sn.includes(s))):[];
+    if(matched.length)candidates=matched;
+    if(!candidates.length||candidates.some(h=>!text(h.sa)))return '';
+    const values=[...new Set(candidates.map(h=>text(h.sa)))];return values.length===1?values[0]:'';
+  }
+  global.BazInspectionHospitals={create,normalize,createBinding,salesFor};
 })(window);
+

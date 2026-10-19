@@ -45,7 +45,7 @@
     if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다.');
     function apply(){
      var existing=loadTasks().filter(function(t){return t.data?.handover?.recordId===target.recordId&&(!t.data.handover.requestId||t.data.handover.requestId===target.requestId);}).sort(function(a,b){return b.updatedAt-a.updatedAt;})[0];
-     if(existing){if(!openTask(existing.id))throw new Error('현재 작업을 보관하지 못했습니다.');handoverReference={...handoverReference,requestId:target.requestId};saveCurrentTask();message.textContent='이 현장 기록의 기존 내역서를 이어서 열었습니다. 작성 중인 내용·사진·서명을 유지합니다.';}
+     if(existing){if(!openTask(existing.id))throw new Error('현재 작업을 보관하지 못했습니다.');handoverReference={...handoverReference,requestId:target.requestId};if(!String(existing.data?.basic?.receiver||'').trim()&&status.request.sales)document.getElementById('receiver').value=status.request.sales;else fillInspectionSales(status.request.sales);saveCurrentTask();message.textContent='이 현장 기록의 기존 내역서를 이어서 열었습니다. 작성 중인 내용·사진·서명을 유지하며 비어 있는 영업 담당자는 접수·병원 DB에서 보완합니다.';}
      else{if(!newTask({keepRoute:true}))throw new Error('현재 작업을 보관하지 못했습니다.');applyFormData(flow.inspectionData(status.source,status.request));if(status.source.pdf)uploadedPdfDocument=status.source.pdf;saveCurrentTask();message.textContent='병원·장비·접수일·영업 담당자·실제 처리일·처리 내용을 불러왔습니다. 점검 결과와 사진을 확인하세요.';}
      refresh(handoverReference,message.textContent);
     }
@@ -58,3 +58,4 @@
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialise,{once:true});else initialise();
 })();
+
