@@ -13,7 +13,7 @@ export async function removeRequestNotifications(kv:any,requestId:string){
   if(pending.value?.due)await kv.delete(key('fanoutDue',pending.value.due,id));
   for await(const recipient of kv.list({prefix:key('recipient',id)})){
    const uid=String(recipient.key[recipient.key.length-1]);
-   if(!(await kv.atomic().delete(key('inbox',uid,recipient.value)).delete(key('index',uid,id)).delete(key('unread',uid,id)).delete(key('read',uid,id)).delete(key('recipientName',id,uid)).delete(recipient.key).commit()).ok)throw new Error('접수 알림 삭제 정리를 다시 시도합니다.');
+   if(!(await kv.atomic().delete(key('inbox',uid,recipient.value)).delete(key('index',uid,id)).delete(key('unread',uid,id)).delete(key('read',uid,id)).delete(key('recipientName',id,uid)).delete(key('reminder',id,uid)).delete(recipient.key).commit()).ok)throw new Error('접수 알림 삭제 정리를 다시 시도합니다.');
   }
   for await(const jobIndex of kv.list({prefix:key('eventJob',id)})){
    const job=await kv.get(key('job',jobIndex.value));let tx=kv.atomic().check(job).delete(job.key).delete(jobIndex.key);
@@ -155,16 +155,45 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(!selected)return {success:true,requestId,hospitalName:r.hospitalName,events:eventList,selected:null,recipients:[],read:0,unread:0,total:0,retentionDays:30};
   const recipients=await rows(['recipient',selected.id],1001);
   if(recipients.length>1000)throw new Error('알림 수신 계정이 많아 조회할 수 없습니다. 관리자에게 문의하세요.');
-  const people:Obj[]=[];
+  const people:Obj[]=[],valid=await currentEvent(selected);
   for(const entry of recipients){
    const uid=String(entry.key[entry.key.length-1]);
    const name=(await get('recipientName',selected.id,uid)).value||d.accounts.find((a:Obj)=>a.uid===uid)?.name||'이전 수신 계정';
    const readAt=(await get('read',uid,selected.id)).value||'';
-   people.push({name:String(name),readAt});
+   const account=d.accounts.find((a:Obj)=>a.uid===uid),devices=account?await rows(['device',uid],10):[],reminder=(await get('reminder',selected.id,uid)).value;
+   people.push({recipientId:await digest(JSON.stringify([selected.id,uid])),name:String(name),readAt,canRemind:!readAt&&valid&&!!account&&eligible(selected,account,d)&&devices.length>0,remindedAt:reminder?.at?new Date(reminder.at).toISOString():'',retryAt:reminder?.at?new Date(reminder.at+600000).toISOString():''});
   }
   people.sort((a,b)=>a.name.localeCompare(b.name,'ko')||a.readAt.localeCompare(b.readAt));
   const read=people.filter(x=>x.readAt).length;
   return {success:true,requestId,hospitalName:r.hospitalName,events:eventList,selected:eventList.find(e=>e.id===selected.id),recipients:people,read,unread:people.length-read,total:people.length,pending:!!(await get('pending',selected.id)).value,retentionDays:30};
+ }
+ // Reuse the original notification/read boundary; reminders never create an inbox item.
+ async function remind(p:Obj,a:Obj,d:Obj){
+  if(!p.notificationId||!/^[a-f0-9]{64}$/.test(String(p.recipientId||'')))throw new Error('재알림 대상을 다시 선택하세요.');
+  const view=await receipts(p,d),person=view.recipients.find((x:Obj)=>x.recipientId===p.recipientId);
+  if(!person||!view.selected)throw new Error('이 알림의 수신 계정이 아닙니다.');
+  if(person.readAt)throw new Error('이미 확인한 알림입니다. 현황을 새로고침하세요.');
+  if(!person.canRemind)throw new Error('현재 알림 대상·수신 설정·기기 연결을 확인하세요. 지난 배정 알림에는 재알림을 보낼 수 없습니다.');
+  const e=(await get('event',view.selected.id)).value;
+  if(!e||Date.parse(e.createdAt)+TTL<=now())throw new Error('알림 보관 기간이 지났습니다.');
+  let uid='';for(const r of await rows(['recipient',e.id],1001)){const candidate=String(r.key[r.key.length-1]);if(await digest(JSON.stringify([e.id,candidate]))===p.recipientId){uid=candidate;break;}}
+  if(!uid)throw new Error('재알림 대상을 다시 확인하세요.');
+  const recipient=await get('recipient',e.id,uid),read=await get('read',uid,e.id),rate=await get('reminder',e.id,uid);
+  if(!recipient.value||read.value)throw new Error('이미 확인했거나 수신 대상이 변경되었습니다. 현황을 새로고침하세요.');
+  if(rate.value&&now()<rate.value.at+600000)throw new Error('같은 대상의 재알림은 10분 뒤 다시 요청할 수 있습니다.');
+  const remaining=Date.parse(e.createdAt)+TTL-now(),at=now(),jobs=[];
+  for(const device of await rows(['device',uid],10)){
+   const sub=await get('subscription',device.value.id);
+   if(sub.value?.uid!==uid||sub.value.binding!==device.value.binding)continue;
+   const id=await digest('reminder|'+e.id+'|'+uid+'|'+device.value.id),old=await get('job',id);
+   if(old.value)throw new Error('앞서 요청한 재알림이 발송 대기 중입니다.');
+   jobs.push({old,sub,job:{id,eventId:e.id,uid,deviceId:device.value.id,binding:device.value.binding,attempt:0,due:at,lease:0,reminderAt:at}});
+  }
+  if(!jobs.length)throw new Error('연결된 알림 기기가 없습니다. 대상자의 앱 알림 설정을 확인하세요.');
+  let tx=kv.atomic().check(recipient,read,rate).set(rate.key,{at,requestedBy:a.uid},{expireIn:remaining});
+  for(const {old,sub,job} of jobs)tx=tx.check(old,sub).set(old.key,job,{expireIn:Math.min(PUSH_TTL,remaining)}).set(key('due',at,job.id),true,{expireIn:Math.min(PUSH_TTL,remaining)}).set(key('eventJob',e.id,job.id),job.id,{expireIn:remaining});
+  if(!(await tx.commit()).ok)throw new Error('읽음 상태나 재알림 요청이 변경되었습니다. 현황을 새로고침하세요.');
+  return {success:true,queued:jobs.length,remindedAt:new Date(at).toISOString(),retryAt:new Date(at+600000).toISOString()};
  }
  async function subscribe(p:Obj,a:Obj){
   const subscription=validateSubscription(p.subscription),id=await digest(subscription.endpoint);
@@ -282,9 +311,10 @@ export function createWorkNotifications(kv:any,options:Obj){
   let retry=false,expired=false;
   const roster=e?.kind==='roster'?(await createWorkRoster(kv).read(e.date.slice(0,7))).roster:[];
   const off=roster.some((r:Obj)=>!r.deletedAt&&r.date===e.date&&r.type==='휴무'&&[a?.engineer,a?.name].some(n=>norm(n)===norm(r.person)));
-  if(e&&now()-Date.parse(e.createdAt)<PUSH_TTL&&a&&eligible(e,a,d)&&!off&&sub?.uid===j.uid&&sub.binding===j.binding&&!(await get('read',j.uid,e.id)).value&&await currentEvent(e)){
+  const pushAt=j.reminderAt||Date.parse(e?.createdAt||''),pushUntil=Math.min(pushAt+PUSH_TTL,Date.parse(e?.createdAt||'')+TTL);
+  if(e&&now()<pushUntil&&a&&eligible(e,a,d)&&!off&&sub?.uid===j.uid&&sub.binding===j.binding&&!(await get('read',j.uid,e.id)).value&&await currentEvent(e)){
    try{
-    await options.send(sub.subscription,{...notificationText(e),requestId:e.requestId||'',notificationId:e.id,kind:e.kind,recipient:j.uid},Math.max(1,Math.floor(((e.kind==='roster'?Math.min(PUSH_TTL,Date.parse(e.date+'T09:00:00+09:00')-Date.parse(e.createdAt)):PUSH_TTL)-(now()-Date.parse(e.createdAt)))/1000)));
+    await options.send(sub.subscription,{...notificationText(e),...(j.reminderAt?{title:'재알림 · '+notificationText(e).title,reminder:true}:{}),requestId:e.requestId||'',notificationId:e.id,kind:e.kind,recipient:j.uid},Math.max(1,Math.floor((Math.min(pushUntil,e.kind==='roster'?Date.parse(e.date+'T09:00:00+09:00'):pushUntil)-now())/1000)));
    }catch(error:any){expired=[404,410].includes(Number(error.statusCode));retry=!expired&&(!error.statusCode||error.statusCode===429||error.statusCode>=500);}
   }
   if(expired)await removeDevice(j.deviceId,j.uid,j.binding);
@@ -311,6 +341,7 @@ export function createWorkNotifications(kv:any,options:Obj){
    case 'notification_config':return {success:true,uid:a.uid,name:a.name,engineer:a.engineer||'',broadcast:true,publicKey:await options.publicKey(),devices:(await rows(['device',a.uid],10)).map(x=>({id:x.value.id})),admin:Math.min(a.level,who.level)>=3,notificationTypes:NOTIFICATION_TYPES,preferences:a.preferences};
    case 'notification_detail':return await detail(p,a);
    case 'notification_receipts':return await receipts(p,d);
+   case 'notification_remind':return await remind(p,a,d);
    case 'notification_preferences':{
     if(Math.min(a.level,who.level)<3)throw new Error('관리자 권한이 필요합니다.');
     if(!p.types||Object.keys(p.types).length!==NOTIFICATION_TYPES.length||NOTIFICATION_TYPES.some(t=>typeof p.types[t]!=='boolean')||Object.keys(p.types).some(t=>!NOTIFICATION_TYPES.includes(t)))throw new Error('알림 종류별 수신 설정을 확인하세요.');
