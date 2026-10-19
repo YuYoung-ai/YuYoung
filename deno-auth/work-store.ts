@@ -4,6 +4,7 @@ import {createWorkRoster} from './work-roster.ts';
 import {requestNotifications,appendNotification,notificationActivation,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 import {sourceReview,pdfBasis} from './work-source-review.ts';
 import {createWorkIndexes,updateRequestIndexes} from './work-indexes.ts';
+import {createInspectionLinks} from './work-inspection-links.ts';
 import {createWorkMatching} from './work-matching.ts';
 import {createHandoverReview,reviewBody,bodyHash} from './work-handover-review.ts';
 type Obj = Record<string, any>;
@@ -265,6 +266,7 @@ export function createWorkStore(kv:any,options:Obj={}){
   return {kind:p.action.slice(5),before,request:r,response:{success:true,request:r}};
  });}
  async function cleanupPurge(r:Obj){
+  await kv.delete(key('inspectionLinks',r.id));
   await removeRequestNotifications(kv,r.id);
   // Primary records and old retry payloads are removed in bounded, resumable transactions.
   for await(const e of kv.list({prefix:key('history',r.id)})){
@@ -469,6 +471,7 @@ export function createWorkStore(kv:any,options:Obj={}){
     case 'work_flow_relink_preview':return await flowRelinkPreview(p,who);
     case 'work_flow_relink':return await flowRelink(p,who);
     case 'work_detail':return await detail(p);
+    case 'work_inspection_links':return await createInspectionLinks(kv)(p);
     case 'work_document_status':return await documentStatus(p);
     case 'work_document_retry':await reconcileDocuments();return await documentStatus(p);
     case 'work_save':case 'work_request_edit':{
@@ -693,3 +696,4 @@ export function createWorkStore(kv:any,options:Obj={}){
  async function notificationSources(requestId:string){return [...new Set((await history(requestId)).filter(h=>h.kind==='result'&&!h.deletedAt&&h.source?.origin!=='flow').map(h=>h.source?.recordId).filter(Boolean))];}
  return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,processPendingMatches,notificationSources,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
 }
+

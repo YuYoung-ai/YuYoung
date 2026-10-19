@@ -1,0 +1,24 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+(async()=>{
+ const timers=new Map();let tid=0,calls=0,stored=null,resolveNext,answer=null;
+ const window={BazAuth:{name:()=> 'tester'}};
+ const context={window,URL,Map,Set,setTimeout:fn=>{timers.set(++tid,fn);return tid;},clearTimeout:id=>timers.delete(id)};vm.createContext(context);
+ vm.runInContext(fs.readFileSync(__dirname+'/../js/baz-work-comments.js','utf8'),context);
+ vm.runInContext(fs.readFileSync(__dirname+'/../js/baz-work-inspections.js','utf8'),context);
+ const api={get:async(a,p)=>{calls++;assert.equal(a,'work_inspection_links');if(answer)return answer;return new Promise(r=>resolveNext=r);}};
+ const cache={detail:async()=>stored,saveDetail:async(a,id,value)=>{stored=value;}};
+ const create=()=>window.BazWorkInspections.create({account:'tester',api,cache});
+ const a={dataset:{inspectionRequest:'r1'},innerHTML:''},b={dataset:{inspectionRequest:'r1'},innerHTML:''},host={querySelectorAll:()=>[a,b]};
+ const item=(revision,url='https://drive.google.com/file/d/file-'+revision+'/view')=>({requestId:'r1',revision,attachment:{kind:'inspection_pdf',url}});
+ const flush=async()=>{const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());for(let i=0;i<8;i++)await Promise.resolve();};
+ const ui=create();for(let i=0;i<10;i++)ui.hydrate(host,[{id:'r1',revision:1}]);await flush();assert.equal(calls,1,'rapid renders issue only one batch');
+ resolveNext({success:true,items:[item(1)]});await flush();assert.match(a.innerHTML,/file-1/);assert.equal(a.innerHTML,b.innerHTML,'desktop and mobile share one result');
+ ui.hydrate(host,[{id:'r1',revision:1}]);await flush();assert.equal(calls,1,'search/page redisplay reuses revision cache');
+ const reopened=create();reopened.hydrate(host,[{id:'r1',revision:1}]);await flush();assert.equal(calls,1,'IndexedDB cache avoids repeated reads after restart');
+ answer={success:true,items:[item(2,'javascript:alert(1)')]};ui.hydrate(host,[{id:'r1',revision:2}]);await flush();assert.doesNotMatch(a.innerHTML,/javascript|href/,'unsafe URL cannot become a link');
+ answer={success:false};ui.hydrate(host,[{id:'r1',revision:3}]);await flush();assert.match(a.innerHTML,/내역서 다시 확인/);
+ answer={success:true,items:[{requestId:'r1',revision:3,attachment:null}]};ui.retry('r1');await flush();assert.match(a.innerHTML,/inspection-empty/);
+ answer=null;ui.hydrate(host,[{id:'r1',revision:4}]);await flush();const old=resolveNext;
+ answer={success:true,items:[item(5)]};ui.hydrate(host,[{id:'r1',revision:5}]);await flush();old({success:true,items:[item(4)]});await flush();assert.match(a.innerHTML,/file-5/,'late response cannot replace a newer revision');
+ console.log('work-inspection-list: debounce, shared rendering, memory/IndexedDB reuse, unsafe URLs, retry, empty state and late revision protection passed.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

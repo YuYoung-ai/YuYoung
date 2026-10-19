@@ -1,0 +1,36 @@
+/* Shared status palette keeps the selected status readable in the list and detail. */
+.status-badge[data-work-status="접수"]{--status-bg:#e9f1ff;--status-fg:#2456a6;--status-line:#c7d9f7}
+.status-badge[data-work-status="방문예정"]{--status-bg:#f0eafd;--status-fg:#6640a8;--status-line:#d9c9f2}
+.status-badge[data-work-status="처리중"]{--status-bg:#fff0e3;--status-fg:#a34c13;--status-line:#f2cbaa}
+.status-badge[data-work-status="결과확인"]{--status-bg:#e3f4f8;--status-fg:#166579;--status-line:#b7dfe8}
+.status-badge[data-work-status="완료"]{--status-bg:#e6f5ed;--status-fg:#236b48;--status-line:#bcdfcc}
+.status-badge[data-work-status="보류"]{--status-bg:#fff6d9;--status-fg:#805e0a;--status-line:#e9d99b}
+.status-badge[data-work-status="취소"]{--status-bg:#edf0f4;--status-fg:#566171;--status-line:#d4dae3}
+html[data-theme=dark] .status-badge[data-work-status="접수"]{--status-bg:#203957;--status-fg:#b2d1ff;--status-line:#41658d}
+html[data-theme=dark] .status-badge[data-work-status="방문예정"]{--status-bg:#3a2d55;--status-fg:#d6c1ff;--status-line:#6c5395}
+html[data-theme=dark] .status-badge[data-work-status="처리중"]{--status-bg:#4a3022;--status-fg:#ffd0aa;--status-line:#835b3e}
+html[data-theme=dark] .status-badge[data-work-status="결과확인"]{--status-bg:#173e49;--status-fg:#a2e0ef;--status-line:#39717e}
+html[data-theme=dark] .status-badge[data-work-status="완료"]{--status-bg:#204333;--status-fg:#a8e1c1;--status-line:#44775c}
+html[data-theme=dark] .status-badge[data-work-status="보류"]{--status-bg:#443c21;--status-fg:#efda91;--status-line:#7b6b36}
+html[data-theme=dark] .status-badge[data-work-status="취소"]{--status-bg:#303a48;--status-fg:#c3ccd9;--status-line:#5b687b}
+.list-panel .badge.status-badge[data-work-status],.badge.status-badge[data-work-status],#detail .badge.status-badge[data-work-status]{background:var(--status-bg);color:var(--status-fg);border-color:var(--status-line)}
+.work-status-group{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+.service-badge{display:inline-flex;align-items:center;justify-content:center;min-height:31px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--muted);font-size:12px;white-space:nowrap}
+.service-badge[data-service-type="유상"]{background:#fff3e7;color:#925015;border-color:#edd1b5}.service-badge[data-service-type="무상"]{background:#e9f6f3;color:#226d5c;border-color:#bedfd5}
+html[data-theme=dark] .service-badge[data-service-type="유상"]{background:#473426;color:#f5d1aa;border-color:#795a3b}html[data-theme=dark] .service-badge[data-service-type="무상"]{background:#213f38;color:#a9dfd0;border-color:#446e62}
+.status-badge>.editable-value{padding:5px 25px 5px 24px;white-space:nowrap}.service-badge>.editable-value{padding:0;min-height:22px;white-space:nowrap}
+.table-scroll>table{table-layout:fixed;width:100%;min-width:1120px}.table-scroll>table th,.table-scroll>table td{vertical-align:middle;padding:14px 12px}
+.table-scroll>table .hospital-column{text-align:left}.table-scroll>table .status-column{width:200px;text-align:center}.table-scroll>table .visit-column{width:158px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.table-scroll>table .person-column{width:92px;text-align:center;overflow-wrap:anywhere}.table-scroll>table .recent-column{width:166px;text-align:center}.table-scroll>table .read-receipts-column{width:70px;text-align:center}
+.table-scroll>table .person-column>.editable-value,.table-scroll>table .visit-column>.editable-value{text-align:center}.table-scroll>table .summary{overflow-wrap:anywhere}.table-scroll>table .recent-column .inspection-pdf-link{display:inline-block;white-space:normal;line-height:1.6}
+.recent-inspection{font-size:12px;line-height:1.6}.inspection-empty,.inspection-loading{color:var(--muted)}.inspection-retry{font-size:12px;padding:4px 6px;white-space:normal}
+.card-people{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;color:var(--muted)}.card-people strong{color:var(--text);font-weight:550}
+#detail .work-status-group{justify-content:flex-start}
+@media(max-width:700px){
+ .mobile-card:not(.editable-card){display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+ .mobile-card:not(.editable-card)>.mobile-status{position:static;grid-column:1;grid-row:1}.mobile-status .work-status-group{justify-content:flex-start}
+ .mobile-card:not(.editable-card)>.mobile-select{position:absolute;right:12px;top:10px}.mobile-card .card-top{padding-right:0}
+ .mobile-card:not(.editable-card)>button,.mobile-card>.card-people,.mobile-card>.recent-inspection,.mobile-card>.read-receipts-card-footer{grid-column:1;min-width:0}
+ .mobile-card:not(.editable-card)>.read-receipts-card-footer{margin:0;display:flex;justify-content:flex-end}
+ .mobile-card .service-badge{font-size:12px}.editable-card>.recent-inspection{margin-top:10px}
+}

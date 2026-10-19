@@ -148,8 +148,8 @@ await assert.rejects(()=>clean.bridge('activate',{manifest:{}}),/검증/);assert
 await assert.rejects(()=>store.bridge('seed',{requests:[]}),/다시 가져올/);
 const main=fs.readFileSync(new URL('../deno-auth/main.ts',import.meta.url),'utf8');stripTypeScriptTypes(main);assert.ok(main.includes("baz-work-bridge-v1\\n"));
 const ui=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');new vm.Script(ui);assert.ok(ui.includes("state.filter==='trash'"));
-// The roster day-rollover timer is separate from work-data polling.
-assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui.replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'')));
+// Roster rollover and flushing local drafts do not poll work data.
+assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(ui.replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'').replace("document.addEventListener('visibilitychange',function(){if(document.hidden)flushInlineDrafts();});",'')));
 {
  const db=new Kv(),s=createWorkStore(db),second={...hospital,id:'h-new',key:'새 병원\u001fSN2\u001f부산',name:'새 병원',sn:'SN2',region:'부산',asType:'무상',ncare:'미가입'};
  await s.bridge('seed',{hospitals:[hospital,second],references:{engineers:['엔지니어'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
@@ -173,8 +173,8 @@ assert.match(fieldsMarkup,/노즐 재사용<\/dt><dd>유/);assert.match(fieldsMa
 assert.match(fields({...source,nozzleReuse:'X'}),/노즐 재사용<\/dt><dd>무/);
 assert.match(fields({...source,origin:'flow'},'[사용자 숙련도 평가]NS 충진 여부 : ONS 충진량 : 정상젯 분사 판단[병원담당자] : 가능비고/특이사항 : N/A'),/NS 충진 여부<\/dt><dd>O<\/dd>/);
 assert.match(fields({...source,origin:'flow'},'노즐 재사용 의심'),/노즐 재사용<\/dt><dd>미기록/,'do not infer nozzle reuse from free text');
-const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
-const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{window:{},fields:workFields,editable:(r,k,v)=>String(v??''),editMode:false,statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
+const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{editMode:false,esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
+const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{window:{},fields:workFields,editable:(r,k,v)=>String(v??''),editMode:false,receiptButton:()=>'',statusPicker,statusGroup:statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<option value="완료" selected>완료<\/option>/);assert.match(markup,/<span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(!markup.includes('data-action="save-status"'));assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
 // Existing deleted-owner links must heal without clearing the original result/history.
 async function relinkFixture(gubun='A/S'){
@@ -325,3 +325,4 @@ console.log('work-kv: revisions, ACL, trash AS/inspection relink, original histo
  assert.ok([...db.data.values()].some(x=>x.key[1]==='rosterAudit'),'edits retain a separate audit');
  console.log('work-roster: monthly shared read/sync, date/person uniqueness, idempotency, atomic conflicts, validation, ACL, reversible deletion and no A/S side effects passed.');
 }
+
