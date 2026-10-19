@@ -855,7 +855,9 @@ function doPost(e){
     try{ bazDropHandoverCaches_(P.hosp); }catch(e){}
     /* 재고 원장 사용처 자동 기입 (실패해도 본 기록에는 영향 없음) */
     var inv = {done:false, msg:''};
-    try{ inv = invRecordUsage_(payload) || inv; }catch(e){ inv = {done:false, msg:'재고 기입 오류(무시): '+e}; }
+    try{ inv = typeof invRecordUsage_==='function' ? (invRecordUsage_(payload) || inv)
+      : {done:false, pending:true, msg:'교체품 재고 서버 파일을 추가해야 합니다.'};
+    }catch(e){ inv = {done:false, pending:true, msg:'재고 반영대기: '+e}; }
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
     var msg = '✅ '+ P.hosp +' 기록 완료 (행 '+row+')';
     warnings.forEach(function(w){ msg += '\n⚠️ ' + w; });
@@ -927,7 +929,9 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, warmed:warmed, pong:new Date().toISOString()});
+      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1,
+        inventorySchema:typeof INV_REPLACEMENT!=='undefined'?INV_REPLACEMENT.VERSION:0,
+        warmed:warmed, pong:new Date().toISOString()});
     }
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
@@ -3186,14 +3190,13 @@ function findLedgerCols_(sh){
   return null;
 }
 
-/** handover 기록 → 재고 원장 사용처 자동 기입
- *  규칙: 유상(교체비용 있음)=새제품 탭 우선, 무상=Repair 탭 우선 / 풋스위치는 담당자 출고분 매칭 */
-function invRecordUsage_(p){
+/** Handpiece 전용 — 기존 S/N 매칭과 유상/무상 탭 우선순위를 유지한다.
+ *  다른 부품은 handover_inventory_gas.gs의 명시적 품목 매핑으로 처리한다. */
+function invRecordHandpieceUsage_(p){
   try{
     if(!INVENTORY.SPREADSHEET_ID) return {done:false, msg:''};
     var ss=invOpen_();
     var snIn=String(p.hpIn||'').trim().toUpperCase();
-    var isFoot=/풋|FOOT/i.test(String(p.part||''));
     var today=p.date||Utilities.formatDate(new Date(),'Asia/Seoul','yyyy-MM-dd');
 
     /* ① HP 교체: 장착 SN을 출고 SN에서 찾아 기입 */
@@ -3222,29 +3225,6 @@ function invRecordUsage_(p){
         }
       }
       return {done:false, msg:'재고: 출고 SN '+snIn+' 미발견 — 미출고이거나 이미 기입됨'};
-    }
-
-    /* ② 풋스위치 교체: SN 없음 → 담당자 출고분 중 미사용 첫 행 */
-    if(isFoot){
-      var fsh=invSheetByName_(ss,'CS 재고 수량(풋스위치)');
-      if(!fsh) return {done:false, msg:''};
-      var fm=findLedgerCols_(fsh);
-      if(!fm||!fm['출고처']||!fm['사용일']) return {done:false, msg:''};
-      var lastF=fsh.getLastRow(); if(lastF<=fm.row) return {done:false, msg:''};
-      var nf=lastF-fm.row;
-      var outs=fsh.getRange(fm.row+1, fm['출고처'], nf,1).getDisplayValues();
-      var usef=fsh.getRange(fm.row+1, fm['사용일'], nf,1).getDisplayValues();
-      for(var j=0;j<nf;j++){
-        if(String(outs[j][0]).trim()===String(p.fse||'').trim() && String(usef[j][0]).trim()===''){
-          var rw=fm.row+1+j;
-          fsh.getRange(rw, fm['사용일']).setValue(today);
-          if(fm['사용자'])   fsh.getRange(rw, fm['사용자']).setValue(p.fse||'');
-          if(fm['사용처'])   fsh.getRange(rw, fm['사용처']).setValue(p.hosp||'');
-          if(fm['사용수량']) fsh.getRange(rw, fm['사용수량']).setValue(1);
-          return {done:true, msg:'재고[풋스위치] '+(p.fse||'')+' 보유분 → '+(p.hosp||'')+' 기입 (행 '+rw+')'};
-        }
-      }
-      return {done:false, msg:'재고: '+(p.fse||'')+' 앞으로 출고된 풋스위치 잔여분 없음'};
     }
 
     return {done:false, msg:''};  /* 교체 없음 → 재고 기입 대상 아님 */

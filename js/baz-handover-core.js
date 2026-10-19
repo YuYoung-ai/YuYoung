@@ -208,6 +208,10 @@
     out.warnings = Array.isArray(data.warnings) ? data.warnings.slice() : [];
     out.savedFields = (data.savedFields && typeof data.savedFields === 'object') ? data.savedFields : null;
     out.message = text(data.msg);
+    out.inventory = data.inv && typeof data.inv === 'object' ? data.inv : null;
+    if(out.inventory && !out.inventory.done && out.inventory.msg && out.warnings.indexOf(out.inventory.msg)<0){
+      out.warnings.push(text(out.inventory.msg));
+    }
 
     if (data.success !== true) {
       out.state = SAVE.FAILED;
