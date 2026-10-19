@@ -24,6 +24,11 @@ export async function removeRequestNotifications(kv:any,requestId:string){
  }
 }
 const TTL = 30*86400000, DEVICE_TTL = 90*86400000, PUSH_TTL = 86400000;
+// Keep read receipts for audit; only the recipient's inbox listing expires at midnight KST.
+export function readInboxExpiresAt(readAt:string){
+ const at=Date.parse(readAt);if(!Number.isFinite(at))return Infinity;
+ return (Math.floor((at+9*3600000)/86400000)+1)*86400000-9*3600000;
+}
 const norm = (v:any) => String(v||'').normalize('NFKC').trim().replace(/\s+/g,'');
 const clone = (v:any) => structuredClone(v);
 const live = (r:Obj) => r&&!r.deletedAt&&!r.purgedAt&&!['완료','취소'].includes(r.status);
@@ -213,11 +218,53 @@ export function createWorkNotifications(kv:any,options:Obj){
   if(e.value?.uid!==uid||binding&&e.value.binding!==binding)return;
   await kv.atomic().check(e).delete(e.key).delete(key('device',uid,id)).commit();
  }
+ async function retainReadInbox(uid:string,id:string){
+  const stamp=await get('read',uid,id),index=await get('index',uid,id);
+  if(!stamp.value||!index.value)return true;
+  const entry=await get('inbox',uid,index.value);if(!entry.value)return true;
+  const due=readInboxExpiresAt(stamp.value),ttl=Math.min(due,Date.parse(entry.value.createdAt)+TTL)-now();
+  if(ttl>0&&entry.value.readCleanupAt===due)return true;
+  let tx=kv.atomic().check(stamp,index,entry);
+  if(ttl<=0)tx=tx.delete(entry.key).delete(index.key).delete(key('unread',uid,id));
+  else tx=tx.set(entry.key,{...entry.value,readCleanupAt:due},{expireIn:ttl}).set(index.key,index.value,{expireIn:ttl});
+  return (await tx.commit()).ok;
+ }
+ // Bounded one-time backfill of existing read rows. The read markers remain stable cursor anchors.
+ async function migrateReadRetention(){
+  const marker=await get('readRetentionV1');if(marker.value?.done)return;
+  const iterator=kv.list({prefix:key('read')},{limit:100,cursor:marker.value?.cursor||undefined});let count=0;
+  for await(const entry of iterator){count++;if(!await retainReadInbox(String(entry.key[2]),String(entry.key[3])))return;}
+  await kv.atomic().check(marker).set(marker.key,{done:count<100,cursor:String(iterator.cursor||'')}).commit();
+ }
  async function list(p:Obj,a:Obj){
-  const iterator=kv.list({prefix:key('inbox',a.uid)},{reverse:true,limit:50,cursor:p.cursor||undefined}),items=[];
-  for await(const x of iterator)items.push({...x.value,readAt:(await get('read',a.uid,x.value.id)).value||''});
+  const items:Obj[]=[];let cursor=String(p.cursor||''),scanned=0;
+  do{
+   const limit=50-items.length,iterator=kv.list({prefix:key('inbox',a.uid)},{reverse:true,limit,cursor:cursor||undefined});let count=0;
+   for await(const x of iterator){
+    count++;scanned++;const readAt=(await get('read',a.uid,x.value.id)).value||'';
+    if(readAt){
+     if(readInboxExpiresAt(readAt)<=now()){await retainReadInbox(a.uid,x.value.id);continue;}
+     await retainReadInbox(a.uid,x.value.id);
+    }
+    items.push({...x.value,readAt});
+   }
+   cursor=count===limit?String(iterator.cursor||''):'';
+  }while(cursor&&items.length<50&&scanned<200);
   const unread=await rows(['unread',a.uid],1001);
-  return {success:true,items,cursor:items.length===50?String(iterator.cursor||''):'',readThrough:new Date(now()).toISOString(),unread:Math.min(1000,unread.length),unreadMore:unread.length>1000};
+  return {success:true,items,cursor,readRetention:'next-day-kst',readThrough:new Date(now()).toISOString(),unread:Math.min(1000,unread.length),unreadMore:unread.length>1000};
+ }
+ async function deleteReadInbox(p:Obj,a:Obj){
+  if(!Array.isArray(p.ids)||!p.ids.length||p.ids.length>50||p.ids.some((id:any)=>typeof id!=='string'||!/^[A-Za-z0-9_-]{8,90}$/.test(id)))throw new Error('삭제할 읽은 알림을 50개 이하로 선택하세요.');
+  const deletedIds:string[]=[],skippedIds:string[]=[],failedIds:string[]=[];
+  for(const id of new Set<string>(p.ids)){
+   const stamp=await get('read',a.uid,id),index=await get('index',a.uid,id);
+   if(!index.value){deletedIds.push(id);continue;}
+   if(!stamp.value){skippedIds.push(id);continue;}
+   const entry=await get('inbox',a.uid,index.value);
+   const result=await kv.atomic().check(stamp,index,entry).delete(entry.key).delete(index.key).delete(key('unread',a.uid,id)).commit();
+   (result.ok?deletedIds:failedIds).push(id);
+  }
+  return {success:true,deletedIds,skippedIds,failedIds};
  }
  // Inbox acknowledgement only. It never marks a request or Handover as reviewed.
  async function markInboxRead(p:Obj,a:Obj){
@@ -233,22 +280,29 @@ export function createWorkNotifications(kv:any,options:Obj){
   const readIds:string[]=[],failedIds:string[]=[];let changed=0;
   for(let i=0;i<entries.length;i+=4)await Promise.all(entries.slice(i,i+4).map(async entry=>{
    const e=entry.value;if(!e||through&&e.createdAt>through)return;
-   const stamp=await get('read',a.uid,e.id),ttl=Date.parse(e.createdAt)+TTL-now();if(ttl<=0)return;
-   if(stamp.value){readIds.push(e.id);return;}
-   const result=await kv.atomic().check(entry,stamp).set(key('read',a.uid,e.id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,e.id)).commit();
+   const stamp=await get('read',a.uid,e.id),at=now(),ttl=Date.parse(e.createdAt)+TTL-at;if(ttl<=0)return;
+   if(stamp.value){(await retainReadInbox(a.uid,e.id)?readIds:failedIds).push(e.id);return;}
+   const readAt=new Date(at).toISOString(),index=await get('index',a.uid,e.id),due=readInboxExpiresAt(readAt),inboxTTL=Math.min(ttl,due-at);
+   if(!index.value||index.value!==entry.key[entry.key.length-1]){failedIds.push(e.id);return;}
+   const result=await kv.atomic().check(entry,stamp,index).set(key('read',a.uid,e.id),readAt,{expireIn:ttl}).set(entry.key,{...e,readCleanupAt:due},{expireIn:inboxTTL}).set(index.key,index.value,{expireIn:inboxTTL}).delete(key('unread',a.uid,e.id)).commit();
    (result.ok?readIds:failedIds).push(e.id);if(result.ok)changed++;
   }));
   return {success:true,readIds,failedIds,cursor,through,changed};
  }
  async function markRead(p:Obj,a:Obj){
-  const id=String(p.notificationId||''),idx=(await get('index',a.uid,id)).value;
+  const id=String(p.notificationId||''),index=await get('index',a.uid,id),idx=index.value;
   if(!idx)throw new Error('알림을 찾지 못했거나 보관 기간이 지났습니다.');
-  const e=await get('inbox',a.uid,idx),requestEntry=await options.store.request(e.value?.requestId,true),r=requestEntry.value;
+  const e=await get('inbox',a.uid,idx);if(!e.value)throw new Error('알림을 찾지 못했거나 보관 기간이 지났습니다.');
+  const requestEntry=await options.store.request(e.value.requestId,true),r=requestEntry.value;
   if(String(r.revision)!==String(p.revision))return {success:false,error:'접수 내용이 변경되었습니다. 최신 내용을 다시 확인하세요.'};
   // The committed request revision is the read boundary; raw GAS freshness
   // must never be a prerequisite for viewing published review data.
   const ttl=Math.max(1,Date.parse(e.value.createdAt)+TTL-now()),stamp=(await get('read',a.uid,id));
-  const result=await kv.atomic().check(e,stamp,requestEntry).set(key('read',a.uid,id),stamp.value||new Date(now()).toISOString(),{expireIn:ttl}).delete(key('unread',a.uid,id)).commit();
+  const readAt=stamp.value||new Date(now()).toISOString(),due=readInboxExpiresAt(readAt),inboxTTL=Math.min(ttl,due-now());
+  let tx=kv.atomic().check(e,stamp,index,requestEntry).set(key('read',a.uid,id),readAt,{expireIn:ttl}).delete(key('unread',a.uid,id));
+  if(inboxTTL<=0)tx=tx.delete(e.key).delete(index.key);
+  else tx=tx.set(e.key,{...e.value,readCleanupAt:due},{expireIn:inboxTTL}).set(index.key,idx,{expireIn:inboxTTL});
+  const result=await tx.commit();
   return result.ok?{success:true}:{success:false,error:'알림 확인 기록을 다시 시도하세요.'};
  }
  async function migratePending(){
@@ -280,10 +334,10 @@ export function createWorkNotifications(kv:any,options:Obj){
    const guard=await get(e.schema===2&&!['receipt','assignment'].includes(e.kind)?'event':'latest',e.schema===2&&!['receipt','assignment'].includes(e.kind)?e.id:e.requestId);if(!guard.value||guard.value!==e.id&&guard.value.id!==e.id)continue;
    let complete=true;
    for(const a of recipients){
-    const idx=e.createdAt+'|'+e.id,existing=await get('inbox',a.uid,idx);
-    if(existing.value)continue;
+    const idx=e.createdAt+'|'+e.id,existing=await get('inbox',a.uid,idx),recipient=await get('recipient',e.id,a.uid);
+    if(existing.value||recipient.value)continue;
     const remaining=Math.max(1,Date.parse(e.createdAt)+TTL-now());
-    let tx=kv.atomic().check(existing,guard).set(existing.key,e,{expireIn:remaining}).set(key('index',a.uid,e.id),idx,{expireIn:remaining}).set(key('unread',a.uid,e.id),true,{expireIn:remaining}).set(key('recipient',e.id,a.uid),idx,{expireIn:remaining}).set(key('recipientName',e.id,a.uid),a.name,{expireIn:remaining});
+    let tx=kv.atomic().check(existing,guard,recipient).set(existing.key,e,{expireIn:remaining}).set(key('index',a.uid,e.id),idx,{expireIn:remaining}).set(key('unread',a.uid,e.id),true,{expireIn:remaining}).set(key('recipient',e.id,a.uid),idx,{expireIn:remaining}).set(key('recipientName',e.id,a.uid),a.name,{expireIn:remaining});
     if(now()-Date.parse(e.createdAt)<PUSH_TTL){
      for(const device of await rows(['device',a.uid],10)){
       const id=await digest(e.id+'|'+a.uid+'|'+device.value.id),job={id,eventId:e.id,uid:a.uid,deviceId:device.value.id,binding:device.value.binding,attempt:0,due:now(),lease:0};
@@ -326,6 +380,7 @@ export function createWorkNotifications(kv:any,options:Obj){
  }
  async function process(eventId?:string,limit=20){
   await notificationActivation(kv,now());
+  if(!eventId&&limit===20)try{await migrateReadRetention();}catch{console.warn('읽은 알림 보관 전환은 다음 주기에 재시도합니다.');}
   try{await rosterReminder();}catch{console.warn('휴무·당직 알림은 다음 주기에 재시도합니다.');}
   await fanout(eventId);
   const entries=[];
@@ -354,6 +409,7 @@ export function createWorkNotifications(kv:any,options:Obj){
    case 'notification_list':return await list(p,a);
    case 'notification_read':return await markRead(p,a);
    case 'notification_mark_read':return await markInboxRead(p,a);
+   case 'notification_delete':return await deleteReadInbox(p,a);
    case 'notification_test':{
     const id=await digest(String(p.endpoint||'')),sub=(await get('subscription',id)).value;
     if(sub?.uid!==a.uid)throw new Error('현재 기기의 알림 연결을 먼저 설정하세요.');
