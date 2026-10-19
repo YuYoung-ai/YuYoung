@@ -4,18 +4,19 @@ import assert from 'node:assert/strict';
 const fieldApi=vm.runInNewContext(fs.readFileSync(new URL('../js/baz-work-fields.js',import.meta.url),'utf8')+';module.exports;', {module:{exports:{}}});
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
 function fixture(saved,options={}){
- const intervals=new Map(),listeners=new Map(),rosterCalls=[];let timerId=0;
+ const intervals=new Map(),timeouts=new Map(),listeners=new Map(),nodeEvents=new Map(),rosterCalls=[],htmlWrites=new Map();let timerId=0;
+ const runTimers=()=>{for(const [id,timer] of [...timeouts]){timeouts.delete(id);timer.fn();}};
  const workspaceAll={dataset:{workspace:'all'},setAttribute(){}};
  let searchOptions;const hospitalSearch={create:config=>{searchOptions=config;return {refresh(){}};}};
- const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],local=new Map(),filters=['all','active','today','week','lastweek','month','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
- function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
+ const nodes=new Map(),calls=[],writes=[],detailWrites=[],posts=[],localWrites=[],local=new Map(),filters=['all','active','today','week','lastweek','month','trash'].map(filter=>({dataset:{filter},setAttribute(){}}));
+ function node(id){if(!nodes.has(id))nodes.set(id,{id,value:id==='sort'?'visitAt':'',hidden:false,disabled:false,dataset:{},checked:false,open:false,classList:{toggle(){},add(){}},setAttribute(){},querySelector:selector=>node(selector),querySelectorAll:()=>[],add(){},after(){},append(){},prepend(){},addEventListener(type,fn){const key=this.id+':'+type,previous=nodeEvents.get(key);nodeEvents.set(key,event=>{previous?.(event);fn(event);});},showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){}});return nodes.get(id);}
  const cache={snapshot:async()=>saved,pending:async()=>null,detail:async()=>options.detail||null,savePending:async()=>{},saveDetail:async(account,id,value)=>detailWrites.push(value),save:async(account,value)=>writes.push({account,value})};
  const api={id:()=>String(posts.length+1),get:async(action,p)=>{if(action==='work_roster'&&p.rosterMonth===new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit'}).format(new (options.Date||Date)())){rosterCalls.push({action,p});return options.rosterGet?options.rosterGet(p):{success:true,roster:[],rosterMonth:p.rosterMonth};}calls.push({action,p});if(options.get)return options.get(action,p);return {success:true,storage:'kv',requests:[],hospitals:[],engineers:[],revision:'7',roster:[],rosterMonth:p.rosterMonth||'2026-10',updatedAt:'2026-10-06T01:00:00Z'};},post:async(action,p)=>{posts.push({action,p});if(options.post)return options.post(action,p);const old=saved.requests.find(r=>r.id===p.requestId);return {success:true,request:{...old,revision:old.revision+1,deletedAt:action==='work_delete'?'2026-10-06T01:00:00Z':''}};}};
- const document={hidden:false,addEventListener:(type,fn)=>listeners.set(type,fn),getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-workspace')?[workspaceAll]:selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}};
- vm.runInNewContext(source,{window:{BazWorkHospitalSearch:hospitalSearch,BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=>options.account?options.account():'사용자 A',cachedLevel:()=>options.level||1}},document,setInterval:(fn,ms)=>{intervals.set(++timerId,{fn,ms});return timerId;},clearInterval:id=>intervals.delete(id),localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>local.set(k,v),removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},Map,Set,Date:options.Date||Date,Intl,JSON,Array,Number,Promise,console});
+ const document={hidden:false,addEventListener:(type,fn)=>{const previous=listeners.get(type);listeners.set(type,()=>{previous?.();fn();});},getElementById:node,createElement:tag=>node('created-'+tag),querySelectorAll:selector=>selector.includes('data-workspace')?[workspaceAll]:selector.includes('data-filter')?filters:[],documentElement:{dataset:{}}};
+ vm.runInNewContext(source,{window:{location:{search:''},addEventListener:(type,fn)=>listeners.set('window:'+type,fn),BazWorkHospitalSearch:hospitalSearch,BazWorkFields:fieldApi,BazWorkCache:cache,BazWorkAPI:api,BazAuth:{name:()=>options.account?options.account():'사용자 A',cachedLevel:()=>options.level||1}},document,setTimeout:(fn,ms)=>{timeouts.set(++timerId,{fn,ms});return timerId;},clearTimeout:id=>timeouts.delete(id),setInterval:(fn,ms)=>{intervals.set(++timerId,{fn,ms});return timerId;},clearInterval:id=>intervals.delete(id),localStorage:{getItem:k=>local.get(k)||null,setItem:(k,v)=>{localWrites.push({key:k,value:v});local.set(k,v);},removeItem:k=>local.delete(k)},matchMedia:()=>({matches:false}),Option:function(){},URL,URLSearchParams,Map,Set,Date:options.Date||Date,Intl,JSON,Array,Number,Promise,console});
  // These cache/edit tests exercise the full list; role-specific views have their own suite.
  workspaceAll.onclick();filters.find(f=>f.dataset.filter==='all').onclick();
- return {nodes,calls,rosterCalls,writes,detailWrites,posts,filters,local,searchOptions,document,intervals,tick:()=>{for(const timer of intervals.values())timer.fn();},visibility:hidden=>{document.hidden=hidden;listeners.get('visibilitychange')?.();},dispose:()=>intervals.clear()};
+ return {nodes,calls,rosterCalls,writes,detailWrites,posts,filters,local,localWrites,searchOptions,document,intervals,timeouts,runTimers,listeners,nodeEvents,htmlWrites,tick:()=>{for(const timer of intervals.values())timer.fn();},visibility:hidden=>{document.hidden=hidden;listeners.get('visibilitychange')?.();},dispose:()=>intervals.clear()};
 }
 {
  const escapeCode=source.split('\n').find(line=>line.trim().startsWith('function esc('));
@@ -91,8 +92,8 @@ const withRows=rows=>({...saved,requests:rows});
  assert.equal(f.nodes.get('edit-mode').textContent,'수정');f.nodes.get('edit-mode').onclick();assert.equal(f.nodes.get('edit-mode').textContent,'수정 모드 닫기');assert.ok(f.nodes.get('list').innerHTML.includes('data-inline-form="inline"'));assert.ok(f.nodes.get('list').innerHTML.includes('data-edit-field="hospitalInput"'));assert.ok(f.nodes.get('list').innerHTML.includes('<table>'));assert.ok(!f.nodes.get('list').innerHTML.includes('inline-request-list'));
  const fields={hospitalInput:h.name,gubun:'A/S',status:'완료',cs:'수정 CS',engineer:'기사',sales:'영업',registeredDate:'2026-10-06',registeredTime:'900',visitDate:'2026-10-06',visitTime:'1030',symptom:'직접 수정 내용'};
  function form(id,values){return {dataset:{inlineForm:id},querySelectorAll:()=>Object.entries(values).map(([key,value])=>({dataset:{inlineField:key},type:'text',value})),querySelector:()=>({hidden:false}),classList:{add(){}}};}
- const other=form('inline2',{...fields,symptom:'다른 접수 초안'});f.nodes.get('list').oninput({target:{closest:()=>other}});
- const one=form('inline',fields);f.nodes.get('list').oninput({target:{closest:()=>one}});f.nodes.get('sort').onchange();assert.ok(f.nodes.get('list').innerHTML.includes('직접 수정 내용'),'rerender retains row draft');
+ const other=form('inline2',{...fields,symptom:'다른 접수 초안'});f.nodes.get('list').oninput({target:{dataset:{inlineField:'symptom'},closest:()=>other}});
+ const one=form('inline',fields);f.nodes.get('list').oninput({target:{dataset:{inlineField:'symptom'},closest:()=>one}});f.nodes.get('sort').onchange();assert.ok(f.nodes.get('list').innerHTML.includes('직접 수정 내용'),'rerender retains row draft');
  await f.nodes.get('list').onsubmit({target:{closest:()=>one},preventDefault(){}});assert.equal(f.posts[0].action,'work_request_edit');assert.equal(f.posts[0].p.baseRevision,r.revision);assert.equal(f.posts[0].p.form.registeredAt,'2026-10-06T09:00');assert.equal(f.posts[0].p.form.visitAt,'2026-10-06T10:30');assert.equal(f.posts[0].p.form.gubun,'A/S');assert.ok(f.nodes.get('list').innerHTML.includes('다른 접수 초안'),'saving one row does not discard other row drafts');
  assert.equal(f.detailWrites.at(-1).history.length,2,'save-and-reconcile response retains the comment and new result in the local cache');
  assert.equal(f.detailWrites.at(-1).request.gubun,'점검');assert.equal(f.detailWrites.at(-1).preview,false);assert.equal(f.detailWrites.at(-1).logs.length,1,'response audit is not duplicated');assert.equal(f.calls.length,0,'no second detail/Handover request after saving');
@@ -112,7 +113,7 @@ deletable.nodes.get('delete-selected').onclick();await deletable.nodes.get('life
 assert.equal(deletable.posts.length,1);assert.equal(deletable.posts[0].p.baseRevision,4);assert.equal(deletable.posts[0].action,'work_delete');assert.ok(deletable.writes.at(-1).value.requests.find(r=>r.id==='one').deletedAt);assert.equal(deletable.nodes.get('selection-count').textContent,'선택 0건');
 assert.equal(deletable.detailWrites.at(-1).preview,true,'unqueried histories are not cached as empty complete detail');
 deletable.filters.find(f=>f.dataset.filter==='trash').onclick();assert.equal(deletable.nodes.get('selection-bar').hidden,true,'changing filters closes selection mode');assert.equal(deletable.nodes.get('selection-mode').textContent,'복원');assert.equal(deletable.nodes.get('delete-selected').hidden,true);assert.equal(deletable.nodes.get('restore-selected').hidden,false);selectPage(deletable);deletable.nodes.get('restore-selected').onclick();await deletable.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(deletable.posts[1].action,'work_restore');assert.equal(deletable.posts[1].p.baseRevision,5,'restore uses current displayed revision');
-const paged=fixture(withRows(Array.from({length:51},(_,i)=>makeRequest(String(i)))));await flush();selectPage(paged);assert.equal(paged.nodes.get('selection-count').textContent,'선택 50건','select all applies only to current page');paged.nodes.get('next').onclick();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','page change clears hidden selections');selectPage(paged);paged.nodes.get('search').value='missing';paged.nodes.get('search').oninput();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','search cannot leave hidden selections');
+const paged=fixture(withRows(Array.from({length:51},(_,i)=>makeRequest(String(i)))));await flush();selectPage(paged);assert.equal(paged.nodes.get('selection-count').textContent,'선택 50건','select all applies only to current page');paged.nodes.get('next').onclick();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','page change clears hidden selections');selectPage(paged);paged.nodes.get('search').value='missing';paged.nodes.get('search').oninput();paged.runTimers();assert.equal(paged.nodes.get('selection-count').textContent,'선택 0건','search cannot leave hidden selections');
 const partial=fixture(withRows([makeRequest('one'),makeRequest('two')]),{post:async(action,p)=>p.requestId==='one'?{success:true,request:{...makeRequest('one'),deletedAt:'now',revision:5}}:{success:false,error:'다른 PC에서 수정되었습니다.',conflict:true}});await flush();selectPage(partial);partial.nodes.get('delete-selected').onclick();await partial.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(partial.posts.length,2);assert.equal(partial.nodes.get('selection-count').textContent,'선택 1건','failed row remains selected');assert.ok(partial.nodes.get('notice').textContent.includes('다른 PC'));
 const unknown=fixture(withRows([makeRequest('one'),makeRequest('two')]),{post:async()=>({success:false,error:'응답 확인 필요',retrySameOperation:true})});await flush();selectPage(unknown);unknown.nodes.get('delete-selected').onclick();await unknown.nodes.get('lifecycle-form').onsubmit({preventDefault(){}});assert.equal(unknown.posts.length,1,'unknown result stops next row');assert.equal(unknown.nodes.get('selection-count').textContent,'선택 2건');assert.equal(unknown.nodes.get('pending').hidden,false);assert.equal(unknown.nodes.get('delete-selected').disabled,true);assert.ok([...unknown.local.keys()].some(k=>k.endsWith('_pending')),'same-operation retry is durable');
 const admin=fixture(withRows([makeRequest('one','사용자 B')]),{level:3});await flush();selectPage(admin);assert.equal(admin.nodes.get('selection-count').textContent,'선택 1건','admin can select other owner');
@@ -132,7 +133,7 @@ const purgeResponse=id=>({success:true,request:{id,hospitalId:'h-'+id,revision:5
 const purgeUi=fixture(withRows([trashRow('one'),trashRow('two'),makeRequest('live')]),{level:3,post:async(action,p)=>purgeResponse(p.requestId)});await flush();
 assert.equal(purgeUi.nodes.get('empty-trash').hidden,true,'empty trash is hidden outside trash view');
 purgeUi.filters.find(f=>f.dataset.filter==='trash').onclick();assert.equal(purgeUi.nodes.get('empty-trash').hidden,false);
-purgeUi.nodes.get('search').value='one';purgeUi.nodes.get('search').oninput();await purgeUi.nodes.get('empty-trash').onclick();
+purgeUi.nodes.get('search').value='one';purgeUi.nodes.get('search').oninput();purgeUi.runTimers();await purgeUi.nodes.get('empty-trash').onclick();
 assert.equal(purgeUi.calls.at(-1).action,'work_sync','purge confirmation uses a freshly synced trash list');
 assert.equal(purgeUi.nodes.get('lifecycle-title').textContent,'휴지통 2건 비우기');assert.ok(purgeUi.nodes.get('lifecycle-list').innerHTML.includes('병원 two'),'all trash is explicitly listed despite search filter');assert.ok(!purgeUi.nodes.get('lifecycle-list').innerHTML.includes('병원 live'));
 assert.equal(purgeUi.nodes.get('confirm-lifecycle').disabled,true);assert.equal(purgeUi.nodes.get('purge-confirm-label').hidden,false);
@@ -258,3 +259,62 @@ for(const mode of ['invalid','auth','network','stalled']){
  f.dispose();assert.equal(f.intervals.size,0);f.tick();assert.equal(f.rosterCalls.length,before+1);
 }
 console.log('sync isolation: staged pages, fixed snapshot range, failed-page retry, one invalid-revision reload, auth/network preservation, stalled cursors, account changes and modeled roster timer/visibility/cleanup passed.');
+
+function countMarkupWrites(node){let value=node.innerHTML,writes=0;Object.defineProperty(node,'innerHTML',{get:()=>value,set:next=>{value=next;writes++;}});return ()=>writes;}
+function rowNode(id){const classes=new Map();return {dataset:{inlineForm:id},classes,querySelector:()=>null,classList:{toggle:(name,value)=>classes.set(name,value)}};}
+{
+ const r=makeRequest('responsive-detail');let changed=false;
+ const f=fixture(withRows([r]),{get:async()=>({success:true,request:changed?{...r,status:'완료',revision:r.revision+1}:r,history:[],logs:[],requests:[],updatedAt:r.updatedAt})});await flush();
+ const desktop=rowNode(r.id),mobile=rowNode(r.id),list=f.nodes.get('list');
+ list.querySelectorAll=selector=>selector==='tr[data-inline-form],.mobile-card'?[desktop,mobile]:[];
+ const writes=countMarkupWrites(list),filterWrites=countMarkupWrites(f.nodes.get('advanced-groups'));
+ const open={dataset:{open:r.id}};list.onclick({target:{closest:()=>open}});await flush();
+ assert.equal(writes(),0,'unchanged preview and full detail never rebuild the list');assert.equal(filterWrites(),0);
+ assert.equal(desktop.classes.get('selected'),true);assert.equal(mobile.classes.get('selected'),true);
+ const close={dataset:{action:'close-detail'}};f.nodes.get('detail').onclick({target:{closest:()=>close}});
+ assert.equal(writes(),0,'closing detail updates selection only');assert.equal(desktop.classes.get('selected'),false);
+ list.onclick({target:{closest:()=>open}});await flush();
+ f.nodes.get('edit-mode').onclick();assert.equal(writes(),1,'editing with a detail open renders the list only once');
+ changed=true;const refresh={dataset:{action:'refresh-detail'}};f.nodes.get('detail').onclick({target:{closest:()=>refresh}});await flush();
+ assert.equal(writes(),2,'a changed server request still updates list membership, values and counts');assert.equal(f.nodes.get('count-active').textContent,0);
+}
+{
+ const a=makeRequest('selected-a'),b=makeRequest('selected-b','다른 사용자');
+ const f=fixture(withRows([a,b]));await flush();
+ const desktop=rowNode(a.id),mobile=rowNode(a.id),foreign=rowNode(b.id);
+ const checkbox=(id,row)=>({dataset:{selectRequest:id},checked:false,disabled:false,closest:selector=>selector==='[data-select-request]'?inputs.find(x=>x.dataset.selectRequest===id):selector==='tr,.mobile-card'||selector==='[data-inline-form]'?row:null});
+ const inputs=[checkbox(a.id,desktop),checkbox(a.id,mobile),checkbox(b.id,foreign)];
+ const originalQuery=f.document.querySelectorAll;f.document.querySelectorAll=selector=>selector==='[data-select-request]'?inputs:originalQuery(selector);
+ f.nodes.get('selection-mode').onclick();const writes=countMarkupWrites(f.nodes.get('list'));
+ f.nodes.get('list').oninput({target:inputs[0]});assert.equal(f.timeouts.size,0);assert.equal(f.localWrites.length,0,'checkbox input never creates edit drafts');
+ f.nodes.get('list').oninput({target:{dataset:{statusRequest:a.id},closest:()=>desktop}});assert.equal(f.timeouts.size,0);assert.equal(f.localWrites.length,0,'status picker input never creates edit drafts');
+ inputs[0].checked=true;f.nodes.get('list').onchange({target:inputs[0]});
+ assert.equal(writes(),0);assert.equal(inputs[1].checked,true);assert.equal(desktop.classes.get('checked-row'),true);assert.equal(mobile.classes.get('checked-row'),true);assert.equal(inputs[2].disabled,true);
+ f.nodes.get('clear-selection').onclick();assert.equal(writes(),0);assert.equal(inputs[0].checked,false);assert.equal(mobile.classes.get('checked-row'),false);
+ f.nodes.get('select-page').checked=true;f.nodes.get('select-page').onchange();assert.equal(writes(),0);assert.equal(f.nodes.get('selection-count').textContent,'선택 1건');
+}
+{
+ let scans=0;const h={id:'draft-h',key:'draft-key',get name(){scans++;return '초안 병원';},region:'서울',sn:'SN1',sales:'영업 A'};
+ const h2={id:'draft-h2',key:'draft-key2',name:'다른 병원',region:'부산',sn:'SN2',sales:'영업 B'};
+ const r={...makeRequest('draft-responsive'),hospitalId:h.id,hospitalKey:h.key,hospitalName:'초안 병원',region:h.region,registeredAt:'2026-10-19T09:00',serviceOverrides:{asType:'유상',ncare:'가입'}};
+ const f=fixture({...withRows([r]),hospitals:[h,h2]},{post:async()=>({success:false,error:'검증용 저장 거절'})});await flush();
+ const value={dataset:{inlineField:'symptom'},type:'text',value:'첫 입력'};
+ const form={dataset:{inlineForm:r.id},querySelectorAll:()=>[value],querySelector:()=>null,classList:{add(){}}};value.closest=()=>form;
+ const key='baz_work_v1_'+encodeURIComponent('사용자 A')+'_inline_edits',draftWrites=()=>f.localWrites.filter(x=>x.key===key);
+ // Warm the initial draft once; following symptom keystrokes must do no hospital lookup.
+ f.nodes.get('list').oninput({target:value});scans=0;
+ value.value='마지막 입력';f.nodes.get('list').oninput({target:value});
+ assert.equal(scans,0,'ordinary keystrokes never scan hospital labels');assert.equal(draftWrites().length,0);assert.equal(f.timeouts.size,1);
+ f.runTimers();assert.equal(draftWrites().length,1);
+ let saved=JSON.parse(f.local.get(key))[r.id];assert.equal(saved.form.symptom,'마지막 입력');assert.equal(saved.form.hospitalKey,h.key);assert.equal(saved.form.asType,'유상');
+ value.value='포커스 이동 직전';f.nodes.get('list').oninput({target:value});f.nodeEvents.get('list:focusout')();assert.equal(f.timeouts.size,0);assert.equal(JSON.parse(f.local.get(key))[r.id].form.symptom,'포커스 이동 직전');
+ value.value='페이지 닫기 직전';f.nodes.get('list').oninput({target:value});f.listeners.get('window:pagehide')();
+ assert.equal(f.timeouts.size,0);assert.equal(JSON.parse(f.local.get(key))[r.id].form.symptom,'페이지 닫기 직전');
+ value.value='숨기기 직전';f.nodes.get('list').oninput({target:value});f.visibility(true);assert.equal(JSON.parse(f.local.get(key))[r.id].form.symptom,'숨기기 직전');f.visibility(false);
+ value.value='저장 버튼 직전';f.nodes.get('list').oninput({target:value});await f.nodes.get('list').onsubmit({target:{closest:()=>form},preventDefault(){}});assert.equal(f.timeouts.size,0);assert.equal(JSON.parse(f.local.get(key))[r.id].form.symptom,'저장 버튼 직전','even a rejected save preserves the final input');
+ value.dataset.inlineField='hospitalInput';value.value='다른 병원';f.nodes.get('list').oninput({target:value});f.runTimers();saved=JSON.parse(f.local.get(key))[r.id];
+ assert.equal(saved.form.hospitalKey,h2.key);assert.equal(saved.form.sales,'영업 B');assert.equal(saved.form.asType,'');assert.equal(saved.form.ncare,'');
+ value.dataset.inlineField='symptom';value.value='되돌릴 입력';f.nodes.get('list').oninput({target:value});
+ const reset={dataset:{inlineReset:r.id}};f.nodes.get('list').onclick({target:{closest:()=>reset}});f.runTimers();assert.equal(JSON.parse(f.local.get(key))[r.id],undefined,'reset cancels pending persistence and never resurrects the draft');
+}
+console.log('Responsive interactions: unchanged detail/close and checkbox changes preserve list DOM; server changes refresh counts; edit render is single; drafts coalesce and flush on lifecycle boundaries without hospital rescans or reset resurrection; non-edit controls never create drafts.');
