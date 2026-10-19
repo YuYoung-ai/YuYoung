@@ -314,7 +314,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-inspection-workflow.js?v=244"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-inspection-workflow.js?v=265"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 </head>
 <body>
@@ -390,8 +390,8 @@
             <div class="date-wrap"><input type="date" id="receiveDate"><span class="date-icon">📅</span></div>
           </div>
           <div class="field-group">
-            <label>접수처 (고객센터/담당자)</label>
-            <input type="text" id="receiver" placeholder="예) 고객센터/ooo 프로" maxlength="30">
+            <label for="receiver">영업 담당자</label>
+            <input type="text" id="receiver" placeholder="병원 선택 시 자동 입력 · 직접 수정 가능" maxlength="30">
           </div>
         </div>
         <div class="row-2">
@@ -632,7 +632,7 @@
 
 <script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=257"></script><script src="js/baz-inspection-pdf.js?v=257"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-inspection-upload.js?v=257"></script>
-<script src="js/baz-inspection-hospitals.js?v=257"></script><script src="js/baz-autocomplete.js?v=257"></script>
+<script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
 <script>
@@ -697,6 +697,12 @@ const hospitalBinding=window.BazInspectionHospitals.createBinding({
   fields:Object.fromEntries(['hospital','serialNo','subscription','receiver'].map(id=>[id,document.getElementById(id)])),
   status:message=>{document.getElementById('hospMatch').textContent=message;}
 });
+function fillInspectionSales(requestSales){
+  const receiver=document.getElementById('receiver');
+  const value=window.BazInspectionHospitals.salesFor({hospital:v('hospital'),serialNo:v('serialNo'),receiver:receiver.value},HOSPITAL_DB,requestSales);
+  if(!value||receiver.value.trim())return false;
+  receiver.value=value;return true;
+}
 // 병원명 자동완성 (선택 시 S/N·구독·접수처 자동 입력)
 const hospitalAutocomplete=setupAutocomplete({
   inputId:'hospital', dropdownId:'hospDropdown',
@@ -717,7 +723,7 @@ const hospitalAutocomplete=setupAutocomplete({
 });
 const hospitalDb=window.BazInspectionHospitals.create({
   rows:HOSPITAL_DB,url:HANDOVER_URL,
-  changed:()=>hospitalAutocomplete.refresh(),
+  changed:()=>{hospitalAutocomplete.refresh();setTimeout(()=>{if(fillInspectionSales())autoSave();},0);},
   status:message=>{document.getElementById('hospitalDbStatus').textContent=message;},
   busy:loading=>{document.getElementById('hospitalDbRefresh').disabled=loading;}
 });
@@ -1298,6 +1304,7 @@ function applyFormData(d){
   // 기본 입력
   BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el && d.basic && d.basic[id]!=null) el.value=d.basic[id]; });
   hospitalBinding.restore(d.basic);
+  fillInspectionSales();
   // A/S 분류: 대분류를 먼저 반영해 유형 옵션을 만든 뒤 유형 값을 복원
   const savedCat=(d.basic&&d.basic.asCat)||'', savedSub=(d.basic&&d.basic.asSub)||'';
   document.getElementById('asCat').value=savedCat;
@@ -2025,6 +2032,7 @@ async function generatePDF(arg){
   const preview = !!opts.preview;
   const blank = !!opts.blank;
   const simplified=pdfFormat()==='simplified';
+  if(!blank)fillInspectionSales();
   if(!blank && !validate({simplified})) return;
   const captured=collectFormData(),photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(),basis=handoverReference?{...handoverReference}:null;
   const totalDone=window.BazPerf.start('pdf_total');_pdfBusy=true;
@@ -2180,3 +2188,4 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+

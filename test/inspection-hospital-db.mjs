@@ -77,3 +77,22 @@ assert.ok(html.includes('hospitalAutocomplete.reset();partAutocomplete.reset();'
 assert.match(html,/const HOSPITAL_DB = \[\];/);
 assert.match(html,/hospitalDb.load\(false\)/);
 console.log('PASS: authenticated Sheet source, refresh deduplication, same-name equipment, deleted/cleared rows, offline cache, auth errors and selection fields');
+
+const salesFor=picker.window.BazInspectionHospitals.salesFor;
+const salesRows=[{n:'검증 의원',s:'SN-A',sa:'영업 A'},{n:'검증 의원',s:'SN-B',sa:'영업 B'}];
+assert.equal(salesFor({hospital:'검증_의원',serialNo:'sn-b'},salesRows),'영업 B');
+assert.equal(salesFor({hospital:'검증 의원'},salesRows),'','ambiguous equipment must not pick a salesperson');
+assert.equal(salesFor({hospital:'검증 의원'},salesRows,'접수 영업'),'접수 영업');
+assert.equal(salesFor({hospital:'검증 의원',receiver:'수동 담당'},salesRows,'접수 영업'),'수동 담당');
+assert.equal(salesFor({hospital:'다른 병원'},salesRows),'');
+assert.equal(salesFor({hospital:'검증 의원'},[{n:'검증 의원',s:'',sa:''}]),'');
+picker.v=id=>node(id).value;
+picker.HOSPITAL_DB.push(...salesRows);
+node('hospital').value='검증 의원';node('serialNo').value='SN-A';node('receiver').value='';
+assert.equal(vm.runInContext('fillInspectionSales()',picker),true);assert.equal(node('receiver').value,'영업 A');
+node('receiver').value='수동 담당';assert.equal(vm.runInContext('fillInspectionSales()',picker),false);assert.equal(node('receiver').value,'수동 담당');
+assert.match(html,/<label for="receiver">영업 담당자<\/label>/);
+assert.match(html,/hospitalBinding.restore\(d.basic\);\s*fillInspectionSales\(\);/);
+assert.match(html,/if\(!blank\)fillInspectionSales\(\);\s*if\(!blank && !validate/);
+console.log('PASS: missing salesperson backfill, manual/request precedence, serial disambiguation, unknown data and restored/PDF paths');
+
