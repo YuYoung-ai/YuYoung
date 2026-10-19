@@ -48,7 +48,7 @@
 import { createWorkStore } from './work-store.ts';
 import { createWorkNotifications,notificationActivation } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
-const VER = "deno-1.11.1-notification-receipts";
+const VER = "deno-1.12.0-notification-reminders";
 
 const enc = new TextEncoder();
 

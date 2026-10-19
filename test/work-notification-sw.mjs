@@ -31,3 +31,6 @@ for(const kind of ['handover','roster']){
 }
 assert.equal(shown.length,count+2);assert.equal(route.url({notificationId:'notice_handover_123'}),'notification.html?notification=notice_handover_123');
 await fire('push',{data:{json:()=>({recipient:uid,kind:'roster',notificationId:'https://evil.test'})}});assert.equal(shown.length,count+2);
+
+await fire('push',{data:{json:()=>({recipient:uid,requestId:req,notificationId:notice,title:'재알림',reminder:true})}});
+assert.equal(shown.at(-1).o.renotify,true,'explicit reminder can alert again with the original notification tag');assert.equal(shown.at(-1).o.tag,'baz-work-'+notice);

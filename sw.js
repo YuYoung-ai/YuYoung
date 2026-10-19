@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v259';
+const CACHE_VERSION = 'baz-cs-v260';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();
@@ -91,7 +91,7 @@ self.addEventListener('push',(event)=>{
   if(!p.test&&!/^[A-Za-z0-9_-]{8,90}$/.test(p.requestId||'')&&!(['handover','roster'].includes(p.kind)&&/^[A-Za-z0-9_-]{8,90}$/.test(p.notificationId||'')))return;
   await self.registration.showNotification(String(p.title||'BAZ CS 접수 알림').slice(0,100),{
    body:String(p.body||'').slice(0,300),icon:new URL('icon-192.png',self.registration.scope).href,
-   tag:p.test?'baz-push-test':'baz-work-'+(p.notificationId||p.requestId),
+   tag:p.test?'baz-push-test':'baz-work-'+(p.notificationId||p.requestId),renotify:!!p.reminder,
    data:{requestId:p.requestId||'',notificationId:p.notificationId||'',kind:p.kind||'',test:!!p.test}
   });
   for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage({type:'BAZ_NOTIFICATION_RECEIVED'});
