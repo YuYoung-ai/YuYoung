@@ -41,8 +41,9 @@ try{
  for(const a of [bob,secondLogin])assert.ok((await inbox(a)).some(x=>x.recordId==='source_dual_login'),'each authenticated login for the author receives its own inbox item');
  assert.ok(!(await inbox(alice)).some(x=>x.recordId==='source_dual_login'));
  // Korea 08:30: off-duty recipient (including an administrator) never receives.
- clock=Date.parse('2026-10-18T08:29:00+09:00');
- for(const [person,type] of [[alice.name,'휴무'],[admin.name,'휴무'],[bob.name,'당직']])await save('work_roster_save',{date:'2026-10-18',person,type,baseRevision:0});
+ const rosterDate=new Date(Date.now()+2*86400000).toISOString().slice(0,10);
+ clock=Date.parse(rosterDate+'T08:29:00+09:00');
+ for(const [person,type] of [[alice.name,'휴무'],[admin.name,'휴무'],[bob.name,'당직']])await save('work_roster_save',{date:rosterDate,person,type,baseRevision:0});
  await flush();assert.equal((await inbox(bob)).filter(x=>x.kind==='roster').length,0);
  clock+=60000;await Promise.all([service.process(),service.process()]);
  for(const a of [alice,admin])assert.equal((await inbox(a)).filter(x=>x.kind==='roster').length,0);
