@@ -3,7 +3,30 @@
   function serials(v){return Array.from(new Set(String(v||'').normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean)));}
   function serialMatch(a,b){return serials(a).some(function(sn){return serials(b).includes(sn);});}
   function kind(v){var s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;}
+  // Build once per DB snapshot; preserve ambiguous-match handling.
+  function hospitalLookup(hospitals){
+    var keys=new Map(),names=new Map(),serial=new Map();
+    function add(map,key,h){var rows=map.get(key);if(rows)rows.push(h);else map.set(key,[h]);}
+    hospitals.forEach(function(h){
+      if(h.origin==='flow')return;
+      add(keys,h.key,h);add(names,JSON.stringify([h.name,String(h.region||'')]),h);
+      add(serial,String(h.sn||'').trim(),h);
+    });
+    return function(r){
+      var exact=keys.get(r.hospitalKey)||[];
+      if(exact.length===1)return exact[0];
+      var parts=String(r.hospitalKey||'').split('\u001f'),name=r.hospitalName||(parts.length===3?parts[0]:''),region=r.region!=null?r.region:(parts.length===3?parts[2]:'');
+      if(name){
+        var same=names.get(JSON.stringify([name,String(region||'')]))||[];
+        if(same.length===1)return same[0];
+        if(same.length>1){var device=same.filter(function(h){return serialMatch(h.sn,r.hospitalReferenceSN||r.sn||parts[1]);});return device.length===1?device[0]:null;}
+      }
+      var sn=String(r.hospitalReferenceSN||r.sn||'').trim(),matches=sn?(serial.get(sn)||[]):[];
+      return matches.length===1?matches[0]:null;
+    };
+  }
   function hospital(r,hospitals){
+    if(typeof hospitals==='function')return hospitals(r);
     var db=hospitals.filter(function(h){return h.origin!=='flow';});
     var exact=db.filter(function(h){return h.key===r.hospitalKey;});
     if(exact.length===1)return exact[0];
@@ -66,6 +89,6 @@
     if(view==='changed')return r.handoverReviewCount>0;
     return true;
   }
-  var api={hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,workspace:workspace,serials:serials,serialMatch:serialMatch,kind:kind};
+  var api={hospitalLookup:hospitalLookup,hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,workspace:workspace,serials:serials,serialMatch:serialMatch,kind:kind};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.BazWorkFields=api;
 })(typeof window==='object'?window:globalThis);
