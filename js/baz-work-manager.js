@@ -1,5 +1,7 @@
 (function(){
   'use strict';
+  var localTimeFormatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+  var displayTimeFormatter=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
   var cache=window.BazWorkCache,kvReady=false,revision='0',sourceCheckedAt='',bridgeStatus=null,api=window.BazWorkAPI, $=function(id){return document.getElementById(id);};
   var statuses=['접수','방문예정','처리중','결과확인','완료','보류','취소'];
   var state={requests:[],hospitals:[],engineers:[],roster:[],rosterMonth:localNow().slice(0,7),rosterLoaded:false,filter:'week',statusScope:'all',page:1,detail:null,selected:null,editing:null,baseline:null,source:null,loaded:false};
@@ -35,8 +37,8 @@
   }
   function store(key,v){try{if(v===null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(v));return true;}catch(e){return false;}}
   function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
-  function localNow(){return new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date()).replace(' ','T');}
-  function time(v){if(!v)return '미정';if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))return v.replace('T',' ');var d=new Date(v);return isNaN(d.getTime())?v:new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);}
+  function localNow(){return localTimeFormatter.format(new Date()).replace(' ','T');}
+  function time(v){if(!v)return '미정';if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))return v.replace('T',' ');var d=new Date(v);return isNaN(d.getTime())?v:displayTimeFormatter.format(d);}
   function active(r){return !r.deletedAt&&!r.purgedAt&&r.status!=='완료'&&r.status!=='취소';}
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
   function badge(status){return '<span class="badge '+(status==='완료'?'done':['보류','취소'].includes(status)?'hold':'')+'">'+esc(status)+'</span>';}
