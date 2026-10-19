@@ -689,5 +689,7 @@ export function createWorkStore(kv:any,options:Obj={}){
   }
   throw new Error('지원하지 않는 연동 작업입니다.');
  }
- return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,processPendingMatches,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
+ // Resolve through the committed result links, never by hospital name alone.
+ async function notificationSources(requestId:string){return [...new Set((await history(requestId)).filter(h=>h.kind==='result'&&!h.deletedAt&&h.source?.origin!=='flow').map(h=>h.source?.recordId).filter(Boolean))];}
+ return {handle,status,bridge,manifest,ingestSources,sources,request,handoverTarget,processPendingMatches,notificationSources,checkAccess:access,prepareIndexes:indexes.prepare,queryIndexReady:indexes.ready,NS};
 }
