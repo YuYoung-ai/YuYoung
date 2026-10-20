@@ -22,6 +22,8 @@
 .hospital-payment[data-payment=paid]{background:#fff5d9;color:#805e0a}.hospital-payment[data-payment=free]{background:#e6f5ed;color:#236b48}
 .hospital-event-open{display:block;text-align:left;padding:0;margin:18px 0 10px;border:0;background:transparent;color:var(--text);font-size:16px;font-weight:650;line-height:1.7;white-space:normal;overflow-wrap:anywhere;max-width:100%}
 .hospital-event-open:hover{text-decoration:underline}
+.hospital-treatment-result{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.hospital-treatment-result:last-child{border-bottom:0}.hospital-treatment-result>span:first-child{min-width:0;overflow-wrap:anywhere}.hospital-treatment-result small{display:block;font-size:11px;margin-top:3px}.hospital-treatment-result>.hospital-payment{flex:0 0 110px}
 .hospital-treatment,.hospital-equipment{margin:0 0 8px;color:var(--muted);font-size:13px;line-height:1.7;overflow-wrap:anywhere}.hospital-equipment{font-size:12px}
 .hospital-event-footer{display:grid;grid-template-columns:minmax(0,1fr) 156px;gap:14px;align-items:center;margin-top:17px;min-height:32px}
 .hospital-event-footer>p{margin:0;color:var(--muted);font-size:12px;line-height:1.7;overflow-wrap:anywhere}
