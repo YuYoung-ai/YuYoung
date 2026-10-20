@@ -20,5 +20,10 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
  answer={success:true,items:[{requestId:'r1',revision:3,attachment:null}]};ui.retry('r1');await flush();assert.match(a.innerHTML,/inspection-empty/);
  answer=null;ui.hydrate(host,[{id:'r1',revision:4}]);await flush();const old=resolveNext;
  answer={success:true,items:[item(5)]};ui.hydrate(host,[{id:'r1',revision:5}]);await flush();old({success:true,items:[item(4)]});await flush();assert.match(a.innerHTML,/file-5/,'late response cannot replace a newer revision');
+ const summary={dataset:{workSummary:'r1'},textContent:''},payment={dataset:{workPayment:'r1'},textContent:''};
+ const timeline={querySelectorAll:selector=>selector.includes('data-work-summary')?[summary,payment]:[a]};
+ answer={success:true,items:[{...item(6),schema:2,treatment:'A/S / 부품 교체',payment:'paid'}]};ui.hydrate(timeline,[{id:'r1',revision:6}]);await flush();assert.equal(summary.textContent,'처리 항목 · A/S / 부품 교체');assert.equal(payment.textContent,'유상 확정');assert.equal(payment.dataset.payment,'paid');
+ answer={success:true,items:[{...item(7),schema:2,treatment:'',payment:'unknown'}]};ui.hydrate(timeline,[{id:'r1',revision:7}]);await flush();assert.equal(payment.textContent,'미확정');assert.equal(summary.textContent,'처리 항목 · 미등록');
+ answer={success:false};ui.hydrate(timeline,[{id:'r1',revision:8}]);await flush();assert.equal(payment.textContent,'확인 필요','failed reads must not look like a confirmed result');
  console.log('work-inspection-list: debounce, shared rendering, memory/IndexedDB reuse, unsafe URLs, retry, empty state and late revision protection passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
