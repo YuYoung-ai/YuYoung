@@ -12,6 +12,7 @@
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
   var inspectionList=window.BazWorkInspections?window.BazWorkInspections.create({account:account,api:api,cache:cache}):null;
+  var hospitalGroups=window.BazWorkHospitalGroups?window.BazWorkHospitalGroups.create():null;
   var role={engineer:'',admin:window.BazAuth.cachedLevel()>=3,resolved:false},workspaceView=role.admin?'attention':'mine',roleTouched=false,claimReady=null,claimLoading=false,assignmentSeq=0;
   if(role.admin){state.filter='all';lastLiveFilter='all';}
   var launch=window.BazWorkLaunch?window.BazWorkLaunch.parse(window.location?.search):{receipt:false,embed:false};
@@ -308,13 +309,14 @@
     if(!data)return;if(data.success)return;
     d.error=data.error;d.duplicate=!!data.duplicate;if(data.duplicate)d.error+='\n'+(data.candidates||[]).concat(data.overlaps||[]).map(function(x){return x.hospitalName+' · '+time(x.visitAt)+' · '+(x.engineer||'미배정');}).join('\n');if(data.conflict){d.current=data.current;upsert(data.current);}flushInlineDrafts(true);renderEdits();
   }
-  function workspaceLabel(view){return {attention:'확인할 업무',all:'전체 업무',mine:'내 업무',unassigned:'미배정',changed:'원본 변경'}[view]||'전체 업무';}
+  function workspaceLabel(view){return {attention:'확인할 업무',all:'전체 업무',mine:'내 업무',unassigned:'미배정',changed:'원본 변경',hospital:'병원별 그룹화'}[view]||'전체 업무';}
   function renderWorkspace(){
     if(!$('workspace-title'))return;
     $('workspace-title').textContent=state.filter==='trash'?'휴지통':workspaceLabel(workspaceView);
     var hint=workspaceView==='attention'?'미배정·결과 확인 대기·Handover 원본 변경을 모아 보여줍니다.':workspaceView==='mine'?(role.engineer?role.engineer+' 담당으로 배정된 업무입니다.':'본인 담당자 연결을 확인해 주세요. 앱 설치·알림 설정에서 연결할 수 있습니다.'):workspaceView==='unassigned'?'담당자를 지정하면 해당 담당자에게 접수 알림이 전달됩니다.':workspaceView==='changed'?'완료된 업무를 포함해 Handover 원본 확인이 필요한 기록입니다.':'기간·상태·검색 조건을 적용해 전체 업무를 조회합니다.';
     if(workspaceView==='mine'&&!role.resolved)hint=role.failed?'담당자 연결 확인에 실패했습니다. 전체 업무로 전환하거나 앱 설치·알림 설정에서 다시 확인하세요.':'본인의 담당자 연결을 확인하고 있습니다.';
     $('workspace-hint').textContent=hint;document.querySelectorAll('[data-workspace]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.workspace===workspaceView&&state.filter!=='trash'));});
+    if(workspaceView==='hospital')$('workspace-hint').textContent='같은 병원의 여러 장비 처리 이력을 한 타임라인에서 확인합니다. 기간·검색·상세 조건을 적용할 수 있습니다.';
     $('my-today').disabled=!role.engineer;$('my-today').title=role.engineer?'오늘 '+role.engineer+' 방문 업무':'앱 설치·알림 설정에서 담당자를 연결하세요.';
   }
   async function loadRoleContext(){
@@ -383,6 +385,13 @@
     $('list-count').textContent=rows.length+'건 · 전체 '+state.requests.filter(function(r){return !r.deletedAt;}).length+'건';$('page-info').textContent=state.page+' / '+pages;
     $('prev').disabled=state.page<=1;$('next').disabled=state.page>=pages;
     document.querySelectorAll('.filter-bar [data-filter]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.filter===state.filter));});
+    if(workspaceView==='hospital'&&state.filter!=='trash'&&!editMode&&!selectionMode&&hospitalGroups){
+      var grouped=hospitalGroups.render(rows,{display:displayRequest,sales:salesName,time:time,page:state.page});
+      state.page=grouped.page;shownRequests=grouped.shown;$('list').innerHTML=grouped.html;
+      $('list-count').textContent=grouped.count+'개 병원 · '+rows.length+'건';$('page-info').textContent='선택 병원 '+grouped.page+' / '+grouped.pages;
+      $('prev').disabled=grouped.page<=1;$('next').disabled=grouped.page>=grouped.pages;updateSelection();
+      if(inspectionList)inspectionList.hydrate($('list'),shownRequests);return;
+    }
     var shown=rows.slice((state.page-1)*50,state.page*50);shownRequests=shown;updateSelection();
     if(!shown.length){var unmapped=workspaceView==='mine'&&!role.engineer&&state.filter!=='trash';$('list').innerHTML='<div class="empty"><strong>'+(unmapped?'본인 담당자 연결을 확인해 주세요.':state.requests.length?(workspaceView==='attention'?'조건에 맞는 확인할 업무가 없습니다':'조건에 맞는 업무가 없습니다'):'등록된 A/S 업무가 없습니다')+'</strong>'+(unmapped?'<a href="install.html">앱 설치·알림 설정에서 담당자 연결 확인 ↗</a>':state.requests.length?'검색어나 기간·업무 범위를 변경해 보세요.':'상단의 접수 등록에서 첫 요청을 등록하세요.')+'</div>';if(inspectionList)inspectionList.hydrate($('list'),[]);return;}
     function rowButton(r){var shown=displayRequest(r);return (editMode?editable(r,'hospitalInput',shown.hospitalName)+'<button class="row-detail-link" data-open="'+esc(r.id)+'">상세 보기 ↗</button>':'<button class="row-open" data-open="'+esc(r.id)+'">'+esc(shown.hospitalName)+'</button>')+'<div class="summary">'+editable(r,'symptom',r.symptom)+'</div>';}
@@ -864,7 +873,7 @@
   $('search').addEventListener('compositionstart',function(){listSearchComposing=true;clearTimeout(listSearchTimer);});
   $('search').addEventListener('compositionend',function(){listSearchComposing=false;scheduleListSearch();});
   $('search').oninput=scheduleListSearch;$('sort').onchange=$('sort-direction').onchange=function(){clearSelection();state.page=1;renderList();};
-  document.querySelectorAll('[data-workspace]').forEach(function(b){b.onclick=function(){roleTouched=true;workspaceView=b.dataset.workspace;selectionMode=false;clearSelection();closeDetail(false);state.statusScope='all';advanced.status=[];state.page=1;if(state.filter==='trash')state.filter=lastLiveFilter;renderList();};});
+  document.querySelectorAll('[data-workspace]').forEach(function(b){b.onclick=function(){roleTouched=true;workspaceView=b.dataset.workspace;selectionMode=false;clearSelection();closeDetail(false);state.statusScope='all';advanced.status=[];state.page=1;if(state.filter==='trash')state.filter=lastLiveFilter;if(workspaceView==='hospital'){editMode=false;state.filter='all';lastLiveFilter='all';Object.keys(advanced).forEach(function(k){advanced[k]=[];});$('search').value='';if(hospitalGroups)hospitalGroups.reset();}renderList();};});
   $('my-today').onclick=function(){roleTouched=true;workspaceView='mine';Object.keys(advanced).forEach(function(k){advanced[k]=[];});$('search').value='';state.filter='today';lastLiveFilter='today';state.statusScope='all';state.page=1;clearSelection();closeDetail(false);renderList();if(matchMedia('(max-width:700px)').matches)$('list').scrollIntoView({block:'start'});};
   $('prev').onclick=function(){clearSelection();state.page--;renderList();};$('next').onclick=function(){clearSelection();state.page++;renderList();};
   document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){selectionMode=false;clearSelection();closeDetail(false);state.filter=b.dataset.filter;lastLiveFilter=state.filter;state.page=1;renderList();};});
@@ -897,7 +906,7 @@
   $('list').onsubmit=saveInline;
   $('list').ondblclick=$('detail').ondblclick=beginEdit;
   $('list').onkeydown=$('detail').onkeydown=editKey;
-  $('list').onclick=function(event){var inspectionRetry=event.target.closest('[data-inspection-retry]');if(inspectionRetry&&inspectionList){inspectionList.retry(inspectionRetry.dataset.inspectionRetry);return;}if(editClick(event))return;var reset=event.target.closest('[data-inline-reset]');if(reset?.dataset.inlineReset&&!busy&&!pending){delete inlineDrafts[reset.dataset.inlineReset];flushInlineDrafts(true);renderList();return;}var rebase=event.target.closest('[data-inline-rebase]');if(rebase?.dataset.inlineRebase&&!busy&&!pending){var d=inlineDrafts[rebase.dataset.inlineRebase];if(d?.current){d.baseRevision=d.current.revision;delete d.current;delete d.error;flushInlineDrafts(true);renderList();}return;}var b=event.target.closest('[data-open]');if(b)openDetail(b.dataset.open);};
+  $('list').onclick=function(event){var hospitalChoice=event.target.closest('[data-hospital-group]'),directory=event.target.closest('[data-hospital-directory]');if(hospitalChoice&&hospitalGroups){if(hospitalGroups.select(Number(hospitalChoice.dataset.hospitalGroup))){state.page=1;closeDetail(false);renderList();var selectedButton=$('list').querySelector('.hospital-group-choice[aria-pressed="true"]');if(selectedButton)selectedButton.focus({preventScroll:true});}return;}if(directory&&hospitalGroups){hospitalGroups.moveDirectory(Number(directory.dataset.hospitalDirectory));renderList();return;}var inspectionRetry=event.target.closest('[data-inspection-retry]');if(inspectionRetry&&inspectionList){inspectionList.retry(inspectionRetry.dataset.inspectionRetry);return;}if(editClick(event))return;var reset=event.target.closest('[data-inline-reset]');if(reset?.dataset.inlineReset&&!busy&&!pending){delete inlineDrafts[reset.dataset.inlineReset];flushInlineDrafts(true);renderList();return;}var rebase=event.target.closest('[data-inline-rebase]');if(rebase?.dataset.inlineRebase&&!busy&&!pending){var d=inlineDrafts[rebase.dataset.inlineRebase];if(d?.current){d.baseRevision=d.current.revision;delete d.current;delete d.error;flushInlineDrafts(true);renderList();}return;}var b=event.target.closest('[data-open]');if(b)openDetail(b.dataset.open);};
   $('detail').onclick=function(event){
     if(editClick(event))return;    var b=event.target.closest('button');if(!b)return;
     if(b.dataset.open){openDetail(b.dataset.open);return;}

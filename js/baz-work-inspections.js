@@ -2,13 +2,19 @@
  'use strict';
  function create(options){
   var entries=new Map(),failed=new Set(),inflight=new Set(),host=null,requests=[],timer=null;
-  var ready=options.cache.detail(options.account,'inspection-links-v1').then(function(saved){
+  var ready=options.cache.detail(options.account,'inspection-links-v2').then(function(saved){
    (saved&&Array.isArray(saved.items)?saved.items:[]).forEach(function(x){if(x&&x.requestId)entries.set(x.requestId,x);});
   }).catch(function(){});
   function signature(r){return r.id+':'+r.revision;}
   function draw(){
    if(!host)return;
    var current=new Map(requests.map(function(r){return [r.id,r];}));
+   host.querySelectorAll('[data-work-summary], [data-work-payment]').forEach(function(node){
+    var id=node.dataset.workSummary||node.dataset.workPayment,r=current.get(id);if(!r)return;
+    var item=entries.get(id),valid=item&&item.revision===r.revision,summary=valid&&item.schema===2;
+    if(node.dataset.workSummary)node.textContent='처리 항목 · '+(summary?item.treatment||'미등록':valid||failed.has(signature(r))?'다시 확인 필요':'확인 중…');
+    else {var payment=summary&&['paid','free'].includes(item.payment)?item.payment:'unknown';node.dataset.payment=summary?payment:'loading';node.textContent=summary?({paid:'유상 확정',free:'무상 확정',unknown:'미확정'}[payment]):valid||failed.has(signature(r))?'확인 필요':'확인 중…';}
+   });
    host.querySelectorAll('[data-inspection-request]').forEach(function(node){
     var r=current.get(node.dataset.inspectionRequest);if(!r)return;
     var item=entries.get(r.id),valid=item&&item.revision===r.revision;
@@ -28,7 +34,7 @@
     if(!result.success||!Array.isArray(result.items))throw new Error(result.error||'내역서 조회 실패');
     batch.forEach(function(r){var item=result.items.find(function(x){return x.requestId===r.id&&x.revision===r.revision;}),old=entries.get(r.id);if(item){if(!old||old.revision<=item.revision){entries.delete(r.id);entries.set(r.id,item);}}else failed.add(signature(r));});
     while(entries.size>300)entries.delete(entries.keys().next().value);
-    options.cache.saveDetail(options.account,'inspection-links-v1',{items:Array.from(entries.values())}).catch(function(){});
+    options.cache.saveDetail(options.account,'inspection-links-v2',{items:Array.from(entries.values())}).catch(function(){});
    }catch(e){batch.forEach(function(r){failed.add(signature(r));});}
    finally{batch.forEach(function(r){inflight.delete(signature(r));});draw();}
   }
