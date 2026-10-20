@@ -9,7 +9,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
  const cache={detail:async()=>stored,saveDetail:async(a,id,value)=>{stored=value;}};
  const create=()=>window.BazWorkInspections.create({account:'tester',api,cache});
  const a={dataset:{inspectionRequest:'r1'},innerHTML:''},b={dataset:{inspectionRequest:'r1'},innerHTML:''},host={querySelectorAll:()=>[a,b]};
- const item=(revision,url='https://drive.google.com/file/d/file-'+revision+'/view')=>({requestId:'r1',revision,attachment:{kind:'inspection_pdf',url}});
+ const item=(revision,url='https://drive.google.com/file/d/file-'+revision+'/view')=>({schema:3,requestId:'r1',revision,attachment:{kind:'inspection_pdf',url}});
  const flush=async()=>{const jobs=[...timers.values()];timers.clear();jobs.forEach(fn=>fn());for(let i=0;i<8;i++)await Promise.resolve();};
  const ui=create();for(let i=0;i<10;i++)ui.hydrate(host,[{id:'r1',revision:1}]);await flush();assert.equal(calls,1,'rapid renders issue only one batch');
  resolveNext({success:true,items:[item(1)]});await flush();assert.match(a.innerHTML,/file-1/);assert.equal(a.innerHTML,b.innerHTML,'desktop and mobile share one result');
@@ -22,8 +22,9 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
  answer={success:true,items:[item(5)]};ui.hydrate(host,[{id:'r1',revision:5}]);await flush();old({success:true,items:[item(4)]});await flush();assert.match(a.innerHTML,/file-5/,'late response cannot replace a newer revision');
  const summary={dataset:{workSummary:'r1'},textContent:''},payment={dataset:{workPayment:'r1'},textContent:''};
  const timeline={querySelectorAll:selector=>selector.includes('data-work-summary')?[summary,payment]:[a]};
- answer={success:true,items:[{...item(6),schema:2,treatment:'A/S / 부품 교체',payment:'paid'}]};ui.hydrate(timeline,[{id:'r1',revision:6}]);await flush();assert.equal(summary.textContent,'처리 항목 · A/S / 부품 교체');assert.equal(payment.textContent,'유상 확정');assert.equal(payment.dataset.payment,'paid');
- answer={success:true,items:[{...item(7),schema:2,treatment:'',payment:'unknown'}]};ui.hydrate(timeline,[{id:'r1',revision:7}]);await flush();assert.equal(payment.textContent,'미확정');assert.equal(summary.textContent,'처리 항목 · 미등록');
+ answer={success:true,items:[{...item(6),schema:3,treatment:'A/S / 부품 교체',payment:'paid'}]};ui.hydrate(timeline,[{id:'r1',revision:6}]);await flush();assert.equal(summary.textContent,'처리 항목 · A/S / 부품 교체');assert.equal(payment.textContent,'유상 확정');assert.equal(payment.dataset.payment,'paid');
+ answer={success:true,items:[{...item(7),schema:3,treatment:'',payment:'unknown'}]};ui.hydrate(timeline,[{id:'r1',revision:7}]);await flush();assert.equal(payment.textContent,'미확정');assert.equal(summary.textContent,'처리 항목 · 미등록');
+ answer={success:true,items:[{...item(9),schema:3,treatment:'A/S',payment:'mixed',resultItems:[{treatment:'풋스위치 <교체>',sn:'SN-A',date:'2026-10-20',payment:'paid'},{treatment:'장비 점검',sn:'SN-B',date:'2026-10-20',payment:'free'}]}]};ui.hydrate(timeline,[{id:'r1',revision:9}]);await flush();assert.equal(payment.textContent,'항목별 구분');assert.equal(payment.dataset.payment,'mixed');assert.match(summary.innerHTML,/유상 확정/);assert.match(summary.innerHTML,/무상 확정/);assert.match(summary.innerHTML,/SN-A/);assert.match(summary.innerHTML,/SN-B/);assert.match(summary.innerHTML,/&lt;교체&gt;/);
  answer={success:false};ui.hydrate(timeline,[{id:'r1',revision:8}]);await flush();assert.equal(payment.textContent,'확인 필요','failed reads must not look like a confirmed result');
  console.log('work-inspection-list: debounce, shared rendering, memory/IndexedDB reuse, unsafe URLs, retry, empty state and late revision protection passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,10 +1,10 @@
 // Compact, revision-bound projection of PDF comments; no audit/source bodies leave this read.
 type Obj=Record<string,any>;
 const NS='hospitalwork-v2',key=(...p:any[])=>[NS,...p];
-// Explicit result costs only; DB warranty, empty costs and narrative text are not confirmations.
+// Business rule: a saved result with no cost is free. No linked result remains unknown.
 export function resultPayment(cost:any){
  const value=String(cost??'').normalize('NFKC').trim();
- if(value==='유상')return 'paid';if(value==='무상')return 'free';
+ if(value==='유상')return 'paid';if(value===''||value==='무상')return 'free';
  const number=value.replace(/[,₩\s원]/g,'');
  return /^\d+(?:\.\d{1,2})?$/.test(number)?(Number(number)>0?'paid':'free'):'unknown';
 }
@@ -14,7 +14,7 @@ export function createInspectionLinks(kv:any){
    const r=await kv.get(key('request',id));
    if(!r.value||r.value.purgedAt)return {requestId:id,revision:r.value?.revision||0,attachment:null};
    const cached=await kv.get(key('inspectionLinks',id));
-   if(cached.value?.schema===2&&cached.value?.revision===r.value.revision)return cached.value;
+   if(cached.value?.schema===3&&cached.value?.revision===r.value.revision)return cached.value;
    let latest:Obj|null=null;
    const results:Obj[]=[];
    for await(const entry of kv.list({prefix:key('history',id)})){
@@ -27,9 +27,14 @@ export function createInspectionLinks(kv:any){
    // A linked official result supersedes an imported copy of the same device/day.
    const current=results.filter(h=>h.source.origin!=='flow'||!h.source.sn||!results.some(other=>other.source.origin!=='flow'&&other.source.sn===h.source.sn&&other.source.date===h.source.date));
    const treatment=[...new Set(current.map(h=>[h.source.gubun,h.source.cat,h.source.type].filter(Boolean).join(' / ')).filter(Boolean))].join(' · ').slice(0,1200);
-   const payments=current.map(h=>h.sourceReview?.pending?'unknown':resultPayment(h.source.cost));
-   const payment=!payments.length||payments.includes('unknown')?'unknown':payments.includes('paid')?'paid':'free';
-   const value={schema:2,requestId:id,revision:r.value.revision,attachment:latest?.attachment||null,treatment,payment};
+   const resultItems=current.sort((a,b)=>String(b.source.date||'').localeCompare(String(a.source.date||''))||String(a.id).localeCompare(String(b.id))).map(h=>({
+    id:h.id,treatment:[h.source.gubun,h.source.cat,h.source.type].filter(Boolean).join(' / ').slice(0,520),
+    sn:String(h.source.sn||'').slice(0,300),date:String(h.source.date||'').slice(0,10),
+    payment:h.sourceReview?.pending?'unknown':resultPayment(h.source.cost)
+   }));
+   const payments=[...new Set(resultItems.map(item=>item.payment))];
+   const payment=payments.length===1?payments[0]:payments.length?'mixed':'unknown';
+   const value={schema:3,requestId:id,revision:r.value.revision,attachment:latest?.attachment||null,treatment,payment,resultItems};
    if((await kv.atomic().check(r,cached).set(key('inspectionLinks',id),value,{expireIn:7*86400000}).commit()).ok)return value;
   }
   throw new Error('내역서가 변경되었습니다. 다시 확인해 주세요.');
