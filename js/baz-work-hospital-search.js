@@ -15,7 +15,7 @@
   }
   function create(options){
     var doc=options.document||document,win=doc.defaultView,selector=options.selector;
-    var input=null,matches=[],active=-1,choosing=false,composing=false;
+    var input=null,matches=[],active=-1,choosing=false,composing=false,touchChoice=null;
     var panel=doc.createElement('div'),status=doc.createElement('div'),list=doc.createElement('div');
     panel.className='hospital-search-popup';panel.hidden=true;panel.setAttribute('popover','manual');
     status.className='hospital-search-status';status.setAttribute('role','status');
@@ -24,11 +24,11 @@
     function close(){
       if(input){input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');}
       if(panel.hidePopover&&panel.matches(':popover-open'))panel.hidePopover();
-      panel.hidden=true;active=-1;
+      panel.hidden=true;active=-1;touchChoice=null;
     }
     function position(){
       if(panel.hidden)return;
-      if(!input||!input.isConnected||doc.activeElement!==input){close();return;}
+      if(!input||!input.isConnected||doc.activeElement!==input&&!touchChoice){close();return;}
       var box=input.getBoundingClientRect(),view=win.visualViewport;
       var top=view?view.offsetTop:0,left=view?view.offsetLeft:0,height=view?view.height:win.innerHeight,width=view?view.width:win.innerWidth;
       var below=top+height-box.bottom-8,above=box.top-top-8,up=below<180&&above>below;
@@ -39,7 +39,7 @@
       panel.style.top=(up?box.top-panel.getBoundingClientRect().height-5:box.bottom+5)+'px';
     }
     function update(target){
-      if(choosing||!target||!target.matches(selector))return;
+      if(choosing||touchChoice||!target||!target.matches(selector))return;
       if(input!==target){close();composing=false;}input=target;active=-1;
       input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');
       input.setAttribute('aria-controls',list.id);input.removeAttribute('aria-activedescendant');
@@ -65,8 +65,8 @@
       // Keep the existing validation, sales fill and draft-save handlers in one path.
       input.dispatchEvent(new win.Event('input',{bubbles:true}));choosing=false;
     }
-    doc.addEventListener('focusin',function(event){if(event.target.matches(selector))update(event.target);else close();});
-    doc.addEventListener('focusout',function(event){if(event.target===input)close();});
+    doc.addEventListener('focusin',function(event){if(event.target.matches(selector))update(event.target);else if(!touchChoice)close();});
+    doc.addEventListener('focusout',function(event){if(event.target===input&&!touchChoice)close();});
     doc.addEventListener('input',function(event){update(event.target);});
     doc.addEventListener('compositionstart',function(event){if(event.target.matches(selector))composing=true;});
     doc.addEventListener('compositionend',function(event){if(event.target.matches(selector)){composing=false;update(event.target);}});
@@ -86,10 +86,24 @@
     },true);
     panel.addEventListener('pointerdown',function(event){
       var item=event.target.closest('[data-hospital-index]');
+      // Safari may blur the input and dismiss its keyboard before delivering click.
+      // Keep a touch candidate until pointerup; do not cancel touch scrolling.
+      if(item&&(event.pointerType==='touch'||event.pointerType==='pen')){
+        touchChoice={id:event.pointerId,index:Number(item.dataset.hospitalIndex),x:event.clientX,y:event.clientY,moved:false};return;
+      }
       // Retain focus while selecting, so blur cannot hide the result before it is applied.
       if(item){event.preventDefault();event.stopPropagation();}
     });
-    panel.addEventListener('click',function(event){var item=event.target.closest('[data-hospital-index]');if(item){event.preventDefault();event.stopPropagation();choose(Number(item.dataset.hospitalIndex));}});
+    panel.addEventListener('pointermove',function(event){if(touchChoice&&event.pointerId===touchChoice.id&&(Math.abs(event.clientX-touchChoice.x)>10||Math.abs(event.clientY-touchChoice.y)>10))touchChoice.moved=true;});
+    function endTouch(event){
+      if(!touchChoice||event.pointerId!==touchChoice.id)return;
+      var pending=touchChoice;touchChoice=null;
+      var item=event.target.closest('[data-hospital-index]');
+      if(event.type!=='pointercancel'&&!pending.moved&&Math.abs(event.clientX-pending.x)<=10&&Math.abs(event.clientY-pending.y)<=10&&item&&Number(item.dataset.hospitalIndex)===pending.index){event.preventDefault();event.stopPropagation();choose(pending.index);}
+      else if(doc.activeElement!==input)close();
+    }
+    panel.addEventListener('pointerup',endTouch);panel.addEventListener('pointercancel',endTouch);
+    panel.addEventListener('click',function(event){var item=event.target.closest('[data-hospital-index]');if(item&&!panel.hidden){event.preventDefault();event.stopPropagation();choose(Number(item.dataset.hospitalIndex));}});
     doc.addEventListener('pointerdown',function(event){if(event.target!==input&&!panel.contains(event.target))close();});
     doc.addEventListener('close',function(event){if(input&&input.closest('dialog')===event.target)close();},true);
     doc.addEventListener('scroll',position,true);win.addEventListener('resize',position);

@@ -30,9 +30,9 @@ class Element {
 }
 const selected=[],handlers={},body=new Element('body'),doc={body,activeElement:null,
  createElement:tag=>new Element(tag),addEventListener(type,fn){(handlers[type]||=[]).push(fn);}};
-doc.defaultView={innerWidth:800,innerHeight:700,addEventListener(){},Event:class{constructor(type,init){this.type=type;Object.assign(this,init);}}};
+const windowHandlers={};doc.defaultView={innerWidth:800,innerHeight:700,addEventListener(type,fn){windowHandlers[type]=fn;},Event:class{constructor(type,init){this.type=type;Object.assign(this,init);}}};
 function send(type,target,extra={}){const e={target,preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;},...extra};(handlers[type]||[]).forEach(fn=>fn(e));return e;}
-function panelEvent(type,target){const e={target,preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;}};(panel.handlers[type]||[]).forEach(fn=>fn(e));return e;}
+function panelEvent(type,target,extra={}){const e={type,target,preventDefault(){this.prevented=true;},stopPropagation(){this.stopped=true;},...extra};(panel.handlers[type]||[]).forEach(fn=>fn(e));return e;}
 let data=rows;const picker=create({document:doc,selector:'input',getRows:()=>data,formatValue:h=>h.name+' · '+h.sn});
 const input=new Element('input'),dialog=new Element('dialog');input.dialog=dialog;doc.activeElement=input;
 send('focusin',input);const panel=dialog.children[0],list=panel.children[1],status=panel.children[0];
@@ -58,4 +58,17 @@ const inline=new Element('input');inline.value='NEW';doc.activeElement=inline;se
 assert.equal(panel.parentNode,body,'inline popup lives outside the clipped table container');assert.equal(list.children.length,1);
 send('keydown',inline,{key:'ArrowUp'});send('keydown',inline,{key:'Enter'});assert.equal(inline.value,'신규병원 · NEW');
 inline.isConnected=false;picker.refresh();assert.equal(panel.hidden,true);
-console.log('work-hospital-search: live input, Korean IME, distinct SNs, DB-only filtering, keyboard/mouse choice, no accidental submit, refresh and modal/inline lifecycle passed.');
+// iOS Safari ordering: touch begins, keyboard/input blurs, viewport resizes, then pointerup.
+doc.activeElement=input;input.value='신규';send('focusin',input);const tap=list.children[0].children[0],beforeTouch=selected.length;
+const down=panelEvent('pointerdown',tap,{pointerType:'touch',pointerId:1,clientX:50,clientY:200});assert.ok(!down.prevented,'touch scroll must remain native');
+doc.activeElement=body;send('focusout',input);assert.equal(panel.hidden,false,'Safari blur cannot discard a pending option tap');
+windowHandlers.resize();assert.equal(panel.hidden,false,'keyboard viewport change keeps a pending touch candidate alive');
+const up=panelEvent('pointerup',tap,{pointerId:1,clientX:52,clientY:203});assert.ok(up.prevented);assert.equal(selected.length,beforeTouch+1);assert.equal(input.value,'신규병원 · NEW');assert.equal(panel.hidden,true);
+panelEvent('click',tap);assert.equal(selected.length,beforeTouch+1,'synthetic click must not duplicate selection');
+doc.activeElement=input;input.value='신규';send('focusin',input);const scrollItem=list.children[0];
+panelEvent('pointerdown',scrollItem,{pointerType:'touch',pointerId:2,clientX:50,clientY:200});
+panelEvent('pointermove',scrollItem,{pointerId:2,clientX:50,clientY:230});
+panelEvent('pointerup',scrollItem,{pointerId:2,clientX:50,clientY:230});assert.equal(selected.length,beforeTouch+1,'dragging the suggestion list must not select a hospital');
+panelEvent('pointerdown',scrollItem,{pointerType:'touch',pointerId:3,clientX:50,clientY:200});doc.activeElement=body;send('focusout',input);
+panelEvent('pointercancel',scrollItem,{pointerId:3});assert.equal(panel.hidden,true);assert.equal(selected.length,beforeTouch+1,'cancelled touch never selects');
+console.log('work-hospital-search: IME, keyboard/mouse selection, Safari blur/keyboard resize before touch release, no-click/duplicate-click taps, drag/cancel rejection and modal/inline lifecycle passed.');
