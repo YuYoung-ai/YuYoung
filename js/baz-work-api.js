@@ -1,5 +1,5 @@
 (function(root){
- 'use strict';var URL='https://yuyoung.yuyoung-ai.deno.net';
+ 'use strict';var URL='https://yuyoung-production.coaptation.workers.dev';
  async function call(action,params,write){
   var measured=root.BazPerf?root.BazPerf.start(action):function(){},timing={};
   var ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},action.indexOf('work_flow_')===0?45000:action.indexOf('work_handover_')===0||action==='work_references_refresh'?35000:15000);

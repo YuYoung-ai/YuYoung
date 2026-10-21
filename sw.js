@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v269';
+const CACHE_VERSION = 'baz-cs-v270';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();
@@ -73,7 +73,7 @@ self.addEventListener('message',(event)=>{
    const sub=await self.registration.pushManager.getSubscription();
    if(sub){const endpoint=sub.endpoint;await sub.unsubscribe();if(p.token){
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
-    try{await fetch('https://yuyoung.yuyoung-ai.deno.net',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'notification_unsubscribe',endpoint,token:p.token}),signal:controller.signal});}catch{}finally{clearTimeout(timer);}
+    try{await fetch('https://yuyoung-production.coaptation.workers.dev',{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'notification_unsubscribe',endpoint,token:p.token}),signal:controller.signal});}catch{}finally{clearTimeout(timer);}
    }}
   }else if(/^[gp]:[A-Za-z0-9_-]{43}$/.test(p.uid||''))await cache.put(PUSH_BINDING_URL,new Response(p.uid));
   else await cache.delete(PUSH_BINDING_URL);

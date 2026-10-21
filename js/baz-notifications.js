@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- var API='https://yuyoung.yuyoung-ai.deno.net',config=null,workerReady=null,lastCheck=0;
+ var API='https://yuyoung-production.coaptation.workers.dev',config=null,workerReady=null,lastCheck=0;
  function esc(v){return String(v||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
  async function call(action,params){
   var token=root.BazAuth.token(),ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},15000);
