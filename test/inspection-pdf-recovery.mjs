@@ -73,7 +73,8 @@ const uploader=uploadWindow.BazInspectionUpload.create({url:'https://script.goog
 const preparing=uploader.prepare({recordId:'fixed',hospital:'가상 병원',date:'2026-10-16'});await flush();assert.equal([...uploadTime.timers.values()][0].ms,30000);uploadTime.fire(30000);const prepared=await preparing;assert.match(prepared.sourcePreparationError,/대기 시간/);
 stalledFetch=false;await uploader.publish(new Blob(['%PDF-fixture']), 'fixture.pdf',prepared);assert.equal(uploads,1);assert.equal(uploadTime.timers.size,0);
 encodingStall=true;
-const encoding=uploader.publish(new Blob(['%PDF-fixture']), 'reader.pdf',prepared);await new Promise(resolve=>setTimeout(resolve,0));await flush();
+lastReader=null;const encoding=uploader.publish(new Blob(['%PDF-fixture']), 'reader.pdf',prepared);
+for(let attempt=0;attempt<1000&&!lastReader;attempt++)await new Promise(resolve=>setTimeout(resolve,1));await flush();
 assert.equal(uploadTime.timers.size,1);uploadTime.fire(30000);await encoding;
 assert.equal(lastReader.aborted,true);assert.equal(nodes.pdfUploadRetry.hidden,false);assert.equal(uploads,1,'no incomplete base64 is uploaded');
 encodingStall=false;await nodes.pdfUploadRetry.click();assert.equal(uploads,2,'same-file retry reads missing base64 even when its hash is already known');assert.equal(uploadTime.timers.size,0);

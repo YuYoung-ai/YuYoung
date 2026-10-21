@@ -6,29 +6,49 @@
   function button(label,run){var b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=run;actions.appendChild(b);}
   function back(requestId){var a=document.createElement('a');a.textContent='접수로 돌아가기';a.href=flow.url('hospital-work.html',requestId);actions.appendChild(a);}
   async function prepareContext(context){
-   var status=await api.get('work_document_status',{requestId:context.requestId,recordId:context.recordId});if(!status.success||!status.sourceLinked)throw new Error(status.error||'원본의 접수 연결을 먼저 확인하세요.');
+   if(BazAuth.name()!==account){var changed=new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');changed.noRetry=true;throw changed;}
+   var requestId=context.requestId||'';
+   if(target?.recordId&&context.recordId===target.recordId)requestId=requestId||target.requestId;
+   if(target?.recordId&&context.recordId!==target.recordId){var mismatch=new Error('현재 작성 내용과 접수의 원본 ID가 다릅니다. 접수 내역서를 다시 불러오세요.');mismatch.noRetry=true;throw mismatch;}
+   var status;try{status=await api.get('work_document_status',{requestId:requestId,recordId:context.recordId});}catch(e){e.transient=true;throw e;}
+   if(!status.success){var error=new Error(status.error||'원본의 접수 연결을 먼저 확인하세요.');error.noRetry=!status.retryable;error.transient=!!status.retryable;throw error;}
+   if(!status.request)return {...context,attachmentApplicable:false};
+   if(requestId&&status.request.id!==requestId){var wrong=new Error('원본의 접수 연결이 다릅니다.');wrong.noRetry=true;throw wrong;}
+   return {...context,requestId:status.request.id,attachmentApplicable:true};
   }
   async function confirmAttachment(saved,context){
    if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');
    var params={requestId:context.requestId,recordId:context.recordId,sha256:saved.pdf.sha256};
-   var status=await api.get('work_document_status',params);
-   if(!status.success||!status.commentAttached){
-    await api.post('work_document_retry',{requestId:context.requestId,recordId:context.recordId});
-    status=await api.get('work_document_status',params);
+   // The targeted repair returns its authoritative status: no redundant GET.
+   var status=await api.post('work_document_retry',params);
+   if(status.success&&!status.pdfStored&&status.request?.id&&!status.commentDeleted&&!status.documentChanged){
+    // Drive/Handover may have committed while its small bridge delivery failed.
+    // Refresh canonical metadata through the existing authenticated GAS read;
+    // never upload PDF bytes again or trust a client-supplied attachment URL.
+    var refreshed=await api.get('work_handover_detail',{requestId:status.request.id,recordId:context.recordId});
+    if(!refreshed.success){var delayed=new Error(refreshed.error||'저장된 내역서 정보를 다시 확인해 주세요.');delayed.pending=true;throw delayed;}
+    status=await api.post('work_document_retry',params);
    }
-   if(!status.success)throw new Error(status.error||'접수 첨부 확인 실패');
+   for(var attempt=0;attempt<2&&status.success&&!status.commentAttached&&!status.documentChanged&&!status.commentDeleted&&status.attachmentApplicable!==false;attempt++){
+    await new Promise(resolve=>setTimeout(resolve,attempt?1000:300));
+    status=await api.post('work_document_retry',params);
+   }
+   if(!status.success){var failed=new Error(status.error||'접수 첨부 확인 실패');failed.pending=!!status.retryable;failed.noRetry=!!status.deleted;throw failed;}
+   if(status.attachmentApplicable===false)return {applicable:false};
    if(status.documentChanged){var changed=new Error('다른 내역서가 최신 문서로 저장되었습니다. 접수에서 최신 문서를 확인하세요.');changed.noRetry=true;throw changed;}
    if(status.commentDeleted){var deleted=new Error('내역서 댓글이 삭제되어 있습니다. 접수의 댓글 이력을 확인하세요.');deleted.noRetry=true;throw deleted;}
-   if(!status.commentAttached)throw new Error('접수 댓글 연결이 대기 중입니다. 파일을 다시 전송하지 않고 연결만 재시도할 수 있습니다.');
+   if(!status.commentAttached){var pending=new Error('접수 댓글 연결 확인이 대기 중입니다. PDF를 다시 전송하지 않고 연결만 재시도할 수 있습니다.');pending.pending=true;throw pending;}
+   context.requestId=status.request?.id||context.requestId;return {applicable:true};
   }
   function progress(state){
    var list=document.getElementById('pdfFlowStages');list.replaceChildren();
-   flow.documentSteps(state).forEach(function(item){var li=document.createElement('li');li.dataset.state=item.state;li.textContent=item.label;var span=document.createElement('span');span.textContent={done:'완료',working:'확인 중',error:'재시도 필요',waiting:'대기'}[item.state];li.appendChild(span);list.appendChild(li);});
+   flow.documentSteps(state).forEach(function(item){var li=document.createElement('li');li.dataset.state=item.state;li.textContent=item.label;var span=document.createElement('span');span.textContent={done:'완료',working:'확인 중',error:'재시도 필요',pending:'확인 대기',skipped:'연결 접수 없음',waiting:'대기'}[item.state];li.appendChild(span);list.appendChild(li);});
   }
   function refresh(reference,note){
    actions.replaceChildren();
    if(!reference?.requestId){box.hidden=true;return;}
    box.hidden=false;message.textContent=note||'이 내역서는 접수의 현장 기록에 연결됩니다. 입력 내용은 자동 보존됩니다.';back(reference.requestId);
+   button('중단된 전송 복구',async function(){try{if(await pdfPublisher.restore({...reference,taskId:_currentTaskId}))document.getElementById('doneOverlay').classList.add('show');else showToast('이 기기에 보관된 미완료 전송이 없습니다.');}catch(e){showToast(e.message);}});
    if(uploadedPdfDocument){
     var url=new URL(uploadedPdfDocument.url);if(url.origin==='https://drive.google.com'&&/^\/file\/d\/[A-Za-z0-9_-]+\/view$/.test(url.pathname)){var a=document.createElement('a');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='저장된 내역서 열기';actions.prepend(a);}
     button('저장·댓글 연결 확인',function(){document.getElementById('doneOverlay').classList.add('show');pdfPublisher.resume({success:true,recordId:reference.recordId,pdf:uploadedPdfDocument},{requestId:reference.requestId,recordId:reference.recordId,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId});});
