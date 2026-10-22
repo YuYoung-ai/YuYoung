@@ -11,9 +11,9 @@ const realFetch=globalThis.fetch,realNow=Date.now;let clock=1800000000000;
 before(()=>{Date.now=()=>clock;globalThis.fetch=async(url,opts)=>{assert.equal(url,'https://auth.example');const p=JSON.parse(opts.body);assert.equal(p.action,'verify');return Response.json(p.token==='alice'?{ok:true,level:1,name:'직원 A'}:p.token==='bob'?{ok:true,level:1,name:'직원 B'}:{ok:false});};});
 after(()=>{globalThis.fetch=realFetch;Date.now=realNow;});
 function crc(buffer){let value=0xffffffff;for(const byte of buffer){value^=byte;for(let i=0;i<8;i++)value=(value>>>1)^((value&1)?0xedb88320:0);}return(value^0xffffffff)>>>0;}
-function png(){
+function png(blank=false){
   const w=900,h=600,header=Buffer.alloc(13);header.writeUInt32BE(w,0);header.writeUInt32BE(h,4);header[8]=8;header[9]=2;
-  const raw=Buffer.alloc((w*3+1)*h,255);for(let y=0;y<h;y++){raw[y*(w*3+1)]=0;for(let x=0;x<w;x++)if(y>100&&y<480&&Math.abs(y-200-Math.sin(x/50)*70)<4){const p=y*(w*3+1)+1+x*3;raw[p]=raw[p+1]=raw[p+2]=0;}}
+  const raw=Buffer.alloc((w*3+1)*h,255);for(let y=0;y<h;y++){raw[y*(w*3+1)]=0;for(let x=0;x<w;x++)if(!blank&&y>100&&y<480&&Math.abs(y-200-Math.sin(x/50)*70)<4){const p=y*(w*3+1)+1+x*3;raw[p]=raw[p+1]=raw[p+2]=0;}}
   const chunk=(name,data)=>{const t=Buffer.from(name),out=Buffer.alloc(data.length+12);out.writeUInt32BE(data.length);t.copy(out,4);data.copy(out,8);out.writeUInt32BE(crc(Buffer.concat([t,data])),data.length+8);return out;};
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',header),chunk('IDAT',deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
 }
@@ -42,7 +42,7 @@ test('authenticated create freezes document; anonymous/other employee/origin can
   assert.equal((await f.request(f.guestPath(entry,'download'),f.guestToken(entry))).status,409);
 });
 test('confirmation required; blank/invalid image rejected; one signature with idempotent retry',async()=>{
-  const f=await fixture(),entry=await f.create();for(const patch of [{confirmed:false},{name:''},{signature:'data:image/svg+xml;base64,YQ=='}])assert.equal((await f.sign(entry,patch)).status,400);
+  const f=await fixture(),entry=await f.create();for(const patch of [{confirmed:false},{name:''},{signature:'data:image/svg+xml;base64,YQ=='},{signature:'data:image/png;base64,'+png(true).toString('base64')}])assert.equal((await f.sign(entry,patch)).status,400);
   const done=await f.sign(entry);assert.equal(done.status,200);assert.equal((await done.json()).state,'signed');
   assert.equal((await f.sign(entry)).status,200);assert.equal((await f.sign(entry,{name:'다른 사람'})).status,409);
   const final=await f.request(f.guestPath(entry,'download'),f.guestToken(entry));assert.equal(final.status,200);assert.match(final.headers.get('Content-Disposition'),/filename\*=UTF-8/);

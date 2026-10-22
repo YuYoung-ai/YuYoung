@@ -172,7 +172,9 @@ async function route(req, env) {
   if (role === 'staff' && action === 'signature' && row.state === 'signed') return download(env, row, 'signature.png');
   if (role === 'staff' && action === 'revoke') {
     if (row.state === 'signing') fail(409, '고객 서명을 처리 중입니다. 완료 후 다시 확인하세요.');
-    await stmt(env, "UPDATE qr_sessions SET state='revoked' WHERE id=? AND state!='signing'", id).run(); return json({ success: true });
+    const revoked=await stmt(env, "UPDATE qr_sessions SET state='revoked' WHERE id=? AND state!='signing' RETURNING id", id).first();
+    if(!revoked)fail(409,'고객 서명을 처리 중입니다. 완료 후 다시 확인하세요.');
+    return json({ success: true });
   }
   fail(409, '현재 문서 상태에서 사용할 수 없는 기능입니다.');
 }
