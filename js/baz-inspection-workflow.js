@@ -46,12 +46,11 @@
   }
   function refresh(reference,note){
    actions.replaceChildren();
-   if(!reference?.requestId){box.hidden=true;return;}
-   box.hidden=false;message.textContent=note||'이 내역서는 접수의 현장 기록에 연결됩니다. 입력 내용은 자동 보존됩니다.';back(reference.requestId);
+   box.hidden=false;message.textContent=note||(reference?.requestId?'이 내역서는 접수의 현장 기록에 연결됩니다. 입력 내용은 자동 보존됩니다.':'이 기기에 보관된 미완료 PDF가 있으면 같은 파일로 전송을 다시 확인할 수 있습니다.');if(reference?.requestId)back(reference.requestId);
    button('중단된 전송 복구',async function(){try{if(await pdfPublisher.restore({...reference,taskId:_currentTaskId}))document.getElementById('doneOverlay').classList.add('show');else showToast('이 기기에 보관된 미완료 전송이 없습니다.');}catch(e){showToast(e.message);}});
    if(uploadedPdfDocument){
     var url=new URL(uploadedPdfDocument.url);if(url.origin==='https://drive.google.com'&&/^\/file\/d\/[A-Za-z0-9_-]+\/view$/.test(url.pathname)){var a=document.createElement('a');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='저장된 내역서 열기';actions.prepend(a);}
-    button('저장·댓글 연결 확인',function(){document.getElementById('doneOverlay').classList.add('show');pdfPublisher.resume({success:true,recordId:reference.recordId,pdf:uploadedPdfDocument},{requestId:reference.requestId,recordId:reference.recordId,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId});});
+    if(reference?.recordId)button('저장·댓글 연결 확인',function(){document.getElementById('doneOverlay').classList.add('show');pdfPublisher.resume({success:true,recordId:reference.recordId,pdf:uploadedPdfDocument},{requestId:reference.requestId,recordId:reference.recordId,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId});});
    }
   }
   async function start(){

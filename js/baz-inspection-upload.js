@@ -20,7 +20,7 @@
    }catch{s.storageWarning=true;}
   }
   function sourceContext(context,resolved){
-   if(!resolved.recordId||typeof resolved.recordId!=='string')throw new Error('AS 처리 현황의 기록 ID를 확인하지 못했습니다.');
+   if(typeof resolved.recordId!=='string'||!resolved.recordId.trim()){const e=new Error('원본 확인 응답이 불완전합니다. 같은 PDF로 원본 확인·저장을 다시 시도해 주세요.');e.transient=true;throw e;}
    if(context.recordId&&context.recordId!==resolved.recordId){const e=new Error('AS 처리 현황의 연결 기록이 다릅니다. 원본을 확인한 뒤 다시 생성하세요.');e.sourceConflict=true;throw e;}
    return {...context,recordId:resolved.recordId,sourceBasis:resolved.sourceBasis,sourcePdfRevision:context.sourcePdfRevision??resolved.pdf?.revision??0};
   }
@@ -33,6 +33,10 @@
   async function call(action,data,owner,s){
    const measured=root.BazPerf?root.BazPerf.start(action):function(){},url=new URL(options.url);
    if(url.origin!=='https://script.google.com'||!/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname))throw new Error('PDF 저장 서버 주소를 확인하세요.');
+   // Google ContentService redirects the response to another origin. Keep each
+   // transport distinct from warm-up GETs and stale browser redirect caches;
+   // uploadId/hash/baseRevision in the body remain fixed across retries.
+   url.searchParams.set('pdfRequest',id());
    const ctl=new AbortController(),expires=Date.now()+(action==='inspection_pdf_resolve'?30000:120000);let timer,rejectLocal;
    const timeout=new Promise((_,reject)=>{rejectLocal=reject;});
    function cancel(){ctl.abort();const e=new Error('응답 대기 시간이 지났거나 전송 확인을 중단했습니다. 같은 파일로 다시 확인해 주세요.');e.transient=true;rejectLocal(e);}
@@ -41,7 +45,7 @@
    try{
     checkAccount(owner);
     const result=await Promise.race([timeout,(async()=>{
-     const response=await (options.fetch||fetch)(url.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...data,action,token:owner}),signal:ctl.signal});checkAccount(owner);
+     const response=await (options.fetch||fetch)(url.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...data,action,token:owner}),signal:ctl.signal,cache:'no-store',credentials:'omit'});checkAccount(owner);
      if(response.ok===false){const e=new Error('저장 서버 응답 오류 ('+response.status+').');e.transient=response.status===408||response.status===429||response.status>=500;e.noRetry=!e.transient;throw e;}
      const value=await response.json();checkAccount(owner);return value;
     })()]);
@@ -124,6 +128,9 @@
     try{job=await outbox.find(await ownerKey(token),context);}catch{return false;}
     checkAccount(token);if(!job||current!==previous)return false;
     current={...job,ownerKey:job.owner,owner:token,context:{...job.context},busy:false};
+    // Earlier clients classified this incomplete success response as a terminal
+    // failure. Recheck the real source before sending the preserved file.
+    if(!current.saved&&current.context.sourcePreparationError==='AS 처리 현황의 기록 ID를 확인하지 못했습니다.')current.preparationRetryable=true;
     if(options.onRecovered)options.onRecovered(job);progress(current,job.saved?'comment':'drive','pending');notice(current,'이전에 중단된 전송입니다. 같은 파일로 저장·댓글 연결을 다시 확인할 수 있습니다.');
     retry.hidden=false;retry.textContent=job.saved?'댓글 연결 다시 시도':'Drive 저장 다시 시도';if(job.saved){link.href=safeLink(job.saved);link.hidden=false;}return true;
    },
