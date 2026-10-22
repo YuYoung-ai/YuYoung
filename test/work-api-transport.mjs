@@ -6,7 +6,7 @@ const calls=[],timers=new Map();let broken=false,invalid=false,serial=0;
 const root={crypto:{randomUUID:()=> 'same-operation'},BazAuth:{token:()=> 'session',config:()=>{throw Error('config must not block saves');}}};
 vm.runInNewContext(source,{window:root,AbortController,setTimeout:(fn,ms)=>{const id=++serial;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),fetch:async(url,opts)=>{calls.push({url,opts});if(broken)throw Error('offline');return {json:async()=>invalid?{}:{success:true}};}});
 await root.BazWorkAPI.get('work_bootstrap');
-assert.equal(calls[0].url,'https://yuyoung.yuyoung-ai.deno.net');assert.equal(calls[0].opts.method,'POST');assert.equal(JSON.parse(calls[0].opts.body).token,'session');assert.equal(timers.size,0);
+assert.equal(calls[0].url,'https://yuyoung-production.coaptation.workers.dev');assert.equal(calls[0].opts.method,'POST');assert.equal(JSON.parse(calls[0].opts.body).token,'session');assert.equal(timers.size,0);
 await root.BazWorkAPI.post('work_history_add',{operationId:'same-operation'});assert.equal(JSON.parse(calls[1].opts.body).operationId,'same-operation');assert.equal(timers.size,0);
 broken=true;await assert.rejects(root.BazWorkAPI.post('work_save',{operationId:'same-operation'}),e=>e.unknown===true);assert.equal(calls.length,3,'unknown writes never fall back to GAS');
 await assert.rejects(root.BazWorkAPI.get('work_sync',{revision:'10'}),e=>e.unknown===false);assert.equal(timers.size,0);
