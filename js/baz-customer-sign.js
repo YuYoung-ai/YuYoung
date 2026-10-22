@@ -28,13 +28,13 @@
   function renderState(value){
     current=value;if(value.serverNow)offset=value.serverNow-Date.now();$('customerRetry').hidden=true;countdown();
     $('customerSigning').hidden=current.state!=='pending';$('customerDownload').hidden=current.state!=='signed';
-    if(current.state==='signed'){say('서명이 완료되었습니다. PDF를 다운로드해 주세요.');clearTimeout(poll);}
+    if(current.state==='signed'){$('customerHeading').textContent='서명이 완료되었습니다';$('customerReview').hidden=true;$('customerDocument').textContent=current.documentNo;say('서명이 완료되었습니다. PDF를 다운로드해 주세요.');clearTimeout(poll);}
     else if(current.state==='signing'){say('서명을 접수했습니다. 서명된 PDF를 준비하고 있습니다…');schedule();}
     else say('점검 내용과 사진을 확인한 뒤 아래에서 서명해 주세요.');
   }
   function schedule(){clearTimeout(poll);poll=setTimeout(check,5000);}
   async function check(){
-    try{renderState(await api('status'));if(!reviewLoaded)renderReview(await api('review'));if(current.state==='signing'&&submission&&!busy){busy=true;try{renderState(await api('sign',submission));}finally{busy=false;}}}
+    try{renderState(await api('status'));if(!reviewLoaded&&current.state!=='signed')renderReview(await api('review'));if(current.state==='signing'&&submission&&!busy){busy=true;try{renderState(await api('sign',submission));}finally{busy=false;}}}
     catch(e){error(e);if(current?.state==='signing'&&e.status!==410&&e.status!==404)schedule();}
   }
   function point(event){const r=canvas.getBoundingClientRect();return {x:(event.clientX-r.left)*canvas.width/r.width,y:(event.clientY-r.top)*canvas.height/r.height};}
