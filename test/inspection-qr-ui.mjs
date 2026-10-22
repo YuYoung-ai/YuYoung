@@ -1,0 +1,17 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const client=fs.readFileSync(new URL('../js/baz-inspection-qr.js',import.meta.url),'utf8'),html=fs.readFileSync(new URL('../inspection.html',import.meta.url),'utf8');
+const placementCode=client.slice(client.indexOf('function placements('),client.indexOf('root.BazInspectionQr='));
+const position=vm.runInNewContext(placementCode+';placements');
+const rect={x:550,y:1000,width:180,height:110,sheetWidth:794};
+const slots=position(rect,1191);assert.equal(slots.length,1);assert.equal(slots[0].page,0);assert.ok(Math.abs(slots[0].x-(8+550/794*194))<.000001);
+const step=Math.floor(281/194*1191),cross=position({...rect,y:step/1.5-50},1191);assert.equal(cross.length,2);assert.equal(cross[1].page,1);assert.ok(cross[1].y<8);
+const start=html.indexOf('window.BazInspectionQrBridge='),end=html.indexOf("for(const event of ['input','change','click'])",start),data={basic:{hospital:'테스트',actionDetail:'확인한 조치',hospitalName:'고객'},pay:'무상',signatures:{cs:'cs',hs:'hs'},customerQr:null};
+let saved=0,notices=0;const box={src:'',classList:{remove(){}}};
+const ctx=vm.createContext({window:{},collectFormData:()=>structuredClone(data),customerQrDocument:null,sigStore:{hs:'hs'},document:{getElementById:()=>box},saveCurrentTask(){saved++;},showToast(){notices++;}});
+vm.runInContext(html.slice(start,end),ctx);const bridge=ctx.window.BazInspectionQrBridge;
+ctx.customerQrDocument={contentKey:bridge.contentKey()};assert.equal(bridge.beforeGenerate(),true);assert.equal(saved,0);
+data.basic.actionDetail='서명 후 바꾼 조치';assert.equal(bridge.beforeGenerate(),false);assert.equal(ctx.sigStore.hs,null);assert.equal(ctx.customerQrDocument,null);assert.equal(saved,1);assert.equal(notices,1);
+assert.match(html,/customer-sign|customerQrBtn/);assert.match(fs.readFileSync(new URL('../customer-sign.html',import.meta.url),'utf8'),/no-referrer/);
+console.log('PASS: exact PDF placement and page crossing; changed content invalidates the prior customer signature; customer page avoids referrer leakage.');

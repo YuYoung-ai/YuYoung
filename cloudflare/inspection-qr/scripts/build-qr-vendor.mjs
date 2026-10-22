@@ -1,0 +1,12 @@
+import { createRequire } from 'node:module';
+import { readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+const require = createRequire(import.meta.url);
+const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
+const { build } = wranglerRequire('esbuild');
+const result = await build({ entryPoints: [require.resolve('qrcode/lib/browser.js')], bundle: true, minify: true, platform: 'browser', format: 'iife', globalName: 'BazQrEncoder', write: false });
+const license = await readFile(require.resolve('qrcode/license'), 'utf8');
+const qrRequire = createRequire(require.resolve('qrcode/package.json'));
+const dependencyLicense = await readFile(join(dirname(qrRequire.resolve('dijkstrajs/package.json')), 'LICENSE.md'), 'utf8');
+await writeFile(new URL('../../../js/vendor/qrcode-1.5.4.min.js', import.meta.url), '/*! qrcode 1.5.4 (MIT). See qrcode-LICENSE.txt */\n' + result.outputFiles[0].text);
+await writeFile(new URL('../../../js/vendor/qrcode-LICENSE.txt', import.meta.url), license+'\n\n--- dijkstrajs ---\n\n'+dependencyLicense);

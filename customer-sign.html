@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>점검 내역 확인 및 서명 · BAZ BIOMEDIC</title>
+  <link rel="stylesheet" href="css/inspection-qr.css?v=273">
+  <script src="js/baz-inspection-qr-config.js?v=273" defer></script>
+  <script src="js/baz-customer-sign.js?v=273" defer></script>
+</head>
+<body class="customer-sign">
+  <header class="qr-header"><strong>BAZ BIOMEDIC</strong><span>점검 내역 확인 및 서명</span></header>
+  <main class="qr-customer-main">
+    <section class="qr-card">
+      <h1 id="customerHeading">점검 내역을 확인해 주세요</h1>
+      <p id="customerStatus" role="status" aria-live="polite">문서를 확인하고 있습니다…</p>
+      <p id="customerTimer" class="qr-time"></p>
+      <p id="customerDocument" class="qr-muted"></p>
+      <button id="customerRetry" class="qr-button qr-secondary" hidden>다시 확인</button>
+    </section>
+    <section id="customerReview" class="qr-card" hidden>
+      <div class="qr-section-head"><h2>점검 내역서</h2><button id="reviewZoom" class="qr-button qr-secondary" aria-pressed="false">확대 보기</button></div>
+      <p class="qr-muted">본문과 첨부 사진을 모두 확인해 주세요. 확대하면 좌우로 이동할 수 있습니다.</p>
+      <div id="reviewPages" class="qr-review-pages"></div>
+      <div id="reviewPhotos"></div>
+    </section>
+    <section id="customerSigning" class="qr-card" hidden>
+      <h2>병원 담당자 확인</h2>
+      <label for="customerName">성함</label>
+      <input id="customerName" type="text" maxlength="30" autocomplete="name" placeholder="서명하시는 분의 성함">
+      <label class="qr-check"><input id="customerConsent" type="checkbox"><span>위 점검 내역과 조치 내용을 확인했습니다.</span></label>
+      <label for="customerSignature">서명</label>
+      <canvas id="customerSignature" width="900" height="480" aria-label="손가락으로 서명하는 영역"></canvas>
+      <button id="clearSignature" class="qr-button qr-secondary">서명 지우기</button>
+      <p class="qr-muted">서명을 완료하면 확인한 내역서의 병원 담당자 칸에 반영됩니다.</p>
+      <button id="submitSignature" class="qr-button qr-primary">서명 완료 및 PDF 준비</button>
+    </section>
+    <section id="customerDownload" class="qr-card" hidden>
+      <h2>서명된 내역서가 준비되었습니다</h2>
+      <p>아래 버튼으로 PDF를 휴대폰에 저장해 주세요.</p>
+      <button id="downloadSignedPdf" class="qr-button qr-primary">서명된 PDF 다운로드</button>
+      <p class="qr-muted">링크가 만료된 후에도 내려받은 PDF는 유지됩니다.</p>
+    </section>
+  </main>
+</body>
+</html>

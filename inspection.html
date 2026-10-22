@@ -11,6 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BAZ CS">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="css/inspection-qr.css?v=273">
 
 <style>
   :root{
@@ -551,6 +552,7 @@
       </div>
     </div>
 
+    <button type="button" class="btn btn-customer-qr" id="customerQrBtn" data-step="4">고객 휴대폰으로 확인·서명 (QR)</button>
     <!-- 수기 작성용 빈 양식 PDF -->
     <button type="button" class="btn btn-secondary btn-blank" id="blankPdfBtn" data-step="4">🖨 수기 작성용 PDF (빈 양식)</button>
   </div>
@@ -1275,7 +1277,7 @@ function validate(opts){
 const BASIC_IDS = ['receiveDate','receiver','product','serialNo','subscription','version','hospital',
   'asCat','asSub','asSubCustom','actionDetail','recommend','inspectDate','nextDate','replacedPart','cost','csName','hospitalName'];
 
-let handoverReference=null,uploadedPdfDocument=null;
+let handoverReference=null,uploadedPdfDocument=null,customerQrDocument=null;
 function collectFormData(){
   const basic={};
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
@@ -1284,6 +1286,7 @@ function collectFormData(){
     pdfFormat: pdfFormat(),
     handover:handoverReference,
     pdfDocument:uploadedPdfDocument,
+    customerQr:customerQrDocument,
     pay: state.pay,
     types: [...state.types],
     results: {...state.results},
@@ -1299,6 +1302,7 @@ function applyFormData(d){
   hospitalAutocomplete.reset();partAutocomplete.reset();
   handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:''}:null;
   uploadedPdfDocument=d.pdfDocument||null;
+  customerQrDocument=d.customerQr||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
   syncPdfFormat();
   // 기본 입력
@@ -1885,7 +1889,7 @@ function buildSheetHTML(opts){
   const typeChk=(x)=> (!blank && state.types.has(x)) ? '■' : '□';
 
   const csSigImg=blank || simplified ? '' : csSig.dataURL();
-  const hsSigImg=blank || simplified ? '' : hsSig.dataURL();
+  const hsSigImg=blank || simplified || opts?.customerQr ? '' : hsSig.dataURL();
 
   return `
   <div style="width:794px;padding:32px 30px;font-family:'Noto Sans KR',sans-serif;color:#1a1a2e;background:#fff;">
@@ -1971,7 +1975,7 @@ function buildSheetHTML(opts){
                 ${csSigImg?`<img src="${csSigImg}" style="max-height:92px;max-width:90%;">`:''}
               </td>
               <td style="padding:4px;text-align:center;height:110px;vertical-align:middle;">
-                <div style="font-size:11px;color:#333;">${esc(bv('hospitalName'))||''}</div>
+                ${opts?.customerQr?'<div data-qr-signature-slot style="height:110px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#999;">고객 휴대폰 서명 대기</div>':`<div style="font-size:11px;color:#333;">${esc(bv('hospitalName'))||''}</div>`}
                 ${hsSigImg?`<img src="${hsSigImg}" style="max-height:92px;max-width:90%;">`:''}
               </td>
             </tr>
@@ -1986,13 +1990,18 @@ function buildSheetHTML(opts){
 
 // ===== PDF 생성 헬퍼 =====
 // HTML 문자열을 오프스크린 시트에 렌더 후 html2canvas 캔버스로 변환 (메모리 정리 포함)
-async function renderSheetCanvas(html){
+async function renderSheetCanvas(html,onPlacement){
   const sheet=els.pdfSheet;
   sheet.innerHTML=html;
   const target=sheet.firstElementChild;
   try{
   // Bound stalled image loads as well as explicit errors, then release the sheet.
   await window.BazInspectionPdf.waitImages(target.querySelectorAll('img'));
+  const slot=target.querySelector('[data-qr-signature-slot]');
+  if(slot&&onPlacement){
+    const outer=target.getBoundingClientRect(),rect=slot.getBoundingClientRect();
+    onPlacement({x:rect.left-outer.left,y:rect.top-outer.top,width:rect.width,height:rect.height,sheetWidth:outer.width});
+  }
   // html2canvas는 object-fit을 지원하지 않으므로 실제 비율로 너비·높이를 지정한다.
   target.querySelectorAll('img[data-pdf-photo]').forEach(img=>{
     const scale=Math.min(img.parentElement.clientWidth/img.naturalWidth,img.parentElement.clientHeight/img.naturalHeight);
@@ -2035,6 +2044,8 @@ async function generatePDF(arg){
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
   const preview = !!opts.preview;
   const blank = !!opts.blank;
+  const qrDraft=!!opts.qrDraft;
+  if(!blank&&window.BazInspectionQrBridge?.beforeGenerate&&!window.BazInspectionQrBridge.beforeGenerate())return;
   const simplified=pdfFormat()==='simplified';
   if(!blank)fillInspectionSales();
   if(!blank && !validate({simplified})) return;
@@ -2053,15 +2064,29 @@ async function generatePDF(arg){
     const pad=(n)=>String(n).padStart(2,'0');
     const hhmm=pad(now.getHours())+pad(now.getMinutes());
     const ymd=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
-    const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}`;
+    const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}${qrDraft?'-'+crypto.randomUUID().slice(0,8):''}`;
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-    const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt});
+    const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft});
     await step('PDF 도구·글꼴 준비','pdf_libraries',()=>window.BazInspectionPdf.libraries());
-    const uploadContext=!preview&&!blank?await step('AS 처리 현황 연결 확인','pdf_source',()=>pdfPublisher.prepare({hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',pdfFormat:simplified?'simplified':'standard'})):null;
-    const mainPages=await step('본문·서명 페이지 생성','pdf_body',()=>window.BazInspectionPdf.body(mainHTML,renderSheetCanvas));
+    const uploadContext=!preview&&!blank&&!qrDraft?await step('AS 처리 현황 연결 확인','pdf_source',()=>pdfPublisher.prepare({hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',pdfFormat:simplified?'simplified':'standard'})):null;
+    let qrSlots=[];
+    const mainPages=await step('본문·서명 페이지 생성','pdf_body',async()=>{
+      if(!qrDraft)return window.BazInspectionPdf.body(mainHTML,renderSheetCanvas);
+      let position;const canvas=await renderSheetCanvas(mainHTML,p=>{position=p;});
+      try{
+        if(!position)throw new Error('기본 양식에서만 고객 QR 서명을 사용할 수 있습니다.');
+        qrSlots=window.BazInspectionQr.placements(position,canvas.width);
+        return window.BazInspectionPdf.bodyPages(canvas);
+      }finally{canvas.width=canvas.height=0;}
+    });
     const generated=await step('사진·최종 파일 생성','pdf_assemble',()=>window.BazInspectionPdf.assemble(mainPages,photoSnapshot,{logo:_logoDataUrl,docNo,genAt,footers:addPdfFooters,progress:showLoading}),r=>({count:photoSnapshot.length,bytes:r.blob.size,pass:r.passes}));
     const pdf=generated.pdf;
+    if(qrDraft){
+      if(generated.blob.size>6.5*1024*1024)throw new Error('서명 반영 여유를 위해 QR 문서는 6.5MB 이하로 준비해 주세요. 사진 크기나 개수를 줄여 주세요.');
+      hideLoading();
+      return {blob:generated.blob,filename,documentNo:docNo,placements:qrSlots,review:{hospital:captured.basic.hospital,serial:captured.basic.serialNo,pages:mainPages.map(p=>p.data),photos:photoSnapshot},taskId,captured};
+    }
 
     // 파일명
     if(blank){
@@ -2179,7 +2204,43 @@ masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 �
 
 // 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
 flushSyncQueue();
+// QR 문서는 발급 시점의 PDF로 고정한다. 서명된 원본을 기존 Drive 저장 흐름에 전달한다.
+window.BazInspectionQrBridge={
+  draft:async()=>{if(pdfFormat()==='simplified'){showToast('담당자 서명이 포함된 기본 양식을 선택하세요.');return null;}if(!saveCurrentTask())throw new Error('현재 작업을 먼저 저장해 주세요.');return generatePDF({qrDraft:true});},
+  currentId:()=>_currentTaskId,
+  waiting:()=>saveCurrentTask({status:'waiting_signature'}),
+  fingerprint:(data)=>{const d={...(data||collectFormData())};delete d.savedAt;delete d.pdfDocument;return JSON.stringify(d);},
+  contentKey(data){const d={...(data||collectFormData())};for(const k of ['savedAt','pdfDocument','customerQr','handover'])delete d[k];return JSON.stringify(d);},
+  beforeGenerate(){
+    if(!customerQrDocument||customerQrDocument.contentKey===this.contentKey())return true;
+    customerQrDocument=null;sigStore.hs=null;document.getElementById('hsSigPreview').src='';document.getElementById('hsSigBox').classList.remove('has-sign');
+    saveCurrentTask({status:'draft'});showToast('내용 변경으로 고객 서명이 해제되었습니다. 다시 확인·서명받아 주세요.');return false;
+  },
+  async received(blob,meta,taskId,expectedFingerprint){
+    const task=getTask(taskId);if(!task)throw new Error('원본 작업을 작업 목록에서 불러온 뒤 다시 저장하세요.');
+    const currentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(window.BazInspectionQrBridge.fingerprint(task.data)))),x=>x.toString(16).padStart(2,'0')).join('');
+    if(task.data.customerQr?.id!==meta.id&&currentHash!==expectedFingerprint)throw new Error('QR 발급 후 원본 작업이 변경되었습니다. 고객이 서명한 문서는 QR 서버에 보관되어 있습니다. 원본 작업을 확인해 주세요.');
+    const b=task.data.basic,ref=task.data.handover||{};
+    const context=await pdfPublisher.prepare({hospital:b.hospital,date:b.inspectDate,sn:b.serialNo,recordId:ref.recordId||'',requestId:ref.requestId||'',taskId,pdfFormat:'standard'});
+    task.status='completed';task.documentNo=meta.documentNo;task.updatedAt=Date.now();
+    task.data.basic.hospitalName=meta.signer;task.data.customerQr={id:meta.id,signedAt:meta.signedAt,documentNo:meta.documentNo};
+    task.data.signatures.hs=meta.signature;
+    task.data.customerQr.contentKey=this.contentKey(task.data);
+    if(!persistTasks(loadTasks().map(t=>t.id===taskId?task:t)))throw new Error('기기 저장 공간을 확인한 뒤 다시 시도하세요.');
+    if(_currentTaskId===taskId){document.getElementById('hospitalName').value=meta.signer;sigStore.hs=meta.signature;document.getElementById('hsSigPreview').src=meta.signature;document.getElementById('hsSigBox').classList.add('has-sign');customerQrDocument=task.data.customerQr;exitSignMode();updateTaskStatusBar();}
+    const name=meta.filename;
+    window.BazInspectionShare.capture(blob,name,()=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);});
+    document.getElementById('doneFname').textContent=name;document.getElementById('doneOverlay').classList.add('show');
+    pdfPublisher.publish(blob,name,context);
+  }
+};
+for(const event of ['input','change','click'])document.querySelector('.wrap').addEventListener(event,()=>{
+  if(customerQrDocument)queueMicrotask(()=>window.BazInspectionQrBridge.beforeGenerate());
+});
 </script>
+<script src="js/baz-inspection-qr-config.js?v=273"></script>
+<script src="js/vendor/qrcode-1.5.4.min.js"></script>
+<script src="js/baz-inspection-qr.js?v=273"></script>
 <script>
 // 오프라인 사용을 위한 서비스 워커 등록
 if ('serviceWorker' in navigator) {
