@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "baz-inspection-qr",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-22",
+  "workers_dev": true,
+  "vars": {
+    "AUTH_URL": "https://yuyoung-production.coaptation.workers.dev",
+    "ALLOWED_ORIGINS": "https://yuyoung-ai.github.io",
+    "CUSTOMER_PAGE": "https://yuyoung-ai.github.io/YuYoung/customer-sign.html",
+    "RETENTION_DAYS": "30"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "baz-inspection-qr",
+    "database_id": "13d6f212-1fb3-4acc-9768-fabb4a7c6b96",
+    "migrations_dir": "migrations"
+  }],
+  "triggers": { "crons": ["17 * * * *"] },
+  "observability": { "enabled": false }
+}

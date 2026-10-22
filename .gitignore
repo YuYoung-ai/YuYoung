@@ -9,3 +9,5 @@
 
 # 로컬 테스트 의존성(exceljs 등) — 배포 대상 아님
 node_modules/
+.wrangler/
+.dev.vars
