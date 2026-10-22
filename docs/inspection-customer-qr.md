@@ -24,6 +24,8 @@ QR을 취소하면 해당 고객 링크는 즉시 차단된다. 내용을 수정
 
 ## Cloudflare 구성
 
+`global_fetch_strictly_public` 호환성 플래그로 같은 계정의 기존 로그인 Worker를 공개 인증 경로로 호출한다. 별도의 Worker 미리보기 URL은 비활성화한다.
+
 기존 `yuyoung-production` 로그인·업무 Worker는 수정하지 않는다.
 
 - 전용 Worker: `baz-inspection-qr`

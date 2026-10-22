@@ -54,6 +54,7 @@ async function staff(req, env) {
   let answer;
   try {
     const response = await fetch(env.AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'verify', token }), signal: AbortSignal.timeout(10000) });
+    if(response.status===401||response.status===403)fail(401,'로그인이 만료되었습니다. 다시 로그인하세요.');
     if (!response.ok) fail(503, '로그인 서버 연결을 확인하세요.'); answer = await response.json();
   } catch (e) { if (e instanceof HttpError) throw e; fail(503, '로그인 확인이 지연되고 있습니다.'); }
   if (!answer.ok || !(answer.level >= 1) || !answer.name) fail(401, '로그인이 만료되었습니다. 다시 로그인하세요.');

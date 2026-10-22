@@ -3,7 +3,9 @@
   "name": "baz-inspection-qr",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-22",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "workers_dev": true,
+  "preview_urls": false,
   "vars": {
     "AUTH_URL": "https://yuyoung-production.coaptation.workers.dev",
     "ALLOWED_ORIGINS": "https://yuyoung-ai.github.io",
