@@ -34,4 +34,15 @@ const d=fixture({confirm:async()=>({applicable:false})});await d.app.publish(blo
 // A saved file's attachment failure remains durable; restore never sends bytes.
 const e=fixture({confirm:async()=>{throw new Error('bridge delayed');}});await e.app.publish(blob,'saved.pdf',await e.app.prepare(context));assert.equal(e.nodes.pdfUploadRetry.hidden,false);assert.ok([...jobs.values()][0].saved);
 const f=fixture();assert.equal(await f.app.restore(context),true);await f.nodes.pdfUploadRetry.click();assert.equal(f.calls.length,0);assert.equal(f.stages.at(-1).comment,'done');
+// A warm-up/partial success response is not source verification. It must never
+// transmit PDF bytes until a subsequent response supplies the real record ID.
+for(const missingId of [undefined,null,'', '   ',42]){
+ const g=fixture({fetch:async()=>({json:async()=>({success:true,recordId:missingId,ver:'3.9.0'})})});
+ await g.app.publish(blob,'preserved.pdf',await g.app.prepare(context));
+ assert.equal(g.nodes.pdfUploadRetry.hidden,false);assert.equal(g.calls.filter(c=>c.action==='inspection_pdf_upload').length,0);
+ const old=[...jobs.values()][0];assert.equal(old.blob.size,blob.size);const uploadId=old.uploadId;
+ old.context.sourcePreparationError='AS 처리 현황의 기록 ID를 확인하지 못했습니다.';old.preparationRetryable=false;jobs.set(old.key,old);
+ const h=fixture();assert.equal(await h.app.restore(context),true);await h.nodes.pdfUploadRetry.click();
+ const sent=h.calls.find(c=>c.action==='inspection_pdf_upload');assert.ok(sent);assert.equal(sent.uploadId,uploadId);assert.equal(Buffer.from(sent.base64,'base64').toString(),'%PDF-synthetic');assert.equal(jobs.size,0);
+}
 console.log('PDF delivery recovery: missing route ID, Safari UUID fallback, durable same-file receipt, owner isolation, interrupted upload, abort-ignoring transport, saved-file-only recovery and unlinked status passed');
