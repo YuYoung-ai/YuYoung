@@ -10,6 +10,15 @@ const bearer=r=>(r.headers.get('Authorization')||'').replace(/^Bearer /,'');
 export const digest=async v=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))),x=>x.toString(16).padStart(2,'0')).join('');
 const code=()=>Array.from(crypto.getRandomValues(new Uint8Array(24)),x=>x.toString(16).padStart(2,'0')).join('');
 const salesAuth=createSalesAuth({sql,fail,json,digest,code});
+const directory=async env=>(await all(sql(env,'SELECT name FROM survey_directory ORDER BY name'))).map(h=>h.name);
+async function saveHospital(env,p,actor,now){
+ const input=typeof p.name==='string'?p.name.normalize('NFKC').trim().replace(/\s+/g,' '):'';
+ if(!input||input.length>100)fail(400,'입점병원 목록에서 병원을 검색·선택해 주세요.');
+ const key=input.toLowerCase(),name=(await directory(env)).find(n=>n.toLowerCase()===key);
+ if(!name)fail(400,'입점병원 목록에 없는 병원입니다. 목록에서 선택하거나 CS팀에 확인해 주세요.');
+ await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,actor).run();
+ return json({success:true,hospital:await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first()});
+}
 async function body(req){
  if(Number(req.headers.get('Content-Length')||0)>262144)fail(413,'요청이 너무 큽니다.');
  const reader=req.body?.getReader();if(!reader)fail(400,'요청 내용이 없습니다.');let n=0,chunks=[];
@@ -78,16 +87,10 @@ async function staffRoute(req,env,action){
  if(action==='sales-password')return salesAuth.setPassword(env,p,audit(env,who.actor,action,'sales'));
  if(action==='sales-state')return salesAuth.state(env,p,audit(env,who.actor,action,'sales'));
  if(action==='bootstrap')return json({success:true,level:who.level,campaigns:(await all(sql(env,'SELECT * FROM survey_campaigns ORDER BY created_at DESC'))).map(publicCampaign),hospitals:await all(sql(env,'SELECT id,name,code,active FROM survey_hospitals ORDER BY name LIMIT 5000'))});
- if(action==='directory'){
-  // Reuse the authenticated operational directory. Return names only; never
-  // forward work records, contacts, engineer references or roster information.
-  try{const r=await fetch(env.AUTH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'work_bootstrap',token:bearer(req)}),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();const p=await r.json();if(!p.success||!Array.isArray(p.hospitals))throw Error();const names=[...new Set(p.hospitals.map(h=>typeof h.name==='string'?h.name.trim():'').filter(n=>n&&n.length<=100))].sort((a,b)=>a.localeCompare(b,'ko'));await sql(env,'INSERT INTO survey_directory(name,updated_at) SELECT value,? FROM json_each(?) WHERE 1 ON CONFLICT(name) DO UPDATE SET updated_at=excluded.updated_at',now,JSON.stringify(names)).run();return json({success:true,names});}catch{fail(503,'기존 병원 목록을 연결하지 못했습니다. 병원명을 직접 입력할 수 있습니다.');}
- }
- if(action==='hospital-save'){
-  const name=typeof p.name==='string'?p.name.normalize('NFKC').trim().replace(/\s+/g,' '):'';if(!name||name.length>100)fail(400,'병원명을 100자 이내로 입력해 주세요.');const key=name.toLowerCase();
-  await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,who.actor).run();
-  const h=await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first();return json({success:true,hospital:h});
- }
+ // Only the separately imported survey directory supplies issuer choices.
+ // Historical hospitals remain available to results and existing customer links.
+ if(action==='directory')return json({success:true,names:await directory(env)});
+ if(action==='hospital-save')return saveHospital(env,p,who.actor,now);
  if(action==='hospital-state'){
   if(who.level<2)fail(403,'관리자 권한이 필요합니다.');const h=await sql(env,'SELECT id FROM survey_hospitals WHERE id=?',p.hospitalId).first();if(!h)fail(404,'병원을 찾을 수 없습니다.');if(typeof p.active!=='boolean')fail(400,'상태를 확인하세요.');await env.DB.batch([sql(env,'UPDATE survey_hospitals SET active=? WHERE id=?',p.active?1:0,h.id),audit(env,who.actor,'hospital-state',h.id)]);return json({success:true});
  }
@@ -117,12 +120,10 @@ async function salesRoute(req,env,action){
  }
  const who=await salesAuth.session(req,env);if(action==='logout')return salesAuth.logout(req,env);const p=await body(req),now=Date.now();
  if(action==='bootstrap'){
-  const cs=await all(sql(env,"SELECT * FROM survey_campaigns WHERE state='open'"));const names=await all(sql(env,'SELECT name FROM survey_directory UNION SELECT name FROM survey_hospitals WHERE active=1 ORDER BY name LIMIT 5000'));
-  return json({success:true,names:names.map(h=>h.name),campaigns:cs.map(c=>({id:c.id,title:c.title,state:c.state,startsAt:c.starts_at,endsAt:c.ends_at,questionCount:JSON.parse(c.definition).questions.length}))});
+  const cs=await all(sql(env,"SELECT * FROM survey_campaigns WHERE state='open'"));
+  return json({success:true,names:await directory(env),campaigns:cs.map(c=>({id:c.id,title:c.title,state:c.state,startsAt:c.starts_at,endsAt:c.ends_at,questionCount:JSON.parse(c.definition).questions.length}))});
  }
- if(action==='hospital-save'){
-  const name=typeof p.name==='string'?p.name.normalize('NFKC').trim().replace(/\s+/g,' '):'';if(!name||name.length>100)fail(400,'병원명을 100자 이내로 입력해 주세요.');const key=name.toLowerCase();await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,who.actor).run();const h=await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first();return json({success:true,hospital:h});
- }
+ if(action==='hospital-save')return saveHospital(env,p,who.actor,now);
  if(action==='delivery'){
   const c=await campaign(env,p.campaignId),h=await sql(env,'SELECT id,active FROM survey_hospitals WHERE id=?',String(p.hospitalId||'')).first();if(!h||!h.active)fail(404,'사용 가능한 병원을 선택하세요.');if(!isOpen(c,now))fail(409,'접수 중인 조사를 선택해 주세요.');if(!['sms','onsite','other'].includes(p.channel))fail(400,'전달 방식을 선택해 주세요.');await sql(env,'INSERT INTO survey_deliveries VALUES(?,?,?,?,?) ON CONFLICT(campaign_id,hospital_id) DO UPDATE SET channel=excluded.channel,delivered_at=excluded.delivered_at,created_by=excluded.created_by',c.id,h.id,p.channel,now,who.actor).run();return json({success:true});
  }
