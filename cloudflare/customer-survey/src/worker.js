@@ -70,6 +70,11 @@ async function results(env,p,c,exporting){
 async function staffRoute(req,env,action){
  const who=await staff(req,env,['campaign-create','campaign-update','results','export'].includes(action)?2:1),p=await body(req),now=Date.now();
  if(action==='bootstrap')return json({success:true,level:who.level,campaigns:(await all(sql(env,'SELECT * FROM survey_campaigns ORDER BY created_at DESC'))).map(publicCampaign),hospitals:await all(sql(env,'SELECT id,name,code,active FROM survey_hospitals ORDER BY name LIMIT 5000'))});
+ if(action==='directory'){
+  // Reuse the authenticated operational directory. Return names only; never
+  // forward work records, contacts, engineer references or roster information.
+  try{const r=await fetch(env.AUTH_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'work_bootstrap',token:bearer(req)}),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();const p=await r.json();if(!p.success||!Array.isArray(p.hospitals))throw Error();const names=[...new Set(p.hospitals.map(h=>typeof h.name==='string'?h.name.trim():'').filter(n=>n&&n.length<=100))].sort((a,b)=>a.localeCompare(b,'ko'));return json({success:true,names});}catch{fail(503,'기존 병원 목록을 연결하지 못했습니다. 병원명을 직접 입력할 수 있습니다.');}
+ }
  if(action==='hospital-save'){
   const name=typeof p.name==='string'?p.name.normalize('NFKC').trim().replace(/\s+/g,' '):'';if(!name||name.length>100)fail(400,'병원명을 100자 이내로 입력해 주세요.');const key=name.toLowerCase();
   await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,who.actor).run();

@@ -23,7 +23,14 @@ function renderLists(){
  if(data.level<2&&activeTab!=='issue')showTab('issue');
 }
 async function bootstrap(){data=await api('/staff/bootstrap',{},true);renderLists();notice(data.campaigns.some(c=>c.state==='open')?'접수 중인 조사가 있습니다. 병원별 링크를 만들어 전달해 주세요.':data.level>=2?'접수 중인 조사가 없습니다. 조사 관리에서 초안을 만들고 접수를 시작해 주세요.':'접수 중인 조사가 없습니다. 관리자에게 조사 개설을 요청해 주세요.');}
-async function loadHospitalNames(){try{const url=window.BazAuth.withToken(window.BazSurveyConfig.hospitalDb+'?action=hospdbrich');const r=await fetch(url,{signal:AbortSignal.timeout(15000),cache:'no-store'});const p=await r.json();if(!p.success||!Array.isArray(p.data))throw Error();const names=new Set([...data.hospitals.map(h=>h.name),...p.data.map(h=>h.name).filter(n=>typeof n==='string'&&n.trim())]);$('#hospital-list').replaceChildren(...[...names].sort((a,b)=>a.localeCompare(b,'ko')).map(n=>option(n,n)));$('#hospital-help').textContent='기존 병원 목록을 불러왔습니다. 목록에 없으면 직접 입력할 수 있습니다.';}catch{$('#hospital-help').textContent='기존 병원 목록을 연결하지 못했습니다. 병원명을 직접 입력해도 사용할 수 있습니다.';}}
+async function loadHospitalNames(){
+ $('#hospital-help').textContent='기존 병원 목록을 확인하고 있습니다. 직접 입력도 가능합니다.';
+ try{
+  let directory;try{const p=await api('/staff/directory',{},true);if(!Array.isArray(p.names))throw Error();directory=p.names;}
+  catch{const url=window.BazAuth.withToken(window.BazSurveyConfig.hospitalDb+'?action=hospdbrich');const r=await fetch(url,{signal:AbortSignal.timeout(15000),cache:'no-store'});const p=await r.json();if(!p.success||!Array.isArray(p.data))throw Error();directory=p.data.map(h=>h.name);}
+  const names=new Set([...data.hospitals.map(h=>h.name),...directory.filter(n=>typeof n==='string'&&n.trim())]);$('#hospital-list').replaceChildren(...[...names].sort((a,b)=>a.localeCompare(b,'ko')).map(n=>option(n,n)));$('#hospital-help').textContent='기존 병원 목록을 불러왔습니다. 목록에 없으면 직접 입력할 수 있습니다.';
+ }catch{$('#hospital-help').textContent='기존 병원 목록을 연결하지 못했습니다. 병원명을 직접 입력해도 사용할 수 있습니다.';}
+}
 function sms(){return `[BAZ 고객만족도 조사]\n${currentHospital.name} 원장님, 안녕하세요.\n더 나은 제품과 서비스를 위해 원장님의 의견을 듣고자 합니다.\n약 2분이면 참여하실 수 있습니다.\n아래 링크에서 설문에 참여해 주세요.\n${currentLink}\n참여해 주셔서 감사합니다.`;}
 async function copy(text){await navigator.clipboard.writeText(text);notice('복사했습니다.');}
 function download(blob,name){const url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
