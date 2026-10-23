@@ -315,7 +315,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=271"><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-inspection-workflow.js?v=272"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=282"></script><script src="js/baz-inspection-workflow.js?v=282"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 </head>
 <body>
@@ -633,7 +633,7 @@
 <div id="pdfSheet"></div>
 
 <script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=257"></script><script src="js/baz-inspection-pdf.js?v=257"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-outbox.js?v=271"></script><script src="js/baz-inspection-upload.js?v=272"></script>
+<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=272"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1278,9 +1278,17 @@ const BASIC_IDS = ['receiveDate','receiver','product','serialNo','subscription',
   'asCat','asSub','asSubCustom','actionDetail','recommend','inspectDate','nextDate','replacedPart','cost','csName','hospitalName'];
 
 let handoverReference=null,uploadedPdfDocument=null,customerQrDocument=null;
+function checkInspectionIdentity(basic){
+  if(!handoverReference?.identity||window.BazWorkFlow.sameInspectionIdentity(basic,handoverReference.identity))return;
+  handoverReference=null;uploadedPdfDocument=null;customerQrDocument=null;
+  window.BazInspectionPdf.reset();
+  history.replaceState(null,'',location.pathname);
+  if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(null,'병원·처리일·S/N 변경으로 이전 기록 연결을 해제했습니다. Handover 기록 연결 변경에서 현재 기록을 선택하세요.');
+}
 function collectFormData(){
   const basic={};
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
+  checkInspectionIdentity(basic);
   return {
     basic,
     pdfFormat: pdfFormat(),
@@ -1300,7 +1308,7 @@ function collectFormData(){
 function applyFormData(d){
   if(!d) return;
   hospitalAutocomplete.reset();partAutocomplete.reset();
-  handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:''}:null;
+  handoverReference=d.handover&&d.handover.recordId?{recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:'',identity:d.handover.identity||{hospital:d.basic?.hospital||'',inspectDate:d.basic?.inspectDate||'',serialNo:d.basic?.serialNo||''}}:null;
   uploadedPdfDocument=d.pdfDocument||null;
   customerQrDocument=d.customerQr||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
@@ -1486,6 +1494,7 @@ function duplicateTask(id){
   const task=getTask(id); if(!task) return;
   const now=Date.now();
   const copy=JSON.parse(JSON.stringify(task));
+  copy.data.handover=null;copy.data.pdfDocument=null;copy.data.customerQr=null;
   copy.id=genTaskId(); copy.createdAt=now; copy.updatedAt=now; copy.status='draft'; copy.documentNo='';
   const tasks=loadTasks(); tasks.push(copy); persistTasks(tasks);
   renderTaskList(); showToast('작업 복제됨');
@@ -1556,14 +1565,15 @@ function cloudUrl(){
 }
 function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
-const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})()),prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연결을 확인할 수 없습니다. 다시 열어 주세요.');return window.BazInspectionFlow.prepareContext(context);},confirmAttachment(saved,context){return window.BazInspectionFlow.confirmAttachment(saved,context);},onProgress(stages){if(window.BazInspectionFlow)window.BazInspectionFlow.progress(stages);},onRecovered(job){
+const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})(),window.BazWorkFlow.sameInspectionIdentity),prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연결을 확인할 수 없습니다. 다시 열어 주세요.');return window.BazInspectionFlow.prepareContext(context);},confirmAttachment(saved,context){return window.BazInspectionFlow.confirmAttachment(saved,context);},onProgress(stages){if(window.BazInspectionFlow)window.BazInspectionFlow.progress(stages);},onRecovered(job){
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
   const size=job.blob?.size||job.saved?.pdf?.bytes||0;document.getElementById('doneFsize').textContent=(size/1000000).toFixed(1)+' MB';
   if(job.blob)window.BazInspectionShare.capture(job.blob,job.filename,()=>{const href=URL.createObjectURL(job.blob),a=document.createElement('a');a.href=href;a.download=job.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);});
 },onSaved(saved,context){
   const tasks=loadTasks(),task=tasks.find(t=>t.id===context.taskId);
-  if(task){task.data.handover={...(task.data.handover||{}),recordId:saved.recordId,requestId:context.requestId||task.data.handover?.requestId||''};task.data.pdfDocument=saved.pdf;if(!persistTasks(tasks))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
-  if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId,requestId:context.requestId||handoverReference?.requestId||''};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
+  const identity={hospital:context.hospital,inspectDate:context.date,serialNo:context.sn||''};
+  if(task){task.data.handover={recordId:saved.recordId,requestId:context.requestId||'',identity};task.data.pdfDocument=saved.pdf;if(!persistTasks(tasks))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
+  if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId,requestId:context.requestId||'',identity};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
 }});
 
 function cloudPost(payload){
@@ -2186,14 +2196,15 @@ masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 �
 // 현장 처리(handover.html) → 점검 내역서 이어쓰기 프리필 소비
 (function consumePrefill(){
   if(window.BazWorkFlow.route(location.search)?.recordId)return;
+  if(new URLSearchParams(location.search).get('prefill')!=='1')return;
   const PREFILL_KEY='insp_prefill_v1';
   let raw=null; try{ raw=localStorage.getItem(PREFILL_KEY); }catch(e){}
   if(!raw) return;
-  try{ localStorage.removeItem(PREFILL_KEY); }catch(e){}      // 파싱 전에 제거 — 재적용/오염 방지
   let p=null; try{ p=JSON.parse(raw); }catch(e){ return; }
   if(!p || p.v!==1 || !p.form) return;
   if(Date.now()-(p.createdAt||0) > 10*60*1000) return;        // 10분 지난 프리필은 무시
-  newTask();                                                  // 새 draft — 기존 작업은 목록에 보존
+  if(!newTask())return;                                       // 기존 작업 보관 실패 시 덮어쓰지 않는다
+  try{localStorage.removeItem(PREFILL_KEY);}catch(e){}
   applyFormData(Object.assign(
     { basic:{}, pay:'', types:[], results:{}, memos:{}, photos:[], signatures:{cs:null,hs:null} },
     p.form
@@ -2253,4 +2264,3 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
-

@@ -39,10 +39,16 @@ function inspectionPdfBasis_(source,format){
   names.forEach(function(name){fields[name]=inspectionPdfHash_(String(source[name]||'').replace(/\r\n?/g,'\n').trim());});
   var selected=format==='simplified'?'simplified':'standard',relevant={},printed=['hospitalName','date','sn','gubun','cat','type','part','cost','detail','result','remark'];
   if(selected==='standard')printed.push('engineer');printed.forEach(function(name){relevant[name]=fields[name];});
-  return {v:1,recordId:source.recordId,fields:fields,fingerprint:inspectionPdfHash_(JSON.stringify(relevant)),capturedAt:new Date().toISOString(),format:selected,template:1};
+  return {v:1,recordId:source.recordId,identity:{hospital:source.hospitalName,date:source.date,sn:source.sn||''},fields:fields,fingerprint:inspectionPdfHash_(JSON.stringify(relevant)),capturedAt:new Date().toISOString(),format:selected,template:1};
 }
 // The generated file is a fixed snapshot. Body edits never invalidate its upload.
-function inspectionPdfCheckBasis_(p,source){}
+function inspectionPdfCheckBasis_(p,source){
+  var basis=p.sourceBasis,captured=p.action==='inspection_pdf_upload'&&basis&&basis.v===1&&basis.recordId===source.recordId&&basis.identity;
+  var identity=captured||{hospital:source.hospitalName,date:source.date,sn:source.sn};
+  if(basis&&basis.recordId!==source.recordId||hwSourceName_(identity.hospital)!==hwSourceName_(p.hospital)||_issueDateNorm_(identity.date)!==_issueDateNorm_(p.date)||!inspectionPdfSerialMatch_(identity.sn,p.sn)||['A/S','점검'].indexOf(source.gubun)<0){
+    var error=new Error('내역서와 Handover의 병원·처리일·S/N 또는 기록 ID가 다릅니다. Handover 기록 연결 변경에서 원본을 선택하세요.');error.sourceConflict=true;throw error;
+  }
+}
 function inspectionPdfStored_(raw,strict){
   var value=pickH_(raw,[INSPECTION_PDF.META]);if(!value)return null;
   var p;try{p=JSON.parse(value);}catch(e){if(strict)throw new Error('PDF 정보 형식이 잘못되었습니다.');return null;}
@@ -68,7 +74,7 @@ function inspectionPdfRecord_(p){
     hit=matches[0];hwKvStableSource_(hit);
   }
   var s=hit.source;
-  if(!p.recordId&&(hwSourceName_(s.hospitalName)!==hwSourceName_(p.hospital)||s.date!==_issueDateNorm_(p.date)||!inspectionPdfSerialMatch_(s.sn,p.sn)||['A/S','점검'].indexOf(s.gubun)<0))throw new Error('내역서와 Handover의 병원·처리일·S/N이 다릅니다. 원본 기록을 확인하세요.');
+  inspectionPdfCheckBasis_(p,s);
   var link=colBy_(hdr,[INSPECTION_PDF.LINK]),meta=colBy_(hdr,[INSPECTION_PDF.META]);
   if(!link||!meta)throw new Error('PDF 열 초기화가 필요합니다. setupInspectionPdf를 실행하세요.');
   return {sheet:sh,row:hit.raw._row,linkCol:link,metaCol:meta,source:s,pdf:inspectionPdfStored_(hit.raw,true)};

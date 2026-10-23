@@ -174,7 +174,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 .ac-item[aria-selected="true"]{background:var(--teal-soft)}
 .ac-item:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=244"><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-handover-workflow.js?v=244"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-handover-workflow.js?v=282"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js?v=252"></script>
@@ -882,7 +882,8 @@ function setSaveState(state, info){
   else if(state===S.CHECKING){ title='기록 여부를 확인하는 중…'; sub='응답을 받지 못해 서버에 결과를 다시 물어보고 있습니다.'; }
   else if(state===S.SUCCESS){ cls='ok'; ic='✅'; title='시트에 기록되었습니다'+(info.row?' (행 '+info.row+')':'');
     sub=(info.warnings&&info.warnings.length) ? info.warnings.join('\n')
-      : '서버 저장을 확인했습니다.'; }
+      : '서버 저장을 확인했습니다.';
+    var savedId=info.recordId||SAVED_RECORD_ID;if(savedId)sub+='\nHandover 기록 ID: '+savedId; }
   else if(state===S.FAILED){ cls='err'; ic='❌'; title='기록되지 않았습니다';
     sub=(info.error||'')+'\n입력한 내용은 그대로 남아 있습니다 — 원인을 확인한 뒤 다시 [시트 기록]을 눌러 주세요.'; }
   else { cls='unknown'; ic='⚠️'; title='기록 여부를 확인하지 못했습니다';
@@ -901,15 +902,17 @@ function setSaveState(state, info){
   }else if(state===S.FAILED){
     act('📋 시트 미기록 내용 복사', '', function(){ copyText(true); });
   }else if(state===S.SUCCESS){
+    act('기록 ID 복사', '', function(){var id=SAVED_RECORD_ID;if(!id){toast('시트 기록 ID를 확인 중입니다.');return;}if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(id).then(function(){toast('Handover 기록 ID를 복사했습니다.');},function(){fallbackCopy(id,false);});else fallbackCopy(id,false);});
     act('🆕 새 기록 시작', '', function(){ startNewRecord(); });
   }
 }
 
 /* 저장 성공에서만 열리는 후속 기능 */
 function enableCopy(on){
+  on=!!on&&![BazHandover.SAVE.SAVING,BazHandover.SAVE.CHECKING,BazHandover.SAVE.UNKNOWN].includes(SAVE_STATE);
   var b=el('btnCopy'), c=el('btnCont');
   if(b){ b.disabled=!on; b.title = on ? '복사' : '시트 기록 후 복사할 수 있어요'; }
-  if(c){ c.disabled=!on||(window.BazHandoverFlow&&!window.BazHandoverFlow.canContinue()); c.title = on ? '점검 내역서 이어서 작성' : '시트 기록 후 이어서 작성할 수 있어요'; }
+  if(c){ c.disabled=!on||!SAVED_RECORD_ID; c.title = on ? '점검 내역서 이어서 작성' : '시트 기록 후 이어서 작성할 수 있어요'; }
 }
 
 /* 저장 후 업무 필드가 바뀌면 "저장 후 변경됨" — 복사·이어쓰기를 다시 잠근다 */
@@ -917,6 +920,7 @@ function refreshDirty(){
   if(!SAVED_SNAPSHOT){ document.body.classList.remove('is-dirty'); return false; }
   var dirty=BazHandover.isDirty(SAVED_SNAPSHOT, readForm());
   document.body.classList.toggle('is-dirty', dirty);
+  enableCopy(!dirty);
   if(dirty){
     enableCopy(false);
     if(SAVE_STATE===BazHandover.SAVE.SUCCESS){
@@ -932,7 +936,7 @@ function refreshDirty(){
 function applySaveResult(res){
   var S=BazHandover.SAVE;
   if(res.state===S.SUCCESS){
-    setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings});
+    setSaveState(S.SUCCESS, {row:res.row, warnings:res.warnings,recordId:(LAST_SAVE_PAYLOAD&&LAST_SAVE_PAYLOAD.reqId)||LAST_REQ_ID||SAVED_RECORD_ID});
     var current=readForm();
     var sent=LAST_SENT_SNAPSHOT||BazHandover.snapshot(current);
     SAVED_SNAPSHOT=sent;
@@ -1221,7 +1225,7 @@ function syncSkillButtons(){
 var PREFILL_KEY='insp_prefill_v1';
 function contToInspection(){
   if(!SAVED_SNAPSHOT||BazHandover.isDirty(SAVED_SNAPSHOT,readForm())){toast('현재 내용을 먼저 시트에 기록하세요.');return;}
-  if(window.BazHandoverFlow){if(!window.BazHandoverFlow.canContinue()){toast('해당 접수 연결을 먼저 확인하세요.');return;}location.href=window.BazWorkFlow.url('inspection.html',window.BazHandoverFlow.context().requestId,SAVED_RECORD_ID);return;}
+  if(!SAVED_RECORD_ID){toast('시트 기록 ID를 확인한 뒤 다시 시도하세요.');return;}
   if(!val('hosp')){ toast('병원명을 입력하세요'); return; }
   var b=document.getElementById('btnCont'); if(b) b.disabled=true;   /* 이중 클릭 방지 */
   var demo = val('eqKind')==='데모 장비';
@@ -1233,7 +1237,7 @@ function contToInspection(){
   var snv = snVal();
   var rec = HOSPITAL_DB.filter(function(h){ return h.n===val('hosp'); })[0];
   var payload = { v:1, createdAt:Date.now(), source:'handover', form:{
-    handover:{recordId:SAVED_RECORD_ID},
+    handover:{recordId:SAVED_RECORD_ID,requestId:window.BazHandoverFlow?.context()?.requestId||''},
     basic:{
       receiveDate: val('date')||todayISO(),
       inspectDate: val('date')||todayISO(),

@@ -1,7 +1,7 @@
 (function(root){
  'use strict';
  // PDF bytes and small checkpoints only. Never persist a session token/base64.
- function create(indexedDB){
+ function create(indexedDB,identityMatches){
   let opening,blobSupported=true;
   function open(){
    if(!indexedDB)return Promise.reject(new Error('이 기기에서 전송 파일을 보관할 수 없습니다.'));
@@ -37,7 +37,7 @@
   return {
    put,
    remove:key=>transaction('readwrite',store=>store.delete(key)),
-   find:(owner,context)=>transaction('readonly',store=>store.index('byOwnerUpdated').openCursor(root.IDBKeyRange.bound([owner,0],[owner,Number.MAX_SAFE_INTEGER]),'prev'),(request,set)=>{const cursor=request.result;if(!cursor){set(null);return;}const r=cursor.value,c=r.context||{};if(((context.taskId&&c.taskId===context.taskId)||(context.recordId&&c.recordId===context.recordId))&&(!context.recordId||c.recordId===context.recordId)&&(!context.requestId||!c.requestId||context.requestId===c.requestId)){const {bytes,blobType,...rest}=r;set(bytes?{...rest,blob:new Blob([bytes],{type:blobType||'application/pdf'})}:rest);}else cursor.continue();})
+   find:(owner,context)=>transaction('readonly',store=>store.index('byOwnerUpdated').openCursor(root.IDBKeyRange.bound([owner,0],[owner,Number.MAX_SAFE_INTEGER]),'prev'),(request,set)=>{const cursor=request.result;if(!cursor){set(null);return;}const r=cursor.value,c=r.context||{};if(((context.taskId&&c.taskId===context.taskId)||(context.recordId&&c.recordId===context.recordId))&&(!context.recordId||c.recordId===context.recordId)&&(!context.requestId||!c.requestId||context.requestId===c.requestId)&&(!identityMatches||!context.hospital||identityMatches(context,c))){const {bytes,blobType,...rest}=r;set(bytes?{...rest,blob:new Blob([bytes],{type:blobType||'application/pdf'})}:rest);}else cursor.continue();})
   };
  }
  root.BazInspectionOutbox={create};

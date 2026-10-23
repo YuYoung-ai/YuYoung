@@ -16,7 +16,7 @@
  function buttons(items){actions.replaceChildren();items.forEach(function(item){var b=document.createElement('button');b.type='button';b.textContent=item.label;b.addEventListener('click',item.run);actions.appendChild(b);});}
  function context(){return ready?{requestId:ctx.requestId,recordId:RECORD_ID||SAVED_RECORD_ID||''}:null;}
  function saved(){return !!(ctx.linked&&ctx.recordId&&ctx.recordId===SAVED_RECORD_ID);}
- function refreshContinue(){var b=document.getElementById('btnCont');if(b)b.disabled=!(saved()&&SAVED_SNAPSHOT&&!BazHandover.isDirty(SAVED_SNAPSHOT,readForm()));}
+ function refreshContinue(){enableCopy(!!(SAVED_RECORD_ID&&SAVED_SNAPSHOT&&!BazHandover.isDirty(SAVED_SNAPSHOT,readForm())));}
  function pendingState(state){
   if(!ready)return true;
   if(['saving','checking','unknown'].includes(state)&&LAST_SAVE_PAYLOAD){var p={...LAST_SAVE_PAYLOAD};delete p.token;ctx.pendingSave={payload:p,snapshot:LAST_SENT_SNAPSHOT};return persist();}

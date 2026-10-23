@@ -6,7 +6,7 @@ const source=fs.readFileSync(new URL('../inspection.html',import.meta.url),'utf8
 for(const match of source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g))new vm.Script(match[1]);
 const build=source.slice(source.indexOf('function buildSheetHTML('),source.indexOf('// ===== PDF 생성 헬퍼'));
 const validation=source.slice(source.indexOf('function validate(opts)'),source.indexOf('// ===== 폼 데이터 직렬화'));
-const collect=source.slice(source.indexOf('function collectFormData('),source.indexOf('function applyFormData('));
+const collect=source.slice(source.indexOf('function checkInspectionIdentity('),source.indexOf('function applyFormData('));
 const basic={receiveDate:'2026-10-13',serialNo:'TEST-0001',hospital:'검증 병원',
   receiver:'영업 테스트',inspectDate:'2026-10-13',nextDate:'2026-11-15',
   csName:'CS 테스트',hospitalName:'병원 테스트',actionDetail:'조치 내역',recommend:'권고 내역',replacedPart:'교환 부품',cost:'1000'};
