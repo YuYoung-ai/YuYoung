@@ -6,7 +6,7 @@ const source=fs.readFileSync(new URL('../inspection.html',import.meta.url),'utf8
 const render=source.slice(source.indexOf('async function renderSheetCanvas('),source.indexOf('// 모든 페이지 하단'));
 const parent={clientWidth:732,clientHeight:298};
 let images=[],captured=false;
-const target={querySelectorAll:()=>images};
+const target={querySelectorAll:()=>images,querySelector:()=>null};
 const sheet={innerHTML:'',firstElementChild:target};
 const context=vm.createContext({els:{pdfSheet:sheet},PDF_SCALE:2,SHEET_WIDTH:794,
   html2canvas:async()=>{captured=true;return {canvas:true};},
