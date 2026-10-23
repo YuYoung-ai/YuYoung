@@ -11,7 +11,7 @@ const browser=await webkit.launch({executablePath:process.env.PLAYWRIGHT_WEBKIT|
 try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined});});
- const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let linked=false,linkFailures=1;const calls=[];
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let linked=false,linkFailures=1,documentRegistered=false;const calls=[];
  const source={recordId:'source_new_123',hospitalName:'검증 병원',date:'2026-10-22',sn:'SN1',engineer:'검증 담당자',gubun:'점검',result:'정상',detail:'장비 점검 및 작동 확인',version:'v1'};
  const request={id:'request_new_123',hospitalName:source.hospitalName,sn:source.sn,visitAt:'2026-10-22T10:00',revision:1,symptom:'작동 점검',status:'접수'};
  await page.route('**/*',async route=>{
@@ -23,7 +23,7 @@ try{
    if(p.action==='work_handover_candidates')return json({success:true,data:[source],total:1});
    if(p.action==='work_handover_detail')return json({success:true,source:p.recordId==='source_wrong_123'?{...source,recordId:p.recordId,hospitalName:'다른 병원'}:source,workDetail:{success:true,request,history:[]}});
    if(p.action==='work_field_result_link'){if(linkFailures-->0)return route.abort();linked=true;return json({success:true,request});}
-   if(p.action==='work_document_status')return json(!p.recordId?{success:true,request}:linked?{success:true,request,source,sourceLinked:true}:{success:false,retryable:true,code:'SOURCE_PENDING'});
+   if(p.action==='work_document_status')return json(!p.recordId?{success:true,request}:documentRegistered?{success:true,request,source,sourceLinked:false,documentRegistered:true}:linked?{success:true,request,source,sourceLinked:true}:{success:false,retryable:true,code:'SOURCE_PENDING'});
    if(p.action==='work_document_retry')return json(linked?{success:true,request,source,sourceLinked:true}:{success:false,retryable:true,code:'SOURCE_PENDING'});
    return json({success:true,ok:true,name:'검증 담당자',level:3,data:[]});
   }
@@ -56,6 +56,9 @@ try{
  await page.locator('#relink-record-id').fill('source_wrong_123');await page.getByRole('button',{name:'입력한 기록 조회',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#relink-record-id')?.disabled===false);assert.match(await page.locator('.inspection-relink [role=status]').textContent(),/현재 내역서와 다릅니다/);
  assert.equal(await page.getByRole('button',{name:'확인한 기록으로 연결',exact:true}).isDisabled(),true);checks.push('A manually entered record for another hospital is refused');
  await page.getByRole('button',{name:'닫기',exact:true}).click();
+ const priorLinks=calls.filter(c=>c.action==='work_field_result_link').length;documentRegistered=true;linked=false;
+ await page.getByRole('button',{name:'Handover 기록 연결 변경',exact:true}).click();await page.getByRole('button',{name:'입력한 기록 조회',exact:true}).click();await page.getByRole('button',{name:'확인한 기록으로 연결',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('dialog[open]'));
+ assert.equal(calls.filter(c=>c.action==='work_field_result_link').length,priorLinks);checks.push('An independently registered PDF can be selected without adding a duplicate field result');documentRegistered=false;linked=true;
  await page.goto(base+'/handover.html?request='+request.id);await page.waitForFunction(()=>window.BazHandoverFlow?.context());
  await page.evaluate(()=>{setVal('hosp','검증 병원');setVal('date','2026-10-22');setVal('detail','장비 점검 및 작동 확인');SAVED_RECORD_ID='source_new_123';SAVED_SNAPSHOT=BazHandover.snapshot(readForm());enableCopy(true);});
  assert.equal(await page.locator('#btnCont').isDisabled(),false);checks.push('Confirmed sheet save enables continuation while asynchronous request link is pending');
