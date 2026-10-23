@@ -16,7 +16,7 @@ async function saveHospital(env,p,actor,now){
  const input=typeof p.name==='string'?p.name.normalize('NFKC').trim().replace(/\s+/g,' '):'';
  if(!input||input.length>100)fail(400,'입점병원 목록에서 병원을 검색·선택해 주세요.');
  const key=input.toLowerCase(),name=(await directory(env)).find(n=>n.toLowerCase()===key);
- if(!name)fail(400,'입점병원 목록에 없는 병원입니다. 목록에서 선택하거나 CS팀에 확인해 주세요.');
+ if(!name)fail(400,'입점병원 목록에 없는 병원입니다. 목록에서 병원명을 다시 선택해 주세요.');
  await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,actor).run();
  const h=await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first();
  return json({success:true,hospital:{...h,surveyUrl:env.SHORT_URL_BASE+'/'+shortCode(h.code)}});
