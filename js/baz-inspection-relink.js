@@ -11,7 +11,7 @@
   if(!context.requestId){const status=await api.get('work_document_status',{recordId:context.recordId});return checked(status.success?status:await api.post('work_document_retry',{recordId:context.recordId}));}
   let status=await api.get('work_document_status',params);
   if(!status.success)status=await api.post('work_document_retry',params);
-  if(status.success&&status.sourceLinked)return status;
+  if(status.success&&(status.sourceLinked||status.documentRegistered))return status;
   if(!status.success&&status.code!=='SOURCE_PENDING'&&!status.retryable)throw new Error(status.error||'다른 접수에 연결된 기록입니다.');
   const request=detail.workDetail?.request;
   if(!request||request.id!==context.requestId)throw new Error('연결할 접수를 확인하지 못했습니다. 접수 관리에서 기록을 연결하세요.');
