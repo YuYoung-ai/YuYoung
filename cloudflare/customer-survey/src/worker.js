@@ -1,6 +1,7 @@
 import {DEFINITION,validateAnswers,validateDefinition,otherOption,otherKey} from '../../../js/baz-survey-schema.mjs';
 import {createSalesAuth} from './sales-auth.js';
 import {shortCode,redirectSurvey} from './short-links.js';
+import {countComments,resultDetails} from './result-details.js';
 class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
 const fail=(s,m)=>{throw new HttpError(s,m);};
 const sql=(env,q,...v)=>env.DB.prepare(q).bind(...v);
@@ -69,8 +70,8 @@ async function results(env,p,c,exporting){
   const lines=[columns.map(csvCell).join(',')];for(const r of rows){const a=JSON.parse(r.answers);lines.push([r.name,new Date(r.submitted_at+9*3600000).toISOString().replace('T',' ').slice(0,19),...def.questions.map(q=>Array.isArray(a[q.id])?a[q.id].join(' / '):a[q.id]),...others.map(q=>a[otherKey(q)])].map(csvCell).join(','));}
   return new Response('\uFEFF'+lines.join('\r\n'),{headers:{'Content-Type':'text/csv;charset=utf-8','Content-Disposition':"attachment; filename=survey-results.csv"}});
  }
- const textConditions=def.questions.filter(q=>q.type==='text').map(q=>"trim(json_extract(r.answers,'$."+q.id+"'))<>''").join(' OR ')||'0';
- const totals=await sql(env,"SELECT COUNT(*) responses,COUNT(DISTINCT r.hospital_id) hospitals,SUM(CASE WHEN ("+textConditions+") THEN 1 ELSE 0 END) comments FROM survey_responses r WHERE "+rowsWhere,...v).first();
+ const totals=await sql(env,'SELECT COUNT(*) responses,COUNT(DISTINCT r.hospital_id) hospitals FROM survey_responses r WHERE '+rowsWhere,...v).first();
+ totals.comments=await countComments(env,def,f);
  const sentValues=[c.id],sentWhere=['d.campaign_id=?'];if(p.hospitalId){sentWhere.push('d.hospital_id=?');sentValues.push(p.hospitalId);}
  const sent=await sql(env,'SELECT COUNT(*) n FROM survey_deliveries d WHERE '+sentWhere.join(' AND '),...sentValues).first();
  const respondents=await sql(env,'SELECT COUNT(*) n FROM survey_responses r JOIN survey_deliveries d ON d.campaign_id=r.campaign_id AND d.hospital_id=r.hospital_id WHERE '+rowsWhere,...v).first();
@@ -78,10 +79,14 @@ async function results(env,p,c,exporting){
   if(q.type==='multiple'){distributions[q.id]=await all(sql(env,"SELECT j.value value,COUNT(*) count FROM survey_responses r,json_each(r.answers,'$."+q.id+"') j WHERE "+rowsWhere+' GROUP BY j.value',...v));validCounts[q.id]=(await sql(env,"SELECT COUNT(*) n FROM survey_responses r WHERE "+rowsWhere+" AND json_array_length(r.answers,'$."+q.id+"')>0",...v).first()).n;}
   else{distributions[q.id]=await all(sql(env,"SELECT json_extract(r.answers,'$."+q.id+"') value,COUNT(*) count FROM survey_responses r WHERE "+rowsWhere+" AND json_extract(r.answers,'$."+q.id+"') IS NOT NULL AND json_extract(r.answers,'$."+q.id+"')<>'' GROUP BY value",...v));validCounts[q.id]=distributions[q.id].reduce((s,r)=>s+r.count,0);}
  }
- const page=Math.max(0,Math.floor(Number(p.page)||0)),offset=page*50;
- const responses=await all(sql(env,'SELECT r.id,r.submitted_at,h.name,r.answers FROM survey_responses r JOIN survey_hospitals h ON h.id=r.hospital_id WHERE '+rowsWhere+' ORDER BY r.submitted_at DESC,r.id LIMIT 50 OFFSET ?',...v,offset));
- const deliveries=await all(sql(env,`SELECT h.id,h.name,d.channel,d.delivered_at,r.submitted_at FROM survey_deliveries d JOIN survey_hospitals h ON h.id=d.hospital_id LEFT JOIN survey_responses r ON r.campaign_id=d.campaign_id AND r.hospital_id=d.hospital_id WHERE ${sentWhere.join(' AND ')} ORDER BY d.delivered_at DESC LIMIT 200`,...sentValues));
- return json({success:true,campaign:publicCampaign(c),totals:{responses:totals.responses,hospitals:totals.hospitals,comments:totals.comments||0,sent:sent.n,sentResponded:respondents.n,rate:sent.n?respondents.n/sent.n*100:null},distributions,validCounts,responses:responses.map(r=>({...r,answers:JSON.parse(r.answers)})),page,hasMore:offset+responses.length<totals.responses,deliveries});
+ const output={success:true,campaign:publicCampaign(c),totals:{responses:totals.responses,hospitals:totals.hospitals,comments:totals.comments||0,sent:sent.n,sentResponded:respondents.n,rate:sent.n?respondents.n/sent.n*100:null},distributions,validCounts};
+ // Older open tabs can finish a query during rollout. The new dashboard asks
+ // for aggregates only and obtains its opinion/metadata lists separately.
+ if(p.summaryOnly!==true){const page=Math.max(0,Math.floor(Number(p.page)||0)),offset=page*50;
+  const rows=await all(sql(env,'SELECT r.id,r.submitted_at,h.name,r.answers FROM survey_responses r JOIN survey_hospitals h ON h.id=r.hospital_id WHERE '+rowsWhere+' ORDER BY r.submitted_at DESC,r.id LIMIT 50 OFFSET ?',...v,offset));
+  Object.assign(output,{responses:rows.map(r=>({...r,answers:JSON.parse(r.answers)})),page,hasMore:offset+rows.length<totals.responses,deliveries:await all(sql(env,`SELECT h.id,h.name,d.channel,d.delivered_at,r.submitted_at FROM survey_deliveries d JOIN survey_hospitals h ON h.id=d.hospital_id LEFT JOIN survey_responses r ON r.campaign_id=d.campaign_id AND r.hospital_id=d.hospital_id WHERE ${sentWhere.join(' AND ')} ORDER BY d.delivered_at DESC LIMIT 200`,...sentValues))});
+ }
+ return json(output);
 }
 async function staffRoute(req,env,action){
  const who=await staff(req,env,2),p=await body(req),now=Date.now();
@@ -111,8 +116,9 @@ async function staffRoute(req,env,action){
   try{await env.DB.batch([sql(env,'UPDATE survey_campaigns SET title=?,state=?,starts_at=?,ends_at=?,updated_at=? WHERE id=?',title,p.state,start,end,now,c.id),audit(env,who.actor,action,c.id)]);}catch(e){if(/UNIQUE|constraint/i.test(String(e)))fail(409,'진행 중인 다른 조사를 먼저 종료해 주세요.');throw e;}return json({success:true});
  }
  if(action==='delivery'){
-  const h=await sql(env,'SELECT id,active FROM survey_hospitals WHERE id=?',p.hospitalId).first();if(!h||!h.active)fail(404,'사용 가능한 병원을 선택하세요.');if(!isOpen(c,now))fail(409,'접수 중인 조사에서 배포 이력을 기록해 주세요.');if(!['sms','onsite','other'].includes(p.channel))fail(400,'전달 방식을 선택해 주세요.');await sql(env,'INSERT INTO survey_deliveries VALUES(?,?,?,?,?) ON CONFLICT(campaign_id,hospital_id) DO UPDATE SET channel=excluded.channel,delivered_at=excluded.delivered_at,created_by=excluded.created_by',c.id,h.id,p.channel,now,who.actor).run();return json({success:true});
+  const h=await sql(env,'SELECT id,active FROM survey_hospitals WHERE id=?',p.hospitalId).first();if(!h||!h.active)fail(404,'사용 가능한 병원을 선택하세요.');if(!isOpen(c,now))fail(409,'접수 중인 조사에서 배포 이력을 기록해 주세요.');if(!['sms','onsite','other'].includes(p.channel))fail(400,'전달 방식을 선택해 주세요.');await env.DB.batch([sql(env,'INSERT INTO survey_deliveries VALUES(?,?,?,?,?) ON CONFLICT(campaign_id,hospital_id) DO UPDATE SET channel=excluded.channel,delivered_at=excluded.delivered_at,created_by=excluded.created_by',c.id,h.id,p.channel,now,who.actor),sql(env,'INSERT INTO survey_delivery_events VALUES(?,?,?,?,?,?)',id(),c.id,h.id,p.channel,now,who.actor)]);return json({success:true});
  }
+ if(action==='result-details')return json(await resultDetails(env,p,c,{filters,fail}));
  if(action==='results'||action==='export')return results(env,p,c,action==='export');
  fail(404,'잘못된 요청입니다.');
 }
@@ -127,7 +133,7 @@ async function salesRoute(req,env,action){
  }
  if(action==='hospital-save')return saveHospital(env,p,who.actor,now);
  if(action==='delivery'){
-  const c=await campaign(env,p.campaignId),h=await sql(env,'SELECT id,active FROM survey_hospitals WHERE id=?',String(p.hospitalId||'')).first();if(!h||!h.active)fail(404,'사용 가능한 병원을 선택하세요.');if(!isOpen(c,now))fail(409,'접수 중인 조사를 선택해 주세요.');if(!['sms','onsite','other'].includes(p.channel))fail(400,'전달 방식을 선택해 주세요.');await sql(env,'INSERT INTO survey_deliveries VALUES(?,?,?,?,?) ON CONFLICT(campaign_id,hospital_id) DO UPDATE SET channel=excluded.channel,delivered_at=excluded.delivered_at,created_by=excluded.created_by',c.id,h.id,p.channel,now,who.actor).run();return json({success:true});
+  const c=await campaign(env,p.campaignId),h=await sql(env,'SELECT id,active FROM survey_hospitals WHERE id=?',String(p.hospitalId||'')).first();if(!h||!h.active)fail(404,'사용 가능한 병원을 선택하세요.');if(!isOpen(c,now))fail(409,'접수 중인 조사를 선택해 주세요.');if(!['sms','onsite','other'].includes(p.channel))fail(400,'전달 방식을 선택해 주세요.');await env.DB.batch([sql(env,'INSERT INTO survey_deliveries VALUES(?,?,?,?,?) ON CONFLICT(campaign_id,hospital_id) DO UPDATE SET channel=excluded.channel,delivered_at=excluded.delivered_at,created_by=excluded.created_by',c.id,h.id,p.channel,now,who.actor),sql(env,'INSERT INTO survey_delivery_events VALUES(?,?,?,?,?,?)',id(),c.id,h.id,p.channel,now,who.actor)]);return json({success:true});
  }
  fail(403,'영업팀은 QR·안내 문자 발급과 전달 기록만 사용할 수 있습니다.');
 }
