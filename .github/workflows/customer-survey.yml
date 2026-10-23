@@ -1,10 +1,10 @@
 name: Customer survey checks
 on:
   pull_request:
-    paths: ['customer-survey.html', 'survey-admin.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
+    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
   push:
     branches: [main]
-    paths: ['customer-survey.html', 'survey-admin.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
+    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
 permissions:
   contents: read
 jobs:
@@ -16,5 +16,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test cloudflare/customer-survey/test/worker.test.mjs
-      - run: node --check js/baz-customer-survey.mjs && node --check js/baz-survey-admin.mjs
+      - run: node --test cloudflare/customer-survey/test/*.test.mjs
+      - run: node --check js/baz-customer-survey.mjs && node --check js/baz-survey-admin.mjs && node --check js/baz-survey-builder.mjs && node --check js/baz-survey-issuer.mjs && node --check js/baz-survey-sales.mjs
