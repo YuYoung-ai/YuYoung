@@ -1,5 +1,6 @@
 import {DEFINITION,validateAnswers,validateDefinition,otherOption,otherKey} from '../../../js/baz-survey-schema.mjs';
 import {createSalesAuth} from './sales-auth.js';
+import {shortCode,redirectSurvey} from './short-links.js';
 class HttpError extends Error{constructor(status,message){super(message);this.status=status;}}
 const fail=(s,m)=>{throw new HttpError(s,m);};
 const sql=(env,q,...v)=>env.DB.prepare(q).bind(...v);
@@ -17,7 +18,8 @@ async function saveHospital(env,p,actor,now){
  const key=input.toLowerCase(),name=(await directory(env)).find(n=>n.toLowerCase()===key);
  if(!name)fail(400,'입점병원 목록에 없는 병원입니다. 목록에서 선택하거나 CS팀에 확인해 주세요.');
  await sql(env,'INSERT OR IGNORE INTO survey_hospitals(id,name,name_key,code,created_at,created_by) VALUES(?,?,?,?,?,?)',id(),name,key,code(),now,actor).run();
- return json({success:true,hospital:await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first()});
+ const h=await sql(env,'SELECT id,name,code,active FROM survey_hospitals WHERE name_key=?',key).first();
+ return json({success:true,hospital:{...h,surveyUrl:env.SHORT_URL_BASE+'/'+shortCode(h.code)}});
 }
 async function body(req){
  if(Number(req.headers.get('Content-Length')||0)>262144)fail(413,'요청이 너무 큽니다.');
@@ -130,12 +132,13 @@ async function salesRoute(req,env,action){
  fail(403,'영업팀은 QR·안내 문자 발급과 전달 기록만 사용할 수 있습니다.');
 }
 export default {async fetch(req,env){
- env={AUTH_URL:'https://yuyoung-production.coaptation.workers.dev',CUSTOMER_PAGE:'https://yuyoung-ai.github.io/YuYoung/customer-survey.html',ALLOWED_ORIGINS:'https://yuyoung-ai.github.io',...env};
+ env={AUTH_URL:'https://yuyoung-production.coaptation.workers.dev',CUSTOMER_PAGE:'https://yuyoung-ai.github.io/YuYoung/customer-survey.html',SHORT_URL_BASE:'https://curejet.coaptation.workers.dev',ALLOWED_ORIGINS:'https://yuyoung-ai.github.io',...env};
  const origin=req.headers.get('Origin'),allowed=new Set(env.ALLOWED_ORIGINS.split(',').map(x=>x.trim()));let r;
  try{
   if(origin&&!allowed.has(origin))fail(403,'허용되지 않은 접속 경로입니다.');const path=new URL(req.url).pathname;
   if(req.method==='OPTIONS')r=new Response(null,{status:204});
   else if(req.method==='GET'&&path==='/health')r=json({success:true,service:'customer-survey',version:1});
+  else if(req.method==='GET'&&path.startsWith('/r/'))r=await redirectSurvey(env,path.slice(3));
   else if(req.method!=='POST')fail(405,'지원하지 않는 요청 방식입니다.');
   else if(path.startsWith('/public/'))r=await guest(req,env,path.slice(8));
   else if(path.startsWith('/sales/'))r=await salesRoute(req,env,path.slice(7));
