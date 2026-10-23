@@ -6,11 +6,13 @@
   function button(label,run){var b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=run;actions.appendChild(b);}
   function back(requestId){var a=document.createElement('a');a.textContent='접수로 돌아가기';a.href=flow.url('hospital-work.html',requestId);actions.appendChild(a);}
   async function prepareContext(context){
+   target=flow.route(location.search);
    if(BazAuth.name()!==account){var changed=new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');changed.noRetry=true;throw changed;}
    var requestId=context.requestId||'';
    if(target?.recordId&&context.recordId===target.recordId)requestId=requestId||target.requestId;
    if(target?.recordId&&context.recordId!==target.recordId){var mismatch=new Error('현재 작성 내용과 접수의 원본 ID가 다릅니다. 접수 내역서를 다시 불러오세요.');mismatch.noRetry=true;throw mismatch;}
    var status;try{status=await api.get('work_document_status',{requestId:requestId,recordId:context.recordId});}catch(e){e.transient=true;throw e;}
+   if(!status.success&&status.retryable&&requestId&&window.BazInspectionRelink)status=await window.BazInspectionRelink.ensureLink({...context,requestId});
    if(!status.success){var error=new Error(status.error||'원본의 접수 연결을 먼저 확인하세요.');error.noRetry=!status.retryable;error.transient=!!status.retryable;throw error;}
    if(!status.request)return {...context,attachmentApplicable:false};
    if(requestId&&status.request.id!==requestId){var wrong=new Error('원본의 접수 연결이 다릅니다.');wrong.noRetry=true;throw wrong;}
@@ -47,7 +49,9 @@
   function refresh(reference,note){
    actions.replaceChildren();
    box.hidden=false;message.textContent=note||(reference?.requestId?'이 내역서는 접수의 현장 기록에 연결됩니다. 입력 내용은 자동 보존됩니다.':'이 기기에 보관된 미완료 PDF가 있으면 같은 파일로 전송을 다시 확인할 수 있습니다.');if(reference?.requestId)back(reference.requestId);
-   button('중단된 전송 복구',async function(){try{if(await pdfPublisher.restore({...reference,taskId:_currentTaskId}))document.getElementById('doneOverlay').classList.add('show');else showToast('이 기기에 보관된 미완료 전송이 없습니다.');}catch(e){showToast(e.message);}});
+   button('Handover 기록 연결 변경',function(){window.BazInspectionRelink.open();});
+   if(reference?.recordId){var ids=document.createElement('p');ids.textContent='기록 ID: '+reference.recordId+' · 접수 ID: '+(reference.requestId||'자동 확인');actions.appendChild(ids);}
+   button('중단된 전송 복구',async function(){try{if(await pdfPublisher.restore({...reference,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId}))document.getElementById('doneOverlay').classList.add('show');else showToast('현재 병원·처리일·S/N에 맞는 미완료 전송이 없습니다.');}catch(e){showToast(e.message);}});
    if(uploadedPdfDocument){
     var url=new URL(uploadedPdfDocument.url);if(url.origin==='https://drive.google.com'&&/^\/file\/d\/[A-Za-z0-9_-]+\/view$/.test(url.pathname)){var a=document.createElement('a');a.href=url.href;a.target='_blank';a.rel='noopener noreferrer';a.textContent='저장된 내역서 열기';actions.prepend(a);}
     if(reference?.recordId)button('저장·댓글 연결 확인',function(){document.getElementById('doneOverlay').classList.add('show');pdfPublisher.resume({success:true,recordId:reference.recordId,pdf:uploadedPdfDocument},{requestId:reference.requestId,recordId:reference.recordId,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId});});
@@ -77,4 +81,3 @@
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialise,{once:true});else initialise();
 })();
-

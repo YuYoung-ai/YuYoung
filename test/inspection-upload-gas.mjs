@@ -25,7 +25,7 @@ assert.equal(post({...upload,token:''}).success,false);assert.equal(files.length
 assert.equal(post({...common,action:'inspection_pdf_resolve'}).recordId,'report-1');
 const saved=post(upload);assert.ok(saved.success,saved.error);assert.equal(saved.pdf.bytes,body.length);assert.equal(files.length,1);assert.equal(files[0].blob.bytes.length,body.length);assert.equal(handover.data[1][linkCol-1],saved.pdf.url);
 assert.equal(post(upload).success,true);assert.equal(files.length,1,'lost-response retry uses the durable same-file receipt');
-assert.equal(post({...upload,bytes:body.length+1}).success,false);assert.equal(post({...upload,sha256:'f'.repeat(64)}).success,false);assert.equal(post({...upload,sn:'SN2'}).success,true,'immutable record ID keeps a captured PDF valid after a later identity correction');assert.equal(files.length,1);
+assert.equal(post({...upload,bytes:body.length+1}).success,false);assert.equal(post({...upload,sha256:'f'.repeat(64)}).success,false);assert.equal(post({...upload,sn:'SN2'}).sourceConflict,true,'a record ID cannot bypass the printed hospital/date/serial identity');assert.equal(files.length,1);
 assert.equal(post({...common,action:'inspection_pdf_resolve',recordId:'missing'}).success,false);
 assert.equal(post({...common,action:'inspection_pdf_resolve',recordId:''}).recordId,'report-1','direct inspection can resolve one unique existing visit');
 const changed=Buffer.from('%PDF-1.7\nsecond version\n%%EOF'),next={...upload,bytes:changed.length,base64:changed.toString('base64'),sha256:crypto.createHash('sha256').update(changed).digest('hex'),uploadId:'upload-second',baseRevision:1};
@@ -54,3 +54,16 @@ handover.data[1][8]='생성 후 변경';const firstFixed=post({...verified,sourc
 onCreate=()=>{handover.data[1][8]='전송 중 변경';};const duringBytes=Buffer.from('%PDF-1.7\nfixed concurrent snapshot\n%%EOF');const during={...verified,bytes:duringBytes.length,base64:duringBytes.toString('base64'),sha256:crypto.createHash('sha256').update(duringBytes).digest('hex'),uploadId:'upload-during',baseRevision:5,sourceBasis:basis};const final=post(during);assert.ok(final.success,final.error);assert.equal(files.at(-1).trashed,false);assert.equal(final.pdf.sourceBasis.fingerprint,basis.fingerprint,'the capture basis is retained instead of recalculated at upload');
 handover.data[1][8]='저장 후 원본 수정';const replay=post(during);assert.ok(replay.success);assert.equal(replay.pdf.fileId,final.pdf.fileId);assert.equal(replay.pdf.sha256,final.pdf.sha256);
 console.log('inspection-upload-gas: fixed capture basis, body edits before/during/after upload, same-file retry and document revision/integrity protection passed.');
+// Reusing a draft for a different clinic/date/device must not keep its old ID.
+for(const changedIdentity of [{hospital:'다른 병원'},{date:'2026-10-23'},{sn:'OTHER'}]){
+ const count=files.length,result=post({...common,...changedIdentity,action:'inspection_pdf_resolve'});
+ assert.equal(result.sourceConflict,true);assert.equal(files.length,count);
+}
+const capturedState=post({...common,action:'inspection_pdf_resolve'}),captured=capturedState.sourceBasis;
+const capturedBytes=Buffer.from('%PDF-1.7\nidentity snapshot\n%%EOF'),fixed={...upload,bytes:capturedBytes.length,base64:capturedBytes.toString('base64'),sha256:crypto.createHash('sha256').update(capturedBytes).digest('hex'),uploadId:'captured_identity',baseRevision:capturedState.pdf.revision,sourceBasis:captured};
+const hospitalColumn=header.indexOf('병원명'),oldHospital=handover.data[1][hospitalColumn];handover.data[1][hospitalColumn]='관리자가 이후 정정한 병원';
+const fixedSnapshot=post(fixed);assert.ok(fixedSnapshot.success,fixedSnapshot.error);
+assert.equal(post({...fixed,sn:'OTHER'}).sourceConflict,true,'captured identity cannot be changed on upload retry');
+assert.equal(post({...common,action:'inspection_pdf_resolve'}).sourceConflict,true,'new generation must use the currently verified source');
+handover.data[1][hospitalColumn]=oldHospital;
+console.log('inspection identity: stale draft IDs rejected; fixed captured PDF survives subsequent source correction without changing printed identity');

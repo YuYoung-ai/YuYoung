@@ -1,0 +1,140 @@
+diff --git a/deno-auth/work-store.ts b/deno-auth/work-store.ts
+index e0324d1..ff14660 100644
+--- a/deno-auth/work-store.ts
++++ b/deno-auth/work-store.ts
+@@ -439,11 +439,25 @@ export function createWorkStore(kv:any,options:Obj={}){
+   const h={...copy(old),revision:old.revision+1,updatedAt:now,updatedBy:who.name,sourceReview:{...old.sourceReview,pending:false,reviewedAt:now,reviewedBy:who.name}};
+   return {kind:'result_source_review',compactResponse:true,before:old,requestBefore:r,request:next,history:h,checks:[current,entry,src,owner.entry],response:{success:true,request:next,history:h}};
+  });}
++ async function rebindDeletedDocument(recordId:string){
++  for(let attempt=0;attempt<12;attempt++){
++   const doc=await get('document',recordId),binding=await sourceLink(recordId),d=doc.value,r=binding.owner?.value;
++   if(!d?.requestId||!binding.inUse||!r||!live(r)||d.requestId===r.id)return;
++   const previous=await get('request',d.requestId);
++   // Missing data is not proof of deletion. Never steal from a live owner.
++   if(!previous.value||live(previous.value))return;
++   const pointer=await get('sourceIndex',recordId),src=await get('source',pointer.value?.hospitalName||d.context.hospitalName,recordId),s=src.value;
++   if(!s||s.hospitalName!==d.context.hospitalName||s.date!==d.context.date||s.hospitalName!==r.hospitalName||!serialMatch(s.sn,d.context.sn)||r.sn&&!serialMatch(s.sn,r.sn))return;
++   const next={...d,requestId:r.id,previousRequestId:d.requestId,reboundAt:new Date().toISOString()};
++   if((await kv.atomic().check(doc,binding.entry,...(binding.owner?[binding.owner]:[]),previous,pointer,src).set(doc.key,next).set(key('documentPending',recordId),{recordId}).commit()).ok)return;
++  }
++  throw new Error('문서 접수 연결이 변경 중입니다. 같은 파일로 다시 확인하세요.');
++ }
+  async function documentStatus(p:Obj){
+   if(!p.requestId&&p.recordId){
+    // Recover an omitted route ID from exact authoritative ownership only.
+-   const link=await get('link',String(p.recordId)),doc=await get('document',String(p.recordId));
+-   const requestId=link.value?.requestId||doc.value?.requestId;
++   const binding=await sourceLink(String(p.recordId)),doc=await get('document',String(p.recordId)),documentRequest=doc.value?.requestId?await get('request',doc.value.requestId):null;
++   const requestId=binding.inUse?binding.entry.value?.requestId:documentRequest&&(!documentRequest.value||live(documentRequest.value))?doc.value.requestId:'';
+    if(!requestId){const index=await get('sourceIndex',String(p.recordId)),src=index.value?await get('source',index.value.hospitalName,String(p.recordId)):null;if(historicalLinkDate(doc.value?.context?.date||src?.value?.date))return historicalLinkResponse();return {success:true,request:null,sourceLinked:false,attachmentApplicable:false,commentAttached:false};}
+    p={...p,requestId};
+   }
+@@ -455,6 +469,10 @@ export function createWorkStore(kv:any,options:Obj={}){
+    return {success:true,request:r,records};
+   }
+   const recordId=text(p.recordId,120,'원본 기록'),registered=await get('document',recordId),owner=await sourceLink(recordId);
++  if(registered.value?.requestId&&registered.value.requestId!==r.id&&!owner.inUse){
++   const previous=await get('request',registered.value.requestId);
++   if(previous.value&&!live(previous.value))return {success:false,retryable:true,code:'SOURCE_PENDING',error:'삭제된 접수의 문서 연결을 확인 중입니다. 현재 접수에 Handover 원본을 연결하세요.'};
++  }
+   if(registered.value){const doc=registered.value;if(doc.requestId&&doc.requestId!==r.id||owner.inUse&&owner.entry.value?.requestId!==r.id)throw new Error('이 문서는 다른 접수에 연결되어 있습니다.');const comment=(await get('history',r.id,'pdf_'+await hash(recordId))).value,pdf=doc.pdf,matches=!p.sha256||pdf.sha256===p.sha256;return {success:true,request:r,source:{...((await get('source',doc.context.hospitalName,recordId)).value||doc.context),recordId,pdf},documentVersions:await values(['documentVersion',recordId]),sourceLinked:owner.entry.value?.requestId===r.id,documentRegistered:true,pdfStored:matches,commentAttached:!!(matches&&!comment?.deletedAt&&comment?.attachment?.sha256===pdf.sha256&&comment?.attachment?.revision===pdf.revision),commentDeleted:!!comment?.deletedAt,documentChanged:!!(p.sha256&&pdf.sha256!==p.sha256)};}
+   if(!owner.entry.value)return {success:false,retryable:true,code:'SOURCE_PENDING',error:'현장 기록의 접수 연결을 확인 중입니다. 잠시 후 같은 파일로 다시 확인하세요.'};
+   if(owner.entry.value.requestId!==r.id)throw new Error('해당 현장 기록이 이 접수에 연결되어 있지 않습니다. 원본 연결을 확인하세요.');
+@@ -470,6 +488,8 @@ export function createWorkStore(kv:any,options:Obj={}){
+   const recordId=text(p.recordId,120,'원본 기록'),binding=await sourceLink(recordId);
+   if(binding.inUse)return {pending:true};
+   const index=await get('sourceIndex',recordId),doc=await get('document',recordId);
++  const previous=doc.value?.requestId?await get('request',doc.value.requestId):null;
++  const protectedRequestId=previous&&(!previous.value||live(previous.value))?doc.value.requestId:'';
+   const src=await get('source',index.value?.hospitalName||doc.value?.context?.hospitalName||'',recordId),s=src.value;
+   // Metadata may arrive after the upload acknowledgement. Absence of a link is
+   // not proof that the user has no receipt; keep the saved file retryable.
+@@ -481,7 +501,7 @@ export function createWorkStore(kv:any,options:Obj={}){
+   const all=await indexes.visits(s.hospitalName,s.date),records=await sources(s.hospitalName),candidates:Obj[]=[];
+   const eligible=all.filter(r=>live(r)&&['접수','방문예정','처리중','결과확인'].includes(r.status));
+   for(const r of eligible){
+-   if(p.requestId&&r.id!==p.requestId||doc.value?.requestId&&doc.value.requestId!==r.id||!r.sn||!s.sn||!serialMatch(r.sn,s.sn))continue;
++   if(p.requestId&&r.id!==p.requestId||protectedRequestId&&protectedRequestId!==r.id||!r.sn||!s.sn||!serialMatch(r.sn,s.sn))continue;
+    const plan=autoSources(r,all,records);
+    if(!plan.ambiguous&&plan.matches.some(x=>x.recordId===recordId))candidates.push(r);
+   }
+@@ -491,10 +511,11 @@ export function createWorkStore(kv:any,options:Obj={}){
+   return {pending:!saved.success};
+  }
+  async function retryDocument(p:Obj){
++  if(p.recordId)await rebindDeletedDocument(String(p.recordId));
+   let before:Obj=await documentStatus(p);
+   if(before.historical)return before;
+   if(!before.commentAttached&&!before.commentDeleted&&!before.documentChanged&&!before.sourceLinked){
+-   const recovery=await recoverDocumentOwner(p);before=await documentStatus(p);
++   const recovery=await recoverDocumentOwner(p);await rebindDeletedDocument(String(p.recordId));before=await documentStatus(p);
+    if(recovery.changed)return {...before,pdfStored:false,commentAttached:false,documentChanged:true};
+    if(recovery.pending&&!before.sourceLinked&&!before.commentAttached)return {success:false,retryable:true,code:'SOURCE_PENDING',error:'저장된 원본의 접수 연결을 확인 중입니다. 접수의 병원·처리일·S/N을 확인한 뒤 같은 파일로 다시 확인하세요.'};
+   }
+@@ -720,10 +741,15 @@ export function createWorkStore(kv:any,options:Obj={}){
+   if(!Array.isArray(items)||items.length>20)throw new Error('문서 전송 수를 확인하세요.');
+   for(const item of items){const recordId=text(item.recordId,120,'기록 ID'),pdf=inspectionPdf(item.pdf),context={hospitalName:text(item.context?.hospitalName,300,'병원'),date:text(item.context?.date,10,'처리일'),sn:text(item.context?.sn,300,'S/N')};if(!pdf||!recordId||!context.hospitalName||!/^\d{4}-\d{2}-\d{2}$/.test(context.date))throw new Error('문서 등록 정보를 확인하세요.');
+    if(historicalLinkDate(context.date))continue;
++   await rebindDeletedDocument(recordId);
+    for(let attempt=0;attempt<12;attempt++){
+     const old=await get('document',recordId),version=await get('documentVersion',recordId,pdf.revision),owner=await sourceLink(recordId);
+     if(version.value&&version.value.pdf.sha256!==pdf.sha256)throw new Error('같은 문서 버전의 파일이 다릅니다.');
+-    const requestId=String(item.requestId||owner.entry.value?.requestId||old.value?.requestId||''),r=requestId?await request(requestId):null;
++    let requestId=String(item.requestId||owner.entry.value?.requestId||old.value?.requestId||'');
++    if(owner.inUse&&owner.owner?.value&&live(owner.owner.value)&&requestId!==owner.owner.value.id){
++     const stale=await get('request',requestId);if(stale.value&&!live(stale.value))requestId=owner.owner.value.id;
++    }
++    const r=requestId?await request(requestId):null;
+     if(old.value?.requestId&&requestId!==old.value.requestId)throw new Error('다른 접수에 등록된 문서입니다.');
+     if(r&&(r.value.hospitalName!==context.hospitalName||r.value.visitAt?.slice(0,10)!==context.date||context.sn&&r.value.sn&&!serialMatch(context.sn,r.value.sn)))throw new Error('문서와 접수의 병원·처리일·장비가 다릅니다.');
+     if(owner.inUse&&owner.entry.value?.requestId!==requestId)throw new Error('다른 접수에 연결된 문서입니다.');
+@@ -750,6 +776,7 @@ export function createWorkStore(kv:any,options:Obj={}){
+  }
+  async function reconcileDocuments(bounded=false,recordId?:string){
+   for await(const pending of pendingRows('documentPending',bounded,recordId)){
++   await rebindDeletedDocument(String(pending.value.recordId));
+    const doc=await get('document',pending.value.recordId),d=doc.value;if(!d)continue;
+    if(historicalLinkDate(d.context?.date)){await kv.atomic().check(pending,doc).delete(pending.key).commit();continue;}
+    const owner=await sourceLink(d.recordId),requestId=d.requestId||owner.entry.value?.requestId;if(!requestId)continue;
+diff --git a/test/work-document-rebind.mjs b/test/work-document-rebind.mjs
+new file mode 100644
+--- /dev/null
++++ b/test/work-document-rebind.mjs
+@@ -0,0 +1,36 @@
++import assert from 'node:assert/strict';
++import {sqliteD1} from '../cloudflare/test/sqlite-d1.mjs';
++import {D1Kv} from '../cloudflare/src/d1-kv.ts';
++import {createWorkStore} from '../deno-auth/work-store.ts';
++const db=sqliteD1(),kv=new D1Kv(db),store=createWorkStore(kv),who={name:'Synthetic CS',level:3},k=(...p)=>['hospitalwork-v2',...p];
++const hospital={id:'h1',key:'h1',name:'Synthetic Clinic',sn:'SN1'};
++await store.bridge('seed',{hospitals:[hospital],references:{engineers:[],minimumLevel:1}});await store.bridge('activate',{manifest:await store.manifest()});
++const write=(action,p)=>store.handle({action,operationId:crypto.randomUUID(),...p},who);
++const form={hospitalKey:'h1',symptom:'synthetic',cs:who.name,status:'접수',registeredAt:'2026-10-22T09:00',visitAt:'2026-10-22T10:00'};
++const a=await write('work_save',{form});assert.ok(a.success,a.error);
++const source={recordId:'synthetic_source',hospitalName:hospital.name,date:'2026-10-22',sn:'SN1',gubun:'점검',result:'정상',detail:'synthetic',version:'v1',observedAt:new Date().toISOString()};
++const pdf={fileId:'synthetic_file',url:'https://drive.google.com/file/d/synthetic_file/view',filename:'synthetic.pdf',bytes:100,sha256:'a'.repeat(64),revision:1,uploadedAt:new Date().toISOString(),uploadedBy:who.name,uploadId:'synthetic_upload'};
++await store.ingestSources([source]);
++const document={recordId:source.recordId,pdf,context:{hospitalName:source.hospitalName,date:source.date,sn:source.sn},requestId:a.request.id};
++await store.bridge('documents',{documents:[document]});
++let d=await store.handle({action:'work_detail',id:a.request.id},who);assert.equal(d.history.filter(h=>h.attachment).length,1);
++assert.ok((await write('work_delete',{requestId:a.request.id,baseRevision:d.request.revision})).success);
++const b=await write('work_save',{form});assert.ok(b.success,b.error);
++d=await store.handle({action:'work_detail',id:b.request.id},who);
++if(!d.history.some(h=>h.source?.recordId===source.recordId))assert.ok((await write('work_field_result_link',{requestId:b.request.id,recordId:source.recordId,sourceVersion:source.version,baseRevision:d.request.revision,baseHistoryRevision:0})).success);
++let repaired=await store.handle({action:'work_document_retry',requestId:b.request.id,recordId:source.recordId,sha256:pdf.sha256},who);assert.equal(repaired.commentAttached,true,JSON.stringify(repaired));
++assert.equal(repaired.request.id,b.request.id);assert.equal((await kv.get(k('document',source.recordId))).value.previousRequestId,a.request.id);
++await store.bridge('documents',{documents:[document]}); // delayed delivery still carries the deleted request ID
++await Promise.all([1,2].map(()=>store.handle({action:'work_document_retry',recordId:source.recordId,sha256:pdf.sha256},who)));
++d=await store.handle({action:'work_detail',id:b.request.id},who);assert.equal(d.history.filter(h=>h.attachment&&!h.deletedAt).length,1);assert.equal(d.history.find(h=>h.attachment).attachment.fileId,pdf.fileId);
++assert.equal((await kv.get(k('history',a.request.id,d.history.find(h=>h.attachment).id))).value.attachment.fileId,pdf.fileId,'trash history remains intact');
++const c=await write('work_save',{form,acknowledgeDuplicates:true});assert.ok(c.success);
++assert.equal((await store.handle({action:'work_document_retry',requestId:c.request.id,recordId:source.recordId},who)).success,false,'another live owner cannot steal a document');
++await assert.rejects(()=>store.bridge('documents',{documents:[{...document,requestId:c.request.id}]}),/다른 접수/);
++const entry=(await kv.get(k('document',source.recordId))).value;
++await kv.set(k('document',source.recordId),{...entry,requestId:'missing_owner'});
++assert.equal((await store.handle({action:'work_document_retry',requestId:b.request.id,recordId:source.recordId},who)).success,false,'missing owner is protected');
++await kv.set(k('document',source.recordId),entry);
++const comment=d.history.find(h=>h.attachment);assert.ok((await write('work_history_update',{requestId:b.request.id,historyId:comment.id,baseHistoryRevision:comment.revision,deleted:true})).success);
++repaired=await store.handle({action:'work_document_retry',recordId:source.recordId},who);assert.equal(repaired.commentDeleted,true,'explicit comment deletion is preserved');
++db.raw.close();console.log('document rebind: deleted-owner recovery, delayed old-ID delivery, same-file/concurrent dedup, trash history, live/missing owner protection and explicit comment deletion passed');

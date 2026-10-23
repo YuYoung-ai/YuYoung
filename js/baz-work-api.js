@@ -7,5 +7,6 @@
   catch(e){var error=new Error(e.name==='AbortError'?'응답 대기 시간이 지났습니다.':e.message||'연결 실패');error.unknown=!!write;throw error;}
   finally{clearTimeout(timer);measured(timing);}
  }
- root.BazWorkAPI={get:function(a,p){return call(a,p||{},false);},post:function(a,p){return call(a,p||{},true);},id:function(){return root.crypto.randomUUID();}};
+ function id(){if(typeof root.crypto?.randomUUID==='function')return root.crypto.randomUUID();var bytes=root.crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;return Array.from(bytes,function(b,i){return ([4,6,8,10].includes(i)?'-':'')+b.toString(16).padStart(2,'0');}).join('');}
+ root.BazWorkAPI={get:function(a,p){return call(a,p||{},false);},post:function(a,p){return call(a,p||{},true);},id:id};
 })(window);
