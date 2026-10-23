@@ -272,7 +272,7 @@
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
     <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
       <span style="font-size:24px;">⭐</span>
-      <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">AS 서비스 평가 · 별점/항목별 피드백</span></span>
+      <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">병원별 QR 발급 · 설문 결과 통계</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
 
@@ -1787,21 +1787,21 @@ const HUB_I18N = {
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
     'hosp-name':'병원 데이터센터','hosp-desc':'병원 검색 · 점검 현황 · 지도',
-    'survey-name':'고객 만족도 조사','survey-desc':'AS 서비스 평가 · 별점/항목별 피드백' },
+    'survey-name':'고객 만족도 조사','survey-desc':'병원별 QR 발급 · 설문 결과 통계' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
     pwTitle:'Unlock', pwDesc:'Sign in with your registered Google account.', cancel:'Cancel', ok:'OK', rateLimited:'Too many login attempts. Please try again shortly.', googleChecking:'Checking your Google account...', googleDenied:'This Google account is not registered or has been disabled.', googleFailed:'Google sign-in could not be verified. Please try again.', checking:'Checking...', warming:'Waking the server…', sec:'s', retry:'retry', serverBusy:'The server is slow to respond (first login can take up to 30s). Please try again shortly.', netErr:'Network error. Please check your connection.',
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
     'hosp-name':'Hospital Data Center','hosp-desc':'Search · Status · Map',
-    'survey-name':'Customer Satisfaction','survey-desc':'AS service rating & feedback' },
+    'survey-name':'Customer Satisfaction','survey-desc':'Hospital QR links & survey results' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
     pwTitle:'ロック解除', pwDesc:'登録済みのGoogleアカウントでログインしてください。', cancel:'キャンセル', ok:'確認', rateLimited:'ログイン試行回数が多すぎます。しばらくしてから再試行してください。', googleChecking:'Googleアカウントを確認中...', googleDenied:'登録されていないか、無効化されたGoogleアカウントです。', googleFailed:'Googleログインを確認できませんでした。もう一度お試しください。', checking:'確認中...', warming:'サーバーを起動中…', sec:'秒', retry:'再試行', serverBusy:'サーバーの応答が遅れています（初回は30秒かかることがあります）。少し待って再度お試しください。', netErr:'ネットワークエラー。接続を確認してください。',
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
     'hosp-name':'病院データセンター','hosp-desc':'病院検索 · 点検状況 · 地図',
-    'survey-name':'顧客満足度調査','survey-desc':'ASサービス評価・フィードバック' }
+    'survey-name':'顧客満足度調査','survey-desc':'病院別QR・アンケート集計' }
 };
 let HUBLANG = localStorage.getItem('baz_lang') || 'ko';
 if(!HUB_I18N[HUBLANG]) HUBLANG='ko';
@@ -1918,7 +1918,7 @@ document.getElementById('appBtnReport').addEventListener('click', function(){
 document.getElementById('appBtnGuide').addEventListener('click', function(){ location.href='guide.html'; });
 document.getElementById('appBtnChatbot').addEventListener('click', function(){ alert('AI 챗봇은 현재 사용하지 않습니다.'); });
 document.getElementById('appBtnWeekly').addEventListener('click', function(){ location.href='weekly.html'; });
-document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey.html'; });
+document.getElementById('appBtnSurvey').addEventListener('click', function(){ location.href='survey-admin.html'; });
 document.getElementById('appBtnInspection').addEventListener('click', function(){ location.href='inspection.html'; });
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital-pc.html'; });   /* [메뉴 통합] 모바일/PC 단일 카드 — hospital-pc.html이 화면 크기 자동 감지 + 모바일 전환 토글 제공 */
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });

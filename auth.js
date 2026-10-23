@@ -396,6 +396,7 @@
   function goLogin_() {
     try{
       var page=currentPage_();
+      if(page==='survey-admin.html')BazAuth.rememberReturn(page);
       if(page==='notification.html')BazAuth.rememberReturn(page+global.location.search);
       if(['hospital-work.html','handover.html','inspection.html'].includes(page)&&(!BazAuth.token()||BazAuth.cachedLevel()>=requiredLevelFor_(page))){
         var p=new URLSearchParams(global.location.search||''),id=p.get('request'),notice=p.get('notification');
@@ -450,12 +451,12 @@
   BazAuth.guard = guardPage_;
   BazAuth.rememberReturn=function(path){
     var url=new URL(path,global.location.href),base=new URL('index.html',global.location.href);
-    if(url.origin!==base.origin||!['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
-    var safe=url.pathname;if(url.pathname.endsWith('/notification.html')){var noticeId=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(noticeId||''))return false;safe+='?notification='+encodeURIComponent(noticeId);}else if(!['install.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname.endsWith('/'+page);})){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(url.pathname.endsWith('/hospital-work.html')&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);if(url.pathname.endsWith('/inspection.html')){var record=url.searchParams.get('record');if(!/^[A-Za-z0-9_-]{8,90}$/.test(record||''))return false;safe+='&record='+encodeURIComponent(record);}}
+    if(url.origin!==base.origin||!['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html','survey-admin.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))return false;
+    var safe=url.pathname;if(url.pathname.endsWith('/notification.html')){var noticeId=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(noticeId||''))return false;safe+='?notification='+encodeURIComponent(noticeId);}else if(!['install.html','guide.html','hospital-pc.html','survey-admin.html'].some(function(page){return url.pathname.endsWith('/'+page);})){var id=url.searchParams.get('request'),notice=url.searchParams.get('notification');if(!/^[A-Za-z0-9_-]{8,90}$/.test(id||''))return false;safe+='?request='+encodeURIComponent(id);if(url.pathname.endsWith('/hospital-work.html')&&/^[A-Za-z0-9_-]{8,90}$/.test(notice||''))safe+='&notification='+encodeURIComponent(notice);if(url.pathname.endsWith('/inspection.html')){var record=url.searchParams.get('record');if(!/^[A-Za-z0-9_-]{8,90}$/.test(record||''))return false;safe+='&record='+encodeURIComponent(record);}}
     try{sessionStorage.setItem('baz_notification_return_v1',JSON.stringify({path:safe,expires:Date.now()+30*60000}));return true;}catch(e){return false;}
   };
   BazAuth.returnAfterLogin=function(){
-    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
+    try{var saved=JSON.parse(sessionStorage.getItem('baz_notification_return_v1')||'null');sessionStorage.removeItem('baz_notification_return_v1');if(!saved||saved.expires<Date.now()||!BazAuth.token())return;var url=new URL(saved.path,global.location.href),base=new URL('index.html',global.location.href);if(url.origin===base.origin&&['hospital-work.html','handover.html','inspection.html','install.html','notification.html','guide.html','hospital-pc.html','survey-admin.html'].some(function(page){return url.pathname===new URL(page,base).pathname;}))global.location.replace(url.href);}catch(e){}
   };
 
   global.BazAuth = BazAuth;
