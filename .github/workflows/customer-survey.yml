@@ -1,10 +1,10 @@
 name: Customer survey checks
 on:
   pull_request:
-    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
+    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', 'cloudflare/survey-link/**', '.github/workflows/customer-survey.yml']
   push:
     branches: [main]
-    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', '.github/workflows/customer-survey.yml']
+    paths: ['customer-survey.html', 'survey-admin.html', 'survey-sales.html', 'js/*survey*', 'css/baz-survey.css', 'cloudflare/customer-survey/**', 'cloudflare/survey-link/**', '.github/workflows/customer-survey.yml']
 permissions:
   contents: read
 jobs:

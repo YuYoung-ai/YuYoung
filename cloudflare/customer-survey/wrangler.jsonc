@@ -2,7 +2,7 @@
  "$schema":"node_modules/wrangler/config-schema.json",
  "name":"baz-customer-survey","main":"src/worker.js","compatibility_date":"2026-10-23",
  "compatibility_flags":["global_fetch_strictly_public"],"workers_dev":true,"preview_urls":false,
- "vars":{"AUTH_URL":"https://yuyoung-production.coaptation.workers.dev","ALLOWED_ORIGINS":"https://yuyoung-ai.github.io","CUSTOMER_PAGE":"https://yuyoung-ai.github.io/YuYoung/customer-survey.html"},
+ "vars":{"SHORT_URL_BASE":"https://curejet.coaptation.workers.dev","AUTH_URL":"https://yuyoung-production.coaptation.workers.dev","ALLOWED_ORIGINS":"https://yuyoung-ai.github.io","CUSTOMER_PAGE":"https://yuyoung-ai.github.io/YuYoung/customer-survey.html"},
  "d1_databases":[{"binding":"DB","database_name":"baz-customer-survey","database_id":"35b2ed6a-3405-4c2a-8f92-1e1e92fd2b5e","migrations_dir":"migrations"}],
  "ratelimits":[{"name":"SALES_LOGIN_LIMITER","namespace_id":"2026102301","simple":{"limit":20,"period":60}}],
  "observability":{"enabled":false}
