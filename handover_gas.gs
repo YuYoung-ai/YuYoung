@@ -557,10 +557,11 @@ function doPost(e){
        아래 공통 기록 경로로 흘러 사진 없는 행을 만드는 것을 차단한다. */
     var knownActions = ['progress_save','progress_restore','history_save','weeklywrite',
                         'menu_save','weeklyauto_save','labeldone','photo_add','photo_abandon',
-                        'photophrase_save'];
+                        'photophrase_save','report_phrase_save'];
     if(actName && knownActions.indexOf(actName) < 0){
       return json_({success:false, error:'알 수 없는 action: '+String(actName).slice(0,40)});
     }
+    if(actName==='report_phrase_save') return json_(reportPhraseSave_(payload));
     var isHandover = !actName;
 
     /* [v3.4] 사진 전용 액션은 여기서 끝낸다 — 인증은 위에서 이미 통과했고, 아래의
@@ -933,6 +934,7 @@ function doGet(e){
         inventorySchema:typeof INV_REPLACEMENT!=='undefined'?INV_REPLACEMENT.VERSION:0,
         warmed:warmed, pong:new Date().toISOString()});
     }
+    if(action==='report_phrases') return json_(reportPhrasesGet_(p));
     if(action==='all')    return json_(getAll_(p));
     if(action==='hospdb') return json_(getHospDB_(p));
     if(action==='hospdbrich') return json_(getHospDBRich_(p));  /* [Core] 병원정보DB 전체필드(hospital_gas 대체) */
@@ -3940,4 +3942,24 @@ function progRestore_(p){
   }
   try{ schedLog_([[schedNow_(), '', '', 'restore', '', day, String(p.who||'')]]); }catch(e){}
   return res;
+}
+
+/* Weekly report reusable symptom descriptions. Shared only through authenticated Lv.3 API. */
+function reportPhraseKey_(name){return String(name||'').trim().toLowerCase().replace(/\s+/g,'').replace(/[·ㆍ]/g,'');}
+function reportPhraseProperty_(name){return 'REPORT_PHRASE_'+Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,reportPhraseKey_(name),Utilities.Charset.UTF_8).map(function(b){return ('0'+((b+256)%256).toString(16)).slice(-2);}).join('');}
+function reportPhrasesGet_(p){
+  if(verifyLevel_(p.token||'')<3)return {success:false,error:'레벨 3 권한이 필요합니다.'};
+  var props=PropertiesService.getScriptProperties().getProperties(),items=[];
+  Object.keys(props).filter(function(k){return k.indexOf('REPORT_PHRASE_')===0;}).forEach(function(k){try{var x=JSON.parse(props[k]);if(x.name&&x.text)items.push(x);}catch(e){}});
+  return {success:true,items:items};
+}
+function reportPhraseSave_(p){
+  if(verifyLevel_(p.token||'')<3)return {success:false,error:'레벨 3 권한이 필요합니다.'};
+  var name=String(p.name||'').trim(),text=String(p.text||'').trim();
+  if(!name||name.length>120||!text||text.length>90||/[\r\n]/.test(text))return {success:false,error:'증상과 90자 이내의 한 줄 기본 문구를 입력하세요.'};
+  var lock=LockService.getScriptLock();if(!lock.tryLock(10000))return {success:false,error:'다른 문구를 저장 중입니다. 다시 시도하세요.'};
+  try{var props=PropertiesService.getScriptProperties(),key=reportPhraseProperty_(name),old=JSON.parse(props.getProperty(key)||'null');
+    if(Number(p.revision)!==(old?old.revision:0))return {success:false,error:'다른 작성자가 문구를 변경했습니다. 작성 화면을 다시 열어 확인하세요.'};
+    var item={name:name,text:text,revision:old?old.revision+1:1,updatedAt:new Date().toISOString()};props.setProperty(key,JSON.stringify(item));return {success:true,item:item};
+  }finally{lock.releaseLock();}
 }

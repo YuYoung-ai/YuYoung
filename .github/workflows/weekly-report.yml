@@ -1,0 +1,20 @@
+name: Weekly report checks
+on:
+  pull_request:
+    paths: ['dashboard-pc.html', 'handover_gas.gs', 'js/baz-weekly-report.js', 'js/baz-report-files.js', 'assets/report-templates/**', 'test/report-*.mjs', 'test/dashboard-executive-ppt.mjs', '.github/workflows/weekly-report.yml']
+  push:
+    branches: [main]
+    paths: ['dashboard-pc.html', 'handover_gas.gs', 'js/baz-weekly-report.js', 'js/baz-report-files.js', 'assets/report-templates/**', 'test/report-*.mjs', 'test/dashboard-executive-ppt.mjs', '.github/workflows/weekly-report.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check js/baz-weekly-report.js && node --check js/baz-report-files.js
+      - run: node test/report-phrases.mjs && node test/report-attachments.mjs
+      - run: node test/dashboard-executive-ppt.mjs && node test/dashboard-voc-normalization.mjs && node test/dashboard-monthly-trend.mjs
