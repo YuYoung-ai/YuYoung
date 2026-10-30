@@ -1024,9 +1024,10 @@ if (false) {
   ck('7-e. 좌측 조치 요약 패널 폭은 상단 발생 추이와 동일',
     Math.abs(D.L.action.leftW-D.L.trend.leftW)<0.001 &&
     Math.abs(D.L.action.graphX-D.L.trend.graphX)<0.001);
-  ck('7-f. 자체 수리율 원형 그래프와 기준 기간·누적 내부 세척 절감액을 표시',
+  ck('7-f. 주간은 자체 수리율과 이번 주 절감액만 표시하고 누적 절감액은 제거',
     wItems.some(o=>o.actionGauge) && wItems.some(o=>o.actionRepairRate) && wItems.some(o=>o.actionSaving) &&
-    wItems.some(o=>o.actionSavingCumulative) &&
+    !wItems.some(o=>o.actionSavingCumulative) &&
+    mItems.some(o=>o.actionSavingCumulative) &&
     wItems.some(o=>o.actionSavingBasis&&o.t==='※ 1건당 절감액') &&
     wItems.some(o=>o.actionSavingBasisFormula&&o.t==='리페어 제작비 - 수리비 = 281,200원'));
   ck('7-g. 월간도 동일한 조치 카드 구성을 사용',
@@ -1035,10 +1036,8 @@ if (false) {
     wItems.some(o=>o.actionCurrentPeriodBand) && wItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='이번 주') &&
     wItems.filter(o=>o.actionCurrentHalo).length===2 &&
     mItems.some(o=>o.actionCurrentPeriodLabel&&o.t==='당월'));
-  ck('7-g-2. 7월 13일 내부 세척 수리 적용 주차에는 밝은 파란 구간·후광과 표기를 둔다',
-    wItems.some(o=>o.actionRepairStartBand&&o.fill===D.C.blueBg&&o.w>0.9) &&
-    wItems.some(o=>o.actionRepairStartHalo&&o.actionIdx===12&&o.fill===D.C.blueRing) &&
-    wItems.some(o=>o.actionRepairStartLabel&&o.t==='적용 시점'));
+  ck('7-g-2. 수리 조치 그래프에서 적용 시작 구간·후광·표기를 모두 제거',
+    !wItems.concat(mItems).some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel));
 
   load([
     {date:'2026-08-03',hosp:'가나',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},

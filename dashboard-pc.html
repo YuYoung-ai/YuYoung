@@ -1533,6 +1533,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
 }
 </style>
 <script src="auth.js?v=251"></script>
+<link rel="stylesheet" href="css/baz-weekly-report.css?v=1">
 </head>
 <body>
 <header>
@@ -4759,6 +4760,7 @@ function buildExecutivePptDeck(snap){
     var SV=T.saving;
     line({x:SV.ruleX, y:SV.ruleY, w:SV.ruleW, color:C.kpiLine, width:0.75});
     var SS=ac.savingSummary, cumSavingText='₩'+exNum(SS.cumulative), periodSavingText='₩'+exNum(SS.period);
+    if(ac.kind==='month'){
     text({x:SV.leftX, y:SV.labelY, w:SV.colW, h:SV.labelH,
           t:SS.cumulativeLabel, size:6.6, bold:true, color:C.mut, align:'center', actionSavingCumulativeLabel:true});
     text({x:SV.leftX, y:SV.valueY, w:SV.colW, h:SV.valueH,
@@ -4770,6 +4772,11 @@ function buildExecutivePptDeck(snap){
     text({x:SV.rightX, y:SV.valueY, w:SV.colW, h:SV.valueH,
           t:periodSavingText, size:exFitSize_(periodSavingText,SV.colW,[16,14,12,10]), bold:true, color:C.navy,
           align:'center', actionSaving:true, actionSavingPeriod:true});
+
+    }else{
+      text({x:SV.leftX,y:SV.labelY,w:SV.ruleW,h:SV.labelH,t:'이번 주 절감액',size:7.2,bold:true,color:C.mut,align:'center',actionSavingPeriodLabel:true});
+      text({x:SV.leftX,y:SV.valueY,w:SV.ruleW,h:SV.valueH,t:periodSavingText,size:16,bold:true,color:C.navy,align:'center',actionSaving:true,actionSavingPeriod:true});
+    }
 
     rect({x:T.graphX, y:T.graphY, w:T.graphW, h:T.graphH, r:0.06,
           fill:C.white, line:{color:C.line, width:0.6}});
@@ -4792,22 +4799,9 @@ function buildExecutivePptDeck(snap){
     var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=1; pts.forEach(function(p){maxV=Math.max(maxV,p.clean||0,p.replacement||0);});
     var ny=ycNice_(maxV,G.ticks), sy=function(v){return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop);};
-    /* 내부 세척 수리는 7월 13일 적용을 시작한 주차를 별도로 후광 처리한다.
-       표시 기간에 해당 주차가 없을 때는 별도 표식을 그리지 않는다. */
-    var repairApplyIdx=ac.kind==='week' ? pts.findIndex(function(p){ return p.label==='7/13'; }) : -1;
-    /* 수리 조치 그래프도 동일하게 마지막 보고 주·월을 별도 배경으로 읽을 수 있게 한다. */
+    /* 전체 표시 기간이 적용 기간이다. 마지막 보고 주·월만 강조한다. */
     var currentPeriodLabel=ac.kind==='month'?'당월':'이번 주';
     var currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18)), currentBandW=G.plotR-currentBandX;
-    var repairApplyBandX=null, repairApplyBandW=0;
-    if(repairApplyIdx>=0){
-      repairApplyBandX=Math.max(G.plotL,cx(repairApplyIdx)-(n>1?step/2:0.18));
-      /* 적용 시작부터 마지막 보고 주차까지를 하나의 성과 구간으로 덮는다.
-         마지막 주차의 민트 영역은 뒤에서 한 번 더 그려 현재 보고 기간을 구분한다. */
-      repairApplyBandW=G.plotR-repairApplyBandX;
-      rect({x:repairApplyBandX, y:G.plotTop-0.045, w:repairApplyBandW,
-            h:G.labelY+G.labelH-G.plotTop+0.09,
-            fill:C.blueBg, actionRepairStartBand:true});
-    }
     rect({x:currentBandX, y:G.plotTop, w:currentBandW, h:G.labelY+G.labelH-G.plotTop,
           fill:C.mintBg, actionCurrentPeriodBand:true});
     for(var gi=0;gi<=G.ticks;gi++){
@@ -4828,13 +4822,12 @@ function buildExecutivePptDeck(snap){
       for(var j=0;j<n;j++){
         var val=pts[j][key]||0, py=sy(val), other=pts[j][key==='clean'?'replacement':'clean']||0;
         var px=actionCX(key,j), lw=n>10?Math.min(0.27,Math.max(0.23,step)):0.40;
-        var last=j===n-1, repairStart=key==='clean' && j===repairApplyIdx;
+        var last=j===n-1;
         if(last) dot({cx:px, cy:py, r:0.066, fill:C.mintRing, actionCurrentHalo:key, actionIdx:j});
-        if(repairStart) dot({cx:px, cy:py, r:0.085, fill:C.blueRing, actionRepairStartHalo:true, actionIdx:j});
-        dot({cx:px, cy:py, r:(last||repairStart)?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
+        dot({cx:px, cy:py, r:last?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
         if(!val) continue;
         var manualPlacement=exActionLabelPlacement_(ac.kind,pts[j].label,key);
-        var below=(key==='replacement'||repairStart) && py+G.valueH+0.055<=G.plotBot-0.01;
+        var below=(key==='replacement') && py+G.valueH+0.055<=G.plotBot-0.01;
         if(manualPlacement==='top') below=false;
         else if(manualPlacement==='bottom') below=true;
         var ly=below
@@ -4864,12 +4857,6 @@ function buildExecutivePptDeck(snap){
     });
     text({x:currentBandX+0.02, y:G.plotTop+0.03, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
           t:currentPeriodLabel, size:5.8, bold:true, color:C.green, align:'center', actionCurrentPeriodLabel:true});
-    if(repairApplyBandX!=null){
-      var repairStartLabelW=0.56, repairStartLabelX=Math.max(G.plotL,
-          Math.min(repairApplyBandX+repairApplyBandW/2-repairStartLabelW/2,G.plotR-repairStartLabelW));
-      text({x:repairStartLabelX, y:G.plotTop+0.03, w:repairStartLabelW, h:G.valueH,
-            t:'적용 시점', size:4.8, bold:true, color:C.blue, align:'center', actionRepairStartLabel:true});
-    }
     /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
     text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
           t:'※ 1건당 절감액', size:4.9, bold:true, color:C.mut, align:'center', actionSavingBasis:true});
@@ -5062,6 +5049,7 @@ function exPptRenderHtml_(items){
 
 /* ══════ PptxGenJS 지연 로드 — jsDelivr(공식) 우선, 실패 시 폴백 CDN 순차 시도 ══════ */
 var PPTX_CDNS=[
+  'js/vendor/pptxgen-3.12.0.bundle.js',
   'https://cdn.jsdelivr.net/gh/gitbrent/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
   'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
   'https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js'
@@ -10587,5 +10575,8 @@ loadData(false);
   });
 })();
 </script>
+<script src="js/vendor/jszip-3.10.1.min.js"></script>
+<script src="js/baz-report-files.js?v=1"></script>
+<script src="js/baz-weekly-report.js?v=1"></script>
 </body>
 </html>
