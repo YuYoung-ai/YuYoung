@@ -40,7 +40,18 @@ try{
  console.log('PASS snapshot, TOP3, count deduplication, prior period, layout, removed markers and cumulative amount');
  const fileLabels=await page.evaluate(()=>{const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;return {guides:items.filter(o=>o.manualFileSlot).length,captions:items.filter(o=>o.manualFileCaption).map(o=>o.t)};});
  assert.equal(fileLabels.guides,0,'no insertion outlines');
- assert.deepEqual(fileLabels.captions,['A/S 처리 내역서','A/S 처리 내역서','A/S 처리 내역서','사용자 교육 현황','노즐 재사용 현황']);
+ assert.deepEqual(fileLabels.captions,['A/S 처리 내역서','A/S 처리 내역서','A/S 처리 내역서']);
+ const alignment=await page.evaluate(()=>{
+  const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items;
+  const countColumns=items.filter(o=>o.weeklyVocCount||o.weeklyManagementCount).map(o=>[o.x,o.w,o.align]);
+  const deltas=items.filter(o=>o.weeklyManagementDelta).map(o=>o.t);
+  const dividers=items.filter(o=>o.weeklyVocDivider).length;
+  s.change.up=s.change.up.slice(0,1);
+  return {countColumns,deltas,dividers,singleDivider:buildExecutivePptDeck(s)[0].items.filter(o=>o.weeklyVocDivider).length};
+ });
+ assert(alignment.countColumns.every(c=>JSON.stringify(c)===JSON.stringify(alignment.countColumns[0])),'VOC and hospital count columns align');
+ assert.deepEqual(alignment.deltas,['▲ 1','▼ 1']);
+ assert.equal(alignment.dividers,3);assert.equal(alignment.singleDivider,1,'divider under a single/final symptom');
  // Save a description, clear per-report edit, then prove it is reused from the saved dictionary.
  const unregistered=page.locator('.wr-voc').filter({has:page.locator('.missing')}).first();
  const savedName=(await unregistered.locator('.wr-head strong').innerText()).replace(/^\d+\.\s*/, '');await unregistered.locator('textarea').fill('작동 이상이 반복적으로 발생하는 현상');await unregistered.getByRole('button',{name:'기본 문구로 저장'}).click();await page.waitForTimeout(150);
