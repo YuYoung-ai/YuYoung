@@ -56,7 +56,7 @@
   s.notes={title:'특이사항',basis:'',edited:true,items:d.notes.filter(function(t){return t.trim();}).map(function(t){return root.esc(t);})};s.management=management(rows,prev);return s;
  }
  function layout(L){
-  return {change:Object.assign({},L.change,{pad:.14,top:.45,pitch:.60,nameW:2.06,descW:2.20,countX:2.34,countW:.75,deltaX:3.12,deltaW:.67,iconX:3.96,iconW:.39,iconH:.47}),management:{x:L.notes.x,y:L.notes.y,w:L.notes.w,h:1.17,pad:.14,top:.35,pitch:.36,nameW:1.95,countX:2.1,countW:.84,deltaX:3.0,deltaW:.70,iconX:3.96,iconW:.30,iconH:.35},notes:{x:L.notes.x,y:L.notes.y+1.27,w:L.notes.w,h:.85,pad:.14,top:.34,lineH:.20}};
+  return {change:Object.assign({},L.change,{pad:.14,top:.45,pitch:.60,nameW:2.06,descW:2.20,countX:2.34,countW:.75,deltaX:3.12,deltaW:.67,iconX:3.96,iconW:.39,iconH:.47}),management:{x:L.notes.x,y:L.notes.y,w:L.notes.w,h:1.17,pad:.14,top:.35,pitch:.41,nameW:1.95,countX:2.1,countW:.84,deltaX:3.0,deltaW:.70,iconX:3.96,iconW:.30,iconH:.35},notes:{x:L.notes.x,y:L.notes.y+1.27,w:L.notes.w,h:.85,pad:.14,top:.34,lineH:.20}};
  }
  function wrap(text,width,size){var lines=[''];Array.from(String(text)).forEach(function(ch){if(ch==='\r')return;if(ch==='\n'){lines.push('');return;}var i=lines.length-1;if(root.exTxtW_(lines[i]+ch,size)>width&&lines[i])lines.push(ch);else lines[i]+=ch;});return lines;}
  function decorate(s,items){
@@ -66,11 +66,15 @@
   function rule(T,y){items.push({k:'line',x:T.x+T.pad,y:y,w:T.w-T.pad*2,color:C.line,width:.5});}
   function shell(T,title,basis){items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},weeklyCard:title});text(T.x+T.pad,T.y+.07,T.w-T.pad*2,.25,title,10.5,C.navy,true);if(basis)text(T.x+T.w-1.65,T.y+.09,1.5,.19,basis,6.8,C.mut,false,{align:'right'});}
   function delta(T,y,cur,prev){var d=prev==null?null:cur-prev,color=d==null||d===0?C.mut:d>0?C.red:C.green;var t=d==null?'비교 없음':d===0?'전주 동일':(d>0?'▲ +':'▼ −')+Math.abs(d)+'곳';text(T.x+T.countX,y,T.countW,.22,(prev==null?'—':prev)+' → '+cur+'곳',8.5,C.navy,true);text(T.x+T.deltaX,y,T.deltaW,.22,t,8,color,true,{align:'center'});}
+  function manualFile(T,y,label,pdf){
+   var center=T.x+T.iconX+T.iconW/2,h=pdf?.35:.26;
+   text(center-.40,y+h+.025,.80,.10,label,6.2,C.mut,false,{align:'center',manualFileCaption:label});
+  }
 
   var T=B.change;shell(T,'VOC 증가 현황','전주 대비 · 증가 TOP 3');
   if(!s.change.up.length)text(T.x+T.pad,T.y+.7,T.w-T.pad*2,.3,s.change.hasPrev?'전주 대비 증가한 VOC가 없습니다.':'이전 기간 비교 자료가 없습니다.',9,C.mut);
-  s.change.up.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;var name=root.exFitTxt_(r.k,T.nameW,9);text(T.x+T.pad,y,T.nameW,.22,name,9,C.navy,true,{weeklyVoc:i});var ls=wrap(r.desc,T.descW,7);if(ls.length>2)throw new Error(r.k+' 보조문구를 두 줄 이내로 줄여주세요.');ls.forEach(function(l,j){text(T.x+T.pad,y+.24+j*.14,T.descW,.14,l,7,C.mut,false,{weeklyDescription:i});});text(T.x+T.countX,y+.02,T.countW,.22,r.prev+' → '+r.cur+'건',8,C.navy,true);text(T.x+T.deltaX,y+.02,T.deltaW,.22,'▲ +'+r.d,8,C.red,true,{align:'center'});if(i<s.change.up.length-1)rule(T,y+T.pitch-.06);});
-  T=B.management;shell(T,'교육·재사용 병원 현황','전주 대비');s.management.items.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;text(T.x+T.pad,y,T.nameW,.20,r.name,8.5,C.navy,true);text(T.x+T.pad,y+.20,T.nameW,.13,r.sub,6.5,C.mut);delta(T,y+.04,r.cur,r.prev);if(!i)rule(T,y+T.pitch-.03);});
+  s.change.up.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;var name=root.exFitTxt_(r.k,T.nameW,9);text(T.x+T.pad,y,T.nameW,.22,name,9,C.navy,true,{weeklyVoc:i});var ls=wrap(r.desc,T.descW,7);if(ls.length>2)throw new Error(r.k+' 보조문구를 두 줄 이내로 줄여주세요.');ls.forEach(function(l,j){text(T.x+T.pad,y+.24+j*.14,T.descW,.14,l,7,C.mut,false,{weeklyDescription:i});});text(T.x+T.countX,y+.02,T.countW,.22,r.prev+' → '+r.cur+'건',8,C.navy,true);text(T.x+T.deltaX,y+.02,T.deltaW,.22,'▲ +'+r.d,8,C.red,true,{align:'center'});manualFile(T,y-.01,'A/S 처리 내역서',true);if(i<s.change.up.length-1)rule(T,y+T.pitch-.06);});
+  T=B.management;shell(T,'교육·재사용 병원 현황','전주 대비');s.management.items.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;text(T.x+T.pad,y,T.nameW,.20,r.name,8.5,C.navy,true);delta(T,y+.04,r.cur,r.prev);manualFile(T,y-.01,r.sub,false);});
   T=B.notes;shell(T,'특이사항');s.notes.items.forEach(function(t,i){var v=plain(t);if(root.exTxtW_(v,9.5)>T.w-T.pad*2)throw new Error('특이사항 '+(i+1)+'번을 한 줄 안에 들어가도록 줄여주세요.');text(T.x+T.pad,T.y+T.top+i*T.lineH,T.w-T.pad*2,T.lineH,v,9.5,C.navy,false,{weeklyNote:i});});
   return items;
  }

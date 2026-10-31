@@ -38,6 +38,9 @@ try{
  let state=await page.evaluate(()=>{const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items;return {change:s.change,counts:s.management.items,notes:s.notes,layout:BazWeeklyReport.layout(L),applied:items.some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel),cumulative:items.some(o=>o.actionSavingCumulative),saving:items.filter(o=>o.actionSavingPeriod).map(o=>o.t),notesTexts:items.filter(o=>o.weeklyNote!=null)};});
  assert.equal(state.applied,false);assert.equal(state.cumulative,false);assert.deepEqual(state.saving,['₩562,400']);assert.equal(state.change.up.length,3);assert.deepEqual(state.notes.items,[]);assert.equal(state.counts[0].cur,2);assert.equal(state.counts[0].prev,1);assert.equal(state.counts[1].cur,1);assert.equal(state.counts[1].prev,2);assert.equal(state.layout.change.h,2.42);assert.equal(state.layout.notes.h,.85);
  console.log('PASS snapshot, TOP3, count deduplication, prior period, layout, removed markers and cumulative amount');
+ const fileLabels=await page.evaluate(()=>{const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;return {guides:items.filter(o=>o.manualFileSlot).length,captions:items.filter(o=>o.manualFileCaption).map(o=>o.t)};});
+ assert.equal(fileLabels.guides,0,'no insertion outlines');
+ assert.deepEqual(fileLabels.captions,['A/S 처리 내역서','A/S 처리 내역서','A/S 처리 내역서','사용자 교육 현황','노즐 재사용 현황']);
  // Save a description, clear per-report edit, then prove it is reused from the saved dictionary.
  const unregistered=page.locator('.wr-voc').filter({has:page.locator('.missing')}).first();
  const savedName=(await unregistered.locator('.wr-head strong').innerText()).replace(/^\d+\.\s*/, '');await unregistered.locator('textarea').fill('작동 이상이 반복적으로 발생하는 현상');await unregistered.getByRole('button',{name:'기본 문구로 저장'}).click();await page.waitForTimeout(150);

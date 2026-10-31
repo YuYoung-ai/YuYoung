@@ -17,7 +17,7 @@
 3. 정적 파일 변경을 GitHub Pages에 배포한다. `assets/report-templates`, CSS, JS 모듈, vendor 파일을 포함한다. 서비스 워커 버전도 함께 갱신한다.
 4. 실제 보고 주차로 미리보기와 PPT를 생성해 확인한다.
 
-주간·월간은 원래의 `exMakeReportPPT`와 `PptxGenJS.writeFile` 저장 경로를 공유한다. 주간 전용 ZIP 재조립·XML 정규화·OLE 삽입은 호출하지 않는다. 카드 오른쪽은 비워 두며 PDF·엑셀은 데스크톱 PowerPoint의 삽입 → 개체 → 파일에서 만들기로 직접 넣는다. 아이콘으로 표시하고 연결은 해제하면 PPT 내부에 파일이 포함된다.
+주간·월간은 원래의 `exMakeReportPPT`와 `PptxGenJS.writeFile` 저장 경로를 공유한다. 주간 전용 ZIP 재조립·XML 정규화·OLE 삽입은 호출하지 않는다. 카드 오른쪽에는 삽입 영역 테두리 없이 하단 파일 설명(A/S 처리 내역서·사용자 교육 현황·노즐 재사용 현황)만 표시한다. PDF·엑셀은 데스크톱 PowerPoint의 삽입 → 개체 → 파일에서 만들기로 직접 넣는다. 아이콘으로 표시하고 연결은 해제하면 PPT 내부에 파일이 포함된다.
 
 ## 검증
 
