@@ -5,7 +5,7 @@
  var NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main',templates={};
  function key(s){return root.exVocDescKey_(s);}
  function period(){return root.exReportPeriodFromSel_('week');}
- function draft(p){p=p||period();if(!p)return {descs:{},files:{},notes:['','']};var k=p.from+'_'+p.to;return drafts[k]||(drafts[k]={descs:Object.create(null),files:Object.create(null),notes:['','']});}
+ function draft(p){p=p||period();if(!p)return {descs:{},notes:['','']};var k=p.from+'_'+p.to;return drafts[k]||(drafts[k]={descs:Object.create(null),notes:['','']});}
  function desc(name,d){var k=key(name);return Object.prototype.hasOwnProperty.call(d.descs,k)?d.descs[k]:(phrases[k]?phrases[k].text:root.EX_VOC_DESC[k]||'');}
  function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
  function button(text,fn){var b=el('button','wr-button',text);b.type='button';b.onclick=fn;return b;}
@@ -22,15 +22,10 @@
   catch(e){tell(e);}finally{b.disabled=false;}
  }
  function rowsFor(p){var s=root.buildExecutiveReportSnapshot({type:'week',from:p.from,to:p.to});return s.change.up;}
- async function choosePdf(file,row,d,fileBox){
-  var k=key(row.k);if(!file)return;
-  try{if(!/\.pdf$/i.test(file.name)||file.size>root.BazReportFiles.maxBytes)throw new Error('5MB 이하의 PDF 파일을 선택하세요.');var bytes=new Uint8Array(await file.arrayBuffer());if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')throw new Error('유효한 PDF 파일을 선택하세요.');d.files[k]={name:file.name,bytes:bytes,kind:'pdf'};fileBox.textContent=file.name;}
-  catch(e){tell(e);}
- }
  function refreshVoc(){
   var p=period(),host=document.getElementById('wkVocDescRows');if(!host||!p)return;
   var d=draft(p),rows=rowsFor(p);host.replaceChildren();
-  document.querySelector('#wkVocDescBox summary').textContent='VOC 증가 현황 · 보조문구 및 PDF 첨부';
+  document.querySelector('#wkVocDescBox summary').textContent='VOC 증가 현황 · 보조문구';
   var help=document.querySelector('#wkVocDescBox .voc-desc-help');help.textContent='등록 증상은 기본 문구 자동 입력 · 미등록 증상은 작성 후 저장 · 증가 유형 최대 3개';
   if(!rows.length)host.append(el('p','voc-desc-empty','전주 대비 증가한 A/S 유형이 없습니다.'));
   rows.forEach(function(r,i){
@@ -38,11 +33,10 @@
    head.append(el('strong','',String(i+1)+'. '+r.k),el('span','wr-delta',r.prev+' → '+r.cur+'건 · ▲ +'+r.d));box.append(head,badge);
    var label=el('label','wr-label','보조문구'),input=el('textarea','wr-desc');input.rows=2;input.maxLength=90;input.value=v;input.placeholder='증상에 대한 기본 설명을 작성하세요';input.setAttribute('aria-label',r.k+' 보조문구');input.oninput=function(){d.descs[key(r.k)]=input.value;};label.append(input);box.append(label);
    var save=button('기본 문구로 저장',function(){savePhrase(r.k,input,badge,save);});box.append(save,el('small','wr-hint','저장한 문구는 다음 보고서의 같은 증상에 자동 입력됩니다.'));
-   var line=el('div','wr-file'),picker=el('input');picker.type='file';picker.accept='application/pdf,.pdf';picker.setAttribute('aria-label',r.k+' PDF 첨부');var name=el('span','wr-filename',d.files[key(r.k)]?d.files[key(r.k)].name:'첨부 없음');picker.onchange=function(){choosePdf(picker.files[0],r,d,name);};
-   line.append(el('span','','A/S·점검 내역서 PDF'),picker,name,button('삭제',function(){delete d.files[key(r.k)];picker.value='';name.textContent='첨부 없음';}));box.append(line);host.append(box);
+   box.append(el('small','wr-hint','A/S·점검 내역서 PDF는 생성한 PPT에서 직접 삽입하세요.'));host.append(box);
   });
-  var section=el('section','wr-management');section.append(el('strong','','교육·노즐 재사용 병원 현황'),el('p','wr-hint','선택한 보고 기간의 명단을 첨부 양식의 엑셀로 생성합니다.'));
-  section.append(button('사용자 교육 현황.xlsx 확인',function(){previewWorkbook('education');}),button('노즐 재사용 현황.xlsx 확인',function(){previewWorkbook('nozzle');}));host.append(section);document.getElementById('wkVocDescBox').open=true;
+  var section=el('section','wr-management');section.append(el('strong','','교육·노즐 재사용 병원 현황'),el('p','wr-hint','선택 기간의 명단을 제공 양식의 엑셀로 다운로드합니다. 생성한 PPT에서 직접 삽입하세요.'));
+  section.append(button('사용자 교육 현황.xlsx 다운로드',function(){previewWorkbook('education');}),button('노즐 재사용 현황.xlsx 다운로드',function(){previewWorkbook('nozzle');}));host.append(section);document.getElementById('wkVocDescBox').open=true;
  }
  function refreshNotes(){
   var host=document.getElementById('wkNoteRows');if(!host)return;var d=draft();host.replaceChildren();
@@ -58,7 +52,7 @@
  }
  function augment(s){
   var d=draft(s),rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59')),cp=root.buildComparisonPeriod(),prev=root.exPrevRows(cp),as=function(rr){return (rr||[]).filter(function(r){return String(r.gubun||'').trim()==='A/S';});};
-  s.change={title:'VOC 증가 현황',basis:'전주 대비 · A/S 기준',hasPrev:!!prev,down:[],up:prev?root.exVocTypeCompare_(as(rows),as(prev)).filter(function(t){return t.d>0;}).sort(function(a,b){return b.d-a.d||b.cur-a.cur||root.skCmpKo_(a.k,b.k);}).slice(0,3).map(function(t){return Object.assign({},t,{desc:desc(t.k,d),file:d.files[key(t.k)]||null});}):[]};
+  s.change={title:'VOC 증가 현황',basis:'전주 대비 · A/S 기준',hasPrev:!!prev,down:[],up:prev?root.exVocTypeCompare_(as(rows),as(prev)).filter(function(t){return t.d>0;}).sort(function(a,b){return b.d-a.d||b.cur-a.cur||root.skCmpKo_(a.k,b.k);}).slice(0,3).map(function(t){return Object.assign({},t,{desc:desc(t.k,d)});}):[]};
   s.notes={title:'특이사항',basis:'',edited:true,items:d.notes.filter(function(t){return t.trim();}).map(function(t){return root.esc(t);})};s.management=management(rows,prev);return s;
  }
  function layout(L){
@@ -72,11 +66,11 @@
   function rule(T,y){items.push({k:'line',x:T.x+T.pad,y:y,w:T.w-T.pad*2,color:C.line,width:.5});}
   function shell(T,title,basis){items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},weeklyCard:title});text(T.x+T.pad,T.y+.07,T.w-T.pad*2,.25,title,10.5,C.navy,true);if(basis)text(T.x+T.w-1.65,T.y+.09,1.5,.19,basis,6.8,C.mut,false,{align:'right'});}
   function delta(T,y,cur,prev){var d=prev==null?null:cur-prev,color=d==null||d===0?C.mut:d>0?C.red:C.green;var t=d==null?'비교 없음':d===0?'전주 동일':(d>0?'▲ +':'▼ −')+Math.abs(d)+'곳';text(T.x+T.countX,y,T.countW,.22,(prev==null?'—':prev)+' → '+cur+'곳',8.5,C.navy,true);text(T.x+T.deltaX,y,T.deltaW,.22,t,8,color,true,{align:'center'});}
-  function attachment(T,y,a){var o=Object.assign({k:'attachment',x:T.x+T.iconX,y:y,w:T.iconW,h:T.iconH,icon:root.BazReportFiles.icon(a.kind)},a);items.push(o);}
+
   var T=B.change;shell(T,'VOC 증가 현황','전주 대비 · 증가 TOP 3');
   if(!s.change.up.length)text(T.x+T.pad,T.y+.7,T.w-T.pad*2,.3,s.change.hasPrev?'전주 대비 증가한 VOC가 없습니다.':'이전 기간 비교 자료가 없습니다.',9,C.mut);
-  s.change.up.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;var name=root.exFitTxt_(r.k,T.nameW,9);text(T.x+T.pad,y,T.nameW,.22,name,9,C.navy,true,{weeklyVoc:i});var ls=wrap(r.desc,T.descW,7);if(ls.length>2)throw new Error(r.k+' 보조문구를 두 줄 이내로 줄여주세요.');ls.forEach(function(l,j){text(T.x+T.pad,y+.24+j*.14,T.descW,.14,l,7,C.mut,false,{weeklyDescription:i});});text(T.x+T.countX,y+.02,T.countW,.22,r.prev+' → '+r.cur+'건',8,C.navy,true);text(T.x+T.deltaX,y+.02,T.deltaW,.22,'▲ +'+r.d,8,C.red,true,{align:'center'});if(r.file)attachment(T,y-.01,Object.assign({},r.file,{key:key(r.k)}));if(i<s.change.up.length-1)rule(T,y+T.pitch-.06);});
-  T=B.management;shell(T,'교육·재사용 병원 현황','전주 대비');s.management.items.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;text(T.x+T.pad,y,T.nameW,.20,r.name,8.5,C.navy,true);text(T.x+T.pad,y+.20,T.nameW,.13,r.sub,6.5,C.mut);delta(T,y+.04,r.cur,r.prev);attachment(T,y-.01,{key:r.key,kind:'xlsx',name:r.sub+'('+s.from.replaceAll('-','.')+'~'+s.to.replaceAll('-','.')+').xlsx'});if(!i)rule(T,y+T.pitch-.03);});
+  s.change.up.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;var name=root.exFitTxt_(r.k,T.nameW,9);text(T.x+T.pad,y,T.nameW,.22,name,9,C.navy,true,{weeklyVoc:i});var ls=wrap(r.desc,T.descW,7);if(ls.length>2)throw new Error(r.k+' 보조문구를 두 줄 이내로 줄여주세요.');ls.forEach(function(l,j){text(T.x+T.pad,y+.24+j*.14,T.descW,.14,l,7,C.mut,false,{weeklyDescription:i});});text(T.x+T.countX,y+.02,T.countW,.22,r.prev+' → '+r.cur+'건',8,C.navy,true);text(T.x+T.deltaX,y+.02,T.deltaW,.22,'▲ +'+r.d,8,C.red,true,{align:'center'});if(i<s.change.up.length-1)rule(T,y+T.pitch-.06);});
+  T=B.management;shell(T,'교육·재사용 병원 현황','전주 대비');s.management.items.forEach(function(r,i){var y=T.y+T.top+i*T.pitch;text(T.x+T.pad,y,T.nameW,.20,r.name,8.5,C.navy,true);text(T.x+T.pad,y+.20,T.nameW,.13,r.sub,6.5,C.mut);delta(T,y+.04,r.cur,r.prev);if(!i)rule(T,y+T.pitch-.03);});
   T=B.notes;shell(T,'특이사항');s.notes.items.forEach(function(t,i){var v=plain(t);if(root.exTxtW_(v,9.5)>T.w-T.pad*2)throw new Error('특이사항 '+(i+1)+'번을 한 줄 안에 들어가도록 줄여주세요.');text(T.x+T.pad,T.y+T.top+i*T.lineH,T.w-T.pad*2,T.lineH,v,9.5,C.navy,false,{weeklyNote:i});});
   return items;
  }
@@ -109,15 +103,14 @@
  }
  async function previewWorkbook(kind,s){try{s=s||root.exReportSnapFromSel_('week');var a=s.management.items.find(function(x){return x.key===kind;}),bytes=await workbook(s,kind);root.BazReportFiles.download(bytes,a.sub+'('+s.from.replaceAll('-','.')+'~'+s.to.replaceAll('-','.')+').xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');}catch(e){tell(e);}}
  function install(){
-  document.querySelectorAll('#wkModal .mhint').forEach(function(h){if(h.textContent.includes('TOP5'))h.textContent='선택한 추이·증가 VOC·교육/재사용 병원 현황·직접 작성 특이사항을 한 페이지로 생성합니다.';});
+  var hints=document.querySelectorAll('#wkModal .mhint');if(hints[1])hints[1].textContent='선택한 대상의 최근 16주 추이를 표시합니다. VOC 증가·병원 현황은 전체 서비스 기준으로 집계합니다.';if(hints[2])hints[2].textContent='PDF·엑셀은 PPT 생성 후 직접 삽입하세요. 카드 오른쪽에 파일을 넣을 공간이 남아 있습니다.';
   var originalSnap=root.exReportSnapshot_;root.exReportSnapshot_=function(){var s=originalSnap.apply(this,arguments);return s.type==='week'?augment(s):s;};
   var originalDeck=root.buildExecutivePptDeck;root.buildExecutivePptDeck=function(s){var d=originalDeck(s);if(s.type==='week')d[0].items=decorate(s,d[0].items);return d;};
   var oldVoc=root.exRefreshVocDescEditor_;root.exRefreshVocDescEditor_=function(type){if(type==='week')refreshVoc();else oldVoc(type);};
   var oldNotes=root.exRefreshNoteEditor_;root.exRefreshNoteEditor_=function(type){if(type==='week')refreshNotes();else oldNotes(type);};
   var open=root.openWeekly;root.openWeekly=function(){open();loadPhrases();};
   var preview=root.previewWeeklyPPT;root.previewWeeklyPPT=function(){try{return preview();}catch(e){tell(e);}};
-  var originalHtml=root.exPptRenderHtml_;root.exPptRenderHtml_=function(items){var host=originalHtml(items);items.filter(function(o){return o.k==='attachment';}).forEach(function(o){var a=el('button','wr-preview-file');a.type='button';a.title=o.name;a.setAttribute('aria-label',o.name+' 열기');a.style.cssText='position:absolute;border:0;padding:0;background:transparent;cursor:pointer;left:'+root.pvIn(o.x)+'px;top:'+root.pvIn(o.y)+'px;width:'+root.pvIn(o.w)+'px;height:'+root.pvIn(o.h)+'px';var img=el('img');img.src=o.icon;img.alt=o.kind==='pdf'?'내역서':'엑셀';img.style.cssText='width:100%;height:100%';a.append(img);a.onclick=function(){if(o.kind==='xlsx')previewWorkbook(o.key);else root.BazReportFiles.download(o.bytes,o.name,'application/pdf');};host.append(a);});return host;};
-  var originalMake=root.exMakeReportPPT;root.exMakeReportPPT=async function(type){if(type!=='week')return originalMake(type);var b=document.getElementById('wkGo');b.disabled=true;b.textContent='생성 중…';try{var s=root.exReportSnapFromSel_('week');if(!s)throw new Error('보고 주차를 선택하세요.');var deck=root.buildExecutivePptDeck(s);await root.loadPptxLib();var p=new root.PptxGenJS();p.defineLayout({name:'BAZ169',width:root.L.page.w,height:root.L.page.h});p.layout='BAZ169';p.theme={headFontFace:root.FT.face,bodyFontFace:root.FT.face};root.exPptRenderSlide_(p,deck[0].items,await root.exLoadLogo_());var attachments=deck[0].items.filter(function(o){return o.k==='attachment';});for(var a of attachments)if(a.kind==='xlsx')a.bytes=await workbook(s,a.key);var bytes=await root.BazReportFiles.embed(await p.write({outputType:'arraybuffer'}),attachments);root.BazReportFiles.download(bytes,s.fileName,'application/vnd.openxmlformats-officedocument.presentationml.presentation');root.toast('📑 '+s.fileName+' 생성 완료');root.closeWeekly();}catch(e){tell(e);}finally{b.disabled=false;b.textContent='PPT 생성';}};
+  // Weekly and monthly exports both use the original exMakeReportPPT/writeFile path.
   // Use the same supplied templates for the existing dashboard Excel actions as well.
   ['exportSkillManagementExcel','exportNozzleReuseExcel'].forEach(function(name,i){root[name]=async function(){try{var days=root.EX_ROWS.map(root.rowDate).filter(Boolean).map(root.ymd).sort(),cp=root.buildComparisonPeriod(),s={from:root.F.from||days[0]||root.ymd(root.exBaseDate()),to:root.F.to||days[days.length-1]||root.ymd(root.exBaseDate()),management:management(root.EX_ROWS,root.exPrevRows(cp))};await previewWorkbook(i?'nozzle':'education',s);}catch(e){tell(e);}};});
  }

@@ -45,21 +45,32 @@ try{
   const other=buildExecutiveReportSnapshot({type:'week',from:'2026-10-27',to:'2026-10-31'});
   return other.change.up.find(r=>r.k===name);
  },savedName);
- assert.equal(reused.desc,'작동 이상이 반복적으로 발생하는 현상');assert.equal(reused.file,null);
+ assert.equal(reused.desc,'작동 이상이 반복적으로 발생하는 현상');
  assert.equal(await page.evaluate(()=>BazWeeklyReport.management(EX_ROWS,[]).items.every(r=>r.prev===null)),true);
  const empty=await page.evaluate(()=>{const s=buildExecutiveReportSnapshot({type:'week',from:'2026-02-02',to:'2026-02-07'});return {n:s.change.up.length,zero:s.management.items.every(r=>r.cur===0),notes:s.notes.items.length,draw:buildExecutivePptDeck(s).length};});
  assert.deepEqual(empty,{n:0,zero:true,notes:0,draw:1});
  console.log('PASS saved description reused in a different period, isolated attachments, absent comparison and empty periods');
  await page.locator('.wr-note').nth(0).fill('다음 주 사용자 교육 일정을 확인합니다.');await page.locator('.wr-note').nth(1).fill('노즐 재사용 병원은 후속 방문을 진행합니다.');
  await page.evaluate(()=>{document.getElementById('wkModal').style.display='block';});
- // Three uploaded PDFs remain local; a small self-contained PDF fixture is used for review.
- const {PDFDocument}=req('pdf-lib');let pdf=await PDFDocument.create();pdf.addPage([200,200]);const pdfBytes=await pdf.save();
- for(let i=0;i<3;i++)await page.locator('.wr-voc input[type=file]').nth(i).setInputFiles({name:'예시내역서'+(i+1)+'.pdf',mimeType:'application/pdf',buffer:Buffer.from(pdfBytes)});
+ assert.equal(await page.locator('#wkModal input[type=file]').count(),0,'PDF upload removed');
+ assert.equal(await page.getByRole('button',{name:'사용자 교육 현황.xlsx 다운로드'}).count(),1);
  await page.locator('#wkModal .report-box').screenshot({path:path.join(out,'implemented-editor.png')});
  await page.evaluate(()=>previewWeeklyPPT());await page.waitForSelector('#wkPvModal.show');await page.locator('#wkPvSlides > div').first().screenshot({path:path.join(out,'implemented-weekly-report.png')});
  for(const kind of ['education','nozzle']){const bytes=await page.evaluate(async kind=>Array.from(await BazWeeklyReport.workbook(exReportSnapFromSel_('week'),kind)),kind);await fs.writeFile(path.join(out,'sample-'+kind+'.xlsx'),Buffer.from(bytes));const zip=await JSZip.loadAsync(Buffer.from(bytes));const sheet=await zip.file('xl/worksheets/sheet2.xml').async('string');assert(sheet.includes('예시 A병원'));assert(!sheet.includes('강남'));}
- await page.evaluate(()=>closeWkPreview());const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
- const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');assert.equal((slide.match(/<p:oleObj /g)||[]).length,5);assert.equal((slide.match(/progId="Excel.Sheet.12"/g)||[]).length,2);assert.equal((slide.match(/progId="Package"/g)||[]).length,3);
+ await page.evaluate(async()=>{
+  closeWkPreview();await loadPptxLib();window.qaWriteFileCalls=[];
+  const original=PptxGenJS.prototype.writeFile;
+  PptxGenJS.prototype.writeFile=function(options){window.qaWriteFileCalls.push(options.fileName);return original.call(this,options);};
+  BazReportFiles.embed=()=>{throw new Error('Automatic attachment processing must not run');};
+ });
+ const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
+ const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');
+ assert.equal((slide.match(/<p:oleObj /g)||[]).length,0);
+ assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);
+ assert(!slide.includes('bazAttach'));
+ const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>{openMonthly();return makeMonthlyPPT();});await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
+ assert.equal(await page.evaluate(()=>qaWriteFileCalls.length),2,'weekly and monthly both use original writeFile');
+ console.log('PASS original writeFile used for both reports, zero embedded files and no attachment postprocessing');
  for(const kind of ['education','nozzle']){
   const wb=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-'+kind+'.xlsx'))),tpl=await JSZip.loadAsync(await fs.readFile(path.join(root,'assets/report-templates/'+kind+'.xlsx')));
   assert.equal(await wb.file('xl/styles.xml').async('string'),await tpl.file('xl/styles.xml').async('string'),'styles preserved byte for byte');
@@ -71,7 +82,7 @@ try{
    return Array.from(doc.querySelectorAll('*')).some(e=>(e.getAttributeNS(ns,'Ignorable')||'').split(' ').filter(Boolean).some(p=>!e.lookupNamespaceURI(p)));
   },kind);assert.equal(malformed,false,'Office compatibility namespace prefixes remain bound');
  }
- console.log('PASS description save, 2 note lines, template style/namespace preservation, 3 local PDFs and 5 actual PPT embedded objects');
+ console.log('PASS description save, 2 note lines, template style/namespace preservation, manual file insertion with separate workbook downloads');
  assert.deepEqual(errors,[]);console.log('PASS no browser runtime errors');
  await fs.writeFile(path.join(out,'report-qa.json'),JSON.stringify({checks:'passed',state,errors},null,2));
 }finally{await browser.close();server.close();}
