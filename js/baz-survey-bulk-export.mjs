@@ -1,4 +1,4 @@
-import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv} from './baz-survey-bulk-core.mjs';
+import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv} from './baz-survey-bulk-core.mjs?v=20261102-centered';
 const PX=24,scriptLoads=new Map();
 async function loadScript(path,ready){
  if(ready())return;
@@ -15,9 +15,8 @@ function textBlock(text,width,height,{size=1.7,min=size,weight=600,align='left'}
  ctx.fillStyle='#000';ctx.textBaseline='top';ctx.textAlign=align;lines.forEach((line,i)=>ctx.fillText(line,align==='center'?width*PX/2:0,(i*chosen*1.32+.1)*PX));return c;
 }
 function blocks(record){return [
- {x:22,y:1.2,w:9,h:4.8,c:textBlock('고객만족도\n조사',9,4.8,{size:1.65,weight:700})},
- {x:22,y:7,w:9,h:10.5,c:textBlock(record.printName||record.name,9,10.5,{size:1.9,min:1.35,weight:700})},
- {x:22,y:18.2,w:9,h:3.8,c:textBlock('QR 스캔\n참여하기',9,3.8,{size:1.35,weight:500})}
+ {x:1,y:.65,w:30,h:2.4,c:textBlock('고객만족도조사',30,2.4,{size:1.8,weight:700,align:'center'})},
+ {x:1,y:19.65,w:30,h:2.5,c:textBlock(record.printName||record.name,30,2.5,{size:1.7,min:1.15,weight:700,align:'center'})}
  ];}
 export function modulesFor(record){return window.BazQrEncoder.create(record.surveyUrl,{errorCorrectionLevel:'M'}).modules;}
 export function stickerCanvas(record){
@@ -25,7 +24,7 @@ export function stickerCanvas(record){
  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#000';
  qrRuns(modules).forEach(([x,y,w])=>ctx.fillRect((STICKER.qrX+(x+4)*unit)*PX,(STICKER.qrY+(y+4)*unit)*PX,w*unit*PX,unit*PX));
  blocks(record).forEach(b=>ctx.drawImage(b.c,b.x*PX,b.y*PX,b.w*PX,b.h*PX));
- ctx.font=`700 ${2.15*PX}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText('Curejet',STICKER.width*PX/2,24*PX);return c;
+ ctx.font=`700 ${1.95*PX}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText('Curejet',STICKER.width*PX/2,24*PX);return c;
 }
 export async function stickerPdf(records,onProgress=()=>{}){
  await loadScript('./vendor/jspdf-2.5.1.umd.min.js',()=>!!window.jspdf?.jsPDF);await printFont();
@@ -35,7 +34,7 @@ export async function stickerPdf(records,onProgress=()=>{}){
   const r=records[i];if(i)pdf.addPage([32,25],'landscape');const m=modulesFor(r),unit=STICKER.qrSize/(m.size+8);
   pdf.setFillColor(0);qrRuns(m).forEach(([x,y,w])=>pdf.rect(STICKER.qrX+(x+4)*unit,STICKER.qrY+(y+4)*unit,w*unit,unit,'F'));
   try{blocks(r).forEach(b=>pdf.addImage(b.c.toDataURL('image/png'),'PNG',b.x,b.y,b.w,b.h));}catch(e){throw Error(r.name+': '+e.message);}
-  pdf.setTextColor(0);pdf.setFont('helvetica','bold');pdf.setFontSize(6.1);pdf.text('Curejet',16,24,{align:'center'});
+  pdf.setTextColor(0);pdf.setFont('helvetica','bold');pdf.setFontSize(1.95*72/25.4);pdf.text('Curejet',16,24,{align:'center'});
   onProgress(i+1,records.length);if(i%10===0)await new Promise(resolve=>setTimeout(resolve,0));
  }
  return pdf.output('blob');

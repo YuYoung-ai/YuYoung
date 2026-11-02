@@ -1,6 +1,6 @@
 import {el} from './baz-survey-api.mjs';
-import {directoryNames,matchingNames,runBatch,manifestCsv} from './baz-survey-bulk-core.mjs';
-import {printFont,stickerCanvas,stickerPdf,qrArchive,saveBlob} from './baz-survey-bulk-export.mjs';
+import {directoryNames,matchingNames,runBatch,manifestCsv} from './baz-survey-bulk-core.mjs?v=20261102-centered';
+import {printFont,stickerCanvas,stickerPdf,qrArchive,saveBlob} from './baz-survey-bulk-export.mjs?v=20261102-centered';
 
 export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{}}){
  root.innerHTML=`
@@ -18,7 +18,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{}}){
  <div class="bulk-generate"><button data-bulk="generate" class="primary" type="button" disabled>선택 병원 QR 생성</button><button data-bulk="retry" class="secondary" type="button" disabled>실패 병원 재시도</button><button data-bulk="cancel" class="secondary" type="button" hidden>생성 중지</button></div>
  <div data-bulk="progress-area" class="bulk-progress" hidden><progress data-bulk="progress" max="1" value="0" aria-label="QR 생성 진행률"></progress><p data-bulk="progress-text" class="help" role="status"></p></div>
  </div><aside class="bulk-output">
- <h3>인쇄용 스티커 미리보기</h3><p class="help">가로 32 × 세로 25mm · 하단 Curejet 가운데 정렬</p>
+ <h3>인쇄용 스티커 미리보기</h3><p class="help">32 × 25mm · 고객만족도조사 → 중앙 QR → 병원명 → Curejet</p>
  <div class="bulk-preview"><img data-bulk="preview" alt="선택 병원의 스티커 미리보기" hidden><p data-bulk="preview-empty" class="help">QR 생성 후 병원의<br>미리보기를 눌러 주세요.</p></div>
  <p data-bulk="preview-name" class="bulk-preview-name"></p><label class="field" data-bulk="print-name-field" hidden>인쇄 병원명<input data-bulk="print-name" type="text" maxlength="100"><span class="help">긴 병원명은 인쇄할 이름을 줄일 수 있습니다. QR 연결 정보는 유지됩니다.</span></label><p data-bulk="preview-error" class="error" role="status"></p>
  <div class="bulk-downloads"><button data-bulk="pdf" class="primary" type="button" disabled>스티커 PDF 내려받기</button><button data-bulk="zip" class="secondary" type="button" disabled>QR 이미지 묶음 ZIP</button><button data-bulk="csv" class="secondary" type="button" disabled>제작 수량표 CSV</button><button data-bulk="select-ready" class="secondary" type="button" disabled>생성 완료 병원만 선택</button></div>
