@@ -1,0 +1,106 @@
+import {el} from './baz-survey-api.mjs';
+import {directoryNames,matchingNames,runBatch,manifestCsv} from './baz-survey-bulk-core.mjs';
+import {printFont,stickerCanvas,stickerPdf,qrArchive,saveBlob} from './baz-survey-bulk-export.mjs';
+
+export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{}}){
+ root.innerHTML=`
+ <div class="section-heading"><div><p class="eyebrow">HOSPITAL QR · PRINT STICKERS</p><h2>병원 QR 일괄 생성</h2><p class="help">병원을 선택해 전용 QR을 준비하세요. 기존 주소는 그대로 유지되며 다음 조사에도 재사용할 수 있습니다.</p></div><span class="badge">스티커 32 × 25mm</span></div>
+ <div class="bulk-summary"><div><span>입점병원</span><strong data-bulk="total">0곳</strong></div><div><span>선택 병원</span><strong data-bulk="selected">0곳</strong></div><div><span>선택 중 생성 완료</span><strong data-bulk="ready">0곳</strong></div><div><span>선택 제작 수량</span><strong data-bulk="copies">0장</strong></div></div>
+ <div class="bulk-layout"><div class="bulk-directory">
+ <fieldset data-bulk="controls" class="bulk-fieldset"><legend class="bulk-sr">병원 선택 및 제작 수량</legend>
+ <label class="field">병원 검색<input data-bulk="search" type="text" placeholder="병원명을 입력하세요" maxlength="100"></label>
+ <div class="bulk-select-tools"><button class="secondary" type="button" data-bulk="select-all">전체 병원 선택</button><button class="secondary" type="button" data-bulk="select-matches">검색 결과 선택</button><button class="secondary" type="button" data-bulk="clear">선택 해제</button><label class="checkline"><input data-bulk="selected-only" type="checkbox">선택 병원만 보기</label></div>
+ <div class="bulk-quantity"><label class="field">공통 제작 수량<input data-bulk="quantity" type="number" min="1" max="9999" step="1" value="2"></label><button class="secondary" type="button" data-bulk="apply-quantity">선택 병원에 적용</button></div>
+ <p data-bulk="directory-status" class="help" role="status">입점병원 목록을 불러오고 있습니다.</p>
+ <div class="bulk-table-wrap"><table class="bulk-table"><thead><tr><th><input data-bulk="page-all" type="checkbox" aria-label="현재 페이지 병원 전체 선택"></th><th scope="col">병원명</th><th scope="col">수량</th><th scope="col">QR 상태</th><th scope="col">확인</th></tr></thead><tbody data-bulk="rows"></tbody></table></div>
+ <div class="bulk-pager"><span data-bulk="page-label" class="help"></span><div><button class="secondary" type="button" data-bulk="prev">이전</button><button class="secondary" type="button" data-bulk="next">다음</button></div></div>
+ </fieldset>
+ <div class="bulk-generate"><button data-bulk="generate" class="primary" type="button" disabled>선택 병원 QR 생성</button><button data-bulk="retry" class="secondary" type="button" disabled>실패 병원 재시도</button><button data-bulk="cancel" class="secondary" type="button" hidden>생성 중지</button></div>
+ <div data-bulk="progress-area" class="bulk-progress" hidden><progress data-bulk="progress" max="1" value="0" aria-label="QR 생성 진행률"></progress><p data-bulk="progress-text" class="help" role="status"></p></div>
+ </div><aside class="bulk-output">
+ <h3>인쇄용 스티커 미리보기</h3><p class="help">가로 32 × 세로 25mm · 하단 Curejet 가운데 정렬</p>
+ <div class="bulk-preview"><img data-bulk="preview" alt="선택 병원의 스티커 미리보기" hidden><p data-bulk="preview-empty" class="help">QR 생성 후 병원의<br>미리보기를 눌러 주세요.</p></div>
+ <p data-bulk="preview-name" class="bulk-preview-name"></p><label class="field" data-bulk="print-name-field" hidden>인쇄 병원명<input data-bulk="print-name" type="text" maxlength="100"><span class="help">긴 병원명은 인쇄할 이름을 줄일 수 있습니다. QR 연결 정보는 유지됩니다.</span></label><p data-bulk="preview-error" class="error" role="status"></p>
+ <div class="bulk-downloads"><button data-bulk="pdf" class="primary" type="button" disabled>스티커 PDF 내려받기</button><button data-bulk="zip" class="secondary" type="button" disabled>QR 이미지 묶음 ZIP</button><button data-bulk="csv" class="secondary" type="button" disabled>제작 수량표 CSV</button><button data-bulk="select-ready" class="secondary" type="button" disabled>생성 완료 병원만 선택</button></div>
+ <p data-bulk="download-help" class="help">선택한 병원의 QR 생성을 모두 마치면 파일을 저장할 수 있습니다.</p>
+ <div class="notice"><strong>인쇄 · 배포 안내</strong><ul><li>PDF는 병원당 한 페이지입니다. 출력 매수는 수량표로 지정하세요.</li><li>원본 크기 100%로 출력하고, 인쇄 업체의 도련·재단 규격을 확인하세요.</li><li>접수 중인 조사가 없어도 미리 제작할 수 있습니다.</li><li>파일 생성은 전달 이력에 포함되지 않습니다. 실제 전달 후 기존 QR · 안내 문자 메뉴에서 기록하세요.</li></ul></div>
+ </aside></div>`;
+ const $=id=>root.querySelector(`[data-bulk="${id}"]`),selected=new Set(),records=new Map(),quantities=new Map(),printNames=new Map();
+ let names=[],page=0,directoryReady=false,busy=false,running=false,cancelled=false,previewName='',previewVersion=0;
+ const PAGE_SIZE=50,quantity=name=>quantities.get(name)||2;
+ const chosen=()=>names.filter(n=>selected.has(n));
+ const ready=()=>chosen().filter(n=>records.get(n)?.ok);
+ const visible=()=>matchingNames(names,$('search').value,selected,$('selected-only').checked);
+ const snapshot=()=>chosen().map(name=>({...records.get(name).hospital,printName:printNames.get(name)||name,quantity:quantity(name)}));
+ function count(){
+  const all=chosen(),done=ready(),failed=all.filter(n=>records.get(n)?.ok===false),total=all.reduce((sum,n)=>sum+quantity(n),0);
+  $('total').textContent=names.length+'곳';$('selected').textContent=all.length+'곳';$('ready').textContent=done.length+'곳';$('copies').textContent=total.toLocaleString('ko-KR')+'장';
+  $('controls').disabled=busy;$('generate').disabled=busy||!directoryReady||!all.length;$('retry').disabled=busy||!directoryReady||!failed.length;$('cancel').hidden=!running;$('cancel').disabled=cancelled;
+  for(const id of ['pdf','zip','csv'])$(id).disabled=busy||!directoryReady||!all.length||done.length!==all.length;
+  $('print-name').disabled=busy;$('select-ready').disabled=busy||!directoryReady||!names.some(n=>records.get(n)?.ok);
+  $('download-help').textContent=all.length&&done.length===all.length?`${all.length}곳 · ${total.toLocaleString('ko-KR')}장 제작 자료를 저장합니다. PDF는 ${all.length}페이지입니다.`:all.length?`선택 ${all.length}곳 중 완료 ${done.length}곳 · 실패 ${failed.length}곳. 모두 생성하거나 생성 완료 병원만 선택하세요.`:'병원을 선택하고 QR을 생성해 주세요.';
+ }
+ function render(){
+  const list=visible(),pages=Math.max(1,Math.ceil(list.length/PAGE_SIZE));page=Math.min(page,pages-1);const shown=list.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
+  $('rows').replaceChildren();
+  for(const name of shown){
+   const tr=el('tr'),td=el('td'),check=el('input');check.type='checkbox';check.checked=selected.has(name);check.setAttribute('aria-label',name+' 선택');check.addEventListener('change',()=>{if(check.checked)selected.add(name);else selected.delete(name);render();});td.append(check);tr.append(td);
+   tr.append(el('td','bulk-hospital',name));const qtyTd=el('td'),qty=el('input');qty.type='number';qty.min='1';qty.max='9999';qty.step='1';qty.value=quantity(name);qty.setAttribute('aria-label',name+' 제작 수량');qty.addEventListener('change',()=>{const v=Number(qty.value);if(!Number.isInteger(v)||v<1||v>9999){qty.value=quantity(name);onStatus('제작 수량은 1~9999 사이의 정수로 입력해 주세요.',true);return;}quantities.set(name,v);count();});qtyTd.append(qty);tr.append(qtyTd);
+   const r=records.get(name),state=el('td'),badge=el('span','bulk-state '+(r?.ok?'complete':r?.ok===false?'failed':''),r?.ok?'생성 완료':r?.ok===false?'실패':r?.pending?'대기 중':'준비 전');state.append(badge);if(r?.error){const error=el('small','bulk-row-error',r.error);state.append(error);}tr.append(state);
+   const action=el('td'),preview=el('button','secondary','미리보기');preview.type='button';preview.disabled=!r?.ok;preview.setAttribute('aria-label',name+' 스티커 미리보기');preview.addEventListener('click',()=>showPreview(name));action.append(preview);tr.append(action);$('rows').append(tr);
+  }
+  if(!shown.length){const tr=el('tr'),td=el('td','empty',directoryReady?(names.length?'검색 결과가 없습니다.':'등록된 입점병원 목록이 없습니다.'):'병원 목록을 확인하고 있습니다.');td.colSpan=5;tr.append(td);$('rows').append(tr);}
+  const checked=shown.filter(n=>selected.has(n)).length;$('page-all').checked=!!shown.length&&checked===shown.length;$('page-all').indeterminate=checked>0&&checked<shown.length;$('page-all').disabled=!shown.length;
+  $('prev').disabled=page===0;$('next').disabled=page>=pages-1;$('page-label').textContent=`검색 ${list.length}곳 · ${page+1} / ${pages}페이지 · 선택은 검색·페이지를 바꿔도 유지됩니다.`;count();
+ }
+ async function showPreview(name){
+  previewName=name;$('preview-name').textContent=name;$('print-name-field').hidden=false;$('print-name').value=printNames.get(name)||name;
+  await drawPreview();
+ }
+ async function drawPreview(){
+  const version=++previewVersion,r=records.get(previewName);$('preview-error').textContent='';$('preview').hidden=true;$('preview-empty').hidden=false;
+  if(!r?.ok)return;
+  try{await printFont();if(version!==previewVersion)return;const c=stickerCanvas({...r.hospital,printName:printNames.get(previewName)||previewName});$('preview').src=c.toDataURL('image/png');$('preview').alt=previewName+' 전용 스티커, 32 × 25mm, 하단 Curejet';$('preview').hidden=false;$('preview-empty').hidden=true;}
+  catch(e){if(version===previewVersion)$('preview-error').textContent=e.message;}
+ }
+ function lock(value){busy=value;onBusy(value);count();}
+ async function generate(retry=false){
+  if(busy||!directoryReady)return;const target=chosen().filter(n=>!retry||records.get(n)?.ok===false);if(!target.length)return;
+  cancelled=false;running=true;for(const n of target)records.set(n,{pending:true});lock(true);render();if(target.includes(previewName)){previewVersion++;$('preview').hidden=true;$('preview-empty').hidden=false;}
+  $('progress-area').hidden=false;$('progress').max=target.length;$('progress').value=0;$('progress-text').textContent=`0 / ${target.length}곳 생성 중…`;
+  try{
+   const batch=await runBatch(target,{issue:async name=>(await call('hospital-save',{name})).hospital,onResult:(name,r)=>{records.set(name,r);},onProgress:(n,total)=>{$('progress').value=n;$('progress-text').textContent=`${n} / ${total}곳 처리 · 완료 ${target.filter(x=>records.get(x)?.ok).length}곳`;render();},shouldStop:()=>cancelled});
+   const done=target.filter(n=>records.get(n)?.ok).length,failed=target.filter(n=>records.get(n)?.ok===false).length;
+   const message=`${batch.stopped?'생성이 중지되었습니다. ':''}${target.length}곳 중 완료 ${done}곳 · 실패 ${failed}곳 · 미처리 ${target.length-batch.completed}곳`;
+   $('progress-text').textContent=message;onStatus(batch.authError?message+'\n로그인 상태와 관리자 권한을 확인해 주세요.':message,!!failed||!!batch.authError);
+   if(!records.get(previewName)?.ok)previewName=target.find(n=>records.get(n)?.ok)||'';
+   if(previewName)await showPreview(previewName);
+  }catch(e){onStatus(e.message,true);}finally{for(const n of target)if(records.get(n)?.pending)records.delete(n);running=false;lock(false);render();}
+ }
+ async function download(type){
+  if(busy||!directoryReady||!chosen().length||ready().length!==chosen().length)return;
+  const items=snapshot(),date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());lock(true);
+  try{
+   const progress=(n,total)=>onStatus(`${type==='pdf'?'스티커 PDF':'QR 묶음'} 준비 중 ${n} / ${total}곳…`);
+   let blob,file;if(type==='pdf'){blob=await stickerPdf(items,progress);file=`Curejet-스티커-32x25mm-${date}.pdf`;}else if(type==='zip'){blob=await qrArchive(items,progress);file=`Curejet-병원QR-${date}.zip`;}else{blob=new Blob([manifestCsv(items)],{type:'text/csv;charset=utf-8'});file=`Curejet-제작수량표-${date}.csv`;}
+   saveBlob(blob,file);onStatus(`${items.length}곳의 ${type==='pdf'?'32 × 25mm 스티커 PDF':type==='zip'?'QR 이미지 묶음':'제작 수량표'}를 저장했습니다.${type==='pdf'?' 제작 수량표도 함께 전달해 주세요.':''}`);
+  }catch(e){onStatus(e.message,true);}finally{lock(false);}
+ }
+ $('search').addEventListener('input',()=>{page=0;render();});$('selected-only').addEventListener('change',()=>{page=0;render();});
+ $('select-all').addEventListener('click',()=>{names.forEach(n=>selected.add(n));render();});
+ $('select-matches').addEventListener('click',()=>{matchingNames(names,$('search').value,selected).forEach(n=>selected.add(n));render();});
+ $('clear').addEventListener('click',()=>{selected.clear();render();});
+ $('select-ready').addEventListener('click',()=>{selected.clear();names.filter(n=>records.get(n)?.ok).forEach(n=>selected.add(n));render();});
+ $('page-all').addEventListener('change',()=>{const checked=$('page-all').checked;visible().slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE).forEach(n=>checked?selected.add(n):selected.delete(n));render();});
+ $('prev').addEventListener('click',()=>{page--;render();});$('next').addEventListener('click',()=>{page++;render();});
+ $('apply-quantity').addEventListener('click',()=>{const v=Number($('quantity').value);if(!Number.isInteger(v)||v<1||v>9999){onStatus('제작 수량은 1~9999 사이의 정수로 입력해 주세요.',true);return;}chosen().forEach(n=>quantities.set(n,v));render();});
+ $('print-name').addEventListener('input',()=>{if(previewName){printNames.set(previewName,$('print-name').value.trim()||previewName);drawPreview();}});
+ $('generate').addEventListener('click',()=>generate());$('retry').addEventListener('click',()=>generate(true));$('cancel').addEventListener('click',()=>{cancelled=true;$('cancel').disabled=true;$('progress-text').textContent='진행 중인 요청을 마친 뒤 중지합니다…';});
+ for(const id of ['pdf','zip','csv'])$(id).addEventListener('click',()=>download(id));
+ render();
+ return {
+  setLoading(){directoryReady=false;$('directory-status').textContent='입점병원 목록을 불러오고 있습니다.';count();},
+  setNames(values){names=directoryNames(values);const allowed=new Set(names);for(const n of selected)if(!allowed.has(n))selected.delete(n);for(const n of records.keys())if(!allowed.has(n))records.delete(n);directoryReady=true;$('directory-status').textContent=`입점병원 ${names.length}곳 · 검색 결과 선택은 모든 검색 페이지에 적용됩니다.`;if(!allowed.has(previewName)){previewName='';previewVersion++;$('preview').hidden=true;$('preview-empty').hidden=false;$('print-name-field').hidden=true;$('preview-name').textContent='';}render();},
+  setError(message){directoryReady=false;$('directory-status').textContent=message;count();}
+ };
+}
