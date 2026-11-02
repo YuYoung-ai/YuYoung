@@ -1,5 +1,5 @@
 // Shared, DOM-free rules for bulk issuing and print manifests.
-export const STICKER = Object.freeze({width:32,height:25,qrX:7.75,qrY:3.05,qrSize:16.5,margin:4});
+export const STICKER = Object.freeze({width:32,height:25,qrX:8.2,qrY:4.4,qrSize:15.6,margin:4});
 export const nameKey = value => String(value??'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();
 export function directoryNames(values){
  const names=new Map();

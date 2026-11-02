@@ -1,4 +1,4 @@
-import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv} from './baz-survey-bulk-core.mjs?v=20261102-centered';
+import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv} from './baz-survey-bulk-core.mjs?v=20261102-centered-caption';
 const PX=24,scriptLoads=new Map();
 async function loadScript(path,ready){
  if(ready())return;
@@ -15,8 +15,9 @@ function textBlock(text,width,height,{size=1.7,min=size,weight=600,align='left'}
  ctx.fillStyle='#000';ctx.textBaseline='top';ctx.textAlign=align;lines.forEach((line,i)=>ctx.fillText(line,align==='center'?width*PX/2:0,(i*chosen*1.32+.1)*PX));return c;
 }
 function blocks(record){return [
- {x:1,y:.65,w:30,h:2.4,c:textBlock('고객만족도조사',30,2.4,{size:1.8,weight:700,align:'center'})},
- {x:1,y:19.65,w:30,h:2.5,c:textBlock(record.printName||record.name,30,2.5,{size:1.7,min:1.15,weight:700,align:'center'})}
+ {x:1,y:.4,w:30,h:2.4,c:textBlock('고객만족도조사',30,2.4,{size:1.8,weight:700,align:'center'})},
+ {x:1,y:2.8,w:30,h:1.6,c:textBlock('QR 스캔 참여하기',30,1.6,{size:1.15,weight:500,align:'center'})},
+ {x:1,y:20,w:30,h:2.2,c:textBlock(record.printName||record.name,30,2.2,{size:1.6,min:1.15,weight:700,align:'center'})}
  ];}
 export function modulesFor(record){return window.BazQrEncoder.create(record.surveyUrl,{errorCorrectionLevel:'M'}).modules;}
 export function stickerCanvas(record){

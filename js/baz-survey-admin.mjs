@@ -3,7 +3,7 @@ import {DEFINITION} from './baz-survey-schema.mjs';
 import {createBuilder} from './baz-survey-builder.mjs';
 import {createIssuer} from './baz-survey-issuer.mjs';
 import {createResults} from './baz-survey-results.mjs';
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=20261102-centered';
+import {createBulkIssuer} from './baz-survey-bulk.mjs?v=20261102-centered-caption';
 const $=s=>document.querySelector(s),status=$('#status');
 let data={campaigns:[],hospitals:[]},activeTab='campaigns',salesSettings;
 const stateText={draft:'초안',open:'접수 중',closed:'종료'};
