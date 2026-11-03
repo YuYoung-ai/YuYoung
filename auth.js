@@ -364,6 +364,7 @@
     'inspection.html': { tool: 'inspection', level: 1 },
     'handover.html':   { tool: 'handover',   level: 1 },
     'hospital-work.html':{ tool: 'hospitalwork', level: 1 },
+    'hospital-qr.html':{ tool: 'hospitalqr', level: 3 },
     'label.html':      { tool: 'label',      level: 1 },
     'weekly.html':     { tool: 'weekly',     level: 1 },
     'hospital-pc.html':{ tool: 'hospital',   level: 2 },

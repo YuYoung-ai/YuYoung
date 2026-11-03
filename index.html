@@ -267,6 +267,21 @@
       <span style="flex:1;"><span class="tool-name">병원 A/S 업무관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">고객센터 접수 · 방문 배정 · 결과 확인</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
+    <button type="button" id="appBtnCustomerAs" data-toolid="customeras" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">📨</span>
+      <span style="flex:1;"><span class="tool-name">고객 AS 접수 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">병원 QR 접수 · 사진 · 진행 상황</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+    <button type="button" id="appBtnReservations" data-toolid="reservations" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">🗓️</span>
+      <span style="flex:1;"><span class="tool-name">예약 시간 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">공개 시간 · 방문 일정 · 담당자 배정</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
+    <button type="button" id="appBtnHospitalQr" data-toolid="hospitalqr" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+      <span style="font-size:24px;">▦</span>
+      <span style="flex:1;"><span class="tool-name">병원 QR 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">시범 병원 QR 발급 · 저장</span></span>
+      <span style="color:#8EA0C8;">→</span>
+    </button>
     <!-- [메뉴 통합] '병원 데이터센터 (PC)' 중복 카드 제거 — 위 '병원 데이터센터'가 hospital-pc.html로
          이동하며, 그 페이지가 화면 크기로 모바일/PC 모드를 자동 선택하고 Window/Mobile 토글도 제공한다. -->
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
@@ -1924,6 +1939,9 @@ document.getElementById('appBtnHospital').addEventListener('click', function(){ 
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
 document.getElementById('appBtnHospitalWork').addEventListener('click', function(){ location.href='hospital-work.html'; });
+document.getElementById('appBtnCustomerAs').onclick=function(){location.href='hospital-work.html?view=customers';};
+document.getElementById('appBtnReservations').onclick=function(){location.href='hospital-work.html?view=reservations';};
+document.getElementById('appBtnHospitalQr').onclick=function(){location.href='hospital-qr.html';};
 document.getElementById('appBtnLabel').addEventListener('click', function(){ location.href='label.html'; });
 document.getElementById('appBtnAsReport').addEventListener('click', function(){ location.href='asreport.html'; });
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
@@ -1959,6 +1977,9 @@ var MENU_DEFAULTS={
   chatbot:   {name:'🤖 CS AI 챗봇',         level:1, show:true, order:6},
   weekly:    {name:'📅 주간업무보고',       level:1, show:true, order:7},
   hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:8},
+  customeras:{name:'📨 고객 AS 접수 관리',level:1,show:true,order:8.1},
+  reservations:{name:'🗓️ 예약 시간 관리',level:1,show:true,order:8.2},
+  hospitalqr:{name:'▦ 병원 QR 관리',level:3,show:true,order:8.3},
   hospitalwork:{name:'🗂️ 병원 A/S 업무관리',level:1, show:true, order:8},
   survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:9},
   manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:10},
