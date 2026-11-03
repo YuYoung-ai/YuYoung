@@ -1,6 +1,6 @@
 (function(root){
  'use strict';if(!root.BazQrRuntime)return;
- var api=root.BazWorkAPI,$=function(id){return document.getElementById(id);},data=null,selected=null,displayedRevision=0,busy=false,pending=null,dirty=false,photoUrls=[],photoGeneration=0,renderedCase='',limit=20,photoIndex=0,zoom=1;
+ var api=root.BazWorkAPI,$=function(id){return document.getElementById(id);},data=null,selected=null,displayedRevision=0,busy=false,pending=null,dirty=false,photoUrls=[],photoGeneration=0,renderedCase='',limit=20,photoIndex=0,zoom=1,loadTask=null,loadAgain=false,forceNext=false,readEpoch=0;
  var viewKey='qr-work-view:'+root.BazAuth.name(),view={query:'',filter:'active',sort:'priority',period:'all'};try{Object.assign(view,JSON.parse(sessionStorage.getItem(viewKey)||'{}'));}catch{}
  var storageKey='qr-workflow-pending:'+root.BazAuth.name();try{pending=JSON.parse(localStorage.getItem(storageKey)||'null');}catch{}
  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -25,7 +25,8 @@
  $('qr-search').oninput=function(){view.query=this.value;limit=20;rememberView();list();};['sort','period'].forEach(function(k){$('qr-'+k).onchange=function(){view[k]=this.value;limit=20;rememberView();list();};});
  $('qr-list-back').onclick=function(){panel.classList.remove('is-detail');};
  function current(){return data?.items.find(function(c){return c.request.id===selected;});}
- async function load(force){if(busy)return;try{var response=await api.get('qr_cases');if(!response.success)throw Error(response.error);data=response;
+ function load(force,refresh){if(busy)return Promise.resolve();if(loadTask){if(force===true||refresh===true)loadAgain=true;if(force===true)forceNext=true;return loadTask;}panel.setAttribute('aria-busy','true');
+  loadTask=(async function(){do{var renderForce=force===true||forceNext;loadAgain=false;forceNext=false;force=false;var epoch=readEpoch;try{var response=await api.get('qr_cases');if(busy||epoch!==readEpoch)continue;if(!response.success)throw Error(response.error);data=response;
   var done=data.items.filter(function(c){return c.request.status==='완료';}).length;
   $('qr-metrics').textContent='접수 '+data.items.length+'건 · 진행 중 '+data.items.filter(function(c){return !['완료','취소'].includes(c.request.status);}).length+'건 · 완료 '+done+'건';
   $('qr-admin-tools').hidden=!data.admin;$('qr-toggle-ingress').textContent=data.ingress.enabled?'신규 접수 중지':'신규 접수 열기';$('qr-results').hidden=!data.admin;$('qr-reconcile').hidden=!data.admin;
@@ -33,8 +34,8 @@
   $('qr-jobs').innerHTML=data.serviceJobs.map(function(j){return '<li>'+esc(j.requestId)+' · '+esc(j.state)+' · '+esc(j.lastError||'전달 대기')+'</li>';}).join('')||'<li>설문 연동 대기 없음</li>';
   $('qr-push-log').innerHTML=data.pushEvents.slice(-30).map(function(j){return '<li>'+esc(j.kind)+' · '+esc(j.state)+'</li>';}).join('')||'<li>알림 기록 없음</li>';
   root.dispatchEvent(new CustomEvent('baz-qr-work-changed',{detail:{requests:data.items.map(function(c){return c.request;})}}));
-  if(!selected){selected=sessionStorage.getItem(viewKey+':selected');}if(dirty&&current()?.request.revision!==displayedRevision){message('다른 담당자가 변경했습니다. 입력을 유지했습니다. 최신 내용 확인을 누르면 다시 불러옵니다.');}else if(force||!dirty&&JSON.stringify(current())!==renderedCase)render();
- }catch(e){message(e.message);}}
+  if(!selected){selected=sessionStorage.getItem(viewKey+':selected');}if(dirty&&current()?.request.revision!==displayedRevision){message('다른 담당자가 변경했습니다. 입력을 유지했습니다. 최신 내용 확인을 누르면 다시 불러옵니다.');}else if(renderForce||!dirty&&JSON.stringify(current())!==renderedCase)render();
+ }catch(e){message(e.message);}}while(loadAgain&&!busy);})().finally(function(){loadTask=null;panel.setAttribute('aria-busy','false');});return loadTask;}
  function showPhoto(){zoom=1;$('qr-photo-large').src=photoUrls[photoIndex];$('qr-photo-large').style.transform='';}
  var photoTools=document.createElement('div');photoTools.className='qr-photo-tools';photoTools.innerHTML='<button type="button" data-photo-step="-1">이전</button><button type="button" data-photo-zoom="-0.25">축소</button><button type="button" data-photo-zoom="0.25">확대</button><button type="button" data-photo-step="1">다음</button>';lightbox.append(photoTools);photoTools.querySelectorAll('button').forEach(function(b){b.onclick=function(){if(b.dataset.photoStep){var count=current()?.photos.length||1;photoIndex=(photoIndex+Number(b.dataset.photoStep)+count)%count;if(photoUrls[photoIndex])showPhoto();}else{zoom=Math.max(0.5,Math.min(3,zoom+Number(b.dataset.photoZoom)));$('qr-photo-large').style.transform='scale('+zoom+')';}};});
  function releasePhotos(){photoGeneration++;photoUrls.forEach(function(url){URL.revokeObjectURL(url);});photoUrls=[];if(lightbox.open)lightbox.close();}
@@ -60,7 +61,7 @@
   }catch(e){if(generation===photoGeneration)button.textContent=e.message;}});
  }
  async function send(action,p){if(busy||pending)return false;pending={action:action,payload:Object.assign({requestId:selected,operationId:api.id(),baseRevision:displayedRevision},p)};try{localStorage.setItem(storageKey,JSON.stringify(pending));}catch{pending=null;message('재시도 기록을 보관하지 못해 저장하지 않았습니다.');return false;}return retry();}
- async function retry(){if(busy||!pending)return false;busy=true;root.BazDesign?.busy($('qr-save-all')||$('qr-save-status'),true);$('qr-retry').hidden=false;var success=false,finished=pending;try{var response=await api.post(pending.action,pending.payload);if(!response.success&&response.retrySameOperation)throw Error(response.error);pending=null;localStorage.removeItem(storageKey);if(!response.success)throw Error(response.error);success=true;dirty=false;message('저장했습니다.');}catch(e){message(e.message+(pending?' · 같은 기록으로 재시도하세요.':''));}finally{busy=false;root.BazDesign?.busy($('qr-save-all')||$('qr-save-status'),false);$('qr-retry').hidden=!pending;}if(finished.payload.requestId)selected=finished.payload.requestId;await load(success);return success;}
+ async function retry(){if(busy||!pending)return false;readEpoch++;busy=true;root.BazDesign?.busy($('qr-save-all')||$('qr-save-status'),true);$('qr-retry').hidden=false;var success=false,finished=pending;try{var response=await api.post(pending.action,pending.payload);if(!response.success&&response.retrySameOperation)throw Error(response.error);pending=null;localStorage.removeItem(storageKey);if(!response.success)throw Error(response.error);success=true;dirty=false;message('저장했습니다.');}catch(e){message(e.message+(pending?' · 같은 기록으로 재시도하세요.':''));}finally{busy=false;root.BazDesign?.busy($('qr-save-all')||$('qr-save-status'),false);$('qr-retry').hidden=!pending;}if(finished.payload.requestId)selected=finished.payload.requestId;await load(success,true);return success;}
  $('qr-refresh').onclick=function(){load(false);};$('qr-retry').onclick=retry;
  $('qr-pump').onclick=async function(){try{var r=await api.post('qr_pump',{});if(!r.success)throw Error(r.error);message('설문 전달 '+r.delivered+'건 · 응답 반영 '+r.responses+'건 · 시험 알림 '+r.pushRecords+'건 · 실패 '+r.failed+'건');await load();}catch(e){message(e.message);}};
  $('qr-reconcile').onclick=async function(){try{var r=await api.post('qr_reconcile',{repair:true});if(!r.success)throw Error(r.error);message('설문 응답 '+r.remoteResponses+'건 대사 · 누락 초대 '+r.missing.length+'건');}catch(e){message(e.message);}};
@@ -68,5 +69,5 @@
  $('qr-results').onclick=async function(){try{var r=await api.get('qr_survey_results');if(!r.success)throw Error(r.error);var target=$('qr-survey-results');target.hidden=false;target.innerHTML='<h3>설문 점수·의견</h3>'+r.items.filter(function(i){return i.answers;}).map(function(i){var a=JSON.parse(i.answers),c=data.items.find(function(c){return c.request.id===i.request_id;});return '<article><strong>'+esc(c?c.request.hospitalName:i.request_id)+'</strong><p>예약 '+a.booking+' · 응대 '+a.courtesy+' · 처리 '+a.resolution+' · 설명 '+a.explanation+'</p><p>'+esc(a.comment||'추가 의견 없음')+'</p></article>';}).join('');}catch(e){message(e.message);}};
  root.addEventListener('baz-work-tab',function(e){if(e.detail.name==='customers')load(false);});
  setInterval(function(){if(!panel.hidden&&!document.hidden&&!busy&&!pending&&!lightbox.open)load(false);},8000);
- load(false);if(pending){root.BazWorkTabs.show('customers');$('qr-retry').hidden=false;message('저장 결과 확인이 필요합니다. 같은 기록으로 재시도하세요.');}
+ if(pending){root.BazWorkTabs.show('customers');$('qr-retry').hidden=false;message('저장 결과 확인이 필요합니다. 같은 기록으로 재시도하세요.');}else if(!panel.hidden)load(false);
 })(window);
