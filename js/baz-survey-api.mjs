@@ -1,10 +1,11 @@
 export async function api(path, data = {}, authenticated = false, raw = false, suppliedToken = '') {
-  let r;
+  let r;const session=authenticated?(window.BazAuth?.token()||''):'';
   try {
     const headers = {'Content-Type': 'application/json'};
-    if (authenticated || suppliedToken) headers.Authorization = 'Bearer ' + (suppliedToken || window.BazAuth?.token() || '');
+    if (authenticated || suppliedToken) headers.Authorization = 'Bearer ' + (suppliedToken || session);
     r = await fetch(window.BazSurveyConfig.api + path, {method:'POST', headers, body:JSON.stringify(data), cache:'no-store', signal:AbortSignal.timeout(25000), referrerPolicy:'no-referrer'});
   } catch { throw new Error('연결이 지연되고 있습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.'); }
+  if(authenticated&&session!==(window.BazAuth?.token()||''))throw Object.assign(new Error('로그인 계정이 변경되었습니다. 다시 열어 주세요.'),{status:401});
   if (!r.ok) { const p = await r.json().catch(()=>({})); const e = new Error(p.error || '요청을 처리하지 못했습니다.'); e.status=r.status; e.code=p.code; throw e; }
   return raw ? r : r.json();
 }

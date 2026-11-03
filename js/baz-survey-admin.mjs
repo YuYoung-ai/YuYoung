@@ -1,9 +1,8 @@
-import {api,el} from './baz-survey-api.mjs';
+import {api,el} from './baz-survey-api.mjs?v=292';
 import {DEFINITION} from './baz-survey-schema.mjs';
 import {createBuilder} from './baz-survey-builder.mjs';
 import {createIssuer} from './baz-survey-issuer.mjs';
 import {createResults} from './baz-survey-results.mjs';
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=20261102-centered-caption';
 const $=s=>document.querySelector(s),status=$('#status');
 let data={campaigns:[],hospitals:[]},activeTab='campaigns',salesSettings;
 const stateText={draft:'초안',open:'접수 중',closed:'종료'};
@@ -14,18 +13,18 @@ function fill(select,items,blank){const previous=select.value;select.replaceChil
 function localTime(ms){return ms==null?'':new Date(ms+9*3600000).toISOString().slice(0,16);}
 function parseTime(v){return v?Date.parse(v+':00+09:00'):null;}
 function when(ms){return ms==null?'—':new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',dateStyle:'short',timeStyle:'short'}).format(new Date(ms));}
-function showTab(tab){activeTab=tab;history.replaceState(null,'','#'+tab);for(const n of document.querySelectorAll('[data-tab]'))n.setAttribute('aria-selected',String(n.dataset.tab===tab));for(const id of ['issue','bulk-qr','campaigns','results','sales-settings'])$('#'+id).hidden=id!==tab;$('#page-title').textContent=({campaigns:'CS 고객 설문 관리',results:'고객만족도 조사 결과','sales-settings':'영업팀 접속 설정',issue:'QR · 안내 문자','bulk-qr':'병원 QR 일괄 생성'})[tab];$('#export-results').hidden=tab!=='results';if(tab==='results'&&!results.hasData())results.load().catch(e=>notice(e.message,true));}
+function showTab(tab){if(tab==='bulk-qr'){location.href='qr-bulk.html?purpose=survey';return;}activeTab=tab;history.replaceState(null,'','#'+tab);for(const n of document.querySelectorAll('[data-tab]'))n.setAttribute('aria-selected',String(n.dataset.tab===tab));for(const id of ['issue','bulk-qr','campaigns','results','sales-settings'])$('#'+id).hidden=id!==tab;$('#page-title').textContent=({campaigns:'CS 고객 설문 관리',results:'고객만족도 조사 결과','sales-settings':'영업팀 접속 설정',issue:'QR · 안내 문자','bulk-qr':'병원 QR 일괄 생성'})[tab];$('#export-results').hidden=tab!=='results';if(tab==='results'&&!results.hasData())results.load().catch(e=>notice(e.message,true));}
 function showSub(tab){for(const n of document.querySelectorAll('[data-campaign-tab]'))n.setAttribute('aria-selected',String(n.dataset.campaignTab===tab));$('#campaign-create').hidden=tab!=='create';$('#campaign-period').hidden=tab!=='period';}
 document.querySelectorAll('[data-tab]').forEach(n=>n.addEventListener('click',()=>showTab(n.dataset.tab)));
 document.querySelectorAll('[data-campaign-tab]').forEach(n=>n.addEventListener('click',()=>showSub(n.dataset.campaignTab)));
 const builder=createBuilder({root:$('#question-editor'),titleInput:$('#new-title'),introInput:$('#new-intro'),heading:$('#builder-heading'),count:$('#question-count'),onStatus:notice});
 const issuer=createIssuer($('#issue'),{call:(path,p)=>api('/staff/'+path,p,true),onStatus:notice,admin:true});
-const bulk=createBulkIssuer($('#bulk-qr'),{call:(path,p)=>api('/staff/'+path,p,true),onStatus:notice,onBusy:value=>{$('#refresh').disabled=value;}});
+
 const results=createResults({root:$('#result-content'),dialog:$('#result-detail'),filter,onStatus:notice});
 function editCampaign(){const c=data.campaigns.find(c=>c.id===$('#edit-campaign').value);$('#edit-title').value=c?.title||'';$('#edit-state').value=c?.state||'draft';$('#starts').value=localTime(c?.startsAt);$('#ends').value=localTime(c?.endsAt);$('#save-campaign').disabled=!c;$('#edit-definition').disabled=!c||c.state!=='draft';$('#definition-summary').textContent=c?`문항 ${c.definition.questions.length}개 · 문항 구성은 회차별로 보관됩니다.`:'등록한 조사가 없습니다.';}
 function renderLists(){const items=data.campaigns.map(c=>[c.id,`${c.title} · ${stateText[c.state]}`]);fill($('#edit-campaign'),items);fill($('#result-campaign'),items);fill($('#template-campaign'),items,'기본 8문항');editCampaign();results.invalidate();issuer.setCampaigns(data.campaigns);}
 async function bootstrap(){data=await api('/staff/bootstrap',{},true);renderLists();notice(data.campaigns.some(c=>c.state==='open')?'접수 중인 조사가 있습니다. 결과 통계에서 응답을 확인할 수 있습니다.':'접수 중인 조사가 없습니다. 초안을 등록한 뒤 접수 기간·상태에서 접수를 시작해 주세요.');}
-async function loadHospitalNames(){issuer.setNames([]);bulk.setLoading();issuer.setHelp('입점병원 목록을 불러오고 있습니다.');try{const p=await api('/staff/directory',{},true);issuer.setNames(p.names);bulk.setNames(p.names);}catch{const message='입점병원 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.';issuer.setHelp(message);bulk.setError(message);}}
+async function loadHospitalNames(){issuer.setNames([]);issuer.setHelp('입점병원 목록을 불러오고 있습니다.');try{const p=await api('/staff/directory',{},true);issuer.setNames(p.names);}catch{const message='입점병원 목록을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.';issuer.setHelp(message);}}
 function resetBuilder(def=DEFINITION,title='',editing=null){builder.load(def,title,editing);$('#create-campaign').textContent=editing?'초안 문항 변경 저장':'조사 초안 등록';}
 function discardOkay(){return !builder.dirty||window.confirm('작성 중인 문항을 바꾸고 선택한 문항 구성을 불러올까요?');}
 action('#load-template',()=>{if(!discardOkay())return;const c=data.campaigns.find(c=>c.id===$('#template-campaign').value);resetBuilder(c?.definition||DEFINITION,c?c.title+' (복사)':'');notice('문항 구성을 불러왔습니다. 편집 후 새 조사로 등록해 주세요.');});

@@ -1,5 +1,13 @@
 // Shared, DOM-free rules for bulk issuing and print manifests.
 export const STICKER = Object.freeze({width:32,height:25,qrX:8.2,qrY:4.4,qrSize:15.6,margin:4});
+export const PURPOSES=Object.freeze({survey:{title:'고객만족도조사',caption:'QR 스캔 참여하기',prefix:'고객만족도조사'},as:{title:'AS 접수',caption:'QR 스캔으로 접수·진행 확인',prefix:'AS접수'}});
+export function purposeSettings(records){const purpose=records[0]?.purpose||'survey';if(!PURPOSES[purpose]||records.some(r=>(r.purpose||'survey')!==purpose))throw Error('서로 다른 목적의 QR을 함께 저장할 수 없습니다.');return PURPOSES[purpose];}
+export function issuedAsHospital(hospital,expected){
+ if(!hospital||hospital.purpose!=='as'||hospital.id!==expected.id||nameKey(hospital.name)!==nameKey(expected.name))throw Error('병원 관리번호 연결이 일치하지 않습니다.');
+ let url;try{url=new URL(hospital.qrUrl);}catch{throw Error('AS 접수 주소를 확인할 수 없습니다.');}
+ if(url.protocol!=='https:'||url.username||url.password)throw Error('AS 접수 주소를 확인할 수 없습니다.');
+ return {id:hospital.id,name:hospital.name,purpose:'as',qrUrl:url.href,intakeConfigured:!!hospital.intakeConfigured};
+}
 export const nameKey = value => String(value??'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();
 export function directoryNames(values){
  const names=new Map();
@@ -17,8 +25,8 @@ export function issuedHospital(hospital,name){
 export function fileStem(index,name){return String(index+1).padStart(4,'0')+'_'+name.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'').slice(0,70);}
 export function manifestCsv(records){
  const cell=v=>{let s=String(v??'');if(/^[\s\u0000-\u001f]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};
- const rows=[['PDF 페이지','병원명','인쇄 병원명','병원 관리번호','제작 수량','참여 주소','QR 파일명']];
- records.forEach((r,i)=>rows.push([i+1,r.name,r.printName||r.name,r.id,r.quantity,r.surveyUrl,fileStem(i,r.name)]));
+ const purpose=purposeSettings(records),rows=[['PDF 페이지','QR 목적','병원명','인쇄 병원명','병원 관리번호','제작 수량','QR 주소','QR 파일명']];
+ records.forEach((r,i)=>rows.push([i+1,purpose.title,r.name,r.printName||r.name,r.id,r.quantity,r.qrUrl||r.surveyUrl,fileStem(i,r.name)]));
  return '\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
 }
 export function qrRuns(modules){
@@ -30,11 +38,11 @@ export function qrSvg(modules){
  const n=modules.size+STICKER.margin*2,path=qrRuns(modules).map(([x,y,w])=>`M${x+4} ${y+4}h${w}v1h-${w}z`).join('');
  return `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><rect width="${n}" height="${n}" fill="white"/><path d="${path}" fill="black"/></svg>`;
 }
-export async function runBatch(names,{issue,onResult=()=>{},onProgress=()=>{},shouldStop=()=>false,concurrency=3}){
+export async function runBatch(names,{issue,validate=issuedHospital,onResult=()=>{},onProgress=()=>{},shouldStop=()=>false,concurrency=3}){
  let next=0,completed=0,authError=null;const results=new Map();
  async function worker(){while(next<names.length&&!authError&&!shouldStop()){
   const name=names[next++];let result;
-  try{result={ok:true,hospital:issuedHospital(await issue(name),name)};}
+  try{result={ok:true,hospital:validate(await issue(name),name)};}
   catch(e){result={ok:false,error:e.message||'생성하지 못했습니다.'};if(e.status===401||e.status===403)authError=e;}
   results.set(name,result);onResult(name,result);onProgress(++completed,names.length);
  }}

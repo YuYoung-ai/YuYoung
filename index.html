@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>BAZ BIOMEDIC — AS 처리 보고서</title>
+<link rel="stylesheet" href="css/baz-brand.css?v=292"><link rel="stylesheet" href="css/baz-main-brand.css?v=292"><script defer src="js/baz-main-brand.js?v=292"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B2F5E">
 <meta name="mobile-web-app-capable" content="yes">
@@ -16,12 +17,12 @@
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
   :root{
-    --navy:#1B2F5E; --navy-light:#2A4080; --teal:#2E7D9E; --teal-soft:#EAF4F8;
-    --white:#FFFFFF; --gray-bg:#F5F7FA; --gray-line:#DDE3EE; --text:#1A1A2E;
+    --navy:#243447; --navy-light:#23638F; --teal:#23638F; --teal-soft:#EAF3FA;
+    --white:#FFFFFF; --gray-bg:#F4F7FA; --gray-line:#DDE6EE; --text:#243447;
     --text-muted:#6B7A99; --red:#C0392B; --green:#1E7E4E;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  body{font-family:var(--baz-font,Pretendard,system-ui,sans-serif);
     background:var(--gray-bg);color:var(--text);min-height:100vh;-webkit-text-size-adjust:100%;}
   header{background:var(--navy);padding:14px 20px;display:flex;align-items:center;
     justify-content:space-between;position:sticky;top:0;z-index:100;}
@@ -179,7 +180,7 @@
   @media(max-width:480px){.nav-bar{padding-bottom:env(safe-area-inset-bottom,24px);}}
 </style>
 <link rel="stylesheet" href="css/baz-notifications.css?v=246">
-<script src="auth.js?v=251"></script>
+<script src="auth.js?v=292"></script>
 <script src="js/baz-notification-route.js?v=250"></script>
 <script src="js/baz-notifications.js?v=263"></script>
 <script src="https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js" integrity="sha384-TiCUE00h649CAMonG018J2ujOgDKW/kVWlChEuu4jK2vxfAAD0eZxzCKakxg55G4" crossorigin="anonymous"></script>
@@ -187,9 +188,9 @@
 <script src="https://apis.google.com/js/api.js" async></script>
 </head>
 <body>
-<div id="langSelect" style="position:fixed;inset:0;z-index:9999;background:#1B2F5E;display:none;flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 32px 40px;overflow-y:auto;">
+<div id="langSelect" style="display:none">
   <!-- 언어 스위치 (우상단) -->
-  <div id="hubLangSwitch" style="position:absolute;top:16px;right:16px;display:flex;gap:2px;background:rgba(202,220,252,.12);border:1px solid rgba(202,220,252,.3);border-radius:14px;padding:2px;">
+  <div id="hubLangSwitch" >
     <button type="button" data-hublang="ko" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">한국어</button>
     <button type="button" data-hublang="en" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">EN</button>
     <button type="button" data-hublang="ja" class="hublang-opt" style="border:none;background:transparent;color:#cfdbf0;font-size:11px;font-weight:700;padding:5px 9px;border-radius:11px;cursor:pointer;font-family:inherit;">日本語</button>
@@ -197,11 +198,11 @@
 
   <div style="margin-top:24px;"></div>
   <!-- BAZ 로고 (클릭 → 잠금 해제) -->
-  <button type="button" id="hubLogo" style="background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;padding:8px 16px;border-radius:14px;font-family:inherit;-webkit-tap-highlight-color:transparent;">
+  <button type="button" id="hubLogo" >
     <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" style="width:90px;height:72px;margin-bottom:8px;">
-      <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
-      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
-      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
+      <text x="2" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#595959">b</text>
+      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#595959">a</text>
+      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#579BCE">z</text>
     </svg>
     <div style="color:#fff;font-size:18px;font-weight:700;margin-bottom:4px;">BAZ BIOMEDIC</div>
     <div style="color:#9EADCC;font-size:13px;" id="hubSubtitle">CS Field Tools</div>
@@ -214,92 +215,92 @@
 
   <!-- 도구 선택 안내 (해제 후) -->
   <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:12px 0;"><a class="baz-install-link" href="install.html">앱 설치·알림 설정</a><button class="baz-notification-button" type="button" data-notification-open aria-haspopup="dialog">접수 알림 <span data-notification-count hidden></span></button></div>
-  <div id="appSelectStage" style="display:none;flex-direction:column;align-items:center;width:100%;margin-top:14px;">
+  <div id="appSelectStage" style="display:none">
     <div style="color:#CADCFC;font-size:13px;margin-bottom:16px;letter-spacing:.02em;" id="chooseToolText">사용할 도구를 선택하세요</div>
-    <button type="button" id="appBtnReport" data-toolid="report" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:none;background:#fff;color:#1B2F5E;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnReport" data-toolid="report" class="hub-tool" >
       <span style="font-size:24px;">📋</span>
       <span style="flex:1;"><span class="tool-name" data-tool="report-name">AS 처리 보고서</span><br><span style="font-size:11px;font-weight:500;color:#6B7A99;" class="tool-desc" data-tool="report-desc">현장 보고서 작성 → PPT 자동 생성</span></span>
       <span style="color:#9AA3B5;">→</span>
     </button>
-    <button type="button" id="appBtnGuide" data-toolid="guide" class="hub-tool" style="width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;">
+    <button type="button" id="appBtnGuide" data-toolid="guide" class="hub-tool" >
       <span style="font-size:24px;">📖</span>
       <span style="flex:1;"><span class="tool-name" data-tool="guide-name">현장 대응 가이드</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="guide-desc">CUREJET 증상별 진단·조치 매뉴얼</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnInspection" data-toolid="inspection" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnInspection" data-toolid="inspection" class="hub-tool" >
       <span style="font-size:24px;">🔧</span>
       <span style="flex:1;"><span class="tool-name" data-tool="insp-name">A/S 점검 내역서</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;" class="tool-desc" data-tool="insp-desc">점검 체크리스트 · PDF 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
 
-    <button type="button" id="appBtnHandover" data-toolid="handover" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHandover" data-toolid="handover" class="hub-tool" >
       <span style="font-size:24px;">✍</span>
       <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">카톡/Flow 양식 생성 · 시트 자동 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnLabel" data-toolid="label" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnLabel" data-toolid="label" class="hub-tool" >
       <span style="font-size:24px;">🏷</span>
       <span style="flex:1;"><span class="tool-name">장비 Label List</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">주간 병원별 장비 사진 · 엑셀/PPT 생성</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnAsReport" data-toolid="asreport" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnAsReport" data-toolid="asreport" class="hub-tool" >
       <span style="font-size:24px;">🧾</span>
       <span style="flex:1;"><span class="tool-name">A/S 항목별 증상·조치</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">소분류별 사례 수집 · 품질팀 제출 엑셀</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnChatbot" data-toolid="chatbot" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnChatbot" data-toolid="chatbot" class="hub-tool" >
       <span style="font-size:24px;">🤖</span>
       <span style="flex:1;"><span class="tool-name">CS AI 챗봇</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">증상 입력 → 점검·조치 트러블슈팅</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnWeekly" data-toolid="weekly" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnWeekly" data-toolid="weekly" class="hub-tool" >
       <span style="font-size:24px;">📅</span>
       <span style="flex:1;"><span class="tool-name">주간업무보고</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">주간 처리 내역 불러오기 → 시트 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnHospital" data-toolid="hospital" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHospital" data-toolid="hospital" class="hub-tool hub-hidden-tool" style="display:none">
       <span style="font-size:24px;">🏥</span>
       <span style="flex:1;"><span class="tool-name" data-tool="hosp-name">병원 데이터센터</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="hosp-desc">병원 검색 · 점검 현황 · 지도</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
-    <button type="button" id="appBtnHospitalWork" data-toolid="hospitalwork" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHospitalWork" data-toolid="hospitalwork" class="hub-tool" >
       <span style="font-size:24px;">🗂️</span>
       <span style="flex:1;"><span class="tool-name">병원 A/S 업무관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">고객센터 접수 · 방문 배정 · 결과 확인</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnCustomerAs" data-toolid="customeras" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnCustomerAs" data-toolid="customeras" class="hub-tool" >
       <span style="font-size:24px;">📨</span>
       <span style="flex:1;"><span class="tool-name">고객 AS 접수 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">병원 QR 접수 · 사진 · 진행 상황</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnReservations" data-toolid="reservations" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnReservations" data-toolid="reservations" class="hub-tool" >
       <span style="font-size:24px;">🗓️</span>
       <span style="flex:1;"><span class="tool-name">예약 시간 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">공개 시간 · 방문 일정 · 담당자 배정</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnHospitalQr" data-toolid="hospitalqr" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnHospitalQr" data-toolid="hospitalqr" class="hub-tool" >
       <span style="font-size:24px;">▦</span>
-      <span style="flex:1;"><span class="tool-name">병원 QR 관리</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">시범 병원 QR 발급 · 저장</span></span>
+      <span style="flex:1;"><span class="tool-name">QR 일괄 생성</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">AS 접수 · 고객만족도조사 스티커</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
     <!-- [메뉴 통합] '병원 데이터센터 (PC)' 중복 카드 제거 — 위 '병원 데이터센터'가 hospital-pc.html로
          이동하며, 그 페이지가 화면 크기로 모바일/PC 모드를 자동 선택하고 Window/Mobile 토글도 제공한다. -->
     <!-- 숨김 도구: 880821 입력 시에만 표시 -->
-    <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(245,166,35,.5);background:rgba(245,166,35,.08);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnSurvey" data-toolid="survey" class="hub-tool hub-hidden-tool" style="display:none">
       <span style="font-size:24px;">⭐</span>
       <span style="flex:1;"><span class="tool-name" data-tool="survey-name">고객 만족도 조사</span><br><span style="font-size:11px;font-weight:500;color:#E0C088;" class="tool-desc" data-tool="survey-desc">병원별 QR 발급 · 설문 결과 통계</span></span>
       <span style="color:#E0C088;">🔒→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 수석 매니저 가이드 -->
-    <button type="button" id="appBtnManager" data-toolid="manager" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnManager" data-toolid="manager" class="hub-tool hub-hidden-tool" style="display:none">
       <span style="font-size:24px;">🧭</span>
       <span style="flex:1;"><span class="tool-name">수석 매니저 가이드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">유형별 [문제 확인→해결→후속 조치] · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 현장 처리 대시보드 -->
-    <button type="button" id="appBtnDashboard" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none;width:100%;max-width:300px;padding:18px 16px;margin-bottom:12px;border-radius:14px;border:1.5px solid rgba(120,220,190,.55);background:rgba(46,125,158,.16);color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;align-items:center;gap:12px;">
+    <button type="button" id="appBtnDashboard" data-toolid="dashboard" class="hub-tool hub-hidden-tool" style="display:none">
       <span style="font-size:24px;">📊</span>
       <span style="flex:1;"><span class="tool-name">현장 처리 대시보드</span><br><span style="font-size:11px;font-weight:500;color:#9FE0CC;">집계·필터·주간보고 PPT · Lv.3</span></span>
       <span style="color:#9FE0CC;">🔐→</span>
@@ -308,17 +309,17 @@
          이동하며, 그 페이지가 화면 크기로 모바일/PC 모드를 자동 선택하고 Window/Mobile 토글도 제공한다. -->
 
     <!-- AutoDoc — 회사 문서 자동화 플랫폼 (별도 앱 · /autodoc/) -->
-    <button type="button" id="appBtnAutodoc" data-toolid="autodoc" class="hub-tool" style="width:100%;max-width:300px;border-radius:14px;border:1.5px solid rgba(202,220,252,.5);background:transparent;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:12px;padding:18px 16px;margin-bottom:12px;">
+    <button type="button" id="appBtnAutodoc" data-toolid="autodoc" class="hub-tool" >
       <span style="font-size:24px;">📄</span>
       <span style="flex:1;"><span class="tool-name">AutoDoc</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">회사 문서 자동화 플랫폼</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
 
     <!-- 보안레벨 3 전용: 메뉴 관리 (도구 노출 설정 · 시트 '메뉴설정' 연동) -->
-    <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:999;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(202,220,252,.4);background:transparent;color:#8EA0C8;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
+    <button type="button" id="appBtnMenuAdmin" class="hub-tool hub-hidden-tool" style="display:none">
       ⚙️ 메뉴 관리 <span style="font-weight:500;font-size:11px;">· 표시/레벨/순서 설정 · Lv.3</span>
     </button>
-    <button type="button" id="appBtnSecurityAdmin" class="hub-tool hub-hidden-tool" style="display:none;order:1000;width:100%;max-width:300px;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1.5px dashed rgba(120,220,190,.5);background:rgba(46,125,158,.1);color:#9FE0CC;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;align-items:center;justify-content:center;gap:8px;">
+    <button type="button" id="appBtnSecurityAdmin" class="hub-tool hub-hidden-tool" style="display:none">
       🛡️ 보안 관리 <span style="font-weight:500;font-size:11px;">· 사용자/기기 · Lv.3</span>
     </button>
   </div>
@@ -416,9 +417,9 @@
 <header>
   <div class="logo-area">
     <svg viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
-      <text x="2"  y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">b</text>
-      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#9EADCC">a</text>
-      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#4E9CC8">z</text>
+      <text x="2"  y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#595959">b</text>
+      <text x="30" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#595959">a</text>
+      <text x="58" y="62" font-size="68" font-weight="900" font-family="Georgia,serif" fill="#579BCE">z</text>
     </svg>
     <div><h1 data-i18n="appTitle">AS 처리 보고서</h1><div class="subtitle">BAZ BIOMEDIC Field Service</div></div>
   </div>
@@ -1941,7 +1942,7 @@ document.getElementById('appBtnHandover').addEventListener('click', function(){ 
 document.getElementById('appBtnHospitalWork').addEventListener('click', function(){ location.href='hospital-work.html'; });
 document.getElementById('appBtnCustomerAs').onclick=function(){location.href='hospital-work.html?view=customers';};
 document.getElementById('appBtnReservations').onclick=function(){location.href='hospital-work.html?view=reservations';};
-document.getElementById('appBtnHospitalQr').onclick=function(){location.href='hospital-qr.html';};
+document.getElementById('appBtnHospitalQr').onclick=function(){location.href='qr-bulk.html?purpose=as';};
 document.getElementById('appBtnLabel').addEventListener('click', function(){ location.href='label.html'; });
 document.getElementById('appBtnAsReport').addEventListener('click', function(){ location.href='asreport.html'; });
 document.getElementById('appBtnAutodoc').addEventListener('click', function(){ location.href='autodoc/index.html'; });
@@ -1979,7 +1980,7 @@ var MENU_DEFAULTS={
   hospital:  {name:'🏥 병원 데이터센터',    level:2, show:true, order:8},
   customeras:{name:'📨 고객 AS 접수 관리',level:1,show:true,order:8.1},
   reservations:{name:'🗓️ 예약 시간 관리',level:1,show:true,order:8.2},
-  hospitalqr:{name:'▦ 병원 QR 관리',level:3,show:true,order:8.3},
+  hospitalqr:{name:'▦ QR 일괄 생성',level:3,show:true,order:8.3},
   hospitalwork:{name:'🗂️ 병원 A/S 업무관리',level:1, show:true, order:8},
   survey:    {name:'⭐ 고객 만족도 조사',   level:2, show:true, order:9},
   manager:   {name:'🧭 수석 매니저 가이드', level:3, show:true, order:10},
