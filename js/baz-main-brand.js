@@ -6,5 +6,5 @@
   slot.removeAttribute('style');slot.classList.add('hub-icon');slot.setAttribute('aria-hidden','true');slot.textContent='';
   var svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS(svg.namespaceURI,'path');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');path.setAttribute('d',paths[button.dataset.toolid]||paths.report);svg.append(path);slot.append(svg);
  });
- document.querySelectorAll('#langSelect .tool-desc,#hubLogo>div,#hubLangSwitch button,#lockHint>div,#langSelect .hub-tool>span:last-child').forEach(function(el){el.style.removeProperty('color');});
+ document.querySelectorAll('#langSelect .tool-desc,#hubLogo>div,#hubLangSwitch button,#lockHint>div,#chooseToolText,#langSelect .hub-tool>span:last-child').forEach(function(el){el.style.removeProperty('color');});
 })();
