@@ -1,6 +1,6 @@
 (function(root){
  'use strict';if(!root.BazQrRuntime)return;
- var api=root.BazWorkAPI,$=function(id){return document.getElementById(id);},data=null,pending=null,busy=false,loadId=0,registered=false,planning=false;
+ var api=root.BazWorkAPI,$=function(id){return document.getElementById(id);},data=null,pending=null,busy=false,loadId=0,planning=false,loadTask=null,loadAgain=false,loadingDate='';
  var key='qr-local-reservation-pending:'+root.BazAuth.name();
  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
  function message(s){$('reservation-message').textContent=s;}
@@ -11,8 +11,9 @@
  function endAt(s){return new Date(Date.parse(s.startAt+':00+09:00')+(s.durationMinutes||0)*60000+9*3600000).toISOString().slice(0,16);}
  function timeLabel(s){return s.startAt.slice(11)+'–'+(endAt(s).slice(0,10)!==s.startAt.slice(0,10)?endAt(s).slice(5,10)+' ':'')+endAt(s).slice(11);}
  function edit(s){$('reservation-engineer').value=s.engineer;$('reservation-time').value=s.startAt.slice(11);$('reservation-end').value=endAt(s).slice(11);$('reservation-mode').value=s.mode;$('reservation-travel').value=String(s.travelMinutes||0);applyHours();message('선택한 시간의 설정을 수정합니다.');$('reservation-form').scrollIntoView({behavior:'smooth',block:'nearest'});}
- function applyHours(){if(!data)return;var open=$('reservation-mode').value==='open',input=$('reservation-time');if(open&&data.hours.enabled){input.min=data.hours.firstTime;input.max=data.hours.lastTime;}else{input.removeAttribute('min');input.removeAttribute('max');}$('reservation-form').querySelector('button[type=submit]').disabled=open&&!data.hours.enabled;}
+ function applyHours(){var submit=$('reservation-form').querySelector('button[type=submit]');if(!data){submit.disabled=true;return;}var open=$('reservation-mode').value==='open',input=$('reservation-time');if(open&&data.hours.enabled){input.min=data.hours.firstTime;input.max=data.hours.lastTime;}else{input.removeAttribute('min');input.removeAttribute('max');}submit.disabled=!!loadTask||busy||!!pending||data.date!==$('reservation-date').value||open&&!data.hours.enabled;}
  function render(){
+  if(!data)return;
   var date=data.date;$('reservation-hours').textContent=data.hours.enabled?'선택 날짜 예약 시작 · '+data.hours.firstTime+'~'+data.hours.lastTime:'토·일은 예약할 수 없습니다.';
   $('reservation-week').innerHTML=data.week.map(function(d){return '<button type="button" data-date="'+d.date+'" aria-pressed="'+(d.date===date)+'"><span>'+['일','월','화','수','목','금','토'][new Date(d.date+'T00:00:00Z').getUTCDay()]+'</span><strong>'+Number(d.date.slice(8))+'</strong><small>'+(d.visits?d.visits+'건':'—')+'</small></button>';}).join('');
   $('reservation-week').querySelectorAll('button').forEach(function(b){b.onclick=function(){$('reservation-date').value=b.dataset.date;load();};});
@@ -31,18 +32,19 @@
   $('reservation-off').textContent=data.off.length?'휴무 · '+data.off.map(function(s){return s.person;}).join(', '):'';
   $('reservation-uncertain').textContent=data.uncertain.length?'일시·담당 확인이 필요한 접수 '+data.uncertain.length+'건':'';
  }
- async function load(){if(busy)return;var seq=++loadId,date=$('reservation-date').value;try{
-  var response=await api.get('work_reservation_list',{date:date});if(seq!==loadId)return;if(!response.success)throw Error(response.error);if(!response.enabled)return;data=response;
-  if(!registered){registered=true;root.BazWorkTabs.register('reservations',$('reservation-open'),$('reservation-panel'));}
+ function load(force){if(busy)return Promise.resolve();if(loadTask){if(force===true||loadingDate!==$('reservation-date').value)loadAgain=true;return loadTask;}
+  $('reservation-panel').setAttribute('aria-busy','true');$('reservation-form').querySelector('button[type=submit]').disabled=true;
+  loadTask=(async function(){do{loadAgain=false;var seq=loadId,date=loadingDate=$('reservation-date').value;try{
+  var response=await api.get('work_reservation_list',{date:date});if(date!==$('reservation-date').value){loadAgain=true;continue;}if(seq!==loadId||busy)continue;if(!response.success)throw Error(response.error);if(!response.enabled){message('예약 관리가 활성화되지 않았습니다.');continue;}data=response;
   var engineer=$('reservation-engineer').value;$('reservation-engineer').innerHTML=data.engineers.filter(function(e){return data.admin||e===data.ownEngineer;}).map(function(e){return '<option>'+esc(e)+'</option>';}).join('');if(data.engineers.includes(engineer)&&(data.admin||engineer===data.ownEngineer))$('reservation-engineer').value=engineer;
   var filter=$('reservation-filter-engineer').value;$('reservation-filter-engineer').innerHTML='<option value="">전체 엔지니어</option>'+data.engineers.map(function(e){return '<option>'+esc(e)+'</option>';}).join('');$('reservation-filter-engineer').value=filter;
   if(data.hours.enabled&&($('reservation-time').value<data.hours.firstTime||$('reservation-time').value>data.hours.lastTime)){$('reservation-time').value=data.hours.firstTime;$('reservation-end').value='12:00';}render();lock(false);
- }catch(e){message(e.message);}}
- async function send(){if(!pending||busy)return;lock(true);root.BazDesign?.busy($('reservation-form').querySelector('button[type=submit]'),true);message('저장 중…');var result;try{
+ }catch(e){if(date===$('reservation-date').value)message(e.message);else loadAgain=true;}}while(loadAgain&&!busy);})().finally(function(){loadTask=null;$('reservation-panel').setAttribute('aria-busy','false');applyHours();});return loadTask;}
+ async function send(){if(!pending||busy)return;loadId++;lock(true);root.BazDesign?.busy($('reservation-form').querySelector('button[type=submit]'),true);message('저장 중…');var result;try{
   if(pending.queue){while(pending.index<pending.queue.length){var item=pending.queue[pending.index];message((pending.index+1)+' / '+pending.queue.length+' 저장 중 · '+item.startAt.slice(0,10));result=await api.post('work_reservation_slot',item);if(!result.success){if(result.retrySameOperation)throw Error(result.error);throw Object.assign(Error(pending.index+'건 저장 후 중단 · '+item.startAt.slice(0,10)+' · '+result.error),{definite:true});}pending.index++;localStorage.setItem(key,JSON.stringify(pending));}}
   else{result=await api.post(pending.action,pending.payload);if(!result.success&&result.retrySameOperation)throw Error(result.error);}
-  var count=pending.queue?.length;pending=null;localStorage.removeItem(key);lock(false);await load();message(result?.success?(count?count+'개 날짜에 저장했습니다.':result.adjustments?.length?'저장했습니다. 기존 방문 '+result.adjustments.length+'건의 일정 조정이 필요합니다.':'설정을 저장했습니다.'):result.error);
- }catch(e){if(e.definite){pending=null;localStorage.removeItem(key);message(e.message);lock(false);await load();}else message('저장 결과를 확인하지 못했습니다. 같은 기록으로 재시도하세요. '+e.message);}finally{root.BazDesign?.busy($('reservation-form').querySelector('button[type=submit]'),false);lock(false);}}
+  var count=pending.queue?.length;pending=null;localStorage.removeItem(key);lock(false);await load(true);message(result?.success?(count?count+'개 날짜에 저장했습니다.':result.adjustments?.length?'저장했습니다. 기존 방문 '+result.adjustments.length+'건의 일정 조정이 필요합니다.':'설정을 저장했습니다.'):result.error);
+ }catch(e){if(e.definite){pending=null;localStorage.removeItem(key);message(e.message);lock(false);await load(true);}else message('저장 결과를 확인하지 못했습니다. 같은 기록으로 재시도하세요. '+e.message);}finally{root.BazDesign?.busy($('reservation-form').querySelector('button[type=submit]'),false);lock(false);}}
  async function write(payload){if(busy||pending)return;pending={action:'work_reservation_slot',payload:Object.assign({},payload,{operationId:api.id()})};try{localStorage.setItem(key,JSON.stringify(pending));}catch(e){pending=null;message('재시도 기록을 보관하지 못해 저장하지 않았습니다.');return;}await send();}
  $('reservation-date').value=new Date(Date.now()+9*3600000).toISOString().slice(0,10);
  $('reservation-refresh').onclick=load;$('reservation-date').onchange=load;$('reservation-retry').onclick=send;$('reservation-mode').onchange=applyHours;
@@ -50,12 +52,13 @@
  function repeatDates(){var end=$('reservation-repeat-until').value||data.date;if(end<data.date||Date.parse(end)-Date.parse(data.date)>31*86400000)throw Error('반복 범위는 시작일부터 최대 31일입니다.');var days=Array.from($('reservation-repeat-days').querySelectorAll('input:checked')).map(function(i){return Number(i.value);}),out=[];for(var d=data.date;d<=end;d=datePlus(d,1))if((!$('reservation-repeat-until').value||days.includes(new Date(d+'T00:00Z').getUTCDay()))&&new Date(d+'T00:00Z').getUTCDay()%6!==0)out.push(d);if(!out.length)throw Error('적용할 평일을 선택하세요.');return out;}
  $('reservation-preview').onclick=function(){try{$('reservation-preview-text').textContent=repeatDates().join(' · ');}catch(e){message(e.message);}};
  $('reservation-view').onchange=render;$('reservation-filter-engineer').onchange=render;
- $('reservation-form').onsubmit=async function(event){event.preventDefault();if(!data||busy||pending||planning)return;var engineer=$('reservation-engineer').value,startAt=data.date+'T'+$('reservation-time').value,end=data.date+'T'+$('reservation-end').value;if(end<=startAt){message('종료 시간은 시작 시간보다 늦게 설정하세요.');return;}planning=true;var selectedMode=$('reservation-mode').value,travel=Number($('reservation-travel').value);try{
+ $('reservation-form').onsubmit=async function(event){event.preventDefault();if(!data||busy||pending||planning||loadTask||data.date!==$('reservation-date').value)return;var engineer=$('reservation-engineer').value,startAt=data.date+'T'+$('reservation-time').value,end=data.date+'T'+$('reservation-end').value;if(end<=startAt){message('종료 시간은 시작 시간보다 늦게 설정하세요.');return;}planning=true;var selectedMode=$('reservation-mode').value,travel=Number($('reservation-travel').value);try{
   var dates=$('reservation-repeat-until').value?repeatDates():[data.date],queue=[];for(var date of dates){var response=date===data.date?data:await api.get('work_reservation_list',{date:date});if(!response.success)throw Error(response.error);if(selectedMode==='open'&&(!response.hours.enabled||startAt.slice(11)<response.hours.firstTime||startAt.slice(11)>response.hours.lastTime))throw Error(date+'은 선택한 시작 시간에 예약을 공개할 수 없습니다.');var start=date+'T'+startAt.slice(11),old=response.slots.find(function(s){return s.engineer===engineer&&s.startAt===start;});queue.push({engineer:engineer,startAt:start,endAt:date+'T'+end.slice(11),travelMinutes:travel,mode:selectedMode,baseRevision:old?old.revision:0,operationId:api.id()});}
   if(queue.length===1)return write(queue[0]);if(!confirm(queue.length+'개 날짜에 적용할까요? 기존 예약은 유지하며 충돌이 있으면 해당 날짜에서 중단합니다.'))return;pending={queue:queue,index:0};localStorage.setItem(key,JSON.stringify(pending));await send();
  }catch(e){message(e.message);}finally{planning=false;}};
 
- root.addEventListener('baz-work-tab',function(e){if(e.detail.name==='reservations'&&registered)load();});
- root.addEventListener('baz-qr-work-changed',function(){if(!$('reservation-panel').hidden)load();});
- load().then(function(){if(pending){root.BazWorkTabs.show('reservations');message('결과 확인이 필요한 기록이 있습니다. 같은 기록으로 재시도하세요.');lock(false);}});
+ root.addEventListener('baz-work-tab',function(e){if(e.detail.name==='reservations')load();});
+ root.addEventListener('baz-qr-work-changed',function(){if(!$('reservation-panel').hidden)load(true);});
+ applyHours();root.BazWorkTabs.register('reservations',$('reservation-open'),$('reservation-panel'));
+ if(pending){root.BazWorkTabs.show('reservations');message('결과 확인이 필요한 기록이 있습니다. 같은 기록으로 재시도하세요.');lock(false);}
 })(window);
