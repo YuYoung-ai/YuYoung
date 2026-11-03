@@ -1,0 +1,9 @@
+(function(root){
+ 'use strict';if(!root.BazQrRuntime)return;
+ var nav=document.getElementById('work-management-tabs'),tabs={},wanted=new URLSearchParams(location.search),active=wanted.get('view')||(wanted.get('qr')?'customers':'service');
+ document.body.classList.add('qr-enhanced');nav.hidden=false;
+ function show(name){if(!tabs[name])return;active=name;Object.keys(tabs).forEach(function(key){var t=tabs[key],on=key===name;t.panel.hidden=!on;t.button.setAttribute('aria-selected',String(on));t.button.tabIndex=on?0:-1;});var url=new URL(location.href);url.searchParams.delete('qr');url.searchParams.set('view',name);history.replaceState(null,'',url);root.dispatchEvent(new CustomEvent('baz-work-tab',{detail:{name:name}}));}
+ root.BazWorkTabs={register:function(name,button,panel){tabs[name]={button:button,panel:panel};button.hidden=false;button.setAttribute('role','tab');button.setAttribute('aria-controls',panel.id);panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);button.onclick=function(){show(name);};if(name===active)show(name);else{panel.hidden=true;button.setAttribute('aria-selected','false');button.tabIndex=-1;}},show:show};
+ nav.addEventListener('keydown',function(e){if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;var buttons=Array.from(nav.querySelectorAll('[role=tab]:not([hidden])')),index=buttons.indexOf(document.activeElement);if(index<0)return;e.preventDefault();index=e.key==='Home'?0:e.key==='End'?buttons.length-1:(index+(e.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;buttons[index].click();buttons[index].focus();});
+ root.BazWorkTabs.register('service',document.getElementById('service-tab'),document.getElementById('service-panel'));
+})(window);
