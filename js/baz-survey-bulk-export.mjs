@@ -1,4 +1,4 @@
-import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv} from './baz-survey-bulk-core.mjs?v=20261102-centered-caption';
+import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv,purposeSettings} from './baz-survey-bulk-core.mjs?v=292';
 const PX=24,scriptLoads=new Map();
 async function loadScript(path,ready){
  if(ready())return;
@@ -15,11 +15,11 @@ function textBlock(text,width,height,{size=1.7,min=size,weight=600,align='left'}
  ctx.fillStyle='#000';ctx.textBaseline='top';ctx.textAlign=align;lines.forEach((line,i)=>ctx.fillText(line,align==='center'?width*PX/2:0,(i*chosen*1.32+.1)*PX));return c;
 }
 function blocks(record){return [
- {x:1,y:.4,w:30,h:2.4,c:textBlock('고객만족도조사',30,2.4,{size:1.8,weight:700,align:'center'})},
- {x:1,y:2.8,w:30,h:1.6,c:textBlock('QR 스캔 참여하기',30,1.6,{size:1.15,weight:500,align:'center'})},
+ {x:1,y:.4,w:30,h:2.4,c:textBlock(purposeSettings([record]).title,30,2.4,{size:1.8,weight:700,align:'center'})},
+ {x:1,y:2.8,w:30,h:1.6,c:textBlock(purposeSettings([record]).caption,30,1.6,{size:1.15,weight:500,align:'center'})},
  {x:1,y:20,w:30,h:2.2,c:textBlock(record.printName||record.name,30,2.2,{size:1.6,min:1.15,weight:700,align:'center'})}
  ];}
-export function modulesFor(record){return window.BazQrEncoder.create(record.surveyUrl,{errorCorrectionLevel:'M'}).modules;}
+export function modulesFor(record){return window.BazQrEncoder.create((record.qrUrl||record.surveyUrl),{errorCorrectionLevel:'M'}).modules;}
 export function stickerCanvas(record){
  const c=canvas(STICKER.width,STICKER.height),ctx=c.getContext('2d'),modules=modulesFor(record),unit=STICKER.qrSize/(modules.size+8);
  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#000';
@@ -28,9 +28,9 @@ export function stickerCanvas(record){
  ctx.font=`700 ${1.95*PX}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText('Curejet',STICKER.width*PX/2,24*PX);return c;
 }
 export async function stickerPdf(records,onProgress=()=>{}){
- await loadScript('./vendor/jspdf-2.5.1.umd.min.js',()=>!!window.jspdf?.jsPDF);await printFont();
+ const purpose=purposeSettings(records);await loadScript('./vendor/jspdf-2.5.1.umd.min.js',()=>!!window.jspdf?.jsPDF);await printFont();
  const pdf=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:[32,25],compress:true,precision:6});
- pdf.setProperties({title:'Curejet hospital survey stickers 32x25mm',subject:'One hospital per page. Quantities are in the accompanying manifest.'});
+ pdf.setProperties({title:'Curejet '+purpose.title+' stickers 32x25mm',subject:'One hospital per page. Quantities are in the accompanying manifest.'});
  for(let i=0;i<records.length;i++){
   const r=records[i];if(i)pdf.addPage([32,25],'landscape');const m=modulesFor(r),unit=STICKER.qrSize/(m.size+8);
   pdf.setFillColor(0);qrRuns(m).forEach(([x,y,w])=>pdf.rect(STICKER.qrX+(x+4)*unit,STICKER.qrY+(y+4)*unit,w*unit,unit,'F'));
@@ -40,12 +40,12 @@ export async function stickerPdf(records,onProgress=()=>{}){
  }
  return pdf.output('blob');
 }
-export const printInstructions=records=>`Curejet 고객만족도 조사 스티커 제작 요청\n\n재단 크기: 가로 32mm × 세로 25mm\nPDF: 병원당 1페이지, 원본 크기(100%)로 출력\n병원 수: ${records.length}곳 / 총 수량: ${records.reduce((n,r)=>n+r.quantity,0)}장\n병원별 출력 수량: 제작수량표.csv 참조\nQR과 병원명은 완성 배치되어 있습니다. QR 내용을 변경하지 마세요.\nQR은 벡터, 한글은 약 600dpi 이미지이며 Curejet은 PDF 글꼴로 출력됩니다.\n흰 바탕의 완성 크기 PDF입니다. 도련·재단선 및 색상 규격은 인쇄 전 업체와 확인해 주세요.\n무광 방수 소재 및 병원별 분류 포장 희망\n본 인쇄 전 실제 크기 샘플의 QR 인식·병원명·재단 위치를 확인해 주세요.\n`;
+export const printInstructions=records=>`Curejet ${purposeSettings(records).title} 스티커 제작 요청\n\n재단 크기: 가로 32mm × 세로 25mm\nPDF: 병원당 1페이지, 원본 크기(100%)로 출력\n병원 수: ${records.length}곳 / 총 수량: ${records.reduce((n,r)=>n+r.quantity,0)}장\n병원별 출력 수량: 제작수량표.csv 참조\nQR과 병원명은 완성 배치되어 있습니다. QR 내용을 변경하지 마세요.\nQR은 벡터, 한글은 약 600dpi 이미지이며 Curejet은 PDF 글꼴로 출력됩니다.\n흰 바탕의 완성 크기 PDF입니다. 도련·재단선 및 색상 규격은 인쇄 전 업체와 확인해 주세요.\n무광 방수 소재 및 병원별 분류 포장 희망\n본 인쇄 전 실제 크기 샘플의 QR 인식·병원명·재단 위치를 확인해 주세요.\n`;
 export async function qrArchive(records,onProgress=()=>{}){
- await loadScript('./vendor/jszip-3.10.1.min.js',()=>!!window.JSZip);const zip=new window.JSZip();
+ const purpose=purposeSettings(records);await loadScript('./vendor/jszip-3.10.1.min.js',()=>!!window.JSZip);const zip=new window.JSZip();
  for(let i=0;i<records.length;i++){
-  const r=records[i],stem=fileStem(i,r.name),m=modulesFor(r);zip.file('QR/'+stem+'.svg',qrSvg(m));
-  const c=document.createElement('canvas');await window.BazQrEncoder.toCanvas(c,r.surveyUrl,{width:1024,margin:4,errorCorrectionLevel:'M'});
+  const r=records[i],stem=purpose.prefix+'_'+fileStem(i,r.name),m=modulesFor(r);zip.file('QR/'+stem+'.svg',qrSvg(m));
+  const c=document.createElement('canvas');await window.BazQrEncoder.toCanvas(c,r.qrUrl||r.surveyUrl,{width:1024,margin:4,errorCorrectionLevel:'M'});
   const blob=await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error(r.name+': QR 이미지 생성 실패')),'image/png'));
   zip.file('QR/'+stem+'.png',await blob.arrayBuffer());onProgress(i+1,records.length);if(i%10===0)await new Promise(resolve=>setTimeout(resolve,0));
  }

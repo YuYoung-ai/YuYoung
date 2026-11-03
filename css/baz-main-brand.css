@@ -1,0 +1,17 @@
+#langSelect{position:fixed;inset:0;z-index:9999;background:var(--baz-bg);color:var(--baz-text);flex-direction:column;align-items:center;justify-content:flex-start;padding:32px 24px 56px;overflow-y:auto}
+#hubLogo{background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;padding:8px 16px;border-radius:14px;font-family:inherit}
+#hubLogo>div{color:var(--baz-charcoal);font-size:18px;font-weight:700;margin-bottom:4px}#hubLogo #hubSubtitle{color:var(--baz-muted);font-size:12px;letter-spacing:.09em;font-weight:500}
+#hubLangSwitch{position:absolute;top:18px;right:20px;display:flex;gap:2px;padding:3px;background:var(--baz-paper);border:1px solid var(--baz-line);border-radius:10px}
+#hubLangSwitch .hublang-opt{color:var(--baz-primary);font-weight:600;border-radius:7px}
+#langSelect #lockHint>div{color:var(--baz-muted)}#appSelectStage{width:min(820px,100%);margin-top:18px;flex-direction:row;align-items:stretch;justify-content:center;gap:12px;flex-wrap:wrap}
+#appSelectStage #chooseToolText{flex:0 0 100%;text-align:center;color:var(--baz-muted);font-size:13px;margin-bottom:10px}
+#langSelect .hub-tool{width:calc(50% - 6px);min-height:90px;border:1px solid var(--baz-line);border-radius:16px;background:var(--baz-paper);color:var(--baz-text);font:600 15px var(--baz-font);cursor:pointer;text-align:left;display:flex;align-items:center;gap:14px;padding:20px;box-shadow:0 3px 14px #24344704;transition:border-color .15s,box-shadow .15s}
+#langSelect .hub-tool:hover{border-color:var(--baz-blue);box-shadow:0 5px 20px #23638F10}#langSelect .hub-tool:focus-visible{outline:3px solid var(--baz-blue);outline-offset:3px}
+#langSelect .hub-tool .tool-desc{display:inline-block;font-size:12px;font-weight:400;color:var(--baz-muted);line-height:1.6;margin-top:5px}
+#langSelect .hub-tool .hub-icon{display:grid;place-items:center;flex:0 0 40px;width:40px;height:40px;border-radius:12px;background:var(--baz-soft);color:var(--baz-primary)}
+.hub-icon svg{width:23px;height:23px}#langSelect .hub-tool>span:last-child{color:var(--baz-primary)}
+#langSelect #appBtnMenuAdmin,#langSelect #appBtnSecurityAdmin{min-height:44px;border-style:dashed;background:transparent;color:var(--baz-muted);justify-content:center;font-size:12px}
+#langSelect .baz-install-link,#langSelect .baz-notification-button{color:var(--baz-primary);background:var(--baz-paper);border:1px solid var(--baz-line);border-radius:9px}
+#langSelectStage button{color:var(--baz-primary)}
+@media(max-width:620px){#langSelect{padding:28px 18px 40px}#appSelectStage{gap:10px}#langSelect .hub-tool{width:100%;min-height:82px;padding:16px 18px}#hubLangSwitch{right:16px;top:14px}#hubLogo svg{max-width:76px;max-height:61px}#langSelect .hub-tool .tool-desc{font-size:11px}}
+@media(prefers-reduced-motion:reduce){#langSelect .hub-tool{transition:none}}
