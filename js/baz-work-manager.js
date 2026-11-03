@@ -939,7 +939,7 @@
   $('request-form').addEventListener('input',function(event){if(event.target.id!=='ack'){$('ack').checked=false;$('duplicate-ack').hidden=true;}saveDraft();});
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();checkAssignment();};
   ['registeredTime','visitTime'].forEach(function(id){$(id).onblur=function(){var normalized=normalizeTime(this.value);if(normalized)this.value=normalized;saveDraft();};});
-  if(window.BazQrRuntime)['visitDate','visitTime'].forEach(function(id){$(id).addEventListener('change',function(){var start=inputDateTime('visit');if(start)$('request-end').value=new Date(Date.parse(start+':00+09:00')+Number($('request-duration').value)*60000+9*3600000).toISOString().slice(0,16);});});
+  ['visitDate','visitTime'].forEach(function(id){$(id).addEventListener('change',function(){if(!window.BazQrRuntime)return;var start=inputDateTime('visit'),at=Date.parse(start+':00+09:00');$('request-end').value=Number.isFinite(at)?new Date(at+Number($('request-duration').value)*60000+9*3600000).toISOString().slice(0,16):'';});});
   $('request-form').onsubmit=saveRequest;$('close-editor').onclick=function(){saveDraft();if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};$('editor').addEventListener('cancel',function(event){saveDraft();if(embedded){event.preventDefault();receiptMessage('baz-work-receipt-close');}});
   $('discard').onclick=function(){store(draftKey,null);if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};
   $('existing-requests').onclick=function(event){var b=event.target.closest('[data-existing]');if(b){saveDraft();$('editor').close();openDetail(b.dataset.existing);}};
@@ -1007,7 +1007,7 @@
   if(window.BazHandoverReview)window.BazHandoverReview.onSaved=async function(data,requestId){if(data.request)upsert(data.request);await persistSnapshot();renderList();if(requestId&&state.detail?.request.id===requestId)await openDetail(requestId,true);};
   document.addEventListener('click',function(event){var button=event.target.closest('[data-review-record]');if(button&&window.BazHandoverReview)window.BazHandoverReview.open(button.dataset.reviewRecord,button.dataset.reviewRequest||'').catch(function(e){notify(e.message);});});
   start().then(async function(){var date=new URLSearchParams(window.location.search).get('roster');if(!embedded&&/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&state.loaded&&!notificationBusy()){await loadRoster(date.slice(0,7));await openRoster(date);}});
-  if(window.BazQrRuntime)window.addEventListener('baz-qr-work-changed',function(event){
+  window.addEventListener('baz-qr-work-changed',function(event){
     if(!state.loaded||busy||syncing||pending||bulkWorking)return;
     var changed=false;for(var request of event.detail?.requests||[]){var old=state.requests.find(function(r){return r.id===request.id;});if(!old||request.revision>old.revision){upsert(request);changed=true;}}
     if(changed){persistSnapshot();renderList();}
