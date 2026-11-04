@@ -22,3 +22,6 @@ button[data-receipt-request]:hover{background:transparent;color:var(--text,#1b2b
 
 .read-receipts-dialog button.read-receipts-remind{flex-shrink:0;min-height:36px;padding:5px 8px;font-size:11px;color:#64758c;background:transparent;border-color:#e6ebf2}
 @media(max-width:420px){.read-receipts-people li{flex-wrap:wrap}.read-receipts-dialog button.read-receipts-remind{min-height:44px;margin-left:auto}.read-receipts-people li>div:has(strong){min-width:0;flex:1}.read-receipts-when{flex-basis:auto}}
+
+/* Keep receipt metadata secondary to the request. */
+#list button[data-receipt-request],#detail button[data-receipt-request]{font-size:10px;font-weight:400;line-height:1.5}#list button[data-receipt-request] :is(strong,b),#detail button[data-receipt-request] :is(strong,b){font-weight:400}

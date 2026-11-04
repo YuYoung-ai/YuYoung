@@ -1,12 +1,12 @@
 import {el} from './baz-survey-api.mjs?v=292';
-import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital} from './baz-survey-bulk-core.mjs?v=292';
-import {printFont,stickerCanvas,stickerPdf,qrArchive,saveBlob} from './baz-survey-bulk-export.mjs?v=292';
+import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital,issuedHospital} from './baz-survey-bulk-core.mjs?v=292';
+import {printFont,stickerCanvas,stickerPdf,qrArchive,saveBlob,printStickers} from './baz-survey-bulk-export.mjs?v=294';
 
-export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='survey',issue}){
+export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='survey',issue,mode='all',onIssued=()=>{},onManage=()=>{}}){
  const settings=PURPOSES[purpose];if(!settings)throw Error('QR 목적을 확인하세요.');
  root.innerHTML=`
- <div class="section-heading"><div><p class="eyebrow">HOSPITAL QR · PRINT STICKERS</p><h2>${settings.title} QR 일괄 생성</h2><p class="help">병원을 선택해 전용 QR을 준비하세요. ${purpose==='as'?'같은 QR로 접수와 진행 상황을 확인합니다. QR 제작만으로 접수·예약이 시작되지는 않습니다.':'기존 주소는 그대로 유지되며 다음 조사에도 재사용할 수 있습니다.'}</p></div><span class="badge">스티커 32 × 25mm</span></div>
- <div class="bulk-summary"><div><span>입점병원</span><strong data-bulk="total">0곳</strong></div><div><span>선택 병원</span><strong data-bulk="selected">0곳</strong></div><div><span>선택 중 생성 완료</span><strong data-bulk="ready">0곳</strong></div><div><span>선택 제작 수량</span><strong data-bulk="copies">0장</strong></div></div>
+ <div class="section-heading"><div><p class="eyebrow">HOSPITAL QR · ${mode==='library'?'MANAGE & PRINT':'CREATE'}</p><h2>${settings.title} ${mode==='library'?'QR 관리 · 인쇄':'QR 일괄 생성'}</h2><p class="help">${mode==='library'?'보관된 QR을 선택해 인쇄를 준비하세요. 인쇄해도 병원의 기존 QR 주소는 유지됩니다.':`병원을 선택해 전용 QR을 준비하세요. ${purpose==='as'?'같은 QR로 접수와 진행 상황을 확인합니다. QR 제작만으로 접수·예약이 시작되지는 않습니다.':'기존 주소는 그대로 유지되며 다음 조사에도 재사용할 수 있습니다.'}`}</p></div><span class="badge">스티커 32 × 25mm</span></div>
+ <div class="bulk-summary"><div><span>${mode==='library'?'보관된 QR':'입점병원'}</span><strong data-bulk="total">0곳</strong></div><div><span>선택 병원</span><strong data-bulk="selected">0곳</strong></div><div><span>선택 중 생성 완료</span><strong data-bulk="ready">0곳</strong></div><div><span>선택 제작 수량</span><strong data-bulk="copies">0장</strong></div></div>
  <div class="bulk-layout"><div class="bulk-directory">
  <fieldset data-bulk="controls" class="bulk-fieldset"><legend class="bulk-sr">병원 선택 및 제작 수량</legend>
  <label class="field">병원 검색<input data-bulk="search" type="text" placeholder="병원명을 입력하세요" maxlength="100"></label>
@@ -22,11 +22,18 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  <h3>인쇄용 스티커 미리보기</h3><p class="help">32 × 25mm · 제목·안내 문구 → 중앙 QR → 병원명 → Curejet</p>
  <div class="bulk-preview"><img data-bulk="preview" alt="선택 병원의 스티커 미리보기" hidden><p data-bulk="preview-empty" class="help">QR 생성 후 병원의<br>미리보기를 눌러 주세요.</p></div>
  <p data-bulk="preview-name" class="bulk-preview-name"></p><a data-bulk="open" class="bulk-open" target="_blank" rel="noopener noreferrer" hidden>QR 연결 화면 확인 ↗</a><label class="field" data-bulk="print-name-field" hidden>인쇄 병원명<input data-bulk="print-name" type="text" maxlength="100"><span class="help">긴 병원명은 인쇄할 이름을 줄일 수 있습니다. QR 연결 정보는 유지됩니다.</span></label><p data-bulk="preview-error" class="error" role="status"></p>
- <div class="bulk-downloads"><button data-bulk="pdf" class="primary" type="button" disabled>스티커 PDF 내려받기</button><button data-bulk="zip" class="secondary" type="button" disabled>QR 이미지 묶음 ZIP</button><button data-bulk="csv" class="secondary" type="button" disabled>제작 수량표 CSV</button><button data-bulk="select-ready" class="secondary" type="button" disabled>생성 완료 병원만 선택</button></div>
+ <div class="bulk-downloads"><button data-bulk="print" class="primary" type="button" disabled>선택 수량으로 인쇄</button><button data-bulk="pdf" class="primary" type="button" disabled>스티커 PDF 내려받기</button><button data-bulk="zip" class="secondary" type="button" disabled>QR 이미지 묶음 ZIP</button><button data-bulk="csv" class="secondary" type="button" disabled>제작 수량표 CSV</button><button data-bulk="select-ready" class="secondary" type="button" disabled>생성 완료 병원만 선택</button></div>
  <p data-bulk="download-help" class="help">선택한 병원의 QR 생성을 모두 마치면 파일을 저장할 수 있습니다.</p>
  <div class="notice"><strong>인쇄 · 배포 안내</strong><ul><li>PDF는 병원당 한 페이지입니다. 출력 매수는 수량표로 지정하세요.</li><li>원본 크기 100%로 출력하고, 인쇄 업체의 도련·재단 규격을 확인하세요.</li><li>${purpose==='as'?'운영 전 병원도 미리 제작할 수 있습니다. 접수 준비 중이면 병원 화면에 안내됩니다.':'접수 중인 조사가 없어도 미리 제작할 수 있습니다.'}</li>${purpose==='survey'?'<li>파일 생성은 전달 이력에 포함되지 않습니다. 실제 전달 후 기존 QR · 안내 문자 메뉴에서 기록하세요.</li>':'<li>예약 공개·접수 운영·엔지니어 배정은 직원 관리에서 별도로 설정합니다.</li>'}</ul></div>
  </aside></div>`;
  const $=id=>root.querySelector(`[data-bulk="${id}"]`),selected=new Set(),records=new Map(),quantities=new Map(),printNames=new Map(),directory=new Map();
+ root.dataset.bulkMode=mode;
+ if(mode==='create'){
+  $('pdf').parentElement.hidden=true;$('print-name-field').hidden=true;
+  const manage=el('button','primary bulk-manage-next','생성된 QR 관리 · 인쇄 준비 →');manage.type='button';manage.addEventListener('click',onManage);$('download-help').after(manage);
+  $('download-help').textContent='생성한 QR은 서버에 보관됩니다. 생성된 QR 관리에서 병원을 선택해 인쇄 자료를 준비하세요.';
+ }
+ if(mode==='library'){$('generate').parentElement.hidden=true;$('retry').hidden=true;}
  let names=[],page=0,directoryReady=false,busy=false,running=false,cancelled=false,previewName='',previewVersion=0;
  const label=name=>directory.get(name)?.name||name;
  const eligible=name=>directory.get(name)?.eligible!==false;
@@ -40,9 +47,9 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
   const all=chosen(),done=ready(),failed=all.filter(n=>records.get(n)?.ok===false),total=all.reduce((sum,n)=>sum+quantity(n),0);
   $('total').textContent=names.length+'곳';$('selected').textContent=all.length+'곳';$('ready').textContent=done.length+'곳';$('copies').textContent=total.toLocaleString('ko-KR')+'장';
   $('controls').disabled=busy;$('generate').disabled=busy||!directoryReady||!all.length;$('retry').disabled=busy||!directoryReady||!failed.length;$('cancel').hidden=!running;$('cancel').disabled=cancelled;
-  for(const id of ['pdf','zip','csv'])$(id).disabled=busy||!directoryReady||!all.length||done.length!==all.length;
+  for(const id of ['print','pdf','zip','csv'])$(id).disabled=busy||!directoryReady||!all.length||done.length!==all.length;
   $('print-name').disabled=busy;$('select-ready').disabled=busy||!directoryReady||!names.some(n=>records.get(n)?.ok);
-  $('download-help').textContent=all.length&&done.length===all.length?`${all.length}곳 · ${total.toLocaleString('ko-KR')}장 제작 자료를 저장합니다. PDF는 ${all.length}페이지입니다.`:all.length?`선택 ${all.length}곳 중 완료 ${done.length}곳 · 실패 ${failed.length}곳. 모두 생성하거나 생성 완료 병원만 선택하세요.`:'병원을 선택하고 QR을 생성해 주세요.';
+  $('download-help').textContent=mode==='create'?'생성한 QR은 서버에 보관됩니다. 생성된 QR 관리에서 병원을 선택해 인쇄 자료를 준비하세요.':all.length&&done.length===all.length?`${all.length}곳 · ${total.toLocaleString('ko-KR')}장 제작 자료를 저장합니다. PDF는 ${all.length}페이지입니다.`:all.length?`선택 ${all.length}곳 중 완료 ${done.length}곳 · 실패 ${failed.length}곳. 모두 생성하거나 생성 완료 병원만 선택하세요.`:mode==='library'?'인쇄할 병원을 선택하세요. 기존 QR을 그대로 사용합니다.':'병원을 선택하고 QR을 생성해 주세요.';
  }
  function render(){
   const list=visible(),pages=Math.max(1,Math.ceil(list.length/PAGE_SIZE));page=Math.min(page,pages-1);const shown=list.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -50,7 +57,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
   for(const name of shown){
    const tr=el('tr'),td=el('td'),check=el('input');check.type='checkbox';check.disabled=!eligible(name);check.checked=selected.has(name);check.setAttribute('aria-label',label(name)+' 선택');check.addEventListener('change',()=>{if(check.checked)selected.add(name);else selected.delete(name);render();});td.append(check);tr.append(td);
    tr.append(el('td','bulk-hospital',label(name)));const detail=directory.get(name);if(detail){const info=el('small','bulk-hospital-meta',[detail.region,detail.sn,detail.id].filter(Boolean).join(' · '));tr.lastChild.append(info);if(!eligible(name))tr.lastChild.append(el('small','bulk-row-error',detail.reason||'병원 연결 확인 필요'));}const qtyTd=el('td'),qty=el('input');qty.type='number';qty.min='1';qty.max='9999';qty.step='1';qty.value=quantity(name);qty.setAttribute('aria-label',label(name)+' 제작 수량');qty.addEventListener('change',()=>{const v=Number(qty.value);if(!Number.isInteger(v)||v<1||v>9999){qty.value=quantity(name);onStatus('제작 수량은 1~9999 사이의 정수로 입력해 주세요.',true);return;}quantities.set(name,v);count();});qtyTd.append(qty);tr.append(qtyTd);
-   const r=records.get(name),state=el('td'),badge=el('span','bulk-state '+(r?.ok?'complete':r?.ok===false?'failed':''),r?.ok?'생성 완료':r?.ok===false?'실패':r?.pending?'대기 중':'준비 전');state.append(badge);if(r?.error){const error=el('small','bulk-row-error',r.error);state.append(error);}tr.append(state);
+   const r=records.get(name),state=el('td'),badge=el('span','bulk-state '+(r?.ok?'complete':r?.ok===false?'failed':''),r?.ok?'생성 완료':r?.ok===false?'확인 필요':r?.pending?'대기 중':'준비 전');state.append(badge);if(detail?.issuedAt){const at=new Date(detail.issuedAt);if(Number.isFinite(at.getTime()))state.append(el('small','bulk-hospital-meta','생성 '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).format(at)));}if(r?.error){const error=el('small','bulk-row-error',r.error);state.append(error);}tr.append(state);
    const action=el('td'),preview=el('button','secondary','미리보기');preview.type='button';preview.disabled=!r?.ok;preview.setAttribute('aria-label',label(name)+' 스티커 미리보기');preview.addEventListener('click',()=>showPreview(name));action.append(preview);tr.append(action);$('rows').append(tr);
   }
   if(!shown.length){const tr=el('tr'),td=el('td','empty',directoryReady?(names.length?'검색 결과가 없습니다.':'등록된 입점병원 목록이 없습니다.'):'병원 목록을 확인하고 있습니다.');td.colSpan=5;tr.append(td);$('rows').append(tr);}
@@ -59,7 +66,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  }
  async function showPreview(name){
   previewName=name;$('preview-name').textContent=label(name);$('open').href=records.get(name).hospital.qrUrl||records.get(name).hospital.surveyUrl;$('open').hidden=false;$('print-name-field').hidden=false;$('print-name').value=printNames.get(name)||records.get(name).hospital.name;
-  await drawPreview();
+  if(mode==='create')$('print-name-field').hidden=true;await drawPreview();
  }
  async function drawPreview(){
   const version=++previewVersion,r=records.get(previewName);$('preview-error').textContent='';$('preview').hidden=true;$('preview-empty').hidden=false;
@@ -69,7 +76,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  }
  function lock(value){busy=value;onBusy(value);count();}
  async function generate(retry=false){
-  if(busy||!directoryReady)return;const target=chosen().filter(n=>!retry||records.get(n)?.ok===false);if(!target.length)return;
+  if(busy||!directoryReady||mode==='library')return;const target=chosen().filter(n=>(!retry||records.get(n)?.ok===false)&&(mode!=='create'||!records.get(n)?.ok));if(!target.length){onStatus('이미 생성된 QR입니다. 생성된 QR 관리에서 인쇄 자료를 준비하세요.');return;}
   cancelled=false;running=true;for(const n of target)records.set(n,{pending:true});lock(true);render();if(target.includes(previewName)){previewVersion++;$('preview').hidden=true;$('preview-empty').hidden=false;}
   $('progress-area').hidden=false;$('progress').max=target.length;$('progress').value=0;$('progress-text').textContent=`0 / ${target.length}곳 생성 중…`;
   try{
@@ -78,7 +85,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
    const message=`${batch.stopped?'생성이 중지되었습니다. ':''}${target.length}곳 중 완료 ${done}곳 · 실패 ${failed}곳 · 미처리 ${target.length-batch.completed}곳`;
    $('progress-text').textContent=message;onStatus(batch.authError?message+'\n로그인 상태와 관리자 권한을 확인해 주세요.':message,!!failed||!!batch.authError);
    if(!records.get(previewName)?.ok)previewName=target.find(n=>records.get(n)?.ok)||'';
-   if(previewName)await showPreview(previewName);
+   onIssued();if(previewName)await showPreview(previewName);
   }catch(e){onStatus(e.message,true);}finally{for(const n of target)if(records.get(n)?.pending)records.delete(n);running=false;lock(false);render();}
  }
  async function download(type){
@@ -86,6 +93,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
   const items=snapshot(),date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());lock(true);
   try{
    const progress=(n,total)=>onStatus(`${type==='pdf'?'스티커 PDF':'QR 묶음'} 준비 중 ${n} / ${total}곳…`);
+   if(type==='print'){await printStickers(items,progress);onStatus('선택한 병원의 제작 수량대로 인쇄 창을 열었습니다.');return;}
    let blob,file;if(type==='pdf'){blob=await stickerPdf(items,progress);file=`${settings.prefix}_스티커_32x25mm_${date}.pdf`;}else if(type==='zip'){blob=await qrArchive(items,progress);file=`${settings.prefix}_QR_${date}.zip`;}else{blob=new Blob([manifestCsv(items)],{type:'text/csv;charset=utf-8'});file=`${settings.prefix}_제작수량표_${date}.csv`;}
    saveBlob(blob,file);onStatus(`${items.length}곳의 ${type==='pdf'?'32 × 25mm 스티커 PDF':type==='zip'?'QR 이미지 묶음':'제작 수량표'}를 저장했습니다.${type==='pdf'?' 제작 수량표도 함께 전달해 주세요.':''}`);
   }catch(e){onStatus(e.message,true);}finally{lock(false);}
@@ -100,12 +108,18 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  $('apply-quantity').addEventListener('click',()=>{const v=Number($('quantity').value);if(!Number.isInteger(v)||v<1||v>9999){onStatus('제작 수량은 1~9999 사이의 정수로 입력해 주세요.',true);return;}chosen().forEach(n=>quantities.set(n,v));render();});
  $('print-name').addEventListener('input',()=>{if(previewName){printNames.set(previewName,$('print-name').value.trim()||records.get(previewName).hospital.name);drawPreview();}});
  $('generate').addEventListener('click',()=>generate());$('retry').addEventListener('click',()=>generate(true));$('cancel').addEventListener('click',()=>{cancelled=true;$('cancel').disabled=true;$('progress-text').textContent='진행 중인 요청을 마친 뒤 중지합니다…';});
- for(const id of ['pdf','zip','csv'])$(id).addEventListener('click',()=>download(id));
+ for(const id of ['print','pdf','zip','csv'])$(id).addEventListener('click',()=>download(id));
  render();
  return {
   setLoading(){directoryReady=false;$('directory-status').textContent='입점병원 목록을 불러오고 있습니다.';count();},
   setHospitals(values){for(const h of values||[]){if(records.has(h.id)&&records.get(h.id).hospital?.name!==h.name){records.delete(h.id);printNames.delete(h.id);}}directory.clear();for(const h of values||[])if(h?.id&&h?.name)directory.set(h.id,h);this.setNames([...directory.keys()]);},
   setNames(values){names=purpose==='as'?values.filter(n=>directory.has(n)).sort((a,b)=>label(a).localeCompare(label(b),'ko')):directoryNames(values);const allowed=new Set(names);for(const n of selected)if(!allowed.has(n)||!eligible(n))selected.delete(n);for(const n of records.keys())if(!allowed.has(n)||!eligible(n))records.delete(n);directoryReady=true;$('directory-status').textContent=`입점병원 ${names.length}곳 · 검색 결과 선택은 모든 검색 페이지에 적용됩니다.`;if(!allowed.has(previewName)||!records.get(previewName)?.ok){previewName='';previewVersion++;$('preview').hidden=true;$('preview-empty').hidden=false;$('print-name-field').hidden=true;$('preview-name').textContent='';$('open').hidden=true;}render();},
+  setIssued(values){
+   if(mode==='library'){records.clear();directory.clear();for(const h of values||[])directory.set(purpose==='as'?h.id:h.name,{...h,eligible:h.active!==false&&h.eligible!==false});this.setNames([...directory.keys()]);}
+   for(const h of values||[]){const id=purpose==='as'?h.id:h.name;if(!names.includes(id))continue;const entry=directory.get(id);if(entry)directory.set(id,{...entry,issuedAt:h.issuedAt});
+    try{if(h.active===false||h.eligible===false)throw Error(h.reason||'중지된 병원 링크입니다.');const hospital=purpose==='as'?issuedAsHospital(h,directory.get(id)):{...issuedHospital(h,id),purpose};records.set(id,{ok:true,hospital});}catch(e){records.set(id,{ok:false,error:e.message});}
+   }render();
+  },
   setError(message){directoryReady=false;$('directory-status').textContent=message;count();}
  };
 }

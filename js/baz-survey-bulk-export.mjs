@@ -6,6 +6,21 @@ async function loadScript(path,ready){
  await scriptLoads.get(path);
 }
 export async function printFont(){if(document.fonts){await document.fonts.load('700 16px "Survey Print"');await document.fonts.ready;}}
+export async function printStickers(items,onProgress=()=>{}){
+ const total=items.reduce((n,r)=>n+Number(r.quantity||1),0);if(total>500)throw Error('한 번에 500장까지 인쇄할 수 있습니다. 병원이나 제작 수량을 나누어 주세요.');
+ const popup=window.open('','_blank');if(!popup)throw Error('인쇄 창을 열 수 없습니다. 팝업을 허용하거나 PDF를 내려받아 주세요.');popup.opener=null;
+ try{
+  const doc=popup.document;doc.open();doc.write('<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>병원 QR 스티커 인쇄</title><style>body{margin:0;background:#eef2f6;color:#243447;font-family:system-ui,sans-serif}header{padding:16px;position:sticky;top:0;background:white;border-bottom:1px solid #ccd6df}button{padding:10px 20px;border:0;border-radius:8px;background:#23638f;color:white;cursor:pointer}main{display:flex;flex-wrap:wrap;gap:16px;padding:20px}.label{margin:0;width:320px;height:250px;background:#fff}.label img{display:block;width:100%;height:100%}@media print{@page{size:32mm 25mm;margin:0}html,body{margin:0;background:white}header{display:none}main{display:block;margin:0;padding:0}.label{width:32mm;height:25mm;break-inside:avoid;break-after:page}.label:last-child{break-after:auto}}</style></head><body><header><button type="button" id="print-now">인쇄</button><span id="print-info"></span></header><main></main></body></html>');doc.close();
+  doc.getElementById('print-info').textContent=' '+items.length+'개 병원 · '+total+'장 · 원본 크기 100%';doc.getElementById('print-now').onclick=()=>popup.print();
+  await printFont();const images=[];
+  for(let i=0;i<items.length;i++){
+   const item=items[i],src=stickerCanvas(item).toDataURL('image/png');
+   for(let n=0;n<Number(item.quantity||1);n++){const figure=doc.createElement('figure'),img=doc.createElement('img');figure.className='label';img.src=src;img.alt=item.name+' '+purposeSettings([item]).title+' QR';figure.append(img);doc.querySelector('main').append(figure);images.push(img);}
+   onProgress(i+1,items.length);
+  }
+  await Promise.all(images.map(img=>img.decode()));if(popup.closed)throw Error('인쇄 창이 닫혔습니다.');popup.focus();popup.print();
+ }catch(e){if(!popup.closed)popup.close();throw e;}
+}
 function canvas(w,h){const c=document.createElement('canvas');c.width=Math.ceil(w*PX);c.height=Math.ceil(h*PX);return c;}
 function wrap(ctx,text,width){const lines=[];let line='';for(const char of Array.from(text)){if(char==='\n'){lines.push(line);line='';continue;}if(line&&ctx.measureText(line+char).width>width){lines.push(line);line=char;}else line+=char;}if(line)lines.push(line);return lines;}
 function textBlock(text,width,height,{size=1.7,min=size,weight=600,align='left'}={}){
