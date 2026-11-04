@@ -35,7 +35,8 @@ const result=await api.assemble([{data:'body',height:100}],photos.toReversed(),{
 assert.equal(maxActive,1,'PDF copies are resized sequentially');
 assert.equal(result.pdf.pages,2,'all five photos fit one photo sheet');
 const images=result.pdf.images.filter(a=>String(a[0]).includes('small_'));
-assert.deepEqual(images.map(a=>Number(a[0].split('_').at(-1))),[0,1,2,3,4]);
+assert.deepEqual(images.map(a=>Number(a[0].split('_').at(-1))),[0,4,1,2,3],'S/N + overview, before + after, distilled water');
+assert.deepEqual(Array.from(api.PHOTO_ORDER,n=>api.PHOTO_LABELS[n]),['장비 S/N','전체샷','증상 전','증상 후','증류수']);
 assert.equal(frames.length,5);
 assert.equal(frames[0][1],frames[1][1]-0,'first pair has the same baseline when caption lengths match');
 for(const [x,y,w,h]of frames){assert.ok(w<=194/2);assert.ok(h>0);assert.ok(x>=8&&x+w<=202);assert.ok(y>=26&&y+h<=289);}
@@ -61,11 +62,11 @@ const node=()=>({listeners:{},dataset:{},addEventListener(t,f){this.listeners[t]
 const els={photoList:node(),photoCount:node(),photoCameraInput:node(),photoGalleryInput:node()};
 const state={photos:[]},ctx={window:{BazInspectionPdf:api,BazPerf:{start:()=>()=>{}},BazInspectionMedia:{process:async file=>({data:'data:'+file.name,worker:false})}},state,els,MAX_PHOTOS:5,_pdfBusy:false,pdfPublisher:{isBusy:()=>false},showToast(){},showLoading(){},hideLoading(){},saveDraft(){},autoSave(){},esc:s=>String(s||''),document:{getElementById:node}};
 vm.runInNewContext(section+'\nthis.add=addPhotos;this.render=renderPhotos;',ctx);
-await ctx.add([{name:'sn',type:'image/jpeg'},{name:'before',type:'image/jpeg'},{name:'after',type:'image/jpeg'},{name:'water',type:'image/jpeg'},{name:'all',type:'image/jpeg'}]);
-assert.deepEqual(state.photos.map(p=>p.slot),[0,1,2,3,4]);
-const del={dataset:{i:'1'},hasAttribute:()=>false,classList:{contains:s=>s==='photo-del'}};
+await ctx.add([{name:'sn',type:'image/jpeg'},{name:'all',type:'image/jpeg'},{name:'before',type:'image/jpeg'},{name:'after',type:'image/jpeg'},{name:'water',type:'image/jpeg'}]);
+assert.deepEqual(state.photos.map(p=>p.slot),[0,4,1,2,3]);
+const del={dataset:{i:String(state.photos.findIndex(p=>p.slot===1))},hasAttribute:()=>false,classList:{contains:s=>s==='photo-del'}};
 els.photoList.listeners.click({target:{closest:()=>del}});
-assert.deepEqual(state.photos.map(p=>p.slot),[0,2,3,4],'deleting before does not relabel after/water/overview');
+assert.deepEqual(state.photos.map(p=>p.slot),[0,4,2,3],'deleting before does not relabel after/water/overview');
 await ctx.add([{name:'before-replaced',type:'image/jpeg'}],1);
 await ctx.add([{name:'sn-replaced',type:'image/jpeg'}],0);
 assert.equal(state.photos.length,5);assert.equal(state.photos.find(p=>p.slot===0).data,'data:sn-replaced');

@@ -505,7 +505,7 @@
     <div class="card" id="photoCard" data-step="3">
       <div class="card-header"><span class="badge-icon">📷</span><h2>현장 사진</h2><span class="photo-count" id="photoCount">0/5</span></div>
       <div class="card-body">
-        <p class="pdf-format-hint" style="margin:0 0 10px">장비 S/N → 증상 전 → 증상 후 → 증류수 → 전체샷 · 항목별 1장, 총 5장</p>
+        <p class="pdf-format-hint" style="margin:0 0 10px">첫째 줄: 장비 S/N · 전체샷<br>둘째 줄: 증상 전 · 증상 후<br>셋째 줄: 증류수 · 항목별 1장, 총 5장</p>
         <div class="photo-btns">
           <button type="button" id="photoCameraBtn">📷 카메라 촬영</button>
           <button type="button" id="photoGalleryBtn">🖼 갤러리 선택</button>
@@ -640,8 +640,8 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=300"></script><script src="js/baz-inspection-pdf.js?v=300"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=300"></script>
+<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=301"></script><script src="js/baz-inspection-pdf.js?v=301"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=301"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1801,6 +1801,7 @@ document.getElementById('taskListBody').addEventListener('change', (e)=>{
 
 // ===== 현장 사진 =====
 const PHOTO_LABELS=window.BazInspectionPdf.PHOTO_LABELS;
+const PHOTO_ORDER=window.BazInspectionPdf.PHOTO_ORDER;
 let _photoBusy=false,_photoTarget=null;
 function choosePhoto(slot,camera){
   if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 선택하세요.');return;}
@@ -1821,7 +1822,7 @@ async function addPhotos(fileList,selectedSlot=null){
   let count=0,failures=0,worker=0;
   try{
     for(const file of take){
-      const slot=selectedSlot===null?PHOTO_LABELS.findIndex((_,i)=>!state.photos.some(p=>p.slot===i)):selectedSlot;
+      const slot=selectedSlot===null?PHOTO_ORDER.find(slot=>!state.photos.some(p=>p.slot===slot)):selectedSlot;
       showLoading(PHOTO_LABELS[slot]+' 사진 처리 중…');
       try{
         const result=await window.BazInspectionMedia.process(file),photo={data:result.data,memo:'',slot};
@@ -1841,12 +1842,12 @@ function renderPhotos(){
     return '<div class="photo-item">'+(p?'<img src="'+p.data+'" alt="'+esc(name)+'" loading="lazy">':'')+
       '<div class="photo-fields"><label>'+esc(name)+'</label>'+
       (p?'<select class="photo-slot" data-i="'+i+'" aria-label="사진 항목"><option value="">항목 선택</option>'+
-        PHOTO_LABELS.map((label,n)=>'<option value="'+n+'" '+(p.slot===n?'selected':'')+'>'+esc(label)+'</option>').join('')+'</select>'+
+        PHOTO_ORDER.map(n=>'<option value="'+n+'" '+(p.slot===n?'selected':'')+'>'+esc(PHOTO_LABELS[n])+'</option>').join('')+'</select>'+
         '<input type="text" class="photo-memo" data-i="'+i+'" placeholder="사진 메모 (선택)" maxlength="40" value="'+esc(p.memo)+'">':'')+
       (slot!==null?'<div class="photo-btns"><button type="button" data-slot="'+slot+'" data-camera="1">📷 '+(p?'다시 촬영':'촬영')+'</button><button type="button" data-slot="'+slot+'" data-camera="0">갤러리</button></div>':'')+
       '</div>'+(p?'<div class="photo-ctrl"><button type="button" class="photo-del" data-i="'+i+'" title="삭제">✕</button></div>':'')+'</div>';
   }
-  els.photoList.innerHTML=PHOTO_LABELS.map((_,slot)=>{const i=state.photos.findIndex(p=>p.slot===slot);return row(state.photos[i],i,slot);}).join('')+
+  els.photoList.innerHTML=PHOTO_ORDER.map(slot=>{const i=state.photos.findIndex(p=>p.slot===slot);return row(state.photos[i],i,slot);}).join('')+
     state.photos.map((p,i)=>p.slot===null?row(p,i,null):'').join('');
 }
 els.photoList.addEventListener('click',e=>{
