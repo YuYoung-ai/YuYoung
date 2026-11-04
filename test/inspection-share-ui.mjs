@@ -25,6 +25,7 @@ assert.throws(()=>app.capture({size:300000001},name,()=>{}),/300MB/);
 const html=fs.readFileSync(new URL('../inspection.html',import.meta.url),'utf8');
 assert.equal((html.match(/id="pdfShareButton"/g)||[]).length,1);assert.ok(!/id="doneDl"|pdfShareCopy|pdfShareKakao|inspection-download/.test(html));
 const generation=html.slice(html.indexOf('// ===== PDF 생성 ====='),html.indexOf('let _lastPreviewUrl=null;'));
-assert.equal((generation.match(/pdf\.save\(/g)||[]).length,2,'blank download plus fallback callback only; normal generation has no auto-download');
+assert.equal((generation.match(/downloadPdfBlob\(/g)||[]).length,3,'blob helper, blank download and fallback only');
+assert.ok(!generation.includes('pdf.save('),'sharing never retains a jsPDF object');
 assert.ok(!/fetch\(|Kakao\.|inspection-pdf|https:\/\//.test(fs.readFileSync(new URL('../js/baz-inspection-share.js',import.meta.url),'utf8')),'sharing module never uploads PDFs to a server');
 console.log('PASS: exact PDF bytes/name, native share, cancel, fallback, double click, reset, 300MB cap and single-action UI without uploads');

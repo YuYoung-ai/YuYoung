@@ -70,7 +70,7 @@
    try{return await Promise.race([local,options.confirmAttachment(s.saved,s.context)]);}finally{clearTimeout(timer);s.cancel=null;s.expires=0;}
   }
   async function execute(s){
-   s.busy=true;if(current===s){retry.hidden=true;newButton.disabled=true;}
+   s.busy=true;if(current===s){retry.hidden=true;retry.disabled=true;newButton.disabled=true;}
    try{
     checkAccount(s.owner);if(!s.uploadId)s.uploadId=id();
     if(!s.saved){
@@ -86,7 +86,8 @@
      // Keep the original receipt and Blob durable before a possibly ambiguous write.
      await persist(s);if(!s.base64)s.base64=await encoded(s.blob,s);
      notice(s,'Google Drive에 PDF를 저장하는 중…');progress(s,'drive','working');
-     if(current===s){retry.hidden=false;retry.textContent='전송 상태 다시 확인';}
+     // A click cannot stop Apps Script after it has accepted the write. Wait
+     // for this attempt's response/deadline before allowing the same-file retry.
      const saved=await call('inspection_pdf_upload',{...payload(s.context),uploadId:s.uploadId,filename:s.filename,bytes:s.blob.size,sha256:s.sha256,base64:s.base64,baseRevision:s.baseRevision},s.owner,s);
      if(saved.recordId&&saved.recordId!==s.context.recordId){const e=new Error('저장된 원본 ID가 다릅니다. 파일을 확인하세요.');e.noRetry=true;throw e;}
      safeLink(saved);s.saved=saved;
@@ -110,10 +111,10 @@
     progress(s,s.saved?'comment':'drive',e.pending?'pending':'error');await persist(s);
     notice(s,(s.saved?'PDF는 Drive와 AS 처리 현황에 저장되었습니다. ':'PDF는 생성되었습니다. ')+(e.message||'저장 확인 실패'));
     if(current===s){retry.textContent=s.saved?'댓글 연결 다시 시도':s.context.sourcePreparationError&&s.preparationRetryable?'원본 확인·저장 다시 시도':'Drive 저장 다시 시도';retry.hidden=(!!s.context.sourcePreparationError&&!s.preparationRetryable)||!!e.sourceConflict||!!e.noRetry;}
-   }finally{s.busy=false;if(current===s)newButton.disabled=false;}
+   }finally{s.base64=null;s.busy=false;if(current===s){newButton.disabled=false;retry.disabled=false;}if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}}
   }
   function run(s){if(s.busy)return s.running;s.running=execute(s);return s.running;}
-  async function retryCurrent(){const s=current;if(!s)return;if(s.busy){if(!s.cancel)return;s.cancel();await s.running;}if(current===s)return run(s);}
+  async function retryCurrent(){const s=current;if(!s||s.busy)return;return run(s);}
   retry.addEventListener('click',retryCurrent);
   // Safari may suspend timers/network while sharing or locking the screen.
   function resume(){const s=current;if(s?.busy&&s.cancel&&Date.now()>=s.expires)s.cancel();}
@@ -121,8 +122,9 @@
   if(root.addEventListener)root.addEventListener('pageshow',resume);
   return {
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
-   publish(blob,filename,context){const p=preparations.get(context);link.hidden=true;current={blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}};progress(current,'drive','waiting');return run(current);},
-   resume(saved,context){link.hidden=true;current={saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}};return run(current);},
+   isBusy(){return !!current?.busy;},
+   publish(blob,filename,context){if(current?.busy)return current.running;const p=preparations.get(context);link.hidden=true;current={blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}};progress(current,'drive','waiting');return run(current);},
+   resume(saved,context){if(current?.busy)return current.running;link.hidden=true;current={saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}};return run(current);},
    async restore(context){
     if(!outbox||current?.busy)return false;const previous=current,token=options.token();let job;
     try{job=await outbox.find(await ownerKey(token),context);}catch{return false;}
