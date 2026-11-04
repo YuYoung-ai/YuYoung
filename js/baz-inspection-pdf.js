@@ -30,7 +30,7 @@
  });}
  function image(data){return waitImage(new Image(),data);}
  function waitImages(images){return Promise.all(Array.from(images,img=>waitImage(img)));}
- function fit(width,height,maxWidth,maxHeight){const ratio=Math.min(maxWidth/width,maxHeight/height);return {width:width*ratio,height:height*ratio};}
+ function fit(width,height,maxWidth,maxHeight,mode){const ratio=(mode==='cover'?Math.max:Math.min)(maxWidth/width,maxHeight/height);return {width:width*ratio,height:height*ratio};}
  function photoGroups(photos){
   if(!photos.length)return [];
   if(photos.length>5)throw new Error('현장 사진은 최대 5장입니다. 사진을 확인해 주세요.');
@@ -81,9 +81,15 @@
    label(pdf,'현장 사진',70,M,70,18,'center');
    const firstY=26,gap=8,width=(CW-gap)/2,slot=(CH-(firstY-M)-5-gap*2)/3;
    PHOTO_ORDER.forEach((category,i)=>{const p=group[category],title=p?.legacy?'기존 사진 '+(++offset):PHOTO_LABELS[category],x=M+(i%2)*(width+gap),y=firstY+Math.floor(i/2)*(slot+gap),caption=label(pdf,title+(p?.memo?' — '+p.memo:'')+(!p?' (미첨부)':''),x,y,width,12),top=y+caption+2,height=slot-caption-2;
+    if(p){
+     const sized=fit(p.width,p.height,width,height,'cover');
+     // Fill the card without stretching or allocating another raster canvas.
+     // Restore the clip before the next caption/photo/footer is drawn.
+     pdf.saveGraphicsState();
+     try{pdf.roundedRect(x,top,width,height,1.5,1.5,null);pdf.clip();pdf.discardPath();pdf.addImage(p.data,'JPEG',x+(width-sized.width)/2,top+(height-sized.height)/2,sized.width,sized.height);}
+     finally{pdf.restoreGraphicsState();}
+    }
     pdf.setDrawColor(210);pdf.setLineWidth(.2);pdf.roundedRect(x,top,width,height,1.5,1.5);
-    if(!p)return;
-    const sized=fit(p.width,p.height,width-2,height-2);pdf.addImage(p.data,'JPEG',x+(width-sized.width)/2,top+(height-sized.height)/2,sized.width,sized.height);
    });
   }
  }

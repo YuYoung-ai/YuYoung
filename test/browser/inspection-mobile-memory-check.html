@@ -8,16 +8,20 @@
 const api=BazInspectionPdf,Original=jspdf.jsPDF,source=document.querySelector('#source'),status=document.querySelector('#status');
 let captured=[],frames=[],url;
 jspdf.jsPDF=function(opts){const pdf=new Original(opts),add=pdf.addImage,rect=pdf.roundedRect;
- pdf.addImage=function(...args){if(pdf.getNumberOfPages()===2)captured.push(args);return add.apply(pdf,args);};
- pdf.roundedRect=function(...args){if(pdf.getNumberOfPages()===2)frames.push(args);return rect.apply(pdf,args);};return pdf;};
+ let clip=null,pending=null;const save=pdf.saveGraphicsState,restore=pdf.restoreGraphicsState,applyClip=pdf.clip;
+ pdf.saveGraphicsState=function(){clip=null;return save.call(pdf);};
+ pdf.restoreGraphicsState=function(){clip=null;return restore.call(pdf);};
+ pdf.clip=function(...args){clip=pending;return applyClip.apply(pdf,args);};
+ pdf.addImage=function(...args){if(pdf.getNumberOfPages()===2)captured.push({args,clip});return add.apply(pdf,args);};
+ pdf.roundedRect=function(...args){if(args[6]===null)pending=args;else if(pdf.getNumberOfPages()===2)frames.push(args);return rect.apply(pdf,args);};return pdf;};
 function photo(slot){const c=document.createElement('canvas');c.width=slot===4?900:1600;c.height=slot===4?1600:900;const ctx=c.getContext('2d');ctx.fillStyle=['#E5F0FA','#FBE9E7','#E7F4E9','#E1F5FE','#F3E5F5'][slot];ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#1b2f5e';ctx.lineWidth=8;ctx.strokeRect(20,20,c.width-40,c.height-40);ctx.fillStyle='#1b2f5e';ctx.font='bold 70px sans-serif';ctx.fillText(api.PHOTO_LABELS[slot],70,130);ctx.font='48px sans-serif';ctx.fillText(slot===0?'SN-TEST-0001':'합성 시험 사진 '+(slot+1),70,230);const data=c.toDataURL('image/jpeg',.9);c.width=c.height=0;return {data,slot,memo:slot===0?'S/N 식별 확인':''};}
 async function run(missing){captured=[];frames=[];status.textContent='페이지 캡처·사진 축소 중…';const photos=Array.from({length:5},(_,i)=>photo(i)).filter(p=>!missing||p.slot!==1);
  source.innerHTML='<div style="height:150px;padding:20px;box-sizing:border-box"><h2>점검 내역서 · 합성 문서</h2><p>본문과 사진 배치 검증</p></div>';
  const target=source.firstElementChild,pages=await api.capturePages(view=>html2canvas(target,{width:794,windowWidth:794,scale:2,logging:false,...view}),150,794,2);source.innerHTML='';
  const result=await api.assemble(pages,photos,{footers(pdf){const total=pdf.getNumberOfPages();for(let i=1;i<=total;i++){pdf.setPage(i);pdf.setFontSize(8);pdf.text(i+' / '+total,185,293);}},progress:s=>status.textContent=s});
  const c=document.createElement('canvas');c.width=1588;c.height=Math.round(c.width/210*297);const ctx=c.getContext('2d'),scale=c.width/210;ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle='#d2d2d2';ctx.lineWidth=.2*scale;
- for(const [x,y,w,h]of frames)ctx.strokeRect(x*scale,y*scale,w*scale,h*scale);
- for(const [data,type,x,y,w,h]of captured){const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=data;});ctx.drawImage(img,x*scale,y*scale,w*scale,h*scale);img.src='';}
+ for(const [x,y,w,h]of frames){ctx.beginPath();ctx.roundRect(x*scale,y*scale,w*scale,h*scale,1.5*scale);ctx.stroke();}
+ for(const {args:[data,type,x,y,w,h],clip}of captured){const img=new Image();await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=data;});ctx.save();if(clip){const [cx,cy,cw,ch,rx]=clip;ctx.beginPath();ctx.roundRect(cx*scale,cy*scale,cw*scale,ch*scale,rx*scale);ctx.clip();}ctx.drawImage(img,x*scale,y*scale,w*scale,h*scale);ctx.restore();img.src='';}
  document.querySelector('#preview').replaceChildren(c);if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(result.blob);const link=document.querySelector('#pdf');link.href=url;link.hidden=false;
  status.textContent='완료 · '+photos.length+'장 · 사진 1페이지 · 전체 '+result.pdf.getNumberOfPages()+'페이지 · '+Math.round(result.blob.size/1024)+' KB · 원본 1600px / PDF 사본 최대 800px';result.pdf=null;
 }
