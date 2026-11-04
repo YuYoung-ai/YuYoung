@@ -24,7 +24,7 @@
    canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('사진 처리 메모리가 부족합니다. 다른 앱을 닫고 다시 선택해 주세요.');ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.drawImage(image,0,0,width,height);
    const result=await bounded((resolve,reject)=>{canvas.toBlob(b=>b?resolve(b):reject(new Error('사진 압축에 실패했습니다.')),'image/jpeg',opts.quality);},'사진 압축이 지연되고 있습니다. 사진을 다시 선택해 주세요.');
    return {blob:result,width,height,worker:false};
-  }finally{URL.revokeObjectURL(url);if(canvas)canvas.width=canvas.height=0;}
+  }finally{image.src='';URL.revokeObjectURL(url);if(canvas)canvas.width=canvas.height=0;}
  }
  async function process(blob,opts){
   opts={maxDimension:1600,quality:.8,...opts};let result;

@@ -176,6 +176,10 @@
   .photo-item .photo-memo{flex:1;min-width:0;border:1.5px solid var(--gray-line);border-radius:8px;padding:8px 10px;
     font-size:13px;font-family:inherit;color:var(--text);outline:none;}
   .photo-item .photo-memo:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(46,125,158,.12);}
+  .photo-fields{flex:1;min-width:0;}
+  .photo-fields .photo-memo{width:100%;margin:6px 0;}
+  .photo-fields select{font-size:13px;padding:8px 28px 8px 10px;min-height:40px;}
+  .photo-fields .photo-btns{margin:6px 0 0;}
   .photo-ctrl{display:flex;flex-direction:column;gap:4px;flex:0 0 auto;}
   .photo-ctrl button{width:32px;height:26px;border:1px solid var(--gray-line);border-radius:6px;background:#fff;
     font-size:12px;cursor:pointer;color:var(--text-muted);font-family:inherit;}
@@ -501,6 +505,7 @@
     <div class="card" id="photoCard" data-step="3">
       <div class="card-header"><span class="badge-icon">📷</span><h2>현장 사진</h2><span class="photo-count" id="photoCount">0/5</span></div>
       <div class="card-body">
+        <p class="pdf-format-hint" style="margin:0 0 10px">장비 S/N → 증상 전 → 증상 후 → 증류수 → 전체샷 · 항목별 1장, 총 5장</p>
         <div class="photo-btns">
           <button type="button" id="photoCameraBtn">📷 카메라 촬영</button>
           <button type="button" id="photoGalleryBtn">🖼 갤러리 선택</button>
@@ -635,8 +640,8 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=257"></script><script src="js/baz-inspection-pdf.js?v=257"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=272"></script>
+<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=300"></script><script src="js/baz-inspection-pdf.js?v=300"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=300"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1302,7 +1307,7 @@ function collectFormData(){
     types: [...state.types],
     results: {...state.results},
     memos: {...state.memos},
-    photos: state.photos.map(p=>({data:p.data, memo:p.memo})),
+    photos: state.photos.map(p=>({data:p.data, memo:p.memo, slot:p.slot})),
     signatures: { cs: sigStore.cs||null, hs: sigStore.hs||null },
     savedAt: Date.now(),
   };
@@ -1358,7 +1363,7 @@ function applyFormData(d){
     if(box&&prev){ if(data){ prev.src=data; box.classList.add('has-sign'); } else { prev.src=''; box.classList.remove('has-sign'); } }
   });
   // 사진
-  state.photos=(d.photos||[]).map(p=>({data:p.data, memo:p.memo||''}));
+  state.photos=window.BazInspectionPdf.normalizePhotos((d.photos||[]).map(p=>({...p,memo:p.memo||''})));
   renderPhotos();
 }
 
@@ -1451,7 +1456,7 @@ function clearForm(){
 
 // 새 점검: 항상 새로운 Task 생성 (기존 작업은 보존)
 function newTask(opts){
-  if(_photoBusy||_pdfBusy){showToast('사진 처리·PDF 생성이 끝난 뒤 작업을 바꿔 주세요.');return false;}
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
   if(_currentTaskId&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
   const previous=collectFormData();
   exitSignMode();
@@ -1475,7 +1480,7 @@ function newTask(opts){
 
 // 작업 불러오기 (사인대기 작업이면 자동으로 사인 모드 진입)
 function openTask(id){
-  if(_photoBusy||_pdfBusy){showToast('사진 처리·PDF 생성이 끝난 뒤 작업을 바꿔 주세요.');return false;}
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
   const task=getTask(id);
   if(!task){ showToast('작업을 찾을 수 없습니다'); return; }
   if(_currentTaskId&&_currentTaskId!==id&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
@@ -1572,7 +1577,7 @@ const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:aut
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
   const size=job.blob?.size||job.saved?.pdf?.bytes||0;document.getElementById('doneFsize').textContent=(size/1000000).toFixed(1)+' MB';
   if(job.blob)window.BazInspectionShare.capture(job.blob,job.filename,()=>{const href=URL.createObjectURL(job.blob),a=document.createElement('a');a.href=href;a.download=job.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);});
-},onSaved(saved,context){
+},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);const task=getTask(context.taskId);if(task)cloudSyncTask(task,{silent:true});},onSaved(saved,context){
   const tasks=loadTasks(),task=tasks.find(t=>t.id===context.taskId);
   const identity={hospital:context.hospital,inspectDate:context.date,serialNo:context.sn||''};
   if(task){task.data.handover={recordId:saved.recordId,requestId:context.requestId||'',identity};task.data.pdfDocument=saved.pdf;if(!persistTasks(tasks))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
@@ -1638,6 +1643,8 @@ function taskToSyncPayload(task){
 function cloudSyncTask(task, opts){
   opts=opts||{};
   if(!task || !cloudConfigured()) return Promise.resolve({skip:true});
+  // Task snapshots contain photos too; defer them while rendering/uploading.
+  if(_pdfBusy||pdfPublisher.isBusy()){enqueueSync(task.id);return Promise.resolve({queued:true});}
   if(!navigator.onLine){ enqueueSync(task.id); return Promise.resolve({queued:true}); }
   return cloudPost(taskToSyncPayload(task)).then(r=>{
     if(r&&r.success){ dequeueSync(task.id); if(opts.toast) showToast(opts.toast); }
@@ -1793,61 +1800,79 @@ document.getElementById('taskListBody').addEventListener('change', (e)=>{
 });
 
 // ===== 현장 사진 =====
-// 사진은 한 장씩 처리하고 지원 환경에서는 Worker로 압축한다.
-let _photoBusy=false;
-async function addPhotos(fileList){
-  if(_photoBusy||_pdfBusy){showToast('현재 사진 처리·PDF 생성이 끝난 뒤 추가해 주세요.');return;}
+const PHOTO_LABELS=window.BazInspectionPdf.PHOTO_LABELS;
+let _photoBusy=false,_photoTarget=null;
+function choosePhoto(slot,camera){
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 선택하세요.');return;}
+  _photoTarget=slot;
+  const input=camera?els.photoCameraInput:els.photoGalleryInput;
+  if(!camera)input.multiple=slot===null;
+  input.click();
+}
+async function addPhotos(fileList,selectedSlot=null){
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 추가해 주세요.');return;}
   const files=[...fileList].filter(f=>f&&f.type&&f.type.startsWith('image/'));
   if(!files.length)return;
-  const room=MAX_PHOTOS-state.photos.length;if(room<=0){showToast(`사진은 최대 ${MAX_PHOTOS}장까지 가능합니다`);return;}
-  const take=files.slice(0,room),done=window.BazPerf.start('photos');_photoBusy=true;showLoading('사진 처리 중...');
+  const replacing=selectedSlot!==null&&state.photos.some(p=>p.slot===selectedSlot);
+  const room=replacing?1:MAX_PHOTOS-state.photos.length;
+  if(room<=0){showToast('사진은 최대 5장입니다. 기존 사진의 항목을 지정하거나 교체하세요.');return;}
+  const take=files.slice(0,selectedSlot===null?room:1),done=window.BazPerf.start('photos');
+  _photoBusy=true;showLoading('사진 처리 중…');
   let count=0,failures=0,worker=0;
-  try{for(const file of take){
-    showLoading(`사진 처리 ${count+failures+1}/${take.length}`);
-    try{const result=await window.BazInspectionMedia.process(file);state.photos.push({data:result.data,memo:''});count++;if(result.worker)worker++;}catch(e){failures++;}
-  }
-  renderPhotos();saveDraft();showToast(`사진 ${count}장 추가`+(failures?` · ${failures}장은 지원되는 사진 형식으로 다시 선택하세요.`:''));
+  try{
+    for(const file of take){
+      const slot=selectedSlot===null?PHOTO_LABELS.findIndex((_,i)=>!state.photos.some(p=>p.slot===i)):selectedSlot;
+      showLoading(PHOTO_LABELS[slot]+' 사진 처리 중…');
+      try{
+        const result=await window.BazInspectionMedia.process(file),photo={data:result.data,memo:'',slot};
+        const previous=state.photos.findIndex(p=>p.slot===slot);
+        if(previous<0)state.photos.push(photo);else state.photos[previous]=photo;
+        count++;if(result.worker)worker++;
+      }catch(e){failures++;}
+    }
+    renderPhotos();saveDraft();showToast('사진 '+count+'장 저장'+(failures?' · '+failures+'장은 다시 선택하세요.':''));
   }finally{done({count,worker});_photoBusy=false;hideLoading();}
 }
 function renderPhotos(){
-  const list=els.photoList;
-  els.photoCount.textContent=`${state.photos.length}/${MAX_PHOTOS}`;
-  if(!state.photos.length){
-    list.innerHTML='<div class="photo-empty">아직 추가된 사진이 없습니다 (최대 5장)</div>';
-    return;
+  state.photos=window.BazInspectionPdf.normalizePhotos(state.photos);
+  els.photoCount.textContent=state.photos.length+'/'+MAX_PHOTOS;
+  function row(p,i,slot){
+    const name=slot===null?'기존 사진 · 항목을 지정해 주세요':PHOTO_LABELS[slot];
+    return '<div class="photo-item">'+(p?'<img src="'+p.data+'" alt="'+esc(name)+'" loading="lazy">':'')+
+      '<div class="photo-fields"><label>'+esc(name)+'</label>'+
+      (p?'<select class="photo-slot" data-i="'+i+'" aria-label="사진 항목"><option value="">항목 선택</option>'+
+        PHOTO_LABELS.map((label,n)=>'<option value="'+n+'" '+(p.slot===n?'selected':'')+'>'+esc(label)+'</option>').join('')+'</select>'+
+        '<input type="text" class="photo-memo" data-i="'+i+'" placeholder="사진 메모 (선택)" maxlength="40" value="'+esc(p.memo)+'">':'')+
+      (slot!==null?'<div class="photo-btns"><button type="button" data-slot="'+slot+'" data-camera="1">📷 '+(p?'다시 촬영':'촬영')+'</button><button type="button" data-slot="'+slot+'" data-camera="0">갤러리</button></div>':'')+
+      '</div>'+(p?'<div class="photo-ctrl"><button type="button" class="photo-del" data-i="'+i+'" title="삭제">✕</button></div>':'')+'</div>';
   }
-  list.innerHTML=state.photos.map((p,i)=>`
-    <div class="photo-item" data-i="${i}">
-      <img src="${p.data}" alt="현장 사진 ${i+1}" loading="lazy">
-      <input type="text" class="photo-memo" data-i="${i}" placeholder="사진 메모 (선택)" maxlength="40" value="${esc(p.memo)}">
-      <div class="photo-ctrl">
-        <button type="button" class="photo-up" data-i="${i}" ${i===0?'disabled':''} title="위로">▲</button>
-        <button type="button" class="photo-down" data-i="${i}" ${i===state.photos.length-1?'disabled':''} title="아래로">▼</button>
-        <button type="button" class="photo-del" data-i="${i}" title="삭제">✕</button>
-      </div>
-    </div>`).join('');
+  els.photoList.innerHTML=PHOTO_LABELS.map((_,slot)=>{const i=state.photos.findIndex(p=>p.slot===slot);return row(state.photos[i],i,slot);}).join('')+
+    state.photos.map((p,i)=>p.slot===null?row(p,i,null):'').join('');
 }
-// 사진 목록 이벤트 위임
-els.photoList.addEventListener('click', (e)=>{
-  const btn=e.target.closest('button'); if(!btn) return;
-  const i=parseInt(btn.getAttribute('data-i'));
-  if(btn.classList.contains('photo-del')){
-    state.photos.splice(i,1); renderPhotos(); saveDraft(); showToast('사진 삭제됨');
-  }else if(btn.classList.contains('photo-up') && i>0){
-    [state.photos[i-1],state.photos[i]]=[state.photos[i],state.photos[i-1]]; renderPhotos(); saveDraft();
-  }else if(btn.classList.contains('photo-down') && i<state.photos.length-1){
-    [state.photos[i+1],state.photos[i]]=[state.photos[i],state.photos[i+1]]; renderPhotos(); saveDraft();
-  }
+els.photoList.addEventListener('click',e=>{
+  const btn=e.target.closest('button');if(!btn)return;
+  if(btn.hasAttribute('data-slot')){choosePhoto(Number(btn.dataset.slot),btn.dataset.camera==='1');return;}
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy())return;
+  const i=Number(btn.dataset.i);
+  if(btn.classList.contains('photo-del')&&state.photos[i]){state.photos.splice(i,1);renderPhotos();saveDraft();showToast('사진 삭제됨');}
 });
-els.photoList.addEventListener('input', (e)=>{
-  const m=e.target.closest('.photo-memo'); if(!m) return;
-  const i=parseInt(m.getAttribute('data-i'));
-  if(state.photos[i]){ state.photos[i].memo=m.value; autoSave(); }
+els.photoList.addEventListener('change',e=>{
+  const select=e.target.closest('.photo-slot');if(!select)return;
+  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){renderPhotos();return;}
+  const i=Number(select.dataset.i),photo=state.photos[i];if(!photo)return;
+  const next=select.value===''?null:Number(select.value),other=state.photos.find(p=>p!==photo&&p.slot===next&&next!==null);
+  if(other)other.slot=photo.slot;
+  photo.slot=next;renderPhotos();saveDraft();
 });
-document.getElementById('photoCameraBtn').addEventListener('click', ()=>els.photoCameraInput.click());
-document.getElementById('photoGalleryBtn').addEventListener('click', ()=>els.photoGalleryInput.click());
-els.photoCameraInput.addEventListener('change', (e)=>{ addPhotos(e.target.files); e.target.value=''; });
-els.photoGalleryInput.addEventListener('change', (e)=>{ addPhotos(e.target.files); e.target.value=''; });
+els.photoList.addEventListener('input',e=>{
+  const memo=e.target.closest('.photo-memo');if(!memo)return;
+  const photo=state.photos[Number(memo.dataset.i)];
+  if(photo){photo.memo=memo.value;autoSave();}
+});
+document.getElementById('photoCameraBtn').addEventListener('click',()=>choosePhoto(null,true));
+document.getElementById('photoGalleryBtn').addEventListener('click',()=>choosePhoto(null,false));
+els.photoCameraInput.addEventListener('change',e=>{const slot=_photoTarget;_photoTarget=null;addPhotos(e.target.files,slot);e.target.value='';});
+els.photoGalleryInput.addEventListener('change',e=>{const slot=_photoTarget;_photoTarget=null;addPhotos(e.target.files,slot);e.target.value='';});
 
 // ===== 회사 로고 로드 (실패해도 PDF 생성 지속) =====
 let _logoDataUrl=null, _logoReady=false;
@@ -2003,7 +2028,7 @@ function buildSheetHTML(opts){
 
 // ===== PDF 생성 헬퍼 =====
 // HTML 문자열을 오프스크린 시트에 렌더 후 html2canvas 캔버스로 변환 (메모리 정리 포함)
-async function renderSheetCanvas(html,onPlacement){
+async function renderSheetCanvas(html,onPlacement,paginated=false){
   const sheet=els.pdfSheet;
   sheet.innerHTML=html;
   const target=sheet.firstElementChild;
@@ -2021,8 +2046,10 @@ async function renderSheetCanvas(html,onPlacement){
     img.style.width=(img.naturalWidth*scale)+'px';
     img.style.height=(img.naturalHeight*scale)+'px';
   });
-  return await html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
-    width:SHEET_WIDTH, windowWidth:SHEET_WIDTH});}
+  const render=viewport=>html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
+    width:SHEET_WIDTH, windowWidth:SHEET_WIDTH,...viewport});
+  if(paginated)return await window.BazInspectionPdf.capturePages(render,target.getBoundingClientRect().height,SHEET_WIDTH,PDF_SCALE);
+  return await render({});}
   finally{sheet.innerHTML='';}
 }
 // 모든 페이지 하단에 ASCII 푸터(문서번호·생성일시·페이지번호) — 한글 폰트 불필요
@@ -2042,6 +2069,11 @@ function addPdfFooters(pdf, docNo, genAt){
 // ===== PDF 생성 =====
 let _lastFname='';
 let _pdfBusy=false;
+function downloadPdfBlob(blob,filename){
+  const href=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=href;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(href),60000);
+}
 function inspectionPdfFilename(){
   const safe=(s)=>String(s).replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim();
   const types=['A/S','장비 점검','장비 교체','장비 업그레이드']
@@ -2053,6 +2085,7 @@ function inspectionPdfFilename(){
 }
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 async function generatePDF(arg){
+  if(pdfPublisher.isBusy()){showToast('내역서를 전송 중입니다. 전송 결과를 확인한 뒤 생성하세요.');return;}
   if(_pdfBusy||_photoBusy){showToast('진행 중인 사진 처리·PDF 생성을 먼저 확인하세요.');return;}
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
   const preview = !!opts.preview;
@@ -2086,15 +2119,14 @@ async function generatePDF(arg){
     let qrSlots=[];
     const mainPages=await step('본문·서명 페이지 생성','pdf_body',async()=>{
       if(!qrDraft)return window.BazInspectionPdf.body(mainHTML,renderSheetCanvas);
-      let position;const canvas=await renderSheetCanvas(mainHTML,p=>{position=p;});
-      try{
-        if(!position)throw new Error('기본 양식에서만 고객 QR 서명을 사용할 수 있습니다.');
-        qrSlots=window.BazInspectionQr.placements(position,canvas.width);
-        return window.BazInspectionPdf.bodyPages(canvas);
-      }finally{canvas.width=canvas.height=0;}
+      let position;const pages=await renderSheetCanvas(mainHTML,p=>{position=p;},true);
+      if(!position)throw new Error('기본 양식에서만 고객 QR 서명을 사용할 수 있습니다.');
+      qrSlots=window.BazInspectionQr.placements(position,Math.round(SHEET_WIDTH*PDF_SCALE));
+      return pages;
     });
     const generated=await step('사진·최종 파일 생성','pdf_assemble',()=>window.BazInspectionPdf.assemble(mainPages,photoSnapshot,{logo:_logoDataUrl,docNo,genAt,footers:addPdfFooters,progress:showLoading}),r=>({count:photoSnapshot.length,bytes:r.blob.size,pass:r.passes}));
-    const pdf=generated.pdf;
+    // Keep only final bytes, releasing the large jsPDF image buffers.
+    generated.pdf=null;
     if(qrDraft){
       if(generated.blob.size>6.5*1024*1024)throw new Error('서명 반영 여유를 위해 QR 문서는 6.5MB 이하로 준비해 주세요. 사진 크기나 개수를 줄여 주세요.');
       hideLoading();
@@ -2110,15 +2142,15 @@ async function generatePDF(arg){
     hideLoading();
 
     if(preview){
-      _lastPreviewUrl=pdf.output('bloburl');
+      _lastPreviewUrl=URL.createObjectURL(generated.blob);
       window.open(_lastPreviewUrl,'_blank');
     }else if(blank){
-      pdf.save(_lastFname);
+      downloadPdfBlob(generated.blob,_lastFname);
       showToast('수기 작성용 PDF 생성 완료');
     }else{
       const shareFilename=_lastFname;
       const pdfBlob=generated.blob;
-      window.BazInspectionShare.capture(pdfBlob,shareFilename,()=>pdf.save(shareFilename));
+      window.BazInspectionShare.capture(pdfBlob,shareFilename,()=>downloadPdfBlob(pdfBlob,shareFilename));
       document.getElementById('doneFname').textContent=_lastFname;
       document.getElementById('doneOverlay').classList.add('show');
       showToast('PDF 생성 완료');
@@ -2127,8 +2159,8 @@ async function generatePDF(arg){
       const unchanged=JSON.stringify(captured)===JSON.stringify(collectFormData());
       saveCurrentTask(unchanged?{status:'completed', documentNo:docNo}:{});
       pdfPublisher.publish(pdfBlob,shareFilename,uploadContext);
-      // saveCurrentTask already schedules this snapshot; onSaved persists PDF
-      // metadata separately. Avoid a simultaneous duplicate photo/form upload.
+      // onIdle sends the final task snapshot after PDF delivery, replacing the
+      // pending debounce instead of uploading the same photos simultaneously.
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
       //   (현장 처리 기록은 handover 로 일원화. 방문로그 백엔드는 은퇴.)
     }
@@ -2137,7 +2169,7 @@ async function generatePDF(arg){
     showToast(stage+' 실패: '+e.message);
     console.error(e);
   }
-  finally{els.pdfSheet.innerHTML='';_pdfBusy=false;totalDone({count:photoSnapshot.length});}
+  finally{els.pdfSheet.innerHTML='';_pdfBusy=false;if(!pdfPublisher.isBusy())scheduleCloudSync();totalDone({count:photoSnapshot.length});}
 }
 let _lastPreviewUrl=null;
 

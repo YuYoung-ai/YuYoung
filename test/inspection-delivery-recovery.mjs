@@ -9,8 +9,8 @@ function fixture(options={}){
  const nodes=Object.fromEntries(['pdfUploadStatus','pdfUploadRetry','pdfOpenLink','doneNew'].map(id=>[id,{addEventListener(t,fn){this[t]=fn;}}])),stages=[],calls=[];
  const window={},cryptoFallback={subtle:crypto.subtle,getRandomValues:crypto.getRandomValues.bind(crypto)};
  class Reader{readAsDataURL(blob){this.readyState=1;blob.arrayBuffer().then(bytes=>{this.readyState=2;this.result='data:application/pdf;base64,'+Buffer.from(bytes).toString('base64');this.onload?.();});}abort(){this.readyState=2;}}
- vm.runInNewContext(code,{window,document:{getElementById:id=>nodes[id]},URL,AbortController,setTimeout,clearTimeout,crypto:cryptoFallback,FileReader:Reader,Uint8Array,TextEncoder,atob});
- const app=window.BazInspectionUpload.create({outbox,token:()=>options.token||'synthetic-token',onSaved(){},onProgress:s=>stages.push(s),confirmAttachment:options.confirm||(async()=>({applicable:true})),prepareContext:async c=>({...c,requestId:'request_123'}),url:'https://script.google.com/macros/s/synthetic/exec',fetch:async(url,init)=>{const p=JSON.parse(init.body);calls.push(p);return options.fetch?options.fetch(p):{json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
+ vm.runInNewContext(code,{window,document:{getElementById:id=>nodes[id]},URL,AbortController,setTimeout:options.setTimeout||setTimeout,clearTimeout:options.clearTimeout||clearTimeout,crypto:cryptoFallback,FileReader:Reader,Uint8Array,TextEncoder,atob});
+ const app=window.BazInspectionUpload.create({outbox,token:()=>typeof options.token==='function'?options.token():options.token||'synthetic-token',onSaved(){},onIdle:options.onIdle,onProgress:s=>stages.push(s),confirmAttachment:options.confirm||(async()=>({applicable:true})),prepareContext:async c=>({...c,requestId:'request_123'}),url:'https://script.google.com/macros/s/synthetic/exec',fetch:async(url,init)=>{const p=JSON.parse(init.body);calls.push(p);return options.fetch?options.fetch(p):{json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
  return {app,nodes,stages,calls};
 }
 const until=async fn=>{for(let i=0;i<1000&&!fn();i++)await new Promise(r=>setTimeout(r,1));assert.ok(fn(),'asynchronous checkpoint reached');};
@@ -25,10 +25,13 @@ const b=fixture();assert.equal(await b.app.restore(context),true);await b.nodes.
 for(const key of ['uploadId','sha256','base64','baseRevision','recordId','requestId'])assert.equal(retried[key],first[key],key+' survives reload');
 assert.equal(jobs.size,0);assert.equal(b.stages.at(-1).comment,'done');
 // Abort-ignoring fetch and JSON promises must not permanently disable retry.
-let hang=true;
-const c=fixture({fetch:async p=>{if(p.action==='inspection_pdf_upload'&&hang)return new Promise(()=>{});return {json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
+let hang=true,deadline;
+const c=fixture({setTimeout(fn,ms){if(ms===120000){deadline=fn;return -1;}return setTimeout(fn,ms);},clearTimeout(id){if(id!==-1)clearTimeout(id);},fetch:async p=>{if(p.action==='inspection_pdf_upload'&&hang)return new Promise(()=>{});return {json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
 const p=await c.app.prepare(context),running=c.app.publish(blob,'same.pdf',p);await until(()=>c.calls.some(x=>x.action==='inspection_pdf_upload'));
-assert.equal(c.nodes.pdfUploadRetry.hidden,false);hang=false;await c.nodes.pdfUploadRetry.click();await running;
+assert.equal(c.nodes.pdfUploadRetry.hidden,true);assert.equal(c.nodes.pdfUploadRetry.disabled,true);assert.equal(c.app.isBusy(),true);
+await c.nodes.pdfUploadRetry.click();assert.equal(c.calls.filter(p=>p.action==='inspection_pdf_upload').length,1,'a click does not abort/restart the server write');
+assert.equal(c.app.publish(blob,'duplicate.pdf',p),running,'a second publish cannot start another transfer');
+hang=false;deadline();await running;assert.equal(c.app.isBusy(),false);assert.equal(c.nodes.pdfUploadRetry.disabled,false);await c.nodes.pdfUploadRetry.click();
 const uploads=c.calls.filter(p=>p.action==='inspection_pdf_upload');assert.equal(uploads.length,2);assert.equal(uploads[0].uploadId,uploads[1].uploadId);assert.equal(c.stages.at(-1).comment,'done');
 const d=fixture({confirm:async()=>({applicable:false})});await d.app.publish(blob,'standalone.pdf',await d.app.prepare(context));assert.equal(d.stages.at(-1).comment,'skipped');assert.equal(d.nodes.pdfUploadRetry.hidden,true);
 // A saved file's attachment failure remains durable; restore never sends bytes.
@@ -46,3 +49,8 @@ for(const missingId of [undefined,null,'', '   ',42]){
  const sent=h.calls.find(c=>c.action==='inspection_pdf_upload');assert.ok(sent);assert.equal(sent.uploadId,uploadId);assert.equal(Buffer.from(sent.base64,'base64').toString(),'%PDF-synthetic');assert.equal(jobs.size,0);
 }
 console.log('PDF delivery recovery: missing route ID, Safari UUID fallback, durable same-file receipt, owner isolation, interrupted upload, abort-ignoring transport, saved-file-only recovery and unlinked status passed');
+let owner='initial-owner',releaseResponse,idleCalls=0;
+const changed=fixture({token:()=>owner,onIdle(){idleCalls++;},fetch:async()=>{await new Promise(resolve=>{releaseResponse=resolve;});return {json:async()=>({success:true,recordId:context.recordId,pdf})};}});
+const switched=changed.app.publish(blob,'account.pdf',context);await until(()=>releaseResponse);
+owner='another-owner';releaseResponse();await switched;
+assert.equal(idleCalls,0,'an old-account transfer never starts deferred task/photo synchronization with the new token');
