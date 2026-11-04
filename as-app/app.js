@@ -16,7 +16,7 @@
  function remember(id,secret,name,hospitalId,requestNumber,status){saved=saved.filter(function(r){return r.id!==id;});saved.unshift({id:id,secret:secret,name:name||id,hospitalId:hospitalId||hospitalContext?.id,requestNumber:requestNumber,status:status});save('curejet-as-requests',saved.slice(0,15));}
  async function copy(text){try{await navigator.clipboard.writeText(text);message('복사했습니다.');}catch{message('자동 복사가 지원되지 않습니다. 표시된 링크 또는 코드를 직접 보관하세요.');}}
  if(runtime?.local)document.querySelectorAll('[data-local]').forEach(function(el){el.hidden=false;});
- if('serviceWorker' in navigator&&runtime)navigator.serviceWorker.register('sw.js?v=298',{scope:'./'}).catch(function(){});
+ if('serviceWorker' in navigator&&runtime)navigator.serviceWorker.register('sw.js?v=299',{scope:'./',updateViaCache:'none'}).catch(function(){});
  try{gate();}catch(e){message(e.message,true);document.querySelectorAll('form button').forEach(function(b){b.disabled=true;});return;}
  document.querySelectorAll('form').forEach(function(form){form.addEventListener('invalid',function(e){var el=e.target,id=el.id+'-error';if(!el.id)return;var error=$(id);if(!error){error=document.createElement('small');error.id=id;error.className='field-error';el.after(error);el.setAttribute('aria-describedby',id);}error.textContent=el.validationMessage;el.setAttribute('aria-invalid','true');},true);form.addEventListener('input',function(e){e.target.removeAttribute('aria-invalid');var error=$(e.target.id+'-error');if(error)error.remove();});});
  if(page==='request')startRequest();else if(page==='status')startStatus();else startHome();

@@ -2,7 +2,7 @@
 // 오프라인 사용을 위한 캐시.
 // ★ 파일을 수정해 새로 배포할 때마다 아래 CACHE_VERSION 숫자를 반드시 올리세요. ★
 //   (버전을 올리지 않으면 폰이 옛 버전을 계속 사용합니다)
-const CACHE_VERSION = 'baz-cs-v298';
+const CACHE_VERSION = 'baz-cs-v299';
 const PUSH_BINDING_CACHE = 'baz-push-binding-v1';
 const PUSH_BINDING_URL = new URL('__push_binding__',self.registration.scope).href;
 let pushBindingTask=Promise.resolve();
@@ -126,6 +126,12 @@ function putCache(request, res) {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  // Hospital QR URLs may contain access capabilities. Never cache their pages
+  // or let the browser's old HTTP cache masquerade as a fresh network response.
+  const requestUrl=new URL(req.url),customerRoot=new URL('as-app/',self.registration.scope);
+  if(requestUrl.origin===customerRoot.origin&&requestUrl.pathname.startsWith(customerRoot.pathname)){
+    event.respondWith(fetch(req,{cache:'no-store'}));return;
+  }
 
   // Apps Script(인증/데이터 서버) 요청은 절대 캐시하지 않는다.
   // 캐시되면 옛 인증 응답이 재사용되어 로그인이 꼬일 수 있다.
