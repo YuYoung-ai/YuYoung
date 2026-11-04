@@ -1,92 +1,18 @@
-/* Shared screen theme. Printed labels, documents, photos and QR pixels stay original. */
-.baz-theme-toggle{display:inline-flex!important;align-items:center;justify-content:center;flex:none;width:36px;min-width:36px;min-height:36px;height:36px;margin:0;padding:8px;border:1px solid #b4c4d3;border-radius:10px;background:#fff;color:#23638f;cursor:pointer;box-sizing:border-box;line-height:1}
-.baz-theme-toggle svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
-.baz-theme-toggle:focus-visible{outline:3px solid #579bce;outline-offset:3px}
-.baz-theme-floating{position:fixed;right:20px;bottom:24px;z-index:10020;width:44px;height:44px;box-shadow:0 3px 16px #14212d26}
-#hubLangSwitch .baz-theme-toggle{margin-left:4px;border:0;background:transparent}
+/* Theme plumbing only. Each screen owns its component shapes and layout. */
+html [data-baz-theme-toggle]{display:inline-flex!important;align-items:center;justify-content:center;flex:none;width:36px;min-width:36px;min-height:36px;height:36px;margin:0;padding:8px!important;border:1px solid #b4c4d3;border-radius:10px;background:#fff;color:#23638f;cursor:pointer;box-sizing:border-box;line-height:1}
+html [data-baz-theme-toggle] svg{display:block;flex:0 0 19px;min-width:19px;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+[data-baz-theme-toggle]:focus-visible{outline:3px solid #579bce;outline-offset:3px}
+.baz-theme-floating{position:fixed;right:20px;bottom:24px;z-index:10020;box-shadow:0 3px 16px #14212d26}
 @media(max-width:700px){.baz-theme-floating{right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px))}}
 @media screen{
-  html[data-theme=light]{color-scheme:light}
-  html[data-theme=dark]{color-scheme:dark;background:#14212d;color:#edf4fa;
-    --baz-bg:#14212d;--baz-paper:#1d2e3d;--baz-text:#edf4fa;--baz-muted:#b2c4d3;--baz-line:#385063;--baz-soft:#233f56;--baz-primary:#99ceef;
-    --bg:#14212d;--gray-bg:#14212d;--wash:#14212d;--paper:#1d2e3d;--surface:#1d2e3d;--surface-2:#233747;
-    --text:#edf4fa;--ink:#edf4fa;--muted:#b2c4d3;--text-muted:#b2c4d3;--sub:#b2c4d3;
-    --line:#385063;--gray-line:#385063;--gray-cell:#233747;--li-line:#385063;--soft:#233f56;--sky:#233f56;--q-bg:#233f56;
-    --accent:#99ceef;--good:#80d5ae;--danger:#ffada9;--warn:#f3cf85;--red:#ffada9;--green:#80d5ae;--amber:#f3cf85;--amber-bg:#3b3425;
-    --teal-soft:#233f56;--track:#233747;--seg-on:#385063;--shadow:0 12px 36px #0002;
-  }
-  html[data-theme=dark] body{background:#14212d;color:#edf4fa}
-  html[data-theme=dark] .baz-theme-toggle{background:#1d2e3d;border-color:#4a6478;color:#b8def6}
-  html[data-theme=dark] :is(header,.bulk-brand,#hubLogo) img[src$="logo.png"]{background:#fff;border-radius:6px;padding:3px;box-sizing:content-box}
-  html[data-theme=dark] :is(.card,.panel,.admin-panel,.qr-card,.qr-dialog,dialog,.read-receipts-dialog,.notification-dialog,.notification-panel,.install-card,.install-panel,.notice-card,.filter-panel,.question-card,.usage-guide,.builder-card,.result-card,.stat-card,.chart,.sidebar,.side-panel,.side-card,.content-card,.info-card,.section-card,.hospital-card,.draft-card,.ad-card,.ad-panel,.ad-sidebar,.ad-modal,.ad-toast,.modal-box,.modal-content,.mbox,.bubble,.detail-result,.entry,.workspace-welcome,.list-panel,.detail-panel,.roster-rows,.mobile-card){background-color:#1d2e3d;color:#edf4fa;border-color:#385063;box-shadow:none}
-  html[data-theme=dark] :is(.card-header,.card-head,.section-header,.panel-header,.table-head,.preview-table th,.result-fields dt,.stat,.qr-box,.hospital-tag,.notice,.tip,.help-box,.hint-box,.empty,.text-block,.step-card,.step-link:hover,.step-link.active,.filters,.filter-bar,.tabs,.subtabs,.mini-actions,.builder-toolbar,.notification-item,.read-receipts-people li,.read-receipts-tabs,.summary-card,.result-memo,.request-extra,.detail-tools,.detail-records,.timeline-item,.timeline-card,.calendar-day,.timeline-lane,.schedule-card,.slot-card){background-color:#233747;color:#dceaf5;border-color:#385063}
-  html[data-theme=dark] :is(h1,h2,h3,h4,.qr-card h1,.qr-card h2,.qr-dialog h2,.card-title,.panel-title,.section-title,.side-title,.side-foot b,.step-link,.report-title,.brand-text,.brand-name){color:#edf4fa}
-  html[data-theme=dark] :is(.muted,.help,.hint,.sub,.subtitle,.subtext,.meta,.step-label,.privacy,.customer-footer,.qr-muted,.read-receipts-heading p,.read-receipts-note,.read-receipts-when,.counter,.side-foot,.side-foot span,.brand-sub,.card-subtitle){color:#b2c4d3}
-  html[data-theme=dark] :is(a,.eyebrow,.qr-time,.qr-open,.question-number,.score,.read-receipts-tabs button){color:#a9d8f6}
-  html[data-theme=dark] :is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),textarea,select){background:#142635;color:#edf4fa;border-color:#4a6478;color-scheme:dark}
-  html[data-theme=dark] :is(input,textarea)::placeholder{color:#9ab0c1;opacity:1}
-  html[data-theme=dark] :is(button,.btn,.secondary,.btn-secondary,.qr-secondary,.qr-button){border-color:#4a6478}
-  html[data-theme=dark] :is(button:not(.primary):not(.btn-primary):not(.btn-navy):not(.btn-teal):not(.qr-primary):not(.btn-dark):not(.danger):not([data-work-status]):not([aria-selected=true]):not([aria-pressed=true]),.btn-secondary,.secondary,.qr-secondary){background-color:#233747;color:#dceaf5}
-  html[data-theme=dark] :is(.primary,.btn-primary,.btn-navy,.btn-teal,.qr-primary,.btn-dark){background-color:#23638f;color:#fff}
-  html[data-theme=dark] :is(button[aria-selected=true],.tabs button.active,.tab.active,.step-link.active,.choice:has(input:checked)){background-color:#294f6b;color:#e3f3ff;border-color:#99ceef}
-  html[data-theme=dark] :is(.choice,.customer .choice,.options label,.rating-option){background-color:#1d2e3d;color:#edf4fa;border-color:#4a6478}
-  html[data-theme=dark] :is(.choice:hover,.customer .choice:hover){background-color:#233f56}
-  html[data-theme=dark] :is(.choice:has(input:checked),.customer .choice:has(input:checked)){background-color:#294f6b;color:#e3f3ff;border-color:#99ceef}
-  html[data-theme=dark] :is(.brand,.top,.topbar,header,.qr-header){border-color:#385063}
-  html[data-theme=dark] :is(.topbar,.staff-work .topbar){background:#1d2e3df5;color:#edf4fa}
-  html[data-theme=dark] :is(header,.brand,.top) a{color:#d3e8f6}
-  html[data-theme=dark] :is(th,td,.table-wrap,.table-scroll,.entry-meta,.section-divider,.pagination,.actions,.customer .actions){border-color:#385063}
-  html[data-theme=dark] :is(th,thead,.preview-table th){background-color:#233747;color:#c1d2df}
-  html[data-theme=dark] :is(td,.preview-table td){color:#edf4fa}
-  html[data-theme=dark] tr:hover td{background-color:#233f56}
-  html[data-theme=dark] :is(.danger,.error,.qr-error,.warning-text,.overdue){color:#ffada9}
-  html[data-theme=dark] :is(.badge,.success-icon,.customer .success-icon,.customer .badge){background:#233f56;color:#b8def6}
-  html[data-theme=dark] .status-badge[data-work-status="접수"]{--status-bg:#253d59;--status-fg:#b7d5ff;--status-line:#496787}
-  html[data-theme=dark] .status-badge[data-work-status="방문예정"]{--status-bg:#393350;--status-fg:#d8c5ff;--status-line:#65567e}
-  html[data-theme=dark] .status-badge[data-work-status="처리중"]{--status-bg:#493829;--status-fg:#ffd0aa;--status-line:#806244}
-  html[data-theme=dark] .status-badge[data-work-status="결과확인"]{--status-bg:#20414b;--status-fg:#a7e4ee;--status-line:#437181}
-  html[data-theme=dark] .status-badge[data-work-status="완료"]{--status-bg:#244436;--status-fg:#b3e5c7;--status-line:#49765c}
-  html[data-theme=dark] .status-badge[data-work-status="보류"]{--status-bg:#463f27;--status-fg:#f4df9a;--status-line:#7b7048}
-  html[data-theme=dark] .status-badge[data-work-status="취소"]{--status-bg:#473039;--status-fg:#ffc2cd;--status-line:#7e5160}
-  html[data-theme=dark] .staff-work :is(.status-badge,.status-quick-select){background:var(--status-bg);color:var(--status-fg);border-color:var(--status-line)}
-  html[data-theme=dark] #list button[data-receipt-request],html[data-theme=dark] #detail button[data-receipt-request]{background:transparent;color:#b2c4d3;font-weight:400;font-size:10px}
-  html[data-theme=dark] :is(.card-top,.card-summary,.summary,.row-open,.person-chip){color:#edf4fa}
-  html[data-theme=dark] :is(label,.skill-tit,.skill-lab,.insp-name,.recent-body b,.recent-card h4,.task-hosp,.task-meta b,.sec-title,.rrow-head .hosp,.day-head b,.nz-metric b,.nz-listtit,.pv-title,.pv-meta b,.pv-day b,.case-head .c-hosp,.guide h4,.guide dt,.tally .tg b,.count-badge,.bulk-summary strong,.bulk-preview-name,.bulk-brand span,.sign-banner-text,.sign-banner-text span){color:#dceaf5}
-  html[data-theme=dark] :is(.actions,.bottom-bar,.nav-bar,.modal-actions,.task-status-bar,.toolbar,.chips,.install-step,.install-instructions,.notification-sheet,.bulk-summary>div,.bulk-progress,.bulk-preview,.tipbox,.admin-box,.note-box,.titem,.ac-drop,.ac-dropdown,.recent-item,.chk,.sig-box,.sigpad-canvas-wrap,.done-card,.task-item,.sign-banner,.view-toggle,.install-platforms){background-color:#1d2e3d;color:#edf4fa;border-color:#385063}
-  html[data-theme=dark] :is(.install-link-row span,.bulk-summary span,.bulk-state,.progress-steps li){color:#b2c4d3}
-  html[data-theme=dark] :is(.wrap,.skill-box,.tpl-tabs,.recent-card,#draftBar,.admin-sidebar,.results-filters,.metric-card,.results-chart,.opinions-panel,.distribution-chips span,.donut-center,.detail-content .opinion-card,.participation.pending,.participation.outside,.bulk-table-wrap){background-color:#1d2e3d;color:#edf4fa;border-color:#385063}
-  html[data-theme=dark] :is(.skill-tit .optb,.skill-box .opt,.button,#hospital-home,#return-hospital,.sidebar-home,.date-icon){background-color:#233747;color:#dceaf5;border-color:#4a6478}
-  html[data-theme=dark] :is(.customer .brand span,.sidebar-brand span,.sidebar-brand strong,.status){color:#dceaf5}
-  html[data-theme=dark] .star{color:#9ab0c1}html[data-theme=dark] .star.on{color:#f5b64e}
-  html[data-theme=dark] #image-open{background:#233747;color:#edf4fa}
-  html[data-theme=dark] :is(.q,.section-label){color:#edf4fa}
-  html[data-theme=dark] .install-status{background:#233747;color:#dceaf5;border-color:#385063}
-  html[data-theme=dark] body[data-page] button:not(.primary):not([aria-pressed=true]){background-color:#233747;color:#dceaf5;border-color:#4a6478}
-  html[data-theme=dark] body[data-page] button.primary{background-color:#23638f;color:#fff}
-  html[data-theme=dark] #cntInsp{background:#236b48;color:#fff}html[data-theme=dark] #cntVoc{background:#8a3f4b;color:#fff}
-  html[data-theme=dark] :is(.notification-controls #push-state,body[data-page=status] #status-facts dd:nth-of-type(2)){color:#b8def6}
-  html[data-theme=dark] body[data-page] :is(.notification-sheet,.notification-controls,.progress-steps li.reached){background:#233747;color:#edf4fa;border-color:#4a6478}
-  html[data-theme=dark] #langSelect #hubLogo>div{color:#edf4fa}
-  html[data-theme=dark] #langSelect .hub-tool{background:#1d2e3d;color:#edf4fa;border-color:#385063}
-  html[data-theme=dark] #hubLangSwitch{background:#1d2e3d;border-color:#385063}
-  html[data-theme=dark] #hubLangSwitch :is(button,.hublang-opt){background:transparent;color:#c4deef}
-  html[data-theme=dark] #hubLangSwitch .active{background:#294f6b;color:#fff}
-  html[data-theme=dark] :is(.issuer-layout,.bulk-layout,.bulk-toolbar,.bulk-card,.bulk-sidebar,.bulk-preview,.bulk-guide,.purpose-tabs,.hospital-picker,.bulk-hospitals,.bulk-selection,.bulk-print-options,.bulk-export-panel,.bulk-help,.bulk-controls){border-color:#385063}
-  html[data-theme=dark] :is(.bulk-card,.bulk-sidebar,.bulk-guide,.bulk-controls,.bulk-export-panel,.bulk-help,.bulk-print-options,.hospital-picker){background:#1d2e3d;color:#edf4fa}
-  html[data-theme=dark] :is(.bulk-list-row,.hospital-row,.bulk-hospital,.issuer-hospital-row){border-color:#385063;color:#edf4fa}
-  html[data-theme=dark] :is(.bulk-list-row,.hospital-row,.bulk-hospital):has(input:checked){background:#294f6b}
-  html[data-theme=dark] :is(.progress-line,.customer .progress-line,.progress-track){background:#233747;border-color:#4a6478}
-  /* CSS-variable aliases retain dark header ink while foregrounds use readable accents. */
-  html[data-theme=dark] :is(.work-flow-panel,.qr-summary,.reservation-heading,.schedule-toolbar,.schedule-navigation,.workspace-views,.work-periods,.list-tools,.read-receipts-heading){color:#edf4fa}
-  /* Signature/QR/document output is paper, independent of the screen preference. */
-  html[data-theme=dark] :is(#pdfSheet,.pdf-sheet,.pdf-page,.lb-sheet,.qr-review-pages,.sticker-preview,.label-preview,.print-preview,.ad-slide,.ad-page,.slide-canvas,[data-baz-paper]){
-    color-scheme:light;background:#fff;color:#1a1a2e;--text:#1a1a2e;--ink:#243447;--muted:#65788b;--text-muted:#6b7a99;--line:#dde3ee;--gray-line:#dde3ee;--gray-bg:#f5f7fa;--paper:#fff;--surface:#fff;--bg:#fff;--accent:#23638f;--baz-text:#243447;--baz-paper:#fff;--baz-line:#dde6ee;
-  }
-  html[data-theme=dark] :is(#pdfSheet,.pdf-sheet,.pdf-page,.ad-slide,.ad-page,[data-baz-paper]) :is(h1,h2,h3,h4,td,th){color:#1a1a2e}
-  html[data-theme=dark] :is(#pdfSheet,.pdf-sheet,.pdf-page,[data-baz-paper]) :is(td,th){background:#fff;border-color:#dde3ee}
-  html[data-theme=dark] :is(canvas,img,svg,video){filter:none}
+ html[data-theme=light]{color-scheme:light}
+ html[data-theme=dark]{color-scheme:dark;--baz-bg:#14212d;--baz-paper:#1d2e3d;--baz-text:#edf4fa;--baz-muted:#b2c4d3;--baz-line:#385063;--baz-soft:#233f56;--baz-primary:#99ceef}
+ html[data-theme=dark]:not([data-baz-theme-native]){background:#14212d;color:#edf4fa;--bg:#14212d;--gray-bg:#14212d;--wash:#14212d;--paper:#1d2e3d;--surface:#1d2e3d;--surface-2:#233747;--text:#edf4fa;--ink:#edf4fa;--muted:#b2c4d3;--text-muted:#b2c4d3;--sub:#b2c4d3;--line:#385063;--gray-line:#385063;--gray-cell:#233747;--li-line:#385063;--soft:#233f56;--sky:#233f56;--q-bg:#233f56;--teal-soft:#233f56;--track:#233747;--seg-on:#385063}
+ html[data-theme=dark]:not([data-baz-theme-native]) body{background:#14212d;color:#edf4fa}
+ html[data-theme=dark] [data-baz-theme-toggle]{background:#1d2e3d;border-color:#4a6478;color:#b8def6}
+ html[data-theme=dark] :is(header,.bulk-brand) img[src$="logo.png"],html[data-theme=dark] #hubLogo>svg{background:#fff;box-shadow:0 0 0 3px #fff}
+ /* Paper, signatures, photos and QR pixels retain their original output colors. */
+ html[data-theme=dark] :is(#pdfSheet,.pdf-sheet,.pdf-page,.lb-sheet,.qr-review-pages,.sticker-preview,.label-preview,.print-preview,.ad-slide,.ad-page,.slide-canvas,[data-baz-paper]){color-scheme:light;background:#fff;color:#1a1a2e;--text:#1a1a2e;--ink:#243447;--muted:#65788b;--text-muted:#6b7a99;--line:#dde3ee;--gray-line:#dde3ee;--gray-bg:#f5f7fa;--paper:#fff;--surface:#fff;--bg:#fff;--accent:#23638f;--baz-text:#243447;--baz-paper:#fff;--baz-line:#dde6ee}
 }
-@media print{
-  .baz-theme-toggle{display:none!important}
-  html[data-theme],html[data-theme] body{color-scheme:light;background:#fff;color:#243447;--baz-bg:#fff;--baz-paper:#fff;--baz-text:#243447;--baz-muted:#65788b;--baz-line:#dde6ee;--baz-soft:#eaf3fa;--baz-primary:#23638f;--bg:#fff;--paper:#fff;--surface:#fff;--text:#243447;--ink:#243447;--muted:#65788b;--line:#dde6ee;--soft:#eaf3fa;--gray-bg:#fff;--gray-line:#dde6ee;--design-bg:#fff;--design-paper:#fff;--design-ink:#243447;--design-muted:#65788b;--design-line:#dde6ee;--design-accent:#23638f}
-}
+@media print{html[data-theme] [data-baz-theme-toggle]{display:none!important}html[data-theme],html[data-theme] body{color-scheme:light;background:#fff;color:#243447;--baz-bg:#fff;--baz-paper:#fff;--baz-text:#243447;--baz-muted:#65788b;--baz-line:#dde6ee;--baz-soft:#eaf3fa;--baz-primary:#23638f;--bg:#fff;--paper:#fff;--surface:#fff;--text:#243447;--ink:#243447;--muted:#65788b;--line:#dde6ee;--soft:#eaf3fa;--gray-bg:#fff;--gray-line:#dde6ee}}
+@media screen{html[data-theme=dark] .hd-btn[style*="background:var(--teal)"]{color:#14212d}}

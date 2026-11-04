@@ -1,0 +1,4 @@
+/* Paint-only adapter generated from this screen's authored CSS. */
+@media screen{
+html[data-theme=dark] body:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(215.3,14%,82%,1)}
+}
