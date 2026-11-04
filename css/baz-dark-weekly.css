@@ -1,0 +1,65 @@
+/* Paint-only adapter generated from this screen's authored CSS. */
+@media screen{
+html[data-theme=dark]:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){--gray-bg:rgba(29,46,61,1);--gray-line:rgba(56,80,99,1);--text:hsla(240.0,15%,82%,1);--text-muted:rgba(178,196,211,1)}
+html[data-theme=dark] body:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1);background-color:rgba(20,33,45,1)}
+html[data-theme=dark] header:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] header p:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(185, 198, 228)}
+html[data-theme=dark] .menu-link:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(207, 219, 240);background-color:rgba(202, 220, 252, 0.15);border-color:rgba(56,80,99,0.30196078431372547);border-top-color:rgba(56,80,99,0.30196078431372547);border-bottom-color:rgba(56,80,99,0.30196078431372547);border-left-color:rgba(56,80,99,0.30196078431372547);border-right-color:rgba(56,80,99,0.30196078431372547)}
+html[data-theme=dark] .card:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .sec-title:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .sec-title .mini:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] label:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] label .opt:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] select:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1);background-color:rgba(29,46,61,1)}
+html[data-theme=dark] input:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1);background-color:rgba(29,46,61,1)}
+html[data-theme=dark] textarea:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1);background-color:rgba(29,46,61,1)}
+html[data-theme=dark] select:focus:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){border-color:#2E7D9E}
+html[data-theme=dark] input:focus:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){border-color:#2E7D9E}
+html[data-theme=dark] textarea:focus:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){border-color:#2E7D9E}
+html[data-theme=dark] .btn-load:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#2E7D9E}
+html[data-theme=dark] .status.ok:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(150.0,34%,82%,1)}
+html[data-theme=dark] .status.err:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(5.6,35%,82%,1)}
+html[data-theme=dark] .sum-chip:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255)}
+html[data-theme=dark] .rrow:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .rrow-head .no:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] .rrow-head .hosp:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .rrow-head .del:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(5.6,35%,82%,1);background-color:transparent}
+html[data-theme=dark] .badge-voc:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(5.6,35%,82%,1);background-color:hsla(6.3,32%,20%,1);border-color:rgba(56,80,99,1);border-top-color:rgba(56,80,99,1);border-bottom-color:rgba(56,80,99,1);border-left-color:rgba(56,80,99,1);border-right-color:rgba(56,80,99,1)}
+html[data-theme=dark] .badge-insp:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(150.0,34%,82%,1);background-color:hsla(147.7,18%,20%,1);border-color:rgba(56,80,99,1);border-top-color:rgba(56,80,99,1);border-bottom-color:rgba(56,80,99,1);border-left-color:rgba(56,80,99,1);border-right-color:rgba(56,80,99,1)}
+html[data-theme=dark] .btn-addrow:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1);background-color:transparent}
+html[data-theme=dark] .day-head b:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .day-copy:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(197.7,30%,82%,1);background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .day-copy:active:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:hsla(197.1,23%,20%,1)}
+html[data-theme=dark] .hint:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] .actions:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .btn-tsv:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(140.0,39%,82%,1);background-color:hsla(137.1,18%,20%,1);border-color:rgba(56,80,99,1);border-top-color:rgba(56,80,99,1);border-bottom-color:rgba(56,80,99,1);border-left-color:rgba(56,80,99,1);border-right-color:rgba(56,80,99,1)}
+html[data-theme=dark] .btn-copy:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1);background-color:hsla(218.6,20%,20%,1)}
+html[data-theme=dark] .btn-save:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] .toast:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] .empty:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] .nz-sub:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(197.7,30%,82%,1)}
+html[data-theme=dark] .nz-metric:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .nz-metric span:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] .nz-metric b:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .nz-listwrap:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(20,33,45,1)}
+html[data-theme=dark] .nz-listtit:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .nz-list li:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1)}
+html[data-theme=dark] .nz-list li.nz-none:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] .nz-div:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:hsla(218.8,15%,20%,1)}
+html[data-theme=dark] .modal:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(20, 28, 48, 0.55)}
+html[data-theme=dark] .modal-box:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .modal-head:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] .modal-close:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:rgba(29,46,61,0.14901960784313725)}
+html[data-theme=dark] .modal-actions:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .pv-title:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .pv-meta:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgba(178,196,211,1)}
+html[data-theme=dark] .pv-meta b:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1)}
+html[data-theme=dark] .pv-table th:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:rgb(255, 255, 255);background-color:#1B2F5E}
+html[data-theme=dark] .pv-day b:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1);background-color:hsla(197.1,23%,20%,1)}
+html[data-theme=dark] .pv-special:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:rgba(29,46,61,1)}
+html[data-theme=dark] .aw-item:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(240.0,15%,82%,1);background-color:rgba(20,33,45,1)}
+html[data-theme=dark] .aw-item.on:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){color:hsla(222.1,30%,82%,1);background-color:hsla(197.1,23%,20%,1);border-color:#2E7D9E}
+html[data-theme=dark] [style=background\:var\(--green\)]:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:#1E7E4E!important}
+html[data-theme=dark] [style=background\:var\(--red\)]:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:#C0392B!important}
+html[data-theme=dark] [style=background\:var\(--navy\)]:not(:where(#pdfSheet,#pdfSheet *,.lb-sheet,.lb-sheet *,[data-baz-paper],[data-baz-paper] *,img,canvas,svg,svg *)){background-color:#1B2F5E!important}
+}

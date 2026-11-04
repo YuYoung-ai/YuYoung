@@ -8,3 +8,5 @@ body[data-page=status] header{gap:10px}.status-header-actions{display:flex;justi
 .document-viewer{width:min(980px,calc(100vw - 24px));height:90dvh;max-height:90dvh;padding:18px;border:1px solid var(--line,#dde6ee);border-radius:16px;box-sizing:border-box}.document-viewer::backdrop{background:#14212d99}.document-viewer iframe{display:block;width:100%;height:calc(100% - 120px);border:0;margin-top:16px;background:white}.document-viewer h2{font-size:18px;margin:0}
 
 .document-viewer-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+
+.booking-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.booking-heading h2{margin:0}body[data-page] #refresh-times{font-size:12.6px;padding:7px 10px;min-height:36px}.slots .slot-unavailable{opacity:.45;cursor:not-allowed}.slots small{display:block;font-size:11px}.slots .notice{grid-column:1/-1}
