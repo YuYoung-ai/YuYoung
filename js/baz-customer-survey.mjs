@@ -1,9 +1,13 @@
 import {api,el,button} from './baz-survey-api.mjs';
 import {SCALE,validateAnswers,validateAnswer,otherOption,otherKey} from './baz-survey-schema.mjs';
-const root=document.querySelector('#survey'),code=new URLSearchParams(location.hash.slice(1)).get('h');
+const root=document.querySelector('#survey'),fragment=new URLSearchParams(location.hash.slice(1)),code=fragment.get('h');
+// AS credentials remain in the same-origin fragment, never the survey API body.
+const asId=fragment.get('as'),asKey=fragment.get('k'),asReturn=/^[-a-zA-Z0-9_]{8,90}$/.test(asId||'')&&/^[A-Za-z0-9_-]{43}$/.test(asKey||'')?new URL('as-app/as-status.html',location.href):null;
+if(asReturn)asReturn.hash=new URLSearchParams({r:asId,k:asKey,survey:'done',intent:fragment.get('intent')==='download'?'download':'open'}).toString();
+
 let context,answers={},step=0,submissionId,storageKey,busy=false;
 function panel(){const p=el('section','panel');root.replaceChildren(p);return p;}
-function message(title,copy,done=false){const p=panel();if(done){p.classList.add('completion');const label=el('div','step-label'),line=el('div','progress-line'),fill=el('span');label.append(el('span','','설문 완료'),el('strong','','100%'));fill.style.width='100%';line.append(fill);p.append(label,line,el('div','success-icon','✓'));}p.append(el('h1','',title),el('p','muted',copy));}
+function message(title,copy,done=false){const p=panel();if(done){p.classList.add('completion');const label=el('div','step-label'),line=el('div','progress-line'),fill=el('span');label.append(el('span','','설문 완료'),el('strong','','100%'));fill.style.width='100%';line.append(fill);p.append(label,line,el('div','success-icon','✓'));}p.append(el('h1','',title),el('p','muted',copy));if(done&&asReturn){p.append(button('내역서 확인으로 돌아가기',()=>location.replace(asReturn.href),'primary wide'));setTimeout(()=>location.replace(asReturn.href),300);}}
 function save(){try{sessionStorage.setItem(storageKey,JSON.stringify({answers,step,submissionId}));}catch{}}
 function welcome(){const p=panel(),def=context.campaign.definition,count=def.questions.length;p.append(el('p','muted',context.campaign.title),el('p','eyebrow','YOUR VOICE, OUR NEXT STEP'),el('div','hospital-tag',context.hospital),el('h1','','더 나은 제품과 서비스,\n의견에서 시작합니다.'),el('p','welcome-copy',def.intro||'사용하시면서 느끼신 점을 들려주세요.'));
  const facts=el('div','facts');for(const [big,small]of[[`${count}문항`,'간단한 선택과 의견'],[`약 ${Math.max(1,Math.ceil(count/4))}분`,'편한 시간에 참여']]){const f=el('span');f.append(el('strong','',big),document.createTextNode(small));facts.append(f);}p.append(facts,button('설문 시작하기',()=>render(true),'primary wide'),el('p','privacy','응답은 병원별로 수집되며, 제품·서비스 개선에 활용됩니다. 이번 조사에는 병원당 1회 참여하실 수 있습니다.'));

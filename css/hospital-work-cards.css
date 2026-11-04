@@ -34,3 +34,7 @@ html[data-theme=dark] .service-badge[data-service-type="유상"]{background:#473
  .mobile-card:not(.editable-card)>.read-receipts-card-footer{margin:0;display:flex;justify-content:flex-end}
  .mobile-card .service-badge{font-size:12px}.editable-card>.recent-inspection{margin-top:10px}
 }
+
+/* Hospital and symptom share one centered reading axis in both layouts. */
+#list .hospital-column{text-align:center;vertical-align:middle}#list .hospital-column .row-open,#list .hospital-column .summary{text-align:center}#list .hospital-column .row-open{width:100%}#list .card-top{justify-content:center}#list .card-top,#list .card-summary{text-align:center}
+.top-actions .top-action-link{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--text);font:inherit;font-size:12px;text-decoration:none;white-space:nowrap}.top-actions .top-action-link:hover{background:var(--soft)}
