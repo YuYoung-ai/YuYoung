@@ -3,6 +3,8 @@
  let loading=null,cachedBody=null;const labels=new Map(),scripts=new Map();
  const MAX_BYTES=7*1024*1024,W=210,H=297,M=8,CW=W-2*M,CH=H-2*M;
  const PHOTO_LABELS=['장비 S/N','증상 전','증상 후','증류수','전체샷'];
+ // Stored slot IDs stay fixed; only their display positions change.
+ const PHOTO_ORDER=[0,4,1,2,3];
  function normalizePhotos(photos){const used=new Set();return photos.map(p=>{const slot=Number.isInteger(p.slot)&&p.slot>=0&&p.slot<5&&!used.has(p.slot)?p.slot:null;if(slot!==null)used.add(slot);return {...p,slot};});}
  function bounded(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
  function load(src,ready){
@@ -78,7 +80,7 @@
    if(logo)pdf.addImage(logo.data,'PNG',M,M,10.6*logo.width/logo.height,10.6,undefined,'FAST');else label(pdf,'BAZ BIOMEDIC',M,M,40,18);
    label(pdf,'현장 사진',70,M,70,18,'center');
    const firstY=26,gap=8,width=(CW-gap)/2,slot=(CH-(firstY-M)-5-gap*2)/3;
-   group.forEach((p,i)=>{const title=p?.legacy?'기존 사진 '+(++offset):PHOTO_LABELS[i],x=M+(i%2)*(width+gap),y=firstY+Math.floor(i/2)*(slot+gap),caption=label(pdf,title+(p?.memo?' — '+p.memo:'')+(!p?' (미첨부)':''),x,y,width,12),top=y+caption+2,height=slot-caption-2;
+   PHOTO_ORDER.forEach((category,i)=>{const p=group[category],title=p?.legacy?'기존 사진 '+(++offset):PHOTO_LABELS[category],x=M+(i%2)*(width+gap),y=firstY+Math.floor(i/2)*(slot+gap),caption=label(pdf,title+(p?.memo?' — '+p.memo:'')+(!p?' (미첨부)':''),x,y,width,12),top=y+caption+2,height=slot-caption-2;
     pdf.setDrawColor(210);pdf.setLineWidth(.2);pdf.roundedRect(x,top,width,height,1.5,1.5);
     if(!p)return;
     const sized=fit(p.width,p.height,width-2,height-2);pdf.addImage(p.data,'JPEG',x+(width-sized.width)/2,top+(height-sized.height)/2,sized.width,sized.height);
@@ -108,5 +110,5 @@
   if(cachedBody?.html===html)return cachedBody.pages;
   const c=await render(html,undefined,true);try{const pages=Array.isArray(c)?c:bodyPages(c);cachedBody={html,pages};return pages;}finally{if(!Array.isArray(c))c.width=c.height=0;}
  }
- root.BazInspectionPdf={libraries,assemble,body,waitImages,fit,photoGroups,normalizePhotos,PHOTO_LABELS,bodyPages,capturePages,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
+ root.BazInspectionPdf={libraries,assemble,body,waitImages,fit,photoGroups,normalizePhotos,PHOTO_LABELS,PHOTO_ORDER,bodyPages,capturePages,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
 })(window);
