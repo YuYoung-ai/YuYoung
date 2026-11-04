@@ -2,14 +2,18 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
-const draws=[],surfaces=[],frames=[];
+const draws=[],surfaces=[],frames=[],clips=[];
 const document={createElement(){return {width:1,height:1,getContext(){return {measureText:t=>({width:t.length*10}),drawImage(){},scale(){},fillRect(){},fillText(){}};},toDataURL:()=> 'data:image/png;base64,label'};}};
 class Pdf{
- constructor(){this.images=[];this.pages=1;}
+ constructor(){this.images=[];this.pages=1;this.currentClip=null;}
  addPage(){this.pages++;}
  addImage(...args){this.images.push(args);}
  setDrawColor(){}setLineWidth(){}
- roundedRect(...args){frames.push(args);}
+ roundedRect(...args){if(args[6]===null)this.path=args;else frames.push(args);}
+ saveGraphicsState(){this.previousClip=this.currentClip;}
+ clip(){assert.ok(this.path);this.currentClip=this.path;clips.push(this.path);}
+ discardPath(){this.path=null;}
+ restoreGraphicsState(){this.currentClip=this.previousClip;}
  output(){return {size:1024};}
 }
 let active=0,maxActive=0;
@@ -30,7 +34,7 @@ assert.equal(draws.reduce((sum,p)=>sum+p.height,0),height,'all source rows are c
 for(let i=0;i<draws.length;i++)assert.equal(draws[i].y,i*step/scale);
 assert.ok(surfaces.every(c=>c.width===0&&c.height===0));
 await assert.rejects(api.capturePages(()=>assert.fail('must reject before allocating'),100000,width,scale),/20페이지/);
-const photos=Array.from({length:5},(_,slot)=>({slot,data:'data:image/jpeg;base64,original_'+slot,memo:slot===0?'S/N 확인':'',width:1600,height:900}));
+const photos=Array.from({length:5},(_,slot)=>({slot,data:'data:image/jpeg;base64,original_'+(slot===4?'portrait_':'')+slot,memo:slot===0?'S/N 확인':'',width:1600,height:900}));
 const result=await api.assemble([{data:'body',height:100}],photos.toReversed(),{footers(){}});
 assert.equal(maxActive,1,'PDF copies are resized sequentially');
 assert.equal(result.pdf.pages,2,'all five photos fit one photo sheet');
@@ -38,6 +42,16 @@ const images=result.pdf.images.filter(a=>String(a[0]).includes('small_'));
 assert.deepEqual(images.map(a=>Number(a[0].split('_').at(-1))),[0,4,1,2,3],'S/N + overview, before + after, distilled water');
 assert.deepEqual(Array.from(api.PHOTO_ORDER,n=>api.PHOTO_LABELS[n]),['장비 S/N','전체샷','증상 전','증상 후','증류수']);
 assert.equal(frames.length,5);
+assert.equal(clips.length,5);
+assert.equal(result.pdf.currentClip,null,'photo clipping never affects later labels or footers');
+images.forEach((image,i)=>{
+ const [x,y,w,h]=clips[i],ix=image[2],iy=image[3],iw=image[4],ih=image[5];
+ assert.ok(ix<=x+.000001&&iy<=y+.000001&&ix+iw>=x+w-.000001&&iy+ih>=y+h-.000001,'each image covers the entire card');
+ assert.ok(Math.abs(ix+iw/2-x-w/2)<.000001&&Math.abs(iy+ih/2-y-h/2)<.000001,'cropping is centered');
+ const ratio=String(image[0]).includes('portrait')?450/800:800/450;
+ assert.ok(Math.abs(iw/ih-ratio)<.000001,'portrait and landscape photos are not stretched');
+ assert.deepEqual(clips[i].slice(0,4),frames[i].slice(0,4),'clip matches its card');
+});
 assert.equal(frames[0][1],frames[1][1]-0,'first pair has the same baseline when caption lengths match');
 for(const [x,y,w,h]of frames){assert.ok(w<=194/2);assert.ok(h>0);assert.ok(x>=8&&x+w<=202);assert.ok(y>=26&&y+h<=289);}
 assert.ok(frames[0][0]<frames[1][0]);assert.equal(frames[2][0],frames[0][0]);assert.equal(frames[4][0],frames[0][0]);
