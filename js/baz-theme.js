@@ -25,8 +25,8 @@
   apply();
   function mount(){
     var b=doc.getElementById('theme')||doc.getElementById('themeToggle');
-    if(!b){b=doc.createElement('button');b.id='baz-theme-toggle';b.type='button';doc.body.appendChild(b);b.classList.add('baz-theme-floating');}
-    b.classList.add('baz-theme-toggle');b.setAttribute('data-baz-theme-toggle','');
+    if(!b){b=doc.createElement('button');b.id='baz-theme-toggle';b.type='button';var host=doc.querySelector('#hubLangSwitch')||doc.querySelector('.top-actions,.header-actions')||doc.querySelector('.bulk-topbar,body>header');if(host){host.appendChild(b);host.classList.add('baz-theme-host');}else{doc.body.appendChild(b);b.classList.add('baz-theme-floating');}}
+    if(b.id==='theme'||b.id==='themeToggle'){b.parentElement.appendChild(b);b.parentElement.classList.add('baz-theme-host');}b.classList.add('baz-theme-toggle');b.setAttribute('data-baz-theme-toggle','');
     b.addEventListener('click',root.BazTheme.toggle);apply();
   }
   if(doc.readyState==='loading')doc.addEventListener('DOMContentLoaded',mount,{once:true});else mount();

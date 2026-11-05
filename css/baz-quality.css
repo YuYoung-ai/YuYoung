@@ -1,0 +1,54 @@
+/* Shared control geometry and selection states. Loaded after page paint adapters. */
+@media screen{
+ html [data-baz-theme-toggle]{width:44px;min-width:44px;height:44px;min-height:44px;padding:10px!important;border-radius:10px}
+ html [data-baz-theme-toggle] svg{width:22px;height:22px;min-width:22px;flex-basis:22px;stroke-width:1.9}
+ .baz-theme-host{display:flex;align-items:center;gap:10px}
+ .baz-theme-host [data-baz-theme-toggle]{margin-left:auto;flex-shrink:0}
+ .baz-theme-floating{top:16px;right:16px;bottom:auto}
+ body>header.baz-theme-host{flex-wrap:wrap}
+ body>header.baz-theme-host>.home-link,body>header.baz-theme-host>.menu-link,body>header.baz-theme-host>a[style*="position:absolute"]{position:static!important}
+ body[data-page] header strong{margin-right:auto}
+ body[data-page] header>a{display:inline-flex;align-items:center;min-height:44px}
+ body[data-page] .status-header-actions{flex-wrap:wrap;gap:8px}
+ body[data-page] .status-header-actions button,body[data-page] .status-header-actions .button{min-height:44px}
+ body[data-page] .status-header-actions>*:after{display:none}
+ html :is(header,.bulk-brand) img[src$="logo.png"]{width:84px;min-width:84px;height:auto;max-height:none;object-fit:contain;padding:4px;border-radius:6px;box-shadow:none;vertical-align:middle}
+ html[data-theme=light] :is(header,.bulk-brand) img[src$="logo.png"]{background:transparent}
+ html[data-theme=dark] :is(header,.bulk-brand) img[src$="logo.png"]{background:#fff;box-shadow:none}
+ .topbar .brand{gap:12px;letter-spacing:.04em}
+ .staff-work .top-actions{gap:8px;flex-wrap:wrap}
+ .staff-work .top-actions button,.staff-work .top-actions a{min-height:40px;font-size:13px}
+ .staff-work .request-heading-buttons button{min-height:44px;min-width:112px;white-space:nowrap;font-size:13px}
+ .staff-work .workspace-views button,.staff-work .metrics button,.staff-work .work-periods button{min-height:44px;font-size:13px;border:1px solid transparent;box-sizing:border-box}
+ .staff-work .metrics span{font-size:13px}
+ .staff-work .metrics strong{font-size:17px}
+ .staff-work .workspace-views button[aria-pressed=true],.staff-work .metrics button[aria-pressed=true],.staff-work .work-periods button[aria-pressed=true]{background:#EAF3FA;border-color:#579BCE;color:#1B5075;font-weight:700;box-shadow:none}
+ .staff-work .metrics button[aria-pressed=true] strong{color:inherit}
+ html[data-theme=dark] .staff-work :is(.workspace-views,.metrics,.work-periods) button[aria-pressed=true]{background:#233F56;border-color:#79B7DE;color:#D9EEFC}
+ .staff-work .sync-times{font-size:12px}
+ .staff-work .list-sort select{font-size:13px;min-height:40px}
+ .staff-work .table-scroll .person-column{width:100px;word-break:keep-all}
+ .staff-work .list-panel th{font-size:12px}
+ body[data-page] .preference-list button{min-height:44px;min-width:44px}
+ body[data-page] .slots .slot-unavailable{opacity:1;background:var(--baz-bg,#f4f7fa);color:var(--baz-muted,#65788b);border-style:dashed}
+ body[data-page] .slots small{font-size:12px}
+ body[data-page] #refresh-times{min-height:44px;font-size:13px}
+ html[data-theme=dark] .customer .choice:has(input:checked){background:#233F56;border-color:#79B7DE;color:#D9EEFC}
+ html[data-theme=dark] .customer :is(.badge,.hospital-tag){background:#233F56;color:#D9EEFC}
+ html[data-theme=dark] .customer .score{color:#b2c4d3}
+ :is(.staff-work,.customer,body[data-page]) :is(button,a,input,select,textarea):focus-visible{outline:3px solid #579BCE;outline-offset:3px}
+ @media(max-width:700px){
+  html :is(header,.bulk-brand) img[src$="logo.png"]{width:68px;min-width:68px}
+  .topbar .brand{font-size:12px}
+  .staff-work .top-actions button,.staff-work .top-actions a{min-height:44px}
+  .staff-work .request-heading-buttons{flex-wrap:wrap}
+  .staff-work .request-heading-buttons button{min-width:0;padding:10px}
+  .staff-work .metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .staff-work .metrics button{flex-direction:row;justify-content:space-between;min-height:48px;padding:10px}
+  .staff-work .work-periods{flex-wrap:wrap}
+  body[data-page] header{gap:8px;padding:12px 16px}
+  body[data-page=status] .status-header-actions{order:3;width:100%}
+  body[data-page=status] .status-header-actions>*{flex:1}
+ }
+}
+@media print{[data-baz-theme-toggle]{display:none!important}}
