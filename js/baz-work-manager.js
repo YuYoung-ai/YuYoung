@@ -50,7 +50,7 @@
   function store(key,v){try{if(v===null)localStorage.removeItem(key);else localStorage.setItem(key,JSON.stringify(v));return true;}catch(e){return false;}}
   function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
   function localNow(){return localTimeFormatter.format(new Date()).replace(' ','T');}
-  function visitLabel(r){var q=r.qrIntake;if(q&&q.confirmationRequired&&!q.appointmentConfirmed&&!['완료','취소'].includes(r.status))return '희망 · '+time(q.requestedVisitAt||r.visitAt)+' · 조율 중';return time(r.visitAt);}
+  function visitLabel(r){var q=r.qrIntake;if(q&&q.confirmationRequired&&!q.appointmentConfirmed&&!['완료','취소'].includes(r.status))return '접수 확인 중 · '+time(q.requestedVisitAt||r.visitAt);return time(r.visitAt);}
   function time(v){if(!v)return '미정';if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))return v.replace('T',' ');var d=new Date(v);return isNaN(d.getTime())?v:displayTimeFormatter.format(d);}
   function active(r){return !r.deletedAt&&!r.purgedAt&&r.status!=='완료'&&r.status!=='취소';}
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}
@@ -382,6 +382,7 @@
     var periodLabel=state.filter==='trash'?'휴지통 · 전체 기간':state.filter==='today'?today:period?period[0]+' ~ '+period[1]:'전체 기간';
     var conditions=[state.filter==='trash'?'휴지통':workspaceLabel(workspaceView),'방문일 기준 '+periodLabel,scopeLabel],labels={gubun:'구분',asType:'AS',ncare:'N-CARE',year:'년',month:'월',quarter:'분기',engineer:'엔지니어',cs:'CS 접수',sales:'영업 담당'};
     if(search)conditions.push('검색 “'+$('search').value.trim()+'”');Object.keys(labels).forEach(function(k){if(advanced[k].length)conditions.push(labels[k]+' '+advanced[k].join(', '));});conditions.push(rows.length+'건');
+    var chips=$('active-condition-chips');if(!chips){chips=document.createElement('div');chips.id='active-condition-chips';chips.className='active-condition-chips';$('period-caption').before(chips);}chips.innerHTML='';Object.keys(advanced).forEach(function(k){advanced[k].forEach(function(value){var b=document.createElement('button');b.type='button';b.textContent=(k==='status'?'상세 상태':labels[k]||k)+' · '+value+' ×';b.setAttribute('aria-label',b.textContent.replace(' ×',' 조건 해제'));b.onclick=function(){advanced[k]=advanced[k].filter(function(v){return v!==value;});state.page=1;renderList();};chips.append(b);});});
     $('period-caption').textContent=conditions.join(' · ')+(editMode?(singleTapEdit()?' · 항목을 눌러 수정':' · 값을 더블클릭하여 수정'):'');
     $('list-count').textContent=rows.length+'건 · 전체 '+state.requests.filter(function(r){return !r.deletedAt;}).length+'건';$('page-info').textContent=state.page+' / '+pages;
     $('prev').disabled=state.page<=1;$('next').disabled=state.page>=pages;
@@ -872,7 +873,7 @@
   $('search').addEventListener('compositionstart',function(){listSearchComposing=true;clearTimeout(listSearchTimer);});
   $('search').addEventListener('compositionend',function(){listSearchComposing=false;scheduleListSearch();});
   $('search').oninput=scheduleListSearch;$('sort').onchange=$('sort-direction').onchange=function(){clearSelection();state.page=1;renderList();};
-  document.querySelectorAll('[data-workspace]').forEach(function(b){b.onclick=function(){roleTouched=true;workspaceView=b.dataset.workspace;selectionMode=false;clearSelection();closeDetail(false);state.statusScope='all';advanced.status=[];state.page=1;if(state.filter==='trash')state.filter=lastLiveFilter;if(workspaceView==='hospital'){editMode=false;state.filter='all';lastLiveFilter='all';Object.keys(advanced).forEach(function(k){advanced[k]=[];});$('search').value='';if(hospitalGroups)hospitalGroups.reset();}renderList();};});
+  document.querySelectorAll('[data-workspace]').forEach(function(b){b.onclick=function(){var host=b.parentElement,rect=b.getBoundingClientRect(),bounds=host.getBoundingClientRect();if(rect.left<bounds.left||rect.right>bounds.right)host.scrollTo({left:host.scrollLeft+rect.left-bounds.left-(bounds.width-rect.width)/2,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'instant':'smooth'});roleTouched=true;workspaceView=b.dataset.workspace;selectionMode=false;clearSelection();closeDetail(false);state.statusScope='all';advanced.status=[];state.page=1;if(state.filter==='trash')state.filter=lastLiveFilter;if(workspaceView==='hospital'){editMode=false;state.filter='all';lastLiveFilter='all';Object.keys(advanced).forEach(function(k){advanced[k]=[];});$('search').value='';if(hospitalGroups)hospitalGroups.reset();}renderList();};});
   $('prev').onclick=function(){clearSelection();state.page--;renderList();};$('next').onclick=function(){clearSelection();state.page++;renderList();};
   document.querySelectorAll('[data-filter]').forEach(function(b){b.onclick=function(){selectionMode=false;clearSelection();closeDetail(false);state.filter=b.dataset.filter;lastLiveFilter=state.filter;state.page=1;renderList();};});
   document.querySelectorAll('[data-metric]').forEach(function(b){b.onclick=function(){

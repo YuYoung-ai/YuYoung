@@ -1,0 +1,2 @@
+BAZWorkspaceUI: web subsets derived from Pretendard. Glyph shapes and variable weight axes retained. Internal family renamed for modified font distribution. Original copyrights and SIL OFL1.1 retained in LICENSE.txt and font metadata. Common UI characters are grouped; remaining Unicode ranges load only when used. Original asset retained for older pages.
+Source: https://github.com/orioncactus/pretendard

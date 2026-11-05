@@ -1,4 +1,3 @@
-@font-face{font-family:Pretendard;src:url('../fonts/PretendardVariable.woff2') format('woff2');font-weight:100 900;font-display:swap}
-:root{--baz-blue:#579BCE;--baz-charcoal:#595959;--baz-primary:#23638F;--baz-bg:#F4F7FA;--baz-paper:#fff;--baz-text:#243447;--baz-muted:#65788B;--baz-line:#DDE6EE;--baz-soft:#EAF3FA;--baz-font:Pretendard,system-ui,-apple-system,"Malgun Gothic",sans-serif}
+:root{--baz-blue:#579BCE;--baz-charcoal:#595959;--baz-primary:#23638F;--baz-bg:#F4F7FA;--baz-paper:#fff;--baz-text:#243447;--baz-muted:#65788B;--baz-line:#DDE6EE;--baz-soft:#EAF3FA;--baz-font:BAZWorkspaceUI,system-ui,-apple-system,"Malgun Gothic",sans-serif}
 body{font-family:var(--baz-font)}button,input,select,textarea{font-family:inherit}
 html[data-theme=dark]{--baz-bg:#14212D;--baz-paper:#1D2E3D;--baz-text:#EDF4FA;--baz-muted:#B2C4D3;--baz-line:#385063;--baz-soft:#233F56;--baz-primary:#99CEEF}
