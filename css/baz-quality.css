@@ -1,5 +1,7 @@
+@import url('./baz-fonts.css?v=306');
 /* Shared control geometry and selection states. Loaded after page paint adapters. */
 @media screen{
+ :root{--baz-font:BAZWorkspaceUI,system-ui,-apple-system,'Malgun Gothic',sans-serif}
  html [data-baz-theme-toggle]{width:44px;min-width:44px;height:44px;min-height:44px;padding:10px!important;border-radius:10px}
  html [data-baz-theme-toggle] svg{width:22px;height:22px;min-width:22px;flex-basis:22px;stroke-width:1.9}
  .baz-theme-host{display:flex;align-items:center;gap:10px}
@@ -52,3 +54,70 @@
  }
 }
 @media print{[data-baz-theme-toggle]{display:none!important}}
+
+@media screen{
+ body[data-work-view]:not([data-work-view=service]) #review-control{display:none!important}
+ .active-condition-chips{display:flex;gap:8px;flex-wrap:wrap;padding:0 22px 12px}
+ .active-condition-chips:empty{display:none}
+ .staff-work .active-condition-chips button{min-height:40px;border:1px solid var(--baz-blue,#579BCE);background:var(--baz-soft,#eaf3fa);color:var(--baz-primary,#23638f);font-size:13px;padding:8px 12px}
+ .schedule-layout{min-width:150px}
+ .schedule-agenda>summary{font-size:15px}
+ .schedule-agenda[open]{padding:16px;background:var(--paper,#fff);border:1px solid var(--line);border-radius:14px}
+ .schedule-agenda li{align-items:center;min-height:60px}
+ .schedule-agenda li strong{font-size:15px;line-height:1.6}
+ .staff-work .reservation-panel small{font-size:12px;color:var(--muted)}
+ .header-more{position:relative;display:none}
+ .header-more summary{list-style:none;cursor:pointer;min-height:44px;display:flex;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px}
+ .header-more>div{position:absolute;top:calc(100% + 8px);right:0;z-index:90;width:210px;padding:8px;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px #14212d22}
+ .header-more a{display:flex;align-items:center;min-height:44px;padding:8px;color:var(--text);text-decoration:none}
+ .bulk-cell-label{display:none}
+ body[data-page] #progress-steps[data-halted=true]{opacity:.65}
+ body[data-page] #request-state[aria-label]{border:1px solid var(--baz-muted);background:var(--baz-soft);color:var(--baz-text)}
+ .hit-area{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;cursor:pointer}
+ @media(max-width:760px){
+  input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px}
+  .header-more{display:block}
+  .staff-work .active-condition-chips{padding:0 14px 12px}
+  .staff-work .active-condition-chips button{min-height:44px}
+  .staff-work .schedule-navigation{flex-wrap:wrap}
+  .staff-work .schedule-week button{min-width:0}
+  .staff-work .schedule-legend{flex-wrap:wrap}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table-wrap{overflow:visible}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table{min-width:0;display:block}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table thead{position:absolute;clip-path:inset(50%);height:1px;width:1px;overflow:hidden}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table tbody{display:grid;gap:12px}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table tr{display:grid;grid-template-columns:44px minmax(0,1fr);border:1px solid var(--baz-line);border-radius:12px;padding:12px;gap:8px}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table td{min-width:0;border:0;display:flex;gap:8px;align-items:center;padding:4px;flex-wrap:wrap}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table td:first-child{grid-column:1;grid-row:1}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table td:nth-child(2){grid-column:2;grid-row:1;font-weight:700}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table td:nth-child(n+3){grid-column:1/-1}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-cell-label{display:block;flex:0 0 88px;font-size:12px;color:var(--baz-muted)}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table input[type=number]{max-width:120px}
+  :is(.qr-bulk-page,.qr-operations-page) .bulk-table button,:is(.qr-bulk-page,.qr-operations-page) .bulk-table a{min-height:44px;display:inline-flex;align-items:center}
+ }
+}
+
+@media screen{.qr-workflow-controls.is-readonly .qr-workflow-grid,.qr-workflow-controls.is-readonly .qr-workflow-footer{display:none}.readonly-workflow{font-size:14px;line-height:1.8;color:var(--text)}}
+@media screen{:is(.qr-state,#request-state)[data-state="접수"]{background:#e9f1ff;color:#2456a6}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="접수"]{background:#203957;color:#b2d1ff}}
+@media screen{:is(.qr-state,#request-state)[data-state="방문예정"]{background:#f0eafd;color:#6640a8}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="방문예정"]{background:#3a2d55;color:#d6c1ff}}
+@media screen{:is(.qr-state,#request-state)[data-state="처리중"]{background:#fff0e3;color:#a34c13}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="처리중"]{background:#4a3022;color:#ffd0aa}}
+@media screen{:is(.qr-state,#request-state)[data-state="결과확인"]{background:#e3f4f8;color:#166579}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="결과확인"]{background:#173e49;color:#a2e0ef}}
+@media screen{:is(.qr-state,#request-state)[data-state="완료"]{background:#e6f5ed;color:#236b48}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="완료"]{background:#204333;color:#a8e1c1}}
+@media screen{:is(.qr-state,#request-state)[data-state="보류"]{background:#fff6d9;color:#805e0a}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="보류"]{background:#443c21;color:#efda91}}
+@media screen{:is(.qr-state,#request-state)[data-state="취소"]{background:#edf0f4;color:#566171}html[data-theme=dark] :is(.qr-state,#request-state)[data-state="취소"]{background:#303a48;color:#c3ccd9}}
+
+@media screen{.qr-state,#request-state,.service-badge{font-size:12px}.read-receipts-button{font-size:12px;font-weight:400}.qr-case-facts dt,.qr-case-facts dd{align-self:center}input[readonly]{cursor:default;opacity:1}#booking-checked{font-size:12px;margin:6px 0 12px}}
+
+@media screen and (max-width:700px){.staff-work .top-actions>#sync,.staff-work .top-actions>#roster-open{display:none}.header-more>div button{display:flex;justify-content:flex-start;align-items:center;width:100%;min-height:44px;margin:0;padding:8px;background:transparent;color:var(--text)}}
+
+@media screen{.ui-icon{width:20px;height:20px;flex-basis:20px}.staff-work :is(.sync-state,.period-caption,.workspace-welcome .eyebrow,.schedule-legend){font-size:12px}.staff-work .list-panel .summary{font-size:13px}.staff-work .qr-view-tools input,.staff-work .qr-view-tools select{min-height:44px}.timeline-event.tentative{border-style:dashed!important;background:var(--baz-soft)!important;color:var(--baz-text)!important}.notification-sheet{bottom:calc(14px + env(safe-area-inset-bottom,0px))}.qr-photo-viewer{max-height:calc(100dvh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))}.qr-photo-viewer #qr-photo-close{min-width:44px;min-height:44px}.qr-photo-tools button{min-width:44px!important;min-height:44px!important}.qr-case-heading,.booking-heading,.section-heading{align-items:center}#preference-count{font-size:15px;margin:18px 0 6px}}
+
+@media screen{.reservation-settings{margin:16px 0;border:1px solid var(--line);border-radius:12px;background:var(--paper)}.reservation-settings>summary{padding:14px 16px;cursor:pointer;min-height:44px;font-size:14px}.reservation-settings[open]>summary{border-bottom:1px solid var(--line)}.reservation-settings #reservation-form{margin-top:0;border:0}.staff-work .reservation-settings #reservation-form h2{font-size:16px}}
+
+@media screen and (max-width:620px){#langSelect{padding-top:80px}#hubLangSwitch{top:14px;right:16px}#langSelect .hub-tool{position:relative}#langSelect .hub-tool>.hub-icon{flex:0 0 40px}#langSelect .hub-tool>span:last-child{min-width:0}}
+
+@media screen{#hubLogo>img{display:block;width:128px;height:auto;object-fit:contain;padding:6px;border-radius:8px;margin:0 0 10px;background:transparent;box-shadow:none}html[data-theme=dark] #hubLogo>img{background:#fff}}@media screen and (max-width:620px){#hubLogo>img{width:112px}}
+
+@media screen{#qr-metrics,#qr-workflow-message{min-height:24px}.photo-strip .qr-photo{width:170px;min-height:128px;justify-content:center;align-items:center}#qr-workflow-panel[aria-busy=true] #qr-cases:empty:before{content:"접수 목록을 확인하고 있습니다…";display:flex;align-items:center;justify-content:center;min-height:120px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--muted);font-size:13px}}@media screen and (max-width:520px){.photo-strip .qr-photo{width:136px;min-height:102px}}
+
+@media screen{.staff-work .status-picker{min-height:36px;font-size:13px;padding:7px 24px 7px 12px}.staff-work .page-heading h1{font-size:22px;color:var(--text)}.staff-work .workspace-welcome h2{font-size:22px;line-height:1.4}.staff-work .workspace-welcome{margin-bottom:14px}.timeline-engineers{display:flex;margin-left:60px;border-bottom:1px solid var(--line);padding-bottom:10px}.timeline-engineers>span{min-width:0;text-align:center;font-size:13px;font-weight:600;border-right:1px solid var(--line);overflow-wrap:anywhere}.hd-btn{min-height:40px;font-size:13px}.photo-ctrl button{min-width:40px;min-height:40px}}@media screen and (max-width:760px){.staff-work .status-picker{min-height:44px;font-size:14px}.hd-btn,.photo-ctrl button{min-height:44px;min-width:44px}.timeline-engineers{min-width:490px}}
