@@ -14,7 +14,7 @@
  function applyHours(){var submit=$('reservation-form').querySelector('button[type=submit]');if(!data){submit.disabled=true;return;}var open=$('reservation-mode').value==='open',input=$('reservation-time');if(open&&data.hours.enabled){input.min=data.hours.firstTime;input.max=data.hours.lastTime;}else{input.removeAttribute('min');input.removeAttribute('max');}submit.disabled=!!loadTask||busy||!!pending||data.date!==$('reservation-date').value||open&&!data.hours.enabled;}
  function render(){
   if(!data)return;
-  var date=data.date;$('reservation-hours').textContent=data.hours.enabled?(data.defaultOpen?'병원 QR은 10:00~15:00에 기본 예약 가능 · 1시간 단위 · 시작 2시간 전 마감. 닫기·차단 등 예외만 설정하세요.':'선택 날짜 예약 시작 · '+data.hours.firstTime+'~'+data.hours.lastTime):'토·일은 예약할 수 없습니다.';
+  var date=data.date;$('reservation-hours').textContent=data.hours.enabled?(data.defaultOpen?'병원 QR은 '+data.hours.firstTime+'~'+data.hours.lastTime+'에 기본 예약 가능 · 1시간 단위 · 시작까지 2시간 이하이면 마감. 닫기·차단 등 예외만 설정하세요.':'선택 날짜 예약 시작 · '+data.hours.firstTime+'~'+data.hours.lastTime):'토·일은 예약할 수 없습니다.';
   $('reservation-week').innerHTML=data.week.map(function(d){return '<button type="button" data-date="'+d.date+'" aria-pressed="'+(d.date===date)+'"><span>'+['일','월','화','수','목','금','토'][new Date(d.date+'T00:00:00Z').getUTCDay()]+'</span><strong>'+Number(d.date.slice(8))+'</strong><small>'+(d.visits?d.visits+'건':'—')+'</small></button>';}).join('');
   $('reservation-week').querySelectorAll('button').forEach(function(b){b.onclick=function(){$('reservation-date').value=b.dataset.date;load();};});
   $('reservation-day-title').textContent=date.replace(/-/g,'.')+' · 방문 '+data.schedule.length+'건';
