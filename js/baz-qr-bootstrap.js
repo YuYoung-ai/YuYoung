@@ -10,7 +10,7 @@
    root.BazQrRuntime={environment:'pilot',api:api,file:api,fileAction:'qr_file',pushMode:config.pushMode};
   }
   if(document.getElementById('work-management-tabs')){
-   function script(path){return new Promise(function(resolve,reject){var el=document.createElement('script');el.src='js/'+path+'.js?v=303';el.onload=resolve;el.onerror=function(){reject(Error('관리 화면을 불러오지 못했습니다. 새로고침하세요.'));};document.body.append(el);});}
+   function script(path){return new Promise(function(resolve,reject){var el=document.createElement('script');el.src='js/'+path+'.js?v=304';el.onload=resolve;el.onerror=function(){reject(Error('관리 화면을 불러오지 못했습니다. 새로고침하세요.'));};document.body.append(el);});}
    await script('baz-work-tabs');
    await Promise.all([script('baz-work-reservations'),script('baz-qr-workflow')]);
   }
