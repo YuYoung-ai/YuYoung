@@ -1,5 +1,9 @@
 // Shared, DOM-free rules for bulk issuing and print manifests.
 export const STICKER = Object.freeze({width:32,height:25,qrX:8.2,qrY:4.4,qrSize:15.6,margin:4});
+export const DESIGNS=Object.freeze({classic:{id:'classic',name:'기본형',description:'간결한 기본 스티커',...STICKER},b:{id:'b',name:'B · 캐릭터 포인트',description:'원본 B안 그대로',width:45,height:71.2,qrX:10,qrY:36,qrSize:25,margin:4},c:{id:'c',name:'C · 프리미엄 테크',description:'원본 C안 그대로',width:45,height:65.8,qrX:10,qrY:36,qrSize:25,margin:4},f:{id:'f',name:'F · 감성·소통',description:'원본 F안 그대로',width:45,height:65.8,qrX:10,qrY:36,qrSize:25,margin:4}});
+// Original board coordinates. Only operational QR and hospital-name fields vary.
+export const REFERENCES={b:{as:{crop:[824,56,280,443],clear:[890,292,154,154],qr:[890,292,154],name:[892,450,204,28]},survey:{crop:[1128,56,280,443],clear:[1194,292,154,154],qr:[1194,292,154],name:[1196,450,204,28]}},c:{as:{crop:[140,579,284,415],clear:[208,781,153,134],qr:[218,782,132],name:[207,939,207,31]},survey:{crop:[442,579,284,415],clear:[511,781,153,134],qr:[521,782,132],name:[510,939,207,31]}},f:{as:{crop:[821,579,284,415],clear:[895,778,144,140],qr:[897,778,140],name:[885,941,208,32]},survey:{crop:[1126,579,284,415],clear:[1198,778,144,140],qr:[1200,778,140],name:[1192,941,206,32]}}};
+export function designSettings(records){const id=records[0]?.design||'classic';if(!DESIGNS[id]||records.some(r=>(r.design||'classic')!==id))throw Error('인쇄 디자인을 하나만 선택하세요.');if(id==='classic')return DESIGNS[id];purposeSettings(records);const source=REFERENCES[id][records[0]?.purpose||'survey'],[x,y,w,h]=source.crop,scale=45/w;return {...DESIGNS[id],height:Math.round(h*scale*10)/10,qrX:(source.qr[0]-x)*scale,qrY:(source.qr[1]-y)*45/w,qrSize:source.qr[2]*scale,inverted:id==='c',source};}
 export const PURPOSES=Object.freeze({survey:{title:'고객만족도조사',caption:'QR 스캔 참여하기',prefix:'고객만족도조사'},as:{title:'AS 접수',caption:'QR 스캔으로 접수·진행 확인',prefix:'AS접수'}});
 export function purposeSettings(records){const purpose=records[0]?.purpose||'survey';if(!PURPOSES[purpose]||records.some(r=>(r.purpose||'survey')!==purpose))throw Error('서로 다른 목적의 QR을 함께 저장할 수 없습니다.');return PURPOSES[purpose];}
 export function issuedAsHospital(hospital,expected){
@@ -25,8 +29,8 @@ export function issuedHospital(hospital,name){
 export function fileStem(index,name){return String(index+1).padStart(4,'0')+'_'+name.replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'').slice(0,70);}
 export function manifestCsv(records){
  const cell=v=>{let s=String(v??'');if(/^[\s\u0000-\u001f]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';};
- const purpose=purposeSettings(records),rows=[['PDF 페이지','QR 목적','병원명','인쇄 병원명','병원 관리번호','제작 수량','QR 주소','QR 파일명']];
- records.forEach((r,i)=>rows.push([i+1,purpose.title,r.name,r.printName||r.name,r.id,r.quantity,r.qrUrl||r.surveyUrl,fileStem(i,r.name)]));
+ const purpose=purposeSettings(records),design=designSettings(records),rows=[['PDF 페이지','QR 목적','병원명','인쇄 병원명','병원 관리번호','제작 수량','QR 주소','QR 파일명','스티커 디자인','재단 규격(mm)']];
+ records.forEach((r,i)=>rows.push([i+1,purpose.title,r.name,r.printName||r.name,r.id,r.quantity,r.qrUrl||r.surveyUrl,fileStem(i,r.name),design.name,`${design.width}x${design.height}`]));
  return '\ufeff'+rows.map(row=>row.map(cell).join(',')).join('\r\n')+'\r\n';
 }
 export function qrRuns(modules){
