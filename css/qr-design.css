@@ -22,3 +22,6 @@ html[data-theme=dark] :is(.staff-work,.qr-enhanced) .timeline-event{background:#
 :is(.staff-work,.qr-enhanced) .schedule-week button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}:is(.staff-work,.qr-enhanced) .timeline-event.compact{padding:4px 8px;gap:2px}:is(.staff-work,.qr-enhanced) .timeline-event.compact strong{font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}:is(.staff-work,.qr-enhanced) .timeline-event.compact>span{font-size:11px;line-height:1.2}
 
 body[data-page] header a{color:var(--design-accent)}:is(.staff-work,.qr-enhanced) .topbar a{color:var(--design-ink)}:is(.staff-work,.qr-enhanced) .topbar{box-shadow:0 1px 0 var(--design-line)}
+
+/* Ranked preferences stay in a single ordered column on every screen. */
+#qr-preferences .actions{display:flex;flex-direction:column;align-items:stretch;gap:8px}#qr-preferences .actions button{justify-content:flex-start;text-align:left;white-space:normal;flex-wrap:wrap;min-height:44px}#qr-preferences ol{padding-left:24px}#qr-preferences li{padding:8px 0;line-height:1.6}
