@@ -27,7 +27,7 @@
   var d=draft(p),rows=rowsFor(p);host.replaceChildren();
   document.querySelector('#wkVocDescBox summary').textContent='VOC 증가 현황 · 보조문구';
   var help=document.querySelector('#wkVocDescBox .voc-desc-help');help.textContent='등록 증상은 기본 문구 자동 입력 · 미등록 증상은 작성 후 저장 · 증가 유형 최대 3개';
-  if(!rows.length)host.append(el('p','voc-desc-empty','전주 대비 증가한 A/S 유형이 없습니다.'));
+  if(!rows.length)host.append(el('p','voc-desc-empty','전주 대비 증가한 VOC 유형이 없습니다.'));
   rows.forEach(function(r,i){
    var box=el('section','wr-voc'),head=el('div','wr-head'),v=desc(r.k,d),registered=!!(phrases[key(r.k)]||root.EX_VOC_DESC[key(r.k)]),badge=el('span',registered?'wr-status':'wr-status missing',registered?'등록 문구 자동 입력':'미등록 증상');
    head.append(el('strong','',String(i+1)+'. '+r.k),el('span','wr-delta',r.prev+' → '+r.cur+'건 · ▲ +'+r.d));box.append(head,badge);
@@ -51,8 +51,8 @@
   return {rows:rows,skill:skill,nozzle:nz,items:[{key:'education',name:'교육 필요 병원',sub:'사용자 교육 현황',cur:skill.needCount,prev:ps?ps.needCount:null},{key:'nozzle',name:'노즐 재사용 병원',sub:'노즐 재사용 현황',cur:nz.joined.reuse+nz.nonJoined.reuse,prev:pn?pn.joined.reuse+pn.nonJoined.reuse:null}]};
  }
  function augment(s){
-  var d=draft(s),rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59')),cp=root.buildComparisonPeriod(),prev=root.exPrevRows(cp),as=function(rr){return (rr||[]).filter(function(r){return String(r.gubun||'').trim()==='A/S';});};
-  s.change={title:'VOC 증가 현황',basis:'전주 대비 · A/S 기준',hasPrev:!!prev,down:[],up:prev?root.exVocTypeCompare_(as(rows),as(prev)).filter(function(t){return t.d>0;}).sort(function(a,b){return b.d-a.d||b.cur-a.cur||root.skCmpKo_(a.k,b.k);}).slice(0,3).map(function(t){return Object.assign({},t,{desc:desc(t.k,d)});}):[]};
+  var d=draft(s),rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59')),cp=root.buildComparisonPeriod(),prev=root.exPrevRows(cp);
+  s.change={title:'VOC 증가 현황',basis:'전주 대비 · A/S·점검 통합',hasPrev:!!prev,down:[],up:prev?root.exVocTypeCompare_(rows,prev).filter(function(t){return t.d>0;}).sort(function(a,b){return b.d-a.d||b.cur-a.cur||root.skCmpKo_(a.k,b.k);}).slice(0,3).map(function(t){return Object.assign({},t,{desc:desc(t.k,d)});}):[]};
   s.notes={title:'특이사항',basis:'',edited:true,items:d.notes.filter(function(t){return t.trim();}).map(function(t){return root.esc(t);})};s.management=management(rows,prev);return s;
  }
  function layout(L){
