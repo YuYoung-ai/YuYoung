@@ -10,7 +10,7 @@ function fixture(options={}){
  const window={},cryptoFallback={subtle:crypto.subtle,getRandomValues:crypto.getRandomValues.bind(crypto)};
  class Reader{readAsDataURL(blob){this.readyState=1;blob.arrayBuffer().then(bytes=>{this.readyState=2;this.result='data:application/pdf;base64,'+Buffer.from(bytes).toString('base64');this.onload?.();});}abort(){this.readyState=2;}}
  vm.runInNewContext(code,{window,document:{getElementById:id=>nodes[id]},URL,AbortController,setTimeout:options.setTimeout||setTimeout,clearTimeout:options.clearTimeout||clearTimeout,crypto:cryptoFallback,FileReader:Reader,Uint8Array,TextEncoder,atob});
- const app=window.BazInspectionUpload.create({outbox,token:()=>typeof options.token==='function'?options.token():options.token||'synthetic-token',onSaved(){},onIdle:options.onIdle,onProgress:s=>stages.push(s),confirmAttachment:options.confirm||(async()=>({applicable:true})),prepareContext:async c=>({...c,requestId:'request_123'}),url:'https://script.google.com/macros/s/synthetic/exec',fetch:async(url,init)=>{const p=JSON.parse(init.body);calls.push(p);return options.fetch?options.fetch(p):{json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
+ const app=window.BazInspectionUpload.create({outbox,token:()=>typeof options.token==='function'?options.token():options.token||'synthetic-token',onSaved:options.onSaved||function(){},onRecovered:options.onRecovered,onIdle:options.onIdle,onProgress:s=>stages.push(s),confirmAttachment:options.confirm||(async()=>({applicable:true})),prepareContext:async c=>({...c,requestId:'request_123'}),url:'https://script.google.com/macros/s/synthetic/exec',fetch:async(url,init)=>{const p=JSON.parse(init.body);calls.push(p);return options.fetch?options.fetch(p):{json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:context.recordId,pdf:null}:{success:true,recordId:context.recordId,pdf}};}});
  return {app,nodes,stages,calls};
 }
 const until=async fn=>{for(let i=0;i<1000&&!fn();i++)await new Promise(r=>setTimeout(r,1));assert.ok(fn(),'asynchronous checkpoint reached');};
@@ -54,3 +54,14 @@ const changed=fixture({token:()=>owner,onIdle(){idleCalls++;},fetch:async()=>{aw
 const switched=changed.app.publish(blob,'account.pdf',context);await until(()=>releaseResponse);
 owner='another-owner';releaseResponse();await switched;
 assert.equal(idleCalls,0,'an old-account transfer never starts deferred task/photo synchronization with the new token');
+let recoveredSaved=0,recoveredMetadata;
+const metadataOnly=fixture({onSaved(value,c){recoveredSaved++;assert.equal(c.taskId,context.taskId);assert.equal(value.pdf.sha256,pdf.sha256);},onRecovered:j=>{recoveredMetadata=j;},fetch:async()=>({json:async()=>({success:true,recordId:context.recordId,pdf})})});
+await metadataOnly.app.recover(context);
+assert.deepEqual(metadataOnly.calls.map(c=>c.action),['inspection_pdf_resolve'],'recover the canonical saved PDF without uploading a file');
+assert.equal(recoveredSaved,1);assert.equal(recoveredMetadata.blob,undefined);assert.equal(metadataOnly.nodes.pdfOpenLink.href,pdf.url);assert.equal(metadataOnly.stages.at(-1).comment,'done');
+const wrongRecovery=fixture({fetch:async()=>({json:async()=>({success:true,recordId:'wrong-record',pdf})})});await wrongRecovery.app.recover(context);assert.equal(wrongRecovery.nodes.pdfUploadRetry.hidden,true);assert.equal(wrongRecovery.calls.length,1);
+let confirmationDeadline,confirmationSignal;
+const confirmation=fixture({setTimeout(fn,ms){if(ms===120000){confirmationDeadline=fn;return -1;}return setTimeout(fn,ms);},clearTimeout(id){if(id!==-1)clearTimeout(id);},confirm:async(s,c,o)=>{confirmationSignal=o.signal;return new Promise(()=>{});}});
+const verifying=confirmation.app.resume({success:true,pdf},context);await until(()=>confirmationSignal);confirmationDeadline();await verifying;
+assert.equal(confirmationSignal.aborted,true,'the parent deadline cancels the underlying confirmation instead of leaving a late repair running');assert.equal(confirmation.nodes.pdfUploadRetry.hidden,false);
+console.log('PASS: metadata-only saved PDF recovery, source guard and shared confirmation cancellation');

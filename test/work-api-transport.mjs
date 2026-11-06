@@ -13,3 +13,16 @@ await assert.rejects(root.BazWorkAPI.get('work_sync',{revision:'10'}),e=>e.unkno
 broken=false;invalid=true;await assert.rejects(root.BazWorkAPI.post('work_save',{}),e=>e.unknown===true);assert.equal(timers.size,0);
 assert.equal(root.BazWorkAPI.id(),'same-operation');
 console.log('work-api-transport: immediate Deno reads/writes, token and operation preservation, unknown write safety and timer cleanup passed.');
+// Reproduce the old 15s document deadline and abort-ignoring fetch/JSON paths.
+function stalledFixture(jsonStall=false){
+ const deadlines=new Map(),window={BazAuth:{token:()=> 'session'}};let seq=0,requests=0;
+ vm.runInNewContext(source,{window,AbortController,setTimeout(fn,ms){const id=++seq;deadlines.set(id,{fn,ms});return id;},clearTimeout:id=>deadlines.delete(id),fetch:async()=>{requests++;return jsonStall?{json:()=>new Promise(()=>{})}:new Promise(()=>{});}});
+ return {api:window.BazWorkAPI,deadlines,requests:()=>requests};
+}
+for(const [action,ms]of [['work_document_status',20000],['work_document_retry',35000],['work_handover_detail',35000]]){
+ const f=stalledFixture(),job=f.api.post(action,{recordId:'fixed'});const deadline=[...f.deadlines.values()][0];assert.equal(deadline.ms,ms);deadline.fn();await assert.rejects(job,e=>e.timeout===true&&e.unknown===true);assert.equal(f.deadlines.size,0);
+}
+const stalledJson=stalledFixture(true),jsonJob=stalledJson.api.get('work_document_status',{});await Promise.resolve();[...stalledJson.deadlines.values()][0].fn();await assert.rejects(jsonJob,e=>e.timeout===true);assert.equal(stalledJson.deadlines.size,0);
+const parent=new AbortController(),cancelled=stalledFixture(),cancelJob=cancelled.api.post('work_document_retry',{}, {signal:parent.signal});parent.abort();await assert.rejects(cancelJob,e=>e.aborted===true&&!e.timeout);assert.equal(cancelled.deadlines.size,0);
+const already=new AbortController();already.abort();const untouched=stalledFixture();await assert.rejects(untouched.api.get('work_document_status',{}, {signal:already.signal}),e=>e.aborted);assert.equal(untouched.requests(),0);
+console.log('PASS: document deadlines, bounded abort-ignoring fetch/JSON and parent cancellation');

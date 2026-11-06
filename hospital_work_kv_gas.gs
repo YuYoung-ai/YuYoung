@@ -217,9 +217,26 @@ function hwKvQueueDocument_(hit,pdf,p){
 function hwKvDeliverDocuments_(){
  var sh=hwKvSheet_(HW_KV_DOCUMENTS,['eventKey','json','state']),n=sh.getLastRow()-1,rows=n>0?sh.getRange(2,1,n,3).getValues():[],batch=[];
  rows.forEach(function(v,i){if(v[2]==='pending'&&batch.length<20){try{var d=JSON.parse(v[1]);hwKvSourceById_(d.recordId);batch.push({row:i+2,key:String(v[0]),json:String(v[1]),document:d});}catch(e){if(e.sourceMissing)hwLock_(function(){var now=sh.getRange(i+2,1,1,3).getValues()[0];if(String(now[0])===String(v[0])&&String(now[1])===String(v[1])&&now[2]==='pending')sh.getRange(i+2,3).setValue('source_deleted');});else Logger.log('문서 전달 재시도 '+String(v[0])+': '+String(e));}}});
- if(!batch.length)return;hwKvCall_('documents',{documents:batch.map(function(x){return x.document;})});
- hwLock_(function(){batch.forEach(function(x){var v=sh.getRange(x.row,1,1,3).getValues()[0];if(String(v[0])===x.key&&String(v[1])===x.json&&v[2]==='pending')sh.getRange(x.row,3).setValue('sent');});});
+ if(!batch.length)return {sent:0,pending:0};
+ var started=Date.now(),sent=[],failures=[];
+ try{hwKvCall_('documents',{documents:batch.map(function(x){return x.document;})});sent=batch;}
+ catch(batchError){
+  // One rejected document must not hold back the other hospitals. Replaying
+  // metadata after a lost ACK is safe: the bridge deduplicates record/version/hash.
+  if(batch.length===1)throw batchError;
+  for(var i=0;i<batch.length&&Date.now()-started<90000;i++){
+   var item=batch[i];
+   try{hwKvCall_('documents',{documents:[item.document]});sent.push(item);}
+   catch(itemError){failures.push(item.document.recordId+': '+String(itemError.message||itemError));}
+  }
+ }
+ // Only acknowledge accepted metadata. A regenerated/replaced row stays pending.
+ if(sent.length)hwLock_(function(){sent.forEach(function(x){var v=sh.getRange(x.row,1,1,3).getValues()[0];if(String(v[0])===x.key&&String(v[1])===x.json&&v[2]==='pending')sh.getRange(x.row,3).setValue('sent');});});
+ if(sent.length!==batch.length)throw new Error('문서 '+sent.length+'건 전달 완료 · '+(batch.length-sent.length)+'건 재확인 필요. '+failures.join(' / ').slice(0,400));
+ return {sent:sent.length,pending:0};
 }
+// Editor/trigger recovery only: existing saved-file metadata, no PDF upload.
+function retryInspectionPdfDocumentDelivery(){hwResetContext_();return hwKvDeliverDocuments_();}
 function hwReviewApply_(projection){
  if(typeof histReadAll_==='function'&&histReadAll_()[projection.source.hospitalName])throw new Error('기존 병원 이력 편집본의 명시적 전환이 필요합니다. 원본은 보존됩니다.');
  if(!projection.recordId||!Number.isSafeInteger(projection.version)||projection.version<1)throw new Error('검수 반영 버전이 잘못되었습니다.');

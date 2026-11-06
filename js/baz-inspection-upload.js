@@ -16,7 +16,7 @@
   function notice(s,text){message(s,text+(s.storageWarning?' · 이 기기에 재전송 파일을 보관하지 못했습니다. 화면을 닫기 전에 PDF를 따로 저장하세요.':''));}
   async function persist(s){
    if(!outbox)return;try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
-    await outbox.put({key:s.ownerKey+':'+s.uploadId,owner:s.ownerKey,blob:s.blob||null,filename:s.filename,context:{...s.context},uploadId:s.uploadId,sha256:s.sha256||'',baseRevision:s.baseRevision??null,saved:s.saved||null,recorded:!!s.recorded,preparationRetryable:!!s.preparationRetryable,stages:{...s.stages},updatedAt:Date.now()});s.storageWarning=false;
+    await outbox.put({key:s.ownerKey+':'+s.uploadId,owner:s.ownerKey,blob:s.blob||null,filename:s.filename,context:{...s.context},uploadId:s.uploadId,sha256:s.sha256||'',baseRevision:s.baseRevision??null,saved:s.saved||null,recorded:!!s.recorded,recovering:!!s.recovering,preparationRetryable:!!s.preparationRetryable,stages:{...s.stages},updatedAt:Date.now()});s.storageWarning=false;
    }catch{s.storageWarning=true;}
   }
   function sourceContext(context,resolved){
@@ -63,16 +63,28 @@
   });}
   function safeLink(saved){const u=new URL(saved.pdf.url);if(u.origin!=='https://drive.google.com'||!/^\/file\/d\/[A-Za-z0-9_-]+\/view$/.test(u.pathname)||u.username||u.password||u.hash)throw new Error('PDF 링크 응답이 올바르지 않습니다.');return u.href;}
   async function confirm(s){
-   let rejectLocal;const local=new Promise((_,reject)=>{rejectLocal=reject;});
-   const cancel=()=>{const e=new Error('댓글 연결 결과를 다시 확인해 주세요. PDF를 다시 전송할 필요는 없습니다.');e.pending=true;rejectLocal(e);};
-   const timer=setTimeout(cancel,45000);s.cancel=cancel;s.expires=Date.now()+45000;
+   let rejectLocal;const ctl=new AbortController(),local=new Promise((_,reject)=>{rejectLocal=reject;});
+   const cancel=()=>{ctl.abort();const e=new Error('댓글 연결 결과를 다시 확인해 주세요. PDF를 다시 전송할 필요는 없습니다.');e.pending=true;rejectLocal(e);};
+   // Read (20s), canonical Handover refresh (35s), repair (35s), read-back
+   // after an uncertain write (20s) share one bounded confirmation budget.
+   const timer=setTimeout(cancel,120000);s.cancel=cancel;s.expires=Date.now()+120000;
    if(current===s){retry.hidden=false;retry.textContent='댓글 연결 다시 확인';}
-   try{return await Promise.race([local,options.confirmAttachment(s.saved,s.context)]);}finally{clearTimeout(timer);s.cancel=null;s.expires=0;}
+   try{return await Promise.race([local,options.confirmAttachment(s.saved,s.context,{signal:ctl.signal})]);}finally{clearTimeout(timer);s.cancel=null;s.expires=0;}
   }
   async function execute(s){
    s.busy=true;if(current===s){retry.hidden=true;retry.disabled=true;newButton.disabled=true;}
    try{
     checkAccount(s.owner);if(!s.uploadId)s.uploadId=id();
+    if(s.recovering){
+     message(s,'Google Drive에 이미 저장된 PDF 정보를 확인하는 중…');
+     const resolved=await call('inspection_pdf_resolve',payload(s.context),s.owner,s);
+     let context=sourceContext(s.context,resolved);
+     if(!resolved.pdf){const e=new Error('이 Handover 기록에서 저장된 PDF를 찾지 못했습니다. 원본 기록과 Drive 링크를 확인하세요.');e.noRetry=true;throw e;}
+     if(options.prepareContext)context={...context,...await options.prepareContext(context)};
+     checkAccount(s.owner);const saved={success:true,recordId:resolved.recordId,pdf:resolved.pdf};safeLink(saved);
+     s.context=context;s.saved=saved;s.filename=resolved.pdf.filename||'AS/점검 내역서';s.recovering=false;
+     if(options.onRecovered)options.onRecovered({saved,filename:s.filename,context});progress(s,'pdf','done');await persist(s);
+    }
     if(!s.saved){
      if(!s.blob)throw new Error('재전송할 PDF가 없습니다. 저장한 파일을 확인하거나 다시 생성하세요.');
      if(s.blob.size>MAX_BYTES){const e=new Error('Drive 자동 저장은 최대 7MB입니다. 사진을 줄이고 다시 생성하세요.');e.noRetry=true;throw e;}
@@ -123,6 +135,7 @@
   return {
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
    isBusy(){return !!current?.busy;},
+   recover(context){if(current?.busy)return current.running;link.hidden=true;current={recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}};return run(current);},
    publish(blob,filename,context){if(current?.busy)return current.running;const p=preparations.get(context);link.hidden=true;current={blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}};progress(current,'drive','waiting');return run(current);},
    resume(saved,context){if(current?.busy)return current.running;link.hidden=true;current={saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}};return run(current);},
    async restore(context){
