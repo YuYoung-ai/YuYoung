@@ -1,7 +1,7 @@
 // Customer scope only. Private API responses and secret links are never cached.
 const NOTICE_CACHE='curejet-as-notices-v2';
 const NOTICE_TEXT={scheduled:'방문 예정으로 변경되었습니다.',completed:'AS 처리가 완료되었습니다.',rescheduled:'방문 일정이 변경되었습니다.',cancelled:'방문이 취소되었습니다.'};
-const APP_RELEASE='310';
+const APP_RELEASE='311';
 let noticeQueue=Promise.resolve();
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil((async()=>{

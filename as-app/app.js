@@ -38,7 +38,7 @@
   function lock(on){busy=on;window.BazDesign?.busy($('submit-request'),on);document.querySelectorAll('#request-form input,#request-form select,#request-form textarea,#request-form button').forEach(function(el){el.disabled=on||!!pending;});if(!on&&!pending)renderTimes();$('retry-create').disabled=on;$('retry-create').hidden=!pending;$('pending-note').hidden=!pending;$('pending-note').textContent='결과 확인이 필요한 접수가 있습니다. 같은 접수로 다시 확인하여 중복 접수를 방지하세요.';}
   async function send(){if(!pending||busy)return;lock(true);message('예약과 접수를 확인하고 있습니다…');try{var result=await call('create',pending);
    if(!result.success){if(result.activeRequest&&await resumeHospital())return;if(result.retrySameOperation)throw Error(result.error);pending=null;save(pendingKey,null);message(result.error,true);await times();return;}
-   remember(result.requestId,draft.secret,info?.hospital?.name,hospitalId,result.requestNumber);save(draftKey,null);save(pendingKey,null);location.assign(link(result.requestId,draft.secret));
+   remember(result.requestId,draft.secret,info?.hospital?.name,hospitalId,result.requestNumber);save(draftKey,null);save(pendingKey,null);location.assign(link(result.requestId,draft.secret)+'&notify=1');
   }catch(e){message('결과를 확인하지 못했습니다. 입력과 같은 접수 식별자를 보관했습니다. 같은 접수로 다시 확인하세요. '+e.message,true);}finally{lock(false);}}
   $('request-form').onsubmit=async function(event){event.preventDefault();if(busy||pending)return;persist();var startAt=preferences[0];if(!startAt){message('방문 시간을 선택하세요.',true);return;}
    pending={hospitalId:hospitalId,qrCode:qrCode,secret:draft.secret,operationId:draft.operationId,contact:{name:$('contact-name').value,phone:$('phone').value,email:$('email').value},requestType:$('request-type').value,equipment:$('equipment').value,symptom:$('symptom').value,startAt:startAt,preferredStartAts:preferences.slice(),photoIds:photoIds};
@@ -51,7 +51,7 @@
   times().then(function(){lock(false);});
  }
  function startStatus(){
-  var hash=new URLSearchParams(location.hash.slice(1)),requestId=hash.get('r'),secret=hash.get('k'),privateData={requestId:requestId,secret:secret};
+  var hash=new URLSearchParams(location.hash.slice(1)),requestId=hash.get('r'),secret=hash.get('k'),privateData={requestId:requestId,secret:secret},intakePrompt=hash.get('notify')==='1';
   if(!requestId||!secret){message('병원 QR로 다시 접속해 주세요.',true);return;}
   var pushState=null,pushRead=0;var lastStatusRender='',statusTask=null,statusEpoch=0,statusFailures=0,lastPoll=0;var pendingKey='curejet-as-status-pending:'+requestId,pending=read(pendingKey),surveyComplete=false,surveyIntent='open';
   var retry=document.createElement('button');retry.id='retry-status';retry.textContent='같은 기록으로 다시 확인';retry.hidden=!pending;$('message').after(retry);retry.onclick=function(){if(pending)mutate(pending.action,{});};
@@ -62,7 +62,7 @@
 
    $('survey-section').hidden=r.status!=='완료';$('public-result').textContent=r.result||'';
    $('change-state').hidden=!r.changeRequest;if(r.changeRequest)$('change-state').textContent=(r.changeRequest.state==='pending'?'담당자 확인 대기':'요청 조정 완료')+' · '+(r.changeRequest.kind==='cancel'?'취소 요청':'일정 변경 요청');
-   if(data.push.mode!=='disabled'&&pushState?.supported&&pushState.permission!=='denied'&&!read('curejet-as-notify:'+requestId)&&!$('notification-dialog').open)openNotification();
+   if(data.push.mode!=='disabled'&&intakePrompt){openNotification(true);intakePrompt=false;hash.delete('notify');history.replaceState(null,'',location.pathname+location.search+'#'+hash.toString());}else if(data.push.mode!=='disabled'&&pushState?.supported&&pushState.permission!=='denied'&&!read('curejet-as-notify:'+requestId)&&!$('notification-dialog').open)openNotification();
   }catch(e){statusFailures++;if(epoch===statusEpoch)message(e.message+' 새로고침으로 다시 확인하세요.',true);}finally{statusTask=null;}})();return statusTask;}
   document.addEventListener('visibilitychange',function(){if(!document.hidden&&!busy&&!pending)load();});
   $('refresh-status').onclick=load;
@@ -71,12 +71,13 @@
   async function refreshPush(push){
    if(!push)return;var generation=++pushRead,state=runtime.local?{supported:true,permission:window.Notification?.permission||'default',connected:!!push.connected,code:push.connected?'connected':'default',help:''}:await QrCustomerPush.inspect(push);if(generation!==pushRead)return;pushState=state;
    $('push-state').textContent=({connected:'켜짐',denied:'Chrome 알림 차단',default:'허용 전',reconnect:'다시 연결 필요',check_failed:'점검 필요',unsupported:'지원 확인 필요'})[state.code]||'꺼짐';$('push-state').dataset.state=state.code;
-   $('connect-push').hidden=state.connected||push.mode==='disabled';$('connect-push').textContent=state.permission==='denied'?'차단 해제 안내':state.code==='reconnect'?'다시 연결':'알림 받기';$('disconnect-push').hidden=!push.connected;$('check-push').hidden=push.mode==='disabled';$('push-state').closest('.notification-inline').hidden=push.mode==='disabled';
-   var help=$('push-help');help.hidden=push.mode==='disabled'||!state.help||state.code==='default';help.textContent=state.help||'';
+   $('connect-push').hidden=state.connected||push.mode==='disabled'||state.permission==='denied';$('connect-push').textContent=state.code==='reconnect'?'다시 연결':'알림 받기';$('disconnect-push').hidden=!push.connected;$('check-push').hidden=push.mode==='disabled';$('push-options').hidden=push.mode==='disabled';$('push-unblock').hidden=state.permission!=='denied';$('push-state').closest('.notification-inline').hidden=push.mode==='disabled';
   }
-  function openNotification(){var state=pushState||{permission:window.Notification?.permission||'default',supported:runtime.local||QrCustomerPush.supported()},blocked=state.permission==='denied';$('notification-title').textContent=blocked?'Chrome 알림이 차단되어 있습니다':'접수 알림 연결 확인';$('notification-description').textContent='방문 예정·방문 일정 변경·처리 완료·취소 때 알려드립니다.';$('notification-details').textContent=runtime.local?'가상 알림 연결 시험입니다.':QrCustomerPush.guidance(state.permission);$('notification-error').hidden=true;$('notification-allow').hidden=blocked||!state.supported;$('notification-allow').textContent=state.permission==='granted'?'알림 연결':'알림 허용';$('notification-test').hidden=runtime.local||state.permission!=='granted';$('notification-later').textContent=blocked?'닫기':'나중에';if(!$('notification-dialog').open)$('notification-dialog').showModal();}
+  function openNotification(fromIntake){fromIntake=fromIntake===true;var state=pushState||{permission:window.Notification?.permission||'default',supported:runtime.local||QrCustomerPush.supported()},blocked=state.permission==='denied';$('notification-title').textContent=fromIntake?'접수가 완료되었습니다':blocked?'Chrome 알림이 차단되어 있습니다':'접수 알림 연결 확인';$('notification-description').textContent=fromIntake?'방문 일정과 처리 결과를 받으려면 알림을 허용해 주세요.':'방문 예정·방문 일정 변경·처리 완료·취소 때 알려드립니다.';$('notification-details').textContent=runtime.local?'가상 알림 연결 시험입니다.':QrCustomerPush.guidance(state.permission);$('notification-error').hidden=true;$('notification-allow').hidden=blocked||!state.supported;$('notification-allow').textContent=state.permission==='granted'?'알림 연결':'알림 허용';$('notification-test').hidden=runtime.local||state.permission!=='granted';$('notification-later').textContent=blocked?'닫기':'나중에';if(!$('notification-dialog').open)$('notification-dialog').showModal();}
   $('connect-push').onclick=openNotification;
-  $('check-push').onclick=async function(){await refreshPush(latest?.push);openNotification();};
+  $('check-push').onclick=async function(){$('push-options').open=false;await refreshPush(latest?.push);openNotification();};
+  $('push-unblock').onclick=function(){$('push-options').open=false;openNotification();};
+  document.addEventListener('click',function(e){if(!$('push-options').contains(e.target))$('push-options').open=false;});$('push-options').addEventListener('keydown',function(e){if(e.key==='Escape'){this.open=false;this.querySelector('summary').focus();}});
   $('notification-later').onclick=function(){save('curejet-as-notify:'+requestId,'later');$('notification-dialog').close();};
   $('notification-dialog').addEventListener('cancel',function(){save('curejet-as-notify:'+requestId,'later');});
   $('notification-allow').onclick=async function(){this.disabled=true;try{
