@@ -504,16 +504,16 @@
 
     <!-- 현장 사진 -->
     <div class="card" id="photoCard" data-step="3">
-      <div class="card-header"><span class="badge-icon">📷</span><h2>현장 사진</h2><span class="photo-count" id="photoCount">0/5</span></div>
+      <div class="card-header"><span class="badge-icon">📷</span><h2>현장 사진</h2><span class="photo-count" id="photoCount">0/6</span></div>
       <div class="card-body">
-        <p class="pdf-format-hint" style="margin:0 0 10px">첫째 줄: 장비 S/N · 전체샷<br>둘째 줄: 증상 전 · 증상 후<br>셋째 줄: 증류수 · 항목별 1장, 총 5장</p>
+        <p class="pdf-format-hint" style="margin:0 0 10px">첫째 줄: 장비 S/N · 전체샷<br>둘째 줄: 조치 전 증상 · 조치 후 상태<br>셋째 줄: HP 회수품 S/N · HP 교체품 S/N<br>항목별 1장, 최대 6장 · 미첨부 항목은 PDF에서 제외됩니다.</p>
         <div class="photo-btns">
           <button type="button" id="photoCameraBtn">📷 카메라 촬영</button>
           <button type="button" id="photoGalleryBtn">🖼 갤러리 선택</button>
         </div>
         <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none;">
         <input type="file" id="photoGalleryInput" accept="image/*" multiple style="display:none;">
-        <div id="photoList"><div class="photo-empty">아직 추가된 사진이 없습니다 (최대 5장)</div></div>
+        <div id="photoList"><div class="photo-empty">아직 추가된 사진이 없습니다 (최대 6장)</div></div>
       </div>
     </div>
 
@@ -641,7 +641,7 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=302"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=315"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
@@ -676,7 +676,7 @@ const AUTOSAVE_DELAY = 2000;               // 자동저장 debounce (ms)
 const AUTOSAVE_TOAST_GAP = 30000;          // "자동저장 완료" 토스트 최소 간격 (ms)
 const AC_SEARCH_DELAY = 120;               // 자동완성 검색 debounce (ms)
 const AC_MAX_RESULTS = 20;                 // 자동완성 최대 표시 수
-const MAX_PHOTOS = 5;                      // 현장 사진 최대 장수
+const MAX_PHOTOS = 6;                      // 현장 사진 최대 장수 (이전 증류수 사진 제외)
 const SHEET_WIDTH = 794;                   // PDF 렌더 시트 폭 (px, A4 @96dpi)
 const PDF_SCALE = 2;                       // html2canvas 배율
 const A4_W = 210, A4_H = 297;              // A4 (mm)
@@ -1816,8 +1816,8 @@ async function addPhotos(fileList,selectedSlot=null){
   const files=[...fileList].filter(f=>f&&f.type&&f.type.startsWith('image/'));
   if(!files.length)return;
   const replacing=selectedSlot!==null&&state.photos.some(p=>p.slot===selectedSlot);
-  const room=replacing?1:MAX_PHOTOS-state.photos.length;
-  if(room<=0){showToast('사진은 최대 5장입니다. 기존 사진의 항목을 지정하거나 교체하세요.');return;}
+  const room=replacing?1:MAX_PHOTOS-state.photos.filter(p=>p.slot!==3).length;
+  if(room<=0){showToast('사진은 최대 6장입니다. 기존 사진의 항목을 지정하거나 교체하세요.');return;}
   const take=files.slice(0,selectedSlot===null?room:1),done=window.BazPerf.start('photos');
   _photoBusy=true;showLoading('사진 처리 중…');
   let count=0,failures=0,worker=0;
@@ -1837,19 +1837,19 @@ async function addPhotos(fileList,selectedSlot=null){
 }
 function renderPhotos(){
   state.photos=window.BazInspectionPdf.normalizePhotos(state.photos);
-  els.photoCount.textContent=state.photos.length+'/'+MAX_PHOTOS;
+  els.photoCount.textContent=state.photos.filter(p=>p.slot!==3).length+'/'+MAX_PHOTOS;
   function row(p,i,slot){
     const name=slot===null?'기존 사진 · 항목을 지정해 주세요':PHOTO_LABELS[slot];
     return '<div class="photo-item">'+(p?'<img src="'+p.data+'" alt="'+esc(name)+'" loading="lazy">':'')+
       '<div class="photo-fields"><label>'+esc(name)+'</label>'+
-      (p?'<select class="photo-slot" data-i="'+i+'" aria-label="사진 항목"><option value="">항목 선택</option>'+
+      (p?'<select class="photo-slot" data-i="'+i+'" aria-label="사진 항목"><option value="">항목 선택</option>'+(p.slot===3?'<option value="3" selected>이전 첨부 (PDF 제외)</option>':'')+
         PHOTO_ORDER.map(n=>'<option value="'+n+'" '+(p.slot===n?'selected':'')+'>'+esc(PHOTO_LABELS[n])+'</option>').join('')+'</select>'+
         '<input type="text" class="photo-memo" data-i="'+i+'" placeholder="사진 메모 (선택)" maxlength="40" value="'+esc(p.memo)+'">':'')+
-      (slot!==null?'<div class="photo-btns"><button type="button" data-slot="'+slot+'" data-camera="1">📷 '+(p?'다시 촬영':'촬영')+'</button><button type="button" data-slot="'+slot+'" data-camera="0">갤러리</button></div>':'')+
+      (PHOTO_ORDER.includes(slot)?'<div class="photo-btns"><button type="button" data-slot="'+slot+'" data-camera="1">📷 '+(p?'다시 촬영':'촬영')+'</button><button type="button" data-slot="'+slot+'" data-camera="0">갤러리</button></div>':'')+
       '</div>'+(p?'<div class="photo-ctrl"><button type="button" class="photo-del" data-i="'+i+'" title="삭제">✕</button></div>':'')+'</div>';
   }
   els.photoList.innerHTML=PHOTO_ORDER.map(slot=>{const i=state.photos.findIndex(p=>p.slot===slot);return row(state.photos[i],i,slot);}).join('')+
-    state.photos.map((p,i)=>p.slot===null?row(p,i,null):'').join('');
+    state.photos.map((p,i)=>p.slot===null||p.slot===3?row(p,i,p.slot):'').join('');
 }
 els.photoList.addEventListener('click',e=>{
   const btn=e.target.closest('button');if(!btn)return;
@@ -1863,6 +1863,7 @@ els.photoList.addEventListener('change',e=>{
   if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){renderPhotos();return;}
   const i=Number(select.dataset.i),photo=state.photos[i];if(!photo)return;
   const next=select.value===''?null:Number(select.value),other=state.photos.find(p=>p!==photo&&p.slot===next&&next!==null);
+  if(photo.slot===3&&next!==3&&!other&&state.photos.filter(p=>p.slot!==3).length>=MAX_PHOTOS){renderPhotos();showToast('사진은 최대 6장입니다. 기존 사진을 교체하거나 삭제하세요.');return;}
   if(other)other.slot=photo.slot;
   photo.slot=next;renderPhotos();saveDraft();
 });

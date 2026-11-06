@@ -2,10 +2,10 @@
  'use strict';
  let loading=null,cachedBody=null;const labels=new Map(),scripts=new Map();
  const MAX_BYTES=7*1024*1024,W=210,H=297,M=8,CW=W-2*M,CH=H-2*M;
- const PHOTO_LABELS=['장비 S/N','증상 전','증상 후','증류수','전체샷'];
- // Stored slot IDs stay fixed; only their display positions change.
- const PHOTO_ORDER=[0,4,1,2,3];
- function normalizePhotos(photos){const used=new Set();return photos.map(p=>{const slot=Number.isInteger(p.slot)&&p.slot>=0&&p.slot<5&&!used.has(p.slot)?p.slot:null;if(slot!==null)used.add(slot);return {...p,slot};});}
+ const PHOTO_LABELS=['장비 S/N','조치 전 증상','조치 후 상태','이전 증류수 사진 · PDF 제외','전체샷','HP 회수품 S/N','HP 교체품 S/N'];
+ // Keep persisted IDs stable. Slot 3 is retired, never relabel it as an HP photo.
+ const PHOTO_ORDER=[0,4,1,2,5,6];
+ function normalizePhotos(photos){const used=new Set();return photos.map(p=>{if(p.slot===3)return {...p};const slot=PHOTO_ORDER.includes(p.slot)&&!used.has(p.slot)?p.slot:null;if(slot!==null)used.add(slot);return {...p,slot};});}
  function bounded(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
  function load(src,ready){
   if(ready())return Promise.resolve();if(scripts.has(src))return scripts.get(src);
@@ -32,13 +32,14 @@
  function waitImages(images){return Promise.all(Array.from(images,img=>waitImage(img)));}
  function fit(width,height,maxWidth,maxHeight,mode){const ratio=(mode==='cover'?Math.max:Math.min)(maxWidth/width,maxHeight/height);return {width:width*ratio,height:height*ratio};}
  function photoGroups(photos){
+  photos=photos.filter(p=>p.slot!==3);
   if(!photos.length)return [];
-  if(photos.length>5)throw new Error('현장 사진은 최대 5장입니다. 사진을 확인해 주세요.');
-  const slots=Array(5).fill(null),legacy=[];
+  if(photos.length>PHOTO_ORDER.length)throw new Error('현장 사진은 최대 6장입니다. 사진을 확인해 주세요.');
+  const slots={},legacy=[];
   for(const p of normalizePhotos(photos)){if(p.slot===null)legacy.push(p);else slots[p.slot]=p;}
   // Older drafts have no category. Keep their captions generic until assigned.
-  for(const p of legacy)slots[slots.indexOf(null)]={...p,legacy:true};
-  return [slots];
+  for(const p of legacy)slots[PHOTO_ORDER.find(slot=>!slots[slot])]={...p,legacy:true};
+  return [PHOTO_ORDER.filter(slot=>slots[slot]).map(slot=>({...slots[slot],slot}))];
  }
  function bodyPages(canvas){
   const step=Math.floor(CH/CW*canvas.width),count=Math.ceil(canvas.height/step);if(count>20)throw new Error('본문이 20페이지를 초과했습니다. 내용을 확인해 주세요.');
@@ -80,7 +81,7 @@
    if(logo)pdf.addImage(logo.data,'PNG',M,M,10.6*logo.width/logo.height,10.6,undefined,'FAST');else label(pdf,'BAZ BIOMEDIC',M,M,40,18);
    label(pdf,'현장 사진',70,M,70,18,'center');
    const firstY=26,gap=8,width=(CW-gap)/2,slot=(CH-(firstY-M)-5-gap*2)/3;
-   PHOTO_ORDER.forEach((category,i)=>{const p=group[category],title=p?.legacy?'기존 사진 '+(++offset):PHOTO_LABELS[category],x=M+(i%2)*(width+gap),y=firstY+Math.floor(i/2)*(slot+gap),caption=label(pdf,title+(p?.memo?' — '+p.memo:'')+(!p?' (미첨부)':''),x,y,width,12),top=y+caption+2,height=slot-caption-2;
+   group.forEach((p,i)=>{const title=p.legacy?'기존 사진 '+(++offset):PHOTO_LABELS[p.slot],x=M+(i%2)*(width+gap),y=firstY+Math.floor(i/2)*(slot+gap),caption=label(pdf,title+(p.memo?' — '+p.memo:''),x,y,width,12),top=y+caption+2,height=slot-caption-2;
     if(p){
      const sized=fit(p.width,p.height,width,height,'cover');
      // Fill the card without stretching or allocating another raster canvas.
@@ -95,6 +96,7 @@
  }
  function make(body,photos,opts,logo){const pdf=new root.jspdf.jsPDF({orientation:'p',unit:'mm',format:'a4',compress:true});body.forEach((p,i)=>{if(i)pdf.addPage();pdf.addImage(p.data,'JPEG',M,M,CW,p.height);});addPhotos(pdf,photos,logo);opts.footers(pdf,opts.docNo,opts.genAt);return pdf;}
  async function assemble(canvas,photoList,opts){
+  photoList=photoList.filter(p=>p.slot!==3);
   const body=Array.isArray(canvas)?canvas:bodyPages(canvas),photos=[];let logo=null;
   if(opts.logo){const img=await image(opts.logo);logo={data:opts.logo,width:img.naturalWidth,height:img.naturalHeight};}
   for(let i=0;i<photoList.length;i++){
