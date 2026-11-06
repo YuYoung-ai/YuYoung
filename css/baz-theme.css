@@ -10,7 +10,7 @@ html [data-baz-theme-toggle] svg{display:block;flex:0 0 19px;min-width:19px;widt
  html[data-theme=dark]:not([data-baz-theme-native]){background:#14212d;color:#edf4fa;--bg:#14212d;--gray-bg:#14212d;--wash:#14212d;--paper:#1d2e3d;--surface:#1d2e3d;--surface-2:#233747;--text:#edf4fa;--ink:#edf4fa;--muted:#b2c4d3;--text-muted:#b2c4d3;--sub:#b2c4d3;--line:#385063;--gray-line:#385063;--gray-cell:#233747;--li-line:#385063;--soft:#233f56;--sky:#233f56;--q-bg:#233f56;--teal-soft:#233f56;--track:#233747;--seg-on:#385063}
  html[data-theme=dark]:not([data-baz-theme-native]) body{background:#14212d;color:#edf4fa}
  html[data-theme=dark] [data-baz-theme-toggle]{background:#1d2e3d;border-color:#4a6478;color:#b8def6}
- html[data-theme=dark] :is(header,.bulk-brand) img[src$="logo.png"],html[data-theme=dark] #hubLogo>svg{background:#fff;box-shadow:0 0 0 3px #fff}
+ html[data-theme=dark] :is(header,.bulk-brand) img[src$="logo.png"]{background:transparent;box-shadow:none}
  /* Paper, signatures, photos and QR pixels retain their original output colors. */
  html[data-theme=dark] :is(#pdfSheet,.pdf-sheet,.pdf-page,.lb-sheet,.qr-review-pages,.sticker-preview,.label-preview,.print-preview,.ad-slide,.ad-page,.slide-canvas,[data-baz-paper]){color-scheme:light;background:#fff;color:#1a1a2e;--text:#1a1a2e;--ink:#243447;--muted:#65788b;--text-muted:#6b7a99;--line:#dde3ee;--gray-line:#dde3ee;--gray-bg:#f5f7fa;--paper:#fff;--surface:#fff;--bg:#fff;--accent:#23638f;--baz-text:#243447;--baz-paper:#fff;--baz-line:#dde6ee}
 }
