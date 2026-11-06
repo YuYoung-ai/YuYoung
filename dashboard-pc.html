@@ -1534,7 +1534,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
 }
 </style>
 <script src="auth.js?v=251"></script>
-<link rel="stylesheet" href="css/baz-weekly-report.css?v=1">
+<link rel="stylesheet" href="css/baz-weekly-report.css?v=312">
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
 </head>
@@ -4671,11 +4671,10 @@ function buildExecutivePptDeck(snap){
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
     if(currentBandX!=null){
-      text({x:currentBandX+0.02, y:G.plotTop+0.04, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
+      text({x:gridR-0.60, y:G.avgY, w:0.60, h:G.valueH,
             t:currentPeriodLabel, size:6.0, bold:true, color:C.green, align:'center', trendCurrentPeriodLabel:true});
     }
-    var deltaY=G.plotTop+0.04, deltaX=currentBandX!=null
-      ? Math.max(G.plotL,currentBandX-G.deltaW-0.05) : gridR-G.deltaW;
+    var deltaY=G.avgY, deltaX=currentBandX!=null ? gridR-0.68-G.deltaW : gridR-G.deltaW;
     var chartDeltaText=d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
     var chartDeltaSize=exFitSize_(chartDeltaText,G.deltaW,[7.2,6.8,6.4,6]);
     text({x:deltaX, y:deltaY, w:G.deltaW, h:G.valueH,
@@ -4858,7 +4857,7 @@ function buildExecutivePptDeck(snap){
             t:p.label||'', size:n>10?4.8:5.8, bold:!!p.sel, color:p.sel?C.navy:C.mut,
             align:'center', actionPointLabel:true, actionIdx:i});
     });
-    text({x:currentBandX+0.02, y:G.plotTop+0.03, w:Math.max(0.25,currentBandW-0.04), h:G.valueH,
+    text({x:G.plotR-0.60, y:G.subY, w:0.60, h:G.valueH,
           t:currentPeriodLabel, size:5.8, bold:true, color:C.green, align:'center', actionCurrentPeriodLabel:true});
     /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
     text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
@@ -4980,8 +4979,9 @@ function pvPt(v){ return v*PVK/72; }
 function pvHex(c){ return '#'+c; }
 function exPptRenderHtml_(items){
   var s=document.createElement('div');
+  s.setAttribute('data-baz-paper','');
   s.style.cssText='position:relative;width:'+pvIn(L.page.w)+'px;height:'+pvIn(L.page.h)+'px;'
-    +'background:#fff;box-shadow:0 2px 8px rgba(20,30,60,.15);transform-origin:0 0;overflow:hidden;'
+    +'background:#fff;color-scheme:light;box-shadow:0 2px 8px rgba(20,30,60,.15);transform-origin:0 0;overflow:hidden;'
     +'font-family:"맑은 고딕","Malgun Gothic",sans-serif';
   function el(x,y,w,h,css,html){
     var e=document.createElement('div');
@@ -5727,6 +5727,11 @@ function buildComparisonPeriod(){
     var p0=new Date(a.getFullYear(),a.getMonth()-1,1);
     return {from:ymd(p0), to:ymd(new Date(p0.getFullYear(),p0.getMonth()+1,0)), label:'전월', long:'직전 달'};
   }
+  /* 진행 중인 월간 PPT는 전월 같은 날짜까지 비교한다. 화면의 임의 기간 조회는 유지한다. */
+  if(F.reportType==='month' && a.getDate()===1 && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth()){
+    var pm=new Date(a.getFullYear(),a.getMonth()-1,1), pmLast=new Date(a.getFullYear(),a.getMonth(),0).getDate();
+    return {from:ymd(pm),to:ymd(new Date(pm.getFullYear(),pm.getMonth(),Math.min(b.getDate(),pmLast))),label:'전월 동기간',long:'직전 달 동일 기간'};
+  }
   /* 월~토 = 주 단위 → 같은 주 수만큼 이전 */
   if(a.getDay()===1 && b.getDay()===(1+WK_LAST) && (days-WK_LEN)%7===0){
     var w=(days-WK_LEN)/7+1, sh=-7*w;
@@ -6375,15 +6380,15 @@ function exTrendLineSpec_(series, focus, opt){
 function buildExecutiveReportSnapshot(opt){
   opt=opt||{};
   var type=(opt.type==='month')?'month':'week';
-  var sFrom=F.from, sTo=F.to, sCmp=EX_CMP, sCache=EX_CACHE;
+  var sFrom=F.from, sTo=F.to, sCmp=EX_CMP, sCache=EX_CACHE, sReportType=F.reportType;
   try{
     /* 보고서는 항상 이전 동일 기간(주간=전주 · 월간=전월) 대비를 싣는다 — 화면 토글과 무관 */
-    F.from=opt.from; F.to=opt.to; EX_CMP=true; EX_CACHE=null;
+    F.from=opt.from; F.to=opt.to; F.reportType=type; EX_CMP=true; EX_CACHE=null;
     /* opt.notes 가 undefined 면 자동 특이사항(buildExecutiveNotes)을 그대로 쓴다.
        배열이면 그 배열만 싣는다(빈 배열 = 사용자가 전부 지운 상태). */
     return exReportSnapshot_(type, opt.from, opt.to, opt.vocDescriptions||{}, opt.notes,
                              String(opt.vocFocus||''));
-  } finally { F.from=sFrom; F.to=sTo; EX_CMP=sCmp; EX_CACHE=sCache; }
+  } finally { F.from=sFrom; F.to=sTo; EX_CMP=sCmp; EX_CACHE=sCache;if(sReportType===undefined)delete F.reportType;else F.reportType=sReportType; }
 }
 function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFocus){
   var a=new Date(from+'T00:00:00'), b=new Date(to+'T00:00:00');
@@ -10562,6 +10567,6 @@ loadData(false);
 </script>
 <script src="js/vendor/jszip-3.10.1.min.js"></script>
 <script src="js/baz-report-files.js?v=1"></script>
-<script src="js/baz-weekly-report.js?v=4"></script>
+<script src="js/baz-weekly-report.js?v=312"></script>
 </body>
 </html>

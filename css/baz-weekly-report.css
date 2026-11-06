@@ -5,3 +5,13 @@
 .wr-button{font:inherit;font-size:12px;color:var(--navy);background:var(--surface);border:1px solid var(--gray-line);border-radius:6px;padding:6px 10px;cursor:pointer;margin:3px 5px 3px 0}.wr-button:disabled{opacity:.5;cursor:wait}.wr-hint{display:block;color:var(--text-muted);font-size:11px;margin:5px 0}
 .wr-file{display:flex;flex-wrap:wrap;gap:7px;align-items:center;border-top:1px solid var(--gray-line);margin-top:10px;padding-top:9px;font-size:11px}.wr-file input{max-width:230px}.wr-filename{overflow-wrap:anywhere;color:var(--text-muted)}
 #wkModal .report-box{max-width:920px}#wkNoteRows{display:block}.wr-management{background:var(--surface-2)}
+
+/* Editor chrome follows screen theme; the slide paper and PPT colors stay fixed. */
+body.dark :is(#wkModal,#mnModal,#wkPvModal,#mnPvModal) .mbox{--navy:#b9cef6;--navy-light:#c5d9f5;--teal:#80c6e9;--teal-soft:#233f56;--gray-bg:#14212d;--gray-line:#385063;--text:#edf4fa;--text-muted:#b2c4d3;--red:#ffaaa0;--green:#a8e1c1;--amber:#efda91;--surface:#1d2e3d;--surface-2:#192b38;--track:#233747;color-scheme:dark;background:var(--surface);color:var(--text)}
+body.dark :is(#wkModal,#mnModal) :is(select,input,textarea){background:var(--surface-2);color:var(--text);border-color:var(--gray-line)}
+body.dark :is(#wkModal,#mnModal) .wr-status{background:#204333;color:#a8e1c1}
+body.dark :is(#wkModal,#mnModal) :is(.wr-status.missing,input.missing){background:#443c21;color:#efda91}
+body.dark :is(#wkModal,#mnModal,#wkPvModal,#mnPvModal) .mbtn{background:var(--track)!important;color:var(--text)!important}
+body.dark :is(#wkModal,#mnModal,#wkPvModal,#mnPvModal) .mbtn.go{background:#23638f!important;color:#fff!important}
+body.dark :is(#wkPvLabelTools,#mnPvLabelTools){background:var(--surface-2)!important;border-color:var(--gray-line)!important;color:var(--text)!important}
+body.dark :is(#wkPvSlides,#mnPvSlides){background:var(--surface-2)!important}
