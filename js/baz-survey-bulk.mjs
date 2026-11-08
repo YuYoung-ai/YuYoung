@@ -1,7 +1,7 @@
-import {createPrintStudio,confirmPrintChoice} from './baz-qr-print-studio.mjs?v=319';
+import {createPrintStudio,confirmPrintChoice} from './baz-qr-print-studio.mjs?v=320';
 import {el} from './baz-survey-api.mjs?v=292';
-import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital,issuedHospital,DESIGNS,designSettings} from './baz-survey-bulk-core.mjs?v=319';
-import {printFont,stickerCanvas,stickerPdf,qrArchive,stickerArchive,prepareSticker,saveBlob,printStickers} from './baz-survey-bulk-export.mjs?v=319';
+import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital,issuedHospital,DESIGNS,designSettings} from './baz-survey-bulk-core.mjs?v=320';
+import {printFont,stickerCanvas,stickerPdf,qrArchive,stickerArchive,prepareSticker,saveBlob,printStickers} from './baz-survey-bulk-export.mjs?v=320';
 
 export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='survey',issue,mode='all',onIssued=()=>{},onManage=()=>{},onOperation}){
  let studio=null;

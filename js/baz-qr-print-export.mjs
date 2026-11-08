@@ -1,7 +1,11 @@
-import {printPlan,productionCsv} from './baz-qr-print-layout.mjs?v=319';
-import {prepareSticker,productionLayers,modulesFor,saveBlob} from './baz-survey-bulk-export.mjs?v=319';
-import {qrRuns,fileStem} from './baz-survey-bulk-core.mjs?v=319';
+import {printPlan,productionCsv} from './baz-qr-print-layout.mjs?v=320';
+import {prepareSticker,productionLayers,modulesFor,saveBlob} from './baz-survey-bulk-export.mjs?v=320';
+import {qrRuns,fileStem} from './baz-survey-bulk-core.mjs?v=320';
 const loads=new Map(),pause=()=>new Promise(r=>setTimeout(r,0));
+export function printManifest(records,plan,version='초안'){
+ const safe=value=>{const text=String(value??'');return /^[\s\u0000-\u001f]*[=+@-]/.test(text)?"'"+text:text;};
+ return productionCsv(records.map(r=>({...r,name:safe(r.name),printName:safe(r.printName||r.name)})),plan,version);
+}
 async function script(name,ready){if(ready())return;if(!loads.has(name))loads.set(name,new Promise((resolve,reject)=>{const el=document.createElement('script');el.src=new URL('./vendor/'+name,import.meta.url).href;el.onload=()=>ready()?resolve():reject(Error('출력 도구 로드 실패'));el.onerror=()=>reject(Error('출력 도구를 불러오지 못했습니다.'));document.head.append(el);}).catch(e=>{loads.delete(name);throw e;}));await loads.get(name);}
 export async function prepareProduction(records,p){if(!records.length)throw Error('병원을 선택하세요.');await prepareSticker(records[0]);const layers=[];for(let i=0;i<records.length;i++){layers.push({...productionLayers(records[i],p),modules:modulesFor(records[i])});if(i%20===0)await pause();}return layers;}
 export async function inspectProduction(records,p){if(!records.length)throw Error('병원을 선택하세요.');await prepareSticker(records[0]);const errors=[],fonts=[];for(let i=0;i<records.length;i++){try{const l=productionLayers(records[i],p);fonts.push({name:records[i].name,pt:l.actualNamePt});}catch(e){errors.push(e.message);}if(i%10===0)await pause();}return {errors,fonts};}
@@ -42,7 +46,7 @@ export async function productionPdf(records,p,{test=false,onProgress=()=>{},canc
 export async function productionZip(records,p,kind,{onProgress=()=>{},cancelled=()=>false,version=''}={}){
  await script('jszip-3.10.1.min.js',()=>!!window.JSZip);await prepareSticker(records[0]);const zip=new window.JSZip(),plan=printPlan(p,records),pages=kind==='pages'?plan.pages.length:records.length;
  for(let i=0;i<pages;i++){if(cancelled())throw Error('파일 생성을 중지했습니다.');const c=kind==='pages'?await pageCanvas(records,p,i,{px:12}):artworkCanvas({...productionLayers(records[i],p),modules:modulesFor(records[i])},p,24),blob=await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(Error('이미지 생성 실패')),'image/png'));zip.file(kind==='pages'?`A4-${String(i+1).padStart(3,'0')}.png`:`스티커/${fileStem(i,records[i].name)}.png`,await blob.arrayBuffer());c.width=c.height=1;onProgress(i+1,pages);await pause();}
- zip.file('제작수량표.csv',productionCsv(records,plan,version));zip.file('제작설정.json',JSON.stringify({settings:p,version},null,2));zip.file('인쇄안내.txt','A4 · 실제 크기 100% · 페이지 맞춤 해제 · 브라우저 머리글/바닥글 해제\n라벨지는 프린터와 용지 제조사의 급지 안내를 확인하세요.\n출력 파일 생성은 실제 인쇄·배포 완료를 뜻하지 않습니다.');return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}});
+ zip.file('제작수량표.csv',printManifest(records,plan,version));zip.file('제작설정.json',JSON.stringify({settings:p,version},null,2));zip.file('인쇄안내.txt',`그림 규격 ${p.width} × ${p.height}mm\n${kind==='pages'?'수량이 A4에 이미 반영되어 있습니다. 각 페이지는 1회씩 출력하세요.':'병원별 이미지 1개입니다. 수량표의 제작 수량과 실제 mm 규격으로 제작하세요.'}\n정확한 라벨 인쇄에는 A4 PDF · 실제 크기 100% · 인쇄 매수 1 · 페이지 맞춤 해제를 사용하세요.\n브라우저 머리글/바닥글 해제. 라벨지는 프린터와 용지 제조사의 급지 안내를 확인하세요.\n출력 파일 생성은 실제 인쇄·배포 완료를 뜻하지 않습니다.`);return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:3}});
 }
 export async function productionPrint(records,p,options={}){
  const popup=window.open('','_blank');if(!popup)throw Error('팝업을 허용하거나 A4 PDF를 내려받으세요.');popup.opener=null;
