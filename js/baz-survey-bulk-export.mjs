@@ -1,5 +1,5 @@
-import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv,purposeSettings,designSettings} from './baz-survey-bulk-core.mjs?v=318';
-import {artCanvas,designText} from './baz-qr-sticker-art.mjs?v=318';
+import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv,purposeSettings,designSettings} from './baz-survey-bulk-core.mjs?v=319';
+import {artCanvas,designText} from './baz-qr-sticker-art.mjs?v=319';
 const PX=24,scriptLoads=new Map(),art=new Map();
 const artKey=d=>d.id+':'+d.source.crop.join(',');
 export async function prepareSticker(record){await printFont();const d=designSettings([record]);if(d.id!=='classic')art.set(artKey(d),await artCanvas(d,PX));}
@@ -47,6 +47,24 @@ export function stickerCanvas(record){
  ctx.fillStyle=d.inverted?'#111619':'#fff';ctx.fillRect(d.qrX*PX,d.qrY*PX,d.qrSize*PX,d.qrSize*PX);ctx.fillStyle=d.inverted?'#fff':'#000';
  qrRuns(modules).forEach(([x,y,w])=>{const x1=Math.round((d.qrX+(x+4)*unit)*PX),x2=Math.round((d.qrX+(x+4+w)*unit)*PX),y1=Math.round((d.qrY+(y+4)*unit)*PX),y2=Math.round((d.qrY+(y+5)*unit)*PX);ctx.fillRect(x1,y1,x2-x1,y2-y1);});
  if(d.id==='classic'){ctx.font=`700 ${1.95*PX}px Arial,sans-serif`;ctx.textAlign='center';ctx.textBaseline='alphabetic';ctx.fillText('Curejet',d.width*PX/2,24*PX);}return c;
+}
+// Editable production artwork; preserve source art and square QR geometry.
+export function productionLayers(record,p){
+ const d=designSettings([record]),sx=p.width/d.width,sy=p.height/d.height,scale=Math.min(sx,sy),base=d.id==='classic'?{x:1,y:20,w:30,h:2.2,cfg:{size:1.6,color:'#000'}}:designText(record,d)[0];
+ const q={x:d.qrX*sx+(d.qrSize*sx-d.qrSize*scale)/2,y:d.qrY*sy+(d.qrSize*sy-d.qrSize*scale)/2,size:d.qrSize*scale};
+ const x=p.nameX==null?base.x*sx:p.nameX*p.width/100,y=p.nameY==null?(base.y+base.h/2)*sy:p.nameY*p.height/100,w=p.nameWidth==null?base.w*sx:p.nameWidth*p.width/100;
+ let pt=record.namePt??p.namePt??base.cfg.size*scale*72/25.4,min=p.nameAuto?Math.min(p.nameMinPt,pt):pt;
+ const name=String(record.printName||record.name),probe=document.createElement('canvas').getContext('2d');
+ for(;pt>=min-.001;pt-=.1){probe.font=`800 ${pt*25.4/72*PX}px "Survey Print","Malgun Gothic",sans-serif`;if(probe.measureText(name).width<=w*PX)break;}
+ if(pt<min-.001)throw Error(record.name+': 병원명이 한 줄에 들어가지 않습니다. 인쇄 이름이나 글자 크기를 조정하세요.');
+ const height=pt*25.4/72*1.35,top=y-height/2;
+ const inkWidth=probe.measureText(name).width/PX,inkX=x+(p.nameAlign==='center'?(w-inkWidth)/2:p.nameAlign==='right'?w-inkWidth:0);
+ if(x<0||top<0||x+w>p.width+.01||top+height>p.height+.01)throw Error(record.name+': 병원명이 스티커 밖에 있습니다.');
+ if(inkX<q.x+q.size&&inkX+inkWidth>q.x&&top<q.y+q.size&&top+height>q.y)throw Error(record.name+': 병원명과 QR이 겹칩니다.');
+ if(d.id!=='classic'&&top+height>(base.y-1)*sy&&inkX<base.x*sx-1)throw Error(record.name+': 병원명이 하단 로고·구분선과 겹칩니다.');
+ const block={x,y:top,w,h:height,c:textBlock(name,w,height,{size:pt*25.4/72,weight:800,align:p.nameAlign,color:base.cfg.color||'#000',valign:'middle'})};
+ const others=d.id==='classic'?blocks(record).slice(0,2).map(b=>({...b,x:b.x*sx,y:b.y*sy,w:b.w*sx,h:b.h*sy})):[];
+ return {d,q,background:d.id==='classic'?null:art.get(artKey(d)),blocks:[...others,block],actualNamePt:Math.round(pt*10)/10,nameBox:{x,y:top,w,h:height}};
 }
 export async function stickerPdf(records,onProgress=()=>{}){
  const purpose=purposeSettings(records),d=designSettings(records);await loadScript('./vendor/jspdf-2.5.1.umd.min.js',()=>!!window.jspdf?.jsPDF);await prepareSticker(records[0]);
