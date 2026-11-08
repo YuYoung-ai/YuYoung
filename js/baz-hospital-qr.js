@@ -1,4 +1,4 @@
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=319';
+import {createBulkIssuer} from './baz-survey-bulk.mjs?v=320';
 const root=document.getElementById('qr-controls'),message=document.getElementById('qr-message');
 const status=(text,error=false)=>{message.textContent=text;message.classList.toggle('error',error);};
 try{
