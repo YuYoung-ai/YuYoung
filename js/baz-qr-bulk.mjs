@@ -1,5 +1,5 @@
 import {api} from './baz-survey-api.mjs?v=292';
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=318';
+import {createBulkIssuer} from './baz-survey-bulk.mjs?v=319';
 const $=id=>document.getElementById(id),tabs=[...document.querySelectorAll('.purpose-tabs [role=tab]')],states=new Map();
 let active='',libraryPurpose=window.BazAuth?.cachedLevel()>=3?'as':'survey',busy=false;
 const message=(text,error=false)=>{$('bulk-status').textContent=text;$('bulk-status').classList.toggle('error',error);};
@@ -15,7 +15,7 @@ function state(key){
  const manage=key.startsWith('library:'),purpose=manage?key.slice(8):key,entry={purpose,manage,ready:false,loading:null};
  const panel=$(manage?'library-'+purpose:purpose+'-bulk');
  entry.bulk=createBulkIssuer(panel,{purpose,mode:manage?'library':'create',call:(path,p)=>api('/staff/'+path,p,true),
-  ...(purpose==='as'?{onOperation:async(hospitalId,state)=>{await work('qr_hospital_pause',{hospitalId,state});},issue:async id=>(await work('qr_issue',{hospitalId:id})).hospital}:{}),
+  ...(purpose==='as'?{onOperation:async(hospitalId,state,baseRevision)=>work('qr_hospital_pause',{hospitalId,state,baseRevision}),issue:async id=>(await work('qr_issue',{hospitalId:id})).hospital}:{}),
   onStatus:(text,error)=>{entry.message={text,error};if(current()===key)message(text,error);},
   onManage:()=>{libraryPurpose=purpose;show('library');},
   onIssued:()=>{const saved=states.get('library:'+purpose);if(saved)saved.ready=false;},

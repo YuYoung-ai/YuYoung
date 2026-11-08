@@ -1,8 +1,10 @@
+import {createPrintStudio,confirmPrintChoice} from './baz-qr-print-studio.mjs?v=319';
 import {el} from './baz-survey-api.mjs?v=292';
-import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital,issuedHospital,DESIGNS,designSettings} from './baz-survey-bulk-core.mjs?v=318';
-import {printFont,stickerCanvas,stickerPdf,qrArchive,stickerArchive,prepareSticker,saveBlob,printStickers} from './baz-survey-bulk-export.mjs?v=318';
+import {directoryNames,matchingNames,runBatch,manifestCsv,PURPOSES,issuedAsHospital,issuedHospital,DESIGNS,designSettings} from './baz-survey-bulk-core.mjs?v=319';
+import {printFont,stickerCanvas,stickerPdf,qrArchive,stickerArchive,prepareSticker,saveBlob,printStickers} from './baz-survey-bulk-export.mjs?v=319';
 
 export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='survey',issue,mode='all',onIssued=()=>{},onManage=()=>{},onOperation}){
+ let studio=null;
  const settings=PURPOSES[purpose];if(!settings)throw Error('QR 목적을 확인하세요.');
  root.innerHTML=`
  <div class="section-heading"><div><p class="eyebrow">HOSPITAL QR · ${mode==='library'?'MANAGE & PRINT':'CREATE'}</p><h2>${settings.title} ${mode==='library'?'QR 관리 · 인쇄':'QR 일괄 생성'}</h2><p class="help">${mode==='library'?'보관된 QR을 선택해 인쇄를 준비하세요. 인쇄해도 병원의 기존 QR 주소는 유지됩니다.':`병원을 선택해 전용 QR을 준비하세요. ${purpose==='as'?'같은 QR로 접수와 진행 상황을 확인합니다. QR 제작만으로 접수·예약이 시작되지는 않습니다.':'기존 주소는 그대로 유지되며 다음 조사에도 재사용할 수 있습니다.'}`}</p></div><span class="badge" data-bulk="size-badge">스티커 32 × 25mm</span></div>
@@ -36,9 +38,10 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  }
  if(mode==='library'){$('generate').parentElement.hidden=true;$('retry').hidden=true;}
  let names=[],page=0,directoryReady=false,busy=false,running=false,cancelled=false,previewName='',previewVersion=0;
+ const nameOverrides=new Map();
  const designKey='baz-qr-sticker-design:'+purpose;let designId='classic';try{const saved=localStorage.getItem(designKey);if(DESIGNS[saved])designId=saved;}catch{}
  function designInfo(){const d=designSettings([{purpose,design:designId}]);$('size-badge').textContent='스티커 '+d.width+' × '+d.height+'mm';$('design-info').textContent=d.name+' · '+d.width+' × '+d.height+'mm · '+settings.title;$('preview').style.aspectRatio=d.width+'/'+d.height;$('preview').style.maxWidth=d.id==='classic'?'288px':'230px';$('design-controls').querySelectorAll('input').forEach(input=>input.checked=input.value===designId);}
- $('design-controls').addEventListener('change',e=>{if(busy||!DESIGNS[e.target.value])return;designId=e.target.value;try{localStorage.setItem(designKey,designId);}catch{}designInfo();drawPreview();});designInfo();
+ $('design-controls').addEventListener('change',e=>{if(busy||!DESIGNS[e.target.value])return;designId=e.target.value;try{localStorage.setItem(designKey,designId);}catch{}designInfo();drawPreview();studio?.designChanged();});designInfo();
  const label=name=>directory.get(name)?.name||name;
  const eligible=name=>directory.get(name)?.eligible!==false;
  const matching=()=>{const query=$('search').value.normalize('NFKC').trim().toLocaleLowerCase();return names.filter(n=>(!query||[label(n),directory.get(n)?.sn,directory.get(n)?.region].join(' ').normalize('NFKC').toLocaleLowerCase().includes(query)));};
@@ -46,14 +49,15 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  const chosen=()=>names.filter(n=>selected.has(n));
  const ready=()=>chosen().filter(n=>records.get(n)?.ok);
  const visible=()=>matching().filter(n=>!$('selected-only').checked||selected.has(n));
- const snapshot=()=>chosen().map(name=>({...records.get(name).hospital,printName:printNames.get(name)||records.get(name).hospital.name,quantity:quantity(name),design:designId}));
+ const snapshot=()=>chosen().map(name=>({...records.get(name).hospital,printName:printNames.get(name)||records.get(name).hospital.name,quantity:quantity(name),design:designId,...(nameOverrides.has(name)?{namePt:nameOverrides.get(name)}:{})}));
  function count(){
   const all=chosen(),done=ready(),failed=all.filter(n=>records.get(n)?.ok===false),total=all.reduce((sum,n)=>sum+quantity(n),0);
   $('total').textContent=names.length+'곳';$('selected').textContent=all.length+'곳';$('ready').textContent=done.length+'곳';$('copies').textContent=total.toLocaleString('ko-KR')+'장';
   $('controls').disabled=busy;$('generate').disabled=busy||!directoryReady||!all.length;$('retry').disabled=busy||!directoryReady||!failed.length;$('cancel').hidden=!running;$('cancel').disabled=cancelled;
   for(const id of ['print','pdf','sticker-zip','zip','csv'])$(id).disabled=busy||!directoryReady||!all.length||done.length!==all.length;
-  $('design-controls').disabled=busy;$('print-name').disabled=busy;$('select-ready').disabled=busy||!directoryReady||!names.some(n=>records.get(n)?.ok);
-  $('download-help').textContent=mode==='create'?'생성한 QR은 서버에 보관됩니다. 생성된 QR 관리에서 병원을 선택해 인쇄 자료를 준비하세요.':all.length&&done.length===all.length?`${all.length}곳 · ${total.toLocaleString('ko-KR')}장 제작 자료를 저장합니다. PDF는 ${all.length}페이지입니다.`:all.length?`선택 ${all.length}곳 중 완료 ${done.length}곳 · 실패 ${failed.length}곳. 모두 생성하거나 생성 완료 병원만 선택하세요.`:mode==='library'?'인쇄할 병원을 선택하세요. 기존 QR을 그대로 사용합니다.':'병원을 선택하고 QR을 생성해 주세요.';
+  $('design-controls').disabled=busy;$('print-name').disabled=busy||!!studio?.isLocked();$('select-ready').disabled=busy||!directoryReady||!names.some(n=>records.get(n)?.ok);
+  studio?.sync();studio?.setExternalBusy(busy&&!studio.isWorking());
+  $('download-help').textContent=mode==='create'?'생성한 QR은 서버에 보관됩니다. 생성된 QR 관리에서 병원을 선택해 인쇄 자료를 준비하세요.':all.length&&done.length===all.length?`${all.length}곳 · ${total.toLocaleString('ko-KR')}장 제작 자료를 저장합니다. A4 편집기에서 배치와 용지 수를 확인하고 확정해 주세요.`:all.length?`선택 ${all.length}곳 중 완료 ${done.length}곳 · 실패 ${failed.length}곳. 모두 생성하거나 생성 완료 병원만 선택하세요.`:mode==='library'?'인쇄할 병원을 선택하세요. 기존 QR을 그대로 사용합니다.':'병원을 선택하고 QR을 생성해 주세요.';
  }
  function render(){
   const list=visible(),pages=Math.max(1,Math.ceil(list.length/PAGE_SIZE));page=Math.min(page,pages-1);const shown=list.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -67,7 +71,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
     const operating=el('td'),select=el('select');select.setAttribute('aria-label',label(name)+' 운영 상태');
     for(const [value,text] of [['preparing','준비 중'],['open','운영 중'],['paused','접수 중지']]){const option=el('option','',text);option.value=value;select.append(option);}
     select.value=detail?.operationState||(detail?.intakeConfigured?'open':'preparing');select.disabled=!r?.ok||!onOperation;
-    select.addEventListener('change',async()=>{const old=detail.operationState|| (detail.intakeConfigured?'open':'preparing');select.disabled=true;try{await onOperation(name,select.value);detail.operationState=select.value;onStatus(label(name)+' 운영 상태를 저장했습니다.');}catch(e){select.value=old;onStatus(e.message,true);}finally{select.disabled=false;}});operating.append(select);tr.append(operating);
+    select.addEventListener('change',async()=>{const old=detail.operationState|| (detail.intakeConfigured?'open':'preparing'),next=select.value;if(!await confirmPrintChoice('운영 상태 변경 확인','<p>'+select.selectedOptions[0].textContent+' 상태로 변경합니다.</p>')){select.value=old;return;}select.disabled=true;try{const saved=await onOperation(name,next,detail.operationRevision||0);detail.operationState=next;detail.operationRevision=saved?.revision??detail.operationRevision;onStatus(label(name)+' 운영 상태를 저장했습니다.');}catch(e){select.value=old;onStatus(e.message,true);}finally{select.disabled=false;}});operating.append(select);tr.append(operating);
     const urlCell=el('td');if(r?.ok){const link=el('a','bulk-open','접수 URL');link.href=r.hospital.qrUrl;link.target='_blank';link.rel='noopener noreferrer';urlCell.append(link);const copy=el('button','secondary','복사');copy.type='button';copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(r.hospital.qrUrl);onStatus('접수 URL을 복사했습니다.');}catch{onStatus('주소를 복사하지 못했습니다. 접수 URL을 열어 복사하세요.',true);}});urlCell.append(copy);}tr.append(urlCell);
     const imageCell=el('td'),save=el('button','secondary','QR 이미지 저장');save.type='button';save.disabled=!r?.ok;save.addEventListener('click',async()=>{save.disabled=true;try{const canvas=document.createElement('canvas');await window.BazQrEncoder.toCanvas(canvas,r.hospital.qrUrl,{width:600,margin:4,errorCorrectionLevel:'M',color:{dark:'#000000',light:'#ffffff'}});const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw Error('QR 이미지를 만들지 못했습니다.');saveBlob(blob,label(name).replace(/[\\/:*?"<>|]/g,'_')+'-AS접수-QR.png');}catch(e){onStatus(e.message,true);}finally{save.disabled=false;}});imageCell.append(save);tr.append(imageCell);
    }
@@ -79,7 +83,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  }
  async function showPreview(name){
   previewName=name;$('preview-name').textContent=label(name);$('open').href=records.get(name).hospital.qrUrl||records.get(name).hospital.surveyUrl;$('open').hidden=false;$('print-name-field').hidden=false;$('print-name').value=printNames.get(name)||records.get(name).hospital.name;
-  if(mode==='create')$('print-name-field').hidden=true;await drawPreview();
+  if(mode==='create')$('print-name-field').hidden=true;await drawPreview();studio?.select();
  }
  async function drawPreview(){
   const version=++previewVersion,r=records.get(previewName);$('preview-error').textContent='';$('preview').hidden=true;$('preview-empty').hidden=false;
@@ -103,6 +107,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  }
  async function download(type){
   if(busy||!directoryReady||!chosen().length||ready().length!==chosen().length)return;
+  if(studio&&type!=='zip'){await studio.export(({pdf:'pdf',print:'print','sticker-zip':'stickers',csv:'csv'})[type]);return;}
   const items=snapshot(),d=designSettings([{purpose,design:designId}]),date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul'}).format(new Date());lock(true);
   try{
    const progress=(n,total)=>onStatus(`${type==='pdf'?'스티커 PDF':'QR 묶음'} 준비 중 ${n} / ${total}곳…`);
@@ -119,9 +124,25 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
  $('page-all').addEventListener('change',()=>{const checked=$('page-all').checked;visible().slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE).filter(eligible).forEach(n=>checked?selected.add(n):selected.delete(n));render();});
  $('prev').addEventListener('click',()=>{page--;render();});$('next').addEventListener('click',()=>{page++;render();});
  $('apply-quantity').addEventListener('click',()=>{const v=Number($('quantity').value);if(!Number.isInteger(v)||v<1||v>9999){onStatus('제작 수량은 1~9999 사이의 정수로 입력해 주세요.',true);return;}chosen().forEach(n=>quantities.set(n,v));render();});
- $('print-name').addEventListener('input',()=>{if(previewName){printNames.set(previewName,$('print-name').value.trim()||records.get(previewName).hospital.name);drawPreview();}});
+ $('print-name').addEventListener('input',()=>{if(previewName){printNames.set(previewName,$('print-name').value.trim()||records.get(previewName).hospital.name);drawPreview();studio?.sync();studio?.select();}});
  $('generate').addEventListener('click',()=>generate());$('retry').addEventListener('click',()=>generate(true));$('cancel').addEventListener('click',()=>{cancelled=true;$('cancel').disabled=true;$('progress-text').textContent='진행 중인 요청을 마친 뒤 중지합니다…';});
  for(const id of ['print','pdf','sticker-zip','zip','csv'])$(id).addEventListener('click',()=>download(id));
+ if(mode==='library'){
+  const section=el('section');$('preview-error').after(section);root.querySelector('.bulk-preview').hidden=true;$('design-info').hidden=true;
+  for(const id of ['print','pdf','sticker-zip','csv'])$(id).hidden=true;
+  const notice=root.querySelector('.notice');if(notice)notice.hidden=true;
+  studio=createPrintStudio(section,{purpose,design:()=>designId,getRecords:()=>chosen().length&&ready().length===chosen().length?snapshot():[],getPreview:()=>{const r=records.get(previewName);return r?.ok?{...r.hospital,printName:printNames.get(previewName)||r.hospital.name,quantity:1,design:designId,...(nameOverrides.has(previewName)?{namePt:nameOverrides.get(previewName)}:{})}:null;},onOverride:pt=>{const id=previewName||ready()[0];if(id){if(pt==null)nameOverrides.delete(id);else nameOverrides.set(id,pt);studio.sync();}},onStatus,onBusy:lock,onRestore:async items=>{for(const item of items){const id=purpose==='as'?item.id:item.name,r=records.get(id);if(!r?.ok|| (r.hospital.qrUrl||r.hospital.surveyUrl)!==(item.qrUrl||item.surveyUrl))throw Error(item.name+': 현재 QR 연결이 달라 재출력할 수 없습니다.');}selected.clear();for(const item of items){const id=purpose==='as'?item.id:item.name;selected.add(id);quantities.set(id,item.quantity);printNames.set(id,item.printName||item.name);if(item.namePt!=null)nameOverrides.set(id,item.namePt);else nameOverrides.delete(id);}render();}});
+ }
+ if(purpose==='as'&&mode==='library'){
+  const bar=el('div','bulk-operation-tools'),target=el('select'),preview=el('button','secondary','선택 병원 운영 상태 적용'),retry=el('button','secondary','실패만 재시도'),stop=el('button','secondary','적용 중지'),result=el('p','help'),failures=el('ul','bulk-operation-failures');target.setAttribute('aria-label','선택 병원 운영 상태');for(const [v,t]of [['preparing','준비 중'],['open','운영 중'],['paused','접수 중지']]){const option=el('option','',t);option.value=v;target.append(option);}for(const b of [preview,retry,stop])b.type='button';retry.hidden=stop.hidden=true;bar.append(target,preview,retry,stop,result,failures);$('controls').after(bar);let failed=[],operationId='',halt=false,lastState='';stop.onclick=()=>{halt=true;stop.disabled=true;};
+  async function apply(retrying=false){if(busy)return;const items=retrying?failed:chosen().filter(n=>records.get(n)?.ok&&eligible(n)).map(n=>({id:n,name:label(n),baseRevision:directory.get(n)?.operationRevision||0,before:directory.get(n)?.operationState||'preparing'}));if(!items.length){onStatus('운영 상태를 변경할 생성 완료 병원을 선택하세요.',true);return;}const state=retrying?lastState:target.value,labels={preparing:'준비 중',open:'운영 중',paused:'접수 중지'};
+   const contents=document.createElement('div');contents.append(el('p','',items.length+'곳 → '+labels[state]));const list=el('ul');for(const item of items)list.append(el('li','',item.name+' · '+labels[item.before]+' → '+labels[state]));contents.append(list);
+   if(!await confirmPrintChoice('운영 상태 일괄 변경 확인',contents.innerHTML))return;
+   if(!retrying)operationId=crypto.randomUUID();lastState=state;failed=[];halt=false;lock(true);stop.hidden=false;stop.disabled=false;target.disabled=preview.disabled=retry.disabled=true;let done=0,same=0;
+   try{for(let at=0;at<items.length;at+=15){if(halt){failed.push(...items.slice(at).map(x=>({...x,error:'중지됨 · 미처리'})));break;}const group=items.slice(at,at+15);let response;try{response=await window.BazWorkAPI.post('qr_hospital_batch',{operationId,state,items:group.map(({id,baseRevision})=>({hospitalId:id,baseRevision}))});if(!response.success)throw Error(response.error);}catch(e){failed.push(...group.map(x=>({...x,error:e.message})));result.textContent=e.message;continue;}for(const [i,r]of response.results.entries()){const item=group[i];if(!r.success){failed.push({...item,error:r.error});result.textContent=item.name+': '+r.error;}else{const d=directory.get(item.id);d.operationState=r.state;d.operationRevision=r.revision;done++;if(r.unchanged)same++;}}onStatus('운영 상태 적용 '+Math.min(at+15,items.length)+' / '+items.length+'곳');}result.textContent='완료 '+done+'곳 (변경 없음 '+same+'곳) · 실패/미처리 '+failed.length+'곳';onStatus(result.textContent,!!failed.length);
+   }finally{target.disabled=preview.disabled=retry.disabled=false;stop.hidden=true;retry.hidden=!failed.length;failures.replaceChildren(...failed.map(item=>el('li','',item.name+' · '+(item.error||'미처리'))));lock(false);render();}
+  }preview.onclick=()=>apply();retry.onclick=()=>apply(true);
+ }
  render();
  return {
   setLoading(){directoryReady=false;$('directory-status').textContent='입점병원 목록을 불러오고 있습니다.';count();},
@@ -129,7 +150,7 @@ export function createBulkIssuer(root,{call,onStatus,onBusy=()=>{},purpose='surv
   setNames(values){names=purpose==='as'?values.filter(n=>directory.has(n)).sort((a,b)=>label(a).localeCompare(label(b),'ko')):directoryNames(values);const allowed=new Set(names);for(const n of selected)if(!allowed.has(n)||!eligible(n))selected.delete(n);for(const n of records.keys())if(!allowed.has(n)||!eligible(n))records.delete(n);directoryReady=true;$('directory-status').textContent=`입점병원 ${names.length}곳 · 검색 결과 선택은 모든 검색 페이지에 적용됩니다.`;if(!allowed.has(previewName)||!records.get(previewName)?.ok){previewName='';previewVersion++;$('preview').hidden=true;$('preview-empty').hidden=false;$('print-name-field').hidden=true;$('preview-name').textContent='';$('open').hidden=true;}render();},
   setIssued(values){
    if(mode==='library'){records.clear();directory.clear();for(const h of values||[])directory.set(purpose==='as'?h.id:h.name,{...h,eligible:h.active!==false&&h.eligible!==false});this.setNames([...directory.keys()]);}
-   for(const h of values||[]){const id=purpose==='as'?h.id:h.name;if(!names.includes(id))continue;const entry=directory.get(id);if(entry)directory.set(id,{...entry,issuedAt:h.issuedAt,operationState:h.operationState,intakeConfigured:h.intakeConfigured});
+   for(const h of values||[]){const id=purpose==='as'?h.id:h.name;if(!names.includes(id))continue;const entry=directory.get(id);if(entry)directory.set(id,{...entry,issuedAt:h.issuedAt,operationState:h.operationState,operationRevision:h.operationRevision||0,intakeConfigured:h.intakeConfigured});
     try{if(h.active===false||h.eligible===false)throw Error(h.reason||'중지된 병원 링크입니다.');const hospital=purpose==='as'?issuedAsHospital(h,directory.get(id)):{...issuedHospital(h,id),purpose};records.set(id,{ok:true,hospital});}catch(e){records.set(id,{ok:false,error:e.message});}
    }render();
   },
