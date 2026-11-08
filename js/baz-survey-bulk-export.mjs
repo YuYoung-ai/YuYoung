@@ -1,5 +1,5 @@
-import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv,purposeSettings,designSettings} from './baz-survey-bulk-core.mjs?v=320';
-import {artCanvas,designText} from './baz-qr-sticker-art.mjs?v=320';
+import {STICKER,qrRuns,qrSvg,fileStem,manifestCsv,purposeSettings,designSettings} from './baz-survey-bulk-core.mjs?v=321';
+import {artCanvas,designText} from './baz-qr-sticker-art.mjs?v=321';
 const PX=24,scriptLoads=new Map(),art=new Map();
 const artKey=d=>d.id+':'+d.source.crop.join(',');
 export async function prepareSticker(record){await printFont();const d=designSettings([record]);if(d.id!=='classic')art.set(artKey(d),await artCanvas(d,PX));}

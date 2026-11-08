@@ -1,5 +1,5 @@
 import {api} from './baz-survey-api.mjs?v=292';
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=320';
+import {createBulkIssuer} from './baz-survey-bulk.mjs?v=321';
 const $=id=>document.getElementById(id),tabs=[...document.querySelectorAll('.purpose-tabs [role=tab]')],states=new Map();
 let active='',libraryPurpose=window.BazAuth?.cachedLevel()>=3?'as':'survey',busy=false;
 const message=(text,error=false)=>{$('bulk-status').textContent=text;$('bulk-status').classList.toggle('error',error);};
