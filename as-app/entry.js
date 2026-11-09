@@ -1,0 +1,2 @@
+// Old printed QR URLs remain valid, but installation must use the hospital origin.
+(function(){'use strict';if(location.origin!=='https://yuyoung-ai.github.io'||!window.QrCustomerRuntime?.registration)return;var match=location.pathname.match(/^\/YuYoung\/as-app\/(index|as-request|as-status|legacy)\.html$/);if(!match)return;var target=new URL('/as-app/'+match[1]+'.html','https://curejet-as.coaptation.workers.dev');target.search=location.search;target.hash=location.hash;location.replace(target.href);})();
