@@ -1,4 +1,4 @@
-import {installCard} from './pwa.mjs?v=325';
+import {installCard} from './pwa.mjs?v=326';
 import {portalCall,forgetPortalDevice} from './portal-api.mjs?v=321';
 import {writePending} from './portal-storage.mjs?v=323';
 
@@ -6,7 +6,7 @@ import {writePending} from './portal-storage.mjs?v=323';
 export function mountSettings(container,{device=false,handoff}={}){
  if(!container||document.getElementById('portal-device-settings'))return;
  const panel=document.createElement('details');panel.id='portal-device-settings';panel.className='portal-device-settings';
- panel.innerHTML='<summary>앱 설치·기기 관리</summary><div class="portal-settings-body"><div data-install-slot></div><div class="portal-settings-actions"></div><p class="portal-settings-message" role="status" hidden></p><div id="handoff-box"></div></div>';
+ panel.innerHTML='<summary>앱 설치·기기 관리</summary><div class="portal-settings-body"><div data-install-slot></div><div class="portal-settings-actions"></div><p class="portal-settings-message" role="status" hidden></p>'+(device||handoff?'<div id="handoff-box"></div>':'')+'</div>';
  container.append(panel);
  const actions=panel.querySelector('.portal-settings-actions'),status=panel.querySelector('[role=status]'),box=panel.querySelector('#handoff-box');
  const message=text=>{status.textContent=text;status.hidden=!text;};
