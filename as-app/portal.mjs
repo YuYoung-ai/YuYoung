@@ -1,6 +1,6 @@
 import {readPending,writePending} from './portal-storage.mjs?v=323';
 import {portalCall,forgetPortalDevice} from './portal-api.mjs?v=321';
-import {installCard} from './pwa.mjs?v=321';
+import {installCard} from './pwa.mjs?v=324';
 const $=id=>document.getElementById(id),content=$('portal-content'),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const load=(k,store)=>{try{return JSON.parse((store||localStorage).getItem(k)||'null');}catch{return null;}},save=(k,v,store)=>{try{store=store||localStorage;if(v===null)store.removeItem(k);else store.setItem(k,JSON.stringify(v));}catch{throw Error('입력 기록을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.');}};
 let pendingRecord=null;
