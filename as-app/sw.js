@@ -1,7 +1,7 @@
 // Customer scope only. Private API responses and secret links are never cached.
 const NOTICE_CACHE='curejet-as-notices-v2';
 const NOTICE_TEXT={scheduled:'방문 예정으로 변경되었습니다.',completed:'AS 처리가 완료되었습니다.',rescheduled:'방문 일정이 변경되었습니다.',cancelled:'방문이 취소되었습니다.'};
-const APP_RELEASE='320';
+const APP_RELEASE='321';
 let noticeQueue=Promise.resolve();
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
@@ -10,7 +10,7 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{
 })()));
 self.addEventListener('fetch',event=>{
  const req=event.request,u=new URL(req.url),scope=new URL(self.registration.scope);if(req.method!=='GET'||u.origin!==scope.origin||!u.pathname.startsWith(scope.pathname))return;
- event.respondWith(fetch(req,{cache:'no-store'}).catch(()=>req.mode==='navigate'?new Response('<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>인터넷 연결 확인</title><body><h1>인터넷 연결을 확인해 주세요.</h1><p>연결한 뒤 병원 QR로 다시 접속해 주세요. 접수 기록은 유지됩니다.</p></body></html>',{status:503,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}}):Response.error()));
+ event.respondWith(fetch(req,{cache:'no-store'}).catch(()=>req.mode==='navigate'?new Response('<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>인터넷 연결 확인</title><body><h1>인터넷 연결을 확인해 주세요.</h1><p>연결한 뒤 CUREJET AS를 다시 열어 주세요. 접수 기록은 유지됩니다.</p></body></html>',{status:503,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}}):Response.error()));
 });
 self.addEventListener('push',event=>{
  let data={};try{data=event.data.json();}catch{}const id=String(data.requestId||''),eventId=String(data.eventId||'');

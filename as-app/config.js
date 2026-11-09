@@ -1,6 +1,7 @@
 // Public connection settings only. Secrets and hospital permissions stay on the server.
 window.QrCustomerRuntime=Object.freeze({
  environment:'pilot',
+ registration:true,
  api:'https://yuyoung-production.coaptation.workers.dev',
  file:'https://yuyoung-production.coaptation.workers.dev',
  customerAction:'qr_customer',
