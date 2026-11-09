@@ -1,5 +1,5 @@
 import {api} from './baz-survey-api.mjs?v=292';
-import {createBulkIssuer} from './baz-survey-bulk.mjs?v=321';
+import {createBulkIssuer} from './baz-survey-bulk.mjs?v=322';
 const $=id=>document.getElementById(id),tabs=[...document.querySelectorAll('.purpose-tabs [role=tab]')],states=new Map();
 let active='',libraryPurpose=window.BazAuth?.cachedLevel()>=3?'as':'survey',busy=false;
 const message=(text,error=false)=>{$('bulk-status').textContent=text;$('bulk-status').classList.toggle('error',error);};
@@ -26,13 +26,13 @@ async function load(key,force=false){
  const entry=state(key);if(entry.loading)return entry.loading;if(entry.ready&&!force)return;
  entry.bulk.setLoading();if(current()===key)message(entry.manage?'생성된 QR을 불러오는 중…':'병원 목록을 불러오는 중…');
  entry.loading=(async()=>{try{
-  if(entry.manage){const data=await library(entry.purpose);entry.bulk.setIssued(data.items);}
+  if(entry.manage){const data=await library(entry.purpose);entry.bulk.setIssued(data.items);entry.common=!!data.common;if(data.common)message('공통 AS QR입니다. 병원별 등록·운영 상태는 병원 등록 관리에서 설정하세요.');}
   else{
    const [directory,issued]=await Promise.all([entry.purpose==='as'?work('qr_directory'):api('/staff/directory',{},true),library(entry.purpose)]);
    if(entry.purpose==='as')entry.bulk.setHospitals(directory.items);else entry.bulk.setNames(directory.names);
    entry.bulk.setIssued(issued.items);
   }
-  entry.ready=true;entry.message={text:entry.manage?'서버에 보관된 QR입니다. 인쇄할 병원을 선택하세요.':'병원별 QR을 생성한 뒤 생성된 QR 관리에서 인쇄를 준비하세요.',error:false};
+  entry.ready=true;entry.message={text:entry.common?'공통 AS QR입니다. 병원별 등록·운영 상태는 병원 등록 관리에서 설정하세요.':entry.manage?'서버에 보관된 QR입니다. 인쇄할 병원을 선택하세요.':'병원별 QR을 생성한 뒤 생성된 QR 관리에서 인쇄를 준비하세요.',error:false};
  }catch(e){entry.bulk.setError(e.message);entry.message={text:e.message,error:true};}
  finally{entry.loading=null;if(current()===key)message(entry.message.text,entry.message.error);}})();return entry.loading;
 }
