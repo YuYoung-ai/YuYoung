@@ -4,7 +4,7 @@
  var device=read('curejet-as-device')||random();save('curejet-as-device',device);
  function random(){return btoa(String.fromCharCode.apply(null,crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
  function read(k){try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}}
- function save(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}}
+ function save(k,v){if(window.BazBrowserStorage)return BazBrowserStorage.setJSON(k,v);try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}}
  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
  function guide(stage,state,count){try{document.dispatchEvent(new CustomEvent('cudori:ui',{detail:{stage:stage,state:state,count:Number(count)||0}}));}catch(e){/* Optional guide must never block intake. */}}
  function message(text,error){if(!$('message'))return;$('message').hidden=!text;$('message').textContent=text;$('message').className='notice'+(error?' error':'');if(error)guide('error','error');}
