@@ -63,7 +63,7 @@
       form.append('metadata',metadata);form.append('pdf',draft.blob,draft.filename);
       say('문서를 업로드하고 QR을 만들고 있습니다…');created=await api('/staff/sessions',form);
       active={...created,taskId:draft.taskId,filename:draft.filename,fingerprint,state:'pending'};
-      try{save();if(!bridge.waiting())throw new Error('현재 작업을 보관하지 못했습니다.');}catch(e){await api('/staff/sessions/'+created.id+'/revoke');active=null;save();throw e;}
+      try{save();if(!await bridge.waiting())throw new Error('현재 작업을 보관하지 못했습니다.');}catch(e){await api('/staff/sessions/'+created.id+'/revoke');active=null;save();throw e;}
       issued();say('고객에게 QR을 보여 주세요. 고객 휴대폰에서 확인·서명·다운로드할 수 있습니다.');schedule();
     }catch(e){say(e.message,true);}finally{busy=false;$('qrCreate').disabled=false;$('qrDismiss').disabled=false;}
   };

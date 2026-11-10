@@ -159,7 +159,8 @@
   .ac-opt{padding:10px 12px;cursor:pointer;border-bottom:1px solid #F0F2F6;font-size:14px;}
 
   /* 임시저장 도구 바 */
-  .save-bar{display:flex;gap:8px;margin-bottom:14px;}
+  .save-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+  #draftSaveState{order:2;flex-basis:100%;font-size:12px;line-height:1.5;color:var(--text-muted);}
   .save-bar button{flex:1;padding:9px 6px;border:1.5px solid var(--gray-line);border-radius:8px;background:#fff;
     font-size:12.5px;font-weight:700;color:var(--text-muted);cursor:pointer;font-family:inherit;}
   .save-bar button:active{background:var(--gray-bg);}
@@ -320,7 +321,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=283"></script><script src="js/baz-inspection-workflow.js?v=315"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=342"></script><script src="js/baz-inspection-workflow.js?v=342"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-inspection.css?v=295">
@@ -344,6 +345,8 @@
     <div class="save-bar">
       <button type="button" id="saveDraftBtn">💾 저장</button>
       <button type="button" id="loadDraftBtn">📂 작업 목록</button>
+      <button type="button" id="inspectionStorageBtn">저장 공간</button>
+      <span id="draftSaveState" role="status" aria-live="polite">초안 저장소 준비 중…</span>
       <button type="button" id="newTaskBtn">➕ 새 점검</button>
     </div>
 
@@ -642,21 +645,17 @@
 <div id="pdfSheet"></div>
 
 <script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
-<script src="js/baz-inspection-outbox.js?v=282"></script><script src="js/baz-inspection-upload.js?v=315"></script>
+<script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=342"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=315"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
 <script>
 // ===== 설정 상수 =====
 const LOGO_PATH = './logo.png';            // 회사 로고 (저장소 루트, sw.js가 캐시)
-const STORAGE_KEY = 'baz_inspection_draft_v1'; // (구) 단일 임시저장 키 — 마이그레이션용
-const TASKS_KEY = 'inspection_tasks_v1';       // 작업 목록(다중 저장) 키
-const CURRENT_TASK_KEY = 'inspection_current_task_v1'; // 현재 열린 작업 id
 // 클라우드 동기화 (Google Sheets 협업) — 오프라인 우선, 설정 시에만 동작
 const TASK_SYNC_URL = 'https://script.google.com/macros/s/AKfycby4X8be7XtZ0yeM1cdCjOeui4rmmQwGlWZWN6NCg7lf1z1fQAkx88a2CjSisdKmuKwU/exec';                       // ★ 배포 후 inspection_gas.gs /exec URL 입력 ★
 const SYNC_URL_OVERRIDE_KEY = 'inspection_sync_url';   // 코드 수정 없이 URL 설정용
-const SYNC_QUEUE_KEY = 'inspection_sync_queue_v1';     // 오프라인 동기화 대기 큐
-const SYNC_DELETE_KEY = 'inspection_sync_delete_v1';   // 오프라인 삭제 대기 큐
 const CLOUD_SYNC_DELAY = 8000;                         // 저장 후 클라우드 동기화 지연 (ms)
 // 이전 방문 이력 조회 (병원 선택 시 자동) — 이미 배포된 handover 웹앱 재사용
 const HISTORY_URL = '';                                // 전용 이력 시트가 생기면 여기에 /exec 입력
@@ -1373,27 +1372,34 @@ function applyFormData(d){
 //                engineer, documentNo, data(=collectFormData 결과) }
 let _lastAutosaveToast=0;
 let _currentTaskId=null;   // 현재 열려있는 작업 id
+let _currentTaskRevision=0;
+let _draftDirty=false,_draftEpoch=0,_pendingSaves=0;
+function draftSaveStatus(text){document.getElementById('draftSaveState').textContent=text;}
+window.addEventListener('beforeunload',e=>{if(_draftDirty||_pendingSaves){e.preventDefault();e.returnValue='';}});
 let _signMode=false;       // 사인 모드 여부
 
 function genTaskId(){ return 't'+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function loadTasks(){
-  try{ const r=localStorage.getItem(TASKS_KEY); const a=r?JSON.parse(r):[]; return Array.isArray(a)?a:[]; }
-  catch(e){ return []; }
+const _storageAccount=BazAuth.name();
+function draftOwner(){
+  try{const token=BazAuth.token(),p=JSON.parse(atob(token.split('.')[0].replace(/-/g,'+').replace(/_/g,'/')));if(/^[gp]:[A-Za-z0-9_-]{43}$/.test(p.u))return 'account:'+p.u;}catch{}
+  // Older authenticated sessions expose only the registered staff name.
+  return BazAuth.name()?'staff:'+encodeURIComponent(BazAuth.name()):'';
 }
-function persistTasks(tasks){
-  try{ localStorage.setItem(TASKS_KEY, JSON.stringify(tasks)); return true; }
-  catch(err){
-    // Keep the last complete draft. A navigation must not silently remove photos.
-    if(err && (err.name==='QuotaExceededError' || /quota/i.test(err.message||''))){
-      showToast('사진을 포함한 초안을 저장할 공간이 부족합니다. 현재 화면을 유지하고 PDF를 먼저 저장하세요.');return false;
-    }
-    showToast('저장 실패'); console.warn('[작업저장] 실패:', err); return false;
-  }
+const _storageIdentity=draftOwner();
+let _saveChain=Promise.resolve();
+const draftRepository=window.BazInspectionRepository.create({indexedDB:window.indexedDB,storage:localStorage,owner:_storageIdentity,cleanupCache:()=>window.BazBrowserStorage.cleanup(),onMigrationProgress(p){draftSaveStatus('이전 초안 검증·이전 중 '+p.completed+'/'+p.total);},onExternalChange(){showToast('다른 창에서 초안이 변경되었습니다. 저장 전 현재 내용을 백업하고 작업을 다시 불러오세요.');}});
+function checkStorageAccount(){if(draftOwner()!==_storageIdentity||BazAuth.name()!==_storageAccount)throw new Error('로그인 계정이 변경되었습니다. 현재 내용을 백업한 뒤 페이지를 다시 여세요.');}
+function loadTasks(){const tasks=draftRepository.list(),owned=new Set(tasks.filter(t=>t.owner===draftRepository.owner).map(t=>t.id));return tasks.filter(t=>t.owner===draftRepository.owner||!owned.has(t.id));}
+async function saveTask(task){
+  try{await window.inspectionStorageReady;checkStorageAccount();if(task.id===_currentTaskId&&task.revision!=null&&task.revision!==_currentTaskRevision)throw new Error('다른 창에서 작업이 변경되었습니다. 현재 내용을 백업한 뒤 다시 불러오세요.');const saved=await draftRepository.save(task);if(task.id===_currentTaskId)_currentTaskRevision=saved.revision;return saved;}
+  catch(err){showToast(err.name==='QuotaExceededError'?'기기의 초안 저장 공간이 부족합니다. 저장 공간 메뉴에서 백업과 정리를 확인하세요.':err.message||'초안 저장 실패');return false;}
 }
-function getTask(id){ return loadTasks().find(t=>t.id===id) || null; }
+
+function getTask(id){const tasks=loadTasks();return tasks.find(t=>t.id===id&&t.owner===draftRepository.owner)||tasks.find(t=>t.id===id)||null;}
 function setCurrentTaskId(id){
   _currentTaskId=id;
-  try{ id?localStorage.setItem(CURRENT_TASK_KEY,id):localStorage.removeItem(CURRENT_TASK_KEY); }catch(e){}
+  _currentTaskRevision=id?(getTask(id)?.revision||0):0;
+  return draftRepository.setCurrent(id).catch(e=>{showToast(e.message);});
 }
 function taskMetaFromData(data){
   const b=(data&&data.basic)||{};
@@ -1403,44 +1409,41 @@ function taskMetaFromData(data){
 // 현재 작업 저장 (기존 saveDraft 대체). opts: {status, documentNo, showMsg}
 function saveCurrentTask(opts){
   opts=opts||{};
-  const data=collectFormData();
-  const tasks=loadTasks();
-  const now=Date.now();
-  let task=_currentTaskId ? tasks.find(t=>t.id===_currentTaskId) : null;
-  if(!task){
-    task={ id:genTaskId(), createdAt:now, updatedAt:now, status:opts.status||'draft',
-           documentNo:opts.documentNo||'', ...taskMetaFromData(data), data };
-    tasks.push(task);
-    setCurrentTaskId(task.id);
-  }else{
-    task.updatedAt=now;
-    Object.assign(task, taskMetaFromData(data));
-    task.data=data;
-    if(opts.status) task.status=opts.status;
-    if(opts.documentNo) task.documentNo=opts.documentNo;
-  }
-  const ok=persistTasks(tasks);
-  if(ok && opts.showMsg) showToast(opts.showMsg);
-  updateTaskStatusBar();
-  // 모든 저장을 클라우드에 동기화 (상태 무관 — 사인대기 전환을 잊어도 시트에 등록됨)
-  // 빈 작업(병원/S/N/담당자 모두 없음)은 시트에 빈 행이 쌓이지 않도록 제외
-  if(ok && cloudConfigured() && task && (task.hospital||task.serial||task.engineer)){
-    if(opts.cloudNow) cloudSyncTask(task, {silent:true});
-    else scheduleCloudSync();
-  }
-  return ok;
+  const data=collectFormData(),id=_currentTaskId||genTaskId(),now=Date.now();
+  const epoch=++_draftEpoch;_draftDirty=true;_pendingSaves++;draftSaveStatus('초안 저장 중…');
+  // Reserve an ID immediately so overlapping autosaves cannot create duplicate drafts.
+  if(!_currentTaskId)_currentTaskId=id;
+  const run=async()=>{
+    await window.inspectionStorageReady;
+    let task=getTask(id);
+    if(task?.owner===draftRepository.legacyOwner){showToast('이전 작업은 작업 목록에서 현재 계정으로 가져온 뒤 편집하세요.');return false;}
+    task=task?{...task,data,updatedAt:now}:{id,createdAt:now,updatedAt:now,status:'draft',documentNo:'',data};
+    if(id===_currentTaskId)task.revision=_currentTaskRevision;
+    Object.assign(task,taskMetaFromData(data));
+    if(opts.status)task.status=opts.status;if(opts.documentNo)task.documentNo=opts.documentNo;
+    const saved=await saveTask(task);if(!saved)return false;
+    if(_currentTaskId===id)await setCurrentTaskId(id);
+    if(epoch===_draftEpoch){_draftDirty=false;draftSaveStatus('기기에 초안 저장됨');}
+    if(opts.showMsg)showToast(opts.showMsg);updateTaskStatusBar();
+    if(cloudConfigured()&&(task.hospital||task.serial||task.engineer)){
+      if(opts.cloudNow)cloudSyncTask(saved,{silent:true});else scheduleCloudSync();
+    }
+    return true;
+  };
+  const result=_saveChain.catch(()=>{}).then(run).catch(err=>{showToast(err.message);return false;}).then(ok=>{_pendingSaves--;if(!ok)draftSaveStatus('초안 저장 실패 · 현재 화면 유지');return ok;});_saveChain=result;return result;
 }
+
 // 하위호환: 기존 saveDraft(showMsg) 호출부(사진 핸들러 등) 유지
 function saveDraft(showMsg){ return saveCurrentTask(showMsg?{showMsg}:{}); }
 
 // 자동저장: 현재 작업에만 적용, 상태 변경 없음
-const _autoSaveDebounced = debounce(()=>{
-  if(saveCurrentTask()){
+const _autoSaveDebounced = debounce(async()=>{
+  if(await saveCurrentTask()){
     const now=Date.now();
     if(now-_lastAutosaveToast > AUTOSAVE_TOAST_GAP){ _lastAutosaveToast=now; showToast('자동저장 완료'); }
   }
 }, AUTOSAVE_DELAY);
-function autoSave(){ _autoSaveDebounced(); }
+function autoSave(){_draftDirty=true;_draftEpoch++;draftSaveStatus('초안 저장 대기…');_autoSaveDebounced();}
 
 // 폼 비우기 (새 작업/불러오기 초기화용)
 function clearForm(){
@@ -1456,9 +1459,17 @@ function clearForm(){
 }
 
 // 새 점검: 항상 새로운 Task 생성 (기존 작업은 보존)
-function newTask(opts){
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
-  if(_currentTaskId&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
+let _taskSwitching=false;
+async function taskSwitch(run){
+  if(_taskSwitching)return false;_taskSwitching=true;
+  const wrap=document.querySelector('.wrap');wrap.inert=true;
+  try{checkStorageAccount();return await run();}catch(e){showToast(e.message);return false;}finally{wrap.inert=false;_taskSwitching=false;}
+}
+function newTask(opts){return taskSwitch(()=>createNewTask(opts));}
+async function createNewTask(opts){
+  await window.inspectionStorageReady;
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
+  if(_currentTaskId&&!await saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
   const previous=collectFormData();
   exitSignMode();
   clearForm();
@@ -1467,8 +1478,8 @@ function newTask(opts){
   const task={ id:genTaskId(), createdAt:now, updatedAt:now, status:'draft', documentNo:'',
                hospital:'', product:'', serial:'', engineer:'', data:collectFormData() };
   tasks.push(task);
-  if(!persistTasks(tasks)){applyFormData(previous);showToast('새 작업을 보관하지 못했습니다. 기존 작성 내용을 유지합니다.');return false;}
-  setCurrentTaskId(task.id);
+  if(!await saveTask(task)){applyFormData(previous);showToast('새 작업을 보관하지 못했습니다. 기존 작성 내용을 유지합니다.');return false;}
+  await setCurrentTaskId(task.id);_draftDirty=false;draftSaveStatus('기기에 초안 저장됨');
   window.BazInspectionPdf.reset();
   if(!opts?.keepRoute)history.replaceState(null,'',location.pathname);
   updateTaskStatusBar();
@@ -1480,12 +1491,19 @@ function newTask(opts){
 }
 
 // 작업 불러오기 (사인대기 작업이면 자동으로 사인 모드 진입)
-function openTask(id){
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
-  const task=getTask(id);
+function openTask(id){return getTask(id)?.localReleased?cloudPullTask(id):taskSwitch(()=>restoreTask(id));}
+async function restoreTask(id){
+  await window.inspectionStorageReady;
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 작업을 바꿔 주세요.');return false;}
+  let task=getTask(id);
+  if(task?.owner===draftRepository.legacyOwner){
+    if(!confirm('이전 버전의 작업은 계정 정보가 없습니다. 이 작업을 현재 로그인 계정으로 복사해 이어서 작성할까요? 원본은 보존합니다.'))return false;
+    try{task=await draftRepository.claim(task);id=task.id;}catch(e){showToast(e.message);return false;}
+  }
   if(!task){ showToast('작업을 찾을 수 없습니다'); return; }
-  if(_currentTaskId&&_currentTaskId!==id&&!saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
-  setCurrentTaskId(id);
+  if(_currentTaskId&&_currentTaskId!==id&&!await saveCurrentTask()){showToast('현재 작업을 보관하지 못했습니다. 먼저 PDF를 저장하세요.');return false;}
+  try{task=await draftRepository.get(id);checkStorageAccount();}catch(e){showToast(e.message);return false;}
+  await setCurrentTaskId(id);_currentTaskRevision=task.revision;_draftDirty=false;draftSaveStatus('기기에 초안 저장됨');
   window.BazInspectionPdf.reset();
   applyFormData(task.data);
   closeTaskList();
@@ -1499,21 +1517,23 @@ function openTask(id){
 }
 
 // 복제 (새 id, 작성중 상태)
-function duplicateTask(id){
-  const task=getTask(id); if(!task) return;
+async function duplicateTask(id){
+  const task=await draftRepository.get(id); if(!task) return;
+  if(task.owner!==draftRepository.owner){showToast('이전 작업을 먼저 불러와 현재 계정으로 가져오세요.');return;}
   const now=Date.now();
   const copy=JSON.parse(JSON.stringify(task));
   copy.data.handover=null;copy.data.pdfDocument=null;copy.data.customerQr=null;
-  copy.id=genTaskId(); copy.createdAt=now; copy.updatedAt=now; copy.status='draft'; copy.documentNo='';
-  const tasks=loadTasks(); tasks.push(copy); persistTasks(tasks);
+  copy.id=genTaskId(); copy.owner=draftRepository.owner;copy.revision=0;delete copy.key; copy.createdAt=now; copy.updatedAt=now; copy.status='draft'; copy.documentNo='';
+  if(!await saveTask(copy))return;
   renderTaskList(); showToast('작업 복제됨');
 }
 
 // 상태 변경
-function changeTaskStatus(id, status){
+async function changeTaskStatus(id, status){
   if(!TASK_STATUS[status]) return;
-  const tasks=loadTasks(); const t=tasks.find(x=>x.id===id); if(!t) return;
-  t.status=status; t.updatedAt=Date.now(); persistTasks(tasks);
+  const t=getTask(id); if(!t) return;
+  if(t.owner!==draftRepository.owner){showToast('이전 작업을 먼저 불러와 현재 계정으로 가져오세요.');return;}
+  t.status=status; t.updatedAt=Date.now(); if(!await saveTask(t))return;
   if(id===_currentTaskId){
     if(status!=='waiting_signature' && _signMode) exitSignMode();
     updateTaskStatusBar();
@@ -1524,12 +1544,14 @@ function changeTaskStatus(id, status){
   }else{
     cloudSyncTask(t, {silent:true});
   }
+  return true;
 }
 
 // 삭제 (confirm 확인) — 클라우드에서도 삭제 (미삭제 시 목록에 되살아나는 것 방지)
-function deleteTask(id){
+async function deleteTask(id){
   if(!confirm('이 작업을 삭제할까요? 되돌릴 수 없습니다.')) return;
-  let tasks=loadTasks(); tasks=tasks.filter(t=>t.id!==id); persistTasks(tasks);
+  const task=getTask(id);if(!task)return;
+  try{checkStorageAccount();await draftRepository.remove(task);}catch(e){showToast(e.message);return;}
   if(id===_currentTaskId) setCurrentTaskId(null);
   cloudDeleteTask(id);
   renderTaskList(); showToast('작업 삭제됨');
@@ -1565,7 +1587,7 @@ function exitSignMode(){
 }
 
 // ===== 클라우드 동기화 (Google Sheets 협업, 오프라인 우선) =====
-// 설정되지 않으면(=URL 없음) 전부 무동작 → 기존 localStorage 동작 100% 유지.
+// 설정되지 않으면(=URL 없음) 전부 무동작 → 기기의 IndexedDB 초안을 유지.
 let _cloudTasks=[];        // 서버에서 조회한 사인대기/완료 작업 메타데이터
 let _cloudBusy=false;
 function cloudUrl(){
@@ -1578,34 +1600,36 @@ const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:aut
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
   const size=job.blob?.size||job.saved?.pdf?.bytes||0;document.getElementById('doneFsize').textContent=(size/1000000).toFixed(1)+' MB';
   if(job.blob)window.BazInspectionShare.capture(job.blob,job.filename,()=>{const href=URL.createObjectURL(job.blob),a=document.createElement('a');a.href=href;a.download=job.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);});else window.BazInspectionShare.reset();
-},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);const task=getTask(context.taskId);if(task)cloudSyncTask(task,{silent:true});},onSaved(saved,context){
-  const tasks=loadTasks(),task=tasks.find(t=>t.id===context.taskId);
+},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);const task=getTask(context.taskId);if(task)cloudSyncTask(task,{silent:true});},async onSaved(saved,context){
+  const task=getTask(context.taskId);
   const identity={hospital:context.hospital,inspectDate:context.date,serialNo:context.sn||''};
-  if(task){task.data.handover={recordId:saved.recordId,requestId:context.requestId||'',identity};task.data.pdfDocument=saved.pdf;if(!persistTasks(tasks))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
+  if(task){task.data.handover={recordId:saved.recordId,requestId:context.requestId||'',identity};task.data.pdfDocument=saved.pdf;if(!await saveTask(task))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
   if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId,requestId:context.requestId||'',identity};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
 }});
 
+async function cloudRequest(url,options){
+  const token=authToken(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
+  try{const response=await fetch(url,{...options,signal:controller.signal,cache:'no-store'}),result=await response.json();checkStorageAccount();if(authToken()!==token)throw new Error('로그인 정보가 변경되었습니다. 다시 확인하세요.');return result;}finally{clearTimeout(timer);}
+}
 function cloudPost(payload){
+  checkStorageAccount();
   // auth.js 방식: text/plain 단순요청(프리플라이트 회피) + JSON 응답
-  return fetch(cloudUrl(), { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify(Object.assign({token:authToken()}, payload)) }).then(r=>r.json());
+  return cloudRequest(cloudUrl(), { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({token:authToken()}, payload)) });
 }
 function cloudGet(params){
+  checkStorageAccount();
   const q=Object.assign({token:authToken()}, params);
   const qs=Object.keys(q).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(q[k])).join('&');
-  return fetch(cloudUrl()+'?'+qs).then(r=>r.json());
+  return cloudRequest(cloudUrl()+'?'+qs);
 }
-
-// 오프라인 동기화 대기 큐
-function loadSyncQueue(){ try{ const q=JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return []; } }
-function saveSyncQueue(q){ try{ localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(q)); }catch(e){} }
-function enqueueSync(id){ const q=loadSyncQueue(); if(!q.includes(id)){ q.push(id); saveSyncQueue(q); } }
-function dequeueSync(id){ saveSyncQueue(loadSyncQueue().filter(x=>x!==id)); }
-// 오프라인 삭제 대기 큐 (삭제도 복구 시 서버에 반영)
-function loadDelQueue(){ try{ const q=JSON.parse(localStorage.getItem(SYNC_DELETE_KEY)||'[]'); return Array.isArray(q)?q:[]; }catch(e){ return []; } }
-function saveDelQueue(q){ try{ localStorage.setItem(SYNC_DELETE_KEY, JSON.stringify(q)); }catch(e){} }
-function enqueueDel(id){ const q=loadDelQueue(); if(!q.includes(id)){ q.push(id); saveDelQueue(q); } }
-function dequeueDel(id){ saveDelQueue(loadDelQueue().filter(x=>x!==id)); }
+// Queue changes are durable; each task save atomically creates its upsert checkpoint.
+function loadSyncQueue(){return draftRepository.queue('upsert');}
+function loadDelQueue(){return draftRepository.queue('remove');}
+function enqueueSync(id){return draftRepository.enqueue(id,'upsert').catch(e=>showToast(e.message));}
+function dequeueSync(id,revision){return draftRepository.acknowledge(id,'upsert',revision);}
+function enqueueDel(id){return draftRepository.enqueue(id,'remove').catch(e=>showToast(e.message));}
+function dequeueDel(id){return draftRepository.acknowledge(id,'remove');}
 
 // 저장 직후 클라우드 동기화 (debounce — 자동저장이 연속돼도 마지막 1회만 전송)
 let _cloudSyncTimer=null;
@@ -1619,12 +1643,13 @@ function scheduleCloudSync(){
 }
 
 // 클라우드에서 작업 삭제 (오프라인/실패 시 삭제 큐 적재)
-function cloudDeleteTask(id){
+function cloudDeleteTask(id){const result=_cloudWriteChain.catch(()=>{}).then(()=>performCloudDelete(id));_cloudWriteChain=result;return result;}
+async function performCloudDelete(id){
   if(!cloudConfigured()) return;
-  dequeueSync(id);                                  // 업서트 대기분은 무의미해짐
+  await dequeueSync(id);                                  // 업서트 대기분은 무의미해짐
   _cloudTasks=_cloudTasks.filter(c=>c.taskId!==id); // 목록에서도 즉시 제거
   if(!navigator.onLine){ enqueueDel(id); return; }
-  cloudPost({action:'remove', taskId:id}).then(r=>{
+  return cloudPost({action:'remove', taskId:id}).then(r=>{
     // 구버전 GAS(remove 미지원)면 재시도 무한루프 방지 위해 큐에서 제거
     if(r && (r.success || /알 수 없는 action/.test(r.error||''))) dequeueDel(id);
     else enqueueDel(id);
@@ -1641,27 +1666,38 @@ function taskToSyncPayload(task){
     data: JSON.stringify(task.data||{}) };
 }
 // 서버로 작업 동기화 (실패/오프라인 시 큐에 적재). opts:{toast, silent}
-function cloudSyncTask(task, opts){
-  opts=opts||{};
-  if(!task || !cloudConfigured()) return Promise.resolve({skip:true});
-  // Task snapshots contain photos too; defer them while rendering/uploading.
-  if(_pdfBusy||pdfPublisher.isBusy()){enqueueSync(task.id);return Promise.resolve({queued:true});}
-  if(!navigator.onLine){ enqueueSync(task.id); return Promise.resolve({queued:true}); }
-  return cloudPost(taskToSyncPayload(task)).then(r=>{
-    if(r&&r.success){ dequeueSync(task.id); if(opts.toast) showToast(opts.toast); }
-    else { enqueueSync(task.id); if(!opts.silent) showToast('클라우드 동기화 실패 — 나중에 재시도합니다'); }
-    return r||{success:false};
-  }).catch(()=>{ enqueueSync(task.id); if(!opts.silent) showToast('오프라인 — 복구 시 자동 동기화'); return {success:false, offline:true}; });
+let _cloudWriteChain=Promise.resolve();
+function cloudSyncTask(task,opts){
+  const run=async()=>{
+    opts=opts||{};
+    if(!task||task.owner!==draftRepository.owner||!cloudConfigured())return {skip:true};
+    try{
+      checkStorageAccount();
+      if(_pdfBusy||_pdfStarting||pdfPublisher.isBusy()||!navigator.onLine)return {queued:true};
+      const full=await draftRepository.get(task.id);
+      if(!full||full.owner!==draftRepository.owner)return {skip:true};
+      const r=await cloudPost(taskToSyncPayload(full));checkStorageAccount();
+      if(r?.success){await dequeueSync(full.id,full.revision);if(opts.toast)showToast(opts.toast);}
+      else if(!opts.silent)showToast('클라우드 동기화 실패 — 기기 초안은 유지됩니다');
+      return r||{success:false};
+    }catch(e){if(!opts.silent)showToast('클라우드 동기화 대기 — 기기 초안은 유지됩니다');return {success:false};}
+  };
+  const result=_cloudWriteChain.catch(()=>{}).then(run);_cloudWriteChain=result;return result;
 }
+
 // 대기 큐 재전송 (네트워크 복구/로드 시) — 삭제 큐 먼저, 그다음 업서트 큐
-function flushSyncQueue(){
-  if(!cloudConfigured() || !navigator.onLine) return;
-  loadDelQueue().forEach(id=>cloudDeleteTask(id));
-  const dels=loadDelQueue();
-  loadSyncQueue().forEach(id=>{
-    if(dels.includes(id)){ dequeueSync(id); return; }
-    const t=getTask(id); if(t) cloudSyncTask(t,{silent:true}); else dequeueSync(id);
-  });
+let _flushing=false;
+async function flushSyncQueue(){
+  await window.inspectionStorageReady;
+  if(_flushing||!cloudConfigured()||!navigator.onLine)return;
+  _flushing=true;
+  try{
+    for(const id of loadDelQueue())await cloudDeleteTask(id);
+    for(const id of loadSyncQueue()){
+      if(loadDelQueue().includes(id))continue;
+      const task=getTask(id);if(task)await cloudSyncTask(task,{silent:true});
+    }
+  }finally{_flushing=false;}
 }
 
 // 서버에서 전체 작업 목록 조회 → _cloudTasks 갱신 후 목록 재렌더
@@ -1674,34 +1710,39 @@ function refreshCloudTasks(){
   }).catch(()=>{ /* 오프라인: 로컬만 표시 */ }).finally(()=>{ _cloudBusy=false; renderTaskList(); });
 }
 // 서버 작업 불러오기 (Data 포함) → 로컬 반영 + 화면 복원(+사인 모드)
-function cloudPullTask(taskId){
+async function cloudPullTask(taskId){
+  await window.inspectionStorageReady;
+  if(_currentTaskId===taskId&&(_draftDirty||_pendingSaves)){showToast('작성 중인 내용이 있습니다. 먼저 초안을 저장한 뒤 다시 불러오세요.');return false;}
+  if(_currentTaskId&&_currentTaskId!==taskId&&!await saveCurrentTask())return false;
   if(!cloudConfigured()) return;
   showLoading('클라우드에서 불러오는 중...');
-  cloudGet({action:'get', taskId}).then(r=>{
+  return cloudGet({action:'get', taskId}).then(async r=>{
+    checkStorageAccount();
     if(!(r&&r.success&&r.task)){ hideLoading(); showToast('클라우드 작업을 불러오지 못했습니다'); return; }
     const ct=r.task;
     // 로컬 tasks 에 병합 (같은 TaskID면 UpdatedAt 최신 유지)
     const tasks=loadTasks();
-    const local=tasks.find(t=>t.id===ct.taskId);
+    const local=tasks.find(t=>t.id===ct.taskId&&t.owner===draftRepository.owner);
     const remoteUpdated=new Date(ct.updatedAt||0).getTime();
     if(!local || remoteUpdated >= (local.updatedAt||0)){
       const merged={ id:ct.taskId, createdAt:new Date(ct.createdAt||Date.now()).getTime(),
         updatedAt:remoteUpdated||Date.now(), status:ct.status||'draft', documentNo:ct.documentNo||'',
         hospital:ct.hospital||'', product:ct.product||'', serial:ct.serial||'', engineer:ct.engineer||'',
-        data:ct.data||{basic:{},pay:'',types:[],results:{},memos:{},photos:[],signatures:{cs:null,hs:null}} };
+        revision:local?.revision||0,owner:draftRepository.owner, data:(typeof ct.data==='string'?JSON.parse(ct.data):ct.data)||{basic:{},pay:'',types:[],results:{},memos:{},photos:[],signatures:{cs:null,hs:null}} };
       const idx=tasks.findIndex(t=>t.id===ct.taskId);
       if(idx>=0) tasks[idx]=merged; else tasks.push(merged);
-      persistTasks(tasks);
+      if(!await saveTask(merged)){hideLoading();return;}
     }
     hideLoading();
-    openTask(ct.taskId);   // 로컬에 반영됐으므로 기존 열기 로직 재사용 (사인대기면 사인 모드)
+    await openTask(ct.taskId);   // 로컬에 반영됐으므로 기존 열기 로직 재사용 (사인대기면 사인 모드)
   }).catch(()=>{ hideLoading(); showToast('클라우드 오류 — 오프라인일 수 있습니다'); });
 }
 
 window.addEventListener('online', ()=>{ if(cloudConfigured()){ showToast('네트워크 복구 — 동기화 중'); flushSyncQueue(); } });
 
 // ===== 작업 목록 Modal =====
-function openTaskList(){
+async function openTaskList(){
+  try{await window.inspectionStorageReady;await draftRepository.reload();}catch(e){showToast(e.message);return;}
   renderTaskList();
   document.getElementById('taskListOverlay').classList.add('show');
   // 클라우드 설정 시 사인대기/완료 작업 자동 조회 (다른 기기 작업 이어받기)
@@ -1742,19 +1783,19 @@ function renderTaskList(){
     const waiting=t.status==='waiting_signature';
     const opt=(val,label)=>`<option value="${val}"${t.status===val?' selected':''}>${label}</option>`;
     // 클라우드 전용(로컬 미보유/구버전) 항목은 불러오기 시 서버에서 pull, 상태변경·복제·삭제는 로컬 전용
-    const loadAct = t.cloud ? 'cloudload' : 'load';
-    const statusCtrl = t.cloud
+    const loadAct = t.cloud||getTask(t.id)?.localReleased ? 'cloudload' : 'load';
+    const statusCtrl = t.cloud||getTask(t.id)?.localReleased||getTask(t.id)?.owner===draftRepository.legacyOwner
       ? '<span class="ta-cloud-tag">☁ 클라우드</span>'
       : `<select data-act="status" data-id="${t.id}" title="상태 변경">${opt('draft','🟡 작성중')}${opt('inspection_completed','🟠 점검완료')}${opt('waiting_signature','🔵 사인대기')}${opt('completed','🟢 완료')}</select>`;
-    const delBtn = t.cloud ? '' : `<button type="button" class="ta-del" data-act="del" data-id="${t.id}">삭제</button>`;
-    const dupBtn = t.cloud ? '' : `<button type="button" data-act="dup" data-id="${t.id}">복제</button>`;
+    const delBtn = t.cloud||getTask(t.id)?.owner===draftRepository.legacyOwner ? '' : `<button type="button" class="ta-del" data-act="del" data-id="${t.id}">삭제</button>`;
+    const dupBtn = t.cloud||getTask(t.id)?.localReleased||getTask(t.id)?.owner===draftRepository.legacyOwner ? '' : `<button type="button" data-act="dup" data-id="${t.id}">복제</button>`;
     return `<div class="task-item ${waiting?'is-waiting':''}" data-id="${t.id}">
       <div class="task-item-top">
         <span class="st-badge ${m.cls}">${m.badge} ${m.label}</span>
         ${waiting?'<span class="sign-need-label">⚠ 담당자 사인 필요</span>':''}
         ${t.cloud?'<span class="ta-cloud-tag">☁</span>':''}
       </div>
-      <div class="task-hosp">${esc(t.hospital||'무제목')}</div>
+      <div class="task-hosp">${esc(t.hospital||'무제목')}${getTask(t.id)?.owner===draftRepository.legacyOwner?' · 이전 작업 (원본 보존)':''}</div>
       <div class="task-meta">
         <b>제품</b> ${esc(t.product||'—')} · <b>S/N</b> ${esc(t.serial||'—')} · <b>엔지니어</b> ${esc(t.engineer||'—')}<br>
         <b>작성</b> ${fmtTaskTime(t.createdAt)} · <b>수정</b> ${fmtTaskTime(t.updatedAt)}
@@ -1779,25 +1820,27 @@ document.getElementById('cloudRefreshBtn').addEventListener('click', ()=>{
   refreshCloudTasks();
 });
 document.getElementById('editModeBtn').addEventListener('click', ()=>{ exitSignMode(); showToast('편집 모드로 전환'); });
-document.getElementById('taskStatusSelect').addEventListener('change', (e)=>{
+document.getElementById('taskStatusSelect').addEventListener('change', async(e)=>{
   if(!_currentTaskId) return;
-  changeTaskStatus(_currentTaskId, e.target.value);
-  showToast('상태 변경: '+(TASK_STATUS[e.target.value]||TASK_STATUS.draft).label);
+  if(await changeTaskStatus(_currentTaskId, e.target.value))showToast('상태 변경: '+(TASK_STATUS[e.target.value]||TASK_STATUS.draft).label);
+  else updateTaskStatusBar();
 });
 // 작업 목록 내 액션 (불러오기/복제/삭제)
-document.getElementById('taskListBody').addEventListener('click', (e)=>{
+document.getElementById('taskListBody').addEventListener('click', async(e)=>{
   const btn=e.target.closest('button[data-act]'); if(!btn) return;
   const id=btn.getAttribute('data-id'), act=btn.getAttribute('data-act');
-  if(act==='load') openTask(id);
-  else if(act==='cloudload') cloudPullTask(id);
-  else if(act==='dup') duplicateTask(id);
-  else if(act==='del') deleteTask(id);
+  try{
+    if(act==='load')await openTask(id);
+    else if(act==='cloudload')await cloudPullTask(id);
+    else if(act==='dup')await duplicateTask(id);
+    else if(act==='del')await deleteTask(id);
+  }catch(error){showToast(error.message);}
 });
 // 작업 목록 내 상태 변경 select
-document.getElementById('taskListBody').addEventListener('change', (e)=>{
+document.getElementById('taskListBody').addEventListener('change', async(e)=>{
   const sel=e.target.closest('select[data-act="status"]'); if(!sel) return;
-  changeTaskStatus(sel.getAttribute('data-id'), sel.value);
-  showToast('상태 변경됨');
+  if(await changeTaskStatus(sel.getAttribute('data-id'), sel.value))showToast('상태 변경됨');
+  else renderTaskList();
 });
 
 // ===== 현장 사진 =====
@@ -1805,14 +1848,14 @@ const PHOTO_LABELS=window.BazInspectionPdf.PHOTO_LABELS;
 const PHOTO_ORDER=window.BazInspectionPdf.PHOTO_ORDER;
 let _photoBusy=false,_photoTarget=null;
 function choosePhoto(slot,camera){
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 선택하세요.');return;}
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 선택하세요.');return;}
   _photoTarget=slot;
   const input=camera?els.photoCameraInput:els.photoGalleryInput;
   if(!camera)input.multiple=slot===null;
   input.click();
 }
 async function addPhotos(fileList,selectedSlot=null){
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 추가해 주세요.');return;}
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()){showToast('사진 처리·내역서 전송이 끝난 뒤 추가해 주세요.');return;}
   const files=[...fileList].filter(f=>f&&f.type&&f.type.startsWith('image/'));
   if(!files.length)return;
   const replacing=selectedSlot!==null&&state.photos.some(p=>p.slot===selectedSlot);
@@ -1832,7 +1875,7 @@ async function addPhotos(fileList,selectedSlot=null){
         count++;if(result.worker)worker++;
       }catch(e){failures++;}
     }
-    renderPhotos();saveDraft();showToast('사진 '+count+'장 저장'+(failures?' · '+failures+'장은 다시 선택하세요.':''));
+    renderPhotos();if(await saveDraft())showToast('사진 '+count+'장 저장'+(failures?' · '+failures+'장은 다시 선택하세요.':''));
   }finally{done({count,worker});_photoBusy=false;hideLoading();}
 }
 function renderPhotos(){
@@ -1854,13 +1897,13 @@ function renderPhotos(){
 els.photoList.addEventListener('click',e=>{
   const btn=e.target.closest('button');if(!btn)return;
   if(btn.hasAttribute('data-slot')){choosePhoto(Number(btn.dataset.slot),btn.dataset.camera==='1');return;}
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy())return;
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy())return;
   const i=Number(btn.dataset.i);
   if(btn.classList.contains('photo-del')&&state.photos[i]){state.photos.splice(i,1);renderPhotos();saveDraft();showToast('사진 삭제됨');}
 });
 els.photoList.addEventListener('change',e=>{
   const select=e.target.closest('.photo-slot');if(!select)return;
-  if(_photoBusy||_pdfBusy||pdfPublisher.isBusy()){renderPhotos();return;}
+  if(_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()){renderPhotos();return;}
   const i=Number(select.dataset.i),photo=state.photos[i];if(!photo)return;
   const next=select.value===''?null:Number(select.value),other=state.photos.find(p=>p!==photo&&p.slot===next&&next!==null);
   if(photo.slot===3&&next!==3&&!other&&state.photos.filter(p=>p.slot!==3).length>=MAX_PHOTOS){renderPhotos();showToast('사진은 최대 6장입니다. 기존 사진을 교체하거나 삭제하세요.');return;}
@@ -2071,7 +2114,7 @@ function addPdfFooters(pdf, docNo, genAt){
 
 // ===== PDF 생성 =====
 let _lastFname='';
-let _pdfBusy=false;
+let _pdfBusy=false,_pdfStarting=false;
 function downloadPdfBlob(blob,filename){
   const href=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=href;a.download=filename;document.body.appendChild(a);a.click();a.remove();
@@ -2088,16 +2131,21 @@ function inspectionPdfFilename(){
 }
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 async function generatePDF(arg){
+  if(_pdfStarting){showToast('PDF를 준비 중입니다. 잠시 기다려 주세요.');return;}
+  _pdfStarting=true;try{return await renderInspectionPdf(arg);}finally{_pdfStarting=false;}
+}
+async function renderInspectionPdf(arg){
   if(pdfPublisher.isBusy()){showToast('내역서를 전송 중입니다. 전송 결과를 확인한 뒤 생성하세요.');return;}
   if(_pdfBusy||_photoBusy){showToast('진행 중인 사진 처리·PDF 생성을 먼저 확인하세요.');return;}
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
   const preview = !!opts.preview;
   const blank = !!opts.blank;
   const qrDraft=!!opts.qrDraft;
-  if(!blank&&window.BazInspectionQrBridge?.beforeGenerate&&!window.BazInspectionQrBridge.beforeGenerate())return;
+  if(!blank&&window.BazInspectionQrBridge?.beforeGenerate&&!await window.BazInspectionQrBridge.beforeGenerate())return;
   const simplified=pdfFormat()==='simplified';
   if(!blank)fillInspectionSales();
   if(!blank && !validate({simplified})) return;
+  if(!blank&&!await saveCurrentTask())return;
   const captured=collectFormData(),photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(),basis=handoverReference?{...handoverReference}:null;
   const totalDone=window.BazPerf.start('pdf_total');_pdfBusy=true;
   let stage='준비';
@@ -2160,7 +2208,7 @@ async function generatePDF(arg){
       // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
       exitSignMode();
       const unchanged=JSON.stringify(captured)===JSON.stringify(collectFormData());
-      saveCurrentTask(unchanged?{status:'completed', documentNo:docNo}:{});
+      await saveCurrentTask(unchanged?{status:'completed', documentNo:docNo}:{});
       pdfPublisher.publish(pdfBlob,shareFilename,uploadContext);
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.
@@ -2186,7 +2234,8 @@ document.getElementById('doneSurvey').addEventListener('click',()=>{
   location.href=`survey.html?h=${hosp}&e=${cs}`;
 });
 // 완료 오버레이의 "새 점검 내역서" → 새 작업 생성 (기존 작업 보존)
-document.getElementById('doneNew').addEventListener('click',()=>{
+document.getElementById('doneNew').addEventListener('click',async()=>{
+  if(!await saveCurrentTask())return;
   window.BazInspectionShare.reset();
   pdfPublisher.reset();
   document.getElementById('doneOverlay').classList.remove('show');
@@ -2202,37 +2251,29 @@ initTax();      // A/S 항목 분류 드롭다운 구성
 hospitalDb.load(false); // 병원명 목록은 병원정보DB 시트에서 조회한다.
 masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 값 유지)
 
-// (구) 단일 임시저장 → 작업 목록 마이그레이션 (최초 1회)
-(function migrateOldDraft(){
-  try{
-    const old=localStorage.getItem(STORAGE_KEY);
-    if(old && loadTasks().length===0){
-      const data=JSON.parse(old);
-      const now=data.savedAt||Date.now();
-      persistTasks([{ id:genTaskId(), createdAt:now, updatedAt:now, status:'draft',
-        documentNo:'', ...taskMetaFromData(data), data }]);
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }catch(e){ console.warn('[마이그레이션] 실패:', e); }
-})();
-
-// 이전에 열려있던 작업 복원 (없으면 빈 폼 — 첫 입력 시 새 작업 자동 생성)
-(function restoreCurrentTask(){
-  let curId=null; try{ curId=localStorage.getItem(CURRENT_TASK_KEY); }catch(e){}
-  const task=curId?getTask(curId):null;
-  if(task){
-    _currentTaskId=task.id;
-    applyFormData(task.data);
-    if(task.status==='waiting_signature') enterSignMode();
-    updateTaskStatusBar();
-  }else{
-    setCurrentTaskId(null);
-    updateTaskStatusBar();
+// Finish verified migration before accepting input or restoring a current task.
+document.querySelector('.wrap').inert=true;
+window.inspectionStorageReady=draftRepository.ready().then(async()=>{
+  const id=await draftRepository.current(),task=id?getTask(id):null;
+  if(task?.owner===draftRepository.owner&&!task.localReleased){
+    const full=await draftRepository.get(id);await setCurrentTaskId(id);_currentTaskRevision=full.revision;applyFormData(full.data);
+    if(task.status==='waiting_signature')enterSignMode();
   }
-})();
+  updateTaskStatusBar();
+  document.querySelector('.wrap').inert=false;
+  const previousCount=loadTasks().filter(t=>t.owner===draftRepository.legacyOwner).length;
+  draftSaveStatus(previousCount?'이전 초안 '+previousCount+'건 보존됨 · 작업 목록에서 불러오세요':'초안 저장 준비 완료');
+}).catch(e=>{
+  document.querySelector('.wrap').inert=false;showToast(e.message+' 기존 데이터는 삭제하지 않았습니다.');
+  draftSaveStatus('초안 저장소 사용 불가 · 원본 백업 확인');
+  throw e;
+});
+window.inspectionStorageReady.catch(()=>{});
+document.getElementById('inspectionStorageBtn').onclick=()=>window.BazInspectionStorageUI.open({repository:draftRepository,ready:window.inspectionStorageReady,current:()=>_currentTaskId,save:()=>saveCurrentTask(),snapshot:()=>({...getTask(_currentTaskId),id:_currentTaskId||genTaskId(),createdAt:getTask(_currentTaskId)?.createdAt||Date.now(),updatedAt:Date.now(),status:getTask(_currentTaskId)?.status||'draft',...taskMetaFromData(collectFormData()),data:collectFormData()}),cloudGet,checkAccount:checkStorageAccount,outbox:window.BazInspectionOutbox.create(window.indexedDB),onChange(){renderTaskList();updateTaskStatusBar();}});
 
 // 현장 처리(handover.html) → 점검 내역서 이어쓰기 프리필 소비
-(function consumePrefill(){
+(async function consumePrefill(){
+  try{await window.inspectionStorageReady;}catch{return;}
   if(window.BazWorkFlow.route(location.search)?.recordId)return;
   if(new URLSearchParams(location.search).get('prefill')!=='1')return;
   const PREFILL_KEY='insp_prefill_v1';
@@ -2241,32 +2282,37 @@ masterSync();   // 시트 유형마스터 동기화 (실패해도 하드코딩 �
   let p=null; try{ p=JSON.parse(raw); }catch(e){ return; }
   if(!p || p.v!==1 || !p.form) return;
   if(Date.now()-(p.createdAt||0) > 10*60*1000) return;        // 10분 지난 프리필은 무시
-  if(!newTask())return;                                       // 기존 작업 보관 실패 시 덮어쓰지 않는다
-  try{localStorage.removeItem(PREFILL_KEY);}catch(e){}
+  if(!await newTask())return;                                       // 기존 작업 보관 실패 시 덮어쓰지 않는다
   applyFormData(Object.assign(
     { basic:{}, pay:'', types:[], results:{}, memos:{}, photos:[], signatures:{cs:null,hs:null} },
     p.form
   ));
-  saveCurrentTask({ showMsg:'현장 처리 내용을 불러왔습니다 — 이어서 작성하세요' });
+  if(!await saveCurrentTask({ showMsg:'현장 처리 내용을 불러왔습니다 — 이어서 작성하세요' }))return;
+  try{localStorage.removeItem(PREFILL_KEY);}catch(e){}
   try{ history.replaceState(null,'',location.pathname); }catch(e){}
 })();
 
 // 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
-flushSyncQueue();
+window.inspectionStorageReady.then(flushSyncQueue).catch(()=>{});
 // QR 문서는 발급 시점의 PDF로 고정한다. 서명된 원본을 기존 Drive 저장 흐름에 전달한다.
 window.BazInspectionQrBridge={
-  draft:async()=>{if(pdfFormat()==='simplified'){showToast('담당자 서명이 포함된 기본 양식을 선택하세요.');return null;}if(!saveCurrentTask())throw new Error('현재 작업을 먼저 저장해 주세요.');return generatePDF({qrDraft:true});},
+  draft:async()=>{if(pdfFormat()==='simplified'){showToast('담당자 서명이 포함된 기본 양식을 선택하세요.');return null;}if(!await saveCurrentTask())throw new Error('현재 작업을 먼저 저장해 주세요.');return generatePDF({qrDraft:true});},
   currentId:()=>_currentTaskId,
   waiting:()=>saveCurrentTask({status:'waiting_signature'}),
   fingerprint:(data)=>{const d={...(data||collectFormData())};delete d.savedAt;delete d.pdfDocument;return JSON.stringify(d);},
-  contentKey(data){const d={...(data||collectFormData())};for(const k of ['savedAt','pdfDocument','customerQr','handover'])delete d[k];return JSON.stringify(d);},
-  beforeGenerate(){
-    if(!customerQrDocument||customerQrDocument.contentKey===this.contentKey())return true;
+  contentText(data){const d={...(data||collectFormData())};for(const k of ['savedAt','pdfDocument','customerQr','handover'])delete d[k];return JSON.stringify(d);},
+  async contentKey(data){return 'sha256:'+Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(this.contentText(data)))),x=>x.toString(16).padStart(2,'0')).join('');},
+  async beforeGenerate(){
+    const signed=customerQrDocument;if(!signed)return true;
+    const text=this.contentText(),key=await this.contentKey();
+    if(customerQrDocument!==signed||this.contentText()!==text)return false;
+    // Recognize old JSON keys once, then keep only a digest instead of a second photo copy.
+    if(signed.contentKey===key||signed.contentKey===text){signed.contentKey=key;return true;}
     customerQrDocument=null;sigStore.hs=null;document.getElementById('hsSigPreview').src='';document.getElementById('hsSigBox').classList.remove('has-sign');
-    saveCurrentTask({status:'draft'});showToast('내용 변경으로 고객 서명이 해제되었습니다. 다시 확인·서명받아 주세요.');return false;
+    await saveCurrentTask({status:'draft'});showToast('내용 변경으로 고객 서명이 해제되었습니다. 다시 확인·서명받아 주세요.');return false;
   },
   async received(blob,meta,taskId,expectedFingerprint){
-    const task=getTask(taskId);if(!task)throw new Error('원본 작업을 작업 목록에서 불러온 뒤 다시 저장하세요.');
+    const task=await draftRepository.get(taskId);if(!task)throw new Error('원본 작업을 작업 목록에서 불러온 뒤 다시 저장하세요.');
     const currentHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(window.BazInspectionQrBridge.fingerprint(task.data)))),x=>x.toString(16).padStart(2,'0')).join('');
     if(task.data.customerQr?.id!==meta.id&&currentHash!==expectedFingerprint)throw new Error('QR 발급 후 원본 작업이 변경되었습니다. 고객이 서명한 문서는 QR 서버에 보관되어 있습니다. 원본 작업을 확인해 주세요.');
     const b=task.data.basic,ref=task.data.handover||{};
@@ -2274,8 +2320,8 @@ window.BazInspectionQrBridge={
     task.status='completed';task.documentNo=meta.documentNo;task.updatedAt=Date.now();
     task.data.basic.hospitalName=meta.signer;task.data.customerQr={id:meta.id,signedAt:meta.signedAt,documentNo:meta.documentNo};
     task.data.signatures.hs=meta.signature;
-    task.data.customerQr.contentKey=this.contentKey(task.data);
-    if(!persistTasks(loadTasks().map(t=>t.id===taskId?task:t)))throw new Error('기기 저장 공간을 확인한 뒤 다시 시도하세요.');
+    task.data.customerQr.contentKey=await this.contentKey(task.data);
+    if(!await saveTask(task))throw new Error('기기 저장 공간을 확인한 뒤 다시 시도하세요.');
     if(_currentTaskId===taskId){document.getElementById('hospitalName').value=meta.signer;sigStore.hs=meta.signature;document.getElementById('hsSigPreview').src=meta.signature;document.getElementById('hsSigBox').classList.add('has-sign');customerQrDocument=task.data.customerQr;exitSignMode();updateTaskStatusBar();}
     const name=meta.filename;
     window.BazInspectionShare.capture(blob,name,()=>{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);});
@@ -2284,12 +2330,12 @@ window.BazInspectionQrBridge={
   }
 };
 for(const event of ['input','change','click'])document.querySelector('.wrap').addEventListener(event,()=>{
-  if(customerQrDocument)queueMicrotask(()=>window.BazInspectionQrBridge.beforeGenerate());
+  if(customerQrDocument)queueMicrotask(()=>window.BazInspectionQrBridge.beforeGenerate().catch(e=>showToast(e.message)));
 });
 </script>
 <script src="js/baz-inspection-qr-config.js?v=273"></script>
 <script src="js/vendor/qrcode-1.5.4.min.js"></script>
-<script src="js/baz-inspection-qr.js?v=273"></script>
+<script src="js/baz-inspection-qr.js?v=342"></script>
 <script>
 // 오프라인 사용을 위한 서비스 워커 등록
 if ('serviceWorker' in navigator) {
