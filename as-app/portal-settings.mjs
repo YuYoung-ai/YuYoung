@@ -19,6 +19,8 @@ export function mountSettings(container,{device=false,handoff}={}){
  function paintNotice(){const push=window.QrCustomerPush;if(!push){noticeState.textContent='알림을 준비하고 있습니다.';noticeAllow.hidden=true;return;}noticeAllow.hidden=!push.supported();noticeAllow.textContent=push.permission()==='granted'?'접수 알림 연결':'앱 알림 허용';noticeState.textContent=push.supported()?(push.permission()==='granted'?'알림 권한 허용됨 · 접수 진행 확인에서 연결 상태를 확인하세요.':push.guidance(push.permission())):push.guidance(push.permission());}
  noticeAllow.onclick=async()=>{noticeAllow.disabled=true;try{await window.QrCustomerPush.requestPermission();localStorage.setItem('curejet-as-app-notify',JSON.stringify(true));window.dispatchEvent(new Event('curejet:notifications-enabled'));paintNotice();}catch(e){noticeState.textContent=e.message;}finally{noticeAllow.disabled=false;}};
  paintNotice();window.QrCustomerPush?.observe(paintNotice);
+ function updatePhonePolicy(){const enabled=window.CurejetPhoneLogin===true;for(const id of ['handoff-create','pending-handoff']){const button=panel.querySelector('#'+id);if(button)button.hidden=enabled;}const logout=panel.querySelector('#portal-logout');if(logout)logout.textContent=enabled?'로그아웃':'이 기기 연결 해제';}
+ window.addEventListener('curejet:phone-policy',updatePhonePolicy);
  if(device){
   link('접수 병원 변경','hospital');
   link('번호 변경·재등록','recovery');
@@ -33,13 +35,13 @@ export function mountSettings(container,{device=false,handoff}={}){
   button('portal-logout','이 기기 연결 해제',async()=>{
    if(busy)return;
    if(document.querySelector('#photos:disabled')||document.querySelector('#request-form[aria-busy=true]')){message('사진 업로드나 접수가 끝난 뒤 다시 시도해 주세요.');return;}
-   if(!confirm('이 기기의 접속 권한을 해제할까요? 다시 이용하려면 기기 연결 확인이 필요합니다.'))return;
+   if(!confirm(window.CurejetPhoneLogin===true?'로그아웃할까요? 등록된 휴대폰번호로 다시 접속할 수 있습니다.':'이 기기의 접속 권한을 해제할까요? 다시 이용하려면 기기 연결 확인이 필요합니다.'))return;
    setBusy(true);message('');
    try{
     await portalCall('portal_logout');
     // Revoke on the server first. Local storage cleanup must not undo that success.
     await Promise.allSettled([forgetPortalDevice(),writePending(null)]);
-    try{for(const k of ['curejet-portal-login','curejet-portal-hospital','curejet-portal-return'])sessionStorage.removeItem(k);}catch{}
+    try{for(const k of ['curejet-portal-login','curejet-portal-hospital','curejet-portal-return'])sessionStorage.removeItem(k);localStorage.removeItem('curejet-portal-login');}catch{}
     location.replace('index.html?loggedOut=1');
    }catch(e){message(e.message);setBusy(false);}
   });
@@ -48,5 +50,5 @@ export function mountSettings(container,{device=false,handoff}={}){
   if(!panel.open||panel.querySelector('[data-install-card]'))return;
   installCard(panel.querySelector('[data-install-slot]'),true);
  });
- return panel;
+ updatePhonePolicy();return panel;
 }

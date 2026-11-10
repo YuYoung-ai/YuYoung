@@ -18,7 +18,7 @@
  function worker(){
   if(!supported())return Promise.reject(Error(guidance(permission())));
   if(!workerTask)workerTask=(async function(){
-   var reg=await navigator.serviceWorker.register(new URL('sw.js?v=338',base).href,{scope:base.href,updateViaCache:'none'});
+   var reg=await navigator.serviceWorker.register(new URL('sw.js?v=340',base).href,{scope:base.href,updateViaCache:'none'});
    if(reg.scope!==base.href)throw Error('AS 전용 알림 연결을 확인하지 못했습니다. 병원 QR을 다시 열어 주세요.');
    if(validRegistration(reg)&&reg.active.state==='activated')return reg;
    return new Promise(function(resolve,reject){var seen=[],timer=setTimeout(function(){finish(Error('AS 알림 준비가 지연되고 있습니다. 인터넷 연결을 확인하고 다시 연결해 주세요.'));},15000);
