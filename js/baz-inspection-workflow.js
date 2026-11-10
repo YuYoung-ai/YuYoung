@@ -21,6 +21,7 @@
   async function confirmAttachment(saved,context,options){
    if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');
    var transport=options||{},params={requestId:context.requestId,recordId:context.recordId,sha256:saved.pdf.sha256};
+   async function readStatus(){try{return await api.get('work_document_status',params,transport);}catch(e){if(!e.aborted&&!transport.signal?.aborted)e.pending=true;throw e;}}
    function validate(status){
     if(!status.success){var failed=new Error(status.error||'접수 첨부 확인 실패');failed.pending=!!status.retryable;failed.noRetry=!!status.deleted;throw failed;}
     if(status.documentChanged){var changed=new Error('다른 내역서가 최신 문서로 저장되었습니다. 접수에서 최신 문서를 확인하세요.');changed.noRetry=true;throw changed;}
@@ -35,12 +36,12 @@
     context.requestId=status.request?.id||context.requestId;return {applicable:true};
    }
    // A previously completed write needs only a read; do not run repair/push jobs.
-   var status=validate(await api.get('work_document_status',params,transport));
+   var status=validate(await readStatus());
    if(status.commentAttached||status.attachmentApplicable===false)return complete(status);
    if(!status.pdfStored&&status.request?.id){
     // Recover authoritative metadata from the existing saved Handover row.
     // The browser never supplies a file URL or uploads the PDF again.
-    var refreshed=await api.get('work_handover_detail',{requestId:status.request.id,recordId:context.recordId},transport);
+    var refreshed;try{refreshed=await api.get('work_handover_detail',{requestId:status.request.id,recordId:context.recordId},transport);}catch(e){if(!e.aborted&&!transport.signal?.aborted)e.pending=true;throw e;}
     if(!refreshed.success){var delayed=new Error(refreshed.error||'저장된 내역서 정보를 다시 확인해 주세요.');delayed.pending=true;throw delayed;}
    }
    try{status=await api.post('work_document_retry',params,transport);}
@@ -48,12 +49,17 @@
     if(e.aborted||transport.signal?.aborted)throw e;
     // A timeout/lost response does not prove the write failed. Read back once
     // rather than issuing overlapping repairs against the same document.
-    try{status=await api.get('work_document_status',params,transport);}
+    try{status=await readStatus();}
     catch(readError){readError.pending=true;throw readError;}
    }
    return complete(status);
   }
   function progress(state){
+   var done=state.drive==='done'&&state.handover==='done'&&(state.comment==='done'||state.comment==='skipped'),needs=Object.values(state).some(function(s){return s==='error'||s==='pending';});
+   var title=document.getElementById('doneTitle'),icon=document.getElementById('doneIcon'),lead=document.getElementById('doneLead');
+   if(title)title.textContent=done?'점검 내역서 저장 완료':state.drive==='done'?'PDF 저장 완료 · 댓글 연결 '+(needs?'확인 필요':'확인 중'):'PDF 생성 완료 · 저장 '+(needs?'확인 필요':'확인 중');
+   if(icon)icon.textContent=done?'✅':needs?'⚠️':'⏳';
+   if(lead)lead.textContent=done?'확인된 저장 결과입니다.':state.drive==='done'?'저장된 PDF를 유지하고 댓글 연결만 확인합니다.':'전송이 지연되면 같은 PDF의 저장 결과를 다시 확인합니다.';
    var list=document.getElementById('pdfFlowStages');list.replaceChildren();
    flow.documentSteps(state).forEach(function(item){var li=document.createElement('li');li.dataset.state=item.state;li.textContent=item.label;var span=document.createElement('span');span.textContent={done:'완료',working:'확인 중',error:'재시도 필요',pending:'확인 대기',skipped:'연결 접수 없음',waiting:'대기'}[item.state];li.appendChild(span);list.appendChild(li);});
   }

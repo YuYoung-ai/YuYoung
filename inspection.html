@@ -321,7 +321,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=342"></script><script src="js/baz-inspection-workflow.js?v=342"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=342"></script><script src="js/baz-inspection-workflow.js?v=343"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-inspection.css?v=295">
@@ -586,9 +586,9 @@
 
 <div class="done-overlay" id="doneOverlay">
   <div class="done-card">
-    <div class="ico">✅</div>
-    <h3>점검 내역서 완성</h3>
-    <p>생성한 PDF를 Google Drive와 Handover에 저장합니다.</p>
+    <div class="ico" id="doneIcon">⏳</div>
+    <h3 id="doneTitle">PDF 생성 완료 · 저장 확인 중</h3>
+    <p id="doneLead">Drive 저장과 접수 댓글 연결을 확인하고 있습니다.</p>
     <div class="fname" id="doneFname"></div>
     <div class="fsize" id="doneFsize"></div>
     <p id="pdfShareStatus" role="status" aria-live="polite"></p>
@@ -646,7 +646,7 @@
 
 <script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=342"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=315"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=343"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1513,6 +1513,7 @@ async function restoreTask(id){
   updateTaskStatusBar();
   window.scrollTo({top:0,behavior:'smooth'});
   showToast('작업 불러옴');
+  queueMicrotask(()=>restorePendingPdf().catch(e=>showToast(e.message)));
   return true;
 }
 
@@ -1606,6 +1607,14 @@ const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:aut
   if(task){task.data.handover={recordId:saved.recordId,requestId:context.requestId||'',identity};task.data.pdfDocument=saved.pdf;if(!await saveTask(task))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});}
   if(_currentTaskId===context.taskId){handoverReference={recordId:saved.recordId,requestId:context.requestId||'',identity};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
 }});
+async function restorePendingPdf(){
+  await window.inspectionStorageReady;await window.inspectionWorkflowReady;
+  if(!_currentTaskId||_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy())return false;
+  const context={...handoverReference,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId};
+  if(!context.hospital||!context.date)return false;
+  if(await pdfPublisher.restore(context,{automatic:true})){document.getElementById('doneOverlay').classList.add('show');return true;}
+  return false;
+}
 
 async function cloudRequest(url,options){
   const token=authToken(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000);
@@ -2294,6 +2303,7 @@ document.getElementById('inspectionStorageBtn').onclick=()=>window.BazInspection
 
 // 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
 window.inspectionStorageReady.then(flushSyncQueue).catch(()=>{});
+document.addEventListener('DOMContentLoaded',()=>restorePendingPdf().catch(e=>showToast(e.message)),{once:true});
 // QR 문서는 발급 시점의 PDF로 고정한다. 서명된 원본을 기존 Drive 저장 흐름에 전달한다.
 window.BazInspectionQrBridge={
   draft:async()=>{if(pdfFormat()==='simplified'){showToast('담당자 서명이 포함된 기본 양식을 선택하세요.');return null;}if(!await saveCurrentTask())throw new Error('현재 작업을 먼저 저장해 주세요.');return generatePDF({qrDraft:true});},
