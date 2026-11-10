@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const nodes=Object.fromEntries(['pdfUploadStatus','pdfUploadRetry','pdfOpenLink','doneNew'].map(id=>[id,{hidden:true,disabled:false,textContent:'',addEventListener(type,fn){this[type]=fn;}}]));
 class Reader{readAsDataURL(blob){blob.arrayBuffer().then(a=>{this.result='data:application/pdf;base64,'+Buffer.from(a).toString('base64');this.onload();});}}
 const window={};vm.runInNewContext(fs.readFileSync(new URL('../js/baz-inspection-upload.js',import.meta.url),'utf8'),{window,document:{getElementById:id=>nodes[id]},URL,AbortController,setTimeout,clearTimeout,crypto,FileReader:Reader,Uint8Array});
+const uploadCreate=window.BazInspectionUpload.create;window.BazInspectionUpload.create=options=>uploadCreate({...options,delay:async()=>{}});
 const calls=[],saved=[];let fail=true;
 const url='https://script.google.com/macros/s/fixture-upload/exec';
 const pdf={url:'https://drive.google.com/file/d/pdf-file-123/view',revision:1};
@@ -42,7 +43,7 @@ const transfer=switched.publish(new Blob(['%PDF-1.7']), 'switch.pdf',{hospital:'
 console.log('inspection-upload: independent progress, saved-file link visibility, attachment-only retry/resume, single onSaved and account-switch response protection passed.');
 const revisionCalls=[];let otherRevision=3,dropUpload=true;
 const concurrent=window.BazInspectionUpload.create({url,token:()=> 'fixture-token',onSaved(){},fetch:async(endpoint,options)=>{const p=JSON.parse(options.body);revisionCalls.push(p);if(p.action==='inspection_pdf_upload'&&dropUpload)throw new Error('응답 유실');return {json:async()=>p.action==='inspection_pdf_resolve'?{success:true,recordId:'record-123',pdf:{revision:otherRevision}}:{success:false,conflict:true,error:'다른 내역서가 저장되었습니다.'}};}});
-await concurrent.publish(new Blob(['%PDF-1.7']), 'concurrent.pdf',{hospital:'검증',date:'2026-10-14',sourcePdfRevision:3});otherRevision=4;dropUpload=false;await nodes.pdfUploadRetry.click();assert.deepEqual(revisionCalls.filter(p=>p.action==='inspection_pdf_upload').map(p=>p.baseRevision),[3,3],'retry must not adopt a newer document revision and overwrite it');
+await concurrent.publish(new Blob(['%PDF-1.7']), 'concurrent.pdf',{hospital:'검증',date:'2026-10-14',sourcePdfRevision:3});otherRevision=4;dropUpload=false;await nodes.pdfUploadRetry.click();assert.deepEqual(revisionCalls.filter(p=>p.action==='inspection_pdf_upload').map(p=>p.baseRevision),[3],'read-back of a newer revision blocks another upload and preserves the original base revision');
 assert.equal(nodes.pdfUploadRetry.hidden,true,'a newer document requires regeneration, not an endless upload retry');
 console.log('inspection-upload: concurrent-document retry keeps the original base revision.');
 
@@ -63,14 +64,14 @@ const offlinePrepared=await recovering.prepare(snapshot);
 await recovering.publish(new Blob(['%PDF-1.7 original']), 'original.pdf',offlinePrepared);
 assert.equal(nodes.pdfUploadRetry.hidden,false);assert.match(nodes.pdfUploadRetry.textContent,/원본 확인/);
 assert.equal(recoveryCalls.filter(p=>p.action==='inspection_pdf_upload').length,0,'never upload while source verification is offline');
-offline=false;await nodes.pdfUploadRetry.click();const recoveredUpload=recoveryCalls.at(-1);
+offline=false;await nodes.pdfUploadRetry.click();const recoveredUpload=recoveryCalls.filter(p=>p.action==='inspection_pdf_upload').at(-1);
 assert.equal(recoveredUpload.action,'inspection_pdf_upload');assert.equal(recoveredUpload.baseRevision,5);
 assert.equal(recoveredUpload.recordId,snapshot.recordId);assert.equal(recoveredUpload.hospital,snapshot.hospital);assert.equal(recoveredUpload.sn,snapshot.sn);assert.equal(recoveredUpload.taskId,snapshot.taskId);
 assert.equal('sourcePreparationError' in recoveredUpload,false,'client failure state does not travel to GAS');
 const resolveCount=recoveryCalls.filter(p=>p.action==='inspection_pdf_resolve').length;
 uploadLost=false;await nodes.pdfUploadRetry.click();const retried=recoveryCalls.at(-1);
 for(const key of ['uploadId','sha256','base64','baseRevision','recordId'])assert.equal(retried[key],recoveredUpload[key],key+' is fixed after recovery');
-assert.equal(recoveryCalls.filter(p=>p.action==='inspection_pdf_resolve').length,resolveCount,'uncertain writes never resolve a newer revision');
+assert.equal(recoveryCalls.filter(p=>p.action==='inspection_pdf_resolve').length,resolveCount+1,'uncertain writes read back the receipt without adopting a new base revision');
 
 for(const failure of [
  {json:async()=>({success:false,error:'로그인이 필요합니다.'})},
