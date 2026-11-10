@@ -6,7 +6,7 @@ import {writePending} from './portal-storage.mjs?v=323';
 export function mountSettings(container,{device=false,handoff}={}){
  if(!container||document.getElementById('portal-device-settings'))return;
  const panel=document.createElement('details');panel.id='portal-device-settings';panel.className='portal-device-settings';
- panel.innerHTML='<summary>앱 설치·기기 관리</summary><div class="portal-settings-body"><div data-install-slot></div><div class="portal-settings-actions"></div><p class="portal-settings-message" role="status" hidden></p>'+(device||handoff?'<div id="handoff-box"></div>':'')+'</div>';
+ panel.innerHTML='<summary>알림·앱·기기 관리</summary><div class="portal-settings-body"><div data-install-slot></div><div class="portal-settings-actions"></div><p class="portal-settings-message" role="status" hidden></p>'+(device||handoff?'<div id="handoff-box"></div>':'')+'</div>';
  container.append(panel);
  const actions=panel.querySelector('.portal-settings-actions'),status=panel.querySelector('[role=status]'),box=panel.querySelector('#handoff-box');
  const message=text=>{status.textContent=text;status.hidden=!text;};
@@ -14,6 +14,11 @@ export function mountSettings(container,{device=false,handoff}={}){
  const setBusy=on=>{busy=on;actions.setAttribute('aria-busy',String(on));actions.querySelectorAll('button').forEach(b=>b.disabled=on);};
  function button(id,text,click){const b=document.createElement('button');b.type='button';b.id=id;b.textContent=text;b.onclick=click;actions.append(b);return b;}
  function link(text,action){const a=document.createElement('a');a.className='portal-button';a.textContent=text;a.href='index.html?action='+action;actions.append(a);}
+ const notice=document.createElement('section');notice.className='portal-notification-settings';notice.innerHTML='<strong>접수 알림</strong><p data-notice-state role="status"></p><button type="button" data-notice-allow>앱 알림 허용</button>';panel.querySelector('.portal-settings-body').prepend(notice);
+ const noticeState=notice.querySelector('[data-notice-state]'),noticeAllow=notice.querySelector('button');
+ function paintNotice(){const push=window.QrCustomerPush;if(!push){noticeState.textContent='알림을 준비하고 있습니다.';noticeAllow.hidden=true;return;}noticeAllow.hidden=!push.supported();noticeAllow.textContent=push.permission()==='granted'?'접수 알림 연결':'앱 알림 허용';noticeState.textContent=push.supported()?(push.permission()==='granted'?'알림 권한 허용됨 · 접수 진행 확인에서 연결 상태를 확인하세요.':push.guidance(push.permission())):push.guidance(push.permission());}
+ noticeAllow.onclick=async()=>{noticeAllow.disabled=true;try{await window.QrCustomerPush.requestPermission();localStorage.setItem('curejet-as-app-notify',JSON.stringify(true));window.dispatchEvent(new Event('curejet:notifications-enabled'));paintNotice();}catch(e){noticeState.textContent=e.message;}finally{noticeAllow.disabled=false;}};
+ paintNotice();window.QrCustomerPush?.observe(paintNotice);
  if(device){
   link('접수 병원 변경','hospital');
   link('번호 변경·재등록','recovery');
