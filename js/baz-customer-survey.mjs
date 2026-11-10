@@ -4,6 +4,14 @@ const root=document.querySelector('#survey'),fragment=new URLSearchParams(locati
 // Standalone hospital satisfaction survey.
 
 let context,answers={},step=0,submissionId,storageKey,busy=false;
+function fitQuestion(){
+ const title=root.querySelector('.question');if(!title)return;
+ title.style.removeProperty('font-size');
+ const available=title.clientWidth,range=document.createRange();range.selectNodeContents(title);
+ for(let attempt=0;attempt<3&&available>0;attempt++){const width=range.getBoundingClientRect().width;if(width<=available)break;const size=parseFloat(getComputedStyle(title).fontSize);title.style.fontSize=(Math.floor(size*(available-1)/width*10)/10)+'px';}
+}
+let questionWidth=0;new ResizeObserver(([entry])=>{if(entry.contentRect.width!==questionWidth){questionWidth=entry.contentRect.width;fitQuestion();}}).observe(root);
+document.fonts.ready.then(fitQuestion);
 function panel(){const p=el('section','panel');root.replaceChildren(p);return p;}
 function message(title,copy,done=false){const p=panel();if(done){p.classList.add('completion');const label=el('div','step-label'),line=el('div','progress-line'),fill=el('span');label.append(el('span','','설문 완료'),el('strong','','100%'));fill.style.width='100%';line.append(fill);p.append(label,line,el('div','success-icon','✓'));}p.append(el('h1','',title),el('p','muted',copy));}
 function save(){try{sessionStorage.setItem(storageKey,JSON.stringify({answers,step,submissionId}));}catch{}}
@@ -34,7 +42,7 @@ function render(focus=false){const def=context.campaign.definition,q=def.questio
   catch(e){if(e.code==='SURVEY_CHANGED'){message('설문이 업데이트되었습니다.',e.message);root.firstChild.append(button('새 설문 확인하기',()=>location.reload(),'primary wide'));return;}if(e.status===409){message('이번 조사에 이미 참여하셨습니다.','응답이 정상적으로 접수된 병원입니다. 참여해 주셔서 감사합니다.',true);return;}error.textContent=e.message;actions.querySelectorAll('button').forEach(b=>b.disabled=false);next.textContent=submitText;}
   finally{busy=false;}
  });next.setAttribute('aria-label',step===def.questions.length-1?submitText:'다음');actions.append(next);p.append(options,extra,error,actions);if(q.type==='text')p.append(el('p','privacy','환자 정보나 개인 연락처 등 개인정보는 적지 말아 주세요.'));
- if(focus)title.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});
+ fitQuestion();if(focus)title.focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});
 }
 async function start(){try{
  if(!code||!/^[a-f0-9]{48}$/.test(code)){message('병원 전용 링크로 접속해 주세요.','안내 문자에 포함된 주소 또는 전달받은 QR로 접속하실 수 있습니다.');return;}
