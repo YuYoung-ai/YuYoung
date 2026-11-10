@@ -7,6 +7,7 @@
   if(!window.BazNotificationRoute.valid(id)){$('notice-state').textContent='알림 주소를 확인하세요.';return;}
   busy=true;$('notice-refresh').disabled=true;$('notice-state').textContent='최신 내용을 확인하고 있습니다…';$('notice-content').textContent='';
   try{var d=await api.call('notification_detail',{notificationId:id}),e=d.event;
+   if(e.kind==='registration'){location.replace(window.BazNotificationRoute.url({kind:e.kind,registrationId:e.registrationId,notificationId:e.id}));return;}
    $('notice-title').textContent=e.kind==='roster'?'휴무·당직 일정':e.hospitalName+' · AS 처리 현황';
    if(d.source){var s=d.source;$('notice-content').innerHTML=fields([['병원',s.hospitalName],['처리일',s.date],['작성자',s.originalAuthor||e.author],['담당자',s.engineer],['구분',s.gubun],['S/N',s.sn],['처리 결과',s.result],['처리 내용',s.detail],['교체품',s.part],['비고',s.remark]]);}
    else if(e.kind==='roster'){$('notice-content').innerHTML=fields([['일자',e.date],['현재 휴무',d.roster.filter(function(r){return r.type==='휴무';}).map(function(r){return r.person;}).join(', ')||'없음'],['현재 당직',d.roster.filter(function(r){return r.type==='당직';}).map(function(r){return r.person;}).join(', ')||'없음']]);$('notice-roster').href='hospital-work.html?roster='+encodeURIComponent(e.date);$('notice-roster').hidden=false;}
