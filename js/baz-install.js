@@ -18,7 +18,7 @@
   try{
    var c=await api.config(true);
    $('notification-admin').hidden=!c.admin;
-   $('notification-preferences').hidden=!c.admin;if(c.admin){var labels={receipt:'접수·담당자 배정',visit:'방문 일정 등록·변경',status:'상태 변경',handover:'AS 처리 현황 작성 완료',pdf:'AS/점검 내역서·댓글 등록 완료',roster:'휴무·당직 (오전 8:30)'};$('notification-type-options').innerHTML=c.notificationTypes.map(function(t){return '<label><input type="checkbox" data-notification-type="'+t+'"'+(c.preferences?.[t]===false?'':' checked')+'><span>'+labels[t]+'</span></label>';}).join('');}
+   $('notification-preferences').hidden=!c.admin;if(c.admin){var labels={receipt:'접수·담당자 배정',visit:'방문 일정 등록·변경',status:'상태 변경',handover:'AS 처리 현황 작성 완료',pdf:'AS/점검 내역서·댓글 등록 완료',roster:'휴무·당직 (오전 8:30)',registration:'병원 등록 요청 (관리자)'};$('notification-type-options').innerHTML=c.notificationTypes.map(function(t){return '<label><input type="checkbox" data-notification-type="'+t+'"'+(c.preferences?.[t]===false?'':' checked')+'><span>'+labels[t]+'</span></label>';}).join('');}
    if(!api.supported()){show(c.name+' · 앱 설치 후 알림을 연결하세요.');$('notification-help').textContent=api.platform()==='ios'?'iOS 16.4 이상에서 홈 화면에 추가한 앱을 열어 주세요.':'Chrome 등 알림을 지원하는 브라우저에서 열어 주세요.';return;}
    await api.reconcile();var reg=await api.worker(),sub=await reg.pushManager.getSubscription();connected=!!sub&&Notification.permission==='granted';
    show(c.name+' · '+(connected?'이 기기 알림 연결 완료':'접수 알림을 허용해 주세요.'),connected?'ready':'');
