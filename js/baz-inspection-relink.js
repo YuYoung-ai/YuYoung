@@ -71,7 +71,7 @@
    const previous=handoverReference,previousPdf=uploadedPdfDocument;
    handoverReference={recordId:selected.recordId,requestId:linked.request?.id||'',identity:opened};
    if(previous?.recordId!==selected.recordId)uploadedPdfDocument=null;
-   if(!saveCurrentTask()){handoverReference=previous;uploadedPdfDocument=previousPdf;throw new Error('기기에 연결 정보를 저장하지 못했습니다.');}
+   if(!await saveCurrentTask()){handoverReference=previous;uploadedPdfDocument=previousPdf;throw new Error('기기에 연결 정보를 저장하지 못했습니다.');}
    history.replaceState(null,'',location.pathname);root.BazInspectionFlow.refresh(handoverReference,'Handover 원본 연결을 확인했습니다. '+(uploadedPdfDocument?'저장·댓글 연결 확인을 눌러 기존 PDF의 첨부를 재시도하세요.':'현재 내용으로 PDF를 생성하면 선택한 원본에 저장됩니다.'));
    dialog.close();showToast('Handover 기록 연결을 변경했습니다.');
   });

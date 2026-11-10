@@ -9,9 +9,11 @@ const slots=position(rect,1191);assert.equal(slots.length,1);assert.equal(slots[
 const step=Math.floor(281/194*1191),cross=position({...rect,y:step/1.5-50},1191);assert.equal(cross.length,2);assert.equal(cross[1].page,1);assert.ok(cross[1].y<8);
 const start=html.indexOf('window.BazInspectionQrBridge='),end=html.indexOf("for(const event of ['input','change','click'])",start),data={basic:{hospital:'테스트',actionDetail:'확인한 조치',hospitalName:'고객'},pay:'무상',signatures:{cs:'cs',hs:'hs'},customerQr:null};
 let saved=0,notices=0;const box={src:'',classList:{remove(){}}};
-const ctx=vm.createContext({window:{},collectFormData:()=>structuredClone(data),customerQrDocument:null,sigStore:{hs:'hs'},document:{getElementById:()=>box},saveCurrentTask(){saved++;},showToast(){notices++;}});
+const ctx=vm.createContext({window:{},crypto,TextEncoder,collectFormData:()=>structuredClone(data),customerQrDocument:null,sigStore:{hs:'hs'},document:{getElementById:()=>box},saveCurrentTask(){saved++;},showToast(){notices++;}});
 vm.runInContext(html.slice(start,end),ctx);const bridge=ctx.window.BazInspectionQrBridge;
-ctx.customerQrDocument={contentKey:bridge.contentKey()};assert.equal(bridge.beforeGenerate(),true);assert.equal(saved,0);
-data.basic.actionDetail='서명 후 바꾼 조치';assert.equal(bridge.beforeGenerate(),false);assert.equal(ctx.sigStore.hs,null);assert.equal(ctx.customerQrDocument,null);assert.equal(saved,1);assert.equal(notices,1);
+ctx.customerQrDocument={contentKey:await bridge.contentKey()};assert.equal(await bridge.beforeGenerate(),true);assert.equal(saved,0);
+assert.match(ctx.customerQrDocument.contentKey,/^sha256:[a-f0-9]{64}$/,'content key never stores another copy of photo base64');
+ctx.customerQrDocument={contentKey:bridge.contentText()};assert.equal(await bridge.beforeGenerate(),true);assert.match(ctx.customerQrDocument.contentKey,/^sha256:/,'legacy JSON content keys are accepted and compacted');
+data.basic.actionDetail='서명 후 바꾼 조치';assert.equal(await bridge.beforeGenerate(),false);assert.equal(ctx.sigStore.hs,null);assert.equal(ctx.customerQrDocument,null);assert.equal(saved,1);assert.equal(notices,1);
 assert.match(html,/customer-sign|customerQrBtn/);assert.match(fs.readFileSync(new URL('../customer-sign.html',import.meta.url),'utf8'),/no-referrer/);
 console.log('PASS: exact PDF placement and page crossing; changed content invalidates the prior customer signature; customer page avoids referrer leakage.');

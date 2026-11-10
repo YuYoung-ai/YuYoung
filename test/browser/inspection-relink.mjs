@@ -7,7 +7,8 @@ const require=createRequire(import.meta.url);let playwright;
 try{playwright=require('playwright');}catch{if(!process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES)throw new Error('Install playwright or set CODEX_PRIMARY_RUNTIME_NODE_MODULES');playwright=require(path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES,'playwright'));}
 const {webkit}=playwright,root=fileURLToPath(new URL('../../',import.meta.url)),output=path.resolve(process.env.OUTPUT_DIR||path.join(root,'work/inspection-relink'));
 fs.mkdirSync(output,{recursive:true});const checks=[],errors=[],base='http://inspection.test';
-const browser=await webkit.launch({executablePath:process.env.PLAYWRIGHT_WEBKIT||undefined,headless:true});
+const engine=process.env.PLAYWRIGHT_ENGINE||'webkit';
+const browser=await playwright[engine].launch({executablePath:engine==='webkit'?process.env.PLAYWRIGHT_WEBKIT||undefined:undefined,channel:engine==='chromium'?process.env.PLAYWRIGHT_CHANNEL||'msedge':undefined,headless:true});
 try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined});});
@@ -34,11 +35,12 @@ try{
   return route.fulfill({status:200,body:''});
  });
  await page.goto(base+'/inspection.html');await page.getByRole('button',{name:'Handover 기록 연결 변경',exact:true}).waitFor();
- const initial=await page.evaluate(()=>{
+ const initial=await page.evaluate(async()=>{
+  await inspectionStorageReady;
   const d={basic:{hospital:'기존 병원',inspectDate:'2026-10-21',serialNo:'OLD'},handover:{recordId:'source_old_123',requestId:'request_old_123'},pdfDocument:{url:'https://drive.google.com/file/d/old/view'},pay:'무상',types:['A/S'],photos:[],signatures:{cs:null,hs:null}};
-  applyFormData(d);saveCurrentTask();const id=_currentTaskId;
+  applyFormData(d);await saveCurrentTask();const id=_currentTaskId;
   document.getElementById('hospital').value='검증 병원';document.getElementById('inspectDate').value='2026-10-22';document.getElementById('serialNo').value='SN1';
-  const current=collectFormData();saveCurrentTask();return {id,handover:current.handover,pdf:current.pdfDocument,uuid:BazWorkAPI.id()};
+  const current=collectFormData();await saveCurrentTask();return {id,handover:current.handover,pdf:current.pdfDocument,uuid:BazWorkAPI.id()};
  });
  assert.equal(initial.handover,null);assert.equal(initial.pdf,null);assert.match(initial.uuid,/^[a-f0-9-]{36}$/);checks.push('Identity changes detach old record/PDF; Safari UUID fallback works');
  const isolated=await page.evaluate(async()=>{const box=BazInspectionOutbox.create(indexedDB,BazWorkFlow.sameInspectionIdentity),job={key:'synthetic-owner:old',owner:'synthetic-owner',updatedAt:Date.now(),blob:new Blob(['%PDF-old']),context:{taskId:_currentTaskId,hospital:'이전 병원',date:'2026-10-21',sn:'OLD'}};await box.put(job);const wrong=await box.find(job.owner,{taskId:_currentTaskId,hospital:'검증 병원',date:'2026-10-22',sn:'SN1'}),right=await box.find(job.owner,{taskId:_currentTaskId,hospital:'이전 병원',date:'2026-10-21',sn:'OLD'});await box.remove(job.key);return {wrong:!!wrong,right:!!right};});assert.deepEqual(isolated,{wrong:false,right:true});checks.push('Interrupted PDF recovery checks hospital/date/serial as well as task ID');
@@ -50,7 +52,7 @@ try{
  await page.waitForFunction(()=>!document.querySelector('dialog[open]'));
  const bound=await page.evaluate(()=>({ref:handoverReference,data:getTask(_currentTaskId).data}));assert.equal(bound.ref.recordId,source.recordId);assert.equal(bound.ref.requestId,request.id);assert.equal(bound.data.basic.hospital,source.hospitalName);const posts=calls.filter(c=>c.action==='work_field_result_link');assert.equal(posts.length,2);assert.equal(posts[0].operationId,posts[1].operationId);checks.push('Manual preview, exact linking and same-operation recovery after a lost response persist');
  // Duplicating an existing report creates an independent document.
- const duplicate=await page.evaluate(()=>{duplicateTask(_currentTaskId);return loadTasks().at(-1).data;});assert.equal(duplicate.handover,null);assert.equal(duplicate.pdfDocument,null);checks.push('Duplicated reports do not inherit source IDs or PDFs');
+ const duplicate=await page.evaluate(async()=>{const id=_currentTaskId;await duplicateTask(id);return loadTasks().find(t=>t.id!==id).data;});assert.equal(duplicate.handover,null);assert.equal(duplicate.pdfDocument,null);checks.push('Duplicated reports do not inherit source IDs or PDFs');
  await page.getByRole('button',{name:'Handover 기록 연결 변경',exact:true}).click();await page.getByRole('button',{name:'입력한 기록 조회',exact:true}).click();await page.getByRole('button',{name:'확인한 기록으로 연결',exact:true}).waitFor({state:'visible'});
  await page.screenshot({path:path.join(output,'Handover-수동연결-모바일-검증.png'),fullPage:false});
  await page.locator('#relink-record-id').fill('source_wrong_123');await page.getByRole('button',{name:'입력한 기록 조회',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#relink-record-id')?.disabled===false);assert.match(await page.locator('.inspection-relink [role=status]').textContent(),/현재 내역서와 다릅니다/);
@@ -59,10 +61,11 @@ try{
  const priorLinks=calls.filter(c=>c.action==='work_field_result_link').length;documentRegistered=true;linked=false;
  await page.getByRole('button',{name:'Handover 기록 연결 변경',exact:true}).click();await page.getByRole('button',{name:'입력한 기록 조회',exact:true}).click();await page.getByRole('button',{name:'확인한 기록으로 연결',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('dialog[open]'));
  assert.equal(calls.filter(c=>c.action==='work_field_result_link').length,priorLinks);checks.push('An independently registered PDF can be selected without adding a duplicate field result');documentRegistered=false;linked=true;
+ const retainedTaskIds=await page.evaluate(()=>loadTasks().map(t=>t.id));
  await page.goto(base+'/handover.html?request='+request.id);await page.waitForFunction(()=>window.BazHandoverFlow?.context());
  await page.evaluate(()=>{setVal('hosp','검증 병원');setVal('date','2026-10-22');setVal('detail','장비 점검 및 작동 확인');SAVED_RECORD_ID='source_new_123';SAVED_SNAPSHOT=BazHandover.snapshot(readForm());enableCopy(true);});
  assert.equal(await page.locator('#btnCont').isDisabled(),false);checks.push('Confirmed sheet save enables continuation while asynchronous request link is pending');
- await page.locator('#btnCont').click();await page.waitForURL('**/inspection.html*');await page.waitForFunction(()=>typeof handoverReference!=='undefined'&&handoverReference?.recordId==='source_new_123');
- const continued=await page.evaluate(()=>({ref:handoverReference,hospital:v('hospital'),tasks:loadTasks().length}));assert.equal(continued.ref.requestId,request.id);assert.equal(continued.hospital,source.hospitalName);assert.ok(continued.tasks>=3);checks.push('Handover continuation opens a new draft with exact source/request; previous drafts retained');
- assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine:'WebKit',viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
+ await page.locator('#btnCont').click();await page.waitForURL('**/inspection.html*');await page.evaluate(async()=>{await inspectionStorageReady;await window.inspectionWorkflowReady;});await page.waitForFunction(()=>typeof handoverReference!=='undefined'&&handoverReference?.recordId==='source_new_123');
+ const continued=await page.evaluate(()=>({ref:handoverReference,hospital:v('hospital'),ids:loadTasks().map(t=>t.id)}));assert.equal(continued.ref.requestId,request.id);assert.equal(continued.hospital,source.hospitalName);assert.ok(retainedTaskIds.every(id=>continued.ids.includes(id)));checks.push('Handover continuation opens the matching draft with exact source/request; previous drafts retained');
+ assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
 }finally{await browser.close();}

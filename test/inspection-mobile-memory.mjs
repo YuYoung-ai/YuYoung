@@ -84,7 +84,7 @@ assert.equal(late.width,0);assert.equal(late.height,0);
 const html=read('inspection.html'),section=html.slice(html.indexOf('// ===== 현장 사진 ====='),html.indexOf('// ===== 회사 로고 로드'));
 const node=()=>({listeners:{},dataset:{},addEventListener(t,f){this.listeners[t]=f;},click(){}});
 const els={photoList:node(),photoCount:node(),photoCameraInput:node(),photoGalleryInput:node()};
-const state={photos:[{slot:3,data:'old-water',memo:'preserved'}]},ctx={window:{BazInspectionPdf:api,BazPerf:{start:()=>()=>{}},BazInspectionMedia:{process:async file=>({data:'data:'+file.name,worker:false})}},state,els,MAX_PHOTOS:6,_pdfBusy:false,pdfPublisher:{isBusy:()=>false},showToast(){},showLoading(){},hideLoading(){},saveDraft(){},autoSave(){},esc:s=>String(s||''),document:{getElementById:node}};
+const state={photos:[{slot:3,data:'old-water',memo:'preserved'}]},ctx={window:{BazInspectionPdf:api,BazPerf:{start:()=>()=>{}},BazInspectionMedia:{process:async file=>({data:'data:'+file.name,worker:false})}},state,els,MAX_PHOTOS:6,_pdfBusy:false,_pdfStarting:false,pdfPublisher:{isBusy:()=>false},showToast(){},showLoading(){},hideLoading(){},saveDraft(){},autoSave(){},esc:s=>String(s||''),document:{getElementById:node}};
 vm.runInNewContext(section+'\nthis.add=addPhotos;this.render=renderPhotos;',ctx);
 await ctx.add(['sn','all','before','after','hp-return','hp-new'].map(name=>({name,type:'image/jpeg'})));
 assert.deepEqual(state.photos.map(p=>p.slot),[3,0,4,1,2,5,6]);

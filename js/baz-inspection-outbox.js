@@ -36,6 +36,7 @@
   }
   return {
    put,
+   protectedTaskIds:()=>transaction('readonly',store=>store.getAll(),(request,set)=>set(request.result.map(job=>job.context?.taskId).filter(Boolean))),
    remove:key=>transaction('readwrite',store=>store.delete(key)),
    find:(owner,context)=>transaction('readonly',store=>store.index('byOwnerUpdated').openCursor(root.IDBKeyRange.bound([owner,0],[owner,Number.MAX_SAFE_INTEGER]),'prev'),(request,set)=>{const cursor=request.result;if(!cursor){set(null);return;}const r=cursor.value,c=r.context||{};if(((context.taskId&&c.taskId===context.taskId)||(context.recordId&&c.recordId===context.recordId))&&(!context.recordId||c.recordId===context.recordId)&&(!context.requestId||!c.requestId||context.requestId===c.requestId)&&(!identityMatches||!context.hospital||identityMatches(context,c))){const {bytes,blobType,...rest}=r;set(bytes?{...rest,blob:new Blob([bytes],{type:blobType||'application/pdf'})}:rest);}else cursor.continue();})
   };
