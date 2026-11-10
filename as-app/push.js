@@ -52,7 +52,7 @@
   if(!sub||!sub.endpoint)throw Error('기기 알림 구독을 만들지 못했습니다. Chrome의 사이트 알림 설정을 확인하세요.');
   return sub;
  }
- async function displayTest(){if(permission()!=='granted')throw Error(guidance(permission()));var reg=await worker();await reg.showNotification('Curejet 알림 표시 테스트',{body:'이 기기에서 알림 표시를 요청했습니다.',tag:'curejet-as-device-test',icon:new URL('../icon-192.png',base).href});}
+ async function displayTest(){if(permission()!=='granted')throw Error(guidance(permission()));var reg=await worker();await reg.showNotification('Curejet 알림 표시 테스트',{body:'이 기기에서 알림 표시를 요청했습니다.',tag:'curejet-as-device-test',icon:new URL('icons/curejet-192.png?v=327',base).href});}
  function observe(fn){if(navigator.permissions&&navigator.permissions.query)navigator.permissions.query({name:'notifications'}).then(function(p){p.addEventListener('change',fn);}).catch(function(){});root.addEventListener('pageshow',fn);}
  root.QrCustomerPush={worker:worker,inspect:inspect,connect:connect,permission:permission,guidance:guidance,supported:supported,displayTest:displayTest,observe:observe};
 })(window);
