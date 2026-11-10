@@ -1,0 +1,3 @@
+/* Keep the complete customer question on one line; JS fits only long titles. */
+.customer .question{white-space:nowrap;overflow-wrap:normal;line-height:1.6}
+.customer .question-number{margin-right:8px}
