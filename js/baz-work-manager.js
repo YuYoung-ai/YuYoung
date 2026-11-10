@@ -24,7 +24,7 @@
   var pending=null,commentEdit=null,checkedRequests=new Set(),shownRequests=[],selectionMode=false,bulkWorking=false,lifecyclePlan=null;
   var fields=window.BazWorkFields,activeField=null,renderHost="list",referenceRefreshing=false,advanced={year:[],month:[],quarter:[],gubun:[],asType:[],ncare:[],engineer:[],cs:[],sales:[],status:[]};
   var editMode=false,inlineDraftKey=scope+'_inline_edits',inlineDrafts=read(inlineDraftKey)||{};
-  var referenceTask=null,referenceCheckedAt=0,referenceAttemptAt=0;
+  var referenceTask=null;
   var inlineDraftTimer=null,inlineDraftDirty=false;
   function flushInlineDrafts(force){
     if(inlineDraftTimer!=null)clearTimeout(inlineDraftTimer);inlineDraftTimer=null;
@@ -178,6 +178,7 @@
     $('selection-mode').textContent=selectionMode?(state.filter==='trash'?'복원 모드 닫기':'삭제 모드 닫기'):(state.filter==='trash'?'복원':'삭제');
     $('selection-mode').setAttribute('aria-expanded',String(selectionMode));
     $('selection-mode').disabled=locked;
+    $('sync').disabled=syncing||referenceRefreshing;
     $('edit-mode').disabled=locked||!state.loaded||state.filter==='trash';$('edit-mode').textContent=editMode?'수정 모드 닫기':'수정';$('edit-mode').setAttribute('aria-pressed',String(editMode));
     $('list').querySelectorAll('[data-inline-form] input,[data-inline-form] select,[data-inline-form] textarea,[data-inline-form] button').forEach(function(x){x.disabled=locked;});
     $('detail').querySelectorAll('[data-inline-field],[data-edit-field],[data-edit-done],[data-inline-save],[data-inline-reset],[data-inline-rebase]').forEach(function(x){x.disabled=locked||!!state.detail?.request.deletedAt||!!state.detail?.request.purgedAt;});
@@ -220,15 +221,13 @@
     $('advanced-groups').innerHTML=groups.map(function(g){return '<fieldset class="advanced-group"><legend>'+esc(g[1])+'</legend><div><button type="button" data-advanced="'+g[0]+'" data-value="" aria-pressed="'+String(!advanced[g[0]].length)+'">전체</button>'+g[2].map(function(v){return '<button type="button" data-advanced="'+g[0]+'" data-value="'+esc(v)+'" aria-pressed="'+String(advanced[g[0]].includes(v))+'">'+esc(v+(g[0]==='month'?'월':g[0]==='quarter'?'분기':g[0]==='year'?'년':''))+'</button>';}).join('')+'</div></fieldset>';}).join('');
     var count=Object.values(advanced).reduce(function(n,v){return n+v.length;},0);$('advanced-toggle').textContent='⚙ 상세 필터'+(count?' · '+count:'');
   }
-  function refreshHospitalDB(automatic){
-    automatic=automatic===true;
+  function refreshHospitalDB(){
     if(referenceTask)return referenceTask;
-    if(automatic&&(Date.now()-referenceCheckedAt<300000||Date.now()-referenceAttemptAt<30000))return Promise.resolve(false);
-    if(busy||syncing||pending||referenceRefreshing)return Promise.resolve(false);referenceRefreshing=true;referenceAttemptAt=Date.now();updateSelection();$('db-refresh').disabled=true;$('editor-db-refresh').disabled=true;$('hospital-db-status').textContent='Handover와 같은 병원정보DB의 최신 값을 확인하고 있습니다…';if(!automatic)notify('병원정보DB 최신 값을 확인하고 있습니다…');
-    referenceTask=(async function(){try{var data=await api.get('work_references_refresh',{});if(!data.success||!Array.isArray(data.hospitals)||!data.hospitals.length||!Array.isArray(data.engineers))throw new Error(data.error||'병원정보DB 응답을 확인하지 못했습니다.');var selected=state.selected;state.hospitals=data.hospitals;state.engineers=data.engineers;referenceCheckedAt=Date.now();
+    if(busy||syncing||pending||referenceRefreshing)return Promise.resolve(false);referenceRefreshing=true;updateSelection();$('db-refresh').disabled=true;$('editor-db-refresh').disabled=true;$('hospital-db-status').textContent='병원정보DB의 최신 값을 확인하고 있습니다…';notify('병원정보DB 최신 값을 확인하고 있습니다…');
+    referenceTask=(async function(){try{var data=await api.get('work_references_refresh',{});if(!data.success||!Array.isArray(data.hospitals)||!data.hospitals.length||!Array.isArray(data.engineers))throw new Error(data.error||'병원정보DB 응답을 확인하지 못했습니다.');var selected=state.selected;state.hospitals=data.hospitals;state.engineers=data.engineers;
       Object.keys(inlineDrafts).forEach(function(id){var f=inlineDrafts[id].form;if(state.hospitals.some(function(h){return h.key===f.hospitalKey;}))return;var h=fields.hospital({hospitalKey:f.hospitalKey},hospitalRows());if(h){f.hospitalKey=h.key;f.hospitalInput=label(h);}});flushInlineDrafts(true);
-      fillPeople();renderList();if(state.detail)renderDetail();if($('editor').open){var rebound=selected&&fields.hospital({hospitalKey:selected.key},hospitalRows());if(rebound)$('hospital-input').value=label(rebound);selectHospital(false);}await persistSnapshot();var message='병원정보DB 최신 값 반영 완료 · '+state.hospitals.filter(function(h){return h.origin!=='flow';}).length+'건';$('hospital-db-status').textContent=message;if(!automatic)notify(message);return true;}
-    catch(e){var message='병원정보DB 최신 확인 실패 · 보관된 목록을 유지합니다. 새로고침으로 다시 확인하세요. '+e.message;$('hospital-db-status').textContent=message;if(!automatic)notify(message);return false;}
+      fillPeople();renderList();if(state.detail)renderDetail();if($('editor').open){var rebound=selected&&fields.hospital({hospitalKey:selected.key},hospitalRows());if(rebound)$('hospital-input').value=label(rebound);selectHospital(false);}await persistSnapshot();var message='병원정보DB 최신 값 반영 완료 · '+state.hospitals.filter(function(h){return h.origin!=='flow';}).length+'건';$('hospital-db-status').textContent=message;notify(message);return true;}
+    catch(e){var message='병원정보DB 최신 확인 실패 · 보관된 목록을 유지합니다. 새로고침으로 다시 확인하세요. '+e.message;$('hospital-db-status').textContent=message;notify(message);return false;}
     finally{referenceRefreshing=false;referenceTask=null;$('db-refresh').disabled=false;$('editor-db-refresh').disabled=false;updateSelection();}})();
     return referenceTask;
   }
@@ -677,7 +676,6 @@
     $('editor-title').textContent=request?'A/S 접수 정보 수정':'A/S 접수';$('draft-status').textContent=useDraft?'이 PC의 미저장 초안 복원됨':'';
     if(!$('editor').open)$('editor').showModal();
     checkAssignment();
-    refreshHospitalDB(true);
   }
   function conflictForm(response){
     var latest=response.current,input=formValues(),base=state.baseline||{},keys=Object.keys(input);
@@ -943,7 +941,6 @@
   window.addEventListener('pagehide',function(){flushInlineDrafts();});
   document.addEventListener('visibilitychange',function(){if(document.hidden)flushInlineDrafts();});
   var hospitalSearch=window.BazWorkHospitalSearch.create({selector:'#hospital-input, [data-inline-field="hospitalInput"]',getRows:function(){return state.hospitals.filter(function(h){return h.origin!=='flow';});},formatValue:label});
-  document.addEventListener('focusin',function(event){if(event.target.matches('#hospital-input, [data-inline-field="hospitalInput"]'))refreshHospitalDB(true);});
   $('hospital-input').oninput=function(){selectHospital(true);saveDraft();};
   $('request-form').addEventListener('input',function(event){if(event.target.id!=='ack'){$('ack').checked=false;$('duplicate-ack').hidden=true;}saveDraft();});
   $('engineer').onchange=$('visitDate').onchange=$('visitTime').onchange=function(){if(!state.editing&&$('engineer').value&&$('visitDate').value&&normalizeTime($('visitTime').value)&&$('status').value==='접수')$('status').value='방문예정';saveDraft();checkAssignment();};
@@ -1003,7 +1000,6 @@
     var saved=await cache.snapshot(account).catch(function(){return null;});
     if(saved&&saved.storage==='kv'&&Array.isArray(saved.requests)&&saved.hospitals){kvReady=true;state.requests=saved.requests;state.hospitals=saved.hospitals;state.engineers=saved.engineers;state.roster=saved.roster||[];state.rosterMonth=saved.rosterMonth||state.rosterMonth;state.rosterLoaded=!!saved.rosterLoaded;revision=saved.revision||'0';sourceCheckedAt=saved.sourceCheckedAt||'';bridgeStatus=saved.bridgeStatus||null;state.loaded=true;fillPeople();renderList();renderRoster();$('new').disabled=false;showSyncState('done',saved.updatedAt);$('sync-state').textContent='이 PC의 보관 데이터';}
     else await sync();
-    if(state.loaded)refreshHospitalDB(true);
     if(state.loaded&&!embedded)await refreshTodayRoster();
     if(embedded){$('receipt-launch-status').hidden=state.loaded;$('receipt-launch-retry').hidden=state.loaded;$('receipt-launch-message').textContent=state.loaded?'':'접수 정보를 불러오지 못했습니다. 다시 불러오거나 패널을 닫은 뒤 재시도하세요.';}
     if(launch.receipt&&state.loaded){var selected=window.BazWorkLaunch.match(launch,state.hospitals);openEditor(null,selected);if(launch.name&&!selected)$('hospital-match').textContent='조회한 병원을 최신 병원정보DB에서 확인해 선택하세요. 이름·장비번호·지역이 일치하는 한 개의 후보만 자동 선택합니다.';}
