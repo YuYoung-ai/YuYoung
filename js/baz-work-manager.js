@@ -809,45 +809,60 @@
     }catch(e){notify('원본 변경을 확인 처리하지 못했습니다. '+e.message);}
     finally{notificationOpening=false;}
   }
+  var sourceController=null;
+  function resultStatus(message,loading){
+    $('source-status').textContent=message;$('source-list').setAttribute('aria-busy',String(!!loading));
+    $('save-result').disabled=$('save-complete').disabled=!!loading||!state.source;
+  }
+  function cancelSource(){sourceSeq++;if(sourceController)sourceController.abort();sourceController=null;state.source=null;}
+  function sourceCreated(value){var date=new Date(value);return value&&Number.isFinite(date.getTime())?localTimeFormatter.format(date).replace('T',' '):'미기록';}
+  function sourceOrder(a,b){return String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||''))||String(a.recordId||'').localeCompare(String(b.recordId||''));}
   async function openResults(existing){
-    if(busy)return;var requestId=state.detail.request.id,dialogSeq=++resultDialogSeq;state.source=null;state.resultExisting=existing||null;sourceSeq++;
-    $('source-list').textContent='Handover 기록을 불러오는 중…';$('source-preview').hidden=true;$('result-memo').value=existing?existing.memo||'':'';err('result-error','');
+    if(busy)return;var requestId=state.detail.request.id,dialogSeq=++resultDialogSeq;cancelSource();state.sources=[];state.resultExisting=null;
+    $('source-list').textContent='Handover 기록을 불러오는 중…';$('source-preview').hidden=true;$('result-memo').value=existing?existing.memo||'':'';err('result-error','');resultStatus('기록 조회 중… 조회만으로 결과를 등록하지 않습니다.',true);
     $('result-dialog').showModal();
     try{
       var data=await api.get('work_handover_candidates',{requestId:requestId});if(dialogSeq!==resultDialogSeq)return;if(!data.success)throw new Error(data.error);
-      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(data.workDetail.request.id,data.workDetail);await cache.saveDetail(account,data.workDetail.request.id,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
-      state.sources=data.data.map(function(s){return Object.assign({},s,{gubun:fields.kind(s.gubun)});}).filter(function(s){return s.gubun==='A/S'||s.gubun==='점검';});
-      $('source-list').innerHTML=state.sources.length?state.sources.map(function(s,i){return '<button class="source-button" type="button" data-source="'+i+'"><strong>'+esc(s.date)+' · '+esc(s.engineer)+' · '+esc(s.sn||'S/N 미기록')+'</strong><br>'+esc([s.cat,s.type,s.detail.slice(0,100)].filter(Boolean).join(' / '))+'</button>';}).join(''):'이 병원에 저장된 A/S·점검 기록이 없습니다. Handover에서 시트 저장을 완료한 뒤 다시 불러오세요.';
+      if(state.detail?.request.id!==requestId)return;
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(requestId,data.workDetail);cache.saveDetail(account,requestId,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
+      state.sources=data.data.map(function(s){return Object.assign({},s,{gubun:fields.kind(s.gubun)});}).filter(function(s){return s.gubun==='A/S'||s.gubun==='점검';}).sort(sourceOrder);
+      $('source-list').innerHTML=state.sources.length?state.sources.map(function(s,i){return '<button class="source-button" type="button" data-source="'+i+'" aria-pressed="false"><span class="source-dates"><strong>방문·처리 '+esc(s.date||'미기록')+'</strong><small>작성 '+esc(sourceCreated(s.createdAt))+'</small></span><span class="source-person"><strong>'+esc(s.engineer||'처리자 미기록')+'</strong><small>'+esc(s.sn||'S/N 미기록')+'</small></span><span class="source-summary">'+esc([s.cat,s.type,String(s.detail||'').slice(0,100)].filter(Boolean).join(' / '))+(s.pdf?'<small>PDF 저장됨</small>':'')+'</span></button>';}).join(''):'이 병원에 저장된 A/S·점검 기록이 없습니다. Handover에서 시트 저장을 완료한 뒤 다시 불러오세요.';
       if(data.total>100)$('source-list').insertAdjacentHTML('afterbegin','<p class="hint">최신 100건 표시</p>');
       var resultDraft=read(scope+'_result_'+requestId);
-      var restoreId=existing?existing.source.recordId:resultDraft?resultDraft.recordId:'';
-      if(restoreId){var i=state.sources.findIndex(function(s){return s.recordId===restoreId;});if(i>=0)await selectSource(i);else err('result-error','연결하거나 작성 중인 원본이 후보 목록에 없습니다. 원본 보존 상태를 확인하세요.');}
-    }catch(e){if(dialogSeq===resultDialogSeq){err('result-error',e.message);$('source-list').textContent='불러오기 실패';}}
+      resultStatus('방문·처리일 → 작성 일시 내림차순 · '+state.sources.length+'건. '+(existing||resultDraft?'이전에 사용한 기록도 다시 선택해 확인하세요.':'대상 기록을 선택한 후 미리보기를 확인하세요.'),false);
+    }catch(e){if(dialogSeq===resultDialogSeq){err('result-error',e.message);$('source-list').textContent='불러오기 실패';resultStatus('기록 조회에 실패했습니다. 창을 다시 열어 주세요.',false);}}
   }
   async function selectSource(index){
-    var candidate=state.sources[index],seq=++sourceSeq;if(!candidate)return;
-    state.source=null;err('result-error','');$('source-preview').hidden=true;
+    if(busy||pending)return;var candidate=state.sources[index];if(!candidate)return;
+    cancelSource();var seq=sourceSeq,dialogSeq=resultDialogSeq,requestId=state.detail.request.id;
+    var controller=sourceController=new AbortController();
+    function current(){return seq===sourceSeq&&dialogSeq===resultDialogSeq&&state.detail?.request.id===requestId&&$('result-dialog').open;}
+    err('result-error','');$('source-preview').hidden=true;
+    $('source-list').querySelectorAll('[data-source]').forEach(function(b){var selected=Number(b.dataset.source)===index;b.classList.toggle('selected',selected);b.setAttribute('aria-pressed',String(selected));});
+    resultStatus('선택한 '+candidate.date+' · '+(candidate.engineer||'처리자 미기록')+' 기록을 확인 중…',true);
     try{
-      var data=await api.get('work_handover_detail',{requestId:state.detail.request.id,recordId:candidate.recordId});if(seq!==sourceSeq)return;if(!data.success)throw new Error(data.error);
-      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(data.workDetail.request.id,data.workDetail);await cache.saveDetail(account,data.workDetail.request.id,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
+      var data=await api.get('work_handover_detail',{requestId:requestId,recordId:candidate.recordId},{signal:controller.signal});if(!current())return;if(!data.success)throw new Error(data.error);
+      if(!data.source||data.source.recordId!==candidate.recordId)throw new Error('선택한 기록과 조회 결과가 다릅니다. 다시 선택하세요.');
+      if(data.workDetail&&data.workDetail.success){state.detail=data.workDetail;detailCache.set(requestId,data.workDetail);cache.saveDetail(account,requestId,data.workDetail).catch(function(){});upsert(data.workDetail.request);renderList();renderDetail();}
       state.source=data.source;
       var previous=state.detail.history.find(function(h){return h.kind==='result'&&h.source.recordId===data.source.recordId;});state.resultExisting=previous||null;
       var draft=read(scope+'_result_'+state.detail.request.id);
       $('result-memo').value=draft&&draft.recordId===data.source.recordId?draft.memo:previous?previous.memo||'':'';
-      $('source-preview').innerHTML='<strong>자동 입력된 현장 결과</strong>'+resultFields(data.source)+(previous?'<details><summary>이전에 등록한 원본과 비교</summary>'+resultFields(previous.source)+'</details>':'')+'<p class="hint">고객센터 접수 담당자와 예정 방문 일시는 유지됩니다. 원본 내용은 보완 메모와 구분합니다.</p>';
-      $('source-preview').hidden=false;document.querySelectorAll('[data-source]').forEach(function(b){b.classList.toggle('selected',Number(b.dataset.source)===index);});
+      $('source-preview').innerHTML='<strong>선택한 현장 결과</strong>'+resultFields(data.source)+(data.source.pdf&&window.BazWorkComments?window.BazWorkComments.renderPdf(data.source.pdf):'')+(previous?'<details><summary>이전에 등록한 원본과 비교</summary>'+resultFields(previous.source)+'</details>':'')+'<p class="hint">결과 등록 시 이 기록의 저장된 PDF·Drive 링크도 댓글 첨부를 확인합니다. 고객센터 접수 담당자와 예정 방문 일시는 유지됩니다.</p>';
+      $('source-preview').hidden=false;resultStatus('선택 확인 완료 · '+data.source.date+' · '+(data.source.engineer||'처리자 미기록')+' · 결과 등록을 누르면 적용됩니다.',false);
       var r=state.detail.request,warnings=[];
       if(r.engineer&&r.engineer!==data.source.engineer)warnings.push('배정 엔지니어와 실제 처리자가 다릅니다.');
       if(r.sn&&data.source.sn&&!fields.serialMatch(r.sn,data.source.sn))warnings.push('접수 기준 S/N과 다릅니다. 함께 처리한 다른 장비인지 확인하세요.');
       if(!data.source.result)warnings.push('원본에 처리 결과가 미기록입니다.');
       if(warnings.length)err('result-error',warnings.join('\n')+' 해당 요청의 기록이 맞는지 확인하세요.');
-    }catch(e){if(seq===sourceSeq)err('result-error',e.message);}
+    }catch(e){if(current()){err('result-error',e.message);resultStatus('선택한 기록을 확인하지 못했습니다. 다시 선택하세요.',false);}}
   }
   async function saveResult(complete){
     if(!state.source){err('result-error','연결할 Handover 기록을 선택하세요.');return;}
     var r=state.detail.request,s=state.source,h=state.resultExisting;
     var data=await write('work_result_save',{requestId:r.id,baseRevision:r.revision,recordId:s.recordId,sourceVersion:s.version,baseHistoryRevision:h?h.revision:0,memo:$('result-memo').value,complete:!!complete},'result');
     if(data&&!data.success)err('result-error',data.error+(data.conflict?' 창을 닫고 최신 내용을 확인한 후 다시 불러오세요.':''));
+    if(data?.success&&data.attachmentStatus)notify(data.attachmentStatus.state==='attached'?'선택한 결과 등록과 PDF 댓글 첨부를 완료했습니다.':data.attachmentStatus.state==='pending'?'결과는 등록됐습니다. PDF 댓글 첨부는 다시 확인이 필요합니다.':data.attachmentStatus.state==='deleted'?'결과를 등록했습니다. 삭제한 PDF 댓글은 복원하지 않았습니다.':'결과를 등록했습니다. 이 기록에 저장된 PDF가 없습니다.');
   }
   $('advanced-toggle').onclick=function(){var open=$('advanced-filters').hidden;$('advanced-filters').hidden=!open;this.setAttribute('aria-expanded',String(open));};
   $('advanced-groups').onclick=function(event){var b=event.target.closest('[data-advanced]');if(!b)return;var key=b.dataset.advanced,value=b.dataset.value;if(!value)advanced[key]=[];else if(advanced[key].includes(value))advanced[key]=advanced[key].filter(function(v){return v!==value;});else advanced[key].push(value);if(key==='status')state.statusScope='all';clearSelection();closeDetail(false);state.page=1;renderList();};
@@ -949,7 +964,7 @@
   $('request-form').onsubmit=saveRequest;$('close-editor').onclick=function(){saveDraft();if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};$('editor').addEventListener('cancel',function(event){saveDraft();if(embedded){event.preventDefault();receiptMessage('baz-work-receipt-close');}});
   $('discard').onclick=function(){store(draftKey,null);if(embedded)receiptMessage('baz-work-receipt-close');else $('editor').close();};
   $('existing-requests').onclick=function(event){var b=event.target.closest('[data-existing]');if(b){saveDraft();$('editor').close();openDetail(b.dataset.existing);}};
-  $('close-result').onclick=function(){sourceSeq++;resultDialogSeq++;$('result-dialog').close();};$('result-dialog').addEventListener('cancel',function(){sourceSeq++;resultDialogSeq++;});$('source-list').onclick=function(event){var b=event.target.closest('[data-source]');if(b)selectSource(Number(b.dataset.source));};
+  $('close-result').onclick=function(){cancelSource();resultDialogSeq++;$('result-dialog').close();};$('result-dialog').addEventListener('cancel',function(){cancelSource();resultDialogSeq++;});$('source-list').onclick=function(event){var b=event.target.closest('[data-source]');if(b)selectSource(Number(b.dataset.source));};
   $('result-form').onsubmit=function(event){event.preventDefault();saveResult(false);};$('save-complete').onclick=function(){saveResult(true);};
   $('result-memo').oninput=function(){if(state.source&&state.detail)store(scope+'_result_'+state.detail.request.id,{recordId:state.source.recordId,memo:this.value});};
   $('retry').onclick=async function(){var d=await sendPending();if(d&&!d.success)notify(d.error);};
