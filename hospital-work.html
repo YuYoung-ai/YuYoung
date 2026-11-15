@@ -8,11 +8,14 @@
 <link rel="stylesheet" href="css/qr-usability.css"><link rel="stylesheet" href="css/qr-design.css?v=313">
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
+<link rel="stylesheet" href="css/hospital-work-layout.css?v=1">
 <link rel="preload" href="fonts/pretendard/common.woff2" as="font" type="font/woff2" crossorigin>
 </head><body class="staff-work">
+<script src="js/baz-work-viewmode.js?v=1"></script>
 <header class="topbar"><a class="brand" href="index.html"><img src="logo.png" alt="BAZ" width="32" height="32">CS WORKSPACE</a><div class="top-actions"><span id="account"></span><button type="button" data-notification-open aria-haspopup="dialog">알림 <span data-notification-count hidden></span></button><a class="top-action-link" href="install.html">앱 설치·알림 설정</a><button id="theme" type="button" aria-label="화면 테마 변경">테마</button><button id="sync" type="button" aria-describedby="sync-state sync-time">↻ 동기화</button><button id="roster-open" type="button" aria-haspopup="dialog">근무 일정</button><a class="top-action-link" href="hospital-registrations.html">병원 등록 관리</a><a class="top-action-link" href="index.html">홈으로</a></div></header>
 <div id="receipt-launch-status" hidden role="status"><p id="receipt-launch-message">접수 양식을 불러오는 중…</p><button id="receipt-launch-retry" type="button" hidden>다시 불러오기</button></div>
 <main>
+  <div class="work-view-toolbar"><span>화면 보기</span><div id="modeToggle" class="mode-toggle" role="group" aria-label="화면 모드"><button type="button" data-mode="window" aria-pressed="false">🖥 Window</button><button type="button" data-mode="mobile" aria-pressed="false">📱 Mobile</button></div></div>
   <nav id="work-management-tabs" class="work-management-tabs" role="tablist" aria-label="CS 관리" hidden><button id="service-tab" type="button" role="tab" aria-selected="true">서비스 현황</button><button id="qr-workflow-open" type="button" hidden>고객 AS 접수 관리</button><button id="reservation-open" type="button" hidden>예약 시간 관리</button></nav>
  <div id="service-panel">
   <div id="notification-launch" class="notification-launch" role="status" aria-live="polite" hidden><span id="notification-launch-message"></span><button id="notification-launch-open" type="button">알림 접수 열기 / 다시 확인</button></div>
