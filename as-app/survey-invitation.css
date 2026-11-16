@@ -1,0 +1,46 @@
+/* Completion survey invitation, scaled to the supplied reference artwork. */
+#survey-dialog.survey-invitation {
+  container-type:inline-size;
+  width:min(560px,calc(100vw - 32px));
+  max-width:calc(100vw - 32px);
+  max-height:calc(100dvh - 32px);
+  padding:0;
+  border:0;
+  border-radius:clamp(20px,5.65vw,35px);
+  background:#fff;
+  color:#10263b;
+  box-shadow:0 24px 80px #10212d33;
+  text-align:center;
+  font-family:var(--baz-font,Pretendard,system-ui,sans-serif);
+}
+#survey-dialog::backdrop {background:#21364980;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+#survey-dialog .survey-invitation-content {padding:5.2% 5.5% 5.5%}
+#survey-dialog #survey-later {
+  position:absolute;top:3.8cqw;right:3.8cqw;
+  width:44px;height:44px;min-width:44px;min-height:44px;
+  padding:8px;border:0;border-radius:50%;
+  background:transparent;color:#344256;box-shadow:none;
+}
+#survey-dialog #survey-later svg {width:100%;height:100%;max-width:28px;max-height:28px}
+#survey-dialog #survey-later:hover {background:#edf5fd}
+#survey-dialog .survey-invitation-mark {
+  display:grid;place-items:center;width:15.8cqw;height:15.8cqw;
+  margin:0 auto;border-radius:50%;background:#e5f2ff;color:#0072bf;
+}
+#survey-dialog .survey-invitation-mark svg {width:9cqw;height:9cqw}
+#survey-dialog .survey-eyebrow {margin:1.8cqw 0 0;color:#006db8;font-size:3.7cqw;font-weight:750;line-height:1.4;letter-spacing:-.035em}
+#survey-dialog #survey-title {margin:4.2cqw 0 3.4cqw;color:#10263b;font-size:6.8cqw;font-weight:800;line-height:1.3;letter-spacing:-.055em;word-break:keep-all}
+#survey-dialog #survey-title:focus {outline:none}
+#survey-dialog #survey-description {margin:0;color:#414f60;font-size:4.1cqw;font-weight:500;line-height:1.75;letter-spacing:-.045em;word-break:keep-all}
+#survey-dialog .survey-summary {display:flex;align-items:center;justify-content:center;gap:3.7cqw;min-height:10.4cqw;margin:5.5cqw 2cqw 0;padding:1.8cqw 2cqw;border-radius:999px;background:#e5f2ff;color:#24374c;font-size:4.5cqw;font-weight:500;line-height:1.3;letter-spacing:-.055em}
+#survey-dialog .survey-summary-item {display:inline-flex;align-items:center;justify-content:center;gap:1.6cqw;white-space:nowrap}
+#survey-dialog .survey-summary-item svg {flex:none;width:5.5cqw;height:5.5cqw;color:#0074bf}
+#survey-dialog .survey-summary strong {color:#0072bf;font-weight:750}
+#survey-dialog .survey-summary-divider {width:2px;height:4.1cqw;background:#b1cce7;border-radius:2px;flex:none}
+#survey-dialog .actions {display:block;margin:6.4cqw 0 0}
+#survey-dialog #survey-participate {display:flex;width:100%;min-height:13cqw;margin:0;padding:2cqw 3cqw;border:0;border-radius:3cqw;background:#005b9e!important;border-color:#005b9e!important;color:#fff!important;-webkit-text-fill-color:#fff;font-size:5.1cqw;font-weight:750;line-height:1.3;letter-spacing:-.04em;box-shadow:none}
+#survey-dialog #survey-participate:hover {background:#004d87!important}
+#survey-dialog button:focus-visible {outline:3px solid #63a9e0;outline-offset:3px}
+#survey-dialog #survey-error {margin:4cqw 0 0;font-size:max(13px,3cqw);text-align:left}
+@media(max-width:360px) {#survey-dialog #survey-later {top:8px;right:8px}}
+@media(prefers-reduced-transparency:reduce) {#survey-dialog::backdrop {backdrop-filter:none;-webkit-backdrop-filter:none;background:#213649b3}}
