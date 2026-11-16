@@ -1,4 +1,14 @@
 /* Page-only layout overrides, after the shared theme and quality styles. */
+.staff-work .inline-bulk-bar{position:sticky;top:8px;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:14px 16px;border:1px solid var(--accent);border-radius:12px;background:var(--paper);box-shadow:0 4px 18px #0001}
+.staff-work .inline-bulk-bar>div{min-width:0}
+.staff-work .inline-bulk-bar strong{font-size:14px}
+.staff-work .inline-bulk-bar .hint{margin-top:4px;word-break:keep-all;overflow-wrap:anywhere}
+.staff-work #inline-bulk-status{font-size:13px;line-height:1.6;margin-top:4px;color:var(--accent);overflow-wrap:anywhere}
+.staff-work #inline-bulk-status:empty{display:none}
+.staff-work #inline-save-all{min-height:44px;flex-shrink:0;white-space:normal;word-break:keep-all}
+body.staff-work.mode-mobile .inline-bulk-bar{flex-direction:column;align-items:stretch;padding:12px 14px}
+body.staff-work.mode-mobile #inline-save-all{width:100%}
+@media(max-width:700px){.staff-work .inline-bulk-bar{flex-direction:column;align-items:stretch}.staff-work #inline-save-all{width:100%}}
 .staff-work .work-view-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:0 0 18px;color:var(--muted);font-size:12px}
 .staff-work .mode-toggle{display:flex;gap:3px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
 .staff-work .mode-toggle button{min-height:40px;padding:8px 12px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);font-size:13px;white-space:nowrap}
