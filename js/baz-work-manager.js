@@ -25,6 +25,8 @@
   var fields=window.BazWorkFields,activeField=null,renderHost="list",referenceRefreshing=false,advanced={year:[],month:[],quarter:[],gubun:[],asType:[],ncare:[],engineer:[],cs:[],sales:[],status:[]};
   var editMode=false,inlineDraftKey=scope+'_inline_edits',inlineDrafts=read(inlineDraftKey)||{};
   var inlineBulkWorking=false,inlineBulkMessage='';
+  var rosterBatchKey=scope+'_roster_batch',rosterBatchDraft=read(rosterBatchKey)||{},rosterBatchWorking=false,rosterBatchMessage='';
+  var rosterMultiple=!!rosterBatchDraft.multiple,rosterDates=new Set((Array.isArray(rosterBatchDraft.dates)?rosterBatchDraft.dates:[]).filter(rosterDateValid).slice(0,366));
   var referenceTask=null;
   var inlineDraftTimer=null,inlineDraftDirty=false;
   function flushInlineDrafts(force){
@@ -115,7 +117,8 @@
       var day=i-first+1;if(day<1||day>last){days+='<span class="calendar-blank" aria-hidden="true"></span>';continue;}
       var date=month+'-'+String(day).padStart(2,'0'),entries=items.filter(function(r){return r.date===date;});
       var label=number+'월 '+day+'일 · '+(state.rosterLoaded?(entries.length?entries.map(function(r){return r.person+' '+r.type;}).join(', '):'등록된 일정 없음'):'동기화로 일정 확인');
-      days+='<button type="button" class="calendar-day'+(date===today?' today':'')+(i%7===0?' sunday':i%7===6?' saturday':'')+'" data-calendar-date="'+date+'" aria-label="'+esc(label)+'" title="'+esc(label)+'" aria-pressed="'+String(date===calendarDate)+'"'+(date===today?' aria-current="date"':'')+'><span class="calendar-date">'+day+'</span><span class="calendar-entries" aria-hidden="true">'+entries.slice(0,2).map(function(r){return '<span class="calendar-person '+(r.type==='휴무'?'off':'duty')+'">'+esc(r.person+' '+r.type)+'</span>';}).join('')+(entries.length>2?'<span class="calendar-more">+'+(entries.length-2)+'명</span>':'')+'</span></button>';
+      var selected=rosterMultiple?rosterDates.has(date):date===calendarDate;if(rosterMultiple&&selected)label+=' · 일괄 선택됨';
+      days+='<button type="button" class="calendar-day'+(date===today?' today':'')+(rosterMultiple&&selected?' multi-selected':'')+(i%7===0?' sunday':i%7===6?' saturday':'')+'" data-calendar-date="'+date+'" aria-label="'+esc(label)+'" title="'+esc(label)+'" aria-pressed="'+String(selected)+'"'+(date===today?' aria-current="date"':'')+'><span class="calendar-date">'+day+'</span><span class="calendar-entries" aria-hidden="true">'+entries.slice(0,2).map(function(r){return '<span class="calendar-person '+(r.type==='휴무'?'off':'duty')+'">'+esc(r.person+' '+r.type)+'</span>';}).join('')+(entries.length>2?'<span class="calendar-more">+'+(entries.length-2)+'명</span>':'')+'</span></button>';
     }
     $('roster-calendar-days').innerHTML=days;
     $('roster-calendar-selected-title').textContent=Number(calendarDate.slice(5,7))+'월 '+Number(calendarDate.slice(8))+'일 일정';
@@ -145,9 +148,16 @@
     $('roster-dialog').querySelectorAll('[data-roster-edit],[data-roster-delete]').forEach(function(b){b.disabled=locked;});
     $('roster-calendar-prev').disabled=$('roster-calendar-next').disabled=$('roster-calendar-edit').disabled=$('roster-calendar-today').disabled=!state.loaded||locked;
     $('roster-calendar-days').querySelectorAll('button').forEach(function(b){b.disabled=!state.loaded||locked;});
+    renderRosterBatch();
+    ['roster-mode-single','roster-mode-multiple','roster-multi-toggle'].forEach(function(id){$(id).disabled=locked||!!rosterEdit;});
+    ['roster-range-start','roster-range-end','roster-range-add','roster-select-calendar','roster-dates-clear','roster-replace'].forEach(function(id){$(id).disabled=locked;});
+    $('roster-selected-dates').querySelectorAll('button').forEach(function(b){b.disabled=locked;});
+    if(rosterMultiple){$('roster-date').disabled=true;$('roster-calendar-edit').disabled=locked||!rosterDates.size;$('roster-save').disabled=locked||!state.rosterLoaded||!rosterDates.size;}
+    $('roster-retry').hidden=!(pending&&/^work_roster_/.test(pending.action));$('roster-retry').disabled=busy||bulkWorking;
+    $('roster-close').disabled=rosterBatchWorking;
   }
   function resetRosterForm(){
-    rosterEdit=null;$('roster-date').value=state.rosterMonth===localNow().slice(0,7)?localNow().slice(0,10):state.rosterMonth+'-01';$('roster-person').value='';$('roster-type').value='휴무';$('roster-form-title').textContent='일정 추가';$('roster-cancel-edit').hidden=true;err('roster-error','');updateRosterControls();
+    rosterEdit=null;$('roster-date').value=state.rosterMonth===localNow().slice(0,7)?localNow().slice(0,10):state.rosterMonth+'-01';$('roster-person').value=rosterMultiple?rosterBatchDraft.person||'':'';$('roster-type').value=rosterMultiple&&rosterBatchDraft.type==='당직'?'당직':'휴무';$('roster-replace').checked=!!rosterBatchDraft.replace;$('roster-form-title').textContent=rosterMultiple?'여러 날짜 일정 추가':'일정 추가';$('roster-cancel-edit').hidden=true;err('roster-error','');updateRosterControls();
   }
   async function loadRoster(month){
     if(rosterLoading||busy||pending||syncing||bulkWorking)return;
@@ -156,12 +166,18 @@
     catch(e){$('roster-month').value=state.rosterMonth;err('roster-error',e.message);}
     finally{rosterLoading=false;updateRosterControls();}
   }
-  function rosterSaved(data){
+  function rosterSaved(data,operation){
     var r=data.schedule;if(r.date.slice(0,7)===state.rosterMonth){var i=state.roster.findIndex(function(x){return x.id===r.id;});if(i<0)state.roster.push(r);else if(state.roster[i].revision<=r.revision)state.roster[i]=r;state.rosterLoaded=true;renderRoster();}
+    if(operation&&operation.context==='roster-bulk'){
+      rosterDates.delete(r.date);persistRosterBatch();
+      if(!rosterBatchWorking)rosterBatchMessage=rosterLabel(r)+' 저장 결과 확인 완료 · 남은 선택 '+rosterDates.size+'일';
+      updateRosterControls();return;
+    }
     rosterDelete=null;$('roster-delete-confirm').hidden=true;resetRosterForm();notify(r.deletedAt?'근무 일정을 삭제했습니다.':rosterLabel(r)+' 저장 완료');
   }
   async function saveRoster(event){
     event.preventDefault();if(rosterLoading||busy||pending||syncing||bulkWorking||!state.rosterLoaded)return;err('roster-error','');
+    if(rosterMultiple)return saveRosterBatch();
     var date=$('roster-date').value,person=$('roster-person').value.trim().normalize('NFC');
     if(!date||date.slice(0,7)!==state.rosterMonth){err('roster-error','조회 월과 같은 날짜를 선택하세요. 다른 월은 위의 조회 월을 변경하세요.');return;}
     if(!person){err('roster-error','근무자를 선택하거나 이름을 입력하세요.');return;}
@@ -169,6 +185,81 @@
     if(!rosterEdit&&current&&!current.deletedAt){err('roster-error','이미 등록된 날짜·근무자입니다. 위 목록의 수정 버튼을 사용하세요.');return;}
     var data=await write('work_roster_save',{date:date,person:person,type:$('roster-type').value,baseRevision:rosterEdit?rosterEdit.revision:current?current.revision:0},'roster');
     if(data&&!data.success)err('roster-error',data.error);updateRosterControls();
+  }
+  function rosterDateValid(date){
+    if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<'2000-01-01'||date>'2199-12-31')return false;
+    var value=new Date(date+'T00:00:00Z');return Number.isFinite(+value)&&value.toISOString().slice(0,10)===date;
+  }
+  function persistRosterBatch(){
+    rosterBatchDraft.dates=Array.from(rosterDates).sort();rosterBatchDraft.multiple=rosterMultiple;store(rosterBatchKey,rosterBatchDraft);
+  }
+  function captureRosterBatch(){
+    if(!rosterMultiple)return;
+    rosterBatchDraft.person=$('roster-person').value.trim().normalize('NFC');rosterBatchDraft.type=$('roster-type').value;rosterBatchDraft.replace=$('roster-replace').checked;persistRosterBatch();
+  }
+  function renderRosterBatch(){
+    $('roster-multiple-panel').hidden=!rosterMultiple;$('roster-single-date').hidden=rosterMultiple;$('roster-date').required=!rosterMultiple;
+    $('roster-mode-single').setAttribute('aria-pressed',String(!rosterMultiple));$('roster-mode-multiple').setAttribute('aria-pressed',String(rosterMultiple));
+    $('roster-multi-toggle').setAttribute('aria-pressed',String(rosterMultiple));$('roster-multi-toggle').textContent=rosterMultiple?'여러 날짜 선택 중':'여러 날짜 선택';
+    $('roster-calendar-count').textContent=rosterMultiple?'선택 날짜 '+rosterDates.size+'개 · 날짜를 다시 누르면 해제됩니다.':'';
+    $('roster-selected-count').textContent='선택 날짜 '+rosterDates.size+'개';
+    $('roster-selected-dates').innerHTML=Array.from(rosterDates).sort().map(function(date){return '<button type="button" data-roster-date-remove="'+date+'" aria-label="'+date+' 선택 해제">'+date+' ×</button>';}).join('');
+    $('roster-calendar-edit').textContent=rosterMultiple?'선택 날짜 '+rosterDates.size+'개 일정 등록':'선택 날짜 일정 등록';
+    $('roster-save').textContent=rosterMultiple?'선택 날짜 '+rosterDates.size+'개 저장':'일정 저장';
+    $('roster-batch-status').textContent=rosterMultiple?rosterBatchMessage:'';
+  }
+  function setRosterMode(multiple){
+    if(busy||pending||syncing||bulkWorking||rosterLoading||rosterEdit)return;
+    captureRosterBatch();rosterMultiple=multiple;persistRosterBatch();resetRosterForm();renderRosterCalendar();
+  }
+  function toggleRosterDate(date){
+    if(!rosterDateValid(date)||!rosterMultiple||busy||pending||syncing||bulkWorking||rosterLoading)return;
+    if(rosterDates.has(date))rosterDates.delete(date);
+    else if(rosterDates.size<366)rosterDates.add(date);
+    else{err('roster-error','한 번에 최대 366일을 선택할 수 있습니다.');return;}
+    rosterBatchMessage='';persistRosterBatch();renderRosterCalendar();updateRosterControls();
+  }
+  function addRosterRange(){
+    if(!rosterMultiple||busy||pending||syncing||bulkWorking||rosterLoading)return;
+    var start=$('roster-range-start').value,end=$('roster-range-end').value;
+    if(!rosterDateValid(start)||!rosterDateValid(end)||start>end){err('roster-error','시작일과 종료일을 확인하세요. 종료일은 시작일 이후여야 합니다.');return;}
+    var merged=new Set(rosterDates),day=new Date(start+'T00:00:00Z'),last=new Date(end+'T00:00:00Z');
+    for(;day<=last;day.setUTCDate(day.getUTCDate()+1)){merged.add(day.toISOString().slice(0,10));if(merged.size>366){err('roster-error','한 번에 최대 366일을 선택할 수 있습니다.');return;}}
+    rosterDates=merged;rosterBatchMessage='';err('roster-error','');persistRosterBatch();renderRosterCalendar();updateRosterControls();
+  }
+  async function saveRosterBatch(){
+    if(!rosterMultiple||!state.loaded||!state.rosterLoaded||rosterLoading||busy||pending||syncing||bulkWorking)return;
+    captureRosterBatch();var dates=Array.from(rosterDates).sort(),person=rosterBatchDraft.person,type=rosterBatchDraft.type,replace=rosterBatchDraft.replace;
+    if(!dates.length){err('roster-error','설정할 날짜를 선택하세요.');return;}
+    if(!person||person.length>60||/[\u0000-\u001f\u007f]/.test(person)||!['휴무','당직'].includes(type)){err('roster-error','근무자와 휴무·당직 구분을 확인하세요.');return;}
+    err('roster-error','');var completed=0,same=0,kept=0,failed=0,errors=[],months=Array.from(new Set(dates.map(function(date){return date.slice(0,7);}))),snapshots=new Map();
+    rosterBatchWorking=true;bulkWorking=true;updatePending();
+    try{
+      // Read every month before the first write; retain each date/person revision.
+      for(var month of months){
+        rosterBatchMessage=month+' 기존 일정 확인 중…';updateRosterControls();
+        var snapshot=await api.get('work_roster',{rosterMonth:month});if(!snapshot.success||!Array.isArray(snapshot.roster)||snapshot.rosterMonth!==month)throw new Error(month+' 일정 확인 실패 · '+(snapshot.error||'조회 결과를 확인하세요.'));
+        snapshots.set(month,snapshot.roster);
+      }
+      if(snapshots.has(state.rosterMonth)){state.roster=snapshots.get(state.rosterMonth).slice();renderRoster();}
+      for(var i=0;i<dates.length;i++){
+        var date=dates[i],current=snapshots.get(date.slice(0,7)).find(function(r){return r.date===date&&r.person===person;});
+        rosterBatchMessage=(i+1)+' / '+dates.length+'일 처리 중…';updateRosterControls();
+        if(current&&!current.deletedAt&&current.type===type){same++;rosterDates.delete(date);persistRosterBatch();continue;}
+        if(current&&!current.deletedAt&&!replace){kept++;errors.push(date+' · 기존 '+current.type+' 유지');continue;}
+        var data=await write('work_roster_save',{date:date,person:person,type:type,baseRevision:current?current.revision:0},'roster-bulk');
+        if(data&&data.success)completed++;
+        else{failed++;errors.push(date+' · '+(data?data.error:'저장 결과 확인 필요'));if(!data||pending)break;}
+      }
+    }catch(e){errors.push(e.message||'근무 일정 저장 중 오류가 발생했습니다.');}
+    finally{
+      await refreshTodayRoster();
+      rosterBatchWorking=false;bulkWorking=false;persistRosterBatch();await persistSnapshot();
+      rosterBatchMessage=completed+'일 저장 완료'+(same?' · 같은 일정 '+same+'일':'')+(kept?' · 기존 일정 유지 '+kept+'일':'')+(failed?' · 확인 필요 '+failed+'일':'')+(rosterDates.size?' · 남은 선택 '+rosterDates.size+'일':'');
+      if(pending)rosterBatchMessage+=' · 같은 기록 재시도로 결과를 확인하세요.';
+      if(errors.length)err('roster-error',errors.join('\n'));
+      renderRoster();updatePending();
+    }
   }
   function canManage(r){return r.createdBy===account||window.BazAuth.cachedLevel()>=3;}
   function updateSelection(){
@@ -742,7 +833,7 @@
     $('load-conflict').onclick=function(){state.editing=latest;state.baseline=Object.assign({},latest);setForm(latest);saveDraft();};
   }
   async function write(action,payload,context){
-    if(busy||pending||(bulkWorking&&!(inlineBulkWorking&&context==='inline-request')&&context!=='bulk-'+(lifecyclePlan&&lifecyclePlan.action))){notify('먼저 진행 중인 저장 결과를 확인하세요.');return null;}
+    if(busy||pending||(bulkWorking&&!(inlineBulkWorking&&context==='inline-request')&&!(rosterBatchWorking&&context==='roster-bulk')&&context!=='bulk-'+(lifecyclePlan&&lifecyclePlan.action))){notify('먼저 진행 중인 저장 결과를 확인하세요.');return null;}
     pending={action:action,payload:Object.assign({},payload,{operationId:api.id()}),context:context};
     if(!store(pendingKey,pending))notify('브라우저 저장을 사용할 수 없습니다. 결과 확인 전 이 창을 닫지 마세요.');
     await cache.savePending(account,pending).catch(function(){});return sendPending();
@@ -756,7 +847,7 @@
       if(!data.success&&data.retrySameOperation){notify(data.error+' 같은 기록으로 재시도하세요.');$('save-status').textContent='저장 결과 확인 필요';return null;}
       pending=null;store(pendingKey,null);await cache.savePending(account,null).catch(function(){});updatePending();
       if(!data.success){$('save-status').textContent='저장되지 않음';if(operation.context==='inline-request')inlineFailure(operation.payload.id,data);return data;}
-      if(data.schedule){rosterSaved(data);$('save-status').textContent='서버 저장 완료 '+time(data.schedule.updatedAt);await persistSnapshot();return data;}
+      if(data.schedule){rosterSaved(data,operation);$('save-status').textContent='서버 저장 완료 '+time(data.schedule.updatedAt);await persistSnapshot();if(!rosterBatchWorking)await refreshTodayRoster();return data;}
       if(operation.context==='inline-request'){activeField=null;delete inlineDrafts[data.request.id];flushInlineDrafts(true);}
       upsert(data.request);renderList();$('save-status').textContent='서버 저장 완료 '+time(data.request.updatedAt);
       if(data.request.purgedAt){await forgetPurged(data.request.id);await persistSnapshot();notify('접수를 영구 삭제했습니다.');return data;}
@@ -935,12 +1026,20 @@
   $('roster-calendar-today').onclick=async function(){var date=localNow().slice(0,10);if(date.slice(0,7)!==state.rosterMonth)await loadRoster(date.slice(0,7));if(date.slice(0,7)===state.rosterMonth){calendarDate=date;renderRosterCalendar();updateRosterControls();}};
   $('roster-today-open').onclick=function(){return openRoster(localNow().slice(0,10));};
   ['calendar','manage'].forEach(function(name){var button=$('roster-tab-'+name);button.onclick=function(){setRosterTab(name);};button.onkeydown=function(event){if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();setRosterTab(event.key==='Home'?'calendar':event.key==='End'?'manage':rosterTab==='calendar'?'manage':'calendar',true);}};});
-  $('roster-calendar-days').onclick=function(event){var button=event.target.closest('[data-calendar-date]');if(!button||button.disabled||$('roster-calendar-prev').disabled)return;calendarDate=button.dataset.calendarDate;renderRosterCalendar();updateRosterControls();};
-  $('roster-close').onclick=function(){$('roster-dialog').close();};
+  $('roster-calendar-days').onclick=function(event){var button=event.target.closest('[data-calendar-date]');if(!button||button.disabled||$('roster-calendar-prev').disabled)return;calendarDate=button.dataset.calendarDate;if(rosterMultiple)toggleRosterDate(calendarDate);else{renderRosterCalendar();updateRosterControls();}};
+  $('roster-close').onclick=function(){if(!rosterBatchWorking)$('roster-dialog').close();};
+  $('roster-dialog').addEventListener('cancel',function(event){if(rosterBatchWorking)event.preventDefault();});
+  $('roster-multi-toggle').onclick=function(){setRosterMode(!rosterMultiple);};
+  $('roster-mode-single').onclick=function(){setRosterMode(false);};$('roster-mode-multiple').onclick=function(){setRosterMode(true);};
+  $('roster-select-calendar').onclick=function(){setRosterTab('calendar',true);};$('roster-range-add').onclick=addRosterRange;
+  $('roster-dates-clear').onclick=function(){if(busy||pending||syncing||bulkWorking||rosterLoading)return;rosterDates.clear();rosterBatchMessage='';persistRosterBatch();renderRosterCalendar();updateRosterControls();};
+  $('roster-selected-dates').onclick=function(event){var button=event.target.closest('[data-roster-date-remove]');if(button)toggleRosterDate(button.dataset.rosterDateRemove);};
+  ['roster-person','roster-type','roster-replace'].forEach(function(id){$(id).addEventListener('input',function(){if(busy||pending||bulkWorking)return;rosterBatchMessage='';captureRosterBatch();renderRosterBatch();});});
+  $('roster-retry').onclick=async function(){var data=await sendPending();if(data&&!data.success)err('roster-error',data.error);updateRosterControls();};
   $('roster-form').onsubmit=saveRoster;$('roster-cancel-edit').onclick=resetRosterForm;
   $('roster-refresh').onclick=function(){loadRoster(state.rosterMonth);};
   $('roster-month').onchange=async function(){var month=this.value;if(!/^\d{4}-\d{2}$/.test(month)){this.value=state.rosterMonth;return;}await loadRoster(month);if(state.rosterMonth===month){rosterDelete=null;$('roster-delete-confirm').hidden=true;resetRosterForm();}};
-  function manageRosterRow(event){var button=event.target.closest('button');if(!button||rosterLoading||busy||pending||syncing||bulkWorking)return;var r=state.roster.find(function(r){return r.id===(button.dataset.rosterEdit||button.dataset.rosterDelete);});if(!r||r.deletedAt)return;setRosterTab('manage');err('roster-error','');if(button.dataset.rosterEdit){rosterEdit=Object.assign({},r);$('roster-date').value=r.date;$('roster-person').value=r.person;$('roster-type').value=r.type;$('roster-form-title').textContent='일정 수정';$('roster-cancel-edit').hidden=false;rosterDelete=null;$('roster-delete-confirm').hidden=true;updateRosterControls();$('roster-type').focus();}else{rosterDelete=Object.assign({},r);$('roster-delete-label').textContent=rosterLabel(r)+' 일정을 삭제할까요?';$('roster-delete-confirm').hidden=false;$('roster-delete-cancel').focus();}}
+  function manageRosterRow(event){var button=event.target.closest('button');if(!button||rosterLoading||busy||pending||syncing||bulkWorking)return;var r=state.roster.find(function(r){return r.id===(button.dataset.rosterEdit||button.dataset.rosterDelete);});if(!r||r.deletedAt)return;setRosterTab('manage');err('roster-error','');if(button.dataset.rosterEdit){setRosterMode(false);rosterEdit=Object.assign({},r);$('roster-date').value=r.date;$('roster-person').value=r.person;$('roster-type').value=r.type;$('roster-form-title').textContent='일정 수정';$('roster-cancel-edit').hidden=false;rosterDelete=null;$('roster-delete-confirm').hidden=true;updateRosterControls();$('roster-type').focus();}else{rosterDelete=Object.assign({},r);$('roster-delete-label').textContent=rosterLabel(r)+' 일정을 삭제할까요?';$('roster-delete-confirm').hidden=false;$('roster-delete-cancel').focus();}}
   $('roster-rows').onclick=$('roster-calendar-selection').onclick=manageRosterRow;
   $('roster-delete-cancel').onclick=function(){rosterDelete=null;$('roster-delete-confirm').hidden=true;};
   $('roster-delete-submit').onclick=async function(){if(!rosterDelete||rosterLoading||busy||pending||syncing||bulkWorking)return;var r=rosterDelete,data=await write('work_roster_delete',{date:r.date,person:r.person,baseRevision:r.revision},'roster');if(data&&!data.success)err('roster-error',data.error);};
