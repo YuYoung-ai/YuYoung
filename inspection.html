@@ -644,6 +644,7 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
+<script src="js/baz-inspection-pdf-actions.js?v=345"></script>
 <script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=342"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
 <script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=343"></script>
@@ -2233,9 +2234,16 @@ async function renderInspectionPdf(arg){
 }
 let _lastPreviewUrl=null;
 
-document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
-document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
-document.getElementById('blankPdfBtn').addEventListener('click',()=>generatePDF({blank:true}));
+const inspectionPdfActions=window.BazInspectionPdfActions.create({window,document,
+  settleMs:new URLSearchParams(location.search).get('prefill')==='1'||window.BazWorkFlow.route(location.search)?.recordId?800:0});
+inspectionPdfActions.bind('generateBtn',()=>generatePDF(false));
+inspectionPdfActions.bind('previewBtn',()=>generatePDF(true));
+inspectionPdfActions.bind('blankPdfBtn',()=>generatePDF({blank:true}));
+document.addEventListener('DOMContentLoaded',()=>{
+  inspectionPdfActions.activateAfter(Promise.all([
+    window.inspectionStorageReady,window.inspectionPrefillReady,window.inspectionWorkflowReady
+  ])).catch(()=>{}); // Storage errors already display their recovery message.
+},{once:true});
 document.getElementById('doneSurvey').addEventListener('click',()=>{
   const hosp=encodeURIComponent(v('hospital')||'');
   const cs=encodeURIComponent(v('csName')||'');
@@ -2281,7 +2289,7 @@ window.inspectionStorageReady.catch(()=>{});
 document.getElementById('inspectionStorageBtn').onclick=()=>window.BazInspectionStorageUI.open({repository:draftRepository,ready:window.inspectionStorageReady,current:()=>_currentTaskId,save:()=>saveCurrentTask(),snapshot:()=>({...getTask(_currentTaskId),id:_currentTaskId||genTaskId(),createdAt:getTask(_currentTaskId)?.createdAt||Date.now(),updatedAt:Date.now(),status:getTask(_currentTaskId)?.status||'draft',...taskMetaFromData(collectFormData()),data:collectFormData()}),cloudGet,checkAccount:checkStorageAccount,outbox:window.BazInspectionOutbox.create(window.indexedDB),onChange(){renderTaskList();updateTaskStatusBar();}});
 
 // 현장 처리(handover.html) → 점검 내역서 이어쓰기 프리필 소비
-(async function consumePrefill(){
+window.inspectionPrefillReady=(async function consumePrefill(){
   try{await window.inspectionStorageReady;}catch{return;}
   if(window.BazWorkFlow.route(location.search)?.recordId)return;
   if(new URLSearchParams(location.search).get('prefill')!=='1')return;
@@ -2300,6 +2308,7 @@ document.getElementById('inspectionStorageBtn').onclick=()=>window.BazInspection
   try{localStorage.removeItem(PREFILL_KEY);}catch(e){}
   try{ history.replaceState(null,'',location.pathname); }catch(e){}
 })();
+window.inspectionPrefillReady.catch(()=>{});
 
 // 로드 시 오프라인 동기화 대기분 재전송 (네트워크 있으면)
 window.inspectionStorageReady.then(flushSyncQueue).catch(()=>{});
@@ -2358,3 +2367,4 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
+
