@@ -1,0 +1,143 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const http = require('node:http');
+const path = require('node:path');
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+
+const root = path.resolve(__dirname, '../..');
+const now = new Date().toISOString();
+const day = '2030-06-18';
+const preference = day + 'T10:00';
+const alternate = day + 'T14:00';
+const item = (id, confirmed, revision = 1) => ({
+  request: {id, revision, registeredAt: now, createdAt: now, hospitalName: '테스트 병원 '+id,
+    symptom: '점검 요청', visitAt: preference, engineer: '', status: confirmed ? '방문예정' : '접수',
+    qrIntake: {preferredStartAts: [preference], requestedVisitAt: preference, appointmentConfirmed: confirmed}},
+  contact: {name: '테스트', phone: '01000000000'}, photos: [], detailLoaded: true,
+});
+
+const staffFixture = `<!doctype html><html lang="ko"><body><main><button id="qr-workflow-open"></button></main>
+<script>
+window.BazQrRuntime={api:'/_local/api'};
+window.BazWorkTabs={register(name,button,panel){panel.hidden=false;}};
+window.BazAuth={name:()=> 'test-admin',token:()=> 'test-token'};
+async function call(action,p){const response=await fetch('/_local/api',{method:'POST',body:JSON.stringify({action,...p})});return response.json();}
+window.BazWorkAPI={get:call,post:call,id:()=>crypto.randomUUID()};
+</script><script src="/js/baz-qr-workflow.js"></script></body></html>`;
+const config = `window.QrCustomerRuntime={local:true,api:'/_local/customer',file:'/_local/file'};`;
+
+async function run(){
+  const cases = Array.from({length: 10000}, (_, i) => item('case-'+String(i).padStart(4,'0'), false));
+  cases[20] = item('later-confirmed', true);
+  const listReads = [], writes = [], storedOps = new Map();
+  const customerWrites = [], customerOps = new Map();
+  let listVersion = 1;
+  const server = http.createServer(async (req,res)=>{
+    const pathname=new URL(req.url,'http://localhost').pathname;
+    const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
+    if(pathname==='/test-qr'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(staffFixture);}
+    if(pathname==='/as-app/config.js'){res.setHeader('Content-Type','application/javascript');return res.end(config);}
+    if(pathname==='/_local/api'||pathname==='/_local/customer'){
+      let body='';for await(const part of req)body+=part;const p=JSON.parse(body);
+      if(p.action==='qr_cases'){
+        listReads.push(p);
+        if(p.offset&&p.listVersion!==listVersion)return json({success:false,code:'LIST_CHANGED'});
+        return json({success:true,admin:true,engineers:['엔지니어 A'],ingress:{enabled:true},
+          listVersion,items:cases.slice(p.offset,p.offset+p.limit),total:cases.length,
+          nextOffset:p.offset+p.limit<cases.length?p.offset+p.limit:null,serviceJobs:[],pushEvents:[]});
+      }
+      if(p.action==='work_reservation_list')return json({success:true,off:[],schedule:[],slots:[]});
+      if(p.action==='qr_update'){
+        writes.push(p);
+        if(storedOps.has(p.operationId))return json(storedOps.get(p.operationId));
+        const row=cases.find(c=>c.request.id===p.requestId);
+        if(row.request.revision!==p.baseRevision)return json({success:false,code:'CONFLICT',error:'다른 담당자가 변경했습니다.'});
+        Object.assign(row.request,{revision:row.request.revision+1,visitAt:p.startAt,status:p.status,engineer:p.engineer});
+        row.request.qrIntake.appointmentConfirmed=p.status==='방문예정';
+        listVersion++;
+        storedOps.set(p.operationId,{success:true});
+        if(writes.length===1)return json({success:false,retrySameOperation:true,error:'응답 확인 필요'});
+        return json({success:true});
+      }
+      const hospital={id:'test-hospital',name:'테스트 병원'};
+      if(p.action==='hospital_info')return json({success:true,hospital});
+      if(p.action==='info')return json({success:true,hospital,times:[{startAt:preference}],serverNow:Date.parse('2030-06-17T00:00:00Z')});
+      if(p.action==='hospital_entry')return json({success:true,active:false});
+      if(p.action==='create'){
+        customerWrites.push(p);
+        if(customerOps.has(p.operationId))return json(customerOps.get(p.operationId));
+        customerOps.set(p.operationId,{success:true,requestId:'fixture-qr-01',requestNumber:'AS-2030-001'});
+        return json({success:false,retrySameOperation:true,error:'응답 확인 필요'});
+      }
+      if(p.action==='status')return json({success:true,request:{id:'fixture-qr-01',requestNumber:'AS-2030-001',
+        hospitalId:hospital.id,hospitalName:hospital.name,status:'방문예정',visitConfirmed:true,visitAt:alternate,
+        preferredStartAts:[preference],contact:{phone:'01000000000'},symptom:'점검 요청'}});
+      return json({success:false,error:'테스트에 없는 동작'});
+    }
+    try{
+      const ext=path.extname(pathname), type={'.html':'text/html','.js':'application/javascript','.css':'text/css','.mjs':'application/javascript'}[ext];
+      if(type)res.setHeader('Content-Type',type+'; charset=utf-8');
+      res.end(await fs.readFile(path.join(root,pathname)));
+    }catch{res.writeHead(404).end();}
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const origin='http://127.0.0.1:'+server.address().port;
+  let browser;
+  try{
+    browser=await chromium.launch({executablePath:process.env.BROWSER_EXECUTABLE||undefined});
+    const staff=await browser.newPage({viewport:{width:390,height:844}});
+    staff.setDefaultTimeout(10000);
+    staff.on('pageerror',error=>console.error(error.message));
+    await staff.goto(origin+'/test-qr');
+    await staff.locator('[data-qr-select="case-0000"]').click();
+    assert.equal(listReads[0].limit,20);
+    assert.equal(await staff.locator('[data-qr-select]').count(),20);
+    await staff.locator('#qr-visit-at').fill(alternate);
+    await staff.locator('#qr-confirm-visit').click();
+    await staff.locator('#qr-workflow-message').filter({hasText:'같은 기록'}).waitFor().catch(async error=>{
+      console.error({message:await staff.locator('#qr-workflow-message').textContent(),writes:writes.length,
+        form:await staff.locator('#qr-confirm-visit').evaluate(button=>({valid:button.form?.checkValidity(),html:button.outerHTML}))});
+      throw error;
+    });
+    assert.equal(writes[0].status,'방문예정');
+    assert.equal(writes[0].startAt,alternate);
+    await staff.locator('#qr-retry').click();
+    await staff.locator('.qr-appointment').filter({hasText:'14:00'}).waitFor();
+    assert.equal(writes[1].operationId,writes[0].operationId);
+    assert.equal(storedOps.size,1);
+    assert.equal(cases[0].request.revision,2);
+    await staff.locator('#qr-list-back').click();
+    await staff.locator('[data-qr-select="case-0001"]').click();
+    await staff.locator('[data-preference="0"]').click();
+    await staff.locator('#qr-confirm-visit').click();
+    await staff.locator('.qr-appointment').filter({hasText:'10:00'}).waitFor();
+    assert.equal(writes[2].status,'방문예정');
+    assert.equal(writes[2].startAt,preference);
+    await staff.locator('#qr-list-back').click();
+    await staff.locator('[data-filter="confirmed-unassigned"]').click();
+    await staff.getByRole('button',{name:'다음 접수 더 보기'}).click();
+    await staff.locator('[data-qr-select="later-confirmed"]').waitFor();
+
+    const phone=await browser.newPage({viewport:{width:390,height:844}});
+    phone.setDefaultTimeout(10000);
+    phone.on('pageerror',error=>console.error(error.message));
+    await phone.goto(origin+'/as-app/as-request.html?hospital=test-hospital');
+    await phone.locator('#symptom').fill('점검 요청');
+    await phone.locator('#phone').fill('01000000000');
+    await phone.locator('#times input[value="'+preference+'"]').check();
+    await phone.locator('#submit-request').click();
+    await phone.locator('#message').filter({hasText:'전송 결과 확인 중'}).waitFor();
+    await phone.reload();
+    await phone.locator('#retry-create').click();
+    await phone.locator('#status-facts').filter({hasText:'AS-2030-001'}).waitFor();
+    assert.equal(customerWrites[1].operationId,customerWrites[0].operationId);
+    assert.equal(customerOps.size,1);
+    assert.match(await phone.locator('#status-facts').innerText(),/확정 방문/);
+    console.log('QR intake recovery, both confirmation paths and 10,000-case paging passed');
+  }finally{
+    await browser?.close();
+    await new Promise(resolve=>server.close(resolve));
+  }
+}
+
+run().catch(err=>{console.error(err);process.exitCode=1;});
