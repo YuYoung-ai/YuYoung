@@ -68,7 +68,7 @@
     if(q.statusScope==='review'&&r.status!=='결과확인'||q.statusScope==='completed'&&r.status!=='완료')return false;
     var day=String(r.visitAt||'').slice(0,10),period=range(q.filter,q.today,q.month);
     if(period&&(!day||day<period[0]||day>period[1]))return false;
-    if(q.search&&![q.name||r.hospitalName,r.symptom,r.cs,r.engineer,r.sales].join(' ').toLowerCase().includes(String(q.search).toLowerCase()))return false;
+    if(q.search&&![q.name||r.hospitalName,r.sn,r.hospitalReferenceSN,r.symptom,r.cs,r.engineer,r.sales].join(' ').toLowerCase().includes(String(q.search).toLowerCase()))return false;
     if(q.filter==='active')return !['완료','취소'].includes(r.status);
     if(q.filter==='today')return day===q.today;
     if(q.filter==='mine')return r.status!=='취소'&&(r.cs===q.account||r.engineer===q.account);
