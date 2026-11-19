@@ -60,14 +60,18 @@
   return Math.floor(minutes/1440)+'일 전 접수';
  }
  function list(){if(!data)return;var q=view.query.trim().toLocaleLowerCase(),items=data.items.filter(function(c){var r=c.request,delta=(Date.parse(r.visitAt.slice(0,10))-Date.parse(today()))/86400000;return matches(c,view.filter)&&(!q||[r.hospitalName,r.symptom,r.engineer,c.contact.phone,c.contact.name].join(' ').toLocaleLowerCase().includes(q))&&(view.period==='all'||view.period==='today'&&delta===0||view.period==='week'&&delta>=0&&delta<7||view.period==='month'&&Math.abs(delta)<=30);});
-  var signature=JSON.stringify([view,selected,limit,data.total,data.nextOffset,data.counts,items.map(function(c){return [c.request,c.changeRequest?.state,ageLabel(c.request)];})]);
+  var signature=JSON.stringify([view,selected,limit,data.admin,data.total,data.nextOffset,data.counts,items.map(function(c){return [c.request,c.canSchedule,c.changeRequest?.state,ageLabel(c.request)];})]);
   if(signature===listSignature)return;
   listSignature=signature;
 
   items.sort(function(a,b){var x=a.request,y=b.request;if(view.sort==='priority'){var ax=a.changeRequest?.state==='pending'?0:!confirmed(x)?1:!x.engineer?2:3,bx=b.changeRequest?.state==='pending'?0:!confirmed(y)?1:!y.engineer?2:3;if(ax!==bx)return ax-bx;}return view.sort==='new'?y.createdAt.localeCompare(x.createdAt):x.visitAt.localeCompare(y.visitAt);});
   $('qr-filters').innerHTML=[['active','진행 중'],['awaiting','일정 미확정'],['confirmed-unassigned','확정·미배정'],['today','오늘 방문'],['changes','변경 요청 대기'],['completed','완료'],['all','전체']].map(function(f){return '<button type="button" data-filter="'+f[0]+'" aria-pressed="'+(view.filter===f[0])+'">'+f[1]+' <strong>'+((data.counts?.[f[0]]??data.items.filter(function(c){return matches(c,f[0]);}).length))+'</strong></button>';}).join('');$('qr-filters').querySelectorAll('button').forEach(function(b){b.onclick=function(){view.filter=b.dataset.filter;limit=20;rememberView();load(true,true);};});
   $('qr-found').textContent=((data.total??items.length)+'건')+(items.length>limit?' · '+limit+'건 표시':'');
-  $('qr-cases').innerHTML=items.slice(0,limit).map(function(c){var r=c.request;return '<li class="'+(r.id===selected?'selected':'')+'"><button type="button" data-qr-select="'+esc(r.id)+'"><span class="qr-list-heading"><strong>'+esc(r.hospitalName)+'</strong><b class="qr-state" data-state="'+esc(r.status)+'">'+esc(r.status)+'</b></span><span class="qr-list-date">'+'접수 · '+esc(root.BazDesign?root.BazDesign.date(r.registeredAt,true):(r.registeredAt||'접수 일시 미상').replace('T',' '))+'</span><span class="qr-list-date">'+esc(confirmed(r)?'확정 방문 · '+dateLabel(r.visitAt):'방문 시간 확인 중')+'</span><span class="qr-symptom">'+esc(r.symptom)+'</span><span class="qr-list-engineer">'+esc([r.engineer||'미배정',ageLabel(r),nextWork(c)].filter(Boolean).join(' · '))+'</span></button></li>';}).join('')||'<li class="qr-empty">불러온 접수 중 조건에 맞는 건이 없습니다.</li>';
+  $('qr-cases').innerHTML=items.slice(0,limit).map(function(c){
+   var r=c.request,canConfirm=(data.admin||c.canSchedule===true)&&openCase(r)&&!confirmed(r)&&c.changeRequest?.state!=='pending';
+   return '<li class="'+(r.id===selected?'selected':'')+'"><button type="button" data-qr-select="'+esc(r.id)+'"><span class="qr-list-heading"><strong>'+esc(r.hospitalName)+'</strong><b class="qr-state" data-state="'+esc(r.status)+'">'+esc(r.status)+'</b></span><span class="qr-list-date">'+'접수 · '+esc(root.BazDesign?root.BazDesign.date(r.registeredAt,true):(r.registeredAt||'접수 일시 미상').replace('T',' '))+'</span><span class="qr-list-date">'+esc(confirmed(r)?'확정 방문 · '+dateLabel(r.visitAt):'방문 시간 확인 중')+'</span><span class="qr-symptom">'+esc(r.symptom)+'</span><span class="qr-list-engineer">'+esc([r.engineer||'미배정',ageLabel(r),canConfirm?'':nextWork(c)].filter(Boolean).join(' · '))+'</span></button>'+
+    (canConfirm?'<button type="button" class="qr-list-confirm" data-ui-icon="calendar" data-qr-confirm="'+esc(r.id)+'" aria-label="'+esc(r.hospitalName)+' 방문 일정 확정">방문 일정 확정</button>':'')+'</li>';
+  }).join('')||'<li class="qr-empty">불러온 접수 중 조건에 맞는 건이 없습니다.</li>';
   if(data.nextOffset!==null&&data.nextOffset!==undefined&&items.length<=limit){
    var next=document.createElement('button');next.type='button';next.textContent='다음 접수 더 보기';
    next.onclick=async function(){
@@ -88,8 +92,23 @@
    $('qr-cases').append(next);
   }
   if(items.length>limit){var more=document.createElement('button');more.type='button';more.textContent='20건 더 보기';more.onclick=function(){limit+=20;list();};$('qr-cases').append(more);}
-  $('qr-cases').querySelectorAll('[data-qr-select]').forEach(function(b){b.onclick=async function(){if(dirty&&!confirm('저장하지 않은 변경을 비울까요?'))return;panel.dataset.listScroll=String(scrollY);selected=b.dataset.qrSelect;sessionStorage.setItem(viewKey+':selected',selected);dirty=false;list();try{await ensureDetail();if(busy||selected!==b.dataset.qrSelect)return;render();}catch(e){message(e.message);return;}panel.classList.add('is-detail');if(matchMedia('(max-width:760px)').matches)$('qr-case-detail').scrollIntoView({block:'start'});};});
  }
+ $('qr-cases').onclick=async function(e){
+  var target=e.target.closest('[data-qr-select],[data-qr-confirm]');
+  if(!target||busy||pending)return;
+  var id=target.dataset.qrConfirm||target.dataset.qrSelect,shortcut=!!target.dataset.qrConfirm;
+  if(selected!==id||!dirty){
+   if(dirty&&!confirm('저장하지 않은 변경을 비울까요?'))return;
+   selected=id;sessionStorage.setItem(viewKey+':selected',id);dirty=false;list();
+   try{await ensureDetail();if(busy||selected!==id)return;render();}catch(error){message(error.message);return;}
+  }
+  panel.dataset.listScroll=String(scrollY);
+  panel.classList.add('is-detail');
+  if(shortcut&&$('qr-visit-at')&&!$('qr-visit-at').readOnly){
+   $('qr-workflow-heading').focus({preventScroll:true});
+   $('qr-workflow-heading').scrollIntoView({block:'start'});
+  }else if(matchMedia('(max-width:760px)').matches)$('qr-case-detail').scrollIntoView({block:'start'});
+ };
  $('qr-search').value=view.query;$('qr-sort').value=view.sort;$('qr-period').value=view.period;
  var searchTimer,composing=false;function searchChanged(){clearTimeout(searchTimer);if(composing)return;searchTimer=setTimeout(function(){view.query=$('qr-search').value;limit=20;rememberView();load(true,true);},150);}$('qr-search').oncompositionstart=function(){composing=true;};$('qr-search').oncompositionend=function(){composing=false;searchChanged();};$('qr-search').oninput=searchChanged;['sort','period'].forEach(function(k){$('qr-'+k).onchange=function(){view[k]=this.value;limit=20;rememberView();load(true,true);};});
  $('qr-list-back').onclick=function(){panel.classList.remove('is-detail');scrollTo({top:Number(panel.dataset.listScroll||0),behavior:'instant'});$('qr-cases [data-qr-select="'+selected+'"]')?.focus({preventScroll:true});};
@@ -170,8 +189,13 @@
  }
  function render(){renderedCase=JSON.stringify(current());releasePhotos();var c=current();if(!c){$('qr-case-detail').innerHTML='<p class="qr-empty">접수를 선택하세요.</p>';return;}var r=c.request,canSchedule=data.admin||c.canSchedule===true;displayedRevision=r.revision;
   $('qr-case-detail').innerHTML='<div class="qr-case-heading"><h2>'+esc(r.hospitalName)+'</h2><span class="qr-case-number">'+esc(r.requestNumber||r.id.slice(-8))+'</span></div><dl class="qr-case-facts"><dt>담당자</dt><dd>'+esc(c.contact.name||'미입력')+'</dd><dt>연락처</dt><dd>'+'<a href="tel:'+esc(c.contact.phone)+'">'+esc(c.contact.phone)+'</a></dd><dt>이메일</dt><dd>'+esc(c.contact.email||'미입력')+'</dd><dt>엔지니어</dt><dd>'+esc(r.engineer||'미배정')+'</dd></dl><h3>접수 내용</h3><p>'+esc(r.symptom)+'</p><h3>첨부 사진</h3><div id="qr-photo-list" class="photo-strip"></div>'+
-   (canSchedule?'<form id="qr-assignment-form"><label class="field">방문 일시<input id="qr-visit-at" type="datetime-local" required value="'+esc(confirmed(r)?r.visitAt:'')+'"></label><label class="field">배정 엔지니어<select id="qr-assigned-engineer"><option value="">미배정</option>'+data.engineers.map(function(n){return '<option value="'+esc(n)+'" '+(n===r.engineer?'selected ':'')+(!data.admin&&n!==data.ownEngineer?'disabled':'')+'>'+esc(n)+'</option>';}).join('')+'</select></label></form>':'')+
-   '<form id="qr-status-form"><label class="field">처리 상태<select id="qr-status">'+['접수','방문예정','처리중','결과확인','완료','보류','취소'].map(function(s){return '<option '+(s===r.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select></label><button id="qr-save-status" type="submit">상태 저장</button></form>';
+   '<section class="qr-workflow-controls" aria-labelledby="qr-workflow-heading"><h3 id="qr-workflow-heading" tabindex="-1">방문 일정 확정 · 담당 배정</h3>'+
+   (c.canEdit===false&&!canSchedule?
+    '<p class="help">접수·방문 희망 일정 조회 · 일정 조율과 배정은 CS에서 진행합니다.</p><p class="readonly-workflow">'+esc('처리 상태 '+r.status+' · 엔지니어 '+(r.engineer||'미배정')+' · '+(confirmed(r)?'확정 방문 '+dateLabel(r.visitAt):'접수 확인 중'))+'</p>':
+    '<form id="qr-workflow-form"><div class="qr-workflow-grid'+(canSchedule?'':' status-only')+'">'+
+    (canSchedule?'<label class="field">방문 일시<input id="qr-visit-at" type="datetime-local"'+(openCase(r)?'':' readonly')+' value="'+esc(confirmed(r)?r.visitAt:'')+'"></label><label class="field">배정 엔지니어<select id="qr-assigned-engineer"><option value="">미배정</option>'+data.engineers.map(function(n){return '<option value="'+esc(n)+'" '+(n===r.engineer?'selected ':'')+(!data.admin&&n!==data.ownEngineer?'disabled':'')+'>'+esc(n)+'</option>';}).join('')+'</select></label>':'')+
+    '<label class="field">처리 상태<select id="qr-status">'+['접수','방문예정','처리중','결과확인','완료','보류','취소'].map(function(s){return '<option '+(s===r.status?'selected':'')+'>'+s+'</option>';}).join('')+'</select></label></div>'+
+    '<div class="qr-workflow-footer"><p id="qr-save-feedback" role="status"></p><button id="qr-save-all" type="submit" class="primary"><span id="qr-save-label">변경 내용 저장</span></button></div></form>')+'</section>';
   var heading=$('qr-case-detail').querySelector('.qr-case-heading'),status=document.createElement('span');status.className='qr-state';status.dataset.state=r.status;status.textContent=r.status;heading.append(status);var appointment=document.createElement('p');appointment.className='qr-appointment';appointment.dataset.uiIcon='calendar';appointment.textContent=(confirmed(r)?'확정 방문 · '+dateLabel(r.visitAt):'접수 확인 중');heading.after(appointment);
   var tools=document.createElement('div');tools.className='qr-detail-actions';tools.innerHTML='<button id="qr-service-open" type="button">서비스 현황에서 열기</button><button id="qr-latest" type="button">최신 내용 확인</button><span id="qr-dirty" role="status"></span>';appointment.after(tools);
   $('qr-service-open').onclick=function(){root.BazWorkTabs.show('service');root.dispatchEvent(new CustomEvent('baz-open-notification',{detail:{requestId:r.id}}));};$('qr-latest').title='선택한 접수 내용을 새로 확인합니다.';$('qr-latest').onclick=function(){if(dirty&&!confirm('저장하지 않은 변경을 비우고 최신 내용을 볼까요?'))return;dirty=false;load(true);};
@@ -194,36 +218,61 @@
    }
   }
   $('qr-case-detail').querySelectorAll('input,textarea,select').forEach(function(el){el.oninput=function(){dirty=true;if($('qr-dirty'))$('qr-dirty').textContent='저장하지 않은 변경사항';};});
-  function saveWorkflow(confirmVisit){
+  var workflowForm=$('qr-workflow-form'),savedVisit=confirmed(r)?r.visitAt:'';
+  function saveWorkflow(e){
+   e.preventDefault();
+   if(busy||pending)return;
    var chosenStatus=$('qr-status').value;
-   if(!canSchedule){if(c.canEdit!==false)send('work_status',{requestId:r.id,baseRevision:r.revision,status:chosenStatus});return;}
-   var date=$('qr-visit-at'),engineer=$('qr-assigned-engineer').value;
-   if(confirmVisit){
-    if(!openCase(r)||!date.reportValidity())return;
-    if($('qr-assigned-engineer').selectedOptions[0]?.disabled){message('선택한 담당자는 해당 시간에 방문할 수 없습니다. 시간을 바꾸거나 담당자를 다시 선택하세요.');return;}
-    if(confirmed(r)&&date.value===r.visitAt){message('확정 방문 일시가 같습니다.');return;}
-    // Direct dates and preference buttons use the same existing Worker action and status.
-    send('qr_update',{engineer:engineer,startAt:date.value,status:confirmed(r)&&r.status!=='접수'?r.status:'방문예정'});
+   if(!canSchedule){send('work_status',{requestId:r.id,baseRevision:r.revision,status:chosenStatus});return;}
+   var date=$('qr-visit-at'),assignee=$('qr-assigned-engineer'),engineer=assignee.value,at=date.value;
+   var newVisit=openCase(r)&&!!at&&at!==savedVisit;
+   function feedback(text,field){
+    $('qr-save-feedback').textContent=text;
+    field?.focus();
+   }
+   if(savedVisit&&!at){feedback('방문 일시를 입력해 주세요.',date);return;}
+   if(newVisit){
+    if(c.changeRequest?.state==='pending'&&c.changeRequest.kind==='cancel'){
+     feedback('고객이 요청한 접수 취소를 먼저 확인해 주세요.');
+     return;
+    }
+    if(!savedVisit&&chosenStatus===r.status)chosenStatus='방문예정';
+    if((!savedVisit&&chosenStatus!=='방문예정')||['접수','취소'].includes(chosenStatus)){
+     feedback('방문 일시를 확정할 수 있는 처리 상태를 선택해 주세요.',$('qr-status'));
+     return;
+    }
+   }
+   if(chosenStatus==='방문예정'&&!at){feedback('방문 일시를 입력해 주세요.',date);return;}
+   if((newVisit||chosenStatus==='방문예정')&&!engineer){
+    feedback('방문 일정을 확정하려면 담당 엔지니어를 선택해 주세요.',assignee);
     return;
    }
-   if(chosenStatus==='방문예정'&&!confirmed(r)){message('방문 일시를 확인한 뒤 방문 일시 확정 버튼을 눌러 주세요.');return;}
-   send('qr_update',{engineer:engineer,startAt:r.visitAt,status:chosenStatus});
-  }
-  if($('qr-assignment-form'))$('qr-assignment-form').onsubmit=function(e){e.preventDefault();saveWorkflow(true);};
-  $('qr-status-form').onsubmit=function(e){e.preventDefault();saveWorkflow(false);};
-  if(canSchedule){
-   var confirmButton=document.createElement('button');
-   confirmButton.type='submit';confirmButton.id='qr-confirm-visit';confirmButton.className='primary';
-   $('qr-assignment-form').append(confirmButton);
-   function labelConfirm(){
-    var at=$('qr-visit-at').value;
-    confirmButton.disabled=!at||!openCase(r)||confirmed(r)&&at===r.visitAt;
-    confirmButton.textContent=at?dateLabel(at)+(confirmed(r)?'로 변경 확정':'로 방문 확정'):'방문 일시 확정';
+   if((newVisit||engineer!==r.engineer)&&assignee.selectedOptions[0]?.disabled){
+    feedback('해당 시간에 방문 가능한 엔지니어를 선택해 주세요.',assignee);
+    return;
    }
-   $('qr-save-status').textContent='담당·상태 저장';
-   labelConfirm();$('qr-visit-at').addEventListener('input',labelConfirm);$('qr-visit-at').addEventListener('change',labelConfirm);
-   var candidateGeneration=photoGeneration,availabilityRead=0,initialSchedules=new Map(),preferences=Array.isArray(r.qrIntake?.preferredStartAts)?r.qrIntake.preferredStartAts:[r.qrIntake?.requestedVisitAt||r.visitAt];
-   var preferencePanel=document.createElement('section');preferencePanel.id='qr-preferences';preferencePanel.innerHTML='<h3>방문 희망 순위</h3><div class="actions">'+preferences.map(function(at,index){return '<button type="button" data-preference="'+index+'" aria-label="'+(index+1)+'순위 적용"><strong>'+(index+1)+'순위</strong> '+esc(root.BazDesign?root.BazDesign.date(at,true):at.replace('T',' '))+' · <span>가능 인원 확인 중</span></button>';}).join('')+'</div>';tools.after(preferencePanel);
+   send('qr_update',{engineer:engineer,status:chosenStatus,...(newVisit?{startAt:at}:{})});
+  }
+  if(workflowForm){
+   workflowForm.onsubmit=saveWorkflow;
+   function updateSave(){
+    var at=$('qr-visit-at')?.value||'',label=$('qr-save-label'),assignee=$('qr-assigned-engineer');
+    var nextLabel=openCase(r)&&at&&at!==savedVisit?(savedVisit?'변경 일정 확정':'방문 일정 확정'):'변경 내용 저장';
+    if(label.textContent!==nextLabel)label.textContent=nextLabel;
+    var assignmentChanged=assignee&&assignee.value!==(r.engineer||'');
+    var visitChanged=canSchedule&&at!==savedVisit;
+    $('qr-save-all').disabled=!visitChanged&&!assignmentChanged&&$('qr-status').value===r.status;
+    $('qr-save-feedback').textContent='';
+   }
+   workflowForm.addEventListener('input',updateSave);
+   workflowForm.addEventListener('change',updateSave);
+   updateSave();
+  }
+  if(canSchedule){
+   var candidateGeneration=photoGeneration,availabilityRead=0,initialSchedules=new Map();
+   var preferredTimes=(r.qrIntake?.preferredStartAts||[r.qrIntake?.requestedVisitAt||r.visitAt]).filter(Boolean);
+   var preferencePanel=document.createElement('section');preferencePanel.id='qr-preferences';preferencePanel.innerHTML='<h3>방문 희망 순위</h3><div class="actions">'+preferredTimes.map(function(at,index){return '<button type="button" data-preference="'+index+'" aria-label="'+(index+1)+'순위 적용"><strong>'+(index+1)+'순위</strong> '+esc(dateLabel(at))+' · <span>가능 인원 확인 중</span></button>';}).join('')+'</div>';
+   if(openCase(r)&&preferredTimes.length)workflowForm.before(preferencePanel);
    function unavailable(schedule,person,at){var start=Date.parse(at+':00+09:00'),end=start+((r.reservationDurationMinutes||120)+(r.reservationTravelMinutes||0))*60000,off=schedule.off.find(function(o){return o.person===person;});if(off)return off.type;var overlaps=function(o){var os=Date.parse(o.startAt+':00+09:00'),oe=os+(o.durationMinutes+(o.travelMinutes||0))*60000;return start<oe&&os<end;};return schedule.schedule.some(function(o){return o.id!==r.id&&o.engineer===person&&overlaps(o);})||schedule.slots.some(function(o){return o.engineer===person&&['closed','blocked'].includes(o.mode)&&overlaps(o);})?'일정 겹침':'';}
    function readSchedule(date){
     var previous=initialSchedules.get(date),now=Date.now();
@@ -232,11 +281,20 @@
     initialSchedules.set(date,{start:now,task:task});
     return task;
    }
-   preferencePanel.querySelectorAll('button').forEach(function(button,index){var at=preferences[index];button.disabled=true;readSchedule(at.slice(0,10)).then(function(schedule){if(candidateGeneration!==photoGeneration||!schedule.success)return;var count=data.engineers.filter(function(person){return (data.admin||person===data.ownEngineer)&&!unavailable(schedule,person,at);}).length;button.querySelector('span').textContent=count?(data.admin?'현재 '+count+'명 가능':'본인 방문 가능'):(data.admin?'현재 방문 불가':'본인 방문 불가');button.disabled=!count;}).catch(function(){button.querySelector('span').textContent='가능 여부 다시 확인';});button.onclick=function(){if(busy||pending||button.disabled)return;$('qr-visit-at').value=at;if(!data.admin&&!$('qr-assigned-engineer').value)$('qr-assigned-engineer').value=data.ownEngineer||'';$('qr-visit-at').dispatchEvent(new Event('input',{bubbles:true}));$('qr-visit-at').dispatchEvent(new Event('change',{bubbles:true}));};});
-   function checkCandidates(){var generation=++availabilityRead,at=$('qr-visit-at').value;if(!at)return;readSchedule(at.slice(0,10)).then(function(schedule){if(!schedule.success||candidateGeneration!==photoGeneration||generation!==availabilityRead)return;Array.from($('qr-assigned-engineer').options).forEach(function(option){if(!option.value)return;option.setAttribute('value',option.value);var reason=unavailable(schedule,option.value,at);option.textContent=option.value+(reason?' · '+reason:' · 해당 시간 가능');option.disabled=!!reason||!data.admin&&option.value!==data.ownEngineer;});preferencePanel.querySelectorAll('button').forEach(function(button,index){button.setAttribute('aria-pressed',String(preferences[index]===at));});}).catch(function(){});}
+   if(preferencePanel.isConnected)preferencePanel.querySelectorAll('button').forEach(function(button,index){var at=preferredTimes[index];button.disabled=true;readSchedule(at.slice(0,10)).then(function(schedule){if(candidateGeneration!==photoGeneration||!schedule.success)return;var count=data.engineers.filter(function(person){return (data.admin||person===data.ownEngineer)&&!unavailable(schedule,person,at);}).length;button.querySelector('span').textContent=count?(data.admin?'현재 '+count+'명 가능':'본인 방문 가능'):(data.admin?'현재 방문 불가':'본인 방문 불가');button.disabled=!count;}).catch(function(){button.querySelector('span').textContent='가능 여부 다시 확인';});button.onclick=function(){if(busy||pending||button.disabled)return;$('qr-visit-at').value=at;if(!data.admin&&!$('qr-assigned-engineer').value)$('qr-assigned-engineer').value=data.ownEngineer||'';$('qr-visit-at').dispatchEvent(new Event('input',{bubbles:true}));$('qr-visit-at').dispatchEvent(new Event('change',{bubbles:true}));};});
+   function checkCandidates(){
+    var generation=++availabilityRead,at=$('qr-visit-at').value;
+    preferencePanel.querySelectorAll('button').forEach(function(button,index){button.setAttribute('aria-pressed',String(preferredTimes[index]===at));});
+    var options=Array.from($('qr-assigned-engineer').options).filter(function(option){return !!option.value;});
+    options.forEach(function(option){option.textContent=option.value;option.disabled=!data.admin&&option.value!==data.ownEngineer;});
+    if(!at)return;
+    readSchedule(at.slice(0,10)).then(function(schedule){
+     if(!schedule.success||candidateGeneration!==photoGeneration||generation!==availabilityRead)return;
+     options.forEach(function(option){var reason=unavailable(schedule,option.value,at);option.textContent=option.value+(reason?' · '+reason:' · 해당 시간 가능');option.disabled=!!reason||!data.admin&&option.value!==data.ownEngineer;});
+    }).catch(function(){});
+   }
    $('qr-visit-at').addEventListener('change',checkCandidates);checkCandidates();
   }
-  var workflow=document.createElement('section');workflow.className='qr-workflow-controls';var title=document.createElement('h3');title.textContent='방문 일정 확정 · 담당 배정';var grid=document.createElement('div');grid.className='qr-workflow-grid';workflow.append(title,grid);var assignment=$('qr-assignment-form'),statusForm=$('qr-status-form');statusForm.before(workflow);if(assignment)grid.append(assignment);grid.append(statusForm);var footer=document.createElement('div');footer.className='qr-workflow-footer';var saveAll=$('qr-save-all');if(saveAll)footer.append(saveAll);else {$('qr-save-status').classList.add('primary');$('qr-save-status').textContent='변경 내용 저장';}workflow.append(footer);if(c.canEdit===false&&!canSchedule){workflow.querySelectorAll('input,select,button').forEach(function(el){el.disabled=true;});var help=document.createElement('p');help.className='help';help.textContent='접수·방문 희망 일정 조회 · 일정 조율과 배정은 CS에서 진행합니다.';workflow.prepend(help);workflow.classList.add('is-readonly');var values=document.createElement('p');values.className='readonly-workflow';values.textContent='처리 상태 '+r.status+' · 엔지니어 '+(r.engineer||'미배정')+' · '+(r.qrIntake?.appointmentConfirmed?'확정 방문 '+r.visitAt.replace('T',' '):'접수 확인 중');help.after(values);}
   var generation=photoGeneration,list=$('qr-photo-list'),token=root.BazAuth.token();
   if(token!==photoCacheToken){photoCache.clear();photoCacheBytes=0;photoCacheToken=token;}
   if(!c.photos.length)list.textContent='첨부된 사진이 없습니다.';

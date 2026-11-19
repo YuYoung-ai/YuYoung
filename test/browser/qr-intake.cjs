@@ -28,7 +28,7 @@ window.BazWorkTabs={register(name,button,panel){panel.hidden=false;}};
 window.BazAuth={name:()=> 'test-admin',token:()=> 'test-token'};
 async function call(action,p){const response=await fetch('/_local/api',{method:'POST',body:JSON.stringify({action,...p})});return response.json();}
 window.BazWorkAPI={get:call,post:call,id:()=>crypto.randomUUID()};
-</script><script src="/js/baz-qr-workflow.js"></script></body></html>`;
+</script><script src="/js/qr-design.js"></script><script src="/js/baz-qr-workflow.js"></script></body></html>`;
 const config = `window.QrCustomerRuntime={local:true,api:'/_local/customer',file:'/_local/file'};`;
 
 async function run(){
@@ -58,7 +58,7 @@ async function run(){
         const filtered=cases.filter(c=>p.view.filter==='awaiting'?!c.request.qrIntake.appointmentConfirmed:
           p.view.filter==='confirmed-unassigned'?c.request.qrIntake.appointmentConfirmed&&!c.request.engineer:
           p.view.filter==='changes'?c.changeRequest?.state==='pending':true);
-        return json({success:true,admin:true,engineers:['엔지니어 A'],ingress:{enabled:true},
+        return json({success:true,admin:true,engineers:['엔지니어 A','엔지니어 B'],ingress:{enabled:true},
           listVersion,items:filtered.slice(p.offset,p.offset+p.limit),total:filtered.length,
           nextOffset:p.offset+p.limit<filtered.length?p.offset+p.limit:null,serviceJobs:[],pushEvents:[]});
       }
@@ -68,8 +68,8 @@ async function run(){
         if(storedOps.has(p.operationId))return json(storedOps.get(p.operationId));
         const row=cases.find(c=>c.request.id===p.requestId);
         if(row.request.revision!==p.baseRevision)return json({success:false,code:'CONFLICT',error:'다른 담당자가 변경했습니다.'});
-        Object.assign(row.request,{revision:row.request.revision+1,visitAt:p.startAt,status:p.status,engineer:p.engineer});
-        row.request.qrIntake.appointmentConfirmed=p.status==='방문예정';
+        Object.assign(row.request,{revision:row.request.revision+1,visitAt:p.startAt??row.request.visitAt,status:p.status,engineer:p.engineer});
+        row.request.qrIntake.appointmentConfirmed=!['접수','취소'].includes(p.status)&&!!p.engineer&&(p.status==='방문예정'||row.request.qrIntake.appointmentConfirmed);
         listVersion++;
         storedOps.set(p.operationId,{success:true});
         if(writes.length===1)return json({success:false,retrySameOperation:true,error:'응답 확인 필요'});
@@ -110,8 +110,18 @@ async function run(){
     staff.setDefaultTimeout(10000);
     staff.on('pageerror',error=>console.error(error.message));
     await staff.goto(origin+'/test-qr');
-    await staff.locator('[data-qr-select="case-0000"]').click();
+    await staff.locator('[data-qr-confirm="case-0000"]').click();
+    assert.equal(await staff.locator(':focus').getAttribute('id'),'qr-workflow-heading');
+    assert.equal(writes.length,0,'list shortcut opens the form without confirming the first preference');
     assert.equal(await staff.locator('.qr-appointment').innerText(),'접수 확인 중');
+    const workflowForm=staff.locator('#qr-workflow-form');
+    assert.equal(await workflowForm.locator('button[type=submit]').count(),1);
+    assert.equal(await staff.locator('#qr-visit-at').inputValue(),'');
+    const formLayout=()=>workflowForm.evaluate(form=>[...form.querySelectorAll('.field')].map(field=>Math.round(field.getBoundingClientRect().top)));
+    assert.equal(new Set(await formLayout()).size,3,'mobile fields stack vertically');
+    await staff.setViewportSize({width:1440,height:900});
+    assert.equal(new Set(await formLayout()).size,1,'desktop fields share an aligned row');
+    await staff.setViewportSize({width:390,height:844});
     assert.equal(listReads[0].limit,20);
     assert.equal(await staff.locator('[data-qr-select]').count(),20);
     for(const width of [1280,390]){
@@ -153,10 +163,14 @@ async function run(){
       await staff.locator('#qr-photo-viewer').waitFor({state:'hidden'});
     }
     await staff.locator('#qr-visit-at').fill(alternate);
-    await staff.locator('#qr-confirm-visit').click();
+    await staff.locator('#qr-save-all').click();
+    assert.match(await staff.locator('#qr-save-feedback').innerText(),/담당 엔지니어를 선택/);
+    assert.equal(writes.length,0);
+    await staff.locator('#qr-assigned-engineer').selectOption('엔지니어 A');
+    await staff.locator('#qr-save-all').click();
     await staff.locator('#qr-workflow-message').filter({hasText:'같은 기록'}).waitFor().catch(async error=>{
       console.error({message:await staff.locator('#qr-workflow-message').textContent(),writes:writes.length,
-        form:await staff.locator('#qr-confirm-visit').evaluate(button=>({valid:button.form?.checkValidity(),html:button.outerHTML}))});
+        form:await staff.locator('#qr-save-all').evaluate(button=>({valid:button.form?.checkValidity(),html:button.outerHTML}))});
       throw error;
     });
     assert.equal(writes[0].status,'방문예정');
@@ -166,13 +180,25 @@ async function run(){
     assert.equal(writes[1].operationId,writes[0].operationId);
     assert.equal(storedOps.size,1);
     assert.equal(cases[0].request.revision,2);
+    assert.equal(await staff.locator('[data-qr-confirm="case-0000"]').count(),0);
+    await staff.locator('#qr-visit-at').fill(preference);
+    await staff.locator('#qr-assigned-engineer').selectOption('엔지니어 B');
+    await staff.locator('#qr-status').selectOption('처리중');
+    await staff.locator('#qr-save-all').click();
+    await staff.locator('.qr-appointment').filter({hasText:'10:00'}).waitFor();
+    assert.deepEqual([writes[2].startAt,writes[2].engineer,writes[2].status],[preference,'엔지니어 B','처리중']);
+    await staff.locator('#qr-status').selectOption('결과확인');
+    await staff.locator('#qr-save-all').click();
+    await staff.locator('.qr-case-heading .qr-state').filter({hasText:'결과확인'}).waitFor();
+    assert.equal(writes[3].startAt,undefined,'status-only save leaves the confirmed date intact');
     await staff.locator('#qr-list-back').click();
     await staff.locator('[data-qr-select="case-0001"]').click();
     await staff.locator('[data-preference="0"]').click();
-    await staff.locator('#qr-confirm-visit').click();
+    await staff.locator('#qr-assigned-engineer').selectOption('엔지니어 A');
+    await staff.locator('#qr-save-all').click();
     await staff.locator('.qr-appointment').filter({hasText:'10:00'}).waitFor();
-    assert.equal(writes[2].status,'방문예정');
-    assert.equal(writes[2].startAt,preference);
+    assert.equal(writes[4].status,'방문예정');
+    assert.equal(writes[4].startAt,preference);
     await staff.locator('#qr-list-back').click();
     await staff.locator('[data-filter="confirmed-unassigned"]').click();
     await staff.locator('[data-qr-select="later-confirmed"]').waitFor();
