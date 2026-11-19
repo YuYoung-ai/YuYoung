@@ -53,13 +53,15 @@
    return complete(status);
   }
   function progress(state){
-   var done=state.drive==='done'&&state.handover==='done'&&(state.comment==='done'||state.comment==='skipped'),needs=Object.values(state).some(function(s){return s==='error'||s==='pending';});
+   var done=state.drive==='done'&&state.handover==='done'&&(state.comment==='done'||state.comment==='skipped'),needs=Object.values(state).some(function(s){return s==='error'||s==='pending'||s==='blocked';});
    var title=document.getElementById('doneTitle'),icon=document.getElementById('doneIcon'),lead=document.getElementById('doneLead');
-   if(title)title.textContent=done?'점검 내역서 저장 완료':state.drive==='done'?'PDF 저장 완료 · 댓글 연결 '+(needs?'확인 필요':'확인 중'):'PDF 생성 완료 · 저장 '+(needs?'확인 필요':'확인 중');
+   if(title)title.textContent=done?'점검 내역서 저장 완료':state.source==='blocked'?'PDF 생성 완료 · Handover 원본 확인 필요':state.handover==='done'?'PDF 저장 완료 · 댓글 연결 '+(needs?'확인 필요':'확인 중'):state.drive==='done'?'Drive 저장 완료 · Handover 연결 '+(needs?'확인 필요':'확인 중'):'PDF 생성 완료 · 저장 '+(needs?'확인 필요':'확인 중');
    if(icon)icon.textContent=done?'✅':needs?'⚠️':'⏳';
    if(lead)lead.textContent=done?'확인된 저장 결과입니다.':state.drive==='done'?'저장된 PDF를 유지하고 댓글 연결만 확인합니다.':'전송이 지연되면 같은 PDF의 저장 결과를 다시 확인합니다.';
    var list=document.getElementById('pdfFlowStages');list.replaceChildren();
-   flow.documentSteps(state).forEach(function(item){var li=document.createElement('li');li.dataset.state=item.state;li.textContent=item.label;var span=document.createElement('span');span.textContent={done:'완료',working:'확인 중',error:'재시도 필요',pending:'확인 대기',skipped:'연결 접수 없음',waiting:'대기'}[item.state];li.appendChild(span);list.appendChild(li);});
+   const steps=flow.documentSteps(state);
+   if(state.source)steps.splice(1,0,{key:'source',label:'Handover 원본 확인',state:state.source});
+   steps.forEach(function(item){var li=document.createElement('li');li.dataset.state=item.state;li.textContent=item.label;var span=document.createElement('span');span.textContent={done:'완료',working:'확인 중',error:'재시도 필요',pending:'확인 대기',blocked:'확인 필요',skipped:'연결 접수 없음',waiting:'대기'}[item.state];li.appendChild(span);list.appendChild(li);});
   }
   function refresh(reference,note){
    actions.replaceChildren();const viewContext=inspectionContext(reference);
@@ -83,10 +85,14 @@
    try{
     var status=await api.get('work_document_status',{requestId:target.requestId,recordId:target.recordId});if(!status.success||status.request?.id!==target.requestId||status.source?.recordId!==target.recordId)throw new Error(status.error||'접수와 원본 연결 정보가 다릅니다.');
     if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다.');
+    const source=status.source,reference={recordId:source.recordId,requestId:target.requestId};
+    const receipt=await pdfPublisher.source({recordId:source.recordId,hospital:source.sourceHospitalName||source.hospitalName,date:source.date,sn:source.sn});
+    const formSource=receipt?.source||source;
+    const sourceReference=receipt?BazInspectionSession.sourceReference(reference,receipt,source,flow):{...reference,sourceSnapshot:source,sourcePdfRevision:source.pdf?.revision||0};
     async function apply(){
      var existing=loadTasks().filter(function(t){return t.data?.handover?.recordId===target.recordId&&(!t.data.handover.requestId||t.data.handover.requestId===target.requestId);}).sort(function(a,b){return b.updatedAt-a.updatedAt;})[0];
-     if(existing){if(!await openTask(existing.id))throw new Error('현재 작업을 보관하지 못했습니다.');handoverReference={...handoverReference,requestId:target.requestId,sourceSnapshot:status.source,sourcePdfRevision:status.source.pdf?.revision||0};if(!String(existing.data?.basic?.receiver||'').trim()&&status.request.sales)document.getElementById('receiver').value=status.request.sales;else fillInspectionSales(status.request.sales);if(!await saveCurrentTask())throw new Error('초안 저장에 실패했습니다.');message.textContent='이 현장 기록의 기존 내역서를 이어서 열었습니다. 작성 중인 내용·사진·서명을 유지하며 비어 있는 영업 담당자는 접수·병원 DB에서 보완합니다.';}
-     else{if(!await newTask({keepRoute:true}))throw new Error('현재 작업을 보관하지 못했습니다.');const data=flow.inspectionData(status.source,status.request);data.handover.sourceSnapshot=status.source;data.handover.sourcePdfRevision=status.source.pdf?.revision||0;applyFormData(data);if(status.source.pdf)uploadedPdfDocument=status.source.pdf;if(!await saveCurrentTask())throw new Error('초안 저장에 실패했습니다.');message.textContent='병원·장비·접수일·영업 담당자·실제 처리일·처리 내용을 불러왔습니다. 점검 결과와 사진을 확인하세요.';}
+     if(existing){if(!await openTask(existing.id))throw new Error('현재 작업을 보관하지 못했습니다.');handoverReference=existing.data.handover?.deliveryReceipt?{...handoverReference,requestId:target.requestId}:{...handoverReference,...sourceReference};if(!String(existing.data?.basic?.receiver||'').trim()&&status.request.sales)document.getElementById('receiver').value=status.request.sales;else fillInspectionSales(status.request.sales);if(!await saveCurrentTask())throw new Error('초안 저장에 실패했습니다.');message.textContent='이 현장 기록의 기존 내역서를 이어서 열었습니다. 작성 중인 내용·사진·서명을 유지하며 비어 있는 영업 담당자는 접수·병원 DB에서 보완합니다.';}
+     else{if(!await newTask({keepRoute:true}))throw new Error('현재 작업을 보관하지 못했습니다.');const data=flow.inspectionData(formSource,status.request);data.handover=sourceReference;applyFormData(data);if(formSource.pdf)uploadedPdfDocument=formSource.pdf;if(!await saveCurrentTask())throw new Error('초안 저장에 실패했습니다.');message.textContent='병원·장비·접수일·영업 담당자·실제 처리일·처리 내용을 불러왔습니다. 점검 결과와 사진을 확인하세요.';}
      refresh(handoverReference,message.textContent);
     }
     if((_currentTaskId!==initialTask)||edited){message.textContent='작성 중인 내용을 유지했습니다. 접수의 내역서는 현재 작업을 보관한 뒤 열 수 있습니다.';back(target.requestId);button('현재 작업 보관 후 내역서 열기',async function(){if(await saveCurrentTask())await apply();});}

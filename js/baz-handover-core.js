@@ -229,6 +229,7 @@
       return out;
     }
     out.state = SAVE.SUCCESS;
+    out.inspectionReceipt = data.inspectionReceipt || null;
     out.row = (typeof data.row === 'number') ? data.row : null;
     out.canClearPhoto = true;
     return out;

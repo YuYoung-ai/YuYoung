@@ -175,10 +175,10 @@ body.is-dirty .dirty-badge{display:inline-block}
 .ac-item[aria-selected="true"]{background:var(--teal-soft)}
 .ac-item:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-session.js?v=348"></script><script src="js/baz-handover-workflow.js?v=282"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-handover-workflow.js?v=282"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
-<script src="js/baz-handover-core.js?v=252"></script>
+<script src="js/baz-handover-core.js?v=349"></script>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-handover.css?v=295">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
@@ -868,6 +868,7 @@ var FIELD_LABEL={eqKind:'장비 구분', verUI:'UI 버전', verHP:'HP 버전', n
 var SAVE_STATE=BazHandover.SAVE.IDLE;
 var SAVED_SNAPSHOT=null;      /* 저장 성공 시점의 업무 필드 스냅샷(dirty 판정) */
 var SAVED_RECORD_ID='';
+var SAVED_INSPECTION_RECEIPT=null;
 var LAST_REQ_ID='';           /* 결과 불명 상태에서 다시 확인할 요청 키 */
 var LAST_SAVE_PAYLOAD=null;   /* 결과 불명 재전송은 반드시 같은 reqId를 재사용 */
 var LAST_SENT_SNAPSHOT=null;  /* 서버가 실제로 받은 업무 필드 — 응답 대기 중 편집과 분리 */
@@ -945,6 +946,7 @@ function applySaveResult(res){
     var sent=LAST_SENT_SNAPSHOT||BazHandover.snapshot(current);
     SAVED_SNAPSHOT=sent;
     SAVED_RECORD_ID=(LAST_SAVE_PAYLOAD&&LAST_SAVE_PAYLOAD.reqId)||LAST_REQ_ID||SAVED_RECORD_ID;
+    SAVED_INSPECTION_RECEIPT=res.inspectionReceipt?.recordId===SAVED_RECORD_ID?res.inspectionReceipt:null;
     LAST_REQ_ID='';
     var textChanged=BazHandover.isDirty(sent, current);
     resetRecordId();
@@ -1241,7 +1243,8 @@ function contToInspection(){
   var snv = snVal();
   var rec = HOSPITAL_DB.filter(function(h){ return h.n===val('hosp'); })[0];
   var payload = { v:1, createdAt:Date.now(), source:'handover', form:{
-    handover:{recordId:SAVED_RECORD_ID,requestId:window.BazHandoverFlow?.context()?.requestId||''},
+    handover:{recordId:SAVED_RECORD_ID,requestId:window.BazHandoverFlow?.context()?.requestId||'',
+      deliveryReceipt:SAVED_INSPECTION_RECEIPT?.recordId===SAVED_RECORD_ID?SAVED_INSPECTION_RECEIPT:null},
     basic:{
       receiveDate: val('date')||todayISO(),
       inspectDate: val('date')||todayISO(),
