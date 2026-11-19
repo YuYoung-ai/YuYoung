@@ -469,10 +469,10 @@
   function workspaceLabel(view){return {attention:'확인할 업무',all:'전체 업무',mine:'내 업무',unassigned:'미배정',changed:'원본 변경',hospital:'병원별 그룹화'}[view]||'전체 업무';}
   function renderWorkspace(){
     if(!$('workspace-title'))return;
-    $('workspace-title').textContent=inspectionSearch?'통합 작성 · 접수 검색':state.filter==='trash'?'휴지통':workspaceLabel(workspaceView);
+    $('workspace-title').textContent=inspectionSearch?'통합 작성 · 접수 찾기':state.filter==='trash'?'휴지통':workspaceLabel(workspaceView);
     var hint=workspaceView==='attention'?'미배정·결과 확인 대기·Handover 원본 변경을 모아 보여줍니다.':workspaceView==='mine'?(role.engineer?role.engineer+' 담당으로 배정된 업무입니다.':'본인 담당자 연결을 확인해 주세요. 앱 설치·알림 설정에서 연결할 수 있습니다.'):workspaceView==='unassigned'?'담당자를 지정하면 해당 담당자에게 접수 알림이 전달됩니다.':workspaceView==='changed'?'완료된 업무를 포함해 Handover 원본 확인이 필요한 기록입니다.':'기간·상태·검색 조건을 적용해 전체 업무를 조회합니다.';
     if(workspaceView==='mine'&&!role.resolved)hint=role.failed?'담당자 연결 확인에 실패했습니다. 전체 업무로 전환하거나 앱 설치·알림 설정에서 다시 확인하세요.':'본인의 담당자 연결을 확인하고 있습니다.';
-    $('workspace-hint').textContent=inspectionSearch?'병원명이나 장비 S/N을 검색하고 결과를 누르세요.':hint;document.querySelectorAll('[data-workspace]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.workspace===workspaceView&&state.filter!=='trash'));});
+    $('workspace-hint').textContent=inspectionSearch?'목록에서 접수를 선택하거나 병원명·장비 S/N으로 검색하세요.':hint;document.querySelectorAll('[data-workspace]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.workspace===workspaceView&&state.filter!=='trash'));});
     if(workspaceView==='hospital')$('workspace-hint').textContent='같은 병원의 여러 장비 처리 이력을 한 타임라인에서 확인합니다. 기간·검색·상세 조건을 적용할 수 있습니다.';
 
   }
@@ -549,7 +549,7 @@
     if($('source-review-alert')){$('source-review-alert').hidden=!sourceAlerts.length;$('source-review-alert').innerHTML='<summary>Handover 원본 변경 확인 · '+sourceAlerts.length+'건 <small>전체 기간</small></summary><div>'+sourceAlerts.map(function(r){return '<button type="button" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+' · '+esc(time(r.visitAt))+' · '+r.handoverReviewCount+'개 기록</button>';}).join('')+'</div>';}
 
     $('trash-toggle').setAttribute('aria-pressed',String(state.filter==='trash'));$('trash-toggle').textContent=state.filter==='trash'?'휴지통 닫기':'휴지통';
-    var rows=inspectionSearch&&!search?[]:state.requests.filter(function(r){
+    var rows=state.requests.filter(function(r){
       return fields.query(Object.assign({},r,{cs:csLabel(r)}),Object.assign({},query,{name:displayRequest(r).hospitalName}),hospitalRows());
     });
     var sort=$('sort').value,key=sort==='updated'?'updatedAt':sort==='deadline'?'deadline':'visitAt',direction=$('sort-direction').value==='desc'?-1:1;
@@ -572,7 +572,6 @@
       if(inspectionList)inspectionList.hydrate($('list'),shownRequests);return;
     }
     var shown=rows.slice((state.page-1)*50,state.page*50);shownRequests=shown;updateSelection();
-    if(inspectionSearch&&!search){$('list').innerHTML='<div class="empty">병원명 또는 장비 S/N을 입력하세요.</div>';if(inspectionList)inspectionList.hydrate($('list'),[]);return;}
     if(!shown.length){var unmapped=workspaceView==='mine'&&!role.engineer&&state.filter!=='trash';$('list').innerHTML='<div class="empty"><strong>'+(unmapped?'본인 담당자 연결을 확인해 주세요.':state.requests.length?(workspaceView==='attention'?'조건에 맞는 확인할 업무가 없습니다':'조건에 맞는 업무가 없습니다'):'등록된 A/S 업무가 없습니다')+'</strong>'+(unmapped?'<a href="install.html">앱 설치·알림 설정에서 담당자 연결 확인</a>':state.requests.length?'검색어나 기간·업무 범위를 변경해 보세요.':'상단의 접수 등록에서 첫 요청을 등록하세요.')+'</div>';if(inspectionList)inspectionList.hydrate($('list'),[]);return;}
     function rowButton(r){var shown=displayRequest(r);return (editMode?editable(r,'hospitalInput',shown.hospitalName)+'<button class="row-detail-link" data-open="'+esc(r.id)+'">상세 보기</button>':'<div class="work-card-heading"><button class="row-open" data-open="'+esc(r.id)+'">'+esc(shown.hospitalName)+'</button>'+inspectionButton(r)+'</div>')+'<div class="summary">'+(inspectionSearch&&r.sn?'<span>장비 S/N '+esc(r.sn)+' · </span>':'')+editable(r,'symptom',r.symptom)+'</div>';}
     function rowCheck(r){return '<input type="checkbox" data-select-request="'+esc(r.id)+'" aria-label="'+esc(r.hospitalName+' · '+time(r.visitAt)+' · '+String(r.symptom||'').slice(0,60)+' 접수 선택')+'"'+(checkedRequests.has(r.id)?' checked':'')+(canManage(r)?'':' disabled title="등록자 또는 관리자만 선택할 수 있습니다."')+'>';}
@@ -1237,7 +1236,6 @@
   window.addEventListener('pageshow',function(event){if(event.persisted)refreshInspectionCard();});
   if(inspectionSearch){
     $('search').placeholder='병원명 또는 장비 S/N 검색';
-    $('search').focus();
   }
   start().then(async function(){var date=new URLSearchParams(window.location.search).get('roster');if(!embedded&&/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&state.loaded&&!notificationBusy()){await loadRoster(date.slice(0,7));await openRoster(date);}});
   window.addEventListener('baz-qr-work-changed',function(event){
