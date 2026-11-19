@@ -29,7 +29,7 @@ await verified.publish(new Blob(['%PDF-1.7']), 'verified.pdf',prepared);assert.e
 assert.equal(verifiedCalls.filter(p=>p.action==='inspection_pdf_resolve').length,1,'a prepared source needs no redundant Google resolve before upload');
 sourceConflict=true;await verified.publish(new Blob(['%PDF-1.7 changed']), 'verified.pdf',prepared);assert.equal(nodes.pdfUploadRetry.hidden,true,'a changed source requires regeneration, not a doomed same-file retry');
 const beforePrepareError=verifiedCalls.length;await verified.publish(new Blob(['%PDF-1.7']), 'offline.pdf',{...prepared,sourcePreparationError:'원본 확인 실패'});assert.equal(verifiedCalls.length,beforePrepareError);assert.match(nodes.pdfUploadStatus.textContent,/다시 생성/);
-assert.ok(html.indexOf('()=>pdfPublisher.prepare(')<html.indexOf("step('본문·서명 페이지 생성'"),'source snapshot is captured before the PDF is rendered or reused');
+assert.equal(html.slice(html.indexOf('async function renderInspectionPdf'),html.indexOf("let _lastPreviewUrl=null")).includes('await pdfPublisher.prepare('),false,'local generation never awaits the server source lookup');
 assert.ok(html.includes('pdfPublisher.publish(pdfBlob,shareFilename,uploadContext)'),'publish retains the prepared account and original task context');
 console.log('inspection-upload: pre-render source basis, immutable upload context, regeneration on source conflict and local-file preservation after failed preflight passed.');
 const stages=[],linkCalls=[];let linkFail=true,saves=0,uploads=0;

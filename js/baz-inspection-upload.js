@@ -9,10 +9,12 @@
  }
  function create(options){
   const doc=options.document||document,status=doc.getElementById('pdfUploadStatus'),retry=doc.getElementById('pdfUploadRetry'),link=doc.getElementById('pdfOpenLink'),newButton=doc.getElementById('doneNew');
-  const outbox=options.outbox||null,preparations=new WeakMap();let current=null;
+  const outbox=options.outbox||null,preparations=new WeakMap();let current=null,transferChain=Promise.resolve();const active=new Set();
+  function visible(s){return current===s&&(!options.isCurrent||options.isCurrent(s.context));}
+  function select(s){if(!options.isCurrent||options.isCurrent(s.context)){current=s;link.hidden=true;}return s;}
   function checkAccount(owner){if(options.token()!==owner){const e=new Error('로그인 계정이 변경되었습니다. 다시 내역서를 열어 확인하세요.');e.noRetry=true;throw e;}}
-  function message(s,text){if(current===s)status.textContent=text;}
-  function progress(s,stage,value){s.stages[stage]=value;if(current===s&&options.onProgress)options.onProgress({...s.stages},s.context);}
+  function message(s,text){if(visible(s))status.textContent=text;}
+  function progress(s,stage,value){s.stages[stage]=value;if(visible(s)&&options.onProgress)options.onProgress({...s.stages},s.context);}
   function notice(s,text){message(s,text+(s.storageWarning?' · 이 기기에 재전송 파일을 보관하지 못했습니다. 화면을 닫기 전에 PDF를 따로 저장하세요.':''));}
   async function persist(s){
    if(!outbox)return;try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
@@ -22,7 +24,11 @@
   function sourceContext(context,resolved){
    if(typeof resolved.recordId!=='string'||!resolved.recordId.trim()){const e=new Error('원본 확인 응답이 불완전합니다. 같은 PDF로 원본 확인·저장을 다시 시도해 주세요.');e.transient=true;throw e;}
    if(context.recordId&&context.recordId!==resolved.recordId){const e=new Error('AS 처리 현황의 연결 기록이 다릅니다. 원본을 확인한 뒤 다시 생성하세요.');e.sourceConflict=true;throw e;}
-   return {...context,recordId:resolved.recordId,sourceBasis:resolved.sourceBasis,sourcePdfRevision:context.sourcePdfRevision??resolved.pdf?.revision??0};
+   if(context.requireSourceBasis){
+    if(!context.sourceBasis||context.sourceBasis.fingerprint!==resolved.sourceBasis?.fingerprint||context.sourceBasis.format!==resolved.sourceBasis?.format){const e=new Error('생성 기준 원본을 확인할 수 없거나 Handover 내용이 변경되었습니다. PDF는 보관됩니다. 기록 연결 변경에서 원본을 확인한 뒤 다시 생성하세요.');e.sourceConflict=true;throw e;}
+    if(context.sourcePdfRevision!=null&&Number(context.sourcePdfRevision)!==Number(resolved.pdf?.revision||0)){const e=new Error('생성 준비 이후 다른 PDF가 저장되었습니다. 보관된 파일과 최신 문서를 확인한 뒤 다시 생성하세요.');e.sourceConflict=true;throw e;}
+   }
+   return {...context,recordId:resolved.recordId,sourceBasis:context.sourceBasis||resolved.sourceBasis,sourcePdfRevision:context.sourcePdfRevision??resolved.pdf?.revision??0,sourcePrepared:true};
   }
   function payload(context){const {sourcePreparationError,attachmentApplicable,...rest}=context;return rest;}
   async function prepareContext(context,owner){
@@ -66,7 +72,7 @@
   async function pause(ms){if(options.delay)return options.delay(ms);return new Promise(resolve=>setTimeout(resolve,ms));}
   async function receipt(s){
    const resolved=await call('inspection_pdf_resolve',payload(s.context),s.owner,s);
-   sourceContext(s.context,resolved);
+   sourceContext({...s.context,requireSourceBasis:false},resolved);
    if(resolved.pdf?.sha256===s.sha256){
     const saved={success:true,recordId:resolved.recordId,pdf:resolved.pdf};safeLink(saved);s.saved=saved;s.blob=null;s.base64=null;s.autoResumeEligible=true;await persist(s);return true;
    }
@@ -91,11 +97,11 @@
    // Read (20s), canonical Handover refresh (35s), repair (35s), read-back
    // after an uncertain write (20s) share one bounded confirmation budget.
    const ms=Math.min(120000,budget||120000),timer=setTimeout(cancel,ms);s.cancel=cancel;s.expires=Date.now()+ms;
-   if(current===s){retry.hidden=false;retry.textContent='댓글 연결 다시 확인';}
+   if(visible(s)){retry.hidden=false;retry.textContent='댓글 연결 다시 확인';}
    try{return await Promise.race([local,options.confirmAttachment(s.saved,s.context,{signal:ctl.signal})]);}finally{clearTimeout(timer);s.cancel=null;s.expires=0;}
   }
   async function execute(s,automatic){
-   s.busy=true;if(current===s){retry.hidden=true;retry.disabled=true;newButton.disabled=true;}
+   s.busy=true;if(visible(s)){retry.hidden=true;retry.disabled=true;newButton.disabled=false;}
    try{
     checkAccount(s.owner);if(!s.uploadId)s.uploadId=id();
     if(s.recovering){
@@ -106,7 +112,7 @@
      if(options.prepareContext)context={...context,...await options.prepareContext(context)};
      checkAccount(s.owner);const saved={success:true,recordId:resolved.recordId,pdf:resolved.pdf};safeLink(saved);
      s.context=context;s.saved=saved;s.filename=resolved.pdf.filename||'AS/점검 내역서';s.recovering=false;
-     if(options.onRecovered)options.onRecovered({saved,filename:s.filename,context});progress(s,'pdf','done');await persist(s);
+     if(visible(s)&&options.onRecovered)options.onRecovered({saved,filename:s.filename,context});progress(s,'pdf','done');await persist(s);
     }
     if(!s.saved){
      if(!s.blob)throw new Error('재전송할 PDF가 없습니다. 저장한 파일을 확인하거나 다시 생성하세요.');
@@ -115,7 +121,7 @@
      if(s.context.sourcePreparationError&&!s.preparationRetryable){const e=new Error(s.context.sourcePreparationError+' 원본을 확인한 뒤 PDF를 다시 생성하세요.');e.noRetry=true;throw e;}
      if(!s.context.hospital||!s.context.date)throw new Error('병원명과 점검일을 확인하세요.');
      message(s,'PDF 생성 완료 · AS 처리 현황을 확인하는 중…');
-     if(s.context.sourcePreparationError||!s.context.recordId){s.context=await prepareContext(s.context,s.owner);s.preparationRetryable=false;}
+     if(s.context.sourcePreparationError||!s.context.recordId||s.context.sourcePrepared===false){s.context=await prepareContext(s.context,s.owner);s.preparationRetryable=false;}
      if(s.baseRevision==null)s.baseRevision=s.context.sourcePdfRevision??0;
      if(!s.sha256)s.sha256=await hash(s.blob);
      // Keep the original receipt and Blob durable before a possibly ambiguous write.
@@ -146,7 +152,7 @@
      }
     }
     const href=safeLink(s.saved);progress(s,'drive','done');progress(s,'handover','done');checkAccount(s.owner);
-    if(current===s){link.href=href;link.hidden=false;}
+    if(visible(s)){link.href=href;link.hidden=false;}
     let localRecordError=null;
     if(!s.recorded){try{await options.onSaved(s.saved,s.context);s.recorded=true;}catch(e){checkAccount(s.owner);localRecordError=e;}await persist(s);}
     checkAccount(s.owner);
@@ -165,41 +171,50 @@
      if(result?.applicable===false){progress(s,'comment','skipped');notice(s,'PDF 저장 완료 · 연결된 접수가 없어 댓글 첨부 대상이 없습니다.');}
      else{progress(s,'comment','done');notice(s,'PDF 생성·Drive 저장·AS 처리 현황 연결·접수 댓글 첨부 완료');}
     }else{progress(s,'comment','skipped');notice(s,s.saved.warning||'Google Drive·AS 처리 현황 저장 완료 · 접수 동기화 후 댓글에서 AS/점검 내역서를 확인하세요.');}
-    if(localRecordError){s.autoResumeEligible=true;s.nextAutoResumeAt=Date.now()+5000;await persist(s);notice(s,'서버 저장·댓글 확인은 완료되었습니다. 기기의 연결 정보 보관만 다시 확인해 주세요. '+(localRecordError.message||''));if(current===s){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}return;}
-    s.complete=true;s.autoResumeEligible=false;if(current===s)retry.hidden=true;
+    if(localRecordError){s.autoResumeEligible=true;s.nextAutoResumeAt=Date.now()+5000;await persist(s);notice(s,'서버 저장·댓글 확인은 완료되었습니다. 기기의 연결 정보 보관만 다시 확인해 주세요. '+(localRecordError.message||''));if(visible(s)){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}return;}
+    s.complete=true;s.autoResumeEligible=false;if(visible(s))retry.hidden=true;
     if(outbox&&s.ownerKey)try{await outbox.remove(s.ownerKey+':'+s.uploadId);}catch{}
    }catch(e){
     s.autoResumeEligible=retryable(e);s.nextAutoResumeAt=Date.now()+5000;
     if(s.context.sourcePreparationError&&!e.transient)s.preparationRetryable=false;
     progress(s,s.saved?'comment':'drive',e.pending?'pending':'error');await persist(s);
     notice(s,(s.saved?'PDF는 Drive와 AS 처리 현황에 저장되었습니다. ':'PDF는 생성되었습니다. ')+(e.message||'저장 확인 실패'));
-    if(current===s){retry.textContent=s.saved?'댓글 연결 다시 시도':s.context.sourcePreparationError&&s.preparationRetryable?'원본 확인·저장 다시 시도':s.uploadAttempted?'저장 확인·재시도':'Drive 저장 다시 시도';retry.hidden=(!!s.context.sourcePreparationError&&!s.preparationRetryable)||!!e.sourceConflict||!!e.noRetry;}
-   }finally{s.base64=null;s.busy=false;if(current===s){newButton.disabled=false;retry.disabled=false;}if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}}
+    if(visible(s)){retry.textContent=s.saved?'댓글 연결 다시 시도':s.context.sourcePreparationError&&s.preparationRetryable?'원본 확인·저장 다시 시도':s.uploadAttempted?'저장 확인·재시도':'Drive 저장 다시 시도';retry.hidden=(!!s.context.sourcePreparationError&&!s.preparationRetryable)||!!e.sourceConflict||!!e.noRetry;}
+   }finally{s.base64=null;s.busy=false;if(visible(s)){newButton.disabled=false;retry.disabled=false;}}
   }
-  function run(s,automatic){if(s.busy)return s.running;s.running=execute(s,automatic);return s.running;}
-  async function retryCurrent(){const s=current;if(!s||s.busy)return;return run(s);}
+  function run(s,automatic){
+   if(s.busy)return s.running;
+   s.busy=true;if(!s.uploadId)s.uploadId=id();active.add(s);
+   if(active.size>1)notice(s,'PDF 생성 완료 · 앞선 문서의 전송이 끝나면 이 파일을 전송합니다.');
+   // Persist every newly generated Blob before waiting for another document's
+   // transfer. Network writes are serialized, local PDF rendering is independent.
+   const checkpoint=persist(s);
+   s.running=transferChain.catch(()=>{}).then(async()=>{await checkpoint;return execute(s,automatic);}).finally(()=>{s.busy=false;active.delete(s);if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}});
+   transferChain=s.running;return s.running;
+  }
+  async function retryCurrent(){const s=current;if(!s||!visible(s)||s.busy)return;return run(s);}
   retry.addEventListener('click',retryCurrent);
   // Safari may suspend timers/network while sharing or locking the screen.
-  function resume(){const s=current;if(s?.busy&&s.cancel&&Date.now()>=s.expires)s.cancel();else if(s&&!s.busy&&!s.complete&&s.autoResumeEligible&&Date.now()>=(s.nextAutoResumeAt||0)&&(s.resumeAttempts||0)<3){s.resumeAttempts=(s.resumeAttempts||0)+1;run(s,true);}}
+  function resume(){const s=current;if(!s||!visible(s))return;if(s?.busy&&s.cancel&&Date.now()>=s.expires)s.cancel();else if(s&&!s.busy&&!s.complete&&s.autoResumeEligible&&Date.now()>=(s.nextAutoResumeAt||0)&&(s.resumeAttempts||0)<3){s.resumeAttempts=(s.resumeAttempts||0)+1;run(s,true);}}
   if(doc.addEventListener)doc.addEventListener('visibilitychange',()=>{if(!doc.hidden)resume();});
   if(root.addEventListener)root.addEventListener('pageshow',resume);
   if(root.addEventListener)root.addEventListener('online',resume);
   return {
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
-   isBusy(){return !!current?.busy;},
-   recover(context){if(current?.busy)return current.running;link.hidden=true;current={recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}};return run(current);},
-   publish(blob,filename,context){if(current?.busy)return current.running;const p=preparations.get(context);link.hidden=true;current={blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}};progress(current,'drive','waiting');return run(current);},
-   resume(saved,context){if(current?.busy)return current.running;link.hidden=true;current={saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}};return run(current);},
+   isBusy(){return active.size>0;},
+   recover(context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}}));},
+   publish(blob,filename,context){if(current?.busy&&current.blob===blob&&current.context.taskId===context.taskId&&visible(current))return current.running;const p=preparations.get(context),s=select({blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}});progress(s,'drive','waiting');return run(s);},
+   resume(saved,context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}}));},
    async restore(context,settings){
-    if(!outbox||current?.busy)return false;const previous=current,token=options.token();let job;
+    if(!outbox||current?.busy||options.isCurrent&&!options.isCurrent(context))return false;const previous=current,token=options.token();let job;
     try{job=await outbox.find(await ownerKey(token),context);}catch{return false;}
-    checkAccount(token);if(!job||current!==previous)return false;
-    current={...job,ownerKey:job.owner,owner:token,context:{...job.context},uploadAttempted:!!(job.uploadAttempted||!job.saved&&job.sha256),busy:false};
+    checkAccount(token);if(!job||current!==previous||options.isCurrent&&!options.isCurrent(context))return false;
+    current={...job,ownerKey:job.owner,owner:token,context:{...job.context,sessionEpoch:context.sessionEpoch},uploadAttempted:!!(job.uploadAttempted||!job.saved&&job.sha256),busy:false};
     // Earlier clients classified this incomplete success response as a terminal
     // failure. Recheck the real source before sending the preserved file.
     if(!current.saved&&/^(AS 처리 현황의 기록 ID를 확인하지 못했습니다\.|.*잠금.*시간\s*초과.*)$/.test(current.context.sourcePreparationError||''))current.preparationRetryable=true;
-    if(options.onRecovered)options.onRecovered(job);progress(current,job.saved?'comment':'drive','pending');notice(current,'이전에 중단된 전송입니다. 같은 파일로 저장·댓글 연결을 다시 확인할 수 있습니다.');
-    retry.hidden=false;retry.textContent=job.saved?'댓글 연결 다시 시도':'저장 확인·재시도';if(job.saved){link.href=safeLink(job.saved);link.hidden=false;}if(settings?.automatic){current.autoResumeEligible=true;current.resumeAttempts=1;run(current,true);}return true;
+    if(visible(current)&&options.onRecovered)options.onRecovered({...job,context:current.context});progress(current,job.saved?'comment':'drive','pending');notice(current,'이전에 중단된 전송입니다. 같은 파일로 저장·댓글 연결을 다시 확인할 수 있습니다.');
+    retry.hidden=false;retry.textContent=job.saved?'댓글 연결 다시 시도':'저장 확인·재시도';if(job.saved){link.href=safeLink(job.saved);link.hidden=false;}current.autoResumeEligible=false;return true;
    },
    reset(){current=null;status.textContent='';retry.hidden=true;link.hidden=true;newButton.disabled=false;if(options.onProgress)options.onProgress({},{});}
   };

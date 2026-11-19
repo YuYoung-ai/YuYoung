@@ -28,8 +28,8 @@ vm.runInContext(build+'\n'+validation+'\n'+collect,context);
 const standard=context.buildSheetHTML({docNo:'TEST-DOC'});
 assert.match(standard,/영업 담당자:/);
 assert.doesNotMatch(standard,/접수처:/);
-for(const value of ['희망 점검','CS 담당자','병원 담당자',basic.nextDate,basic.csName,basic.hospitalName,'data:cs-signature','data:hs-signature'])assert.ok(standard.includes(value));
-assert.equal(signatureReads,2);
+for(const value of ['희망 점검','CS 담당자','병원 담당자',basic.nextDate,basic.csName,basic.hospitalName,'cs-signature','hs-signature'])assert.ok(standard.includes(value));
+assert.equal(signatureReads,0,'PDF uses serialized signature bytes, without reading a mutable canvas');
 
 signatureReads=0;
 const simplified=context.buildSheetHTML({simplified:true,docNo:'TEST-DOC'});

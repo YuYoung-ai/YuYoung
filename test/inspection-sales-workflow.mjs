@@ -5,7 +5,7 @@ const source=fs.readFileSync(new URL('../js/baz-inspection-workflow.js',import.m
 async function restored(receiver,requestSales){
  const nodes=new Map(),node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',hidden:false,textContent:'',replaceChildren(){},appendChild(){},addEventListener(){}});return nodes.get(id);};
  const existing={id:'task',updatedAt:1,data:{handover:{recordId:'report',requestId:'req'},basic:{receiver},photos:['photo'],signatures:{cs:'signature'}}};let saved='';
- const c={location:{search:'?request=req&record=report'},BazAuth:{name:()=> 'tester'},_currentTaskId:null,handoverReference:null,uploadedPdfDocument:null,loadTasks:()=>[existing],
+ const c={inspectionEntry:{kind:'linked'},inspectionContext:()=>({}),inspectionIsCurrent:()=>true,location:{search:'?request=req&record=report'},BazAuth:{name:()=> 'tester'},_currentTaskId:null,handoverReference:null,uploadedPdfDocument:null,loadTasks:()=>[existing],
   openTask:()=>{node('receiver').value=receiver||'DB 담당';return true;},fillInspectionSales:sales=>{if(!node('receiver').value)node('receiver').value=sales||'DB 담당';},saveCurrentTask:()=>{saved=node('receiver').value;return true;},
   document:{readyState:'complete',getElementById:node,querySelector:()=>node('wrap'),createElement:()=>({})},
   window:{BazWorkFlow:{route:()=>({requestId:'req',recordId:'report'}),url:()=> 'hospital-work.html'},BazWorkAPI:{get:async()=>({success:true,request:{id:'req',sales:requestSales},source:{recordId:'report'}})}}};
