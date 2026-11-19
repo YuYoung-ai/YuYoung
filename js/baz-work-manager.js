@@ -55,7 +55,7 @@
   function read(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
   function localNow(){return localTimeFormatter.format(new Date()).replace(' ','T');}
   function csLabel(r){return r.qrIntake?'QR':r.cs||'미기록';}
-  function visitLabel(r){var q=r.qrIntake;if(q&&q.confirmationRequired&&!q.appointmentConfirmed&&!['완료','취소'].includes(r.status))return '접수 확인 중 · '+time(q.requestedVisitAt||r.visitAt);return time(r.visitAt);}
+  function visitLabel(r){var q=r.qrIntake;if(q&&q.confirmationRequired&&q.appointmentConfirmed!==true)return ['완료','취소'].includes(r.status)?'확정된 방문 일정 없음':'접수 확인 중';return time(r.visitAt);}
   function time(v){if(!v)return '미정';if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v))return v.replace('T',' ');var d=new Date(v);return isNaN(d.getTime())?v:displayTimeFormatter.format(d);}
   function active(r){return !r.deletedAt&&!r.purgedAt&&r.status!=='완료'&&r.status!=='취소';}
   function overdue(r){return active(r)&&r.deadline&&r.deadline<localNow();}

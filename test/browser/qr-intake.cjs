@@ -35,9 +35,10 @@ async function run(){
   const cases = Array.from({length: 10000}, (_, i) => item('case-'+String(i).padStart(4,'0'), false));
   cases[0].photos=[{id:'photo-wide'},{id:'photo-square'}];
   cases[20] = item('later-confirmed', true);
+  cases[21].changeRequest={kind:'cancel',state:'pending',note:'테스트 취소 요청'};
   const listReads = [], writes = [], storedOps = new Map();
   const customerWrites = [], customerOps = new Map();
-  let listVersion = 1;
+  let listVersion = 1, customerChange=null, customerConfirmed=true;
   const server = http.createServer(async (req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
     const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
@@ -54,9 +55,12 @@ async function run(){
       if(p.action==='qr_cases'){
         listReads.push(p);
         if(p.offset&&p.listVersion!==listVersion)return json({success:false,code:'LIST_CHANGED'});
+        const filtered=cases.filter(c=>p.view.filter==='awaiting'?!c.request.qrIntake.appointmentConfirmed:
+          p.view.filter==='confirmed-unassigned'?c.request.qrIntake.appointmentConfirmed&&!c.request.engineer:
+          p.view.filter==='changes'?c.changeRequest?.state==='pending':true);
         return json({success:true,admin:true,engineers:['엔지니어 A'],ingress:{enabled:true},
-          listVersion,items:cases.slice(p.offset,p.offset+p.limit),total:cases.length,
-          nextOffset:p.offset+p.limit<cases.length?p.offset+p.limit:null,serviceJobs:[],pushEvents:[]});
+          listVersion,items:filtered.slice(p.offset,p.offset+p.limit),total:filtered.length,
+          nextOffset:p.offset+p.limit<filtered.length?p.offset+p.limit:null,serviceJobs:[],pushEvents:[]});
       }
       if(p.action==='work_reservation_list')return json({success:true,off:[],schedule:[],slots:[]});
       if(p.action==='qr_update'){
@@ -81,8 +85,13 @@ async function run(){
         customerOps.set(p.operationId,{success:true,requestId:'fixture-qr-01',requestNumber:'AS-2030-001'});
         return json({success:false,retrySameOperation:true,error:'응답 확인 필요'});
       }
+      if(p.action==='change'){
+        customerChange={kind:p.kind,state:'pending',note:p.note};
+        return json({success:true});
+      }
       if(p.action==='status')return json({success:true,request:{id:'fixture-qr-01',requestNumber:'AS-2030-001',
-        hospitalId:hospital.id,hospitalName:hospital.name,status:'방문예정',visitConfirmed:true,visitAt:alternate,
+        hospitalId:hospital.id,hospitalName:hospital.name,status:customerConfirmed?'방문예정':'접수',
+        visitConfirmed:customerConfirmed,visitAt:customerConfirmed?alternate:'',changeRequest:customerChange,
         preferredStartAts:[preference],contact:{phone:'01000000000'},symptom:'점검 요청'}});
       return json({success:false,error:'테스트에 없는 동작'});
     }
@@ -102,6 +111,7 @@ async function run(){
     staff.on('pageerror',error=>console.error(error.message));
     await staff.goto(origin+'/test-qr');
     await staff.locator('[data-qr-select="case-0000"]').click();
+    assert.equal(await staff.locator('.qr-appointment').innerText(),'접수 확인 중');
     assert.equal(listReads[0].limit,20);
     assert.equal(await staff.locator('[data-qr-select]').count(),20);
     for(const width of [1280,390]){
@@ -165,8 +175,15 @@ async function run(){
     assert.equal(writes[2].startAt,preference);
     await staff.locator('#qr-list-back').click();
     await staff.locator('[data-filter="confirmed-unassigned"]').click();
-    await staff.getByRole('button',{name:'다음 접수 더 보기'}).click();
     await staff.locator('[data-qr-select="later-confirmed"]').waitFor();
+    assert.equal(listReads.at(-1).view.filter,'confirmed-unassigned');
+    await staff.locator('[data-filter="awaiting"]').click();
+    await staff.locator('[data-qr-select="case-0002"]').waitFor();
+    assert.equal(await staff.locator('[data-qr-select="later-confirmed"]').count(),0);
+    await staff.locator('[data-filter="changes"]').click();
+    await staff.locator('[data-qr-select="case-0021"]').click();
+    await staff.getByRole('button',{name:'접수 취소 확정'}).waitFor();
+    assert.equal(await staff.locator('#qr-adjust-save').count(),0);
 
     const phone=await browser.newPage({viewport:{width:390,height:844}});
     phone.setDefaultTimeout(10000);
@@ -183,6 +200,18 @@ async function run(){
     assert.equal(customerWrites[1].operationId,customerWrites[0].operationId);
     assert.equal(customerOps.size,1);
     assert.match(await phone.locator('#status-facts').innerText(),/확정 방문/);
+    customerConfirmed=false;
+    await phone.reload();
+    await phone.locator('#request-state').filter({hasText:'접수 확인 중'}).waitFor();
+    assert.doesNotMatch(await phone.locator('#status-facts').innerText(),/확정 방문|10:00/);
+    await phone.locator('#change-section summary').click();
+    await phone.locator('#change-kind').selectOption('cancel');
+    await phone.locator('#change-note').fill('테스트 취소 사유');
+    await phone.getByRole('button',{name:'요청하기'}).click();
+    await phone.locator('#change-state').filter({hasText:'취소 요청이 접수되었습니다'}).waitFor();
+    assert.equal(await phone.locator('#change-form').isVisible(),false);
+    await phone.reload();
+    await phone.locator('#change-section summary').filter({hasText:'취소 요청 · CS 확인 대기'}).waitFor();
     console.log('QR photo centering and scroll, intake recovery, visit confirmation and 10,000-case paging passed');
   }finally{
     await browser?.close();
