@@ -67,7 +67,7 @@ export function requestNotifications(ev:Obj){
 }
 function category(e:Obj){return e.kind==='assignment'?'receipt':e.kind;}
 export function notificationText(e:Obj){
- const titles:Obj={receipt:e.audience==='all'?'담당자 미지정 접수가 등록되었습니다':'새 접수가 배정되었습니다',assignment:'담당자가 변경되었습니다',visit:'방문 일정이 등록·변경되었습니다',status:'업무 상태가 변경되었습니다',handover:'AS 처리 현황 작성이 완료되었습니다',pdf:'AS/점검 내역서·댓글 등록이 완료되었습니다',roster:'오늘의 휴무·당직 안내'};
+ const titles:Obj={receipt:e.audience==='all'?'병원 A/S 접수가 등록되었습니다.':'새 접수가 배정되었습니다',assignment:'담당자가 변경되었습니다',visit:'방문 일정이 확정되었습니다',status:'업무 상태가 변경되었습니다',handover:'AS 처리 현황 작성이 완료되었습니다',pdf:'AS/점검 내역서·댓글 등록이 완료되었습니다',roster:'오늘의 휴무·당직 안내'};
  return {title:titles[e.kind]||'업무 알림',body:String(e.kind==='roster'?e.summary:e.hospitalName+' · '+(e.kind==='status'?e.previousStatus+' → '+e.status:e.kind==='pdf'?'AS/점검 내역서':e.gubun+' · '+(e.visitAt?e.visitAt.replace('T',' '):'방문일 미정'))).slice(0,280)};
 }
 

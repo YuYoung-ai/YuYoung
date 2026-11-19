@@ -1,7 +1,7 @@
 // Customer scope only. Private API responses and secret links are never cached.
 const NOTICE_CACHE='curejet-as-notices-v2';
-const NOTICE_TEXT={scheduled:'방문 예정으로 변경되었습니다.',completed:'AS 처리가 완료되었습니다.',rescheduled:'방문 일정이 변경되었습니다.',cancelled:'방문이 취소되었습니다.'};
-const APP_RELEASE='340';
+const NOTICE_TEXT={scheduled:'방문 일정이 확정되었습니다.',completed:'AS 처리가 완료되었습니다.',rescheduled:'방문 일정이 변경되었습니다.',cancelled:'방문이 취소되었습니다.'};
+const APP_RELEASE='348';
 let noticeQueue=Promise.resolve();
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
@@ -18,7 +18,10 @@ self.addEventListener('push',event=>{
  const task=noticeQueue.catch(()=>{}).then(async()=>{
   const cache=await caches.open(NOTICE_CACHE),key=new URL('__notice__/'+encodeURIComponent(eventId),self.registration.scope).href;
   if(await cache.match(key))return;
-  await self.registration.showNotification('Curejet 서비스 안내',{body:NOTICE_TEXT[data.kind],tag:'curejet-as:'+id+':'+data.kind,renotify:true,data:{requestId:id},icon:'icons/curejet-192.png?v=327'});
+  const visitAt=data.visitAt;
+  const body=data.kind==='scheduled'&&typeof visitAt==='string'&&/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d$/.test(visitAt)
+   ?visitAt.replace('T',' ')+' 방문 예정입니다.':NOTICE_TEXT[data.kind];
+  await self.registration.showNotification('Curejet 서비스 안내',{body,tag:'curejet-as:'+id+':'+data.kind,renotify:true,data:{requestId:id},icon:'icons/curejet-192.png?v=327'});
   await cache.put(key,new Response('1'));const keys=await cache.keys();if(keys.length>128)await Promise.all(keys.slice(0,keys.length-128).map(k=>cache.delete(k)));
  });noticeQueue=task;event.waitUntil(task);
 });
