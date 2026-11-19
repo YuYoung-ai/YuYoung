@@ -127,9 +127,8 @@ try{
  await frame().evaluate(()=>localStorage.removeItem('baz_handover_inspection_v1:'+draftRepository.owner+':'+combinedRequest));
  await page.reload();
  await form.locator('#generateBtn').waitFor({state:'attached'});
- const rejected=await frame().evaluate(async()=>await inspectionSessionReady);
- assert.equal(rejected.success,false);
- assert.match(rejected.error,/저장된 현장 기록/);
+ const rejected=await frame().evaluate(()=>inspectionSessionReady.then(()=>'',error=>error.message));
+ assert.match(rejected,/저장된 현장 기록/);
  assert.equal(writes.length,1);
  assert.deepEqual(errors,[]);
  console.log(engine+' PASS: separate route, preserved input after reload, one Sheet row after lost response, link retry, one PDF submit and safe legacy fallback');
