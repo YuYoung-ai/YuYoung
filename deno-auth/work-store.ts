@@ -614,7 +614,26 @@ export function createWorkStore(kv:any,options:Obj={}){
    await kv.atomic().check(pending,src,binding.entry).delete(pending.key).commit();
   }
  }
- async function registerDocuments(items:Obj[]){
+ async function inspectionTarget(p:Obj){
+  const recordId=text(p.recordId,120,'기록 ID');
+  const owner=await sourceLink(recordId);
+  const linkedId=owner.inUse?String(owner.entry.value?.requestId||''):'';
+  if(p.requestId&&linkedId&&p.requestId!==linkedId)
+   return {success:true,ready:false,code:'TARGET_CHANGED',message:'다른 접수에 연결된 Handover 기록입니다.'};
+  if(!linkedId)
+   return {success:true,ready:false,code:'TARGET_PENDING',message:'Handover의 접수 연결을 확인하고 있습니다.'};
+  const r=await get('request',linkedId);
+  if(!r.value||!live(r.value))
+   return {success:true,ready:false,code:'TARGET_CHANGED',message:'연결된 접수를 열 수 없습니다.'};
+  const h=await get('history',linkedId,owner.entry.value.historyId);
+  if(h.value?.kind!=='result'||h.value?.deletedAt||h.value?.source?.recordId!==recordId||h.value?.source?.origin==='flow')
+   return {success:true,ready:false,code:'TARGET_PENDING',message:'접수에서 현장 처리 기록을 확인하고 있습니다.'};
+  const comment=await get('history',linkedId,'pdf_'+await hash(recordId));
+  if(comment.value?.deletedAt)
+   return {success:true,ready:false,code:'COMMENT_DELETED',message:'접수에서 삭제된 내역서 댓글을 확인해 주세요.'};
+  return {success:true,ready:true,recordId,requestId:linkedId};
+ }
+ async function registerDocuments(items:Obj[],targeted=false){
   if(!Array.isArray(items)||items.length>20)throw new Error('문서 전송 수를 확인하세요.');
   for(const item of items){const recordId=text(item.recordId,120,'기록 ID'),pdf=inspectionPdf(item.pdf),context={hospitalName:text(item.context?.hospitalName,300,'병원'),date:text(item.context?.date,10,'처리일'),sn:text(item.context?.sn,300,'S/N')};if(!pdf||!recordId||!context.hospitalName||!/^\d{4}-\d{2}-\d{2}$/.test(context.date))throw new Error('문서 등록 정보를 확인하세요.');
    for(let attempt=0;attempt<12;attempt++){
@@ -622,18 +641,23 @@ export function createWorkStore(kv:any,options:Obj={}){
     if(version.value&&version.value.pdf.sha256!==pdf.sha256)throw new Error('같은 문서 버전의 파일이 다릅니다.');
     if(old.value&&old.value.pdf.revision>=pdf.revision)break;
     const requestId=String(item.requestId||owner.entry.value?.requestId||''),r=requestId?await request(requestId):null;
-    if(r&&(r.value.hospitalName!==context.hospitalName||r.value.visitAt?.slice(0,10)!==context.date||context.sn&&r.value.sn&&!serialMatch(context.sn,r.value.sn)))throw new Error('문서와 접수의 병원·처리일·장비가 다릅니다.');
+    const exactLink=owner.inUse&&owner.entry.value?.requestId===requestId;
+    if(targeted&&!exactLink)throw new Error('현장 기록의 접수 연결이 변경되었습니다.');
+    if(!targeted&&r&&(r.value.hospitalName!==context.hospitalName||r.value.visitAt?.slice(0,10)!==context.date||context.sn&&r.value.sn&&!serialMatch(context.sn,r.value.sn)))throw new Error('문서와 접수의 병원·처리일·장비가 다릅니다.');
     if(owner.inUse&&owner.entry.value?.requestId!==requestId)throw new Error('다른 접수에 연결된 문서입니다.');
     const doc=bounded({recordId,pdf,context,requestId,registeredAt:new Date().toISOString()});
     let tx=kv.atomic().check(old,version,owner.entry,...(r?[r]:[])).set(old.key,doc).set(version.key,doc).set(key('documentPending',recordId),{recordId});
     if((await tx.commit()).ok)break;if(attempt===11)throw new Error('문서 등록이 겹쳤습니다. 같은 파일로 재시도하세요.');
    }
   }
-  await reconcileDocuments();return {success:true};
+  await reconcileDocuments(targeted?items[0]?.recordId:undefined);return {success:true};
  }
- async function reconcileDocuments(){
-  for await(const pending of kv.list({prefix:key('documentPending')})){
-   const doc=await get('document',pending.value.recordId),d=doc.value;if(!d)continue;
+ async function reconcileDocuments(recordId?:string){
+  const pendingEntries=recordId?[await get('documentPending',recordId)]:kv.list({prefix:key('documentPending')});
+  for await(const pending of pendingEntries){
+   const targetRecordId=pending.value?.recordId||recordId;
+   if(!targetRecordId)continue;
+   const doc=await get('document',targetRecordId),d=doc.value;if(!d)continue;
    const owner=await sourceLink(d.recordId),requestId=d.requestId||owner.entry.value?.requestId;if(!requestId)continue;
    const r=await get('request',requestId);if(!r.value||!live(r.value))continue;
    if(owner.inUse&&owner.entry.value?.requestId!==requestId)continue;
@@ -648,6 +672,18 @@ export function createWorkStore(kv:any,options:Obj={}){
    }
    await kv.atomic().check(pending,doc,owner.entry).delete(pending.key).commit();
   }
+ }
+ async function completeInspectionDelivery(p:Obj){
+  const target=await inspectionTarget(p);
+  if(!target.ready)return {...target,complete:false};
+  const document=p.document;
+  if(!document||document.recordId!==p.recordId||document.requestId!==target.requestId||document.pdf?.sha256!==p.sha256||document.pdf?.revision!==p.revision)
+   throw new Error('내역서 전송 결과가 일치하지 않습니다.');
+  await registerDocuments([document],true);
+  const state=await documentStatus({requestId:target.requestId,recordId:p.recordId,sha256:p.sha256});
+  if(state.commentDeleted)return {success:true,complete:false,code:'COMMENT_DELETED',message:'접수에서 삭제된 내역서 댓글을 확인해 주세요.'};
+  if(state.documentChanged)return {success:true,complete:false,code:'VERSION_CHANGED',message:'더 최신 PDF가 저장되었습니다.'};
+  return {success:true,complete:state.pdfStored&&state.commentAttached===true,code:'COMMENT_PENDING',message:'접수 댓글 첨부를 확인하고 있습니다.'};
  }
  async function seed(p:Obj){
   if((await status()).ready)throw new Error('활성화된 KV에는 기존 시트를 다시 가져올 수 없습니다.');
@@ -684,6 +720,8 @@ export function createWorkStore(kv:any,options:Obj={}){
    throw new Error('연동 현황 저장이 겹쳤습니다.');
   }
   if(verb==='documents')return registerDocuments(p.documents||[]);
+  if(verb==='inspection_target')return inspectionTarget(p);
+  if(verb==='inspection_complete')return completeInspectionDelivery(p);
   if(verb==='sources')return {success:true,...await ingestSources(p.sources||[])};
   if(verb==='pending'){for(const r of await values(['purgeCleanup'],{limit:2}))await cleanupPurge(r);const rows=await values(['outbox'],{limit:21});return {success:true,events:rows.slice(0,20),more:rows.length>20,seq:(await status()).seq};}
   if(verb==='ack'){
