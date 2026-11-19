@@ -1287,10 +1287,13 @@ const BASIC_IDS = ['receiveDate','receiver','product','serialNo','subscription',
 
 let handoverReference=null,uploadedPdfDocument=null,customerQrDocument=null;
 const inspectionView=BazInspectionSession.view(),inspectionEntry=BazInspectionSession.intent(location.search);
-let inspectionPhase='loading';
+let inspectionPhase='loading',inspectionRefreshQueued=false;
 function inspectionContext(reference=handoverReference){return {...reference,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId,sessionEpoch:inspectionView.capture()};}
 function inspectionIsCurrent(context){return inspectionPhase==='ready'&&draftOwner()===_storageIdentity&&BazAuth.name()===_storageAccount&&inspectionView.matches(context.sessionEpoch)&&context.taskId===_currentTaskId&&BazWorkFlow.sameInspectionIdentity(context,{hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo')})&&(!context.recordId||!handoverReference?.recordId||context.recordId===handoverReference.recordId);}
-function invalidateInspectionView(){inspectionView.bump();if(typeof pdfPublisher!=='undefined')pdfPublisher.reset();document.getElementById('doneOverlay').classList.remove('show');window.BazInspectionShare.reset();}
+function invalidateInspectionView(){
+ inspectionView.bump();if(typeof pdfPublisher!=='undefined')pdfPublisher.reset();document.getElementById('doneOverlay').classList.remove('show');window.BazInspectionShare.reset();
+ if(!inspectionRefreshQueued){inspectionRefreshQueued=true;queueMicrotask(()=>{inspectionRefreshQueued=false;if(inspectionPhase==='ready'&&!_taskSwitching)window.BazInspectionFlow?.refresh(handoverReference);});}
+}
 function pdfGenerationStatus(text,localOnly=false){
  let box=document.getElementById('pdfGenerationState');if(!box){box=document.createElement('div');box.id='pdfGenerationState';box.setAttribute('role','status');box.style.cssText='padding:12px;white-space:pre-line;color:var(--text);';document.getElementById('generateBtn').parentElement.before(box);}box.replaceChildren(document.createTextNode(text));
  if(localOnly){const b=document.createElement('button');b.type='button';b.textContent='PDF만 별도 생성·보관';b.onclick=()=>generatePDF({localOnly:true});box.append(document.createElement('br'),b);}
@@ -2277,6 +2280,7 @@ document.getElementById('doneNew').addEventListener('click',async()=>{
   document.getElementById('doneOverlay').classList.remove('show');
   newTask();
 });
+const doneEdit=document.createElement('button');doneEdit.type='button';doneEdit.className='btn btn-outline';doneEdit.textContent='현재 내역서 계속 편집';doneEdit.id='doneEdit';doneEdit.style.marginTop='12px';document.getElementById('doneNew').before(doneEdit);doneEdit.onclick=()=>document.getElementById('doneOverlay').classList.remove('show');
 
 // 초기화
 buildInspList();
