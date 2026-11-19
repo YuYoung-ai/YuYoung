@@ -11,8 +11,13 @@
  function mountLayout(){
   document.body.classList.add('combined-inspection');
   const stylesheet=document.createElement('link');
-  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=353';
+  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=355';
   document.head.append(stylesheet);
+  const theme=document.querySelector('.baz-theme-floating[data-baz-theme-toggle]');
+  if(theme){
+   theme.classList.remove('baz-theme-floating');
+   document.querySelector('.save-bar').append(theme);
+  }
 
   const reception=document.getElementById('receptionCard'),action=document.getElementById('actionCard');
   const front=document.createElement('div');
@@ -23,18 +28,47 @@
   action.querySelector('h2').textContent='조치·처리 정보';
   reception.querySelector('.card-body').prepend(document.getElementById('hospFieldGroup').closest('.row-2'));
 
+  const oldProduct=document.getElementById('product'),productGroup=document.getElementById('productSel');
+  const product=document.createElement('select');
+  product.id=oldProduct.id;
+  productGroup.previousElementSibling.htmlFor=product.id;
+  product.add(new Option('제품 선택',''));
+  for(const choice of productGroup.querySelectorAll('[data-product]')){
+   product.add(new Option(choice.dataset.product,choice.dataset.product));
+  }
+  product.value=oldProduct.value;
+  oldProduct.remove();
+  productGroup.replaceWith(product);
+
   const name=document.getElementById('csName'),nameLabel=name.previousElementSibling;
-  const signatureLabel=document.createElement('label');
+  const signatureLabel=document.createElement('span');
+  signatureLabel.className='combined-signature-label';
   signatureLabel.textContent='CS 담당자 서명';
   name.before(signatureLabel);
   nameLabel.htmlFor=name.id;
+  name.style.removeProperty('margin-bottom');
   const nameField=document.createElement('div'),row=document.createElement('div');
   nameField.className='field-group';row.className='row-2';
   nameField.append(nameLabel,name);
   row.append(document.getElementById('inspectDate').closest('.field-group'),nameField);
   document.getElementById('recentCard').before(row);
+  document.getElementById('nextDate').closest('.row-2').remove();
 
   const photo=document.getElementById('photoCard'),format=document.getElementById('pdfFormatCard'),sign=document.getElementById('signCard');
+  format.querySelector('option[value="simplified"]').textContent='간소화 양식 — 담당자·서명 제외';
+  const hospitalName=document.getElementById('hospitalName');
+  const hospitalNameLabel=hospitalName.previousElementSibling;
+  hospitalNameLabel.htmlFor=hospitalName.id;
+  hospitalName.style.removeProperty('margin-bottom');
+  const hospitalSignatureLabel=signatureLabel.cloneNode(false);
+  hospitalSignatureLabel.textContent='병원 담당자 서명';
+  hospitalName.before(hospitalSignatureLabel);
+  const hospitalNameField=document.createElement('div'),signatureRow=sign.querySelector('.row-2');
+  hospitalNameField.className='field-group';
+  hospitalNameField.append(hospitalNameLabel,hospitalName);
+  signatureRow.classList.add('combined-signature-grid');
+  signatureRow.before(hospitalNameField);
+
   const closing=document.createElement('div'),publishing=document.createElement('div');
   closing.className='combined-form-columns';
   photo.before(closing);

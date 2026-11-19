@@ -40,12 +40,26 @@ html[data-theme=dark] .service-badge[data-service-type="유상"]{background:#473
 
 .work-card-heading,.mobile-card-toolbar{display:flex;align-items:flex-start;gap:6px}
 .work-card-heading .row-open{min-width:0}
-.work-combined-entry{white-space:nowrap;margin-left:auto;min-height:38px}
+.work-combined-entry{
+  display:grid;
+  place-content:center;
+  flex:none;
+  width:48px;
+  min-width:48px;
+  max-width:48px;
+  height:48px;
+  min-height:48px;
+  margin-left:auto;
+  padding:0;
+  text-align:center;
+  font-size:11px;
+  line-height:1.15;
+  box-sizing:border-box;
+}
 .work-combined-entry[hidden],#list.selection-mode .work-combined-entry{display:none}
 .mobile-card-toolbar{min-width:0;justify-content:space-between}
 .mobile-card-toolbar .mobile-status{position:static;min-width:0}
 .mobile-card-toolbar .work-status-group{justify-content:flex-start;flex-wrap:wrap}
-.mobile-card-toolbar .work-combined-entry{min-height:44px;flex:0 0 auto}
 
 [data-inspection-search] .workspace-views,
 [data-inspection-search] .work-periods,

@@ -95,6 +95,25 @@ try{
  await render();
  await form.locator('#inspList').waitFor({state:'visible'});
  await frame().waitForFunction(()=>getComputedStyle(document.getElementById('inspList')).display==='grid');
+ assert.equal(await form.locator('#nextDate').count(),0);
+ const alignedFields=()=>frame().evaluate(()=>{
+  const rect=id=>document.getElementById(id).getBoundingClientRect();
+  const equals=(a,b)=>Math.abs(a-b)<1;
+  const pair=(a,b)=>equals(rect(a).top,rect(b).top)&&equals(rect(a).height,rect(b).height)&&equals(rect(a).width,rect(b).width);
+  return {
+   reception:[['receiveDate','receiver'],['product','serialNo'],['subscription','version'],['inspectDate','csName']].every(ids=>pair(...ids)),
+   signatures:pair('csSigBox','hsSigBox'),
+   hospitalNameAbove:rect('hospitalName').bottom<=rect('hsSigBox').top,
+   clearButtons:equals(
+    document.querySelector('[data-clear="cs"]').getBoundingClientRect().top,
+    document.querySelector('[data-clear="hs"]').getBoundingClientRect().top),
+   productIsSelect:document.getElementById('product').tagName==='SELECT'
+  };
+ });
+ const expectedAlignment={reception:true,signatures:true,hospitalNameAbove:true,clearButtons:true,productIsSelect:true};
+ assert.deepEqual(await alignedFields(),expectedAlignment);
+ await frame().evaluate(()=>{document.documentElement.dataset.theme='dark';});
+ assert.deepEqual(await alignedFields(),expectedAlignment);
  const layout=()=>frame().evaluate(()=>{
   const [first,second]=Array.from(document.querySelectorAll('#inspList .insp-item')).map(item=>item.getBoundingClientRect());
   const reception=document.getElementById('receptionCard').getBoundingClientRect();
@@ -108,6 +127,7 @@ try{
  await page.setViewportSize({width:1150,height:850});
  await frame().waitForFunction(()=>window.innerWidth>=800);
  assert.deepEqual(await layout(),{checksInRow:true,commonInRow:true,stepsHidden:true,sharedFields:true,fits:true});
+ assert.deepEqual(await alignedFields(),expectedAlignment);
  await page.setViewportSize({width:390,height:844});
  await form.locator('[data-n="1"] [data-r="수리"]').click();
  await form.locator('[data-n="2"] [data-r="교체"]').click();
