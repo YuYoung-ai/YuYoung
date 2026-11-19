@@ -69,7 +69,7 @@
    const linked=await ensureLink(context);guard();
    if(requestId&&linked.request?.id!==requestId)throw new Error('선택한 접수 연결을 확인하지 못했습니다.');
    const previous=handoverReference,previousPdf=uploadedPdfDocument;
-   handoverReference={recordId:selected.recordId,requestId:linked.request?.id||'',identity:opened};
+   invalidateInspectionView();handoverReference={recordId:selected.recordId,requestId:linked.request?.id||'',identity:opened,sourceSnapshot:selected,sourcePdfRevision:selected.pdf?.revision||0};
    if(previous?.recordId!==selected.recordId)uploadedPdfDocument=null;
    if(!await saveCurrentTask()){handoverReference=previous;uploadedPdfDocument=previousPdf;throw new Error('기기에 연결 정보를 저장하지 못했습니다.');}
    history.replaceState(null,'',location.pathname);root.BazInspectionFlow.refresh(handoverReference,'Handover 원본 연결을 확인했습니다. '+(uploadedPdfDocument?'저장·댓글 연결 확인을 눌러 기존 PDF의 첨부를 재시도하세요.':'현재 내용으로 PDF를 생성하면 선택한 원본에 저장됩니다.'));

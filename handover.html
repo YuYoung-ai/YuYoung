@@ -175,7 +175,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 .ac-item[aria-selected="true"]{background:var(--teal-soft)}
 .ac-item:focus-visible{outline:2px solid var(--teal);outline-offset:-2px}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-handover-workflow.js?v=282"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=282"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-session.js?v=348"></script><script src="js/baz-handover-workflow.js?v=282"></script>
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js?v=252"></script>
@@ -1259,9 +1259,10 @@ function contToInspection(){
     pay:   (costNum && Number(costNum)>0) ? '유상' : '무상',
     types: [ val('gubun')==='점검' ? '장비 점검' : 'A/S' ]
   }};
-  try{ localStorage.setItem(PREFILL_KEY, JSON.stringify(payload)); }
+  var next;
+  try{ next=BazInspectionSession.write(localStorage,BazAuth,payload); }
   catch(e){ toast('임시저장 실패 — 브라우저 저장공간 확인'); if(b) b.disabled=false; return; }
-  location.href='inspection.html?prefill=1';
+  location.href=next;
 }
 
 /* ── 시트 연동 확장 (HANDOVER_URL 설정 시 자동 활성화) ── */

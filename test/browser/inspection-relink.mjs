@@ -65,7 +65,7 @@ try{
  await page.goto(base+'/handover.html?request='+request.id);await page.waitForFunction(()=>window.BazHandoverFlow?.context());
  await page.evaluate(()=>{setVal('hosp','검증 병원');setVal('date','2026-10-22');setVal('detail','장비 점검 및 작동 확인');SAVED_RECORD_ID='source_new_123';SAVED_SNAPSHOT=BazHandover.snapshot(readForm());enableCopy(true);});
  assert.equal(await page.locator('#btnCont').isDisabled(),false);checks.push('Confirmed sheet save enables continuation while asynchronous request link is pending');
- await page.locator('#btnCont').click();await page.waitForURL('**/inspection.html*');await page.evaluate(async()=>{await inspectionStorageReady;await window.inspectionWorkflowReady;});await page.waitForFunction(()=>typeof handoverReference!=='undefined'&&handoverReference?.recordId==='source_new_123');
+ await page.locator('#btnCont').click();await page.waitForURL('**/inspection.html*');await page.evaluate(async()=>{await inspectionSessionReady;});await page.waitForFunction(()=>typeof handoverReference!=='undefined'&&handoverReference?.recordId==='source_new_123');
  const continued=await page.evaluate(()=>({ref:handoverReference,hospital:v('hospital'),ids:loadTasks().map(t=>t.id)}));assert.equal(continued.ref.requestId,request.id);assert.equal(continued.hospital,source.hospitalName);assert.ok(retainedTaskIds.every(id=>continued.ids.includes(id)));checks.push('Handover continuation opens the matching draft with exact source/request; previous drafts retained');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
 }finally{await browser.close();}
