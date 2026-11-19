@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '../..');
 const now = new Date().toISOString();
 const day = '2030-06-18';
 const preference = day + 'T10:00';
-const alternate = day + 'T14:00';
+const alternate = day + 'T13:00';
 const item = (id, confirmed, revision = 1) => ({
   request: {id, revision, registeredAt: now, createdAt: now, hospitalName: '테스트 병원 '+id,
     symptom: '점검 요청', visitAt: preference, engineer: '', status: confirmed ? '방문예정' : '접수',
@@ -17,10 +17,14 @@ const item = (id, confirmed, revision = 1) => ({
 });
 
 const staffFixture = `<!doctype html><html lang="ko" data-theme="dark"><head>
+<link rel="stylesheet" href="/css/baz-brand.css">
+<link rel="stylesheet" href="/css/hospital-work.css">
 <link rel="stylesheet" href="/css/work-reservations.css">
 <link rel="stylesheet" href="/css/qr-usability.css">
 <link rel="stylesheet" href="/css/qr-design.css">
+<link rel="stylesheet" href="/css/baz-theme.css">
 <link rel="stylesheet" href="/css/baz-quality.css">
+<link rel="stylesheet" href="/css/hospital-work-layout.css">
 </head><body class="staff-work"><main><button id="qr-workflow-open"></button></main>
 <script>
 window.BazQrRuntime={api:'/_local/api'};
@@ -110,17 +114,46 @@ async function run(){
     staff.setDefaultTimeout(10000);
     staff.on('pageerror',error=>console.error(error.message));
     await staff.goto(origin+'/test-qr');
-    await staff.locator('[data-qr-confirm="case-0000"]').click();
+    const shortcut=staff.locator('[data-qr-confirm="case-0000"]');
+    await shortcut.locator('.ui-icon').waitFor();
+    assert.equal(await shortcut.innerText(),'방문 확정');
+    for(const width of [390,1440]){
+      await staff.setViewportSize({width,height:844});
+      const layout=await shortcut.evaluate(button=>{
+        const card=button.previousElementSibling.getBoundingClientRect(), cta=button.getBoundingClientRect();
+        const icon=button.querySelector('.ui-icon').getBoundingClientRect(), label=button.querySelector('.control-label').getBoundingClientRect();
+        return {right:card.right-cta.right,bottom:card.bottom-cta.bottom,center:Math.abs((icon.left+icon.right-label.left-label.right)/2),labelBelow:label.top>=icon.bottom};
+      });
+      assert.ok(layout.right>=8&&layout.right<=18&&layout.bottom>=8&&layout.bottom<=18,`shortcut sits inside the card at ${width}`);
+      assert.ok(layout.center<1&&layout.labelBelow,'label is centered below the calendar icon');
+    }
+    await staff.setViewportSize({width:390,height:844});
+    await shortcut.click();
     assert.equal(await staff.locator(':focus').getAttribute('id'),'qr-workflow-heading');
     assert.equal(writes.length,0,'list shortcut opens the form without confirming the first preference');
     assert.equal(await staff.locator('.qr-appointment').innerText(),'접수 확인 중');
     const workflowForm=staff.locator('#qr-workflow-form');
     assert.equal(await workflowForm.locator('button[type=submit]').count(),1);
-    assert.equal(await staff.locator('#qr-visit-at').inputValue(),'');
+    const dateInput=staff.locator('#qr-visit-date'),timeInput=staff.locator('#qr-visit-time'),saveButton=staff.locator('#qr-save-all');
+    assert.equal(await dateInput.inputValue(),'');
+    assert.equal(await timeInput.inputValue(),'');
+    assert.equal(await saveButton.innerText(),'방문 확정');
     const formLayout=()=>workflowForm.evaluate(form=>[...form.querySelectorAll('.field')].map(field=>Math.round(field.getBoundingClientRect().top)));
     assert.equal(new Set(await formLayout()).size,3,'mobile fields stack vertically');
     await staff.setViewportSize({width:1440,height:900});
     assert.equal(new Set(await formLayout()).size,1,'desktop fields share an aligned row');
+    for(const width of [1440,390,320]){
+      await staff.setViewportSize({width,height:844});
+      const formBounds=await workflowForm.evaluate(form=>{
+        const border=form.getBoundingClientRect();
+        const fields=[...form.querySelectorAll('label,input,select,button')].map(el=>el.getBoundingClientRect());
+        const save=form.querySelector('#qr-save-all').getBoundingClientRect();
+        return {inset:Math.min(...fields.map(el=>Math.min(el.left-border.left,el.top-border.top,border.right-el.right,border.bottom-el.bottom))),
+          buttonWidth:save.width,buttonHeight:save.height};
+      });
+      assert.ok(formBounds.inset>=10,`all controls stay inside the border at ${width}`);
+      assert.ok(formBounds.buttonWidth<=108&&formBounds.buttonHeight<=38,'confirmation button stays compact');
+    }
     await staff.setViewportSize({width:390,height:844});
     assert.equal(listReads[0].limit,20);
     assert.equal(await staff.locator('[data-qr-select]').count(),20);
@@ -162,7 +195,19 @@ async function run(){
       await staff.keyboard.press('Escape');
       await staff.locator('#qr-photo-viewer').waitFor({state:'hidden'});
     }
-    await staff.locator('#qr-visit-at').fill(alternate);
+    await dateInput.evaluate(input=>{
+      const openPicker=input.showPicker.bind(input);
+      input.showPicker=()=>{openPicker();input.dataset.pickerOpened='true';};
+    });
+    await dateInput.click({position:{x:12,y:16}});
+    assert.equal(await dateInput.getAttribute('data-picker-opened'),'true','clicking the date text opens the native picker');
+    await staff.keyboard.press('Escape');
+    await dateInput.fill(day);
+    await timeInput.fill('2460');
+    await saveButton.click();
+    assert.match(await staff.locator('#qr-save-feedback').innerText(),/네 자리/);
+    assert.equal(writes.length,0);
+    await timeInput.fill('1300');
     await staff.locator('#qr-save-all').click();
     assert.match(await staff.locator('#qr-save-feedback').innerText(),/담당 엔지니어를 선택/);
     assert.equal(writes.length,0);
@@ -176,12 +221,13 @@ async function run(){
     assert.equal(writes[0].status,'방문예정');
     assert.equal(writes[0].startAt,alternate);
     await staff.locator('#qr-retry').click();
-    await staff.locator('.qr-appointment').filter({hasText:'14:00'}).waitFor();
+    await staff.locator('.qr-appointment').filter({hasText:'13:00'}).waitFor();
+    assert.equal(await timeInput.inputValue(),'1300');
     assert.equal(writes[1].operationId,writes[0].operationId);
     assert.equal(storedOps.size,1);
     assert.equal(cases[0].request.revision,2);
     assert.equal(await staff.locator('[data-qr-confirm="case-0000"]').count(),0);
-    await staff.locator('#qr-visit-at').fill(preference);
+    await timeInput.fill('1000');
     await staff.locator('#qr-assigned-engineer').selectOption('엔지니어 B');
     await staff.locator('#qr-status').selectOption('처리중');
     await staff.locator('#qr-save-all').click();
@@ -194,6 +240,8 @@ async function run(){
     await staff.locator('#qr-list-back').click();
     await staff.locator('[data-qr-select="case-0001"]').click();
     await staff.locator('[data-preference="0"]').click();
+    assert.equal(await dateInput.inputValue(),day);
+    assert.equal(await timeInput.inputValue(),'1000');
     await staff.locator('#qr-assigned-engineer').selectOption('엔지니어 A');
     await staff.locator('#qr-save-all').click();
     await staff.locator('.qr-appointment').filter({hasText:'10:00'}).waitFor();
