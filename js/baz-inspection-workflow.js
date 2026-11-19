@@ -16,6 +16,15 @@
    if(requestId&&status.request.id!==requestId){var wrong=new Error('원본의 접수 연결이 다릅니다.');wrong.noRetry=true;throw wrong;}
    return {...context,requestId:status.request.id,attachmentApplicable:true};
   }
+  async function upgradeDraft(reference,context){
+   const receipt=await pdfPublisher.source(context);
+   if(!receipt)return null;
+   const updated=BazInspectionSession.sourceReference(reference,receipt,context,flow);
+   const previous=reference.sourceSnapshot?await BazInspectionSession.basis(reference.sourceSnapshot,context.pdfFormat):reference.sourceBasis;
+   if(previous?.format===context.pdfFormat&&previous.fingerprint!==receipt.basis[context.pdfFormat].fingerprint)
+    throw new Error('Handover 원본 내용이 변경되었습니다. 기록 연결 변경에서 원본을 확인하세요.');
+   return {...BazInspectionSession.deliveryContext(updated,context.pdfFormat),sourcePdfRevision:updated.sourcePdfRevision};
+  }
   async function confirmAttachment(saved,context,options){
    if(BazAuth.name()!==account)throw new Error('로그인 계정이 변경되었습니다. 다시 접수에서 열어 주세요.');
    var transport=options||{},params={requestId:context.requestId,recordId:context.recordId,sha256:saved.pdf.sha256};
@@ -53,11 +62,11 @@
    return complete(status);
   }
   function progress(state){
-   var done=state.drive==='done'&&state.handover==='done'&&(state.comment==='done'||state.comment==='skipped'),needs=Object.values(state).some(function(s){return s==='error'||s==='pending'||s==='blocked';});
+   var done=state.drive==='done'&&state.handover==='done'&&(state.comment==='done'||state.comment==='skipped'),needs=Object.values(state).some(function(s){return s==='error'||s==='blocked';});
    var title=document.getElementById('doneTitle'),icon=document.getElementById('doneIcon'),lead=document.getElementById('doneLead');
    if(title)title.textContent=done?'점검 내역서 저장 완료':state.source==='blocked'?'PDF 생성 완료 · Handover 원본 확인 필요':state.handover==='done'?'PDF 저장 완료 · 댓글 연결 '+(needs?'확인 필요':'확인 중'):state.drive==='done'?'Drive 저장 완료 · Handover 연결 '+(needs?'확인 필요':'확인 중'):'PDF 생성 완료 · 저장 '+(needs?'확인 필요':'확인 중');
    if(icon)icon.textContent=done?'✅':needs?'⚠️':'⏳';
-   if(lead)lead.textContent=done?'확인된 저장 결과입니다.':state.drive==='done'?'저장된 PDF를 유지하고 댓글 연결만 확인합니다.':'전송이 지연되면 같은 PDF의 저장 결과를 다시 확인합니다.';
+   if(lead)lead.textContent=done?'확인된 저장 결과입니다.':state.drive==='done'?'Drive에 저장한 PDF로 Handover 연결과 댓글 첨부를 확인합니다.':'전송이 지연되면 같은 PDF의 저장 결과를 다시 확인합니다.';
    var list=document.getElementById('pdfFlowStages');list.replaceChildren();
    const steps=flow.documentSteps(state);
    if(state.source)steps.splice(1,0,{key:'source',label:'Handover 원본 확인',state:state.source});
@@ -100,7 +109,7 @@
     return {success:true};
    }catch(e){message.textContent='접수·현장 기록을 확인하지 못했습니다. 작성 내용은 유지됩니다. '+e.message;back(target.requestId);button('다시 불러오기',()=>location.reload());return {success:false,error:e.message};}
   }
-  window.BazInspectionFlow={prepareContext:prepareContext,confirmAttachment:confirmAttachment,progress:progress,refresh:refresh};
+  window.BazInspectionFlow={prepareContext:prepareContext,upgradeDraft:upgradeDraft,confirmAttachment:confirmAttachment,progress:progress,refresh:refresh};
   window.inspectionWorkflowReady=start();
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialise,{once:true});else initialise();
