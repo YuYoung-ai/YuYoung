@@ -103,7 +103,7 @@
   }
   async function jobRequest(s,action,data){
    const result=await call('inspection_pdf_job_'+action,{uploadId:s.uploadId,...data},s.owner,s);
-   if(result.state!=='missing'&&(result.jobId!==s.uploadId||result.recordId!==s.context.recordId||result.sha256!==s.sha256||s.context.requestId&&result.requestId!==s.context.requestId)){
+   if(result.state!=='missing'&&(result.jobId!==s.uploadId||result.recordId!==s.context.recordId||result.sha256!==s.sha256||s.context.requestId&&(result.requestId||result.state==='complete')&&result.requestId!==s.context.requestId)){
     const error=new Error('전송 결과가 현재 내역서와 일치하지 않습니다.');error.noRetry=true;throw error;
    }
    return result;
@@ -127,11 +127,6 @@
     notice(s,'같은 PDF의 서버 저장 결과를 확인하는 중…');
     result=await jobRequest(s,'status');
     await showJob(s,result);
-    if(!automatic&&result.code==='TARGET_PENDING'&&s.context.requestId&&visible(s)&&options.repairTarget){
-     notice(s,'원래 접수의 Handover 연결을 다시 확인하는 중…');
-     await options.repairTarget({...s.context});
-     checkAccount(s.owner);
-    }
    }
    if(!result.received&&result.state!=='blocked'&&!automatic&&s.blob){
     if(s.blob.size>MAX_BYTES){const error=new Error('PDF는 최대 7MB까지 전송할 수 있습니다.');error.noRetry=true;throw error;}
@@ -145,11 +140,25 @@
    }
    if(result.received&&result.state!=='complete'&&(result.state!=='blocked'||!automatic&&result.code==='COMMENT_DELETED')){
     notice(s,'PDF 수신 완료 · 서버가 Handover와 접수 댓글을 연결하는 중…');
-    result=await jobRequest(s,'resume');await showJob(s,result);
-    if(!automatic&&result.code==='TARGET_PENDING'){
-     // The save's existing Handover link can arrive just after PDF intake.
-     await pause(1500);
-     result=await jobRequest(s,'resume');await showJob(s,result);
+    progress(s,result.pdf?'comment':'handover','working');
+    let uncertain=false;
+    async function resumeJob(){
+     try{result=await jobRequest(s,'resume',{requestId:s.context.requestId||''});await showJob(s,result);}
+     catch(error){if(!retryable(error))throw error;uncertain=true;}
+    }
+    if(!result.processing)await resumeJob();
+    if(!automatic&&!result.processing&&result.code==='TARGET_PENDING'&&s.context.requestId&&visible(s)&&options.repairTarget){
+     notice(s,'원래 접수의 Handover 연결을 다시 확인하는 중…');
+     try{await options.repairTarget({...s.context});checkAccount(s.owner);await resumeJob();}
+     catch(error){if(!retryable(error))throw error;error.pending=true;throw error;}
+    }
+    if(uncertain||result.processing||result.code==='LOCK_BUSY'){
+     for(const delay of [1000,2000,3000]){
+      await pause(delay);if(!visible(s))break;
+      try{result=await jobRequest(s,'status');await showJob(s,result);}
+      catch(error){if(!retryable(error))throw error;continue;}
+      if(result.state==='complete'||result.state==='blocked'||result.code==='TARGET_PENDING'&&!result.processing)break;
+     }
     }
    }
    if(result.state==='complete'&&result.commentAttached&&s.saved){
@@ -160,7 +169,8 @@
     if(outbox&&s.ownerKey)try{await outbox.remove(s.ownerKey+':'+s.uploadId);}catch{}
     return;
    }
-   const error=new Error(result.message||(result.received?'서버에서 계속 처리 중입니다. 이어서 전송을 누르면 같은 문서의 결과를 확인합니다.':'원래 PDF의 수신을 확인하지 못했습니다. 이어서 전송을 눌러 주세요.'));
+   const waitingForTarget=result.code==='TARGET_PENDING'&&!s.context.requestId;
+   const error=new Error(waitingForTarget?'Drive에 PDF를 보관했습니다. 이 현장 기록을 기존 접수에 연결하면 서버가 댓글 첨부를 이어갑니다.':result.message||(result.received?'서버에서 같은 PDF의 연결을 계속 확인합니다.':'원래 PDF의 수신을 확인하지 못했습니다. 이어서 전송을 눌러 주세요.'));
    error.pending=result.state!=='blocked';
    error.sourceConflict=['SOURCE_CHANGED','VERSION_CHANGED','TARGET_CHANGED'].includes(result.code);
    error.noRetry=result.state==='blocked'&&result.code!=='COMMENT_DELETED';
@@ -253,7 +263,7 @@
     s.autoResumeEligible=retryable(e);s.nextAutoResumeAt=Date.now()+5000;
     if(s.context.sourcePreparationError&&!e.transient)s.preparationRetryable=false;
     if(s.context.transferVersion===2&&e.sourceConflict){progress(s,'source','blocked');}
-    else progress(s,s.saved?'comment':s.context.transferVersion===2&&s.stages.drive==='done'?'handover':'drive',e.pending?'pending':'error');
+    else progress(s,s.saved?'comment':s.context.transferVersion===2&&s.stages.drive==='done'?'handover':'drive',e.pending||s.context.transferVersion===2&&s.stages.drive==='done'&&retryable(e)?'pending':'error');
     await persist(s);
     notice(s,(s.saved?'PDF는 Drive와 AS 처리 현황에 저장되었습니다. ':'PDF는 생성되었습니다. ')+(e.message||'저장 확인 실패'));
     if(visible(s)){retry.textContent=s.saved?'댓글 연결 다시 시도':s.context.sourcePreparationError&&s.preparationRetryable?'원본 확인·저장 다시 시도':s.uploadAttempted?'저장 확인·재시도':'Drive 저장 다시 시도';retry.hidden=(!!s.context.sourcePreparationError&&!s.preparationRetryable)||!!e.sourceConflict||!!e.noRetry;}

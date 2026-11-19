@@ -15,4 +15,16 @@ async function restored(receiver,requestSales){
 assert.equal(await restored('','접수 담당'),'접수 담당','blank restored task prefers receipt over DB autofill');
 assert.equal(await restored('수동 담당','접수 담당'),'수동 담당','existing explicit value is preserved');
 assert.equal(await restored('',''),'DB 담당','DB fallback survives when receipt has no salesperson');
+const basis={format:'standard',fingerprint:'original'},ref={recordId:'same-record',sourceSnapshot:{detail:'original'}};
+const draftContext={recordId:'same-record',pdfFormat:'standard'},receipt={basis:{standard:basis},pdfRevision:4};
+const page={inspectionEntry:{kind:'general'},BazAuth:{name:()=> 'author'},location:{search:''},
+  pdfPublisher:{source:async function(context){assert.equal(context.recordId,ref.recordId);return receipt;}},
+  BazInspectionSession:{sourceReference:(reference,current)=>({...reference,sourcePdfRevision:current.pdfRevision}),
+    basis:async snapshot=>({format:'standard',fingerprint:snapshot.detail}),deliveryContext:()=>({transferVersion:2,sourceBasis:basis})},
+  window:{BazWorkFlow:{route:()=>null},BazWorkAPI:{}},document:{readyState:'complete',getElementById:()=>({})}};
+vm.runInNewContext(source,page);
+const upgrade=page.window.BazInspectionFlow.upgradeDraft;
+const upgraded=await upgrade(ref,draftContext);assert.equal(upgraded.transferVersion,2);assert.equal(upgraded.sourcePdfRevision,4);
+await assert.rejects(upgrade({...ref,sourceSnapshot:{detail:'old body'}},draftContext),/원본 내용이 변경/);
+assert.deepEqual(ref,{recordId:'same-record',sourceSnapshot:{detail:'original'}},'checking the original must preserve the old draft');
 console.log('inspection-sales-workflow: receipt/DB backfill on restored task and manual/photo/signature preservation passed.');

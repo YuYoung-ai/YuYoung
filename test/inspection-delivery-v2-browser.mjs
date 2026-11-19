@@ -13,13 +13,13 @@ class Reader{
 vm.runInNewContext(body,{window,document:{getElementById:id=>nodes[id]},URL,AbortController,FileReader:Reader,TextEncoder,Uint8Array,crypto,atob,setTimeout,clearTimeout});
 const jobs=new Map(),audit=[],saved=[],progress=[];
 const outbox={put:async job=>jobs.set(job.key,structuredClone(job)),remove:async key=>jobs.delete(key),find:async owner=>[...jobs.values()].find(job=>job.owner===owner)};
-let server=null,online=false,dropResponse=true;
-function fixture(){
+let server=null,online=false,dropResponse=true,lockFailures=0,readsUntilComplete=0;
+function fixture(repairTarget){
  return window.BazInspectionUpload.create({
   url:'https://script.google.com/macros/s/fixture/exec',token:()=> 'fixture-token',outbox,delay:async()=>{},
-  onSaved:value=>saved.push(value),onProgress:value=>progress.push(value),
+  repairTarget,onSaved:value=>saved.push(value),onProgress:value=>progress.push(value),
   fetch:async(_url,init)=>{
-   const p=JSON.parse(init.body),action=p.action.replace('inspection_pdf_job_','');audit.push({action,id:p.uploadId,base64:!!p.base64});
+   const p=JSON.parse(init.body),action=p.action.replace('inspection_pdf_job_','');audit.push({action,id:p.uploadId,base64:!!p.base64,requestId:p.requestId});
    if(action==='submit'){
     assert.equal(p.sourceVersion,'canonical-sheet-version');
     assert.equal(p.sourceBasis.fingerprint,'b'.repeat(64));
@@ -28,7 +28,8 @@ function fixture(){
     server={success:true,state:'drive',jobId:p.uploadId,requestId:p.requestId,recordId:p.recordId,sha256:p.sha256,bytes:p.bytes,filename:p.filename,received:true};
     if(dropResponse)throw new TypeError('synthetic response loss after durable receipt');
    }
-   if(action==='resume'&&online)server={...server,state:'complete',commentAttached:true,pdf:{sha256:server.sha256,revision:1,url:'https://drive.google.com/file/d/fixture-file/view'}};
+   if(action==='resume'&&lockFailures>0){lockFailures--;return {json:async()=>({success:false,code:'LOCK_BUSY',retryable:true})};}
+   if(action==='resume'&&online||action==='status'&&readsUntilComplete>0&&--readsUntilComplete===0)server={...server,requestId:p.requestId||server.requestId,state:'complete',commentAttached:true,pdf:{sha256:server.sha256,revision:1,url:'https://drive.google.com/file/d/fixture-file/view'}};
    return {json:async()=>server};
   }
  });
@@ -51,4 +52,20 @@ dropResponse=false;server=null;audit.length=0;
 await fixture().publish(new Blob(['%PDF-1.7 nominal']),'nominal.pdf',context);
 assert.deepEqual(audit.map(event=>event.action),['submit','resume']);
 assert.equal(progress.at(-1).comment,'done');assert.equal(nodes.pdfUploadRetry.hidden,true);
-console.log('PASS: same-ID source receipt, lost response read-back, persistent manual resume and zero repeated PDF bytes.');
+server=null;audit.length=0;progress.length=0;lockFailures=2;readsUntilComplete=2;
+await fixture().publish(new Blob(['%PDF-1.7 concurrent trigger']),'locked.pdf',context);
+assert.deepEqual(audit.map(event=>event.action),['submit','resume','status','status']);
+assert.equal(progress.at(-1).comment,'done');assert.equal(nodes.pdfUploadRetry.hidden,true);
+assert.ok(progress.every(value=>value.drive!=='error'&&value.handover!=='error'));
+assert.equal(lockFailures,1,'the browser never races the background process with a second resume');
+readsUntilComplete=0;lockFailures=0;online=false;
+server={...server,state:'drive',requestId:'',pdf:null,commentAttached:false,code:'TARGET_PENDING'};
+audit.length=0;let repairs=0;
+const resumed=fixture(async target=>{assert.equal(target.requestId,context.requestId);repairs++;online=true;});
+assert.equal(await resumed.restoreServer(context),true);
+await nodes.pdfUploadRetry.click();
+assert.deepEqual(audit.map(event=>event.action),['lookup','status','resume','resume']);
+assert.equal(repairs,1);assert.equal(audit.filter(event=>event.base64).length,0);
+assert.ok(audit.filter(event=>event.action==='resume').every(event=>event.requestId===context.requestId));
+assert.equal(progress.at(-1).comment,'done');assert.equal(nodes.pdfUploadRetry.hidden,true);
+console.log('PASS: response loss, original-file resume after linking, lock contention read-back, and no duplicate upload.');

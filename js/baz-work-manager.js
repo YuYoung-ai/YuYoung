@@ -920,11 +920,20 @@
       var data=await api.get('work_document_status',{requestId:id});if(!data.success)throw new Error(data.error);
       if(state.detail?.request.id!==id)return;
       if(!data.records.length){location.href=window.BazWorkFlow.url('handover.html',id);return;}
-      if(data.records.length===1){location.href=window.BazWorkFlow.url('inspection.html',id,data.records[0].recordId);return;}
+      var live=await api.get('work_handover_candidates',{requestId:id,recordIds:data.records.map(function(record){return record.recordId;})});
+      if(state.detail?.request.id!==id)return;
+      if(!live.success||live.exactRecordIds!==true)throw new Error(live.error||'시트의 원본 확인이 지연되고 있습니다. 잠시 후 다시 열어 주세요.');
+      var sources=new Map(live.data.map(function(source){return [source.recordId,source];}));
+      var records=data.records.filter(function(record){return sources.has(record.recordId);}).map(function(record){
+        var source=sources.get(record.recordId);
+        return {recordId:record.recordId,date:source.date,sn:source.sn,hasPdf:!!source.pdf};
+      });
+      if(!records.length){notify('연결했던 Handover 원본이 시트에 없습니다. 상세 관리 및 이력에서 현재 시트 원본을 연결하세요.');return;}
+      if(records.length===1){location.href=window.BazWorkFlow.url('inspection.html',id,records[0].recordId);return;}
       var dialog=document.createElement('dialog');dialog.className='work-flow-panel';
       var heading=document.createElement('h3');heading.textContent='내역서를 작성할 현장 기록 선택';dialog.appendChild(heading);
       var hint=document.createElement('p');hint.textContent='같은 병원의 여러 장비·방문 기록입니다. 처리일과 S/N을 확인하세요.';dialog.appendChild(hint);
-      var list=document.createElement('div');list.className='work-flow-records';data.records.forEach(function(record){var b=document.createElement('button');b.type='button';b.textContent=(record.date||'처리일 미기록')+' · '+(record.sn||'S/N 미기록')+(record.hasPdf?' · 내역서 있음':'');b.onclick=function(){location.href=window.BazWorkFlow.url('inspection.html',id,record.recordId);};list.appendChild(b);});dialog.appendChild(list);
+      var list=document.createElement('div');list.className='work-flow-records';records.forEach(function(record){var b=document.createElement('button');b.type='button';b.textContent=(record.date||'처리일 미기록')+' · '+(record.sn||'S/N 미기록')+(record.hasPdf?' · 내역서 있음':'');b.onclick=function(){location.href=window.BazWorkFlow.url('inspection.html',id,record.recordId);};list.appendChild(b);});dialog.appendChild(list);
       var close=document.createElement('button');close.type='button';close.textContent='닫기';close.onclick=function(){dialog.close();};dialog.appendChild(close);dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();notify('');
     }catch(e){notify('다음 작업을 열지 못했습니다. '+e.message);}
     finally{notificationOpening=false;}

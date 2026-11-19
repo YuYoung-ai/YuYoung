@@ -13,7 +13,7 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined});});
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let linked=false,linkFailures=1,documentRegistered=false;const calls=[];
- let deliveryJob=null,completeDelivery=false;
+ let deliveryJob=null,completionLock=false,completionReads=0;
  const source={recordId:'source_new_123',hospitalName:'검증 병원',date:'2026-10-22',sn:'SN1',engineer:'검증 담당자',gubun:'점검',result:'정상',detail:'장비 점검 및 작동 확인',version:'v1'};
  const request={id:'request_new_123',hospitalName:source.hospitalName,sn:source.sn,visitAt:'2026-10-22T10:00',revision:1,symptom:'작동 점검',status:'접수'};
  const receipt={recordId:source.recordId,version:'sheet-v1',source,pdfRevision:0,basis:Object.fromEntries(['standard','simplified'].map(format=>[format,{format,fingerprint:'a'.repeat(64)}]))};
@@ -30,7 +30,14 @@ try{
    }
    if(p.action==='inspection_pdf_job_status'||p.action==='inspection_pdf_job_resume'){
     calls.push(p);assert.equal(p.uploadId,deliveryJob.jobId);assert.equal(p.base64,undefined);
-    if(completeDelivery)deliveryJob={...deliveryJob,state:'complete',commentAttached:true,pdf:{filename:deliveryJob.filename,sha256:deliveryJob.sha256,revision:1,url:'https://drive.google.com/file/d/synthetic-file/view'}};
+    if(p.action==='inspection_pdf_job_resume'&&completionLock){
+     completionReads=2;
+     return json({success:false,code:'LOCK_BUSY',retryable:true,error:'다른 저장 작업을 처리 중입니다.'});
+    }
+    if(p.action==='inspection_pdf_job_status'&&completionReads>0&&--completionReads===0){
+     completionLock=false;
+     deliveryJob={...deliveryJob,state:'complete',commentAttached:true,pdf:{filename:deliveryJob.filename,sha256:deliveryJob.sha256,revision:1,url:'https://drive.google.com/file/d/synthetic-file/view'}};
+    }
     return json(deliveryJob);
    }
   }
@@ -100,9 +107,12 @@ try{
  assert.equal(await page.locator('#doneOverlay').evaluate(el=>el.classList.contains('show')),false);
  await page.getByRole('button',{name:'중단된 전송 복구',exact:true}).click();
  await page.waitForFunction(()=>document.getElementById('doneOverlay').classList.contains('show'));
- completeDelivery=true;
+ const firstRecoveryCall=calls.length;
+ completionLock=true;
  await page.getByRole('button',{name:'이어서 전송',exact:true}).click();
  await page.waitForFunction(()=>document.getElementById('doneTitle').textContent==='점검 내역서 저장 완료');
- assert.equal(calls.filter(call=>call.action==='inspection_pdf_job_submit').length,1);checks.push('Sheet save receipt survives normal continuation, and author completes the same server job after reload');
+ assert.equal(calls.filter(call=>call.action==='inspection_pdf_job_submit').length,1);
+ assert.deepEqual(calls.slice(firstRecoveryCall).map(call=>call.action),['inspection_pdf_job_status','inspection_pdf_job_resume','inspection_pdf_job_status','inspection_pdf_job_status']);
+ checks.push('Sheet save receipt survives reload and a shared-lock response, with read-only confirmation and one file upload');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
 }finally{await browser.close();}
