@@ -20,6 +20,12 @@
      else node.textContent='처리 항목 · '+(summary?item.treatment||'미등록':valid||failed.has(signature(r))?'다시 확인 필요':'확인 중…');
     }else {var payment=summary&&['paid','free'].includes(item.payment)?item.payment:'unknown';node.dataset.payment=summary?(parts.length>1?'mixed':payment):'loading';node.textContent=summary?(parts.length>1?'항목별 구분':paymentLabel(payment)):valid||failed.has(signature(r))?'확인 필요':'확인 중…';}
    });
+   host.querySelectorAll('[data-open-inspection]').forEach(function(button){
+    var r=current.get(button.dataset.openInspection);
+    if(!r)return;
+    var item=entries.get(r.id);
+    button.hidden=!!(item&&item.revision===r.revision&&item.attachment);
+   });
    host.querySelectorAll('[data-inspection-request]').forEach(function(node){
     var r=current.get(node.dataset.inspectionRequest);if(!r)return;
     var item=entries.get(r.id),valid=item&&item.revision===r.revision;

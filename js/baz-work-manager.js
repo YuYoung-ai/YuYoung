@@ -11,6 +11,7 @@
   var detailSeq=0,hospitalSeq=0,sourceSeq=0,resultDialogSeq=0,busy=false,syncing=false,syncCheckedAt='';
   var detailCache=new Map(),detailLoading=false,detailError='',detailTask=null;
   var account=window.BazAuth.name(),scope='baz_work_v1_'+encodeURIComponent(account),draftKey=scope+'_draft',pendingKey=scope+'_pending';
+  var inspectionReturnKey=scope+'_inspection_return';
   var inspectionList=window.BazWorkInspections?window.BazWorkInspections.create({account:account,api:api,cache:cache}):null;
   var hospitalGroups=window.BazWorkHospitalGroups?window.BazWorkHospitalGroups.create():null;
   var role={engineer:'',admin:window.BazAuth.cachedLevel()>=3,resolved:false},workspaceView=role.admin?'attention':'mine',roleTouched=false,claimReady=null,claimLoading=false,assignmentSeq=0;
@@ -18,6 +19,8 @@
   var launch=window.BazWorkLaunch?window.BazWorkLaunch.parse(window.location?.search):{receipt:false,embed:false};
   var notificationTarget=window.BazNotificationRoute?window.BazNotificationRoute.parse(window.location?.search):null,notificationOpening=false;
   var embedded=launch.receipt&&launch.embed&&window.parent!==window;
+  var inspectionSearch=!embedded&&new URLSearchParams(location.search).get('entry')==='inspection-search';
+  if(inspectionSearch){workspaceView='all';state.filter='all';lastLiveFilter='all';roleTouched=true;document.documentElement.dataset.inspectionSearch='true';}
   if(embedded){$('receipt-launch-status').hidden=false;document.documentElement.dataset.receiptEmbed='true';draftKey=scope+'_lookup_draft_'+encodeURIComponent([launch.name,launch.sn,launch.region].join('|'));}
   function receiptMessage(type){if(embedded)window.parent.postMessage({type:type},window.location.origin);}
   var refreshCommentPreview=function(){};
@@ -466,10 +469,10 @@
   function workspaceLabel(view){return {attention:'확인할 업무',all:'전체 업무',mine:'내 업무',unassigned:'미배정',changed:'원본 변경',hospital:'병원별 그룹화'}[view]||'전체 업무';}
   function renderWorkspace(){
     if(!$('workspace-title'))return;
-    $('workspace-title').textContent=state.filter==='trash'?'휴지통':workspaceLabel(workspaceView);
+    $('workspace-title').textContent=inspectionSearch?'통합 작성 · 접수 검색':state.filter==='trash'?'휴지통':workspaceLabel(workspaceView);
     var hint=workspaceView==='attention'?'미배정·결과 확인 대기·Handover 원본 변경을 모아 보여줍니다.':workspaceView==='mine'?(role.engineer?role.engineer+' 담당으로 배정된 업무입니다.':'본인 담당자 연결을 확인해 주세요. 앱 설치·알림 설정에서 연결할 수 있습니다.'):workspaceView==='unassigned'?'담당자를 지정하면 해당 담당자에게 접수 알림이 전달됩니다.':workspaceView==='changed'?'완료된 업무를 포함해 Handover 원본 확인이 필요한 기록입니다.':'기간·상태·검색 조건을 적용해 전체 업무를 조회합니다.';
     if(workspaceView==='mine'&&!role.resolved)hint=role.failed?'담당자 연결 확인에 실패했습니다. 전체 업무로 전환하거나 앱 설치·알림 설정에서 다시 확인하세요.':'본인의 담당자 연결을 확인하고 있습니다.';
-    $('workspace-hint').textContent=hint;document.querySelectorAll('[data-workspace]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.workspace===workspaceView&&state.filter!=='trash'));});
+    $('workspace-hint').textContent=inspectionSearch?'병원명이나 장비 S/N을 검색하고 결과를 누르세요.':hint;document.querySelectorAll('[data-workspace]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.workspace===workspaceView&&state.filter!=='trash'));});
     if(workspaceView==='hospital')$('workspace-hint').textContent='같은 병원의 여러 장비 처리 이력을 한 타임라인에서 확인합니다. 기간·검색·상세 조건을 적용할 수 있습니다.';
 
   }
@@ -507,6 +510,27 @@
     }catch(e){feedback(e.message);}
     finally{claimLoading=false;var current=$('detail').querySelector('[data-action="claim"]');if(current)current.disabled=busy||!!pending||!role.engineer;}
   }
+  function inspectionButton(r){
+    if(r.deletedAt||r.purgedAt||['완료','취소'].includes(r.status))return '';
+    return '<button type="button" class="work-combined-entry" data-open-inspection="'+esc(r.id)+'">통합 작성</button>';
+  }
+  function navigateFromInspectionCard(url,id){
+    try{sessionStorage.setItem(inspectionReturnKey,id);}catch(e){}
+    location.href=url;
+  }
+  async function refreshInspectionCard(){
+    if(!state.loaded)return;
+    var id;
+    try{id=sessionStorage.getItem(inspectionReturnKey);if(id)sessionStorage.removeItem(inspectionReturnKey);}catch(e){return;}
+    if(!id)return;
+    try{
+      var response=await api.get('work_document_status',{requestId:id});
+      if(!response.success||response.request?.id!==id)return;
+      if(inspectionList)inspectionList.forget(id);
+      upsert(response.request);
+      renderList();
+    }catch(e){}
+  }
   function receiptButton(r){return r.deletedAt||r.purgedAt?'':'<button type="button" aria-label="알림 읽음 현황" title="알림 읽음 현황 보기" data-receipt-request="'+esc(r.id)+'">읽음 현황</button>'; }
   function renderList(searchOnly){
     flushInlineDrafts();
@@ -525,7 +549,7 @@
     if($('source-review-alert')){$('source-review-alert').hidden=!sourceAlerts.length;$('source-review-alert').innerHTML='<summary>Handover 원본 변경 확인 · '+sourceAlerts.length+'건 <small>전체 기간</small></summary><div>'+sourceAlerts.map(function(r){return '<button type="button" data-open="'+esc(r.id)+'">'+esc(r.hospitalName)+' · '+esc(time(r.visitAt))+' · '+r.handoverReviewCount+'개 기록</button>';}).join('')+'</div>';}
 
     $('trash-toggle').setAttribute('aria-pressed',String(state.filter==='trash'));$('trash-toggle').textContent=state.filter==='trash'?'휴지통 닫기':'휴지통';
-    var rows=state.requests.filter(function(r){
+    var rows=inspectionSearch&&!search?[]:state.requests.filter(function(r){
       return fields.query(Object.assign({},r,{cs:csLabel(r)}),Object.assign({},query,{name:displayRequest(r).hospitalName}),hospitalRows());
     });
     var sort=$('sort').value,key=sort==='updated'?'updatedAt':sort==='deadline'?'deadline':'visitAt',direction=$('sort-direction').value==='desc'?-1:1;
@@ -548,13 +572,14 @@
       if(inspectionList)inspectionList.hydrate($('list'),shownRequests);return;
     }
     var shown=rows.slice((state.page-1)*50,state.page*50);shownRequests=shown;updateSelection();
+    if(inspectionSearch&&!search){$('list').innerHTML='<div class="empty">병원명 또는 장비 S/N을 입력하세요.</div>';if(inspectionList)inspectionList.hydrate($('list'),[]);return;}
     if(!shown.length){var unmapped=workspaceView==='mine'&&!role.engineer&&state.filter!=='trash';$('list').innerHTML='<div class="empty"><strong>'+(unmapped?'본인 담당자 연결을 확인해 주세요.':state.requests.length?(workspaceView==='attention'?'조건에 맞는 확인할 업무가 없습니다':'조건에 맞는 업무가 없습니다'):'등록된 A/S 업무가 없습니다')+'</strong>'+(unmapped?'<a href="install.html">앱 설치·알림 설정에서 담당자 연결 확인</a>':state.requests.length?'검색어나 기간·업무 범위를 변경해 보세요.':'상단의 접수 등록에서 첫 요청을 등록하세요.')+'</div>';if(inspectionList)inspectionList.hydrate($('list'),[]);return;}
-    function rowButton(r){var shown=displayRequest(r);return (editMode?editable(r,'hospitalInput',shown.hospitalName)+'<button class="row-detail-link" data-open="'+esc(r.id)+'">상세 보기</button>':'<button class="row-open" data-open="'+esc(r.id)+'">'+esc(shown.hospitalName)+'</button>')+'<div class="summary">'+editable(r,'symptom',r.symptom)+'</div>';}
+    function rowButton(r){var shown=displayRequest(r);return (editMode?editable(r,'hospitalInput',shown.hospitalName)+'<button class="row-detail-link" data-open="'+esc(r.id)+'">상세 보기</button>':'<div class="work-card-heading"><button class="row-open" data-open="'+esc(r.id)+'">'+esc(shown.hospitalName)+'</button>'+inspectionButton(r)+'</div>')+'<div class="summary">'+(inspectionSearch&&r.sn?'<span>장비 S/N '+esc(r.sn)+' · </span>':'')+editable(r,'symptom',r.symptom)+'</div>';}
     function rowCheck(r){return '<input type="checkbox" data-select-request="'+esc(r.id)+'" aria-label="'+esc(r.hospitalName+' · '+time(r.visitAt)+' · '+String(r.symptom||'').slice(0,60)+' 접수 선택')+'"'+(checkedRequests.has(r.id)?' checked':'')+(canManage(r)?'':' disabled title="등록자 또는 관리자만 선택할 수 있습니다."')+'>';}
     $('list').innerHTML='<div class="table-scroll"><table><thead><tr><th class="selection-cell"><span class="sr-only">접수 선택</span></th><th class="hospital-column">병원 / 접수 증상</th><th class="status-column">상태 · 유/무상</th><th class="visit-column">방문 일시</th><th class="person-column">엔지니어</th><th class="person-column">CS 접수</th><th class="person-column">영업 담당자</th><th class="recent-column">최근 기록</th><th class="read-receipts-column">알림</th></tr></thead><tbody>'+shown.map(function(r){return '<tr data-inline-form="'+esc(r.id)+'" class="'+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><td class="selection-cell">'+rowCheck(r)+'</td><td class="hospital-column">'+rowButton(r)+'</td><td class="status-column">'+statusGroup(r)+(overdue(r)?'<div class="overdue">마감 초과</div>':'')+'</td><td class="date visit-column">'+editable(r,'visit',visitLabel(r))+'</td><td class="person-column">'+editable(r,'engineer',r.engineer||'미배정')+'</td><td class="person-column">'+editable(r,'cs',csLabel(r))+'</td><td class="person-column">'+editable(r,'sales',salesName(r))+'</td><td class="recent-column">'+recentInspection(r)+'</td><td class="read-receipts-column">'+receiptButton(r)+'</td></tr>'+(editMode&&inlineDrafts[r.id]?'<tr class="edit-save-row" data-inline-form="'+esc(r.id)+'"><td colspan="9">'+inlineActions(r)+'</td></tr>':'');}).join('')+'</tbody></table></div><div class="mobile-cards">'+shown.map(function(r){if(editMode){
       function mobileField(name,value){return '<div class="mobile-edit-field mobile-edit-field--'+name+'"><span class="mobile-edit-label">'+esc(editLabels[name])+'</span>'+editable(r,name,value)+'</div>';}
       return '<article class="mobile-card editable-card" data-inline-form="'+esc(r.id)+'"><div class="mobile-edit-heading"><span class="mobile-edit-label">병원명</span><button type="button" class="row-detail-link" data-open="'+esc(r.id)+'">상세 보기</button></div><div class="mobile-edit-hospital">'+editable(r,'hospitalInput',displayRequest(r).hospitalName)+'</div>'+mobileField('symptom',r.symptom)+'<div class="mobile-edit-grid">'+mobileField('status',r.status)+mobileField('visit',time(r.visitAt))+mobileField('engineer',r.engineer||'미배정')+mobileField('cs',r.cs)+mobileField('sales',salesName(r))+mobileField('asType',fields.terms(r,hospitalRows()).asType)+'</div>'+recentInspection(r)+inlineActions(r)+'</article>';
-    }return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><div class="mobile-status">'+statusGroup(r)+'</div><label class="mobile-select">'+rowCheck(r)+'<span class="sr-only">접수 선택</span></label><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(displayRequest(r).hospitalName)+'</span>'+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(String(r.symptom||'').slice(0,130))+'</div></button><div class="card-people"><span>CS 접수 <strong>'+esc(csLabel(r))+'</strong></span><span>영업 담당자 <strong>'+esc(salesName(r))+'</strong></span></div>'+recentInspection(r)+'<div class="read-receipts-card-footer">'+receiptButton(r)+'</div></div>';}).join('')+'</div>';updateSelection();if(inspectionList)inspectionList.hydrate($('list'),shown);
+    }return '<div class="mobile-card '+(state.detail&&state.detail.request.id===r.id?'selected':'')+(checkedRequests.has(r.id)?' checked-row':'')+'"><div class="mobile-card-toolbar"><div class="mobile-status">'+statusGroup(r)+'</div>'+inspectionButton(r)+'</div><label class="mobile-select">'+rowCheck(r)+'<span class="sr-only">접수 선택</span></label><button data-open="'+esc(r.id)+'"><div class="card-top"><span>'+esc(displayRequest(r).hospitalName)+'</span>'+'</div><div class="card-meta">'+esc(time(r.visitAt))+' · '+esc(r.engineer||'미배정')+(inspectionSearch&&r.sn?' · S/N '+esc(r.sn):'')+(overdue(r)?' · 마감 초과':'')+'</div><div class="card-summary">'+esc(String(r.symptom||'').slice(0,130))+'</div></button><div class="card-people"><span>CS 접수 <strong>'+esc(csLabel(r))+'</strong></span><span>영업 담당자 <strong>'+esc(salesName(r))+'</strong></span></div>'+recentInspection(r)+'<div class="read-receipts-card-footer">'+receiptButton(r)+'</div></div>';}).join('')+'</div>';updateSelection();if(inspectionList)inspectionList.hydrate($('list'),shown);
   }
   async function readSyncData(force){
     var data,nextRevision;
@@ -911,17 +936,26 @@
       await new Promise(function(resolve){setTimeout(resolve,250);});
     }}catch(e){}finally{indexPreparing=false;}
   }
-  async function openDocumentFlow(){
+  async function openDocumentFlow(searchRequestId){
     if(busy||pending||syncing||bulkWorking||notificationOpening){notify('진행 중인 저장·동기화를 먼저 확인하세요.');return;}
-    if(!state.detail||state.detail.request.deletedAt)return;
-    var id=state.detail.request.id;notificationOpening=true;
+    var fromSearch=typeof searchRequestId==='string';
+    var selected=fromSearch?state.requests.find(function(item){return item.id===searchRequestId;}):state.detail?.request;
+    if(!selected||selected.deletedAt)return;
+    var id=selected.id;notificationOpening=true;
     try{
       notify('이 접수의 최신 현장 기록을 확인하고 있습니다…');
       var data=await api.get('work_document_status',{requestId:id});if(!data.success)throw new Error(data.error);
-      if(state.detail?.request.id!==id)return;
-      if(!data.records.length){location.href=window.BazWorkFlow.url('handover.html',id);return;}
+      if(!fromSearch&&state.detail?.request.id!==id)return;
+      if(fromSearch&&data.request?.id!==id)throw new Error('검색한 접수를 확인할 수 없습니다.');
+      if(!data.records.length){
+        if(fromSearch){
+          if(data.request.deletedAt||['완료','취소'].includes(data.request.status)){await openDetail(id);return;}
+          navigateFromInspectionCard('handover-inspection.html?request='+encodeURIComponent(id),id);
+        }else location.href=window.BazWorkFlow.url('handover.html',id);
+        return;
+      }
       var live=await api.get('work_handover_candidates',{requestId:id,recordIds:data.records.map(function(record){return record.recordId;})});
-      if(state.detail?.request.id!==id)return;
+      if(!fromSearch&&state.detail?.request.id!==id)return;
       if(!live.success||live.exactRecordIds!==true)throw new Error(live.error||'시트의 원본 확인이 지연되고 있습니다. 잠시 후 다시 열어 주세요.');
       var sources=new Map(live.data.map(function(source){return [source.recordId,source];}));
       var records=data.records.filter(function(record){return sources.has(record.recordId);}).map(function(record){
@@ -929,11 +963,18 @@
         return {recordId:record.recordId,date:source.date,sn:source.sn,hasPdf:!!source.pdf};
       });
       if(!records.length){notify('연결했던 Handover 원본이 시트에 없습니다. 상세 관리 및 이력에서 현재 시트 원본을 연결하세요.');return;}
-      if(records.length===1){location.href=window.BazWorkFlow.url('inspection.html',id,records[0].recordId);return;}
+      if(records.length===1){
+        var url=window.BazWorkFlow.url('inspection.html',id,records[0].recordId);
+        if(fromSearch)navigateFromInspectionCard(url,id);else location.href=url;
+        return;
+      }
       var dialog=document.createElement('dialog');dialog.className='work-flow-panel';
       var heading=document.createElement('h3');heading.textContent='내역서를 작성할 현장 기록 선택';dialog.appendChild(heading);
       var hint=document.createElement('p');hint.textContent='같은 병원의 여러 장비·방문 기록입니다. 처리일과 S/N을 확인하세요.';dialog.appendChild(hint);
-      var list=document.createElement('div');list.className='work-flow-records';records.forEach(function(record){var b=document.createElement('button');b.type='button';b.textContent=(record.date||'처리일 미기록')+' · '+(record.sn||'S/N 미기록')+(record.hasPdf?' · 내역서 있음':'');b.onclick=function(){location.href=window.BazWorkFlow.url('inspection.html',id,record.recordId);};list.appendChild(b);});dialog.appendChild(list);
+      var list=document.createElement('div');list.className='work-flow-records';records.forEach(function(record){var b=document.createElement('button');b.type='button';b.textContent=(record.date||'처리일 미기록')+' · '+(record.sn||'S/N 미기록')+(record.hasPdf?' · 내역서 있음':'');b.onclick=function(){
+        var url=window.BazWorkFlow.url('inspection.html',id,record.recordId);
+        if(fromSearch)navigateFromInspectionCard(url,id);else location.href=url;
+      };list.appendChild(b);});dialog.appendChild(list);
       var close=document.createElement('button');close.type='button';close.textContent='닫기';close.onclick=function(){dialog.close();};dialog.appendChild(close);dialog.addEventListener('close',function(){dialog.remove();});document.body.appendChild(dialog);dialog.showModal();notify('');
     }catch(e){notify('다음 작업을 열지 못했습니다. '+e.message);}
     finally{notificationOpening=false;}
@@ -1092,7 +1133,7 @@
   $('list').onsubmit=saveInline;
   $('list').ondblclick=$('detail').ondblclick=beginEdit;
   $('list').onkeydown=$('detail').onkeydown=editKey;
-  $('list').onclick=function(event){var hospitalChoice=event.target.closest('[data-hospital-group]'),directory=event.target.closest('[data-hospital-directory]');if(hospitalChoice&&hospitalGroups){if(hospitalGroups.select(Number(hospitalChoice.dataset.hospitalGroup))){state.page=1;closeDetail(false);renderList();var selectedButton=$('list').querySelector('.hospital-group-choice[aria-pressed="true"]');if(selectedButton)selectedButton.focus({preventScroll:true});}return;}if(directory&&hospitalGroups){hospitalGroups.moveDirectory(Number(directory.dataset.hospitalDirectory));renderList();return;}var inspectionRetry=event.target.closest('[data-inspection-retry]');if(inspectionRetry&&inspectionList){inspectionList.retry(inspectionRetry.dataset.inspectionRetry);return;}if(editClick(event))return;var reset=event.target.closest('[data-inline-reset]');if(reset?.dataset.inlineReset&&!busy&&!pending){delete inlineDrafts[reset.dataset.inlineReset];flushInlineDrafts(true);renderList();return;}var rebase=event.target.closest('[data-inline-rebase]');if(rebase?.dataset.inlineRebase&&!busy&&!pending){var d=inlineDrafts[rebase.dataset.inlineRebase];if(d?.current){d.baseRevision=d.current.revision;delete d.current;delete d.error;flushInlineDrafts(true);renderList();}return;}var b=event.target.closest('[data-open]');if(b)openDetail(b.dataset.open);};
+  $('list').onclick=function(event){var hospitalChoice=event.target.closest('[data-hospital-group]'),directory=event.target.closest('[data-hospital-directory]');if(hospitalChoice&&hospitalGroups){if(hospitalGroups.select(Number(hospitalChoice.dataset.hospitalGroup))){state.page=1;closeDetail(false);renderList();var selectedButton=$('list').querySelector('.hospital-group-choice[aria-pressed="true"]');if(selectedButton)selectedButton.focus({preventScroll:true});}return;}if(directory&&hospitalGroups){hospitalGroups.moveDirectory(Number(directory.dataset.hospitalDirectory));renderList();return;}var inspectionRetry=event.target.closest('[data-inspection-retry]');if(inspectionRetry&&inspectionList){inspectionList.retry(inspectionRetry.dataset.inspectionRetry);return;}var inspectionButton=event.target.closest('[data-open-inspection]');if(inspectionButton){openDocumentFlow(inspectionButton.dataset.openInspection);return;}if(editClick(event))return;var reset=event.target.closest('[data-inline-reset]');if(reset?.dataset.inlineReset&&!busy&&!pending){delete inlineDrafts[reset.dataset.inlineReset];flushInlineDrafts(true);renderList();return;}var rebase=event.target.closest('[data-inline-rebase]');if(rebase?.dataset.inlineRebase&&!busy&&!pending){var d=inlineDrafts[rebase.dataset.inlineRebase];if(d?.current){d.baseRevision=d.current.revision;delete d.current;delete d.error;flushInlineDrafts(true);renderList();}return;}var b=event.target.closest('[data-open]');if(b){if(inspectionSearch)openDocumentFlow(b.dataset.open);else openDetail(b.dataset.open);}};
   $('detail').onclick=function(event){
     if(editClick(event))return;    var b=event.target.closest('button');if(!b)return;
     if(b.dataset.open){openDetail(b.dataset.open);return;}
@@ -1180,6 +1221,7 @@
     var saved=await cache.snapshot(account).catch(function(){return null;});
     if(saved&&saved.storage==='kv'&&Array.isArray(saved.requests)&&saved.hospitals){kvReady=true;state.requests=saved.requests;state.hospitals=saved.hospitals;state.engineers=saved.engineers;state.roster=saved.roster||[];state.rosterMonth=saved.rosterMonth||state.rosterMonth;state.rosterLoaded=!!saved.rosterLoaded;revision=saved.revision||'0';sourceCheckedAt=saved.sourceCheckedAt||'';bridgeStatus=saved.bridgeStatus||null;state.loaded=true;fillPeople();renderList();renderRoster();$('new').disabled=false;showSyncState('done',saved.updatedAt);$('sync-state').textContent='이 PC의 보관 데이터';}
     else await sync();
+    await refreshInspectionCard();
     if(state.loaded&&!embedded)await refreshTodayRoster();
     if(embedded){$('receipt-launch-status').hidden=state.loaded;$('receipt-launch-retry').hidden=state.loaded;$('receipt-launch-message').textContent=state.loaded?'':'접수 정보를 불러오지 못했습니다. 다시 불러오거나 패널을 닫은 뒤 재시도하세요.';}
     if(launch.receipt&&state.loaded){var selected=window.BazWorkLaunch.match(launch,state.hospitals);openEditor(null,selected);if(launch.name&&!selected)$('hospital-match').textContent='조회한 병원을 최신 병원정보DB에서 확인해 선택하세요. 이름·장비번호·지역이 일치하는 한 개의 후보만 자동 선택합니다.';}
@@ -1192,6 +1234,11 @@
   if(window.addEventListener)window.addEventListener('baz-open-notification',function(event){$('notification-launch-open').hidden=false;queueNotification(event.detail||{});});
   if(window.BazHandoverReview)window.BazHandoverReview.onSaved=async function(data,requestId){if(data.request)upsert(data.request);await persistSnapshot();renderList();if(requestId&&state.detail?.request.id===requestId)await openDetail(requestId,true);};
   document.addEventListener('click',function(event){var button=event.target.closest('[data-review-record]');if(button&&window.BazHandoverReview)window.BazHandoverReview.open(button.dataset.reviewRecord,button.dataset.reviewRequest||'').catch(function(e){notify(e.message);});});
+  window.addEventListener('pageshow',function(event){if(event.persisted)refreshInspectionCard();});
+  if(inspectionSearch){
+    $('search').placeholder='병원명 또는 장비 S/N 검색';
+    $('search').focus();
+  }
   start().then(async function(){var date=new URLSearchParams(window.location.search).get('roster');if(!embedded&&/^\d{4}-\d{2}-\d{2}$/.test(date||'')&&state.loaded&&!notificationBusy()){await loadRoster(date.slice(0,7));await openRoster(date);}});
   window.addEventListener('baz-qr-work-changed',function(event){
     if(!state.loaded||busy||syncing||pending||bulkWorking)return;
