@@ -6,18 +6,34 @@ import {fileURLToPath} from 'node:url';
 const require=createRequire(import.meta.url);let playwright;
 try{playwright=require('playwright');}catch{if(!process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES)throw new Error('Install playwright or set CODEX_PRIMARY_RUNTIME_NODE_MODULES');playwright=require(path.join(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES,'playwright'));}
 const {webkit}=playwright,root=fileURLToPath(new URL('../../',import.meta.url)),output=path.resolve(process.env.OUTPUT_DIR||path.join(root,'work/inspection-relink'));
-fs.mkdirSync(output,{recursive:true});const checks=[],errors=[],base='http://inspection.test';
+fs.mkdirSync(output,{recursive:true});const checks=[],errors=[],base='http://localhost:8252';
 const engine=process.env.PLAYWRIGHT_ENGINE||'webkit';
 const browser=await playwright[engine].launch({executablePath:engine==='webkit'?process.env.PLAYWRIGHT_WEBKIT||undefined:undefined,channel:engine==='chromium'?process.env.PLAYWRIGHT_CHANNEL||'msedge':undefined,headless:true});
 try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined});});
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let linked=false,linkFailures=1,documentRegistered=false;const calls=[];
+ let deliveryJob=null,completeDelivery=false;
  const source={recordId:'source_new_123',hospitalName:'검증 병원',date:'2026-10-22',sn:'SN1',engineer:'검증 담당자',gubun:'점검',result:'정상',detail:'장비 점검 및 작동 확인',version:'v1'};
  const request={id:'request_new_123',hospitalName:source.hospitalName,sn:source.sn,visitAt:'2026-10-22T10:00',revision:1,symptom:'작동 점검',status:'접수'};
+ const receipt={recordId:source.recordId,version:'sheet-v1',source,pdfRevision:0,basis:Object.fromEntries(['standard','simplified'].map(format=>[format,{format,fingerprint:'a'.repeat(64)}]))};
  await page.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
-  const json=data=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+  const json=data=>route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':base},body:JSON.stringify(data)});
+  if(url.hostname==='script.google.com'&&req.postData()){
+   const p=JSON.parse(req.postData());
+   if(p.action==='inspection_pdf_job_source')return json({success:false,code:'DELIVERY_DISABLED'});
+   if(p.action==='inspection_pdf_job_lookup')return json(deliveryJob||{success:true,state:'missing'});
+   if(p.action==='inspection_pdf_job_submit'){
+    calls.push(p);assert.equal(p.sourceVersion,receipt.version);assert.equal(p.sourceBasis.format,'simplified');assert.equal(p.requestId,request.id);
+    deliveryJob={success:true,received:true,state:'drive',recordId:source.recordId,requestId:request.id,jobId:p.uploadId,sha256:p.sha256,filename:p.filename,bytes:p.bytes};return json(deliveryJob);
+   }
+   if(p.action==='inspection_pdf_job_status'||p.action==='inspection_pdf_job_resume'){
+    calls.push(p);assert.equal(p.uploadId,deliveryJob.jobId);assert.equal(p.base64,undefined);
+    if(completeDelivery)deliveryJob={...deliveryJob,state:'complete',commentAttached:true,pdf:{filename:deliveryJob.filename,sha256:deliveryJob.sha256,revision:1,url:'https://drive.google.com/file/d/synthetic-file/view'}};
+    return json(deliveryJob);
+   }
+  }
   if(url.origin===base){if(url.pathname==='/auth.js')return route.fulfill({contentType:'application/javascript',body:"window.BazAuth={name:()=> '검증 담당자',token:()=> 'synthetic-token',withToken:u=>u,currentLevel:async()=>3,cachedLevel:()=>3};"});const file=path.join(root,decodeURIComponent(url.pathname));return route.fulfill({path:file,contentType:/\.html$/.test(file)?'text/html; charset=utf-8':/\.js$/.test(file)?'application/javascript':/\.css$/.test(file)?'text/css':undefined});}
   if(url.hostname==='yuyoung-production.coaptation.workers.dev'){
    const p=JSON.parse(req.postData()||'{}');calls.push(p);
@@ -63,9 +79,30 @@ try{
  assert.equal(calls.filter(c=>c.action==='work_field_result_link').length,priorLinks);checks.push('An independently registered PDF can be selected without adding a duplicate field result');documentRegistered=false;linked=true;
  const retainedTaskIds=await page.evaluate(()=>loadTasks().map(t=>t.id));
  await page.goto(base+'/handover.html?request='+request.id);await page.waitForFunction(()=>window.BazHandoverFlow?.context());
- await page.evaluate(()=>{setVal('hosp','검증 병원');setVal('date','2026-10-22');setVal('detail','장비 점검 및 작동 확인');SAVED_RECORD_ID='source_new_123';SAVED_SNAPSHOT=BazHandover.snapshot(readForm());enableCopy(true);});
+ await page.evaluate(receipt=>{
+  setVal('hosp','검증 병원');setVal('date','2026-10-22');setVal('detail','장비 점검 및 작동 확인');
+  SAVED_RECORD_ID=receipt.recordId;LAST_SENT_SNAPSHOT=BazHandover.snapshot(readForm());
+  applySaveResult(BazHandover.classifySaveResult('json',{success:true,row:2,inspectionReceipt:receipt},{photoSent:false}));
+ },receipt);
  assert.equal(await page.locator('#btnCont').isDisabled(),false);checks.push('Confirmed sheet save enables continuation while asynchronous request link is pending');
  await page.locator('#btnCont').click();await page.waitForURL('**/inspection.html*');await page.evaluate(async()=>{await inspectionSessionReady;});await page.waitForFunction(()=>typeof handoverReference!=='undefined'&&handoverReference?.recordId==='source_new_123');
  const continued=await page.evaluate(()=>({ref:handoverReference,hospital:v('hospital'),ids:loadTasks().map(t=>t.id)}));assert.equal(continued.ref.requestId,request.id);assert.equal(continued.hospital,source.hospitalName);assert.ok(retainedTaskIds.every(id=>continued.ids.includes(id)));checks.push('Handover continuation opens the matching draft with exact source/request; previous drafts retained');
+ assert.equal(continued.ref.deliveryReceipt.version,receipt.version);
+ await page.evaluate(async()=>{
+  document.getElementById('pdfFormat').value='simplified';
+  BazInspectionPdf.libraries=async()=>{};
+  BazInspectionPdf.body=async()=>[];
+  BazInspectionPdf.assemble=async()=>({blob:new Blob(['%PDF-1.7 synthetic']),pdf:null,passes:1});
+  await generatePDF(false);
+ });
+ await page.getByRole('button',{name:'이어서 전송',exact:true}).waitFor();
+ await page.reload();await page.evaluate(()=>inspectionSessionReady);
+ assert.equal(await page.locator('#doneOverlay').evaluate(el=>el.classList.contains('show')),false);
+ await page.getByRole('button',{name:'중단된 전송 복구',exact:true}).click();
+ await page.waitForFunction(()=>document.getElementById('doneOverlay').classList.contains('show'));
+ completeDelivery=true;
+ await page.getByRole('button',{name:'이어서 전송',exact:true}).click();
+ await page.waitForFunction(()=>document.getElementById('doneTitle').textContent==='점검 내역서 저장 완료');
+ assert.equal(calls.filter(call=>call.action==='inspection_pdf_job_submit').length,1);checks.push('Sheet save receipt survives normal continuation, and author completes the same server job after reload');
  assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
 }finally{await browser.close();}

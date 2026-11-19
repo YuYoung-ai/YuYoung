@@ -27,5 +27,16 @@
   const relevant={},selected=format==='simplified'?'simplified':'standard',printed=['hospitalName','date','sn','gubun','cat','type','part','cost','detail','result','remark'];if(selected==='standard')printed.push('engineer');printed.forEach(name=>{relevant[name]=fields[name];});
   return {v:1,recordId:source.recordId,identity:{hospital:source.sourceHospitalName||source.hospitalName,date:source.date,sn:source.sn||''},fields,fingerprint:await hash(JSON.stringify(relevant)),capturedAt:new Date().toISOString(),format:selected,template:1};
  }
- root.BazInspectionSession={owner,intent,write,read,view,freeze,basis,id:nonce};
+ function sourceReference(reference,receipt,basic,flow){
+  if(!receipt||receipt.recordId!==reference.recordId||receipt.source?.recordId!==reference.recordId||
+     !flow.sameInspectionIdentity(basic,receipt.source)||!receipt.version||
+     !['standard','simplified'].every(format=>receipt.basis?.[format]?.format===format&&/^[a-f0-9]{64}$/.test(receipt.basis[format].fingerprint||'')))
+   throw new Error('현재 병원·처리일·S/N의 PDF 원본 정보를 확인할 수 없습니다.');
+  return {...reference,deliveryReceipt:receipt,sourceSnapshot:receipt.source,sourcePdfRevision:receipt.pdfRevision||0};
+ }
+ function deliveryContext(reference,format){
+  const receipt=reference?.deliveryReceipt;
+  return receipt?{transferVersion:2,sourceBasis:receipt.basis[format],sourceVersion:receipt.version}:null;
+ }
+ root.BazInspectionSession={owner,intent,write,read,view,freeze,basis,id:nonce,sourceReference,deliveryContext};
 })(typeof window==='object'?window:globalThis);
