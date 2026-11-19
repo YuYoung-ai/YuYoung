@@ -16,7 +16,12 @@
  var panel=document.createElement('section');panel.id='qr-workflow-panel';panel.className='reservation-panel';panel.hidden=true;
  panel.innerHTML='<div class="reservation-heading"><div><h1>고객 AS 접수 관리</h1><p id="qr-metrics"></p></div><button id="qr-refresh" type="button">목록 새로고침</button></div><p id="qr-workflow-message" role="status" aria-live="polite"></p><button id="qr-retry" hidden>같은 기록으로 재시도</button><div id="qr-view-tools" class="qr-view-tools"><input id="qr-search" type="search" aria-label="병원·연락처·증상 검색" placeholder="병원, 연락처, 증상 검색"><select id="qr-sort" aria-label="접수 정렬"><option value="priority">처리 우선순위</option><option value="visit">방문 시간순</option><option value="new">최근 접수순</option></select><select id="qr-period" aria-label="방문 조회 기간"><option value="all">전체 기간</option><option value="today">오늘</option><option value="week">향후 7일</option><option value="month">최근·향후 30일</option></select></div><div id="qr-filters" class="qr-filters"></div><p id="qr-found" role="status"></p><div class="qr-case-layout"><div><h2>접수 목록</h2><ul id="qr-cases"></ul></div><div><button id="qr-list-back" type="button">‹ 접수 목록</button><div id="qr-case-detail"></div></div></div><details class="qr-system-tools"><summary>연동 관리</summary><div class="actions"><button id="qr-pump" type="button">대기 중인 연동 작업 처리</button><button id="qr-reconcile" type="button">연동 누락 복구</button><button id="qr-results" type="button">설문 점수·의견</button><span id="qr-admin-tools" hidden><button id="qr-toggle-ingress" type="button"></button></span></div><ul id="qr-jobs"></ul><details><summary>알림 처리 기록</summary><ul id="qr-push-log"></ul></details><div id="qr-survey-results" hidden></div></details>';
  document.querySelector('main').append(panel);
- var lightbox=document.createElement('dialog');lightbox.id='qr-photo-viewer';lightbox.className='qr-photo-viewer';lightbox.setAttribute('aria-label','접수 사진 확대');lightbox.innerHTML='<button type="button" id="qr-photo-close" aria-label="확대 사진 닫기">닫기 ×</button><img id="qr-photo-large" alt="확대된 접수 사진">';document.body.append(lightbox);$('qr-photo-close').onclick=function(){lightbox.close();};lightbox.onclick=function(e){if(e.target===lightbox)lightbox.close();};
+ var lightbox=document.createElement('dialog');lightbox.id='qr-photo-viewer';lightbox.className='qr-photo-viewer';lightbox.setAttribute('aria-label','접수 사진 확대');
+ lightbox.innerHTML='<div class="qr-photo-heading"><button type="button" id="qr-photo-close" aria-label="확대 사진 닫기">닫기 ×</button></div><div class="qr-photo-viewport" tabindex="0" role="region" aria-label="사진 스크롤 영역"><div class="qr-photo-canvas"><img id="qr-photo-large" alt="확대된 접수 사진"></div></div>';
+ document.body.append(lightbox);
+ var photoViewport=lightbox.querySelector('.qr-photo-viewport'),largePhoto=$('qr-photo-large');
+ $('qr-photo-close').onclick=function(){lightbox.close();};
+ lightbox.onclick=function(e){if(e.target===lightbox)lightbox.close();};
  root.BazWorkTabs.register('customers',$('qr-workflow-open'),panel);
  function rememberView(){try{sessionStorage.setItem(viewKey,JSON.stringify(view));}catch{}}
  function today(){return new Date(Date.now()+9*3600000).toISOString().slice(0,10);}
@@ -114,8 +119,41 @@
   root.dispatchEvent(new CustomEvent('baz-qr-work-changed',{detail:{requests:data.items.map(function(c){return c.request;})}}));
   if(!selected){selected=sessionStorage.getItem(viewKey+':selected');}await ensureDetail();if(dirty&&current()?.request.revision!==displayedRevision){message('다른 담당자가 변경했습니다. 입력을 유지했습니다. 최신 내용 확인을 누르면 다시 불러옵니다.');}else if(!dirty&&(renderForce||JSON.stringify(current())!==renderedCase))render();
  }catch(e){pollFailures++;message(e.message+' · 새로고침으로 다시 확인하세요.');}}while(loadAgain&&!busy);})().finally(function(){loadTask=null;panel.setAttribute('aria-busy','false');});return loadTask;}
- function showPhoto(){zoom=1;$('qr-photo-large').src=photoUrls[photoIndex];$('qr-photo-large').style.transform='';}
- var photoTools=document.createElement('div');photoTools.className='qr-photo-tools';photoTools.innerHTML='<button type="button" data-photo-step="-1">이전</button><button type="button" data-photo-zoom="-0.25">축소</button><button type="button" data-photo-zoom="0.25">확대</button><button type="button" data-photo-step="1">다음</button>';lightbox.append(photoTools);photoTools.querySelectorAll('button').forEach(function(b){b.onclick=function(){if(b.dataset.photoStep){var count=current()?.photos.length||1;photoIndex=(photoIndex+Number(b.dataset.photoStep)+count)%count;if(photoUrls[photoIndex])showPhoto();}else{zoom=Math.max(0.5,Math.min(3,zoom+Number(b.dataset.photoZoom)));$('qr-photo-large').style.transform='scale('+zoom+')';}};});
+ function fitPhoto(keepCenter){
+  if(!lightbox.open||!largePhoto.naturalWidth||!photoViewport.clientWidth||!photoViewport.clientHeight)return;
+  var frame=photoViewport.getBoundingClientRect(),before=largePhoto.getBoundingClientRect();
+  var centerX=keepCenter&&before.width?Math.max(0,Math.min(1,(frame.left+photoViewport.clientWidth/2-before.left)/before.width)):0.5;
+  var centerY=keepCenter&&before.height?Math.max(0,Math.min(1,(frame.top+photoViewport.clientHeight/2-before.top)/before.height)):0.5;
+  var scale=Math.min(1,frame.width/largePhoto.naturalWidth,frame.height/largePhoto.naturalHeight)*zoom;
+  largePhoto.style.width=Math.max(1,Math.floor(largePhoto.naturalWidth*scale))+'px';
+  largePhoto.style.height=Math.max(1,Math.floor(largePhoto.naturalHeight*scale))+'px';
+  var after=largePhoto.getBoundingClientRect();
+  photoViewport.scrollTo({
+   left:photoViewport.scrollLeft+after.left-frame.left+after.width*centerX-photoViewport.clientWidth/2,
+   top:photoViewport.scrollTop+after.top-frame.top+after.height*centerY-photoViewport.clientHeight/2
+  });
+ }
+ function showPhoto(){
+  zoom=1;
+  largePhoto.style.width='0px';largePhoto.style.height='0px';
+  largePhoto.src=photoUrls[photoIndex];
+  if(largePhoto.complete)fitPhoto(false);
+ }
+ largePhoto.addEventListener('load',function(){fitPhoto(false);});
+ root.addEventListener('resize',function(){fitPhoto(true);});
+ var photoTools=document.createElement('div');photoTools.className='qr-photo-tools';photoTools.innerHTML='<button type="button" data-photo-step="-1">이전</button><button type="button" data-photo-zoom="-0.25">축소</button><button type="button" data-photo-zoom="0.25">확대</button><button type="button" data-photo-step="1">다음</button>';
+ lightbox.append(photoTools);
+ photoTools.addEventListener('click',function(e){
+  var button=e.target.closest('button');
+  if(!button)return;
+  if(button.dataset.photoStep){
+   var count=current()?.photos.length||1,next=(photoIndex+Number(button.dataset.photoStep)+count)%count;
+   if(photoUrls[next]){photoIndex=next;showPhoto();}
+   return;
+  }
+  zoom=Math.max(0.5,Math.min(3,zoom+Number(button.dataset.photoZoom)));
+  fitPhoto(true);
+ });
  lightbox.addEventListener('close',function(){photoFocus?.focus({preventScroll:true});});
  var photoCache=new Map(),photoCacheBytes=0,photoCacheToken='';
  function releasePhotos(){photoGeneration++;photoControllers.forEach(function(c){c.abort();});photoControllers=[];photoUrls.forEach(function(url){URL.revokeObjectURL(url);});photoUrls=[];if(lightbox.open)lightbox.close();}
@@ -189,7 +227,7 @@
   c.photos.forEach(function(photo,index){var button=document.createElement('button');button.type='button';button.className='qr-photo';button.disabled=true;button.setAttribute('aria-label','접수 사진 '+(index+1)+' 확대');button.textContent='사진 불러오는 중…';list.append(button);function download(){return (async function(){var measured=root.BazPerf?root.BazPerf.start('photos'):function(){},ctl=new AbortController(),timer=setTimeout(function(){ctl.abort();},20000);photoControllers.push(ctl);button.disabled=true;button.textContent='사진 불러오는 중…';try{
    var key=JSON.stringify([r.id,r.revision,photo.id]),blob=photoCache.get(key);
    if(!blob){
-   var response=await fetch(root.BazQrRuntime.file||'/_local/file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:root.BazQrRuntime.fileAction,token:root.BazAuth.token(),requestId:r.id,photoId:photo.id}),cache:'no-store',signal:ctl.signal});if(!response.ok)throw Error('사진을 불러오지 못했습니다.');blob=await response.blob();if(generation!==photoGeneration||token!==root.BazAuth.token())return;cachePhoto(key,blob);}var url=URL.createObjectURL(blob);photoUrls[index]=url;var img=document.createElement('img');img.src=url;img.alt='접수 사진 '+(index+1);img.width=170;img.height=128;img.decoding='async';button.replaceChildren(img);button.disabled=false;button.onclick=function(){photoFocus=button;photoIndex=index;showPhoto();lightbox.showModal();};
+   var response=await fetch(root.BazQrRuntime.file||'/_local/file',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:root.BazQrRuntime.fileAction,token:root.BazAuth.token(),requestId:r.id,photoId:photo.id}),cache:'no-store',signal:ctl.signal});if(!response.ok)throw Error('사진을 불러오지 못했습니다.');blob=await response.blob();if(generation!==photoGeneration||token!==root.BazAuth.token())return;cachePhoto(key,blob);}var url=URL.createObjectURL(blob);photoUrls[index]=url;var img=document.createElement('img');img.src=url;img.alt='접수 사진 '+(index+1);img.width=170;img.height=128;img.decoding='async';button.replaceChildren(img);button.disabled=false;button.onclick=function(){photoFocus=button;photoIndex=index;lightbox.showModal();showPhoto();};
   }catch(e){if(generation===photoGeneration){button.disabled=false;button.textContent='사진 다시 불러오기';button.title=e.message;button.onclick=function(){photoRun(download);};}}finally{clearTimeout(timer);measured({bytes:blob?.size||0});photoControllers=photoControllers.filter(function(c){return c!==ctl;});}})();}photoRun(download);});
  }
  async function send(action,p){if(busy||pending)return false;pending={action:action,payload:Object.assign({requestId:selected,operationId:api.id(),baseRevision:displayedRevision},p)};try{localStorage.setItem(storageKey,JSON.stringify(pending));}catch{pending=null;message('재시도 기록을 보관하지 못해 저장하지 않았습니다.');return false;}return retry();}

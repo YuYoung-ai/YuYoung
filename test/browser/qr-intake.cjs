@@ -16,7 +16,12 @@ const item = (id, confirmed, revision = 1) => ({
   contact: {name: '테스트', phone: '01000000000'}, photos: [], detailLoaded: true,
 });
 
-const staffFixture = `<!doctype html><html lang="ko"><body><main><button id="qr-workflow-open"></button></main>
+const staffFixture = `<!doctype html><html lang="ko" data-theme="dark"><head>
+<link rel="stylesheet" href="/css/work-reservations.css">
+<link rel="stylesheet" href="/css/qr-usability.css">
+<link rel="stylesheet" href="/css/qr-design.css">
+<link rel="stylesheet" href="/css/baz-quality.css">
+</head><body class="staff-work"><main><button id="qr-workflow-open"></button></main>
 <script>
 window.BazQrRuntime={api:'/_local/api'};
 window.BazWorkTabs={register(name,button,panel){panel.hidden=false;}};
@@ -28,6 +33,7 @@ const config = `window.QrCustomerRuntime={local:true,api:'/_local/customer',file
 
 async function run(){
   const cases = Array.from({length: 10000}, (_, i) => item('case-'+String(i).padStart(4,'0'), false));
+  cases[0].photos=[{id:'photo-wide'},{id:'photo-square'}];
   cases[20] = item('later-confirmed', true);
   const listReads = [], writes = [], storedOps = new Map();
   const customerWrites = [], customerOps = new Map();
@@ -37,6 +43,12 @@ async function run(){
     const json=value=>{res.setHeader('Content-Type','application/json');res.end(JSON.stringify(value));};
     if(pathname==='/test-qr'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(staffFixture);}
     if(pathname==='/as-app/config.js'){res.setHeader('Content-Type','application/javascript');return res.end(config);}
+    if(pathname==='/_local/file'){
+      let body='';for await(const part of req)body+=part;
+      const width=JSON.parse(body).photoId==='photo-wide'?1600:800;
+      res.setHeader('Content-Type','image/svg+xml');
+      return res.end(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="800"><rect width="100%" height="100%" fill="#123"/></svg>`);
+    }
     if(pathname==='/_local/api'||pathname==='/_local/customer'){
       let body='';for await(const part of req)body+=part;const p=JSON.parse(body);
       if(p.action==='qr_cases'){
@@ -92,6 +104,44 @@ async function run(){
     await staff.locator('[data-qr-select="case-0000"]').click();
     assert.equal(listReads[0].limit,20);
     assert.equal(await staff.locator('[data-qr-select]').count(),20);
+    for(const width of [1280,390]){
+      await staff.setViewportSize({width,height:844});
+      await staff.getByRole('button',{name:'접수 사진 1 확대'}).click();
+      const viewport=staff.locator('.qr-photo-viewport');
+      const image=staff.locator('#qr-photo-large');
+      const geometry=()=>viewport.evaluate(frame=>{
+        const imageBox=frame.querySelector('img').getBoundingClientRect(), frameBox=frame.getBoundingClientRect();
+        return {centerX:imageBox.x+imageBox.width/2-frameBox.x-frame.clientWidth/2,
+          centerY:imageBox.y+imageBox.height/2-frameBox.y-frame.clientHeight/2,
+          overflowX:frame.scrollWidth-frame.clientWidth,overflowY:frame.scrollHeight-frame.clientHeight,
+          left:frame.scrollLeft,top:frame.scrollTop};
+      });
+      await image.waitFor({state:'visible'});
+      const fitted=await geometry();
+      assert.ok(Math.abs(fitted.centerX)<2&&Math.abs(fitted.centerY)<2, 'photo is centered at '+width);
+      assert.equal(fitted.overflowX,0);
+      assert.equal(fitted.overflowY,0);
+      for(let clicks=0;clicks<8;clicks++)await staff.locator('[data-photo-zoom="0.25"]').click();
+      const expanded=await geometry();
+      assert.ok(expanded.overflowX>0, 'landscape photo scrolls horizontally at '+width);
+      if(width===1280)assert.ok(expanded.overflowY>0);
+      assert.ok(Math.abs(expanded.centerX)<20&&Math.abs(expanded.centerY)<20, 'zoom starts around center');
+      await viewport.evaluate(frame=>frame.scrollTo(frame.scrollWidth,frame.scrollHeight));
+      const edge=await geometry();
+      assert.equal(edge.left,edge.overflowX);
+      assert.equal(edge.top,edge.overflowY);
+      await staff.locator('[data-photo-step="1"]').click();
+      await staff.waitForFunction(()=>document.querySelector('#qr-photo-large').naturalWidth===800);
+      const next=await geometry();
+      assert.ok(Math.abs(next.centerX)<2&&Math.abs(next.centerY)<2, 'next photo resets the zoom');
+      if(width===390){
+        for(let clicks=0;clicks<8;clicks++)await staff.locator('[data-photo-zoom="0.25"]').click();
+        const square=await geometry();
+        assert.ok(square.overflowX>0&&square.overflowY>0, 'enlarged square photo scrolls in both axes on mobile');
+      }
+      await staff.keyboard.press('Escape');
+      await staff.locator('#qr-photo-viewer').waitFor({state:'hidden'});
+    }
     await staff.locator('#qr-visit-at').fill(alternate);
     await staff.locator('#qr-confirm-visit').click();
     await staff.locator('#qr-workflow-message').filter({hasText:'같은 기록'}).waitFor().catch(async error=>{
@@ -133,7 +183,7 @@ async function run(){
     assert.equal(customerWrites[1].operationId,customerWrites[0].operationId);
     assert.equal(customerOps.size,1);
     assert.match(await phone.locator('#status-facts').innerText(),/확정 방문/);
-    console.log('QR intake recovery, both confirmation paths and 10,000-case paging passed');
+    console.log('QR photo centering and scroll, intake recovery, visit confirmation and 10,000-case paging passed');
   }finally{
     await browser?.close();
     await new Promise(resolve=>server.close(resolve));
