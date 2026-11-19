@@ -48,6 +48,7 @@ try{
    if(p.reqId){
     assert.equal(p.hosp,request.hospitalName);assert.equal(p.sn,request.sn);
     assert.equal(p.hpOut,'SYNTHETIC-OUT');assert.equal(p.hpIn,'SYNTHETIC-IN');
+    assert.equal(p.result,'교체');
     writes.push(p);
     source={recordId:p.reqId,hospitalName:p.hosp,sn:p.sn,date:p.date,engineer:p.fse,gubun:p.gubun,detail:p.detail,result:p.result,version:'v1'};
     receipt={recordId:source.recordId,source,version:'sheet-v1',pdfRevision:0,basis:Object.fromEntries(
@@ -92,10 +93,27 @@ try{
  assert.equal(await page.getByRole('link',{name:'기존 Handover로 작성'}).getAttribute('href'),'handover.html?request='+request.id);
  await ready();
  await render();
+ await form.locator('#inspList').waitFor({state:'visible'});
+ await frame().waitForFunction(()=>getComputedStyle(document.getElementById('inspList')).display==='grid');
+ const layout=()=>frame().evaluate(()=>{
+  const [first,second]=Array.from(document.querySelectorAll('#inspList .insp-item')).map(item=>item.getBoundingClientRect());
+  const reception=document.getElementById('receptionCard').getBoundingClientRect();
+  const action=document.getElementById('actionCard').getBoundingClientRect();
+  return {checksInRow:first.top===second.top&&first.left<second.left,commonInRow:reception.top===action.top,
+   stepsHidden:getComputedStyle(document.getElementById('stepBar')).display==='none',
+   sharedFields:['hospital','serialNo','inspectDate','csName','actionDetail'].every(id=>document.querySelectorAll('#'+id).length===1),
+   fits:document.documentElement.scrollWidth<=window.innerWidth};
+ });
+ assert.deepEqual(await layout(),{checksInRow:true,commonInRow:false,stepsHidden:true,sharedFields:true,fits:true});
+ await page.setViewportSize({width:1150,height:850});
+ await frame().waitForFunction(()=>window.innerWidth>=800);
+ assert.deepEqual(await layout(),{checksInRow:true,commonInRow:true,stepsHidden:true,sharedFields:true,fits:true});
+ await page.setViewportSize({width:390,height:844});
+ await form.locator('[data-n="1"] [data-r="수리"]').click();
+ await form.locator('[data-n="2"] [data-r="교체"]').click();
  await frame().evaluate(async()=>{
   document.getElementById('pdfFormat').value='simplified';
   document.getElementById('actionDetail').value='장비 동작 확인 및 조치';
-  document.getElementById('combined-result').value='정상';
   document.getElementById('combined-hpOut').value='SYNTHETIC-OUT';
   document.getElementById('combined-hpIn').value='SYNTHETIC-IN';
   await generatePDF(false);

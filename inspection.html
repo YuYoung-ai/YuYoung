@@ -1189,6 +1189,7 @@ const STEP_REQUIRED={
   2:[], 3:[], 4:[]
 };
 function stepModeOn(){
+  if(document.body.classList.contains('combined-inspection'))return false;
   try{ return localStorage.getItem(STEP_MODE_KEY)!=='all'; }catch(e){ return true; }
 }
 function renderStep(){
@@ -2361,7 +2362,7 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=352')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=353')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,
@@ -2374,6 +2375,8 @@ window.inspectionSessionReady=(async()=>{
    const defaults=BazWorkFlow.reportForm(request);
    const data=prior?.data||BazWorkFlow.inspectionData({date:defaults.date,sn:defaults.sn,
      hospitalName:defaults.hosp,engineer:defaults.fse,gubun:defaults.gubun},request);
+   BazHandoverInspection.mountLayout();
+   renderStep();
    applyFormData(data);
    BazHandoverInspection.mountFields(document.getElementById('actionDetail').closest('.field-group'),data.basic.handoverFields);
    document.getElementById('generateBtn').textContent='시트 기록 및 PDF 발행';

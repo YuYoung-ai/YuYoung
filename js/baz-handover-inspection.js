@@ -1,27 +1,63 @@
 (function(root){
  'use strict';
  const fields=[
-  ['result','처리 결과'],
+  ['result','처리 결과 직접 지정 (선택)'],
   ['hpOut','HP 회수품 S/N'],
   ['wVer','HP 회수품 버전'],
   ['hpIn','HP 교체품 S/N'],
   ['uVer','HP 교체품 버전'],
   ['nozzleDate','노즐 제조일자']
  ];
+ function mountLayout(){
+  document.body.classList.add('combined-inspection');
+  const stylesheet=document.createElement('link');
+  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=353';
+  document.head.append(stylesheet);
+
+  const reception=document.getElementById('receptionCard'),action=document.getElementById('actionCard');
+  const front=document.createElement('div');
+  front.className='combined-form-columns';
+  reception.before(front);
+  front.append(reception,action);
+  reception.querySelector('h2').textContent='접수·장비 정보';
+  action.querySelector('h2').textContent='조치·처리 정보';
+  reception.querySelector('.card-body').prepend(document.getElementById('hospFieldGroup').closest('.row-2'));
+
+  const name=document.getElementById('csName'),nameLabel=name.previousElementSibling;
+  const signatureLabel=document.createElement('label');
+  signatureLabel.textContent='CS 담당자 서명';
+  name.before(signatureLabel);
+  nameLabel.htmlFor=name.id;
+  const nameField=document.createElement('div'),row=document.createElement('div');
+  nameField.className='field-group';row.className='row-2';
+  nameField.append(nameLabel,name);
+  row.append(document.getElementById('inspectDate').closest('.field-group'),nameField);
+  document.getElementById('recentCard').before(row);
+
+  const photo=document.getElementById('photoCard'),format=document.getElementById('pdfFormatCard'),sign=document.getElementById('signCard');
+  const closing=document.createElement('div'),publishing=document.createElement('div');
+  closing.className='combined-form-columns';
+  photo.before(closing);
+  closing.append(photo,publishing);
+  publishing.append(format,sign);
+ }
  function mountFields(after,saved){
   const panel=document.createElement('details'),heading=document.createElement('summary');
   heading.textContent='Handover 추가 정보';
-  panel.append(heading);
+  const grid=document.createElement('div');
+  grid.className='combined-extra-fields';
+  panel.append(heading,grid);
   for(const [name,label] of fields){
    const row=document.createElement('label'),input=document.createElement('input');
    row.className='field-group';
    row.textContent=label;
    input.dataset.handoverField=name;
    input.id='combined-'+name;
+   input.type='text';
    input.maxLength=100;
    input.value=saved?.[name]||'';
    row.append(input);
-   panel.append(row);
+   grid.append(row);
   }
   if(Object.values(saved||{}).some(Boolean))panel.open=true;
   after.after(panel);
@@ -53,7 +89,7 @@
    }finally{clearTimeout(timer);}
   }
 
-  function toHandover(draft,fields){
+  function toHandover(draft,fields,previous){
    const b=draft.basic;
    const sn=flow.serials(b.serialNo),assigned=flow.serials(request.sn);
    if(!flow.sameInspectionIdentity({hospital:b.hospital},{hospital:request.hospitalName}))
@@ -64,9 +100,12 @@
    const cost=handover.parseCost(b.cost);
    if(!cost.ok||(draft.pay==='유상')!==(cost.value>0))throw new Error('유상·무상과 비용을 확인하세요.');
    const [verUI,verHP]=String(b.version||'').split(/\s*\/\s*/,2);
+   const selected=Object.values(draft.results||{});
+   const result=b.handoverFields?.result||(previous?previous.payload.result:
+    ['교체','수리','정상'].find(value=>selected.includes(value))||'');
    const form={...b.handoverFields,date:b.inspectDate,hosp:request.hospitalName,fse:b.csName||request.engineer||auth.name(),
     gubun:draft.types.includes('A/S')?'A/S':'점검',sn:sn[0],verUI,verHP,cat:b.asCat,
-    subLabel:fields.item,code:fields.code,part:b.replacedPart,cost:b.cost,
+    subLabel:fields.item,code:fields.code,part:b.replacedPart,cost:b.cost,result,
     detail:b.actionDetail,remark:b.recommend};
    const valid=handover.validate(form);
    if(!valid.ok)throw new Error(valid.first.msg);
@@ -78,12 +117,12 @@
    if(!request)throw new Error('접수를 다시 불러와 주세요.');
    if(!draft.types.includes('A/S')&&!draft.types.includes('장비 점검'))
     throw new Error('A/S 또는 장비 점검을 선택해 주세요.');
-   const form=toHandover(draft,fields);
+   const previous=JSON.parse(storage.getItem(key)||'null');
+   const form=toHandover(draft,fields,previous);
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+taskId));
    const id=Array.from(new Uint8Array(digest).slice(0,16),byte=>byte.toString(16).padStart(2,'0')).join('');
    const payload=handover.buildPayload(form,{reqId:id});
    delete payload.token;
-   const previous=JSON.parse(storage.getItem(key)||'null');
    if(previous?.id!==undefined&&previous.id!==id)throw new Error('이 접수의 통합 초안을 다시 열어 주세요.');
    let entry=previous||{id,payload,state:'pending'};
    if(JSON.stringify(entry.payload)!==JSON.stringify(payload))
@@ -144,5 +183,5 @@
   }
   return {readRequest,prepare,pdfStarted,rememberPdf};
  }
- root.BazHandoverInspection={create,mountFields};
+ root.BazHandoverInspection={create,mountFields,mountLayout};
 })(window);
