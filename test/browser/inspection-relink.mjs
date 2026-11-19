@@ -13,7 +13,7 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{Object.defineProperty(crypto,'randomUUID',{value:undefined});});
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));let linked=false,linkFailures=1,documentRegistered=false;const calls=[];
- let deliveryJob=null,completionLock=false,completionReads=0;
+ let deliveryJob=null,completionLock=false,completionReads=0,completeOnSubmit=false;
  const source={recordId:'source_new_123',hospitalName:'검증 병원',date:'2026-10-22',sn:'SN1',engineer:'검증 담당자',gubun:'점검',result:'정상',detail:'장비 점검 및 작동 확인',version:'v1'};
  const request={id:'request_new_123',hospitalName:source.hospitalName,sn:source.sn,visitAt:'2026-10-22T10:00',revision:1,symptom:'작동 점검',status:'접수'};
  const receipt={recordId:source.recordId,version:'sheet-v1',source,pdfRevision:0,basis:Object.fromEntries(['standard','simplified'].map(format=>[format,{format,fingerprint:'a'.repeat(64)}]))};
@@ -26,7 +26,10 @@ try{
    if(p.action==='inspection_pdf_job_lookup')return json(deliveryJob||{success:true,state:'missing'});
    if(p.action==='inspection_pdf_job_submit'){
     calls.push(p);assert.equal(p.sourceVersion,receipt.version);assert.equal(p.sourceBasis.format,'simplified');assert.equal(p.requestId,request.id);
-    deliveryJob={success:true,received:true,state:'drive',recordId:source.recordId,requestId:request.id,jobId:p.uploadId,sha256:p.sha256,filename:p.filename,bytes:p.bytes};return json(deliveryJob);
+    deliveryJob={success:true,received:true,state:'drive',recordId:source.recordId,requestId:request.id,jobId:p.uploadId,sha256:p.sha256,filename:p.filename,bytes:p.bytes};
+    if(completeOnSubmit)deliveryJob={...deliveryJob,state:'complete',serverMs:400,commentAttached:true,
+     pdf:{filename:p.filename,sha256:p.sha256,revision:2,url:'https://drive.google.com/file/d/synthetic-second-file/view'}};
+    return json(deliveryJob);
    }
    if(p.action==='inspection_pdf_job_status'||p.action==='inspection_pdf_job_resume'){
     calls.push(p);assert.equal(p.uploadId,deliveryJob.jobId);assert.equal(p.base64,undefined);
@@ -114,5 +117,23 @@ try{
  assert.equal(calls.filter(call=>call.action==='inspection_pdf_job_submit').length,1);
  assert.deepEqual(calls.slice(firstRecoveryCall).map(call=>call.action),['inspection_pdf_job_status','inspection_pdf_job_resume','inspection_pdf_job_status','inspection_pdf_job_status']);
  checks.push('Sheet save receipt survives reload and a shared-lock response, with read-only confirmation and one file upload');
- assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors},null,2));console.log(JSON.stringify({checks,errors}));
+ const fastStart=calls.length;
+ completeOnSubmit=true;
+ await page.evaluate(async()=>{
+  document.getElementById('pdfFormat').value='simplified';
+  BazInspectionPdf.libraries=async()=>{};
+  BazInspectionPdf.body=async()=>[];
+  BazInspectionPdf.assemble=async()=>({blob:new Blob(['%PDF-1.7 second synthetic']),pdf:null,passes:1});
+  await generatePDF(false);
+ });
+ await page.waitForFunction(()=>BazPerf.samples().some(sample=>sample.name==='pdf_delivery_total'));
+ assert.equal(await page.locator('#doneTitle').textContent(),'점검 내역서 저장 완료');
+ assert.equal(await page.locator('#pdfOpenLink').getAttribute('href'),'https://drive.google.com/file/d/synthetic-second-file/view');
+ assert.equal(await page.getByRole('button',{name:'이어서 전송',exact:true}).isVisible(),false);
+ assert.deepEqual(calls.slice(fastStart).filter(call=>call.action.startsWith('inspection_pdf_job_')).map(call=>call.action),['inspection_pdf_job_submit']);
+ const timings=await page.evaluate(()=>BazPerf.samples().filter(sample=>sample.name.startsWith('pdf_delivery_')||sample.name==='inspection_pdf_job_submit'));
+ assert.equal(timings.findLast(sample=>sample.name==='inspection_pdf_job_submit').serverMs,400);
+ assert.equal(timings.findLast(sample=>sample.name==='pdf_delivery_total').jobId,deliveryJob.jobId);
+ checks.push('The first upload response can confirm Drive, Sheet and comment with no second request; browser records end-to-end duration');
+ assert.deepEqual(errors,[]);fs.writeFileSync(path.join(output,'handover-browser-verification.json'),JSON.stringify({engine,viewport:{width:390,height:844},checks,errors,timings},null,2));console.log(JSON.stringify({checks,errors}));
 }finally{await browser.close();}
