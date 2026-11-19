@@ -51,10 +51,14 @@ try{
  const search=page.locator('#search');
  const completed=page.locator('.mobile-cards [data-open-inspection="'+requests[1].id+'"]');
  const styleCandidate=page.locator('.mobile-cards [data-open-inspection="'+requests[0].id+'"]');
- await page.getByText('병원명 또는 장비 S/N을 입력하세요.',{exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>document.activeElement.id),'search');
+ const completedCard=page.locator('.mobile-cards [data-open="'+requests[1].id+'"]');
+ await styleCandidate.waitFor();
+ await completedCard.waitFor();
+ assert.equal(await search.inputValue(),'');
+ assert.notEqual(await page.evaluate(()=>document.activeElement.id),'search');
  await search.fill('분당');
- await page.locator('.mobile-cards [data-open="'+requests[1].id+'"]').waitFor();
+ await completedCard.waitFor();
+ await styleCandidate.waitFor({state:'hidden'});
  assert.equal(await completed.count(),0);
  await search.fill('SN-123');
  await styleCandidate.waitFor();
@@ -63,6 +67,8 @@ try{
   return {right:card.right-button.right,top:button.top-card.top,width:button.width,height:button.height};
  });
  assert.ok(position.right<25&&position.top<25&&position.width===48&&position.height===48,JSON.stringify(position));
+ await search.fill('');
+ await completedCard.waitFor();
  await styleCandidate.click();
  await page.waitForURL('**/handover-inspection.html?request='+requests[0].id);
  attached=true;
@@ -72,5 +78,5 @@ try{
  await page.locator('.mobile-cards [data-open="'+requests[0].id+'"]').waitFor();
  await styleCandidate.waitFor({state:'hidden'});
  assert.deepEqual(errors,[]);
- console.log(engine+' PASS: search by hospital or serial across periods, right-side card action, direct exact-request navigation, and completion hides the button');
+ console.log(engine+' PASS: immediate case list, hospital and serial search, direct selection without a search term, and completion hides the card button');
 }finally{await browser.close();}
