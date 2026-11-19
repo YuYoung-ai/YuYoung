@@ -75,7 +75,8 @@
   function refresh(reference,note){
    actions.replaceChildren();const viewContext=inspectionContext(reference);
    box.hidden=false;message.textContent=note||(reference?.requestId?'이 내역서는 접수의 현장 기록에 연결됩니다. 입력 내용은 자동 보존됩니다.':'이 기기에 보관된 미완료 PDF가 있으면 같은 파일로 전송을 다시 확인할 수 있습니다.');if(reference?.requestId)back(reference.requestId);
-   button('Handover 기록 연결 변경',function(){if(inspectionIsCurrent(viewContext))window.BazInspectionRelink.open();});
+   if(!flow.valid(new URLSearchParams(location.search).get('combined')))
+    button('Handover 기록 연결 변경',function(){if(inspectionIsCurrent(viewContext))window.BazInspectionRelink.open();});
    if(reference?.recordId){var ids=document.createElement('p');ids.textContent='기록 ID: '+reference.recordId+' · 접수 ID: '+(reference.requestId||'자동 확인');actions.appendChild(ids);}
    button('중단된 전송 복구',async function(){try{if(!inspectionIsCurrent(viewContext))return;if(!await restorePendingPdf()&&inspectionIsCurrent(viewContext))showToast('현재 작업에 맞는 미완료 전송이 없습니다.');}catch(e){if(inspectionIsCurrent(viewContext))showToast(e.message);}});
    if(reference?.recordId)button('저장된 PDF·댓글 복구',function(){if(!inspectionIsCurrent(viewContext))return;document.getElementById('doneOverlay').classList.add('show');pdfPublisher.recover(viewContext);});

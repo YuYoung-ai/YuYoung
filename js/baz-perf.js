@@ -1,6 +1,6 @@
 (function(root){
  'use strict';
- const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|photos|assemble|total|draft_save|delivery_(queue|prepare|local_save|total|incomplete))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
+ const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|photos|assemble|total|draft_save|delivery_(sheet|link|queue|prepare|local_save|total|incomplete))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
  function record(name,ms,extra){
   if(!allowed.test(name)||!Number.isFinite(ms))return;
   const item={name,ms:name==='layout_shift'?Math.round(ms*10000)/10000:Math.round(ms*10)/10};

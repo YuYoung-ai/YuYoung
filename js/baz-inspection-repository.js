@@ -9,6 +9,7 @@
   async function archive(tasks){const body={format:'baz-inspection-backup',version:1,createdAt:new Date().toISOString(),tasks};return JSON.stringify({...body,sha256:await digest(new TextEncoder().encode(JSON.stringify(body)))});}
   function create(options){
     const idb=options.indexedDB,ls=options.storage,owner=options.owner;
+    const currentKey='current|'+owner+(options.currentScope?'|'+options.currentScope:'');
     let db,index=[],queue=[],opening,chain=Promise.resolve(),currentId=null;
     const tabId=Math.random().toString(36).slice(2)+Date.now().toString(36);
     const key=id=>owner+'|'+id;
@@ -124,8 +125,8 @@
       list:()=>[...index.filter(t=>t.owner===owner),...index.filter(t=>t.owner===LEGACY)].map(clone),
       get:async id=>{const t=await raw(owner,id)||await raw(LEGACY,id);return t?.localReleased?null:hydrate(t);},
       save:(task)=>serial(()=>{if(task.owner===LEGACY)throw error('이전 작업을 현재 계정으로 가져온 뒤 저장하세요.');return commit(task,task.revision||0);}),
-      current:()=>transaction(['meta'],'readonly',(tx,set)=>{const r=tx.objectStore('meta').get('current|'+owner);r.onsuccess=()=>set(r.result?.id||null);}),
-      setCurrent:id=>serial(async()=>{await transaction(['meta'],'readwrite',tx=>{const s=tx.objectStore('meta');s.put({key:'current|'+owner,id});s.put({key:'lease|'+owner+'|'+tabId,owner,id,updatedAt:Date.now(),lease:true});});currentId=id;}),
+      current:()=>transaction(['meta'],'readonly',(tx,set)=>{const r=tx.objectStore('meta').get(currentKey);r.onsuccess=()=>set(r.result?.id||null);}),
+      setCurrent:id=>serial(async()=>{await transaction(['meta'],'readwrite',tx=>{const s=tx.objectStore('meta');s.put({key:currentKey,id});s.put({key:'lease|'+owner+'|'+tabId,owner,id,updatedAt:Date.now(),lease:true});});currentId=id;}),
       claim:task=>serial(async()=>{const full=await hydrate(task),existing=await raw(owner,full.id);if(existing)return existing;full.owner=owner;full.revision=0;delete full.migrationHash;return commit(full,0);}),
       remove:(task)=>serial(async()=>{
         if(task.owner!==owner)throw error('이전 작업은 원본 보존을 위해 삭제할 수 없습니다.');

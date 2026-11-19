@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Handover·점검 내역서 통합 작성 | BAZ CS</title>
+  <style>
+    body{margin:0;background:#f3f5f9;color:#1b2f5e;font:1rem system-ui,sans-serif}
+    nav{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:.5rem;padding:.65rem 1rem;border-bottom:1px solid #ccd5e2}
+    nav a{color:inherit;padding:.35rem 0}
+    iframe{display:block;width:100%;height:calc(100dvh - var(--nav-height, 60px));border:0}
+    iframe[hidden]{display:none}
+    main{padding:1rem}
+  </style>
+  <script src="js/baz-work-flow.js?v=282" defer></script>
+  <script src="js/baz-handover-inspection-entry.js?v=352" defer></script>
+</head>
+<body>
+  <nav id="entryNav" aria-label="작성 방식">
+    <strong>Handover·점검 내역서</strong>
+    <a id="legacyHandover" href="hospital-work.html">접수 관리</a>
+  </nav>
+  <main id="entryMessage">접수 상세에서 통합 작성을 열어 주세요.</main>
+  <iframe id="inspectionForm" title="현장 기록과 점검 내역서 작성" allow="web-share" hidden></iframe>
+</body>
+</html>
