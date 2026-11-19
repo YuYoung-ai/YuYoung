@@ -31,6 +31,11 @@ assert.doesNotMatch(standard,/접수처:/);
 for(const value of ['희망 점검','CS 담당자','병원 담당자',basic.nextDate,basic.csName,basic.hospitalName,'cs-signature','hs-signature'])assert.ok(standard.includes(value));
 assert.equal(signatureReads,0,'PDF uses serialized signature bytes, without reading a mutable canvas');
 
+const combined=context.buildSheetHTML({omitNextDate:true});
+assert.doesNotMatch(combined,/희망 점검/);
+assert.ok(!combined.includes(basic.nextDate));
+for(const value of ['CS 담당자','병원 담당자','cs-signature','hs-signature',basic.inspectDate])assert.ok(combined.includes(value),value);
+
 signatureReads=0;
 const simplified=context.buildSheetHTML({simplified:true,docNo:'TEST-DOC'});
 for(const value of ['희망 점검','CS 담당자','병원 담당자',basic.nextDate,basic.csName,basic.hospitalName,'data:cs-signature','data:hs-signature'])assert.ok(!simplified.includes(value),value+' must be excluded');

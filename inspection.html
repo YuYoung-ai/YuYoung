@@ -1258,7 +1258,7 @@ function syncPdfFormat(){
   const simplified=pdfFormat()==='simplified';
   document.body.classList.toggle('pdf-simplified',simplified);
   document.getElementById('pdfFormatHint').textContent=simplified
-    ?'희망 점검 예정일, CS·병원 담당자 이름과 서명을 제외합니다. 서명 없이 생성할 수 있습니다.'
+    ?(document.body.classList.contains('combined-inspection')?'':'희망 점검 예정일, ')+'CS·병원 담당자 이름과 서명을 제외합니다. 서명 없이 생성할 수 있습니다.'
     :'기본 양식은 CS 담당자 이름과 서명이 필요합니다.';
 }
 document.getElementById('pdfFormat').addEventListener('change',()=>{syncPdfFormat();autoSave();});
@@ -2078,9 +2078,10 @@ function buildSheetHTML(opts){
         <td style="border:1px solid #888;padding:10px 12px;font-size:12px;word-break:break-word;overflow-wrap:anywhere;">${esc(bv('replacedPart'))||dash} ${bv('cost')?'/ '+esc(bv('cost'))+'원':''}</td>
       </tr>
       ${simplified?'':`<tr>
+        ${opts?.omitNextDate?'':`
         <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">희망 점검<br>예정일</td>
-        <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(bv('nextDate'))||dash}</td>
-        <td colspan="2" style="border:1px solid #888;padding:0;">
+        <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(bv('nextDate'))||dash}</td>`}
+        <td colspan="${opts?.omitNextDate?4:2}" style="border:1px solid #888;padding:0;">
           <table style="width:100%;border-collapse:collapse;height:100%;">
             <tr>
               <td style="width:50%;border-right:1px solid #888;border-bottom:1px solid #888;padding:6px;font-size:11px;font-weight:700;text-align:center;background:#F4F4F4;">CS 담당자</td>
@@ -2244,7 +2245,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
     const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}${qrDraft?'-'+BazInspectionSession.id().slice(0,8):''}`;
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-    const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft,snapshot:captured,asLine});
+    const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft,snapshot:captured,asLine,omitNextDate:!!combinedFlow});
     let delivery=BazInspectionSession.deliveryContext(basis,uploadContext.pdfFormat);
     if(!delivery&&basis?.recordId&&!preview&&!blank&&!localOnly&&!qrDraft){
       try{delivery=await step('Handover 원본 확인','pdf_source',()=>BazInspectionFlow.upgradeDraft(basis,uploadContext));}
@@ -2362,7 +2363,7 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=353')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=355')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,

@@ -60,9 +60,9 @@ try{
  await styleCandidate.waitFor();
  const position=await styleCandidate.evaluate(b=>{
   const button=b.getBoundingClientRect(),card=b.closest('.mobile-card').getBoundingClientRect();
-  return card.right-button.right<25&&button.top-card.top<25;
+  return {right:card.right-button.right,top:button.top-card.top,width:button.width,height:button.height};
  });
- assert.equal(position,true);
+ assert.ok(position.right<25&&position.top<25&&position.width===48&&position.height===48,JSON.stringify(position));
  await styleCandidate.click();
  await page.waitForURL('**/handover-inspection.html?request='+requests[0].id);
  attached=true;

@@ -512,7 +512,7 @@
   }
   function inspectionButton(r){
     if(r.deletedAt||r.purgedAt||['완료','취소'].includes(r.status))return '';
-    return '<button type="button" class="work-combined-entry" data-open-inspection="'+esc(r.id)+'">통합 작성</button>';
+    return '<button type="button" class="work-combined-entry" data-open-inspection="'+esc(r.id)+'" aria-label="통합 작성"><span>통합<br>작성</span></button>';
   }
   function navigateFromInspectionCard(url,id){
     try{sessionStorage.setItem(inspectionReturnKey,id);}catch(e){}

@@ -42,8 +42,78 @@
   padding-inline: 2px;
 }
 
-.combined-inspection #productSel {
-  flex-wrap: wrap;
+.combined-inspection #receptionCard .row-2,
+.combined-inspection #actionCard .row-2,
+.combined-inspection #payGroup,
+.combined-inspection #typeGroup {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.combined-inspection #receptionCard .row-2,
+.combined-inspection #actionCard .row-2 {
+  margin-bottom: 13px;
+}
+
+.combined-inspection :is(#payGroup,#typeGroup) .chk {
+  min-height: 46px;
+  padding: 8px 10px;
+}
+
+.combined-inspection #receptionCard .row-2 .field-group,
+.combined-inspection #actionCard .row-2 .field-group {
+  margin-bottom: 0;
+}
+
+.combined-inspection #receptionCard .row-2:has(#hospFieldGroup) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.combined-inspection :is(#receptionCard,#actionCard,#signCard) :is(input[type="text"],input[type="date"],select) {
+  width: 100%;
+  min-width: 0;
+  height: 50px;
+  min-height: 50px;
+  padding-block: 0;
+  font-size: 16px;
+}
+
+.combined-inspection .date-wrap input[type="date"] {
+  display: block;
+  padding-inline: 12px;
+}
+
+.combined-inspection .date-wrap input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+.combined-inspection .date-icon {
+  display: none;
+}
+
+.combined-inspection .combined-signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.combined-signature-grid > .field-group {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.combined-signature-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.combined-signature-grid .sig-wrap {
+  margin-top: auto;
 }
 
 .combined-extra-fields {
