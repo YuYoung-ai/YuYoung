@@ -644,9 +644,9 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=245"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-perf.js?v=351"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=342"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=350"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=351"></script>
 <script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -2161,12 +2161,22 @@ function generatePDF(arg){
   if(_generationPromise)return _generationPromise;
   if(inspectionPhase!=='ready'){pdfGenerationStatus(inspectionPhase==='error'?'이어쓰기 준비에 실패했습니다. 상단 안내에서 다시 불러오세요.':'작성할 내역서를 준비하고 있습니다.');return Promise.resolve();}
   const generationOptions=(typeof arg==='object'&&arg!==null)?arg:{preview:!!arg};
-  if(!generationOptions.preview&&!generationOptions.blank&&!generationOptions.localOnly&&!generationOptions.qrDraft)invalidateInspectionView();
+  const startsDelivery=!generationOptions.preview&&!generationOptions.blank&&!generationOptions.localOnly&&!generationOptions.qrDraft;
+  const deliveryStarted=startsDelivery?performance.now():null;
+  if(startsDelivery)invalidateInspectionView();
   _pdfStarting=true;document.getElementById('generateBtn').disabled=true;
   pdfGenerationStatus('입력 확인 중…');
-  _generationPromise=renderInspectionPdf(arg).catch(e=>{hideLoading();pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');}).finally(()=>{_pdfStarting=false;_generationPromise=null;document.getElementById('generateBtn').disabled=false;});return _generationPromise;
+  let publishing=false;
+  _generationPromise=renderInspectionPdf(arg,deliveryStarted)
+    .then(result=>{publishing=result===true;return result;})
+    .catch(e=>{hideLoading();pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');})
+    .finally(()=>{
+      if(startsDelivery&&!publishing)window.BazPerf.start('pdf_delivery_incomplete',deliveryStarted)();
+      _pdfStarting=false;_generationPromise=null;document.getElementById('generateBtn').disabled=false;
+    });
+  return _generationPromise;
 }
-async function renderInspectionPdf(arg){
+async function renderInspectionPdf(arg,deliveryStarted){
   if(_pdfBusy||_photoBusy){pdfGenerationStatus('사진 처리 중입니다. 처리가 끝난 뒤 다시 PDF 생성을 눌러 주세요.');return;}
   const opts = (typeof arg==='object' && arg!==null) ? arg : { preview: !!arg };
   const preview = !!opts.preview;
@@ -2178,7 +2188,12 @@ async function renderInspectionPdf(arg){
   if(!blank)fillInspectionSales();
   if(!blank && !validate({simplified})){pdfGenerationStatus('필수 입력을 확인하세요. 표시된 항목을 작성한 뒤 다시 생성할 수 있습니다.');return;}
   const captured=BazInspectionSession.freeze(collectFormData()),asLine=(()=>{const t=asItemText(),c=asItemCode();return t?(c?`${t} (${c})`:t):'';})();
-  if(!blank&&!localOnly&&!await saveCurrentTask()){pdfGenerationStatus('초안을 기기에 보관하지 못했습니다. 현재 내용은 화면에 유지됩니다. 저장 공간을 확인하거나 PDF만 별도 보관하세요. 자동 전송은 시작하지 않았습니다.',true);return;}
+  if(!blank&&!localOnly){
+    const saved=window.BazPerf.start('pdf_draft_save');
+    try{
+      if(!await saveCurrentTask()){pdfGenerationStatus('초안을 기기에 보관하지 못했습니다. 현재 내용은 화면에 유지됩니다. 저장 공간을 확인하거나 PDF만 별도 보관하세요. 자동 전송은 시작하지 않았습니다.',true);return;}
+    }finally{saved();}
+  }
   if(!inspectionView.matches(startingEpoch)&&_currentTaskId!==null&&captured.basic.hospital!==v('hospital'))return;
   const photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(captured),basis=captured.handover,viewContext=inspectionContext();
   const uploadContext={...viewContext,hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',taskRevision:_currentTaskRevision,pdfFormat:simplified?'simplified':'standard',requireSourceBasis:true,sourcePrepared:false,sourcePdfRevision:basis?.sourcePdfRevision??basis?.sourceSnapshot?.pdf?.revision??0};
@@ -2257,11 +2272,12 @@ async function renderInspectionPdf(arg){
       if(unchanged)await saveCurrentTask({status:'completed',documentNo:docNo});
       if(!inspectionIsCurrent(viewContext))return;
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
-      pdfPublisher.publish(pdfBlob,shareFilename,uploadContext);
+      pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted);
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
       //   (현장 처리 기록은 handover 로 일원화. 방문로그 백엔드는 은퇴.)
+      return true;
     }
   }catch(e){
     hideLoading();

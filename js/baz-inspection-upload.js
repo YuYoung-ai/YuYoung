@@ -37,14 +37,14 @@
    checkAccount(owner);return prepared;
   }
   async function call(action,data,owner,s){
-   const measured=root.BazPerf?root.BazPerf.start(action):function(){},url=new URL(options.url);
+   const measured=root.BazPerf?.start(action),url=new URL(options.url);
    if(url.origin!=='https://script.google.com'||!/^\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(url.pathname))throw new Error('PDF 저장 서버 주소를 확인하세요.');
    // Google ContentService redirects the response to another origin. Keep each
    // transport distinct from warm-up GETs and stale browser redirect caches;
    // uploadId/hash/baseRevision in the body remain fixed across retries.
    url.searchParams.set('pdfRequest',id());
    const duration=action==='inspection_pdf_job_status'?10000:action==='inspection_pdf_job_resume'?20000:action==='inspection_pdf_job_submit'?35000:action==='inspection_pdf_resolve'||action==='inspection_pdf_job_source'?30000:120000;
-   const ctl=new AbortController(),expires=Date.now()+duration;let timer,rejectLocal;
+   const ctl=new AbortController(),expires=Date.now()+duration;let timer,rejectLocal,serverMs;
    const timeout=new Promise((_,reject)=>{rejectLocal=reject;});
    function cancel(){ctl.abort();const e=new Error('응답 대기 시간이 지났거나 전송 확인을 중단했습니다. 같은 파일로 다시 확인해 주세요.');e.transient=true;rejectLocal(e);}
    timer=setTimeout(cancel,duration);
@@ -56,11 +56,12 @@
      if(response.ok===false){const e=new Error('저장 서버 응답 오류 ('+response.status+').');e.transient=response.status===408||response.status===429||response.status>=500;e.noRetry=!e.transient;throw e;}
      const value=await response.json();checkAccount(owner);return value;
     })()]);
+    serverMs=result?.serverMs;
     if(!result||typeof result.success!=='boolean'){const e=new Error('저장 서버 응답을 확인하지 못했습니다. 같은 파일로 다시 시도해 주세요.');e.transient=true;throw e;}
     if(!result.success){const e=new Error(result.error||'PDF 저장 응답을 확인하지 못했습니다.');e.code=result.code||'';e.sourceConflict=!!result.sourceConflict||['SOURCE_REQUIRED','SOURCE_CHANGED','VERSION_CHANGED','TARGET_CHANGED'].includes(e.code);e.noRetry=!!result.conflict||['WRONG_OWNER','INVALID_JOB','INVALID_FILE'].includes(e.code);e.transient=!e.sourceConflict&&!e.noRetry&&(!!result.retryable||e.code==='LOCK_BUSY'||/(잠금.*시간\s*초과|lock.*(?:timeout|timed out)|timed out.*lock)/i.test(e.message));throw e;}
     return result;
    }catch(e){checkAccount(owner);if(e.name==='AbortError'||e.transient==null&&!e.noRetry)e.transient=true;throw e;}
-   finally{clearTimeout(timer);if(s){s.cancel=null;s.expires=0;}measured();}
+   finally{clearTimeout(timer);if(s){s.cancel=null;s.expires=0;}measured?.({bytes:data.bytes,serverMs,jobId:data.uploadId});}
   }
   function encoded(blob,s){return new Promise((resolve,reject)=>{
    const reader=new FileReader();let settled=false;const timer=setTimeout(()=>finish(new Error('PDF 파일 읽기가 지연되고 있습니다. 같은 파일로 다시 시도해 주세요.')),30000);
@@ -119,7 +120,7 @@
     progress(s,'handover','done');
    }
    if(result.state==='complete'&&result.commentAttached)progress(s,'comment','done');
-   await persist(s);
+   if(result.state!=='complete')await persist(s);
   }
   async function executeJob(s,automatic){
    let result={state:'missing'};
@@ -130,11 +131,15 @@
    }
    if(!result.received&&result.state!=='blocked'&&!automatic&&s.blob){
     if(s.blob.size>MAX_BYTES){const error=new Error('PDF는 최대 7MB까지 전송할 수 있습니다.');error.noRetry=true;throw error;}
-    s.sha256=s.sha256||await hash(s.blob);
-    s.uploadAttempted=true;
-    await persist(s);
-    notice(s,'Google Drive에 PDF를 저장하는 중…');progress(s,'drive','working');
-    const base64=await encoded(s.blob,s);
+    const prepared=root.BazPerf?.start('pdf_delivery_prepare');
+    let base64;
+    try{
+     s.sha256=s.sha256||await hash(s.blob);
+     s.uploadAttempted=true;
+     await persist(s);
+     base64=await encoded(s.blob,s);
+    }finally{prepared?.({bytes:s.blob.size,jobId:s.uploadId});}
+    notice(s,'PDF 저장 및 접수 댓글 연결 중…');progress(s,'drive','working');
     result=await jobRequest(s,'submit',{...payload(s.context),filename:s.filename,bytes:s.blob.size,sha256:s.sha256,base64,baseRevision:s.context.sourcePdfRevision});
     await showJob(s,result);
    }
@@ -162,7 +167,19 @@
     }
    }
    if(result.state==='complete'&&result.commentAttached&&s.saved){
-    if(!s.recorded){await options.onSaved(s.saved,s.context);s.recorded=true;}
+    s.deliveryConfirmed=true;
+    if(!s.recorded){
+     const measured=root.BazPerf?.start('pdf_delivery_local_save');
+     try{await options.onSaved(s.saved,s.context);s.recorded=true;}
+     catch(error){
+      checkAccount(s.owner);
+      await persist(s);
+      notice(s,'Drive 저장·Handover 연결·댓글 첨부 완료 · 기기 보관을 다시 확인해 주세요. '+error.message);
+      if(visible(s)){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}
+      return;
+     }
+     finally{measured?.({jobId:s.uploadId});}
+    }
     s.complete=true;s.autoResumeEligible=false;
     notice(s,'PDF 생성·Drive 저장·Handover 연결·접수 댓글 첨부 완료');
     if(visible(s))retry.hidden=true;
@@ -276,8 +293,20 @@
    if(active.size>1)notice(s,'PDF 생성 완료 · 앞선 문서의 전송이 끝나면 이 파일을 전송합니다.');
    // Persist every newly generated Blob before waiting for another document's
    // transfer. Network writes are serialized, local PDF rendering is independent.
-   const checkpoint=persist(s);
-   s.running=transferChain.catch(()=>{}).then(async()=>{await checkpoint;return execute(s,automatic);}).finally(()=>{s.busy=false;active.delete(s);if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}});
+   const queued=root.BazPerf?.start('pdf_delivery_queue'),checkpoint=persist(s);
+   s.running=transferChain.catch(()=>{}).then(async()=>{
+    await checkpoint;
+    queued?.({jobId:s.uploadId});
+    return execute(s,automatic);
+   }).finally(()=>{
+    s.busy=false;active.delete(s);
+    if(Number.isFinite(s.startedAt)){
+     const metric=(s.deliveryConfirmed||s.complete&&s.stages.comment==='done')&&visible(s)?'pdf_delivery_total':'pdf_delivery_incomplete';
+     root.BazPerf?.start(metric,s.startedAt)({bytes:s.originalBytes,jobId:s.uploadId});
+     s.startedAt=null;
+    }
+    if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}
+   });
    transferChain=s.running;return s.running;
   }
   async function retryCurrent(){const s=current;if(!s||!visible(s)||s.busy)return;return run(s);}
@@ -310,7 +339,12 @@
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
    isBusy(){return active.size>0;},
    recover(context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}}));},
-   publish(blob,filename,context){if(current?.busy&&current.blob===blob&&current.context.taskId===context.taskId&&visible(current))return current.running;const p=preparations.get(context),s=select({blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'}});progress(s,'drive','waiting');return run(s);},
+   publish(blob,filename,context,startedAt){
+    if(current?.busy&&current.blob===blob&&current.context.taskId===context.taskId&&visible(current))return current.running;
+    const p=preparations.get(context),s=select({blob,filename,context:{...context},owner:p?p.owner:options.token(),preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'},startedAt,originalBytes:blob.size});
+    progress(s,'drive','waiting');
+    return run(s);
+   },
    resume(saved,context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({saved,recorded:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'done',drive:'done',handover:'done'}}));},
    async restore(context,settings){
     if(!outbox||current?.busy||options.isCurrent&&!options.isCurrent(context))return false;const previous=current,token=options.token();let job;
