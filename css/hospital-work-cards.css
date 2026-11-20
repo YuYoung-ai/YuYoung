@@ -65,9 +65,4 @@ body.staff-work.mode-mobile #list .mobile-card:not(.editable-card)>.mobile-statu
 .request-id-line{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
 .request-id-line code{color:var(--text);user-select:all}
 
-[data-inspection-search] .workspace-views,
-[data-inspection-search] .work-periods,
-[data-inspection-search] .metrics,
-[data-inspection-search] .workspace-global-alerts,
-[data-inspection-search] .list-actions{display:none}
 .top-actions .top-action-link{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:7px 11px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--text);font:inherit;font-size:12px;text-decoration:none;white-space:nowrap}.top-actions .top-action-link:hover{background:var(--soft)}
