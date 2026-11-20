@@ -8,10 +8,47 @@
   ['uVer','HP 교체품 버전'],
   ['nozzleDate','노즐 제조일자']
  ];
+ const deviceSlots=[0,1,2];
+ const sharedFields=['hospital','receiveDate','receiver','inspectDate','csName'];
+ const requestKey=(owner,requestId)=>'baz_handover_inspection_v1:'+owner+':'+requestId;
+ function hasPending(storage,owner,requestId){
+  if(!owner)return false;
+  try{return storage.getItem(requestKey(owner,requestId)+':pending-devices')==='yes';}catch{return false;}
+ }
+ function mountDevices(options){
+  const panel=document.createElement('section'),heading=document.createElement('h2');
+  const devices=document.createElement('div'),controls=document.createElement('div'),status=document.createElement('p');
+  const add=document.createElement('button'),remove=document.createElement('button'),pdf=document.createElement('a');
+  panel.id='combinedDevices';panel.className='work-flow-panel';heading.textContent='점검 장비';
+  devices.className='combined-device-tabs';devices.setAttribute('role','group');devices.setAttribute('aria-label','장비 선택');
+  controls.className='combined-device-actions';
+  add.type=remove.type='button';add.textContent='+ 장비 추가';remove.textContent='작성 대상에서 빼기';
+  add.onclick=options.add;remove.onclick=options.remove;
+  pdf.textContent='선택 장비 PDF 보기';pdf.target='_blank';pdf.rel='noopener noreferrer';
+  status.setAttribute('role','status');status.hidden=true;
+  controls.append(add,remove,pdf);panel.append(heading,devices,controls,status);
+  document.querySelector('.combined-form-columns').before(panel);
+  return {
+   render(slots,active,busy){
+    devices.replaceChildren(...slots.map(slot=>{
+     const tab=document.createElement('button');
+     tab.type='button';tab.dataset.deviceSlot=slot.index;tab.setAttribute('aria-pressed',String(slot.index===active));
+     tab.textContent=['장비 '+(slot.index+1),slot.sn,slot.complete?'발행 완료':''].filter(Boolean).join(' · ');
+     tab.disabled=busy;tab.onclick=()=>options.select(slot.index);return tab;
+    }));
+    const selected=slots.find(slot=>slot.index===active);
+    add.disabled=busy;add.hidden=slots.length>=deviceSlots.length;
+    remove.disabled=busy;remove.hidden=!selected?.removable;
+    pdf.hidden=!selected?.pdfUrl;
+    if(selected?.pdfUrl)pdf.href=selected.pdfUrl;else pdf.removeAttribute('href');
+   },
+   status(message){status.textContent=message;status.hidden=!message;}
+  };
+ }
  function mountLayout(){
   document.body.classList.add('combined-inspection');
   const stylesheet=document.createElement('link');
-  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=355';
+  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=358';
   document.head.append(stylesheet);
   const theme=document.querySelector('.baz-theme-floating[data-baz-theme-toggle]');
   if(theme){
@@ -98,17 +135,40 @@
  }
  function create(options){
   const {requestId,storage,owner,checkAccount,auth,api,flow,session,handover,url,source,link,measure}=options;
-  const key='baz_handover_inspection_v1:'+owner+':'+requestId;
-  let request;
+  const key=requestKey(owner,requestId);
+  const groupKey=key+':devices',primaryTask='handover-'+requestId;
+  const taskIdFor=slot=>slot===0?primaryTask:primaryTask+'-device-'+(slot+1);
+  const entryKey=taskId=>taskId===primaryTask?key:key+':'+taskId;
+  const entry=taskId=>JSON.parse(storage.getItem(entryKey(taskId))||'null');
+  let request,records=[];
+
+  function slots(){
+   const stored=JSON.parse(storage.getItem(groupKey)||'null');
+   return [0,...deviceSlots.slice(1).filter(slot=>stored?.includes(slot)||entry(taskIdFor(slot)))];
+  }
+
+  function setSlots(selected){
+   checkAccount();
+   storage.setItem(groupKey,JSON.stringify(selected));
+  }
+
+  function markPending(pending){
+   const marker=key+':pending-devices';
+   try{
+    checkAccount();
+    if(pending&&!storage.getItem(marker))storage.setItem(marker,'yes');
+    else if(!pending&&storage.getItem(marker))storage.removeItem(marker);
+   }catch{}
+  }
 
   async function readRequest(){
    checkAccount();
    const result=await api.get('work_document_status',{requestId});
    checkAccount();
-   if(!result.success||result.request?.id!==requestId||result.request.deletedAt)
+   if(!result.success||result.request?.id!==requestId||result.request.deletedAt||result.request.status==='취소')
     throw new Error(result.error||'접수 정보를 확인하지 못했습니다.');
-   const existing=JSON.parse(storage.getItem(key)||'null');
-   if(!existing&&result.records?.length)
+   records=result.records||[];
+   if(!slots().some(slot=>entry(taskIdFor(slot)))&&records.length)
     throw new Error('이 접수에 저장된 현장 기록이 있습니다. 접수 관리에서 기존 내역서를 이어서 작성하세요.');
    request=result.request;
    return request;
@@ -123,13 +183,17 @@
    }finally{clearTimeout(timer);}
   }
 
-  function toHandover(draft,fields,previous){
+  function toHandover(draft,fields,previous,taskId){
    const b=draft.basic;
    const sn=flow.serials(b.serialNo),assigned=flow.serials(request.sn);
    if(!flow.sameInspectionIdentity({hospital:b.hospital},{hospital:request.hospitalName}))
     throw new Error('접수의 병원명을 확인하세요.');
-   if(sn.length!==1||assigned.length&&!assigned.includes(sn[0]))
-    throw new Error('이 접수에서 처리한 장비 S/N 한 개를 입력하세요.');
+   if(sn.length!==1)
+    throw new Error('장비 S/N을 한 개만 입력하세요.');
+   if(taskId===primaryTask&&assigned.length&&!assigned.includes(sn[0]))
+    throw new Error('장비 1에는 접수에 등록된 S/N을 입력하세요.');
+   if(records.some(record=>record.recordId!==previous?.id&&record.date===b.inspectDate&&flow.serials(record.sn).includes(sn[0])))
+    throw new Error('이 접수에 같은 처리일과 S/N의 현장 기록이 있습니다. 기존 내역서를 확인하세요.');
    if(!b.inspectDate||!b.actionDetail.trim())throw new Error('처리일과 실제 조치 내용을 입력하세요.');
    const cost=handover.parseCost(b.cost);
    if(!cost.ok||(draft.pay==='유상')!==(cost.value>0))throw new Error('유상·무상과 비용을 확인하세요.');
@@ -146,26 +210,35 @@
    return form;
   }
 
-  async function prepare(draft,fields,taskId){
+  function validateDraft(draft,fields,taskId){
    checkAccount();
    if(!request)throw new Error('접수를 다시 불러와 주세요.');
    if(!draft.types.includes('A/S')&&!draft.types.includes('장비 점검'))
     throw new Error('A/S 또는 장비 점검을 선택해 주세요.');
-   const previous=JSON.parse(storage.getItem(key)||'null');
-   const form=toHandover(draft,fields,previous);
+   const previous=entry(taskId),form=toHandover(draft,fields,previous,taskId);
+   if(previous){
+    const payload=handover.buildPayload(form,{reqId:previous.id});
+    delete payload.token;
+    if(JSON.stringify(previous.payload)!==JSON.stringify(payload))
+     throw new Error('시트 전송 당시와 입력이 다릅니다. 전송한 내용을 복원하거나 기존 접수에서 원본을 확인하세요.');
+   }
+   return {previous,form};
+  }
+
+  async function prepare(draft,fields,taskId){
+   const {previous,form}=validateDraft(draft,fields,taskId);
+   const journal=entryKey(taskId);
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+taskId));
    const id=Array.from(new Uint8Array(digest).slice(0,16),byte=>byte.toString(16).padStart(2,'0')).join('');
    const payload=handover.buildPayload(form,{reqId:id});
    delete payload.token;
    if(previous?.id!==undefined&&previous.id!==id)throw new Error('이 접수의 통합 초안을 다시 열어 주세요.');
    let entry=previous||{id,payload,state:'pending'};
-   if(JSON.stringify(entry.payload)!==JSON.stringify(payload))
-    throw new Error('시트 전송 당시와 입력이 다릅니다. 전송한 내용을 복원하거나 기존 접수에서 원본을 확인하세요.');
    const finishSheet=measure('pdf_delivery_sheet');
    let receipt;
    try{
     if(entry.state==='pending'){
-     storage.setItem(key,JSON.stringify(entry));
+     storage.setItem(journal,JSON.stringify(entry));
      if(previous){
       const status=new URL(url);
       status.search=new URLSearchParams({action:'savecheck',reqId:id});
@@ -173,11 +246,11 @@
       if(!checked.success||checked.reqId!==id)throw new Error('시트의 기존 저장 상태를 확인하지 못했습니다.');
       if(checked.found)receipt=accept(checked.result,id);
       else if(draft.handover?.recordId===id)receipt=draft.handover.deliveryReceipt;
-      else entry=await submit(payload,id);
-     }else entry=await submit(payload,id);
+      else entry=await submit(payload,id,journal);
+     }else entry=await submit(payload,id,journal);
      receipt=receipt||entry.receipt;
      entry={...entry,id,payload,state:'confirmed'};
-     storage.setItem(key,JSON.stringify(entry));
+     storage.setItem(journal,JSON.stringify(entry));
     }
     const identity={hospital:form.hosp,date:form.date,sn:form.sn};
     receipt=receipt||await source({recordId:id,...identity});
@@ -199,23 +272,33 @@
    return result.inspectionReceipt;
   }
 
-  async function submit(payload,id){
+  async function submit(payload,id,journal){
    checkAccount();
    const result=await transport(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
     body:JSON.stringify({...payload,token:auth.token()})});
    checkAccount();
    if(result?.success===false){
-    storage.removeItem(key);
+    storage.removeItem(journal);
    }
    return {receipt:accept(result,id)};
   }
-  function pdfStarted(){return !!JSON.parse(storage.getItem(key)||'null')?.pdfStarted;}
-  function rememberPdf(recordId){
-   const entry=JSON.parse(storage.getItem(key)||'null');
-   if(entry?.id!==recordId||entry.state!=='confirmed')throw new Error('시트 저장 결과를 다시 확인해 주세요.');
-   storage.setItem(key,JSON.stringify({...entry,pdfStarted:true}));
+  async function pdfStatus(context){
+   const result=await api.get('work_document_status',{requestId,recordId:context.recordId});
+   checkAccount();
+   if(!result.success||result.request?.id!==requestId||result.source?.recordId!==context.recordId||
+      !flow.sameInspectionIdentity(context,result.source))
+    throw new Error('이 장비의 기존 PDF 저장 결과를 확인하지 못했습니다.');
+   return result;
   }
-  return {readRequest,prepare,pdfStarted,rememberPdf};
+
+  function rememberPdf(recordId,taskId,uploadId){
+   const saved=entry(taskId);
+   if(saved?.id!==recordId||saved.state!=='confirmed')throw new Error('시트 저장 결과를 다시 확인해 주세요.');
+   const savedId=saved.uploadId||uploadId;
+   storage.setItem(entryKey(taskId),JSON.stringify({...saved,pdfStarted:true,...(savedId?{uploadId:savedId}:{})}));
+   return savedId;
+  }
+  return {readRequest,prepare,validateDraft,taskIdFor,slots,setSlots,entry,pdfStatus,rememberPdf,markPending};
  }
- root.BazHandoverInspection={create,mountFields,mountLayout};
+ root.BazHandoverInspection={create,mountFields,mountLayout,mountDevices,deviceSlots,sharedFields,hasPending};
 })(window);

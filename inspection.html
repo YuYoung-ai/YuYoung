@@ -321,7 +321,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=349"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-inspection-relink.js?v=360"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
 <style>#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-inspection.css?v=295">
@@ -646,8 +646,8 @@
 
 <script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=351"></script>
-<script src="js/baz-inspection-hospitals.js?v=265"></script><script src="js/baz-autocomplete.js?v=257"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=360"></script>
+<script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
 <script>
@@ -713,6 +713,18 @@ function fillInspectionSales(requestSales){
   if(!value||receiver.value.trim())return false;
   receiver.value=value;return true;
 }
+let automaticSubscription='';
+function fillInspectionSubscription(){
+  if(!combinedTaskId||!HOSPITAL_DB.length)return false;
+  const field=document.getElementById('subscription'),entered=field.value.trim();
+  if(entered&&entered!==automaticSubscription)return false;
+  automaticSubscription=BazInspectionHospitals.subscriptionFor({hospital:v('hospital'),serialNo:v('serialNo')},HOSPITAL_DB);
+  if(entered===automaticSubscription)return false;
+  field.value=automaticSubscription;
+  return true;
+}
+document.getElementById('subscription').addEventListener('input',()=>{automaticSubscription='';});
+document.getElementById('serialNo').addEventListener('change',()=>{if(fillInspectionSubscription())autoSave();});
 // 병원명 자동완성 (선택 시 S/N·구독·접수처 자동 입력)
 const hospitalAutocomplete=setupAutocomplete({
   inputId:'hospital', dropdownId:'hospDropdown',
@@ -720,9 +732,9 @@ const hospitalAutocomplete=setupAutocomplete({
   itemText: h => h.n,
   startsLimit: 20,
   renderItem: h => `
-        <div style="font-weight:700;color:#1B2F5E;">${esc(h.n)}</div>
-        <div style="font-size:11px;color:#6B7A99;margin-top:1px;">
-          ${h.s?'S/N '+esc(h.s):'<span style=\'color:#C0392B\'>S/N 없음</span>'} · ${esc(h.c||'미가입')}${h.sa?' · '+esc(h.sa):''}
+        <div style="font-weight:700;color:var(--text);">${esc(h.n)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">
+          ${h.s?'S/N '+esc(h.s):'S/N 없음'} · ${esc(h.c||'미가입')}${h.sa?' · '+esc(h.sa):''}
         </div>`,
   onInput: ()=>hospitalBinding.input(),
   onPick: (h)=>{
@@ -733,7 +745,12 @@ const hospitalAutocomplete=setupAutocomplete({
 });
 const hospitalDb=window.BazInspectionHospitals.create({
   rows:HOSPITAL_DB,url:HANDOVER_URL,
-  changed:()=>{hospitalAutocomplete.refresh();setTimeout(()=>{if(fillInspectionSales())autoSave();},0);},
+  changed:()=>{
+    hospitalAutocomplete.refresh();setTimeout(()=>{
+      const salesChanged=fillInspectionSales(),subscriptionChanged=fillInspectionSubscription();
+      if(salesChanged||subscriptionChanged)autoSave();
+    },0);
+  },
   status:message=>{document.getElementById('hospitalDbStatus').textContent=message;},
   busy:loading=>{document.getElementById('hospitalDbRefresh').disabled=loading;}
 });
@@ -1312,6 +1329,7 @@ function checkInspectionIdentity(basic){
 function collectFormData(){
   const basic={};
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
+  if(combinedTaskId&&automaticSubscription===basic.subscription&&automaticSubscription)basic.subscriptionFromDb=automaticSubscription;
   if(typeof combinedTaskId==='string')basic.handoverFields=Object.fromEntries(
     Array.from(document.querySelectorAll('[data-handover-field]'),field=>[field.dataset.handoverField,field.value.trim()])
   );
@@ -1343,6 +1361,11 @@ function applyFormData(d){
   syncPdfFormat();
   // 기본 입력
   BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el && d.basic && d.basic[id]!=null) el.value=d.basic[id]; });
+  automaticSubscription=d.basic?.subscriptionFromDb||'';
+  fillInspectionSubscription();
+  if(combinedTaskId)for(const field of document.querySelectorAll('[data-handover-field]')){
+    field.value=d.basic?.handoverFields?.[field.dataset.handoverField]||'';
+  }
   hospitalBinding.restore(d.basic);
   fillInspectionSales();
   // A/S 분류: 대분류를 먼저 반영해 유형 옵션을 만든 뒤 유형 값을 복원
@@ -1619,24 +1642,176 @@ function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
 const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,isCurrent:inspectionIsCurrent,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})(),window.BazWorkFlow.sameInspectionIdentity),
 repairTarget(context){return window.BazInspectionRelink.ensureLink(context);},
+chooseTarget(context,onLinked){return window.BazInspectionRelink.open({recordId:context.recordId,onLinked});},
 prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연결을 확인할 수 없습니다. 다시 열어 주세요.');return window.BazInspectionFlow.prepareContext(context);},confirmAttachment(saved,context,options){return window.BazInspectionFlow.confirmAttachment(saved,context,options);},onProgress(stages){if(window.BazInspectionFlow)window.BazInspectionFlow.progress(stages);},onRecovered(job){
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
   const size=job.blob?.size||job.saved?.pdf?.bytes||job.bytes||0;document.getElementById('doneFsize').textContent=(size/1000000).toFixed(1)+' MB';
   if(job.blob)window.BazInspectionShare.capture(job.blob,job.filename,()=>{const href=URL.createObjectURL(job.blob),a=document.createElement('a');a.href=href;a.download=job.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);});else window.BazInspectionShare.reset();
-},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);if(!pdfPublisher.isBusy())flushSyncQueue().catch(()=>{});},async onSaved(saved,context){
+},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);if(!combinedDeviceBusy&&!pdfPublisher.isBusy())flushSyncQueue().catch(()=>{});},onSaved:storeInspectionPdf});
+async function storeInspectionPdf(saved,context){
   const task=await draftRepository.get(context.taskId);
   const identity={hospital:context.hospital,inspectDate:context.date,serialNo:context.sn||''};
   if(!task||!BazWorkFlow.sameInspectionIdentity(task.data.basic,identity)||task.data.handover?.recordId&&task.data.handover.recordId!==saved.recordId)throw new Error('원래 초안의 병원 또는 연결이 변경되어 저장 결과를 덮어쓰지 않았습니다. 보관된 PDF와 원래 작업을 확인하세요.');
-  task.data.handover={...task.data.handover,recordId:saved.recordId,requestId:context.requestId||'',identity,sourceBasis:context.sourceBasis,sourcePdfRevision:saved.pdf.revision};task.data.pdfDocument=saved.pdf;if(!await saveTask(task))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');if(cloudConfigured())cloudSyncTask(task,{silent:true});
+  task.data.handover={...task.data.handover,recordId:saved.recordId,requestId:context.requestId||'',identity,sourceBasis:context.sourceBasis,sourcePdfRevision:saved.pdf.revision};task.data.pdfDocument=saved.pdf;
+  if(context.batchDevice)task.status='completed';
+  if(!await saveTask(task))throw new Error('PDF는 저장되었지만 기기의 작업 보관 공간이 부족합니다. 저장된 PDF를 확인하고 다시 시도하세요.');
+  if(cloudConfigured()&&!combinedDeviceBusy)cloudSyncTask(task,{silent:true});
   if(inspectionIsCurrent(context)){handoverReference={...task?.data?.handover,recordId:saved.recordId,requestId:context.requestId||'',identity,sourceBasis:context.sourceBasis,sourcePdfRevision:saved.pdf.revision};uploadedPdfDocument=saved.pdf;if(window.BazInspectionFlow)window.BazInspectionFlow.refresh(handoverReference);}
-}});
-let combinedFlow=null;
-async function restorePendingPdf(){
+  refreshCombinedDevices();
+}
+let combinedFlow=null,combinedRequestData=null,combinedDevicePanel=null,combinedDeviceBusy=false;
+let combinedActiveSlot=0;
+async function restorePendingPdf({duringGeneration=false,show=true,deliveryUploadId,batchDevice=false}={}){
   await window.inspectionSessionReady;
-  if(!_currentTaskId||_photoBusy||_pdfBusy||_pdfStarting)return false;
-  const context=inspectionContext();if(!context.hospital||!context.date)return false;
+  if(!_currentTaskId||_photoBusy||_pdfBusy||_pdfStarting&&!duringGeneration)return false;
+  const context={...inspectionContext(),deliveryUploadId,batchDevice};if(!context.hospital||!context.date)return false;
   const restored=await pdfPublisher.restore(context)||inspectionIsCurrent(context)&&await pdfPublisher.restoreServer(context);
-  if(restored&&inspectionIsCurrent(context)){document.getElementById('doneOverlay').classList.add('show');return true;}return false;
+  if(restored&&inspectionIsCurrent(context)){
+    if(show)document.getElementById('doneOverlay').classList.add('show');
+    return true;
+  }
+  return false;
+}
+
+function combinedDeviceInfo(slot){
+  const id=combinedFlow.taskIdFor(slot),task=getTask(id),entry=combinedFlow.entry(id);
+  const active=slot===combinedActiveSlot;
+  const pdf=task?.data?.pdfDocument;
+  const complete=!!(pdf?.url&&entry?.id&&entry.id===task.data.handover?.recordId&&task.data.handover.requestId===combinedRequest);
+  return {index:slot,sn:(active?v('serialNo'):task?.serial)||entry?.payload?.sn||'',complete,
+    pdfUrl:complete&&/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?|$)/.test(pdf.url)?pdf.url:'',
+    removable:slot!==0&&!entry};
+}
+
+function refreshCombinedDevices(){
+  if(!combinedDevicePanel)return;
+  const slots=combinedFlow.slots(),info=slots.map(combinedDeviceInfo),current=info.find(slot=>slot.index===combinedActiveSlot);
+  const allComplete=info.every(slot=>slot.complete);
+  combinedFlow.markPending(info.length>1&&!allComplete);
+  combinedDevicePanel.render(info,combinedActiveSlot,combinedDeviceBusy);
+  const commonLocked=slots.some(slot=>combinedFlow.entry(combinedFlow.taskIdFor(slot)));
+  for(const id of BazHandoverInspection.sharedFields){
+    document.getElementById(id).readOnly=id==='hospital'||combinedActiveSlot!==0||commonLocked;
+  }
+  document.getElementById('serialNo').readOnly=!!combinedFlow.entry(combinedFlow.taskIdFor(combinedActiveSlot));
+  const generate=document.getElementById('generateBtn');
+  if(info.length===1)generate.textContent='시트 기록 및 PDF 발행';
+  else if(allComplete)generate.textContent='전체 발행 완료';
+  else if(info.some(slot=>slot.complete))generate.textContent='남은 장비 발행';
+  else generate.textContent='장비 '+info.length+'대 모두 발행';
+  generate.disabled=combinedDeviceBusy||info.length>1&&allComplete;
+  const fallback=document.getElementById('combinedFallback'),record=handoverReference?.recordId;
+  if(fallback){
+    fallback.hidden=!record||!!current?.complete;
+    if(record)fallback.href=BazWorkFlow.url('inspection.html',combinedRequest,record);
+  }
+}
+
+async function loadCombinedDevice(slot){
+  checkStorageAccount();
+  const id=combinedFlow.taskIdFor(slot),prior=await draftRepository.get(id);
+  checkStorageAccount();
+  const request=combinedRequestData,defaults=BazWorkFlow.reportForm(request);
+  const used=new Set(combinedFlow.slots().filter(other=>other!==slot).flatMap(other=>BazWorkFlow.serials(getTask(combinedFlow.taskIdFor(other))?.serial)));
+  const sn=BazWorkFlow.serials(request.sn).find(serial=>!used.has(serial))||'';
+  const fresh=BazWorkFlow.inspectionData({date:defaults.date||today,sn,hospitalName:defaults.hosp,
+    engineer:defaults.fse,gubun:defaults.gubun},request);
+  const first=getTask(combinedTaskId)?.data?.basic;
+  const data=prior?.data||{...fresh,pdfFormat:getTask(combinedTaskId)?.data?.pdfFormat};
+  const basic=Object.fromEntries(BASIC_IDS.map(key=>[key,data.basic?.[key]??'']));
+  const common=BazHandoverInspection.sharedFields;
+  if(slot!==0&&first)for(const key of common)basic[key]=first[key]??basic[key];
+  basic.hospital=request.hospitalName;
+  basic.receiveDate=basic.receiveDate||String(request.registeredAt||'').slice(0,10)||today;
+  basic.handoverFields=data.basic?.handoverFields;
+  basic.subscriptionFromDb=data.basic?.subscriptionFromDb;
+  await setCurrentTaskId(id);
+  combinedActiveSlot=slot;
+  clearAllInvalid();
+  applyFormData({...data,basic});
+  _draftDirty=false;
+  updateTaskStatusBar();
+  window.BazInspectionFlow?.refresh(handoverReference);
+  refreshCombinedDevices();
+}
+
+async function combinedDeviceAction(run){
+  if(inspectionPhase!=='ready'||combinedDeviceBusy||_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy())return;
+  combinedDeviceBusy=true;
+  document.querySelector('.wrap').inert=true;
+  refreshCombinedDevices();
+  try{
+    if(!await saveCurrentTask())throw new Error('현재 장비의 초안을 보관하지 못했습니다.');
+    await run();
+  }catch(error){
+    const message=error.message||'장비 작성 상태를 확인하세요.';
+    combinedDevicePanel.status(message);showToast(message);
+  }
+  finally{
+    combinedDeviceBusy=false;
+    document.querySelector('.wrap').inert=false;
+    refreshCombinedDevices();
+    scheduleCloudSync();
+  }
+}
+
+function selectCombinedDevice(slot){
+  if(slot!==combinedActiveSlot)return combinedDeviceAction(()=>loadCombinedDevice(slot));
+}
+
+function addCombinedDevice(){
+  return combinedDeviceAction(async()=>{
+    const slots=combinedFlow.slots(),slot=BazHandoverInspection.deviceSlots.find(value=>!slots.includes(value));
+    if(slot===undefined)return;
+    combinedFlow.setSlots([...slots,slot]);
+    await loadCombinedDevice(slot);
+    combinedDevicePanel.status('');
+  });
+}
+
+function removeCombinedDevice(){
+  return combinedDeviceAction(async()=>{
+    const slot=combinedActiveSlot;
+    if(!combinedDeviceInfo(slot).removable)return;
+    combinedFlow.setSlots(combinedFlow.slots().filter(value=>value!==slot));
+    await loadCombinedDevice(0);
+    combinedDevicePanel.status('장비를 작성 대상에서 뺐습니다. 추가하면 보관한 초안을 다시 열 수 있습니다.');
+  });
+}
+
+function publishCombinedDevices(){
+  return combinedDeviceAction(async()=>{
+    const slots=combinedFlow.slots(),serials=new Set();
+    for(const slot of slots){
+      if(slot!==combinedActiveSlot)await loadCombinedDevice(slot);
+      const serial=BazWorkFlow.serials(v('serialNo'));
+      const label='장비 '+(slot+1);
+      if(serial.length!==1)throw new Error(label+'의 S/N을 한 개 입력하세요.');
+      if(serials.has(serial[0]))throw new Error(label+'의 S/N이 다른 장비와 중복됩니다.');
+      serials.add(serial[0]);
+      if(combinedDeviceInfo(slot).complete)continue;
+      if(!validate({simplified:pdfFormat()==='simplified'}))throw new Error(label+'의 필수 입력을 확인하세요.');
+      try{combinedFlow.validateDraft(collectFormData(),{item:asSubName(),code:asItemCode()},_currentTaskId);}
+      catch(error){throw new Error(label+' · '+error.message);}
+    }
+    const pending=[];
+    for(const slot of slots){
+      if(combinedDeviceInfo(slot).complete)continue;
+      if(slot!==combinedActiveSlot)await loadCombinedDevice(slot);
+      combinedDevicePanel.status('장비 '+(slot+1)+' · '+v('serialNo')+' 발행 중…');
+      await generatePDF({batchDevice:true});
+      if(!combinedDeviceInfo(slot).complete)pending.push({
+        slot,sn:v('serialNo'),message:(document.getElementById('pdfUploadStatus').textContent||
+          document.getElementById('pdfGenerationState')?.textContent||'저장 상태를 확인하세요.').trim()
+      });
+    }
+    if(pending.length){
+      await loadCombinedDevice(pending[0].slot);
+      combinedDevicePanel.status(slots.length-pending.length+'/'+slots.length+'대 발행 완료 · 남은 장비는 다시 발행할 수 있습니다.\n'+
+        pending.map(result=>'장비 '+(result.slot+1)+' · '+result.sn+' · '+result.message).join('\n'));
+    }else combinedDevicePanel.status(slots.length+'대의 Drive 저장·Handover 연결·댓글 첨부가 완료되었습니다.');
+    document.getElementById('combinedDevices').scrollIntoView({block:'start'});
+  });
 }
 
 async function cloudRequest(url,options){
@@ -1705,7 +1880,7 @@ function cloudSyncTask(task,opts){
     if(!task||task.owner!==draftRepository.owner||!cloudConfigured())return {skip:true};
     try{
       checkStorageAccount();
-      if(_pdfBusy||_pdfStarting||pdfPublisher.isBusy()||!navigator.onLine)return {queued:true};
+      if(combinedDeviceBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy()||!navigator.onLine)return {queued:true};
       const full=await draftRepository.get(task.id);
       if(!full||full.owner!==draftRepository.owner)return {skip:true};
       const r=await cloudPost(taskToSyncPayload(full));checkStorageAccount();
@@ -1721,7 +1896,7 @@ function cloudSyncTask(task,opts){
 let _flushing=false;
 async function flushSyncQueue(){
   await window.inspectionStorageReady;
-  if(_flushing||!cloudConfigured()||!navigator.onLine)return;
+  if(_flushing||combinedDeviceBusy||!cloudConfigured()||!navigator.onLine)return;
   _flushing=true;
   try{
     for(const id of loadDelQueue())await cloudDeleteTask(id);
@@ -2154,14 +2329,14 @@ function downloadPdfBlob(blob,filename){
   a.href=href;a.download=filename;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(href),60000);
 }
-function inspectionPdfFilename(snapshot=collectFormData()){
+function inspectionPdfFilename(snapshot=collectFormData(),includeSerial=false){
   const safe=(s)=>String(s).replace(/[<>:/\\|?*"\x00-\x1f]/g,'').trim();
   const types=['A/S','장비 점검','장비 교체','장비 업그레이드']
     .filter(type=>snapshot.types.includes(type)).map(type=>type.replace(/[\/\s]/g,''));
   const type=types.join('+')||'점검';
   const hospital=safe(snapshot.basic.hospital)||'병원';
   const date=safe(snapshot.basic.inspectDate||today);
-  return `${type}_${hospital}_${date}.pdf`;
+  return [type,hospital,includeSerial?safe(snapshot.basic.serialNo):'',date].filter(Boolean).join('_')+'.pdf';
 }
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 let _generationPromise=null;
@@ -2180,8 +2355,9 @@ function generatePDF(arg){
     .catch(e=>{hideLoading();pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');})
     .finally(()=>{
       if(startsDelivery&&!publishing)window.BazPerf.start('pdf_delivery_incomplete',deliveryStarted)();
-      if(combinedFlow&&inspectionPhase==='ready')document.querySelector('.wrap').inert=false;
+      if(combinedFlow&&inspectionPhase==='ready')document.querySelector('.wrap').inert=combinedDeviceBusy;
       _pdfStarting=false;_generationPromise=null;document.getElementById('generateBtn').disabled=false;
+      refreshCombinedDevices();
     });
   return _generationPromise;
 }
@@ -2194,7 +2370,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
   if(!blank&&window.BazInspectionQrBridge?.beforeGenerate&&!await window.BazInspectionQrBridge.beforeGenerate())return;
   if(!inspectionView.matches(startingEpoch))return;
   const simplified=pdfFormat()==='simplified';
-  if(!blank)fillInspectionSales();
+  if(!blank){fillInspectionSales();fillInspectionSubscription();}
   if(!blank && !validate({simplified})){pdfGenerationStatus('필수 입력을 확인하세요. 표시된 항목을 작성한 뒤 다시 생성할 수 있습니다.');return;}
   let captured=BazInspectionSession.freeze(collectFormData());
   const asLine=(()=>{const t=asItemText(),c=asItemCode();return t?(c?`${t} (${c})`:t):'';})();
@@ -2208,7 +2384,22 @@ async function renderInspectionPdf(arg,deliveryStarted){
   let combinedLink,bindingSave;
   if(combinedFlow&&!preview&&!blank&&!localOnly&&!qrDraft){
     document.querySelector('.wrap').inert=true;
-    if(handoverReference?.recordId&&combinedFlow.pdfStarted()&&await restorePendingPdf())return;
+    const entry=combinedFlow.entry(_currentTaskId);
+    if(handoverReference?.recordId&&entry?.pdfStarted){
+      const context={...inspectionContext(),deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice};
+      if(await restorePendingPdf({duringGeneration:true,show:!opts.batchDevice,deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice})){
+        if(opts.batchDevice)await pdfPublisher.retry();
+        return true;
+      }
+      if(opts.batchDevice){
+        const prior=await combinedFlow.pdfStatus(context);
+        if(prior.pdfStored){
+          if(!prior.commentAttached)throw new Error('Drive에 보관된 PDF가 있습니다. 기존 내역서에서 댓글 연결 상태를 확인하세요.');
+          await storeInspectionPdf({recordId:context.recordId,pdf:prior.source.pdf},context);
+          return true;
+        }
+      }
+    }
     pdfGenerationStatus('시트 기록을 확인하는 중…');
     const fields={item:asSubName(),code:asItemCode()};
     const prepared=await combinedFlow.prepare(captured,fields,_currentTaskId);
@@ -2225,7 +2416,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
     document.getElementById('combinedFallback').hidden=false;
     bindingSave=saveCurrentTask();
   }
-  const photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(captured),basis=captured.handover,viewContext=inspectionContext();
+  const photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(captured,!!opts.batchDevice),basis=captured.handover,viewContext=inspectionContext();
   const uploadContext={...viewContext,hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',taskRevision:_currentTaskRevision,pdfFormat:simplified?'simplified':'standard',requireSourceBasis:true,sourcePrepared:false,sourcePdfRevision:basis?.sourcePdfRevision??basis?.sourceSnapshot?.pdf?.revision??0};
   pdfGenerationStatus('현재 내용을 고정했습니다. PDF 생성 중…');
   const totalDone=window.BazPerf.start('pdf_total');_pdfBusy=true;
@@ -2242,7 +2433,8 @@ async function renderInspectionPdf(arg,deliveryStarted){
     const pad=(n)=>String(n).padStart(2,'0');
     const hhmm=pad(now.getHours())+pad(now.getMinutes());
     const ymd=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
-    const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}${qrDraft?'-'+BazInspectionSession.id().slice(0,8):''}`;
+    const documentSuffix=qrDraft?'-'+BazInspectionSession.id().slice(0,8):opts.batchDevice?'-'+(combinedActiveSlot+1):'';
+    const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}${documentSuffix}`;
     const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
     const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft,snapshot:captured,asLine,omitNextDate:!!combinedFlow});
@@ -2297,19 +2489,27 @@ async function renderInspectionPdf(arg,deliveryStarted){
     }else{
       const shareFilename=_lastFname;
       const pdfBlob=generated.blob;
-      window.BazInspectionShare.capture(pdfBlob,shareFilename,()=>downloadPdfBlob(pdfBlob,shareFilename));
-      document.getElementById('doneFname').textContent=_lastFname;
-      document.getElementById('doneOverlay').classList.add('show');
-      showToast('PDF 생성 완료');
+      if(!opts.batchDevice){
+        window.BazInspectionShare.capture(pdfBlob,shareFilename,()=>downloadPdfBlob(pdfBlob,shareFilename));
+        document.getElementById('doneFname').textContent=_lastFname;
+        document.getElementById('doneOverlay').classList.add('show');
+        showToast('PDF 생성 완료');
+      }
       // 최종 PDF 생성 완료 → 현재 작업을 '완료' 상태 + 문서번호 기록
       exitSignMode();
       const content=d=>{const {savedAt,...rest}=d;return JSON.stringify(rest);};
       const unchanged=content(captured)===content(collectFormData());
-      if(unchanged)await saveCurrentTask({status:'completed',documentNo:docNo});
+      if(unchanged||opts.batchDevice&&inspectionIsCurrent(viewContext))
+        await saveCurrentTask({status:opts.batchDevice?'inspection_completed':'completed',documentNo:docNo});
       if(!inspectionIsCurrent(viewContext))return;
-      if(combinedLink)combinedFlow.rememberPdf(uploadContext.recordId);
+      if(combinedLink){
+        const uploadId=opts.batchDevice?BazInspectionSession.id():null;
+        uploadContext.deliveryUploadId=combinedFlow.rememberPdf(uploadContext.recordId,taskId,uploadId);
+        uploadContext.batchDevice=!!opts.batchDevice;
+      }
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
-      pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted);
+      const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted);
+      if(opts.batchDevice)await delivery;
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──
@@ -2325,7 +2525,10 @@ async function renderInspectionPdf(arg,deliveryStarted){
 }
 let _lastPreviewUrl=null;
 
-document.getElementById('generateBtn').addEventListener('click',()=>generatePDF(false));
+document.getElementById('generateBtn').addEventListener('click',()=>{
+  if(combinedFlow?.slots().length>1)return publishCombinedDevices();
+  return generatePDF(false);
+});
 document.getElementById('previewBtn').addEventListener('click',()=>generatePDF(true));
 document.getElementById('blankPdfBtn').addEventListener('click',()=>generatePDF({blank:true}));
 document.getElementById('doneSurvey').addEventListener('click',()=>{
@@ -2363,24 +2566,19 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=355')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=358')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,
     source:context=>pdfPublisher.source(context),link:context=>BazInspectionRelink.ensureLink(context),
     measure:metric=>BazPerf.start(metric),warn:showToast
    });
-   const request=await combinedFlow.readRequest();
-   await setCurrentTaskId(combinedTaskId);
-   const prior=await draftRepository.get(combinedTaskId);
-   const defaults=BazWorkFlow.reportForm(request);
-   const data=prior?.data||BazWorkFlow.inspectionData({date:defaults.date,sn:defaults.sn,
-     hospitalName:defaults.hosp,engineer:defaults.fse,gubun:defaults.gubun},request);
+   combinedRequestData=await combinedFlow.readRequest();
+   const current=await draftRepository.current(),slots=combinedFlow.slots();
    BazHandoverInspection.mountLayout();
    renderStep();
-   applyFormData(data);
-   BazHandoverInspection.mountFields(document.getElementById('actionDetail').closest('.field-group'),data.basic.handoverFields);
-   document.getElementById('generateBtn').textContent='시트 기록 및 PDF 발행';
+   BazHandoverInspection.mountFields(document.getElementById('actionDetail').closest('.field-group'));
+   combinedDevicePanel=BazHandoverInspection.mountDevices({select:selectCombinedDevice,add:addCombinedDevice,remove:removeCombinedDevice});
    for(const id of ['newTaskBtn','loadDraftBtn','doneNew','customerQrBtn','blankPdfBtn']){
     const button=document.getElementById(id);
     if(button)button.style.display='none';
@@ -2388,10 +2586,9 @@ window.inspectionSessionReady=(async()=>{
    const fallback=document.createElement('a');
    fallback.id='combinedFallback';fallback.textContent='기존 내역서에서 이어쓰기';
    fallback.target='_blank';fallback.rel='noopener';
-   const record=data.handover?.recordId;
-   if(record)fallback.href=BazWorkFlow.url('inspection.html',combinedRequest,record);
-   else fallback.hidden=true;
+   fallback.hidden=true;
    document.getElementById('generateBtn').parentElement.before(fallback);
+   await loadCombinedDevice(slots.find(slot=>combinedFlow.taskIdFor(slot)===current)??0);
    BazInspectionPdf.libraries().catch(()=>{});
   }else if(inspectionEntry.kind==='handover'){
    const entry=BazInspectionSession.read(localStorage,BazAuth,inspectionEntry),form=entry.form,ref=form.handover;

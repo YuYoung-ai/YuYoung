@@ -8,6 +8,48 @@
   display: none;
 }
 
+#combinedDevices {
+  margin-bottom: 12px;
+}
+
+#combinedDevices h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.combined-device-tabs,
+.combined-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.combined-device-actions {
+  margin-top: 8px;
+}
+
+#combinedDevices :is(button,a) {
+  max-width: 100%;
+  min-height: 42px;
+  padding: 8px 12px;
+  overflow-wrap: anywhere;
+}
+
+#combinedDevices button[aria-pressed="true"] {
+  border-color: var(--primary, #335d9d);
+  box-shadow: inset 0 0 0 1px var(--primary, #335d9d);
+  font-weight: 700;
+}
+
+#combinedDevices [hidden] {
+  display: none !important;
+}
+
+#combinedDevices p {
+  margin: 8px 0 0;
+  white-space: pre-line;
+}
+
 .combined-form-columns,
 .combined-extra-fields,
 .combined-inspection #inspList {

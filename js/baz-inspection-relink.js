@@ -27,11 +27,12 @@
   if(result.success||!result.retrySameOperation)localStorage.removeItem(storageKey);
   checked(result);return checked(await api.post('work_document_retry',params));
  }
- function open(){
+ function open(options={}){
+  const fixed=!!options.recordId;
   const account=BazAuth.name(),taskId=_currentTaskId,opened=basic();let selected=null,busy=false;
   const dialog=document.createElement('dialog');dialog.className='work-flow-panel inspection-relink';
   function node(tag,text){const n=document.createElement(tag);if(text)n.textContent=text;dialog.appendChild(n);return n;}
-  node('h3','Handover 기록 연결 변경');
+  node('h3',fixed?'저장된 PDF를 기존 접수에 연결':'Handover 기록 연결 변경');
   node('p','병원·처리일·S/N과 처리 내용을 확인해 연결하세요. 시트의 기록 ID를 수정할 필요는 없습니다.');
   node('p','현재 병원: '+opened.hospital+' · '+opened.inspectDate+' · '+(opened.serialNo||'S/N 미기록'));
   const current=handoverReference;node('p','현재 기록 ID: '+(current?.recordId||'미연결')+'\n접수 ID: '+(current?.requestId||'자동 확인'));
@@ -39,8 +40,11 @@
   const find=node('button','현재 병원의 기록 찾기');find.type='button';
   const lookup=node('button','입력한 기록 조회');lookup.type='button';
   const list=node('div');list.className='work-flow-records';
-  const requestLabel=node('label','연결할 접수 ID 또는 접수 주소 (선택)'),request=node('input');request.id='relink-request-id';requestLabel.htmlFor=request.id;request.value=current?.requestId||'';request.autocomplete='off';
-  node('p','접수를 지정하지 않으면 해당 원본의 현재 접수 연결을 확인합니다. 접수 관리의 Handover 연결 관리에서도 원본을 선택할 수 있습니다.');
+  const requestLabel=node('label',fixed?'연결할 접수 ID 또는 상세 주소':'연결할 접수 ID 또는 접수 주소 (선택)'),request=node('input');request.id='relink-request-id';requestLabel.htmlFor=request.id;request.value=current?.requestId||'';request.autocomplete='off';
+  if(fixed){
+   record.value=options.recordId;record.readOnly=true;find.hidden=lookup.hidden=true;
+   node('p','접수 관리에서 실제 접수를 열고 상세 주소나 접수 ID를 입력하세요.');
+  }else node('p','접수를 지정하지 않으면 해당 원본의 현재 접수 연결을 확인합니다. 접수 관리의 Handover 연결 관리에서도 원본을 선택할 수 있습니다.');
   const preview=node('p'),status=node('p');status.setAttribute('role','status');
   const apply=node('button','확인한 기록으로 연결');apply.type='button';apply.disabled=true;
   const close=node('button','닫기');close.type='button';close.onclick=()=>dialog.close();
@@ -65,9 +69,19 @@
   apply.onclick=()=>run(async()=>{
    if(!selected)throw new Error('연결할 원본을 먼저 조회하세요.');
    let requestId=request.value.trim();if(requestId){try{const u=new URL(requestId);requestId=u.searchParams.get('request')||'';}catch{}if(!flow.valid(requestId))throw new Error('접수 ID 또는 접수 주소를 확인하세요.');}
+   if(fixed){
+    if(!requestId)throw new Error('연결할 접수 ID 또는 상세 주소를 입력하세요.');
+    const result=checked(await api.get('work_document_status',{requestId})),target=result.request;guard();
+    const assigned=flow.serials(target?.sn);
+    if(target?.id!==requestId||target.deletedAt||target.status==='취소'||
+       !flow.sameInspectionIdentity({hospital:opened.hospital,date:opened.inspectDate},{hospital:target.hospitalName,date:target.visitAt})||
+       assigned.length&&!flow.serials(opened.serialNo).some(sn=>assigned.includes(sn)))
+     throw new Error('접수의 병원·방문일·장비 S/N을 확인하세요.');
+   }
    const context={hospital:opened.hospital,date:opened.inspectDate,sn:opened.serialNo,recordId:selected.recordId,requestId};
    const linked=await ensureLink(context);guard();
    if(requestId&&linked.request?.id!==requestId)throw new Error('선택한 접수 연결을 확인하지 못했습니다.');
+   if(fixed){dialog.close();await options.onLinked(requestId);return;}
    const receipt=await pdfPublisher.source(context);guard();
    const previous=handoverReference,previousPdf=uploadedPdfDocument;
    const reference={recordId:selected.recordId,requestId:linked.request?.id||'',identity:opened,sourceSnapshot:selected,sourcePdfRevision:selected.pdf?.revision||0};
@@ -78,6 +92,7 @@
    dialog.close();showToast('Handover 기록 연결을 변경했습니다.');
   });
   dialog.addEventListener('close',()=>dialog.remove());document.body.appendChild(dialog);dialog.showModal();
+  if(fixed)run(()=>select(options.recordId));
  }
  root.BazInspectionRelink={open,ensureLink};
 })(window);
