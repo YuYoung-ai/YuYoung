@@ -166,6 +166,83 @@
   margin-bottom: 0;
 }
 
+.combined-inspection #actionCard [hidden],
+.combined-inspection #inspCard [hidden] {
+  display: none !important;
+}
+
+.combined-skills {
+  min-inline-size: 0;
+  margin: 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--gray-line);
+  border-radius: 8px;
+}
+
+.combined-skills legend {
+  padding-inline: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.combined-skills .combined-extra-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.combined-bulk-toggle {
+  margin-left: auto;
+  min-height: 36px;
+  padding: 5px 10px;
+  border: 1px solid #c4d2e8;
+  border-radius: 7px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.combined-bulk-results {
+  display: grid;
+  grid-template-columns: minmax(102px, 1.2fr) repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.combined-bulk-results :is(select,button) {
+  min-width: 0;
+  min-height: 44px;
+  padding-inline: 5px;
+  border: 1px solid var(--gray-line);
+  border-radius: 7px;
+  background: var(--gray-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.combined-bulk-results button[aria-pressed="true"] {
+  border-color: var(--teal);
+  box-shadow: inset 0 0 0 1px var(--teal);
+  font-weight: 700;
+}
+
+.combined-bulk-results button:disabled {
+  opacity: .55;
+}
+
+.combined-inspection-pick {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0 auto;
+  accent-color: var(--teal);
+}
+
+@media (max-width: 480px) {
+  .combined-skills .combined-extra-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (min-width: 800px) {
   .combined-form-columns {
     grid-template-columns: repeat(2, minmax(0, 1fr));
