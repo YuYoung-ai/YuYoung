@@ -717,6 +717,7 @@ let automaticSubscription='';
 function fillInspectionSubscription(){
   if(!combinedTaskId||!HOSPITAL_DB.length)return false;
   const field=document.getElementById('subscription'),entered=field.value.trim();
+  if(!v('serialNo'))return false;
   if(entered&&entered!==automaticSubscription)return false;
   automaticSubscription=BazInspectionHospitals.subscriptionFor({hospital:v('hospital'),serialNo:v('serialNo')},HOSPITAL_DB);
   if(entered===automaticSubscription)return false;
@@ -832,6 +833,55 @@ function buildInspList(){
   `).join('');
 }
 
+let combinedInspectionResults=null;
+function setInspectionResult(item,result){
+  const number=item.dataset.n;
+  if(result)state.results[number]=result;else delete state.results[number];
+  item.querySelectorAll('.result-btn').forEach(button=>{
+    const active=button.dataset.r===result;
+    button.classList.toggle('on',active);button.setAttribute('aria-pressed',String(active));
+  });
+}
+
+function mountCombinedInspectionResults(){
+  const card=document.getElementById('inspCard'),header=card.querySelector('.card-header');
+  const toggle=document.createElement('button'),panel=document.createElement('div'),scope=document.createElement('select');
+  toggle.type='button';toggle.className='combined-bulk-toggle';toggle.textContent='일괄 적용';
+  toggle.setAttribute('aria-controls','combinedInspectionResults');
+  panel.id='combinedInspectionResults';panel.className='combined-bulk-results';
+  scope.setAttribute('aria-label','결과 적용 범위');
+  scope.add(new Option('전체 항목','all'));scope.add(new Option('선택 항목','selected'));
+  const items=Array.from(els.inspList.querySelectorAll('.insp-item'));
+  const picks=items.map(item=>{
+    const box=document.createElement('input');box.type='checkbox';box.className='combined-inspection-pick';
+    box.setAttribute('aria-label',item.dataset.n+'번 '+item.querySelector('.insp-name').textContent+' 적용 대상');
+    item.querySelector('.insp-head').append(box);box.onchange=refresh;return box;
+  });
+  const buttons=['정상','수리','교체'].map(result=>{
+    const button=document.createElement('button');button.type='button';button.textContent=result;
+    button.onclick=()=>{
+      const targets=targetItems(),active=targets.every(item=>state.results[item.dataset.n]===result);
+      if(!targets.length)return;
+      targets.forEach(item=>setInspectionResult(item,active?'':result));
+      refresh();autoSave();
+    };
+    return button;
+  });
+  function targetItems(){return scope.value==='all'?items:items.filter((item,index)=>picks[index].checked);}
+  function refresh(){
+    for(const box of picks)box.hidden=panel.hidden||scope.value!=='selected';
+    const targets=targetItems();
+    for(const button of buttons){
+      button.disabled=!targets.length;
+      button.setAttribute('aria-pressed',String(!!targets.length&&targets.every(item=>state.results[item.dataset.n]===button.textContent)));
+    }
+  }
+  function expanded(open){panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));refresh();}
+  scope.onchange=refresh;toggle.onclick=()=>expanded(panel.hidden);
+  panel.append(scope,...buttons);header.append(toggle);els.inspList.before(panel);expanded(false);
+  return {refresh,reset(){picks.forEach(box=>{box.checked=false;});scope.value='all';expanded(false);}};
+}
+
 // ===== 이벤트: 구분 체크 =====
 document.getElementById('payGroup').addEventListener('click', e=>{
   const c=e.target.closest('[data-pay]'); if(!c) return;
@@ -861,10 +911,9 @@ document.getElementById('typeGroup').addEventListener('click', e=>{
 // ===== 이벤트: 점검 결과/메모 =====
 els.inspList.addEventListener('click', e=>{
   const b=e.target.closest('.result-btn'); if(!b) return;
-  const n=b.getAttribute('data-n'), r=b.getAttribute('data-r');
-  const grp=b.closest('.result-group');
-  grp.querySelectorAll('.result-btn').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on'); state.results[n]=r; autoSave();
+  setInspectionResult(b.closest('.insp-item'),b.dataset.r);
+  combinedInspectionResults?.refresh();
+  autoSave();
 });
 els.inspList.addEventListener('input', e=>{
   const m=e.target.closest('.insp-memo'); if(!m) return;
@@ -1364,7 +1413,7 @@ function applyFormData(d){
   automaticSubscription=d.basic?.subscriptionFromDb||'';
   fillInspectionSubscription();
   if(combinedTaskId)for(const field of document.querySelectorAll('[data-handover-field]')){
-    field.value=d.basic?.handoverFields?.[field.dataset.handoverField]||'';
+    field.value=d.basic?.handoverFields?.[field.dataset.handoverField]||field.options?.[0]?.value||'';
   }
   hospitalBinding.restore(d.basic);
   fillInspectionSales();
@@ -1394,10 +1443,10 @@ function applyFormData(d){
   INSP_ITEMS.forEach(it=>{
     const item=els.inspList.querySelector(`.insp-item[data-n="${it.n}"]`);
     if(!item) return;
-    const r=state.results[it.n];
-    item.querySelectorAll('.result-btn').forEach(b=>b.classList.toggle('on', b.getAttribute('data-r')===r));
+    setInspectionResult(item,state.results[it.n]);
     const memoEl=item.querySelector('.insp-memo'); if(memoEl) memoEl.value=state.memos[it.n]||'';
   });
+  combinedInspectionResults?.reset();
   // 서명
   ['cs','hs'].forEach(k=>{
     const data=d.signatures?.[k]||null;
@@ -1707,7 +1756,7 @@ function refreshCombinedDevices(){
   }
 }
 
-async function loadCombinedDevice(slot){
+async function loadCombinedDevice(slot,copyFrom){
   checkStorageAccount();
   const id=combinedFlow.taskIdFor(slot),prior=await draftRepository.get(id);
   checkStorageAccount();
@@ -1718,6 +1767,11 @@ async function loadCombinedDevice(slot){
     engineer:defaults.fse,gubun:defaults.gubun},request);
   const first=getTask(combinedTaskId)?.data?.basic;
   const data=prior?.data||{...fresh,pdfFormat:getTask(combinedTaskId)?.data?.pdfFormat};
+  if(copyFrom&&!prior){
+    data.basic={...data.basic,serialNo:''};
+    for(const key of BazHandoverInspection.copiedEquipmentFields)data.basic[key]=copyFrom.basic[key]??'';
+    data.pay=copyFrom.pay;data.types=[...copyFrom.types];
+  }
   const basic=Object.fromEntries(BASIC_IDS.map(key=>[key,data.basic?.[key]??'']));
   const common=BazHandoverInspection.sharedFields;
   if(slot!==0&&first)for(const key of common)basic[key]=first[key]??basic[key];
@@ -1763,8 +1817,15 @@ function addCombinedDevice(){
   return combinedDeviceAction(async()=>{
     const slots=combinedFlow.slots(),slot=BazHandoverInspection.deviceSlots.find(value=>!slots.includes(value));
     if(slot===undefined)return;
-    combinedFlow.setSlots([...slots,slot]);
-    await loadCombinedDevice(slot);
+    const previous=combinedActiveSlot,copyFrom=collectFormData();
+    await loadCombinedDevice(slot,copyFrom);
+    try{
+      if(!await saveCurrentTask())throw new Error('추가 장비의 초안을 보관하지 못했습니다.');
+      combinedFlow.setSlots([...slots,slot]);
+    }catch(error){
+      await loadCombinedDevice(previous);
+      throw error;
+    }
     combinedDevicePanel.status('');
   });
 }
@@ -2242,10 +2303,10 @@ function buildSheetHTML(opts){
         <td style="width:13%;background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;vertical-align:top;">조치 내용</td>
         <td colspan="3" style="border:1px solid #888;padding:10px 12px;font-size:12px;min-height:48px;vertical-align:top;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">${asLine?`<div style="font-weight:700;color:#1B2F5E;margin-bottom:3px;">${esc(asLine)}</div>`:''}${esc(bv('actionDetail')).replace(/\n/g,'<br>')||dash}</td>
       </tr>
-      <tr>
+      ${!opts?.omitNextDate?`<tr>
         <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;vertical-align:top;">권고 사항</td>
         <td colspan="3" style="border:1px solid #888;padding:10px 12px;font-size:12px;vertical-align:top;line-height:1.6;word-break:break-word;overflow-wrap:anywhere;">${esc(bv('recommend')).replace(/\n/g,'<br>')||dash}</td>
-      </tr>
+      </tr>`:''}
       <tr>
         <td style="background:#E8E8E8;border:1px solid #888;padding:10px 8px;font-size:12px;font-weight:700;text-align:center;">점검 일자</td>
         <td style="border:1px solid #888;padding:10px 12px;font-size:12px;">${fmtDate(bv('inspectDate'))||dash}</td>
@@ -2566,7 +2627,7 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=358')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=362')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,
@@ -2578,6 +2639,7 @@ window.inspectionSessionReady=(async()=>{
    BazHandoverInspection.mountLayout();
    renderStep();
    BazHandoverInspection.mountFields(document.getElementById('actionDetail').closest('.field-group'));
+   combinedInspectionResults=mountCombinedInspectionResults();
    combinedDevicePanel=BazHandoverInspection.mountDevices({select:selectCombinedDevice,add:addCombinedDevice,remove:removeCombinedDevice});
    for(const id of ['newTaskBtn','loadDraftBtn','doneNew','customerQrBtn','blankPdfBtn']){
     const button=document.getElementById(id);

@@ -1,15 +1,21 @@
 (function(root){
  'use strict';
  const fields=[
-  ['result','처리 결과 직접 지정 (선택)'],
   ['hpOut','HP 회수품 S/N'],
   ['wVer','HP 회수품 버전'],
   ['hpIn','HP 교체품 S/N'],
   ['uVer','HP 교체품 버전'],
-  ['nozzleDate','노즐 제조일자']
+  ['nozzleDate','노즐 제조일자'],
+  ['nozzleReuse','노즐 재사용 유무',[['X','재사용 안 함 (X)'],['O','재사용 (O)']]]
+ ];
+ const skillFields=[
+  ['nsFill','NS 충진 여부',[['','미평가'],['O','O'],['X','X']]],
+  ['nsAmt','NS 충진량 (0.9cc 기준)',[['','미평가'],['정상','정상'],['부족','부족'],['과다','과다']]],
+  ['jet','정상적인 젯 분사 판단',[['','미평가'],['가능','가능'],['교육 필요','교육 필요']]]
  ];
  const deviceSlots=[0,1,2];
  const sharedFields=['hospital','receiveDate','receiver','inspectDate','csName'];
+ const copiedEquipmentFields=['product','subscription','version','subscriptionFromDb'];
  const requestKey=(owner,requestId)=>'baz_handover_inspection_v1:'+owner+':'+requestId;
  function hasPending(storage,owner,requestId){
   if(!owner)return false;
@@ -48,7 +54,7 @@
  function mountLayout(){
   document.body.classList.add('combined-inspection');
   const stylesheet=document.createElement('link');
-  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=358';
+  stylesheet.rel='stylesheet';stylesheet.href='css/baz-handover-inspection.css?v=362';
   document.head.append(stylesheet);
   const theme=document.querySelector('.baz-theme-floating[data-baz-theme-toggle]');
   if(theme){
@@ -63,6 +69,7 @@
   front.append(reception,action);
   reception.querySelector('h2').textContent='접수·장비 정보';
   action.querySelector('h2').textContent='조치·처리 정보';
+  document.getElementById('recommend').closest('.field-group').hidden=true;
   reception.querySelector('.card-body').prepend(document.getElementById('hospFieldGroup').closest('.row-2'));
 
   const oldProduct=document.getElementById('product'),productGroup=document.getElementById('productSel');
@@ -112,25 +119,35 @@
   closing.append(photo,publishing);
   publishing.append(format,sign);
  }
- function mountFields(after,saved){
-  const panel=document.createElement('details'),heading=document.createElement('summary');
-  heading.textContent='Handover 추가 정보';
+ function mountFields(after){
+  const panel=document.createElement('div');
   const grid=document.createElement('div');
   grid.className='combined-extra-fields';
-  panel.append(heading,grid);
-  for(const [name,label] of fields){
-   const row=document.createElement('label'),input=document.createElement('input');
+  panel.append(grid);
+  function field([name,label,choices]){
+   const row=document.createElement('label'),input=document.createElement(choices?'select':'input');
    row.className='field-group';
    row.textContent=label;
    input.dataset.handoverField=name;
    input.id='combined-'+name;
-   input.type='text';
-   input.maxLength=100;
-   input.value=saved?.[name]||'';
+   if(choices){
+    for(const [value,caption] of choices)input.add(new Option(caption,value));
+   }else{
+    input.type='text';
+    input.maxLength=100;
+   }
    row.append(input);
-   grid.append(row);
+   return row;
   }
-  if(Object.values(saved||{}).some(Boolean))panel.open=true;
+  grid.append(...fields.map(field));
+  const skills=document.createElement('fieldset'),legend=document.createElement('legend');
+  skills.className='combined-skills';legend.textContent='사용자 숙련도 평가';
+  const skillGrid=document.createElement('div');skillGrid.className='combined-extra-fields';
+  skillGrid.append(...skillFields.map(field));skills.append(legend,skillGrid);panel.append(skills);
+  // Keep an existing draft's explicit result available for an idempotent Sheet retry.
+  const legacyResult=document.createElement('input');
+  legacyResult.type='hidden';legacyResult.id='combined-result';legacyResult.dataset.handoverField='result';
+  panel.append(legacyResult);
   after.after(panel);
  }
  function create(options){
@@ -300,5 +317,5 @@
   }
   return {readRequest,prepare,validateDraft,taskIdFor,slots,setSlots,entry,pdfStatus,rememberPdf,markPending};
  }
- root.BazHandoverInspection={create,mountFields,mountLayout,mountDevices,deviceSlots,sharedFields,hasPending};
+ root.BazHandoverInspection={create,mountFields,mountLayout,mountDevices,deviceSlots,sharedFields,copiedEquipmentFields,hasPending};
 })(window);

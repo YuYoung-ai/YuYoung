@@ -68,6 +68,8 @@ try{
         assert.equal(rows.has(p.reqId),false,'a device retry must not write its sheet row again');
         assert.equal(p.hosp,request.hospitalName);assert.equal(p.date,'2026-11-20');
         assert.equal(p.detail,'조치 '+p.sn);assert.equal(p.hpOut,p.sn+'-HP');
+        assert.equal(p.nozzleReuse,'O');assert.equal(p.nsFill,'O');
+        assert.equal(p.nsAmt,'정상');assert.equal(p.jet,'가능');
         const source={recordId:p.reqId,hospitalName:p.hosp,sn:p.sn,date:p.date,engineer:p.fse,gubun:p.gubun,
           detail:p.detail,result:p.result,version:'source-'+p.sn};
         const receipt={recordId:source.recordId,source,version:'sheet-'+p.sn,pdfRevision:0,basis:Object.fromEntries(
@@ -106,6 +108,7 @@ try{
       BazInspectionPdf.assemble=async([html],photos)=>{
         const serial=document.getElementById('serialNo').value.trim();
         if(!html.includes(serial))throw new Error('wrong serial in printed body');
+        if(html.includes('권고 사항'))throw new Error('recommendation row must be omitted from the combined PDF');
         const note=photos.map(photo=>photo.memo).join(',');
         const subscription=document.getElementById('subscription').value;
         if(!html.includes(subscription))throw new Error('missing subscription in printed body');
@@ -119,6 +122,10 @@ try{
       document.getElementById('serialNo').value=value;
       document.getElementById('actionDetail').value='조치 '+value;
       document.getElementById('combined-hpOut').value=value+'-HP';
+      document.getElementById('combined-nozzleReuse').value='O';
+      document.getElementById('combined-nsFill').value='O';
+      document.getElementById('combined-nsAmt').value='정상';
+      document.getElementById('combined-jet').value='가능';
       document.getElementById('pdfFormat').value='simplified';
       state.results[1]='정상';
       state.photos=[{slot:'sn',memo:value+'-photo',
@@ -131,12 +138,39 @@ try{
   const device=index=>panel.locator('[data-device-slot="'+index+'"]');
   await ready();
   await form.locator('#inspectDate').fill('2026-11-20');
+  await form.locator('#product').selectOption('CUREJET');
+  await form.locator('#version').fill('2.1.1 / 2.6');
+  assert.equal(await form.locator('#recommend').isVisible(),false);
+  assert.deepEqual(await form.locator('#actionCard .combined-extra-fields [data-handover-field]').evaluateAll(fields=>fields.map(field=>field.dataset.handoverField)),
+    ['hpOut','wVer','hpIn','uVer','nozzleDate','nozzleReuse','nsFill','nsAmt','jet']);
+  const bulk=form.locator('#combinedInspectionResults');
+  const toggle=form.getByRole('button',{name:'일괄 적용'});
+  await toggle.click();
+  await bulk.getByRole('button',{name:'정상'}).click();
+  assert.equal(await frame().evaluate(()=>Object.keys(state.results).length),
+    await form.locator('#inspList .insp-item').count());
+  await bulk.getByRole('button',{name:'정상'}).click();
+  assert.deepEqual(await frame().evaluate(()=>state.results),{});
+  await bulk.getByRole('combobox').selectOption('selected');
+  assert.equal(await bulk.getByRole('button',{name:'수리'}).isDisabled(),true);
+  await form.locator('.insp-item[data-n="1"] .combined-inspection-pick').check();
+  await form.locator('.insp-item[data-n="11"] .combined-inspection-pick').check();
+  await bulk.getByRole('button',{name:'수리'}).click();
+  assert.deepEqual(await frame().evaluate(()=>state.results),{1:'수리',11:'수리'});
+  await toggle.click();
+  assert.equal(await bulk.isVisible(),false);
   await fill(serials[0]);
+  await frame().waitForFunction(()=>document.getElementById('subscription').value==='구독 1');
   await add.click();
   await device(1).and(panel.locator('[aria-pressed="true"]')).waitFor();
   assert.equal(await publish.textContent(),'장비 2대 모두 발행');
   assert.equal(await form.locator('#inspectDate').inputValue(),'2026-11-20');
   assert.equal(await form.locator('#inspectDate').getAttribute('readonly'),'');
+  assert.equal(await form.locator('#serialNo').inputValue(),'');
+  assert.equal(await form.locator('#product').inputValue(),'CUREJET');
+  assert.equal(await form.locator('#version').inputValue(),'2.1.1 / 2.6');
+  assert.equal(await form.locator('#subscription').inputValue(),'구독 1');
+  assert.deepEqual(await frame().evaluate(()=>state.results),{});
   await fill(serials[0]);
   await publish.click();
   await frame().waitForFunction(()=>document.querySelector('#combinedDevices [role=status]').textContent.includes('중복'));
