@@ -79,17 +79,33 @@
     }
     return {pick,input,restore};
   }
+  const name=value=>text(value).normalize('NFKC').replace(/[\s_]+/g,'').toLowerCase();
+  const serials=value=>text(value).normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean);
+  function hospitalRows(basic,rows){
+    const hospital=name(basic&&basic.hospital);if(!hospital)return '';
+    return rows.filter(h=>name(h.n)===hospital);
+  }
+  function agreed(rows,field){
+    const values=[...new Set(Array.from(rows,row=>text(row[field])))];
+    return values.length===1?values[0]:'';
+  }
   function salesFor(basic,rows,requestSales){
     if(text(basic&&basic.receiver))return text(basic.receiver);
     if(text(requestSales))return text(requestSales);
-    const name=value=>text(value).normalize('NFKC').replace(/[\s_]+/g,''),serials=value=>text(value).normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean);
-    const hospital=name(basic&&basic.hospital);if(!hospital)return '';
-    let candidates=rows.filter(h=>name(h.n)===hospital);
+    const candidates=hospitalRows(basic,rows);
+    if(!candidates.length)return '';
     const sn=serials(basic.serialNo),matched=sn.length?candidates.filter(h=>serials(h.s).some(s=>sn.includes(s))):[];
-    if(matched.length)candidates=matched;
-    if(!candidates.length||candidates.some(h=>!text(h.sa)))return '';
-    const values=[...new Set(candidates.map(h=>text(h.sa)))];return values.length===1?values[0]:'';
+    return agreed(matched.length?matched:candidates,'sa');
   }
-  global.BazInspectionHospitals={create,normalize,createBinding,salesFor};
+  function subscriptionFor(basic,rows){
+    const candidates=hospitalRows(basic,rows);
+    if(!candidates.length)return '';
+    const sn=serials(basic.serialNo);
+    if(sn.length!==1)return '';
+    const matched=candidates.filter(h=>serials(h.s).includes(sn[0]));
+    if(matched.length&&matched.some(row=>text(row.c)))return agreed(matched,'c');
+    return agreed(candidates.filter(row=>!serials(row.s).length),'c');
+  }
+  global.BazInspectionHospitals={create,normalize,createBinding,salesFor,subscriptionFor};
 })(window);
 

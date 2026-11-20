@@ -24,7 +24,7 @@
     var r=current.get(button.dataset.openInspection);
     if(!r)return;
     var item=entries.get(r.id);
-    button.hidden=!!(item&&item.revision===r.revision&&item.attachment);
+    button.hidden=!button.hasAttribute('data-inspection-pending')&&!!(item&&item.revision===r.revision&&item.attachment);
    });
    host.querySelectorAll('[data-inspection-request]').forEach(function(node){
     var r=current.get(node.dataset.inspectionRequest);if(!r)return;
