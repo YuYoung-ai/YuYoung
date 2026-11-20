@@ -239,11 +239,6 @@
       <span style="flex:1;"><span class="tool-name">현장 처리완료 · 공유</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">카톡/Flow 양식 생성 · 시트 자동 기록</span></span>
       <span style="color:#8EA0C8;">→</span>
     </button>
-    <button type="button" id="appBtnHandoverInspection" data-toolid="handoverinspection" class="hub-tool">
-      <span style="font-size:24px;" aria-hidden="true">📝</span>
-      <span style="flex:1;"><span class="tool-name" data-tool="combined-name">Handover·점검 내역서 통합 작성 (시험)</span><br><span class="tool-desc" data-tool="combined-desc">접수 선택 후 시트 기록·PDF 발행</span></span>
-      <span style="color:#8EA0C8;" aria-hidden="true">→</span>
-    </button>
     <button type="button" id="appBtnLabel" data-toolid="label" class="hub-tool" >
       <span style="font-size:24px;">🏷</span>
       <span style="flex:1;"><span class="tool-name">장비 Label List</span><br><span style="font-size:11px;font-weight:500;color:#8EA0C8;">주간 병원별 장비 사진 · 엑셀/PPT 생성</span></span>
@@ -1811,7 +1806,6 @@ const HUB_I18N = {
     'report-name':'AS 처리 보고서','report-desc':'현장 보고서 작성 → PPT 자동 생성',
     'guide-name':'현장 대응 가이드','guide-desc':'CUREJET 증상별 진단·조치 매뉴얼',
     'insp-name':'A/S 점검 내역서','insp-desc':'점검 체크리스트 · PDF 기록',
-    'combined-name':'Handover·점검 내역서 통합 작성 (시험)','combined-desc':'접수 선택 후 시트 기록·PDF 발행',
     'hosp-name':'병원 데이터센터','hosp-desc':'병원 검색 · 점검 현황 · 지도',
     'survey-name':'고객 만족도 조사','survey-desc':'병원별 QR 발급 · 설문 결과 통계' },
   en:{ subtitle:'CS Field Tools', lockHint:'Tap the logo to unlock', chooseTool:'Select a tool',
@@ -1819,7 +1813,6 @@ const HUB_I18N = {
     'report-name':'AS Service Report','report-desc':'Field report → auto PPT',
     'guide-name':'Field Response Guide','guide-desc':'CUREJET symptom diagnosis & action',
     'insp-name':'A/S Inspection Sheet','insp-desc':'Checklist · PDF record',
-    'combined-name':'Combined Handover and Inspection (Pilot)','combined-desc':'Select a case to save to Sheets and publish a PDF',
     'hosp-name':'Hospital Data Center','hosp-desc':'Search · Status · Map',
     'survey-name':'Customer Satisfaction','survey-desc':'Hospital QR links & survey results' },
   ja:{ subtitle:'CS Field Tools', lockHint:'ロゴをタップしてロック解除', chooseTool:'使用するツールを選択',
@@ -1827,7 +1820,6 @@ const HUB_I18N = {
     'report-name':'AS処理レポート','report-desc':'現場レポート → PPT自動生成',
     'guide-name':'現場対応ガイド','guide-desc':'CUREJET症状別 診断・対応マニュアル',
     'insp-name':'A/S点検内訳書','insp-desc':'点検チェックリスト · PDF記録',
-    'combined-name':'Handover・点検内訳書の一括作成（試験運用）','combined-desc':'受付を選択してシートに記録・PDFを発行',
     'hosp-name':'病院データセンター','hosp-desc':'病院検索 · 点検状況 · 地図',
     'survey-name':'顧客満足度調査','survey-desc':'病院別QR・アンケート集計' }
 };
@@ -1951,8 +1943,7 @@ document.getElementById('appBtnInspection').addEventListener('click', function()
 document.getElementById('appBtnHospital').addEventListener('click', function(){ location.href='hospital-pc.html'; });   /* [메뉴 통합] 모바일/PC 단일 카드 — hospital-pc.html이 화면 크기 자동 감지 + 모바일 전환 토글 제공 */
 document.getElementById('appBtnManager').addEventListener('click', function(){ openMgr(); });
 document.getElementById('appBtnHandover').addEventListener('click', function(){ location.href='handover.html'; });
-document.getElementById('appBtnHandoverInspection').addEventListener('click', function(){ location.href='hospital-work.html?view=service&entry=inspection-search'; });
-document.getElementById('appBtnHospitalWork').addEventListener('click', function(){ location.href='hospital-work.html'; });
+document.getElementById('appBtnHospitalWork').addEventListener('click', function(){ location.href='hospital-work.html?view=service'; });
 document.getElementById('appBtnCustomerAs').onclick=function(){location.href='hospital-work.html?view=customers';};
 document.getElementById('appBtnReservations').onclick=function(){location.href='hospital-work.html?view=reservations';};
 document.getElementById('appBtnHospitalQr').onclick=function(){location.href='qr-bulk.html?purpose=as';};
@@ -1986,7 +1977,6 @@ var MENU_DEFAULTS={
   guide:     {name:'📖 현장 대응 가이드',   level:1, show:true, order:2},
   inspection:{name:'🔧 A/S 점검 내역서',    level:1, show:true, order:3},
   handover:  {name:'✍ 현장 처리완료·공유', level:1, show:true, order:4},
-  handoverinspection:{name:'📝 Handover·점검 내역서 통합 작성 (시험)',level:1,show:true,order:4},
   label:     {name:'🏷 장비 Label List',    level:1, show:true, order:5},
   asreport:  {name:'🧾 A/S 항목별 증상·조치', level:2, show:true, order:6},
   chatbot:   {name:'🤖 CS AI 챗봇',         level:1, show:true, order:6},
