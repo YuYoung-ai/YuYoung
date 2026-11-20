@@ -376,7 +376,10 @@
     checkAccount(token);
     if(!job||context.deliveryUploadId&&job.uploadId!==context.deliveryUploadId||current!==previous||
       options.isCurrent&&!options.isCurrent(context))return false;
-    current={...job,ownerKey:job.owner,owner:token,context:{...job.context,sessionEpoch:context.sessionEpoch},uploadAttempted:!!(job.uploadAttempted||!job.saved&&job.sha256),busy:false};
+    const requestId=job.context.requestId||(
+      context.recordId&&context.recordId===job.context.recordId?context.requestId:'');
+    current={...job,ownerKey:job.owner,owner:token,context:{...job.context,requestId,sessionEpoch:context.sessionEpoch},
+      needsTarget:!requestId&&!!job.needsTarget,uploadAttempted:!!(job.uploadAttempted||!job.saved&&job.sha256),busy:false};
     // Earlier clients classified this incomplete success response as a terminal
     // failure. Recheck the real source before sending the preserved file.
     if(!current.saved&&/^(AS 처리 현황의 기록 ID를 확인하지 못했습니다\.|.*잠금.*시간\s*초과.*)$/.test(current.context.sourcePreparationError||''))current.preparationRetryable=true;
