@@ -30,7 +30,7 @@
    }
    return {...context,recordId:resolved.recordId,sourceBasis:context.sourceBasis||resolved.sourceBasis,sourcePdfRevision:context.sourcePdfRevision??resolved.pdf?.revision??0,sourcePrepared:true};
   }
-  function payload(context){const {sourcePreparationError,attachmentApplicable,...rest}=context;return rest;}
+  function payload(context){const {sourcePreparationError,attachmentApplicable,requireSheetLink,...rest}=context;return rest;}
   async function prepareContext(context,owner){
    let prepared=sourceContext(payload(context),await call('inspection_pdf_resolve',payload(context),owner));
    if(options.prepareContext)prepared={...prepared,...await options.prepareContext(prepared)};
@@ -135,6 +135,24 @@
    }
    if(!result.received&&result.state!=='blocked'&&!automatic&&s.blob){
     if(s.blob.size>MAX_BYTES){const error=new Error('PDF는 최대 7MB까지 전송할 수 있습니다.');error.noRetry=true;throw error;}
+    if(s.context.requireSheetLink&&!s.linkConfirmed){
+     notice(s,'PDF 생성 완료 · 시트 원본과 접수 연결을 확인하는 중…');
+     progress(s,'handover','working');
+     try{
+      if(s.initialSheetLink){
+       const failure=await s.initialSheetLink;
+       s.initialSheetLink=null;
+       if(failure)throw failure;
+      }else await options.repairTarget(s.context);
+      checkAccount(s.owner);
+      s.linkConfirmed=true;
+     }catch(cause){
+      const error=new Error(cause.message||'시트 원본과 접수 연결을 확인해 주세요.');
+      error.pending=true;
+      error.sheetLink=true;
+      throw error;
+     }
+    }
     const prepared=root.BazPerf?.start('pdf_delivery_prepare');
     let base64;
     try{
@@ -284,7 +302,8 @@
    }catch(e){
     s.autoResumeEligible=!s.needsTarget&&retryable(e);s.nextAutoResumeAt=Date.now()+5000;
     if(s.context.sourcePreparationError&&!e.transient)s.preparationRetryable=false;
-    if(s.context.transferVersion===2&&e.sourceConflict){progress(s,'source','blocked');}
+    if(e.sheetLink){progress(s,'handover','pending');}
+    else if(s.context.transferVersion===2&&e.sourceConflict){progress(s,'source','blocked');}
     else progress(s,s.saved?'comment':s.context.transferVersion===2&&s.stages.drive==='done'?'handover':'drive',e.pending||s.context.transferVersion===2&&s.stages.drive==='done'&&retryable(e)?'pending':'error');
     await persist(s);
     notice(s,(s.saved?'PDF는 Drive와 AS 처리 현황에 저장되었습니다. ':'PDF는 생성되었습니다. ')+(e.message||'저장 확인 실패'));
@@ -362,10 +381,10 @@
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
    isBusy(){return active.size>0;},
    recover(context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}}));},
-   publish(blob,filename,context,startedAt){
+   publish(blob,filename,context,startedAt,initialSheetLink){
     if(current?.busy&&current.blob===blob&&current.context.taskId===context.taskId&&visible(current))return current.running;
     const p=preparations.get(context),s=select({blob,filename,context:{...context},owner:p?p.owner:options.token(),
-      uploadId:context.deliveryUploadId||undefined,preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'},startedAt,originalBytes:blob.size});
+      uploadId:context.deliveryUploadId||undefined,preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'},startedAt,originalBytes:blob.size,initialSheetLink});
     progress(s,'drive','waiting');
     return run(s);
    },

@@ -321,7 +321,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-work-cache.js"></script><script src="js/baz-inspection-relink.js?v=361"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-work-cache.js"></script><script src="js/baz-inspection-relink.js?v=365"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
 <style>.inspection-relink .work-flow-records button[aria-pressed=true]{outline:2px solid var(--teal);outline-offset:1px;font-weight:700}#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-inspection.css?v=295">
@@ -646,7 +646,7 @@
 
 <script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=361"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=364"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1690,7 +1690,10 @@ function cloudUrl(){
 function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
 const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,isCurrent:inspectionIsCurrent,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})(),window.BazWorkFlow.sameInspectionIdentity),
-repairTarget(context){return window.BazInspectionRelink.ensureLink(context);},
+repairTarget(context){
+  const relink=window.BazInspectionRelink;
+  return context.requireSheetLink?relink.ensureSheetLink({...context,sheetVersion:context.sourceVersion}):relink.ensureLink(context);
+},
 chooseTarget(context,onLinked){return window.BazInspectionRelink.open({recordId:context.recordId,onLinked});},
 prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연결을 확인할 수 없습니다. 다시 열어 주세요.');return window.BazInspectionFlow.prepareContext(context);},confirmAttachment(saved,context,options){return window.BazInspectionFlow.confirmAttachment(saved,context,options);},onProgress(stages){if(window.BazInspectionFlow)window.BazInspectionFlow.progress(stages);},onRecovered(job){
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
@@ -1714,6 +1717,10 @@ async function restorePendingPdf({duringGeneration=false,show=true,deliveryUploa
   await window.inspectionSessionReady;
   if(!_currentTaskId||_photoBusy||_pdfBusy||_pdfStarting&&!duringGeneration)return false;
   const context={...inspectionContext(),deliveryUploadId,batchDevice};if(!context.hospital||!context.date)return false;
+  if(combinedFlow&&handoverReference?.deliveryReceipt?.version){
+    context.requireSheetLink=true;
+    context.sourceVersion=handoverReference.deliveryReceipt.version;
+  }
   const restored=await pdfPublisher.restore(context)||inspectionIsCurrent(context)&&await pdfPublisher.restoreServer(context);
   if(restored&&inspectionIsCurrent(context)){
     if(show)document.getElementById('doneOverlay').classList.add('show');
@@ -1744,7 +1751,8 @@ function refreshCombinedDevices(){
   }
   document.getElementById('serialNo').readOnly=!!combinedFlow.entry(combinedFlow.taskIdFor(combinedActiveSlot));
   const generate=document.getElementById('generateBtn');
-  if(info.length===1)generate.textContent='시트 기록 및 PDF 발행';
+  if(info.length===1)generate.textContent=combinedFlow.entry(combinedFlow.taskIdFor(0))?.state==='pending'
+    ?'시트 저장 확인·이어서 발행':'시트 기록 및 PDF 발행';
   else if(allComplete)generate.textContent='전체 발행 완료';
   else if(info.some(slot=>slot.complete))generate.textContent='남은 장비 발행';
   else generate.textContent='장비 '+info.length+'대 모두 발행';
@@ -2413,7 +2421,11 @@ function generatePDF(arg){
   let publishing=false;
   _generationPromise=renderInspectionPdf(arg,deliveryStarted)
     .then(result=>{publishing=result===true;return result;})
-    .catch(e=>{hideLoading();pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');})
+    .catch(e=>{
+      hideLoading();
+      if(e.code==='SHEET_PENDING')pdfGenerationStatus(e.message+'\n현재 입력은 유지됩니다. 발행 버튼을 다시 누르면 같은 기록의 저장 여부부터 확인합니다.');
+      else pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');
+    })
     .finally(()=>{
       if(startsDelivery&&!publishing)window.BazPerf.start('pdf_delivery_incomplete',deliveryStarted)();
       if(combinedFlow&&inspectionPhase==='ready')document.querySelector('.wrap').inert=combinedDeviceBusy;
@@ -2528,9 +2540,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
 
     if(combinedLink){
       stage='접수 연결';
-      const [error,bound]=await Promise.all([combinedLink,bindingSave]);
-      if(error)throw error;
-      if(!bound)throw new Error('시트 기록은 보관되었습니다. 기기에 연결을 저장한 뒤 다시 발행해 주세요.');
+      if(!await bindingSave)throw new Error('시트 기록은 보관되었습니다. 기기에 연결을 저장한 뒤 다시 발행해 주세요.');
     }
     if(!inspectionIsCurrent(viewContext)){pdfGenerationStatus('생성 중 작업이 변경되어 이전 문서의 결과를 표시하지 않았습니다.');return;}
     // 파일명
@@ -2564,12 +2574,12 @@ async function renderInspectionPdf(arg,deliveryStarted){
         await saveCurrentTask({status:opts.batchDevice?'inspection_completed':'completed',documentNo:docNo});
       if(!inspectionIsCurrent(viewContext))return;
       if(combinedLink){
-        const uploadId=opts.batchDevice?BazInspectionSession.id():null;
-        uploadContext.deliveryUploadId=combinedFlow.rememberPdf(uploadContext.recordId,taskId,uploadId);
+        uploadContext.deliveryUploadId=combinedFlow.rememberPdf(uploadContext.recordId,taskId,BazInspectionSession.id());
         uploadContext.batchDevice=!!opts.batchDevice;
+        uploadContext.requireSheetLink=true;
       }
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
-      const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted);
+      const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted,combinedLink);
       if(opts.batchDevice)await delivery;
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.
@@ -2627,11 +2637,11 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=362')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=365')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,
-    source:context=>pdfPublisher.source(context),link:context=>BazInspectionRelink.ensureLink(context),
+    source:context=>pdfPublisher.source(context),link:context=>BazInspectionRelink.ensureSheetLink(context),
     measure:metric=>BazPerf.start(metric),warn:showToast
    });
    combinedRequestData=await combinedFlow.readRequest();

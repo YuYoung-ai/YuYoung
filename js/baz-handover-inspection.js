@@ -192,12 +192,40 @@
   }
 
   async function transport(url,options){
-   const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),20000);
+   const ctl=new AbortController();
+   let timer;
+   const deadline=new Promise((_,reject)=>{
+    timer=setTimeout(()=>{
+     const error=sheetPending('시트 서버의 응답 대기 시간이 지났습니다.');
+     reject(error);
+     ctl.abort();
+    },20000);
+   });
    try{
-    const response=await fetch(url,{...options,cache:'no-store',signal:ctl.signal});
-    if(!response.ok)throw new Error('시트 응답을 확인하지 못했습니다.');
-    return await response.json();
+    return await Promise.race([deadline,(async()=>{
+     const response=await fetch(url,{...options,cache:'no-store',signal:ctl.signal});
+     if(!response.ok)throw sheetPending('시트 서버의 응답을 확인하지 못했습니다.');
+     return await response.json();
+    })()]);
+   }catch(error){
+    if(error.code==='SHEET_PENDING')throw error;
+    throw sheetPending('시트 서버와의 연결이 끊겼거나 응답을 확인할 수 없습니다.');
    }finally{clearTimeout(timer);}
+  }
+
+  function sheetPending(message){
+   return Object.assign(new Error(message),{code:'SHEET_PENDING'});
+  }
+
+  async function checkSaved(id){
+   checkAccount();
+   const status=new URL(url);
+   status.search=new URLSearchParams({action:'savecheck',reqId:id});
+   const checked=await transport(auth.withToken(status.href));
+   checkAccount();
+   if(checked?.success!==true||checked.reqId!==id||typeof checked.found!=='boolean'||checked.found&&checked.result?.success!==true)
+    throw sheetPending('같은 Handover 기록의 저장 상태를 확인하지 못했습니다.');
+   return checked;
   }
 
   function toHandover(draft,fields,previous,taskId){
@@ -212,6 +240,8 @@
    if(records.some(record=>record.recordId!==previous?.id&&record.date===b.inspectDate&&flow.serials(record.sn).includes(sn[0])))
     throw new Error('이 접수에 같은 처리일과 S/N의 현장 기록이 있습니다. 기존 내역서를 확인하세요.');
    if(!b.inspectDate||!b.actionDetail.trim())throw new Error('처리일과 실제 조치 내용을 입력하세요.');
+   if(b.inspectDate!==String(request.visitAt||'').slice(0,10))
+    throw new Error('접수의 방문일과 처리일을 확인하세요.');
    const cost=handover.parseCost(b.cost);
    if(!cost.ok||(draft.pay==='유상')!==(cost.value>0))throw new Error('유상·무상과 비용을 확인하세요.');
    const [verUI,verHP]=String(b.version||'').split(/\s*\/\s*/,2);
@@ -257,10 +287,7 @@
     if(entry.state==='pending'){
      storage.setItem(journal,JSON.stringify(entry));
      if(previous){
-      const status=new URL(url);
-      status.search=new URLSearchParams({action:'savecheck',reqId:id});
-      const checked=await transport(auth.withToken(status.href));
-      if(!checked.success||checked.reqId!==id)throw new Error('시트의 기존 저장 상태를 확인하지 못했습니다.');
+      const checked=await checkSaved(id);
       if(checked.found)receipt=accept(checked.result,id);
       else if(draft.handover?.recordId===id)receipt=draft.handover.deliveryReceipt;
       else entry=await submit(payload,id,journal);
@@ -277,7 +304,7 @@
        previousReceipt.basis.standard.fingerprint!==receipt?.basis?.standard?.fingerprint)
      throw new Error('시트의 원본 내용이 변경되었습니다. 서명과 변경 내용을 기존 내역서에서 확인하세요.');
     const reference=session.sourceReference({requestId,recordId:id,identity},receipt,draft.basic,flow);
-    return {reference,linking:Promise.resolve().then(()=>link({requestId,recordId:id,...identity}))};
+    return {reference,linking:Promise.resolve().then(()=>link({requestId,recordId:id,...identity,sheetVersion:receipt.version}))};
    }finally{finishSheet();}
   }
 
@@ -291,10 +318,25 @@
 
   async function submit(payload,id,journal){
    checkAccount();
-   const result=await transport(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({...payload,token:auth.token()})});
+   let result;
+   try{
+    result=await transport(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+     body:JSON.stringify({...payload,token:auth.token()})});
+    if(typeof result?.success!=='boolean'||result.success&&result.recordId&&result.recordId!==id)
+     throw sheetPending('시트의 저장 결과를 확인하지 못했습니다.');
+   }catch(error){
+    if(error.code!=='SHEET_PENDING')throw error;
+    const checked=await checkSaved(id).catch(reason=>{
+     if(reason.code!=='SHEET_PENDING')throw reason;
+     return null;
+    });
+    if(!checked?.found)throw error;
+    result=checked.result;
+   }
    checkAccount();
    if(result?.success===false){
+    if(result.retryable||/잠금|lock.*(?:time|busy)|다른 저장 작업/i.test(result.error||''))
+     throw sheetPending('시트 서버에서 다른 저장을 처리 중입니다.');
     storage.removeItem(journal);
    }
    return {receipt:accept(result,id)};

@@ -11,6 +11,22 @@
   return hospitalDay&&(!assigned.length||flow.serials(opened.serialNo).some(sn=>assigned.includes(sn)));
  }
  function key(account,recordId,requestId){return 'baz_inspection_link_v1_'+encodeURIComponent(account)+'_'+recordId+'_'+requestId;}
+ async function ensureSheetLink(context){
+  const account=BazAuth.name(),owner=BazInspectionSession.owner(BazAuth);
+  const {requestId,recordId,date,sn,sheetVersion}=context;
+  const keyBytes=new TextEncoder().encode(JSON.stringify([owner,requestId,recordId,date,sn,sheetVersion]));
+  const hash=await crypto.subtle.digest('SHA-256',keyBytes);
+  const operationId='sheet_'+Array.from(new Uint8Array(hash),value=>value.toString(16).padStart(2,'0')).join('');
+  if(BazAuth.name()!==account||BazInspectionSession.owner(BazAuth)!==owner)
+   throw new Error('로그인 계정이 변경되었습니다. 다시 열어 주세요.');
+  const response=await api.post('work_inspection_source_link',{requestId,recordId,date,sn,sheetVersion,operationId});
+  if(response.code==='SHEET_LINK_DISABLED'||/지원하지 않는 업무 API/.test(response.error||''))
+   throw new Error('서버의 시트 직접 연결이 아직 준비되지 않았습니다. 보관된 PDF로 이어서 전송할 수 있습니다.');
+  checked(response);
+  if(response.request?.id!==requestId||response.recordId!==recordId||response.sourceLinked!==true)
+   throw new Error('원래 접수와 Handover 기록의 연결을 확인하지 못했습니다.');
+  return response;
+ }
  async function ensureLink(context){
   const account=BazAuth.name(),params={requestId:context.requestId,recordId:context.recordId};
   const detail=checked(await api.get('work_handover_detail',{...params,hospitalName:context.hospital}));
@@ -167,5 +183,5 @@
    else await searchRequests();
   });
  }
- root.BazInspectionRelink={open,ensureLink};
+ root.BazInspectionRelink={open,ensureLink,ensureSheetLink};
 })(window);
