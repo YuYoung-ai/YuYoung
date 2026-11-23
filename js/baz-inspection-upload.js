@@ -13,7 +13,11 @@
   function visible(s){return current===s&&(!options.isCurrent||options.isCurrent(s.context));}
   function select(s){if(!options.isCurrent||options.isCurrent(s.context)){current=s;link.hidden=true;}return s;}
   function checkAccount(owner){if(options.token()!==owner){const e=new Error('로그인 계정이 변경되었습니다. 다시 내역서를 열어 확인하세요.');e.noRetry=true;throw e;}}
-  function message(s,text){if(visible(s))status.textContent=text;}
+  function message(s,text){
+   if(!visible(s))return;
+   status.textContent=text;
+   options.onStatus?.(text);
+  }
   function progress(s,stage,value){s.stages[stage]=value;if(visible(s)&&options.onProgress)options.onProgress({...s.stages},s.context);}
   function notice(s,text){message(s,text+(s.storageWarning?' · 이 기기에 재전송 파일을 보관하지 못했습니다. 화면을 닫기 전에 PDF를 따로 저장하세요.':''));}
   async function persist(s){

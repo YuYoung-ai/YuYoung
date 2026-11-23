@@ -19,8 +19,8 @@ html[data-theme=dark] .status-badge[data-work-status="취소"]{--status-bg:#303a
 .service-badge[data-service-type="유상"]{background:#fff3e7;color:#925015;border-color:#edd1b5}.service-badge[data-service-type="무상"]{background:#e9f6f3;color:#226d5c;border-color:#bedfd5}
 html[data-theme=dark] .service-badge[data-service-type="유상"]{background:#473426;color:#f5d1aa;border-color:#795a3b}html[data-theme=dark] .service-badge[data-service-type="무상"]{background:#213f38;color:#a9dfd0;border-color:#446e62}
 .status-badge>.editable-value{padding:5px 25px 5px 24px;white-space:nowrap}.service-badge>.editable-value{padding:0;min-height:22px;white-space:nowrap}
-.table-scroll>table{table-layout:fixed;width:100%;min-width:1220px}.table-scroll>table th,.table-scroll>table td{vertical-align:middle;padding:14px 12px}
-.table-scroll>table .hospital-column{text-align:center}.table-scroll>table .registration-column{width:104px;text-align:center}.table-scroll>table .status-column{width:200px;text-align:center}.table-scroll>table .visit-column{width:158px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.table-scroll>table{table-layout:fixed;width:100%;min-width:1252px}.table-scroll>table th,.table-scroll>table td{vertical-align:middle;padding:14px 12px}
+.table-scroll>table .hospital-column{text-align:center}.table-scroll>table .registration-column{width:136px;text-align:center}.table-scroll>table .status-column{width:200px;text-align:center}.table-scroll>table .visit-column{width:158px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
 .table-scroll>table .person-column{width:92px;text-align:center;overflow-wrap:anywhere}.table-scroll>table .recent-column{width:166px;text-align:center}.table-scroll>table .read-receipts-column{width:70px;text-align:center}
 .table-scroll>table .person-column>.editable-value,.table-scroll>table .visit-column>.editable-value{text-align:center}.table-scroll>table .summary{overflow-wrap:anywhere}.table-scroll>table .recent-column .inspection-pdf-link{display:inline-block;white-space:normal;line-height:1.6}
 .recent-inspection{font-size:12px;line-height:1.6}.inspection-empty,.inspection-loading{color:var(--muted)}.inspection-retry{font-size:12px;padding:4px 6px;white-space:normal}
@@ -40,18 +40,17 @@ html[data-theme=dark] .service-badge[data-service-type="유상"]{background:#473
 #list .hospital-column .row-open{width:100%;min-width:0}
 body.staff-work.mode-mobile #list .mobile-card>button[data-open]{width:100%;padding-inline:26px;text-align:center}
 body.staff-work.mode-mobile #list .mobile-card>button[data-open] :is(.card-top,.card-meta,.card-summary){text-align:center;overflow-wrap:anywhere}
-.work-combined-entry{
+.work-combined-entry,.mobile-registration>.work-combined-entry{
   display:inline-grid;
   place-content:center;
   flex:none;
-  width:48px;
-  min-width:48px;
-  max-width:48px;
+  width:112px;
   height:48px;
   min-height:48px;
   margin:0;
   padding:0;
   text-align:center;
+  white-space:nowrap;
   font-size:11px;
   line-height:1.15;
   box-sizing:border-box;
