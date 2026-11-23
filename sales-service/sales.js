@@ -4,9 +4,10 @@
   const apiUrl = 'https://yuyoung-production.coaptation.workers.dev';
   const storageKey = 'baz_sales_service_session';
   const el = id => document.getElementById(id);
-  const state = {token: '', cursor: '', rows: new Map(), pages: 0, busy: false};
+  const state = {token: '', cursor: '', rows: new Map(), pages: 0, busy: false, scope: 'mine', criteria: ''};
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
-  let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask;
+  let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
+  let composing = false, detailRequest = 0;
 
   function feedback(message, error = false) {
     el('feedback').textContent = message;
@@ -72,13 +73,18 @@
   }
 
   async function signIn() {
-    for (const id of ['notice-dialog', 'inbox-dialog']) if (el(id).open) el(id).close();
+    for (const id of ['notice-dialog', 'inbox-dialog', 'detail-dialog']) if (el(id).open) el(id).close();
     el('workspace').hidden = true;
     el('sync').hidden = true;
     el('list').replaceChildren();
+    el('table-list').replaceChildren();
     state.rows.clear();
     state.cursor = '';
     state.pages = 0;
+    state.criteria = '';
+    state.scope = 'mine';
+    el('search').value = '';
+    renderScope();
     el('sync-time').textContent = '';
     el('sign-in').hidden = false;
     if (el('google-sign-in').childElementCount) return;
@@ -109,8 +115,8 @@
     if (state.token) await sync();
   }
 
-  function renderCard(row) {
-    const card = el('service-card').content.firstElementChild.cloneNode(true);
+  function renderCard(row, template = 'service-card') {
+    const card = el(template).content.firstElementChild.cloneNode(true);
     card.dataset.requestId = row.id;
     const values = {
       ...row,
@@ -124,38 +130,61 @@
     return card;
   }
 
+  const searchText = () => el('search').value.trim();
+  const scopeLabel = () => state.scope === 'mine' ? '내 업무' : '전체 업무';
+  const criteria = () => JSON.stringify([state.scope, searchText()]);
+  function renderScope() {
+    el('scope-title').textContent = scopeLabel();
+    for (const button of document.querySelectorAll('[data-scope]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.scope === state.scope));
+    }
+  }
+
   async function sync(append = false) {
     if (!state.token || state.busy) return;
     state.busy = true;
+    const key = criteria(), query = searchText(), scope = state.scope;
+    const same = key === state.criteria;
+    append = append && same;
     el('sync').disabled = el('load-more').disabled = true;
-    feedback('동기화 중…');
-    const anchor = append ? null : [...el('list').children].find(card => card.getBoundingClientRect().bottom > 0);
+    el('list-count').textContent = query ? '검색 중…' : '불러오는 중…';
+    feedback('');
+    const container = matchMedia('(max-width: 700px)').matches ? el('list') : el('table-list');
+    const anchor = append || !same ? null : [...container.children].find(card => card.getBoundingClientRect().bottom > 0);
     const anchorTop = anchor?.getBoundingClientRect().top;
     const rows = append ? new Map(state.rows) : new Map();
     let cursor = append ? state.cursor : '', data, pages = 0;
-    const expected = append ? 1 : Math.max(1, state.pages);
+    const expected = append || !same ? 1 : Math.max(1, state.pages);
     try {
       do {
-        data = await api('sales_list', {cursor});
+        data = await api('sales_list', {cursor, query, scope});
+        if (key !== criteria()) return;
         for (const row of data.items) rows.set(row.id, row);
+        if (cursor && cursor === data.cursor) throw new Error('동기화로 목록을 다시 불러와 주세요.');
         cursor = data.cursor;
         pages++;
-      } while (cursor && (pages < expected || (rows.size === state.rows.size && append || !rows.size) && pages < expected + 3));
+      } while (cursor && (query || scope === 'mine' || pages < expected || (!rows.size || append && rows.size === state.rows.size)));
 
       state.rows = rows;
       state.cursor = cursor;
       state.pages = append ? state.pages + pages : pages;
-      el('list').replaceChildren(...Array.from(rows.values(), renderCard));
+      state.criteria = key;
+      el('list').replaceChildren(...Array.from(rows.values(), row => renderCard(row)));
+      el('table-list').replaceChildren(...Array.from(rows.values(), row => renderCard(row, 'service-row')));
+      el('desktop-list').hidden = !rows.size;
+      el('list-count').textContent = `${rows.size.toLocaleString('ko-KR')}건${cursor ? ' 표시' : ''}`;
+      el('list-conditions').textContent = [scopeLabel(), '방문일 기준 전체 기간', '방문 일시 내림차순', query ? `검색 “${query}”` : ''].filter(Boolean).join(' · ');
       el('empty').hidden = rows.size > 0 || Boolean(cursor);
+      el('empty').textContent = query ? '검색 결과가 없습니다.' : scope === 'mine' ? '내 업무에 배정된 접수가 없습니다. 전체 업무에서 조회할 수 있습니다.' : '조회할 처리 내역이 없습니다.';
       el('load-more').hidden = !cursor;
       el('account').textContent = data.name || '영업 계정';
-      el('sync-time').textContent = '동기화 ' + clock.format(new Date(data.updatedAt));
+      el('sync-time').textContent = '마지막 동기화 ' + clock.format(new Date(data.updatedAt));
       el('sign-in').hidden = true;
       el('workspace').hidden = false;
       el('sync').hidden = false;
       el('notice-tools').hidden = !data.notifications;
       el('notice-open').hidden = !data.canSend || !rows.size;
-      const replacement = anchor && [...el('list').children].find(card => card.dataset.requestId === anchor.dataset.requestId);
+      const replacement = anchor && [...container.children].find(card => card.dataset.requestId === anchor.dataset.requestId);
       if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
       feedback('');
       if (data.notifications && new URLSearchParams(location.search).has('notices')) {
@@ -163,6 +192,7 @@
         void openInbox();
       }
     } catch (error) {
+      el('list-count').textContent = state.rows.size ? `${state.rows.size.toLocaleString('ko-KR')}건 표시` : '';
       if ([401, 403].includes(error.status)) {
         setSession(null);
         await signIn();
@@ -173,7 +203,59 @@
     } finally {
       el('sync').disabled = el('load-more').disabled = false;
       state.busy = false;
+      if (state.token && key !== criteria() && !composing) void sync();
     }
+  }
+
+  async function openDetail(button) {
+    const requestId = button.closest('[data-request-id]').dataset.requestId;
+    const dialog = el('detail-dialog');
+    if (dialog.open) return;
+    const sequence = ++detailRequest;
+    detailTrigger = button;
+    el('detail-feedback').textContent = '접수 상세를 불러오는 중…';
+    el('detail-content').hidden = true;
+    dialog.showModal();
+    dialog.scrollTop = 0;
+    history.pushState({salesDetail: true}, '');
+    try {
+      const data = await api('sales_detail', {requestId});
+      if (!dialog.open || sequence !== detailRequest) return;
+      const summary = renderCard(data.request);
+      summary.querySelector('.sales-case-open').replaceWith(document.createTextNode(data.request.hospital));
+      el('detail-summary').replaceChildren(summary);
+      el('detail-receipt').textContent = data.receipt || '접수 내용 미기록';
+      const results = data.results.map(result => {
+        const block = document.createElement('article');
+        block.className = 'sales-result';
+        const facts = document.createElement('dl');
+        for (const [name, value] of [['처리일', result.date], ['실제 처리자', result.engineer], ['처리 내용', result.detail], ['처리 결과', result.result]]) {
+          if (!value) continue;
+          const label = document.createElement('dt'), text = document.createElement('dd');
+          label.textContent = name;
+          text.textContent = value;
+          facts.append(label, text);
+        }
+        block.append(facts);
+        return block;
+      });
+      el('detail-results').replaceChildren(...results);
+      if (data.resultPending || !results.length) {
+        const message = document.createElement('p');
+        message.className = 'sales-muted';
+        message.textContent = data.resultPending ? 'CS 결과 확인 중' : '등록된 처리 결과가 없습니다.';
+        el('detail-results').append(message);
+      }
+      el('detail-content').hidden = false;
+      el('detail-feedback').textContent = '';
+    } catch (error) {
+      if (sequence === detailRequest && dialog.open) el('detail-feedback').textContent = error.message;
+    }
+  }
+
+  function closeDetail() {
+    if (history.state?.salesDetail) history.back();
+    else el('detail-dialog').close();
   }
 
   async function signOut() {
@@ -329,8 +411,39 @@
   el('notice-message').oninput = () => { noticeOperation = ''; };
   el('notice-form').onsubmit = sendNotice;
   el('push-enable').onclick = enablePush;
+  for (const button of document.querySelectorAll('[data-scope]')) button.onclick = () => {
+    if (state.scope === button.dataset.scope) return;
+    state.scope = button.dataset.scope;
+    renderScope();
+    void sync();
+  };
+  el('search').oninput = event => {
+    clearTimeout(searchTimer);
+    if (!event.isComposing && !composing) searchTimer = setTimeout(() => void sync(), 250);
+  };
+  el('search').oncompositionstart = () => { composing = true; clearTimeout(searchTimer); };
+  el('search').oncompositionend = () => {
+    composing = false;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => void sync(), 250);
+  };
+  for (const id of ['list', 'table-list']) el(id).onclick = event => {
+    const button = event.target.closest('.sales-case-open') || (id === 'list' ? event.target.closest('.sales-card')?.querySelector('.sales-case-open') : null);
+    if (button) void openDetail(button);
+  };
+  el('detail-back').onclick = closeDetail;
+  el('detail-dialog').oncancel = event => { event.preventDefault(); closeDetail(); };
+  el('detail-dialog').onclose = () => {
+    detailRequest++;
+    for (const id of ['detail-summary', 'detail-receipt', 'detail-results']) el(id).replaceChildren();
+    detailTrigger?.focus({preventScroll: true});
+    detailTrigger = null;
+  };
+  window.addEventListener('popstate', () => {
+    if (!history.state?.salesDetail && el('detail-dialog').open) el('detail-dialog').close();
+  });
   window.addEventListener('baz-theme-change', event => {
-    document.querySelector('meta[name=theme-color]').content = event.detail.theme === 'dark' ? '#1b2c3b' : '#f4f7fa';
+    document.querySelector('meta[name=theme-color]').content = event.detail.theme === 'dark' ? '#172835' : '#f4f7fa';
   });
 
   state.token = restoreSession();

@@ -25,13 +25,15 @@ function failure(status, code, message) {
   return Object.assign(new Error(message), {status, code});
 }
 
-function cleanSymptom(value) {
+function shareableText(value, maxLength = 220) {
   return String(value || '').trim()
     .replace(/(환자(?:명| 이름)|생년월일|주민등록번호|연락처|전화번호)\s*[:：]\s*[^\r\n]*/g, '$1 [가림]')
     .replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, '[이메일]')
     .replace(/(?:\+82[ .-]?\(?0?\)?|0)\d{1,2}[ .-]?\d{3,4}[ .-]?\d{4}(?!\d)/g, '[연락처]')
-    .slice(0, 220);
+    .slice(0, maxLength);
 }
+
+const searchable = value => alias(value).toLocaleLowerCase('ko-KR');
 
 function confirmedVisit(row) {
   return row.qrIntake?.confirmationRequired !== true || row.qrIntake.appointmentConfirmed === true;
@@ -42,7 +44,7 @@ function card(row, hospital) {
   return {
     id: row.id,
     hospital: hospital?.name || row.hospitalName || '',
-    symptom: cleanSymptom(row.salesShareSymptom ?? row.symptom),
+    symptom: shareableText(row.salesShareSymptom ?? row.symptom),
     status: row.status || '',
     payment: workFields.terms(row, () => hospital).asType,
     visitAt: confirmed ? row.visitAt || '' : '',
@@ -59,7 +61,8 @@ function scopeFor(policy, email) {
   if (!account || !['staff', 'lead'].includes(account.role)) return null;
   const domestic = new Set((policy.domesticSales || []).map(alias).filter(Boolean));
   const assigned = (account.sales || []).map(alias).filter(name => domestic.has(name));
-  return {email, name: account.name || '', allowed: new Set(account.role === 'lead' ? domestic : assigned), canSend: account.canSend === true};
+  const mine = new Set(assigned.length ? assigned : [alias(account.name)].filter(Boolean));
+  return {email, name: account.name || '', allowed: new Set(account.role === 'lead' ? domestic : assigned), mine, canSend: account.canSend === true};
 }
 
 export async function updateSalesAccess(kv, input, now = Date.now()) {
@@ -114,7 +117,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const assigned = scopeFor(policy, email);
     if (assigned) return assigned;
     const admin = await getCsAdmin?.(email);
-    return admin ? {email, name: admin.name, csAdmin: true, canSend: true} : null;
+    return admin ? {email, name: admin.name, csAdmin: true, mine: new Set([alias(admin.name)].filter(Boolean)), canSend: true} : null;
   }
 
   async function security(token) {
@@ -152,6 +155,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
 
   async function list(p, scope, policy) {
     const cursor = typeof p.cursor === 'string' && p.cursor.length <= 1200 ? p.cursor : '';
+    const terms = searchable(String(p.query || '').slice(0, 100)).split(' ').filter(Boolean);
+    const mine = p.scope === 'mine';
     const meta = (await kv.get(workKey('meta'))).value;
     if (!meta?.ready) throw failure(503, 'TEMPORARY', '서비스 현황을 잠시 후 다시 확인해 주세요.');
     const lookup = await lookups();
@@ -160,10 +165,35 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     for (const row of page.rows) {
       if (!isLive(row)) continue;
       const hospital = lookup(row);
-      if (visibleTo(scope, row, hospital)) items.push(card(row, hospital));
+      if (!visibleTo(scope, row, hospital)) continue;
+      if (mine && !scope.mine.has(alias(row.sales || hospital?.sales))) continue;
+      const item = card(row, hospital);
+      const hospitalName = searchable(item.hospital), salesperson = searchable(item.sales);
+      if (terms.every(term => hospitalName.includes(term) || salesperson.includes(term))) items.push(item);
     }
     const notifications = policy?.notifications === true;
     return {success: true, name: scope.name, notifications, canSend: notifications && scope.canSend, items, cursor: page.cursor, updatedAt: new Date(now()).toISOString()};
+  }
+
+  async function detail(p, scope) {
+    const id = typeof p.requestId === 'string' && p.requestId.length <= 100 ? p.requestId : '';
+    const row = id ? (await kv.get(workKey('request', id))).value : null;
+    if (!isLive(row)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
+    const hospital = (await lookups())(row);
+    if (!visibleTo(scope, row, hospital)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
+    const results = [];
+    let resultPending = false;
+    for await (const entry of kv.list({prefix: workKey('history', id)})) {
+      const history = entry.value, source = history?.source;
+      if (history?.kind !== 'result' || history.deletedAt || !source?.recordId || source.origin === 'flow') continue;
+      const link = (await kv.get(workKey('link', source.recordId))).value;
+      if (link?.requestId !== id || link.historyId !== history.id) continue;
+      if (history.sourceReview?.pending || row.status !== '완료') { resultPending = true; continue; }
+      results.push({date: String(source.date || ''), engineer: shareableText(source.engineer, 80),
+        detail: shareableText(source.detail, 4000), result: shareableText(source.result, 1000)});
+    }
+    results.sort((a, b) => b.date.localeCompare(a.date));
+    return {success: true, request: card(row, hospital), receipt: shareableText(row.salesShareSymptom ?? row.symptom, 4000), results, resultPending};
   }
 
   async function target(requestId, policy) {
@@ -291,6 +321,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     if (p.action === 'sales_google_login') return login(p);
     const {scope, entry, policy} = await security(p.token);
     if (p.action === 'sales_list') return list(p, scope, policy);
+    if (p.action === 'sales_detail') return detail(p, scope);
     if (p.action === 'sales_logout') {
       if (typeof p.endpoint === 'string' && p.endpoint.length <= 2000) await detach(scope.email, await hash(p.endpoint));
       await kv.delete(entry.key);

@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#f4f7fa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BAZ 영업">
-  <title>서비스 현황 | BAZ 영업</title>
+  <title>CS 서비스 현황 | BAZ 영업</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="../icon-192.png">
   <script src="../js/baz-theme.js?v=306"></script>
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css">
-  <script src="sales.js" defer></script>
+  <link rel="stylesheet" href="sales.css?v=371">
+  <script src="sales.js?v=371" defer></script>
 </head>
 <body>
   <header class="sales-bar">
@@ -34,15 +34,34 @@
     </section>
     <section id="workspace" aria-labelledby="workspace-title" hidden>
       <div class="sales-heading">
-        <h1 id="workspace-title">서비스 현황</h1>
+        <h1 id="workspace-title">CS 서비스 현황</h1>
         <p id="sync-time" class="sales-muted"></p>
       </div>
-      <div class="sales-scope" aria-label="조회 범위">
-        <span>전체 업무</span><span>전체 기간</span>
-      </div>
-      <ul id="list" class="sales-list" aria-label="처리내역"></ul>
-      <div id="empty" class="sales-empty" hidden>조회할 처리내역이 없습니다.</div>
-      <div class="sales-more"><button id="load-more" type="button" hidden>더 불러오기</button></div>
+      <section class="sales-scope" aria-labelledby="scope-title">
+        <h2 id="scope-title">내 업무</h2>
+        <div class="sales-scope-actions" role="group" aria-label="업무 범위">
+          <button type="button" data-scope="all" aria-pressed="false">전체 업무</button>
+          <button type="button" data-scope="mine" aria-pressed="true">내 업무</button>
+        </div>
+      </section>
+      <div class="sales-period" aria-label="조회 기간"><span>방문일 기준</span><strong>전체 기간</strong></div>
+      <section class="sales-list-panel" aria-labelledby="list-title">
+        <div class="sales-list-caption">
+          <div class="sales-list-heading"><h2 id="list-title">처리 내역</h2><span id="list-count" class="sales-muted" role="status"></span></div>
+          <label class="sr-only" for="search">병원명, 영업 담당자 검색</label>
+          <input id="search" type="search" autocomplete="off" enterkeyhint="search" maxlength="100" placeholder="병원명, 영업 담당자 검색">
+          <p id="list-conditions" class="sales-muted"></p>
+        </div>
+        <div id="desktop-list" class="sales-table-wrap" hidden>
+          <table class="sales-table" aria-label="처리 내역">
+            <thead><tr><th scope="col">병원 / 접수 증상</th><th scope="col">상태 · 유/무상</th><th scope="col" aria-sort="descending">방문 일시 ↓</th><th scope="col">엔지니어</th><th scope="col">CS 접수</th><th scope="col">영업 담당자</th></tr></thead>
+            <tbody id="table-list"></tbody>
+          </table>
+        </div>
+        <ul id="list" class="sales-list" aria-label="처리 내역"></ul>
+        <p id="empty" class="sales-empty" hidden></p>
+        <div class="sales-more"><button id="load-more" type="button" hidden>더 불러오기</button></div>
+      </section>
       <footer class="sales-footer">
         <span id="account"></span>
         <button id="sign-out" type="button">로그아웃</button>
@@ -55,6 +74,22 @@
     </section>
     <p id="feedback" class="sales-feedback" role="status" aria-live="polite">로그인 상태를 확인하고 있습니다…</p>
   </main>
+  <dialog id="detail-dialog" class="sales-detail" aria-labelledby="detail-title">
+    <header class="sales-detail-bar">
+      <button type="button" id="detail-back" aria-label="처리 내역으로 돌아가기">‹</button>
+      <div><h2 id="detail-title">서비스 업무 상세</h2><p>병원 접수 · 처리 결과</p></div>
+    </header>
+    <p id="detail-feedback" class="sales-detail-status" role="status"></p>
+    <div id="detail-content" hidden>
+      <ul id="detail-summary" class="sales-detail-summary" aria-label="접수 개요"></ul>
+      <section class="sales-detail-section" aria-labelledby="receipt-title">
+        <h3 id="receipt-title">접수 내용</h3><p id="detail-receipt" class="sales-body-text"></p>
+      </section>
+      <section aria-labelledby="result-title">
+        <h3 id="result-title" class="sales-section-divider">처리 결과</h3><div id="detail-results" class="sales-detail-section"></div>
+      </section>
+    </div>
+  </dialog>
   <dialog id="inbox-dialog" aria-labelledby="inbox-title">
     <div class="sales-dialog-heading"><h2 id="inbox-title">받은 알림</h2><form method="dialog"><button type="submit">닫기</button></form></div>
     <p id="inbox-feedback" class="sales-muted" role="status"></p>
@@ -74,7 +109,7 @@
   </dialog>
   <template id="service-card">
     <li class="sales-card">
-      <h2 data-card="hospital"></h2>
+      <h2><button type="button" class="sales-case-open" data-card="hospital"></button></h2>
       <p class="sales-symptom" data-card="symptom"></p>
       <div class="work-status-group sales-badges">
         <span class="badge status-badge" data-card="status"></span>
@@ -87,6 +122,13 @@
         <div><dt>영업 담당자</dt><dd data-card="sales"></dd></div>
       </dl>
     </li>
+  </template>
+  <template id="service-row">
+    <tr>
+      <td><button type="button" class="sales-case-open" data-card="hospital"></button><p class="sales-symptom" data-card="symptom"></p></td>
+      <td><div class="work-status-group sales-badges"><span class="badge status-badge" data-card="status"></span><span class="service-badge" data-card="payment"></span></div></td>
+      <td data-card="visitAt"></td><td data-card="engineer"></td><td data-card="cs"></td><td data-card="sales"></td>
+    </tr>
   </template>
 </body>
 </html>

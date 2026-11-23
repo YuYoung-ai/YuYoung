@@ -4,10 +4,11 @@ import {readFile, writeFile} from 'node:fs/promises';
 const [baselinePath, outputPath] = process.argv.slice(2);
 if (!baselinePath || !outputPath) throw Error('Usage: node assemble-worker.mjs BASELINE.mjs CANDIDATE.mjs');
 
-const [baseline, fields, service] = await Promise.all([
+const [baseline, fields, service, pageAdapter] = await Promise.all([
   readFile(baselinePath, 'utf8'),
   readFile(new URL('../../js/baz-work-fields.js', import.meta.url), 'utf8'),
   readFile(new URL('./service.mjs', import.meta.url), 'utf8'),
+  readFile(new URL('./d1-page.mjs', import.meta.url), 'utf8'),
 ]);
 let source = baseline.replaceAll('\r\n', '\n');
 function insert(anchor, replacement) {
@@ -16,17 +17,35 @@ function insert(anchor, replacement) {
 }
 
 const body = service.replace(/^import[^\n]+\n/, '').replace(/^export /gm, '');
-source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess} = (() => {
+const previousExtension = source.startsWith('const {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess');
+if (previousExtension) {
+  const boundary = '\nvar __defProp = Object.defineProperty;';
+  const end = source.indexOf(boundary);
+  if (end < 0) throw Error('Sales service extension boundary unavailable');
+  source = source.slice(end + 1);
+}
+const adapter = pageAdapter.replace(/^export /gm, '');
+source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage} = (() => {
   const workFields = (() => {
     const module = {exports: {}};
     ${fields}
     return module.exports;
   })();
   ${body}
-  return {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess};
+  ${adapter}
+  return {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage};
 })();
 ${source}`;
 
+const listAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack})';
+if (previousExtension) {
+  if (!source.includes(listAdapter)) insert(`      requestPage: async cursor => {
+        const limit = 128, rows = [];
+        const scan = kv.list({prefix: ["hospitalwork-v2", "request"]}, {limit, cursor: cursor || undefined, reverse: true});
+        for await (const entry of scan) rows.push(entry.value);
+        return {rows, cursor: rows.length === limit ? scan.cursor : ""};
+      }`, listAdapter);
+} else {
 const routing = '  async function handleAction(action, p, clientIp, origin = "") {';
 insert(routing, `  function salesService(kv) {
     return createSalesService(kv, {
@@ -41,12 +60,7 @@ insert(routing, `  function salesService(kv) {
         try { return await verifyGoogleIdToken(String(idToken || "")); }
         catch { throw Object.assign(new Error("Google 계정을 확인해 주세요."), {status: 401, code: "LOGIN_REQUIRED"}); }
       },
-      requestPage: async cursor => {
-        const limit = 128, rows = [];
-        const scan = kv.list({prefix: ["hospitalwork-v2", "request"]}, {limit, cursor: cursor || undefined, reverse: true});
-        for await (const entry of scan) rows.push(entry.value);
-        return {rows, cursor: rows.length === limit ? scan.cursor : ""};
-      }
+${listAdapter}
     });
   }
   async function salesForward(action, p, clientIp) {
@@ -110,6 +124,7 @@ insert(pushRead, `      if (result.ok && ctx?.waitUntil && (result.headers.get("
       }
 ${pushRead}`);
 insert('      h.delete(customerPushHeader);', '      h.delete(customerPushHeader);\n      h.delete("X-YuYoung-Sales-Notice");');
+}
 
 const marker = source.match(/(var release = [^\n]*\? ")[0-9a-f]{64}(" : "development")/);
 if (!marker) throw Error('Production release marker unavailable');
