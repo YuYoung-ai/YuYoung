@@ -13,11 +13,11 @@
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css?v=374">
+  <link rel="stylesheet" href="sales.css?v=375">
   <script src="../js/baz-work-cache.js" defer></script>
   <script src="../js/baz-work-fields.js?v=354" defer></script>
-  <script src="sales-security.js?v=374" defer></script>
-  <script src="sales.js?v=374" defer></script>
+  <script src="sales-security.js?v=375" defer></script>
+  <script src="sales.js?v=375" defer></script>
 </head>
 <body>
   <header class="sales-bar">
@@ -59,8 +59,10 @@
       <section class="sales-list-panel" aria-labelledby="list-title">
         <div class="sales-list-caption">
           <div class="sales-list-heading"><h2 id="list-title">처리 내역</h2><span id="list-count" class="sales-muted" role="status"></span></div>
-          <label class="sr-only" for="search">병원명, 영업 담당자 검색</label>
-          <input id="search" type="search" autocomplete="off" enterkeyhint="search" maxlength="100" placeholder="병원명, 영업 담당자 검색">
+          <form id="work-search" role="search" aria-label="처리 내역 검색">
+            <label class="sr-only" for="search">병원명, 영업 담당자 검색</label>
+            <input id="search" type="search" autocomplete="off" enterkeyhint="search" maxlength="100" placeholder="병원명, 영업 담당자 검색">
+          </form>
           <p id="list-conditions" class="sales-muted"></p>
         </div>
         <div id="desktop-list" class="sales-table-wrap" hidden>
