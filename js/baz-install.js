@@ -11,12 +11,40 @@
  $('install-button').onclick=async function(){if(!promptEvent)return;var current=promptEvent;promptEvent=null;this.hidden=true;await current.prompt();await current.userChoice;};
  $('copy-install').onclick=async function(){try{await navigator.clipboard.writeText(new URL('install.html',location.href).href);$('copy-status').textContent='설치 주소를 복사했습니다.';}catch{$('copy-status').textContent='브라우저 주소창의 주소를 복사하세요.';}};
  $('install-login').onclick=function(){BazAuth.rememberReturn('install.html');location.href='index.html';};
+ var curejetCard=$('curejet-notification-preferences'),curejetForm=$('curejet-preferences-form');
+ var curejetInputs=Array.from(curejetForm.querySelectorAll('input[type=checkbox]'));
+ function showCurejetPreferences(config){
+  var values=config?.curejetPreferences;
+  curejetCard.hidden=!curejetInputs.every(function(input){return typeof values?.[input.name]==='boolean';});
+  if(!curejetCard.hidden)curejetInputs.forEach(function(input){input.checked=values[input.name];});
+ }
+ $('curejet-types-all').onclick=function(){curejetInputs.forEach(function(input){input.checked=true;});};
+ curejetForm.onsubmit=async function(event){
+  event.preventDefault();
+  var button=curejetForm.querySelector('[type=submit]');
+  if(curejetCard.hidden||button.disabled)return;
+  var status=$('curejet-preferences-status'),controls=Array.from(curejetForm.elements);
+  var types=Object.fromEntries(curejetInputs.map(function(input){return [input.name,input.checked];}));
+  controls.forEach(function(control){control.disabled=true;});
+  status.textContent='저장 중…';
+  try{
+   var saved=await api.call('notification_curejet_preferences',{types:types});
+   showCurejetPreferences(saved);
+   status.textContent='내 Curejet AS 알림 설정을 저장했습니다.';
+  }catch(e){status.textContent=e.message;}
+  finally{controls.forEach(function(control){control.disabled=false;});}
+ };
+ window.addEventListener('baz-auth-logout',function(){
+  showCurejetPreferences(null);
+  $('curejet-preferences-status').textContent='';
+ });
  async function state(){
   $('install-state').textContent=api.standalone()?'홈 화면 앱에서 실행 중입니다. 아래에서 알림을 설정하세요.':'설치 후 홈 화면에서 BAZ CS를 실행하세요.';
   $('install-login').hidden=!!BazAuth.token();$('notification-enable').hidden=true;$('notification-test').hidden=true;$('notification-disable').hidden=true;
-  if(!BazAuth.token()){show('먼저 업무 계정으로 로그인해 주세요.');return;}
+  if(!BazAuth.token()){showCurejetPreferences(null);show('먼저 업무 계정으로 로그인해 주세요.');return;}
   try{
    var c=await api.config(true);
+   showCurejetPreferences(c);
    $('notification-admin').hidden=!c.admin;
    $('notification-preferences').hidden=!c.admin;if(c.admin){var labels={receipt:'접수·담당자 배정',visit:'방문 일정 등록·변경',status:'상태 변경',handover:'AS 처리 현황 작성 완료',pdf:'AS/점검 내역서·댓글 등록 완료',roster:'휴무·당직 (오전 8:30)',registration:'병원 등록 요청 (관리자)'};$('notification-type-options').innerHTML=c.notificationTypes.map(function(t){return '<label><input type="checkbox" data-notification-type="'+t+'"'+(c.preferences?.[t]===false?'':' checked')+'><span>'+labels[t]+'</span></label>';}).join('');}
    if(!api.supported()){show(c.name+' · 앱 설치 후 알림을 연결하세요.');$('notification-help').textContent=api.platform()==='ios'?'iOS 16.4 이상에서 홈 화면에 추가한 앱을 열어 주세요.':'Chrome 등 알림을 지원하는 브라우저에서 열어 주세요.';return;}
