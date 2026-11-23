@@ -94,10 +94,14 @@
   if(!s.weeklyVoc.length)text(x,T.y+T.top,w,.25,'선택한 주차에 표시할 유형이 없습니다.',9,C.mut);
   s.weeklyVoc.forEach(function(r,i){
    var y=T.y+T.top+i*T.pitch;
-   text(x,y,w,.20,root.exFitTxt_(r.name,w,9.5),9.5,C.navy,true,{weeklyVoc:i});
-   var lines=wrap(r.desc,w,8);
-   if(lines.length>3)throw new Error(r.name+' 보조문구를 세 줄 이내로 줄여주세요.');
-   lines.forEach(function(line,j){text(x,y+.21+j*.12,w,.12,line,8,C.mut,false,{weeklyDescription:i});});
+   text(x,y+.04,w,.20,root.exFitTxt_(r.name,w,9.5),9.5,C.navy,true,{weeklyVoc:i});
+   var size=8,lines=wrap(r.desc,w,size);
+   if(lines.length>2){
+    size=7;
+    lines=wrap(r.desc,w,size);
+   }
+   if(lines.length>2)throw new Error(r.name+' 보조문구를 두 줄 이내로 줄여주세요.');
+   lines.forEach(function(line,j){text(x,y+.29+j*.12,w,.12,line,size,C.mut,false,{weeklyDescription:i});});
    items.push({k:'line',x:x,y:y+T.pitch-.015,w:w,color:C.line,width:.5,weeklyVocDivider:true});
   });
   T=B.management;
