@@ -36,6 +36,8 @@
     }
   }
 
+  const security = window.BazSalesSecurity(api);
+
   function setSession(data, remember = false) {
     state.token = data?.token || '';
     for (const storage of [sessionStorage, localStorage]) {
@@ -73,6 +75,7 @@
   }
 
   async function signIn() {
+    security.setLevel(0);
     for (const id of ['notice-dialog', 'inbox-dialog', 'detail-dialog']) if (el(id).open) el(id).close();
     el('workspace').hidden = true;
     el('sync').hidden = true;
@@ -185,6 +188,7 @@
       el('sync').hidden = false;
       el('notice-tools').hidden = !data.notifications;
       el('notice-open').hidden = !data.canSend || !rows.size;
+      security.setLevel(data.level);
       const replacement = anchor && [...container.children].find(card => card.dataset.requestId === anchor.dataset.requestId);
       if (replacement) window.scrollBy(0, replacement.getBoundingClientRect().top - anchorTop);
       feedback('');
