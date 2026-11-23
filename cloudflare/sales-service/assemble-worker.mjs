@@ -25,7 +25,7 @@ if (previousExtension) {
   source = source.slice(end + 1);
 }
 const adapter = pageAdapter.replace(/^export /gm, '');
-source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage} = (() => {
+source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage, salesRangeVersion} = (() => {
   const workFields = (() => {
     const module = {exports: {}};
     ${fields}
@@ -33,12 +33,13 @@ source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice,
   })();
   ${body}
   ${adapter}
-  return {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage};
+  return {createSalesService, prepareSalesTransition, enqueueSalesNotice, updateSalesAccess, salesRequestPage, salesRangeVersion};
 })();
 ${source}`;
 
 const oldListAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack})';
 const listAdapter = '      requestPage: (cursor, dateRange) => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack}, dateRange)';
+const rangeVersion = '      rangeVersion: parts => salesRangeVersion(kv, parts, {keyHex, prefixEnd}),';
 const existingAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;';
 const linkedAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자", sub:admin.sub} : null;';
 const adminDirectory = `      getCsAdmins: async () => {
@@ -58,6 +59,7 @@ if (previousExtension) {
       }`, listAdapter);
   if (!source.includes(adminDirectory)) insert(listAdapter, `${adminDirectory}\n${listAdapter}`);
   if (!source.includes(linkedAdmin)) insert(existingAdmin, linkedAdmin);
+  if (!source.includes(rangeVersion)) insert(listAdapter, `${rangeVersion}\n${listAdapter}`);
 } else {
 const routing = '  async function handleAction(action, p, clientIp, origin = "") {';
 insert(routing, `  function salesService(kv) {
@@ -74,6 +76,7 @@ ${adminDirectory}
         try { return await verifyGoogleIdToken(String(idToken || "")); }
         catch { throw Object.assign(new Error("Google 계정을 확인해 주세요."), {status: 401, code: "LOGIN_REQUIRED"}); }
       },
+${rangeVersion}
 ${listAdapter}
     });
   }
