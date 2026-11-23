@@ -149,6 +149,11 @@
 
   .loading{position:fixed;inset:0;z-index:250;background:rgba(255,255,255,.85);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
   .loading.show{display:flex;}
+  .loading-content{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;}
+  .loading[data-publishing]{background:rgba(16,29,61,.55);padding:20px;}
+  .loading[data-publishing] .loading-content{width:min(100%,360px);padding:24px;border:1px solid var(--gray-line);border-radius:16px;background:var(--gray-bg);color:var(--text);}
+  .loading-title{font-size:16px;}
+  .loading[data-publishing] p{max-width:100%;overflow-wrap:anywhere;}
   .spinner{width:38px;height:38px;border:4px solid var(--gray-line);border-top-color:var(--navy);border-radius:50%;animation:spin .8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
   .loading p{font-size:13px;color:var(--text-muted);font-weight:600;}
@@ -582,7 +587,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
-<div class="loading" id="loading"><div class="spinner"></div><p id="loadingMsg">PDF 생성 중...</p></div>
+<div class="loading" id="loading"><div class="loading-content" role="status" aria-live="polite" aria-atomic="true"><div class="spinner" aria-hidden="true"></div><strong id="loadingTitle" class="loading-title" hidden></strong><p id="loadingMsg">PDF 생성 중...</p></div></div>
 
 <div class="done-overlay" id="doneOverlay">
   <div class="done-card">
@@ -646,7 +651,7 @@
 
 <script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=364"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=366"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1078,7 +1083,19 @@ function comma(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function debounce(fn, wait){ let t; return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a), wait); }; }
 // 로딩 오버레이 메시지 표시/숨김
 function showLoading(msg){ els.loadingMsg.textContent=msg||''; els.loading.classList.add('show'); }
-function hideLoading(){ els.loading.classList.remove('show'); }
+function hideLoading(){ if(!els.loading.hasAttribute('data-publishing'))els.loading.classList.remove('show'); }
+function startPublishProgress(){
+  els.loading.setAttribute('data-publishing','');
+  const title=document.getElementById('loadingTitle');
+  title.hidden=false;
+  title.textContent='시트 기록 및 PDF 발행';
+  showLoading('입력을 확인하는 중…');
+}
+function finishPublishProgress(){
+  els.loading.removeAttribute('data-publishing');
+  document.getElementById('loadingTitle').hidden=true;
+  hideLoading();
+}
 
 // ===== A/S 항목 분류 드롭다운 (대분류 → 유형 종속) =====
 function initTax(){
@@ -1690,6 +1707,7 @@ function cloudUrl(){
 function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
 const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,isCurrent:inspectionIsCurrent,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})(),window.BazWorkFlow.sameInspectionIdentity),
+onStatus(text){if(els.loading.hasAttribute('data-publishing')&&text)showLoading(text);},
 repairTarget(context){
   const relink=window.BazInspectionRelink;
   return context.requireSheetLink?relink.ensureSheetLink({...context,sheetVersion:context.sourceVersion}):relink.ensureLink(context);
@@ -1797,11 +1815,12 @@ async function loadCombinedDevice(slot,copyFrom){
   refreshCombinedDevices();
 }
 
-async function combinedDeviceAction(run){
+async function combinedDeviceAction(run,publishing=false){
   if(inspectionPhase!=='ready'||combinedDeviceBusy||_photoBusy||_pdfBusy||_pdfStarting||pdfPublisher.isBusy())return;
   combinedDeviceBusy=true;
   document.querySelector('.wrap').inert=true;
   refreshCombinedDevices();
+  if(publishing)startPublishProgress();
   try{
     if(!await saveCurrentTask())throw new Error('현재 장비의 초안을 보관하지 못했습니다.');
     await run();
@@ -1810,6 +1829,7 @@ async function combinedDeviceAction(run){
     combinedDevicePanel.status(message);showToast(message);
   }
   finally{
+    if(publishing)finishPublishProgress();
     combinedDeviceBusy=false;
     document.querySelector('.wrap').inert=false;
     refreshCombinedDevices();
@@ -1866,6 +1886,8 @@ function publishCombinedDevices(){
     const pending=[];
     for(const slot of slots){
       if(combinedDeviceInfo(slot).complete)continue;
+      document.getElementById('loadingTitle').textContent='장비 '+(slots.indexOf(slot)+1)+' / '+slots.length+' · 시트 기록 및 PDF 발행';
+      showLoading('장비 내역서를 불러오는 중…');
       if(slot!==combinedActiveSlot)await loadCombinedDevice(slot);
       combinedDevicePanel.status('장비 '+(slot+1)+' · '+v('serialNo')+' 발행 중…');
       await generatePDF({batchDevice:true});
@@ -1880,7 +1902,7 @@ function publishCombinedDevices(){
         pending.map(result=>'장비 '+(result.slot+1)+' · '+result.sn+' · '+result.message).join('\n'));
     }else combinedDevicePanel.status(slots.length+'대의 Drive 저장·Handover 연결·댓글 첨부가 완료되었습니다.');
     document.getElementById('combinedDevices').scrollIntoView({block:'start'});
-  });
+  },true);
 }
 
 async function cloudRequest(url,options){
@@ -2414,9 +2436,11 @@ function generatePDF(arg){
   if(inspectionPhase!=='ready'){pdfGenerationStatus(inspectionPhase==='error'?'이어쓰기 준비에 실패했습니다. 상단 안내에서 다시 불러오세요.':'작성할 내역서를 준비하고 있습니다.');return Promise.resolve();}
   const generationOptions=(typeof arg==='object'&&arg!==null)?arg:{preview:!!arg};
   const startsDelivery=!generationOptions.preview&&!generationOptions.blank&&!generationOptions.localOnly&&!generationOptions.qrDraft;
+  const trackPublish=combinedFlow&&startsDelivery&&!generationOptions.batchDevice;
   const deliveryStarted=startsDelivery?performance.now():null;
   if(startsDelivery)invalidateInspectionView();
   _pdfStarting=true;document.getElementById('generateBtn').disabled=true;
+  if(trackPublish)startPublishProgress();
   pdfGenerationStatus('입력 확인 중…');
   let publishing=false;
   _generationPromise=renderInspectionPdf(arg,deliveryStarted)
@@ -2427,6 +2451,7 @@ function generatePDF(arg){
       else pdfGenerationStatus('PDF 준비 실패: '+e.message+'\n현재 입력은 유지됩니다. 다시 생성해 주세요.');
     })
     .finally(()=>{
+      if(trackPublish)finishPublishProgress();
       if(startsDelivery&&!publishing)window.BazPerf.start('pdf_delivery_incomplete',deliveryStarted)();
       if(combinedFlow&&inspectionPhase==='ready')document.querySelector('.wrap').inert=combinedDeviceBusy;
       _pdfStarting=false;_generationPromise=null;document.getElementById('generateBtn').disabled=false;
@@ -2459,6 +2484,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
     document.querySelector('.wrap').inert=true;
     const entry=combinedFlow.entry(_currentTaskId);
     if(handoverReference?.recordId&&entry?.pdfStarted){
+      showLoading('이전에 발행한 PDF의 전송 상태를 확인하는 중…');
       const context={...inspectionContext(),deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice};
       if(await restorePendingPdf({duringGeneration:true,show:!opts.batchDevice,deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice})){
         if(opts.batchDevice)await pdfPublisher.retry();
@@ -2474,6 +2500,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
       }
     }
     pdfGenerationStatus('시트 기록을 확인하는 중…');
+    showLoading('시트 기록을 확인하는 중…');
     const fields={item:asSubName(),code:asItemCode()};
     const prepared=await combinedFlow.prepare(captured,fields,_currentTaskId);
     const linkTime=BazPerf.start('pdf_delivery_link');
@@ -2579,8 +2606,9 @@ async function renderInspectionPdf(arg,deliveryStarted){
         uploadContext.requireSheetLink=true;
       }
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
+      if(combinedLink)showLoading('Drive 저장과 접수 댓글 연결을 준비하는 중…');
       const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted,combinedLink);
-      if(opts.batchDevice)await delivery;
+      if(combinedLink||opts.batchDevice)await delivery;
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.
       // ── 구글시트 방문 기록 전송 — 방문로그(visit_log) 비활성화로 제거됨 ──

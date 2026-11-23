@@ -524,7 +524,7 @@
     if(r.status==='완료'&&!pendingDevices)return '';
     return '<button type="button" class="work-combined-entry" data-open-inspection="'+esc(r.id)+'"'+
       (pendingDevices?' data-inspection-pending':'')+' aria-label="'+(pendingDevices?'처리 결과 등록 이어쓰기':'처리 결과 등록')+
-      '"><span>'+(pendingDevices?'이어서 등록':'처리 결과<br>등록')+'</span></button>';
+      '"><span>'+(pendingDevices?'이어서 등록':'처리 결과 등록')+'</span></button>';
   }
   function navigateFromInspectionCard(url,id){
     try{sessionStorage.setItem(inspectionReturnKey,id);}catch(e){}
