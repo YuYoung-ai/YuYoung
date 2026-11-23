@@ -131,19 +131,20 @@
   }
 
   const searchText = () => el('search').value.trim();
-  const scopeLabel = () => state.scope === 'mine' ? '내 업무' : '전체 업무';
-  const criteria = () => JSON.stringify([state.scope, searchText()]);
+  const lookupScope = () => searchText() ? 'all' : state.scope;
+  const scopeLabel = () => lookupScope() === 'mine' ? '내 업무' : '전체 업무';
+  const criteria = () => JSON.stringify([lookupScope(), searchText()]);
   function renderScope() {
     el('scope-title').textContent = scopeLabel();
     for (const button of document.querySelectorAll('[data-scope]')) {
-      button.setAttribute('aria-pressed', String(button.dataset.scope === state.scope));
+      button.setAttribute('aria-pressed', String(button.dataset.scope === lookupScope()));
     }
   }
 
   async function sync(append = false) {
     if (!state.token || state.busy) return;
     state.busy = true;
-    const key = criteria(), query = searchText(), scope = state.scope;
+    const key = criteria(), query = searchText(), scope = lookupScope();
     const same = key === state.criteria;
     append = append && same;
     el('sync').disabled = el('load-more').disabled = true;
@@ -412,21 +413,26 @@
   el('notice-form').onsubmit = sendNotice;
   el('push-enable').onclick = enablePush;
   for (const button of document.querySelectorAll('[data-scope]')) button.onclick = () => {
-    if (state.scope === button.dataset.scope) return;
+    const previous = criteria();
     state.scope = button.dataset.scope;
+    if (state.scope === 'mine') el('search').value = '';
     renderScope();
-    void sync();
+    if (previous !== criteria()) void sync();
   };
   el('search').oninput = event => {
     clearTimeout(searchTimer);
-    if (!event.isComposing && !composing) searchTimer = setTimeout(() => void sync(), 250);
+    if (!event.isComposing && !composing) scheduleSearch();
   };
   el('search').oncompositionstart = () => { composing = true; clearTimeout(searchTimer); };
   el('search').oncompositionend = () => {
     composing = false;
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => void sync(), 250);
+    scheduleSearch();
   };
+  function scheduleSearch() {
+    renderScope();
+    searchTimer = setTimeout(() => void sync(), 250);
+  }
   for (const id of ['list', 'table-list']) el(id).onclick = event => {
     const button = event.target.closest('.sales-case-open') || (id === 'list' ? event.target.closest('.sales-card')?.querySelector('.sales-case-open') : null);
     if (button) void openDetail(button);

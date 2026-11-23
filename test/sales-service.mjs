@@ -56,6 +56,9 @@ test('sales service enforces the current assignment and returns only card fields
   assert.equal(leadRows[1].payment, '무상');
   const search = (token, query, scope) => service.handle({action: 'sales_list', token, query, scope});
   assert.deepEqual((await search(leadToken, '', 'mine')).items.map(row => row.id), ['r2']);
+  assert.deepEqual((await search(leadToken, '병원A', 'mine')).items.map(row => row.id), ['r1']);
+  assert.deepEqual((await search(leadToken, '국내A', 'mine')).items.map(row => row.id), ['r1']);
+  assert.deepEqual((await search(token, '병원B', 'mine')).items, []);
   assert.deepEqual((await search(leadToken, '병원 국내 b', 'all')).items.map(row => row.id), ['r2']);
   assert.deepEqual((await search(leadToken, '전원', 'all')).items, [], 'symptoms are outside the search scope');
   assert.deepEqual((await search(token, '국내 B', 'all')).items, [], 'search can only locate permitted cases');
