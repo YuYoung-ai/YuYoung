@@ -156,7 +156,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
   async function list(p, scope, policy) {
     const cursor = typeof p.cursor === 'string' && p.cursor.length <= 1200 ? p.cursor : '';
     const terms = searchable(String(p.query || '').slice(0, 100)).split(' ').filter(Boolean);
-    const mine = p.scope === 'mine';
+    const compactQuery = terms.join('');
+    const mine = p.scope === 'mine' && !compactQuery;
     const meta = (await kv.get(workKey('meta'))).value;
     if (!meta?.ready) throw failure(503, 'TEMPORARY', '서비스 현황을 잠시 후 다시 확인해 주세요.');
     const lookup = await lookups();
@@ -168,8 +169,9 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
       if (!visibleTo(scope, row, hospital)) continue;
       if (mine && !scope.mine.has(alias(row.sales || hospital?.sales))) continue;
       const item = card(row, hospital);
-      const hospitalName = searchable(item.hospital), salesperson = searchable(item.sales);
-      if (terms.every(term => hospitalName.includes(term) || salesperson.includes(term))) items.push(item);
+      if (!compactQuery) { items.push(item); continue; }
+      const labels = [item.hospital, item.sales].map(value => searchable(value).replaceAll(' ', ''));
+      if (labels.some(label => label.includes(compactQuery)) || terms.every(term => labels.some(label => label.includes(term)))) items.push(item);
     }
     const notifications = policy?.notifications === true;
     return {success: true, name: scope.name, notifications, canSend: notifications && scope.canSend, items, cursor: page.cursor, updatedAt: new Date(now()).toISOString()};
