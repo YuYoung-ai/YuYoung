@@ -22,12 +22,17 @@ const data=[
  {date:'2026-10-28',hosp:'예시 C병원',gubun:'A/S',type:'핸드피스 작동 불량',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'X'},
  {date:'2026-10-28',hosp:'예시 A병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
  {date:'2026-10-29',hosp:'예시 B병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
+ {date:'2026-10-29',hosp:'예시 D병원',gubun:'점검',type:'냉각수 부족'},
+ {date:'2026-10-30',hosp:'예시 D병원',gubun:'점검',type:'이상 없음'},
+ {date:'2026-10-30',hosp:'예시 E병원',gubun:'점검',type:'무증상'},
  {date:'2026-07-13',hosp:'예시 A병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'}
 ];
 const phrases={};const errors=[];const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL||undefined,headless:true});
-const context=await browser.newContext({viewport:{width:1550,height:1100},deviceScaleFactor:2,acceptDownloads:true});
+const context=await browser.newContext({viewport:{width:1550,height:1100},deviceScaleFactor:2,acceptDownloads:true,serviceWorkers:'block'});
 await context.addInitScript(()=>{sessionStorage.setItem('baz_auth_token','tok-smoke');sessionStorage.setItem('baz_auth_level','3');sessionStorage.setItem('baz_auth_name','테스트');sessionStorage.setItem('baz_auth_expires',new Date(Date.now()+864e5).toISOString());sessionStorage.setItem('baz_auth_verified_ts',String(Date.now()));localStorage.setItem('baz_dash_view','exec');});
 const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():r.abort());
+await page.route('**yuyoung-production.coaptation.workers.dev/**',r=>r.fulfill({json:{ok:true,valid:true,level:3,name:'테스트'}}));
 await page.route('**yuyoung-ai.deno.net/**',r=>r.fulfill({json:{ok:true,valid:true,level:3,name:'테스트'}}));
 await page.route('**://script.google.com/**',r=>{let a=new URL(r.request().url()).searchParams.get('action'),b={success:true};if(r.request().method()==='POST'){const p=JSON.parse(r.request().postData());phrases[p.name]={name:p.name,text:p.text,revision:1};b.item=phrases[p.name];}else if(a==='all')b={success:true,data,updated:'2026-10-30 09:00'};else if(a==='hospdb')b.data=[];else if(a==='report_phrases')b.items=Object.values(phrases);return r.fulfill({json:b});});
 
@@ -35,38 +40,58 @@ try{
  await page.goto('http://127.0.0.1:'+server.address().port+'/dashboard-pc.html');await page.waitForFunction(()=>window.DATA_READY&&window.BazWeeklyReport);
  await page.evaluate(()=>{F.from='2026-10-26';F.to='2026-10-31';buildFilters();apply();openWeekly();document.getElementById('wkSel').value='2026-10-26';exOnReportPeriodChange_('week');EX_PPT_VOC_FOCUS.week=Array.from(document.getElementById('wkVocSel').options).map(o=>o.value).find(v=>/노즐.*누수/.test(v));});
  await page.waitForTimeout(500);
- let state=await page.evaluate(()=>{const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items;return {change:s.change,counts:s.management.items,notes:s.notes,layout:BazWeeklyReport.layout(L),applied:items.some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel),cumulative:items.some(o=>o.actionSavingCumulative),saving:items.filter(o=>o.actionSavingPeriod).map(o=>o.t),notesTexts:items.filter(o=>o.weeklyNote!=null)};});
- assert.equal(state.applied,false);assert.equal(state.cumulative,false);assert.deepEqual(state.saving,['₩562,400']);assert.equal(state.change.up.length,3);assert.deepEqual(state.notes.items,[]);assert.equal(state.counts[0].cur,2);assert.equal(state.counts[0].prev,1);assert.equal(state.counts[1].cur,1);assert.equal(state.counts[1].prev,2);assert.equal(state.layout.change.h,2.42);assert.equal(state.layout.notes.h,.85);
- console.log('PASS snapshot, TOP3, count deduplication, prior period, layout, removed markers and cumulative amount');
- const fileLabels=await page.evaluate(()=>{const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;return {guides:items.filter(o=>o.manualFileSlot).length,captions:items.filter(o=>o.manualFileCaption).map(o=>o.t)};});
- assert.equal(fileLabels.guides,0,'no insertion outlines');
- assert.deepEqual(fileLabels.captions,['A/S 처리 내역서','A/S 처리 내역서','A/S 처리 내역서']);
- const alignment=await page.evaluate(()=>{
-  const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items;
-  const countColumns=items.filter(o=>o.weeklyVocCount||o.weeklyManagementCount).map(o=>[o.x,o.w,o.align]);
-  const deltas=items.filter(o=>o.weeklyManagementDelta).map(o=>o.t);
-  const dividers=items.filter(o=>o.weeklyVocDivider).length;
-  s.change.up=s.change.up.slice(0,1);
-  return {countColumns,deltas,dividers,singleDivider:buildExecutivePptDeck(s)[0].items.filter(o=>o.weeklyVocDivider).length};
+ const state=await page.evaluate(()=>{
+  const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items,layout=BazWeeklyReport.layout(L);
+  const card=layout.voc;
+  const vocTexts=items.filter(o=>o.k==='text'&&o.x>=card.x&&o.y>=card.y&&o.y<card.y+card.h);
+  return {voc:s.weeklyVoc,cards:items.filter(o=>o.weeklyCard),vocTexts,
+   counts:items.filter(o=>o.weeklyManagementCount).map(o=>o.t),
+   captions:items.filter(o=>o.manualFileCaption).map(o=>o.t),
+   dividers:items.filter(o=>o.weeklyVocDivider).length,
+   hasNotes:items.some(o=>o.t?.includes('특이사항')),
+   previousVocHeight:L.change.h,bodyBottom:L.notes.y+L.notes.h,
+   applied:items.some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel),
+   cumulative:items.some(o=>o.actionSavingCumulative),saving:items.filter(o=>o.actionSavingPeriod).map(o=>o.t)};
  });
- assert(alignment.countColumns.every(c=>JSON.stringify(c)===JSON.stringify(alignment.countColumns[0])),'VOC and hospital count columns align');
- assert.deepEqual(alignment.deltas,['▲ 1','▼ 1']);
- assert.equal(alignment.dividers,3);assert.equal(alignment.singleDivider,1,'divider under a single/final symptom');
+ assert.equal(state.applied,false);assert.equal(state.cumulative,false);assert.deepEqual(state.saving,['₩562,400']);
+ assert.equal(state.voc.length,5);assert.equal(state.voc[0].name,'노즐 누수(약액 유입)');
+ assert.equal(state.voc.at(-1).name,'무증상');assert.match(state.voc.at(-1).desc,/정상 동작/);
+ assert.equal(state.dividers,5);assert.equal(state.hasNotes,false);
+ assert.deepEqual(state.counts,['2곳','1곳']);assert.deepEqual(state.captions,['사용자 교육 현황','노즐 재사용 현황']);
+ const [vocCard,managementCard]=state.cards;
+ assert.deepEqual(state.cards.map(o=>o.weeklyCard),['VOC / 점검 유형','교육·재사용 병원 현황']);
+ assert(vocCard.h>state.previousVocHeight&&vocCard.y+vocCard.h<managementCard.y);
+ assert.equal(managementCard.y+managementCard.h,state.bodyBottom);
+ assert(state.vocTexts.slice(1).every(o=>o.weeklyVoc!=null||o.weeklyDescription!=null),'VOC card shows only names and descriptions');
+ console.log('PASS weekly VOC types, no symptoms, expanded card, bottom placement, current hospital counts, and unchanged savings');
  // Save a description, clear per-report edit, then prove it is reused from the saved dictionary.
  const unregistered=page.locator('.wr-voc').filter({has:page.locator('.missing')}).first();
- const savedName=(await unregistered.locator('.wr-head strong').innerText()).replace(/^\d+\.\s*/, '');await unregistered.locator('textarea').fill('작동 이상이 반복적으로 발생하는 현상');await unregistered.getByRole('button',{name:'기본 문구로 저장'}).click();await page.waitForTimeout(150);
+ const savedName=await unregistered.locator('.wr-symptom').innerText();await unregistered.locator('textarea').fill('작동 이상이 반복적으로 발생하는 현상');await unregistered.getByRole('button',{name:'기본 문구로 저장'}).click();await page.waitForTimeout(150);
  const reused=await page.evaluate(name=>{
   const other=buildExecutiveReportSnapshot({type:'week',from:'2026-10-27',to:'2026-10-31'});
-  return other.change.up.find(r=>r.k===name);
+  return other.weeklyVoc.find(r=>r.name===name);
  },savedName);
  assert.equal(reused.desc,'작동 이상이 반복적으로 발생하는 현상');
- assert.equal(await page.evaluate(()=>BazWeeklyReport.management(EX_ROWS,[]).items.every(r=>r.prev===null)),true);
- const empty=await page.evaluate(()=>{const s=buildExecutiveReportSnapshot({type:'week',from:'2026-02-02',to:'2026-02-07'});return {n:s.change.up.length,zero:s.management.items.every(r=>r.cur===0),notes:s.notes.items.length,draw:buildExecutivePptDeck(s).length};});
- assert.deepEqual(empty,{n:0,zero:true,notes:0,draw:1});
- console.log('PASS saved description reused in a different period, isolated attachments, absent comparison and empty periods');
- await page.locator('.wr-note').nth(0).fill('다음 주 사용자 교육 일정을 확인합니다.');await page.locator('.wr-note').nth(1).fill('노즐 재사용 병원은 후속 방문을 진행합니다.');
+ const periods=await page.evaluate(()=>{
+  const isolated=buildExecutiveReportSnapshot({type:'week',from:'2026-07-13',to:'2026-07-18'});
+  const empty=buildExecutiveReportSnapshot({type:'week',from:'2026-02-02',to:'2026-02-07'});
+  return {isolated:isolated.weeklyVoc.map(r=>r.name),empty:empty.weeklyVoc.length,zero:empty.management.items.every(r=>r.cur===0),draw:buildExecutivePptDeck(empty).length};
+ });
+ assert.deepEqual(periods,{isolated:['노즐 누수(약액 유입)'],empty:0,zero:true,draw:1});
+ const longDescription='검'.repeat(90);
+ await page.locator('.wr-desc').last().fill(longDescription);
+ const wrapped=await page.evaluate(()=>{
+  const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;
+  const lines=items.filter(o=>o.weeklyDescription===4);
+  return {text:lines.map(o=>o.t).join(''),end:lines.at(-1).y+lines.at(-1).h,divider:items.filter(o=>o.weeklyVocDivider).at(-1).y};
+ });
+ assert.equal(wrapped.text,longDescription);assert(wrapped.end<wrapped.divider,'long description fits in the final row');
+ await page.locator('.wr-desc').last().fill(state.voc.at(-1).desc);
+ console.log('PASS saved description reuse, long descriptions, a week without comparison, and empty periods');
  await page.evaluate(()=>{document.getElementById('wkModal').style.display='block';});
  assert.equal(await page.locator('#wkModal input[type=file]').count(),0,'PDF upload removed');
+ assert.equal(await page.locator('#wkNoteBox, .wr-delta').count(),0);
+ assert.equal(await page.locator('#wkVocDescBox + .wr-management').count(),1);
  assert.equal(await page.getByRole('button',{name:'사용자 교육 현황.xlsx 다운로드'}).count(),1);
  await page.locator('#wkModal .report-box').screenshot({path:path.join(out,'implemented-editor.png')});
  await page.evaluate(()=>previewWeeklyPPT());await page.waitForSelector('#wkPvModal.show');await page.locator('#wkPvSlides > div').first().screenshot({path:path.join(out,'implemented-weekly-report.png')});
@@ -79,10 +104,14 @@ try{
  });
  const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
  const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');
+ assert.match(slide,/VOC \/ 점검 유형/);assert.match(slide,/교육·재사용 병원 현황/);
+ assert.doesNotMatch(slide,/특이사항|VOC 증가 현황|A\/S 처리 내역서/);
  assert.equal((slide.match(/<p:oleObj /g)||[]).length,0);
  assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);
  assert(!slide.includes('bazAttach'));
  const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>{openMonthly();return makeMonthlyPPT();});await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
+ const monthlyZip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-monthly-report.pptx')));
+ assert.match(await monthlyZip.file('ppt/slides/slide1.xml').async('string'),/특이사항/);
  assert.equal(await page.evaluate(()=>qaWriteFileCalls.length),2,'weekly and monthly both use original writeFile');
  console.log('PASS original writeFile used for both reports, zero embedded files and no attachment postprocessing');
  for(const kind of ['education','nozzle']){
@@ -96,7 +125,7 @@ try{
    return Array.from(doc.querySelectorAll('*')).some(e=>(e.getAttributeNS(ns,'Ignorable')||'').split(' ').filter(Boolean).some(p=>!e.lookupNamespaceURI(p)));
   },kind);assert.equal(malformed,false,'Office compatibility namespace prefixes remain bound');
  }
- console.log('PASS description save, 2 note lines, template style/namespace preservation, manual file insertion with separate workbook downloads');
+ console.log('PASS description save, template style/namespace preservation, and separate workbook downloads');
  assert.deepEqual(errors,[]);console.log('PASS no browser runtime errors');
  await fs.writeFile(path.join(out,'report-qa.json'),JSON.stringify({checks:'passed',state,errors},null,2));
 }finally{await browser.close();server.close();}
