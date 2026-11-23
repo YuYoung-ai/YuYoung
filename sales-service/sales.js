@@ -10,7 +10,7 @@
   const koreanDate = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
   let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
-  let composing = false, detailRequest = 0;
+  let detailRequest = 0;
 
   function feedback(message, error = false) {
     el('feedback').textContent = message;
@@ -165,13 +165,20 @@
     const range = window.BazWorkFields.range(period,today,today.slice(0,7));
     const normalize = value => String(value || '').normalize('NFKC').trim().toLocaleLowerCase('ko-KR');
     const terms = normalize(query).split(/\s+/).filter(Boolean), joined = terms.join('');
+    let outsidePeriod = 0;
     const rows = state.snapshot.items.filter(row => {
       if (scope === 'mine' && !row.mine) return false;
+      if (joined) {
+        const labels = [row.hospital,row.sales].map(value=>normalize(value).replace(/\s+/g,''));
+        const matches = labels.some(label=>label.includes(joined)) || terms.every(term=>labels.some(label=>label.includes(term)));
+        if (!matches) return false;
+      }
       const day = row.visitAt.slice(0,10);
-      if (range && (day < range[0] || day > range[1])) return false;
-      if (!joined) return true;
-      const labels = [row.hospital,row.sales].map(value=>normalize(value).replace(/\s+/g,''));
-      return labels.some(label=>label.includes(joined)) || terms.every(term=>labels.some(label=>label.includes(term)));
+      if (range && (day < range[0] || day > range[1])) {
+        outsidePeriod++;
+        return false;
+      }
+      return true;
     });
     rows.sort((a,b)=>b.visitAt.localeCompare(a.visitAt) || b.changed.localeCompare(a.changed) || a.id.localeCompare(b.id));
     state.rows = new Map(rows.map(row=>[row.id,row]));
@@ -183,7 +190,11 @@
     el('list-count').textContent = `${rows.length.toLocaleString('ko-KR')}건`;
     el('list-conditions').textContent = [scopeLabel(), `방문일 기준 ${periodNames[period]}`, '방문 일시 내림차순', query ? `검색 “${query}”` : ''].filter(Boolean).join(' · ');
     el('empty').hidden = rows.length>0;
-    el('empty').textContent = query ? '검색 결과가 없습니다.' : scope === 'mine' ? '선택한 기간에 내 업무로 배정된 접수가 없습니다.' : '선택한 기간에 조회할 처리 내역이 없습니다.';
+    if (query && outsidePeriod && !rows.length) {
+      el('empty').textContent = `선택한 기간에 검색 결과가 없습니다. 전체 기간에 ${outsidePeriod.toLocaleString('ko-KR')}건이 있습니다.`;
+    } else {
+      el('empty').textContent = query ? '검색 결과가 없습니다.' : scope === 'mine' ? '선택한 기간에 내 업무로 배정된 접수가 없습니다.' : '선택한 기간에 조회할 처리 내역이 없습니다.';
+    }
     el('load-more').hidden = shown.length>=rows.length;
     const replacement = anchor && [...container.children].find(card=>card.dataset.requestId===anchor.dataset.requestId);
     if (replacement) window.scrollBy(0,replacement.getBoundingClientRect().top-anchorTop);
@@ -493,20 +504,18 @@
     renderPeriod();
     renderRows();
   };
-  el('search').oninput = event => {
-    clearTimeout(searchTimer);
-    if (!event.isComposing && !composing) scheduleSearch();
-  };
-  el('search').oncompositionstart = () => { composing = true; clearTimeout(searchTimer); };
-  el('search').oncompositionend = () => {
-    composing = false;
-    clearTimeout(searchTimer);
-    scheduleSearch();
-  };
   function scheduleSearch() {
+    clearTimeout(searchTimer);
     renderScope();
     searchTimer = setTimeout(renderRows, 180);
   }
+  for (const event of ['input','compositionend','search']) el('search').addEventListener(event,scheduleSearch);
+  el('work-search').onsubmit = event => {
+    event.preventDefault();
+    clearTimeout(searchTimer);
+    renderScope();
+    renderRows();
+  };
   for (const id of ['list', 'table-list']) el(id).onclick = event => {
     const button = event.target.closest('.sales-case-open') || (id === 'list' ? event.target.closest('.sales-card')?.querySelector('.sales-case-open') : null);
     if (button) void openDetail(button);
