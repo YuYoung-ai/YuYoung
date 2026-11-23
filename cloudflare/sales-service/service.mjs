@@ -8,6 +8,18 @@ const alias = value => String(value || '').normalize('NFKC').trim().replace(/\s+
 const tokenPattern = /^sales_[0-9a-f]{64}$/;
 const isLive = row => Boolean(row?.id && !row.deletedAt && !row.purgedAt);
 const hour = 60 * 60 * 1000;
+const domesticRegions = new Set([
+  '서울', '서울특별시', '경기', '경기도', '서울 / 경기', '인천', '인천광역시',
+  '대전', '대전광역시', '충청', '대전 / 충청', '충북', '충청북도', '충남', '충청남도', '세종', '세종특별자치시',
+  '경상', '경북', '경상북도', '경남', '경상남도', '대구', '대구광역시', '부산', '부산광역시', '울산', '울산광역시',
+  '전라', '전북', '전라북도', '전북특별자치도', '전남', '전라남도', '광주', '광주광역시',
+  '강원', '강원도', '강원특별자치도', '제주', '제주도', '제주특별자치도',
+]);
+
+function visibleTo(scope, row, hospital) {
+  if (scope.csAdmin) return domesticRegions.has(alias(hospital?.region || row.region));
+  return scope.allowed.has(alias(row.sales || hospital?.sales));
+}
 
 function failure(status, code, message) {
   return Object.assign(new Error(message), {status, code});
@@ -97,14 +109,21 @@ export function enqueueSalesNotice(tx, {previous, notice}) {
   return tx.check(previous).set(previous.key, notice, notice.stage ? {} : expiry).set(key('due', notice.at, notice.id), true, expiry);
 }
 
-export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requestPage, sender, validateSubscription} = {}) {
+export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requestPage, sender, validateSubscription, getCsAdmin} = {}) {
+  async function accessFor(policy, email) {
+    const assigned = scopeFor(policy, email);
+    if (assigned) return assigned;
+    const admin = await getCsAdmin?.(email);
+    return admin ? {email, name: admin.name, csAdmin: true, canSend: true} : null;
+  }
+
   async function security(token) {
     if (!tokenPattern.test(String(token))) throw failure(401, 'LOGIN_REQUIRED', 'Google 계정으로 로그인해 주세요.');
     const entry = await kv.get(key('session', await hash(token)));
     const session = entry.value;
     if (!session || session.expiresAt <= now()) throw failure(401, 'LOGIN_REQUIRED', '로그인 시간이 만료되었습니다.');
     const policy = (await kv.get(key('access'))).value;
-    const scope = scopeFor(policy, session.email);
+    const scope = await accessFor(policy, session.email);
     if (!scope) throw failure(403, 'ACCESS_DENIED', '이 계정에 영업 앱 이용 권한이 없습니다.');
     return {scope, session, entry, policy};
   }
@@ -115,7 +134,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     if (!email || claims.email_verified !== true && claims.email_verified !== 'true') {
       throw failure(401, 'LOGIN_REQUIRED', 'Google 계정을 확인해 주세요.');
     }
-    const scope = scopeFor((await kv.get(key('access'))).value, email);
+    const scope = await accessFor((await kv.get(key('access'))).value, email);
     if (!scope) throw failure(403, 'ACCESS_DENIED', '이 계정에 영업 앱 이용 권한이 없습니다.');
     const random = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
     const token = `sales_${random}`, ttl = p.remember === true ? 30 * 24 * hour : 8 * hour;
@@ -141,9 +160,9 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     for (const row of page.rows) {
       if (!isLive(row)) continue;
       const hospital = lookup(row);
-      if (scope.allowed.has(alias(row.sales || hospital?.sales))) items.push(card(row, hospital));
+      if (visibleTo(scope, row, hospital)) items.push(card(row, hospital));
     }
-    const notifications = policy.notifications === true;
+    const notifications = policy?.notifications === true;
     return {success: true, name: scope.name, notifications, canSend: notifications && scope.canSend, items, cursor: page.cursor, updatedAt: new Date(now()).toISOString()};
   }
 
@@ -151,19 +170,19 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const entry = await kv.get(workKey('request', requestId));
     if (!isLive(entry.value)) return null;
     const row = entry.value;
-    const hospital = row.sales ? null : (await lookups())(row);
+    const hospital = (await lookups())(row);
     const owner = alias(row.sales || hospital?.sales);
     const members = Object.entries(policy.accounts || {}).filter(([, value]) => value.primaryFor?.some(name => alias(name) === owner));
-    if (!owner || members.length !== 1) return {entry, row, owner};
+    if (!owner || members.length !== 1) return {entry, row, owner, hospital};
     const recipient = scopeFor(policy, members[0][0]);
-    return {entry, row, owner, recipient: recipient?.allowed.has(owner) ? recipient : null};
+    return {entry, row, owner, hospital, recipient: recipient?.allowed.has(owner) ? recipient : null};
   }
 
   async function manual(p, scope, policy) {
     if (!scope.canSend) throw failure(403, 'FORBIDDEN', '수동 알림 발신 권한이 없습니다.');
     const requestId = String(p.requestId || '').slice(0, 100);
     const current = await target(requestId, policy);
-    if (!current || !scope.allowed.has(current.owner)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
+    if (!current || !visibleTo(scope, current.row, current.hospital)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
     if (!current.recipient) throw failure(409, 'NO_RECIPIENT', '이 접수에 연결된 영업 알림 수신자가 없습니다.');
     const recipient = await hash(current.recipient.email + ':' + requestId);
     if (p.action === 'sales_notice_target') {
@@ -209,8 +228,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     for await (const entry of kv.list({prefix: key('inbox', scope.email)}, {limit: 24, reverse: true})) {
       const row = (await kv.get(workKey('request', entry.value.requestId))).value;
       if (!isLive(row)) continue;
-      const hospital = row.sales ? null : (await lookups())(row);
-      if (scope.allowed.has(alias(row.sales || hospital?.sales))) items.push(entry.value);
+      const hospital = row.sales && !scope.csAdmin ? null : (await lookups())(row);
+      if (visibleTo(scope, row, hospital)) items.push(entry.value);
     }
     return {success: true, items};
   }
@@ -277,7 +296,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
       await kv.delete(entry.key);
       return {success: true};
     }
-    if (policy.notifications === true) {
+    if (policy?.notifications === true) {
       if (p.action === 'sales_notice_target' || p.action === 'sales_notice_send') return manual(p, scope, policy);
       if (p.action === 'sales_inbox') return inbox(scope, policy);
       if (p.action === 'sales_push_config') return {success: true, publicKey: await sender.publicKey(), binding: await hash(scope.email)};

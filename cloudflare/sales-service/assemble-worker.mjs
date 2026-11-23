@@ -33,6 +33,10 @@ insert(routing, `  function salesService(kv) {
       hash: sha256B64u,
       sender: createPushSender(kv),
       validateSubscription,
+      getCsAdmin: async email => {
+        const admin = (await kv.get(["user_email", email])).value;
+        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;
+      },
       verifyGoogle: async idToken => {
         try { return await verifyGoogleIdToken(String(idToken || "")); }
         catch { throw Object.assign(new Error("Google 계정을 확인해 주세요."), {status: 401, code: "LOGIN_REQUIRED"}); }

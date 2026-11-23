@@ -128,3 +128,31 @@ test('automatic milestones and manual notices use separate idempotency and the c
   assert.equal(sent.length, 3);
   assert.equal(sent[2].payload.binding, hash(substitute));
 });
+
+test('current BAZ CS administrators can start with domestic requests before the sales roster is configured', async () => {
+  const kv = new Kv();
+  const admin = 'existing-admin@example.com';
+  let activeAdmin = true;
+  await kv.set(['hospitalwork-v2', 'meta'], {ready:true});
+  await kv.set(['hospitalwork-v2', 'hospitalRef', 'reference'], {key:'reference', name:'국내 병원', region:'서울 / 경기'});
+  const service = createSalesService(kv, {
+    now: () => kv.clock,
+    hash: value => createHash('sha256').update(value).digest('base64url'),
+    verifyGoogle: async email => ({email, email_verified:true}),
+    getCsAdmin: async email => email === admin && activeAdmin ? {name:'기존 관리자'} : null,
+    requestPage: async () => ({rows:[
+      {id:'local', hospitalKey:'reference', region:'과거 분류'},
+      {id:'abroad', region:'해외'},
+      {id:'unknown-region'},
+    ], cursor:''}),
+  });
+  const login = idToken => service.handle({action:'sales_google_login', idToken});
+  await assert.rejects(login('ordinary-staff@example.com'), {status:403});
+  const {token} = await login(admin);
+  const request = {action:'sales_list', token};
+  const list = await service.handle(request);
+  assert.deepEqual(list.items.map(row => row.id), ['local']);
+  assert.equal(list.notifications, false);
+  activeAdmin = false;
+  await assert.rejects(service.handle(request), {status:403});
+});

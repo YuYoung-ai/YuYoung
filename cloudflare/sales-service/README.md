@@ -7,7 +7,7 @@ node cloudflare/sales-service/assemble-worker.mjs <현재-Worker-모듈> <후보
 node --test test/sales-service.mjs
 ```
 
-배포 시 운영 D1의 `sales-service-v1` 네임스페이스에 별도 영업 계정 정책을 설정합니다. `sales_admin_access` 요청은 현재 권한이 3인 기존 BAZ CS Google 관리자만 실행할 수 있습니다. `policy` 값에 국내 영업 담당명, 승인 계정과 역할을 입력합니다. 아래는 가상 예시입니다.
+기존 BAZ CS의 활성 Google 관리자는 국내 지역으로 확인된 접수를 조회할 수 있습니다. 영업 담당자와 알림 수신 계정을 등록하려면 운영 D1의 `sales-service-v1` 네임스페이스에 영업 계정 정책을 설정합니다. `sales_admin_access` 요청은 현재 권한이 3인 기존 BAZ CS Google 관리자만 실행할 수 있습니다. `policy` 값에 국내 영업 담당명, 승인 계정과 역할을 입력합니다. 아래는 가상 예시입니다.
 
 ```json
 {
