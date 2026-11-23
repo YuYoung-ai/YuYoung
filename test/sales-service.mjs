@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
 import test from 'node:test';
 import {createSalesService, enqueueSalesNotice, prepareSalesTransition, updateSalesAccess} from '../cloudflare/sales-service/service.mjs';
+import {salesRequestPage} from '../cloudflare/sales-service/d1-page.mjs';
 import {Kv} from './notification-test-kv.mjs';
 
 test('sales service enforces the current assignment and returns only card fields', async () => {
@@ -10,7 +12,7 @@ test('sales service enforces the current assignment and returns only card fields
     domesticSales: ['국내 A', '국내 B'],
     accounts: {
       'staff@example.com': {name: '영업 사원', role: 'staff', sales: ['국내 A', '해외']},
-      'lead@example.com': {name: '영업 팀장', role: 'lead'},
+      'lead@example.com': {name: '영업 팀장', role: 'lead', sales: ['국내 B']},
     },
   };
   await kv.set(['sales-service-v1', 'access'], policy);
@@ -52,6 +54,24 @@ test('sales service enforces the current assignment and returns only card fields
   const leadRows = (await list(leadToken)).items;
   assert.deepEqual(leadRows.map(row => row.id), ['r1', 'r2']);
   assert.equal(leadRows[1].payment, '무상');
+  const search = (token, query, scope) => service.handle({action: 'sales_list', token, query, scope});
+  assert.deepEqual((await search(leadToken, '', 'mine')).items.map(row => row.id), ['r2']);
+  assert.deepEqual((await search(leadToken, '병원 국내 b', 'all')).items.map(row => row.id), ['r2']);
+  assert.deepEqual((await search(leadToken, '전원', 'all')).items, [], 'symptoms are outside the search scope');
+  assert.deepEqual((await search(token, '국내 B', 'all')).items, [], 'search can only locate permitted cases');
+
+  await kv.set(['hospitalwork-v2','request','r1'], {...request, status:'완료'});
+  const good = {id:'h1', kind:'result', source:{recordId:'s1', date:'2026-11-23', engineer:'처리 A', detail:'전원 부품 점검', result:'정상', sn:'private serial', cost:'private cost'}};
+  const changed = {...good, id:'h2', source:{...good.source, recordId:'s2'}, sourceReview:{pending:true}};
+  const unrelated = {...good, id:'h3', source:{...good.source, recordId:'s3'}};
+  for (const h of [good, changed, unrelated]) await kv.set(['hospitalwork-v2','history','r1',h.id],h);
+  for (const h of [good, changed]) await kv.set(['hospitalwork-v2','link',h.source.recordId],{requestId:'r1', historyId:h.id});
+  await kv.set(['hospitalwork-v2','link','s3'],{requestId:'r2', historyId:'h3'});
+  const info = await service.handle({action:'sales_detail', token, requestId:'r1'});
+  assert.equal(info.resultPending,true);
+  assert.deepEqual(info.results,[{date:'2026-11-23', engineer:'처리 A', detail:'전원 부품 점검', result:'정상'}]);
+  await kv.set(['hospitalwork-v2','request','r2'], rows[1]);
+  await assert.rejects(service.handle({action:'sales_detail', token, requestId:'r2'}), {status:404});
   request.qrIntake.appointmentConfirmed = true;
   assert.equal((await list(token)).items[0].visitAt, '2026-11-23T10:30');
   request.sales = '국내 B';
@@ -62,6 +82,31 @@ test('sales service enforces the current assignment and returns only card fields
   await assert.rejects(list(token), {status: 403});
   await service.handle({action: 'sales_logout', token: leadToken});
   await assert.rejects(list(leadToken), {status: 401});
+});
+
+test('D1 orders the full request range by confirmed visit time before paging', async () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE kv_entries (k TEXT PRIMARY KEY, value TEXT, expires INTEGER)');
+    const encode = v => v && typeof v === 'object' ? ['o', Object.entries(v).map(([key, value]) => [key, encode(value)])] : ['p',v];
+    const decode = ([type, value]) => type === 'o' ? Object.fromEntries(value.map(([key, packed]) => [key, decode(packed)])) : value;
+    const insert = db.prepare('INSERT INTO kv_entries VALUES (?,?,?)');
+    const put = (id, row, expires = null) => insert.run('rq:'+id, JSON.stringify(encode({id,...row})), expires);
+    for (let i=0;i<192;i++) put('x'+i, {visitAt:'2026-11-23T10:30'});
+    put('older', {visitAt:'2025-01-01T18:25'});
+    put('later', {visitAt:'2026-12-01T10:00', qrIntake:{confirmationRequired:true, appointmentConfirmed:true}});
+    put('provisional', {visitAt:'2026-12-20T11:00', qrIntake:{confirmationRequired:true, appointmentConfirmed:false}});
+    put('expired', {visitAt:'2026-12-25T11:00'}, 2);
+    const kv = {now: () => 10, db:{prepare(sql) {const s=db.prepare(sql); return {bind(...args) {return {all:async () => ({results:s.all(...args)})};}};}}};
+    const codec = {keyHex:()=>'rq:', prefixEnd:key=>key+'\uffff', unpack:text=>decode(JSON.parse(text))};
+    const first = await salesRequestPage(kv, '', codec);
+    const next = await salesRequestPage(kv, first.cursor, codec);
+    assert.equal(first.rows.length,192);
+    assert.equal(first.rows[0].id,'later');
+    assert.deepEqual(next.rows.slice(-2).map(row=>row.id), ['older','provisional']);
+    assert.equal(next.cursor,'');
+    assert.equal(new Set([...first.rows,...next.rows].map(row=>row.id)).size,195);
+  } finally {db.close();}
 });
 
 test('automatic milestones and manual notices use separate idempotency and the current recipient', async () => {
