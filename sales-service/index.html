@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko" data-baz-theme-native>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f7fa">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BAZ 영업">
+  <title>서비스 현황 | BAZ 영업</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="../icon-192.png">
+  <script src="../js/baz-theme.js?v=306"></script>
+  <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
+  <link rel="stylesheet" href="../css/baz-brand.css?v=306">
+  <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
+  <link rel="stylesheet" href="sales.css">
+  <script src="sales.js" defer></script>
+</head>
+<body>
+  <header class="sales-bar">
+    <div class="sales-brand"><img src="../logo.png" alt="" width="32" height="32">BAZ 영업</div>
+    <div class="sales-controls">
+      <button id="sync" type="button" hidden>↻ 동기화</button>
+      <button id="theme" type="button" aria-label="테마 전환"></button>
+    </div>
+  </header>
+  <main class="sales-main">
+    <section id="sign-in" class="sales-sign-in" aria-labelledby="sign-in-title" hidden>
+      <h1 id="sign-in-title">서비스 현황</h1>
+      <p>등록된 Google 계정으로 로그인해 주세요.</p>
+      <div id="google-sign-in" class="sales-google"></div>
+      <label class="sales-remember"><input id="remember" type="checkbox"> 이 기기 기억하기</label>
+      <button id="retry-login" type="button" hidden>다시 시도</button>
+    </section>
+    <section id="workspace" aria-labelledby="workspace-title" hidden>
+      <div class="sales-heading">
+        <h1 id="workspace-title">서비스 현황</h1>
+        <p id="sync-time" class="sales-muted"></p>
+      </div>
+      <div class="sales-scope" aria-label="조회 범위">
+        <span>전체 업무</span><span>전체 기간</span>
+      </div>
+      <ul id="list" class="sales-list" aria-label="처리내역"></ul>
+      <div id="empty" class="sales-empty" hidden>조회할 처리내역이 없습니다.</div>
+      <div class="sales-more"><button id="load-more" type="button" hidden>더 불러오기</button></div>
+      <footer class="sales-footer">
+        <span id="account"></span>
+        <button id="sign-out" type="button">로그아웃</button>
+      </footer>
+      <nav id="notice-tools" class="sales-notice-tools" aria-label="영업 알림" hidden>
+        <button id="inbox-open" type="button">받은 알림</button>
+        <button id="push-enable" type="button">기기 알림 연결</button>
+        <button id="notice-open" type="button" hidden>담당자에게 알림 보내기</button>
+      </nav>
+    </section>
+    <p id="feedback" class="sales-feedback" role="status" aria-live="polite">로그인 상태를 확인하고 있습니다…</p>
+  </main>
+  <dialog id="inbox-dialog" aria-labelledby="inbox-title">
+    <div class="sales-dialog-heading"><h2 id="inbox-title">받은 알림</h2><form method="dialog"><button type="submit">닫기</button></form></div>
+    <p id="inbox-feedback" class="sales-muted" role="status"></p>
+    <ul id="inbox-items" class="sales-inbox"></ul>
+  </dialog>
+  <dialog id="notice-dialog" aria-labelledby="notice-title">
+    <div class="sales-dialog-heading"><h2 id="notice-title">담당자에게 알림 보내기</h2><form method="dialog"><button type="submit">닫기</button></form></div>
+    <form id="notice-form">
+      <label for="notice-request">접수 선택</label>
+      <select id="notice-request" required></select>
+      <p id="notice-recipient" class="sales-muted" role="status"></p>
+      <label for="notice-message">알림 문구</label>
+      <textarea id="notice-message" rows="4" maxlength="500" required></textarea>
+      <button id="notice-send" type="submit" disabled>전송</button>
+      <p id="notice-feedback" class="sales-muted" role="status"></p>
+    </form>
+  </dialog>
+  <template id="service-card">
+    <li class="sales-card">
+      <h2 data-card="hospital"></h2>
+      <p class="sales-symptom" data-card="symptom"></p>
+      <div class="work-status-group sales-badges">
+        <span class="badge status-badge" data-card="status"></span>
+        <span class="service-badge" data-card="payment"></span>
+      </div>
+      <dl class="sales-facts">
+        <div class="sales-visit"><dt>방문 일시</dt><dd data-card="visitAt"></dd></div>
+        <div><dt>담당 엔지니어</dt><dd data-card="engineer"></dd></div>
+        <div><dt>CS 접수</dt><dd data-card="cs"></dd></div>
+        <div><dt>영업 담당자</dt><dd data-card="sales"></dd></div>
+      </dl>
+    </li>
+  </template>
+</body>
+</html>

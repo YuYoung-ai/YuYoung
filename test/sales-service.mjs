@@ -1,0 +1,130 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import test from 'node:test';
+import {createSalesService, enqueueSalesNotice, prepareSalesTransition, updateSalesAccess} from '../cloudflare/sales-service/service.mjs';
+import {Kv} from './notification-test-kv.mjs';
+
+test('sales service enforces the current assignment and returns only card fields', async () => {
+  const kv = new Kv();
+  const policy = {
+    domesticSales: ['국내 A', '국내 B'],
+    accounts: {
+      'staff@example.com': {name: '영업 사원', role: 'staff', sales: ['국내 A', '해외']},
+      'lead@example.com': {name: '영업 팀장', role: 'lead'},
+    },
+  };
+  await kv.set(['sales-service-v1', 'access'], policy);
+  await kv.set(['hospitalwork-v2', 'meta'], {ready: true});
+  await kv.set(['hospitalwork-v2', 'hospitalRef', 'h2'], {key: 'h2', name: '병원 B', sales: '국내 B', asType: '무상'});
+  const request = {
+    id: 'r1', hospitalName: '병원 A', sales: '국내 A', symptom: '전원 불량\n전화번호: 010-1234-5678\n환자명: 테스트', status: '방문예정',
+    visitAt: '2026-11-23T10:30', engineer: '엔지니어', cs: '접수자', serviceOverrides: {asType: '유상'},
+    qrIntake: {confirmationRequired: true, appointmentConfirmed: false}, history: ['private'], comments: ['private'], pdf: 'private',
+  };
+  const rows = [request,
+    {id: 'r2', hospitalKey: 'h2', hospitalName: '병원 B', status: '완료'},
+    {id: 'r3', hospitalName: '해외 병원', sales: '해외'},
+    {id: 'r4', sales: '국내 A', deletedAt: '2026-11-23'},
+  ];
+  const hash = value => createHash('sha256').update(value).digest('base64url');
+  const service = createSalesService(kv, {
+    hash, now: () => kv.clock,
+    verifyGoogle: async email => ({email, email_verified: email !== 'unverified@example.com'}),
+    requestPage: async cursor => cursor ? {rows: rows.slice(2), cursor: ''} : {rows: rows.slice(0, 2), cursor: 'next'},
+  });
+  const login = idToken => service.handle({action: 'sales_google_login', idToken});
+  const list = (token, cursor) => service.handle({action: 'sales_list', token, cursor});
+
+  await assert.rejects(login('unknown@example.com'), {status: 403});
+  await assert.rejects(login('unverified@example.com'), {status: 401});
+  await assert.rejects(list('ordinary-cs-token'), {status: 401});
+  const {token} = await login('Staff@example.com');
+  const {token: leadToken} = await login('lead@example.com');
+  assert.match(token, /^sales_[0-9a-f]{64}$/);
+
+  const first = await list(token);
+  assert.equal(first.cursor, 'next');
+  assert.deepEqual(first.items, [{
+    id: 'r1', hospital: '병원 A', sales: '국내 A', symptom: '전원 불량\n전화번호 [가림]\n환자명 [가림]', status: '방문예정',
+    engineer: '엔지니어', cs: '접수자', payment: '유상', visitAt: '', visitPending: true,
+  }]);
+  assert.deepEqual((await list(token, first.cursor)).items, []);
+  const leadRows = (await list(leadToken)).items;
+  assert.deepEqual(leadRows.map(row => row.id), ['r1', 'r2']);
+  assert.equal(leadRows[1].payment, '무상');
+  request.qrIntake.appointmentConfirmed = true;
+  assert.equal((await list(token)).items[0].visitAt, '2026-11-23T10:30');
+  request.sales = '국내 B';
+  assert.deepEqual((await list(token)).items, []);
+
+  delete policy.accounts['staff@example.com'];
+  await kv.set(['sales-service-v1', 'access'], policy);
+  await assert.rejects(list(token), {status: 403});
+  await service.handle({action: 'sales_logout', token: leadToken});
+  await assert.rejects(list(leadToken), {status: 401});
+});
+
+test('automatic milestones and manual notices use separate idempotency and the current recipient', async () => {
+  const kv = new Kv();
+  const prospect = 'first@example.com', substitute = 'second@example.com', lead = 'lead@example.com';
+  const policy = {notifications: true, domesticSales: ['국내 A', '국내 B'], accounts: {
+    [prospect]: {role: 'staff', name: '담당 A', sales: ['국내 A'], primaryFor: ['국내 A']},
+    [substitute]: {role: 'staff', name: '담당 B', sales: ['국내 B'], primaryFor: ['국내 B']},
+    [lead]: {role: 'lead', name: '팀장', canSend: true},
+  }};
+  await updateSalesAccess(kv, policy, kv.clock);
+  await assert.rejects(updateSalesAccess(kv, {...policy, accounts: {...policy.accounts, [lead]: {role: 'lead', primaryFor: ['국내 A']}}}), {code: 'INVALID_ACCESS'});
+  const hash = value => createHash('sha256').update(value).digest('base64url');
+  const sent = [];
+  const service = createSalesService(kv, {
+    hash, now: () => kv.clock,
+    verifyGoogle: async email => ({email, email_verified: true}),
+    validateSubscription: value => value,
+    sender: {publicKey: async () => 'public-test-key', send: async (device, payload, ttl, context) => sent.push({device, payload, ttl, context})},
+  });
+  const login = async idToken => (await service.handle({action: 'sales_google_login', idToken})).token;
+  const a = await login(prospect), b = await login(substitute), l = await login(lead);
+  const call = (token, action, args) => service.handle({action: 'sales_' + action, token, ...args});
+  await call(a, 'push_subscribe', {subscription: {endpoint: 'https://fcm.googleapis.com/fcm/send/sales-a'}});
+  await call(b, 'push_subscribe', {subscription: {endpoint: 'https://fcm.googleapis.com/fcm/send/sales-b'}});
+  const requestKey = ['hospitalwork-v2', 'request', 'case'];
+  const created = {id: 'case', sales: '국내 A', status: '접수', hospitalName: '검증 병원'};
+  const provisional = {...created, status: '방문예정', visitAt: '2026-12-01T14:00', qrIntake: {confirmationRequired: true}};
+  const scheduled = {...provisional, qrIntake: {...provisional.qrIntake, appointmentConfirmed: true}};
+  const enqueue = async (before, after, kind = 'request_update') => {
+    const prepared = await prepareSalesTransition(kv, before, after, kind, kv.clock);
+    if (!prepared) return false;
+    return (await enqueueSalesNotice(kv.atomic(), prepared).set(requestKey, after).commit()).ok;
+  };
+  assert.equal(await enqueue(created, provisional), false);
+  assert.equal(await enqueue(provisional, scheduled), true);
+  assert.equal(await enqueue(created, scheduled), false);
+  assert.equal(await enqueue(scheduled, {...scheduled, visitAt: '2026-12-02T09:00'}), false);
+  assert.equal(await service.deliver(), true);
+  assert.equal(await service.deliver(), false);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].payload.binding, hash(prospect));
+
+  const requestId = 'case';
+  const {recipient} = await call(l, 'notice_target', {requestId});
+  const message = '방문 전 장비 전원 상태를 확인해 주세요.';
+  const request = {requestId, recipient, message, operationId: crypto.randomUUID()};
+  await assert.rejects(call(a, 'notice_send', request), {status: 403});
+  await call(l, 'notice_send', request);
+  await call(l, 'notice_send', request);
+  await service.deliver();
+  assert.equal(sent.length, 2);
+  assert.ok(!(JSON.stringify(sent[1]).includes(message)), 'manual body stays in the authenticated inbox');
+  assert.ok((await call(a, 'inbox')).items.some(item => item.message === message));
+  assert.deepEqual((await call(b, 'inbox')).items, []);
+
+  await kv.set(requestKey, {...scheduled, sales: '국내 B'});
+  await assert.rejects(call(l, 'notice_send', {...request, operationId: crypto.randomUUID()}), {code: 'RECIPIENT_CHANGED'});
+  assert.deepEqual((await call(a, 'inbox')).items, []);
+  const completed = {...scheduled, sales: '국내 B', status: '완료'};
+  assert.equal(await enqueue(scheduled, completed), true);
+  assert.equal(await enqueue(scheduled, completed), false);
+  await service.deliver();
+  assert.equal(sent.length, 3);
+  assert.equal(sent[2].payload.binding, hash(substitute));
+});

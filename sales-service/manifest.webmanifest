@@ -1,0 +1,15 @@
+{
+  "id": "./",
+  "name": "BAZ 영업 서비스 현황",
+  "short_name": "BAZ 영업",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "lang": "ko",
+  "background_color": "#f4f7fa",
+  "theme_color": "#f4f7fa",
+  "icons": [
+    {"src": "../icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "../icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
