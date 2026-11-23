@@ -398,10 +398,10 @@ if(false){
   ck('13-c. 모달에 수기 입력 항목이 남아 있지 않다',
     !/id="wkDetail"/.test(SRC) && !/id="mnDetail"/.test(SRC) &&
     !/id="inv1"/.test(SRC) && !/id="callInInp"/.test(SRC) && !/id="mnCallInInp"/.test(SRC));
-  ck('13-d. 모달에는 기간 선택·VOC 설명·특이사항 확인·미리보기·PPT 생성만 남는다',
+  ck('13-d. 주간 모달은 VOC 설명과 병원 명단 다운로드, 월간 모달은 특이사항 편집을 제공한다',
     /id="wkSel"/.test(SRC) && /previewWeeklyPPT\(\)/.test(SRC) && /id="wkGo"/.test(SRC) &&
     /id="wkVocDescRows"/.test(SRC) && /id="mnVocDescRows"/.test(SRC) &&
-    /id="wkNoteRows"/.test(SRC) && /id="mnNoteRows"/.test(SRC) &&
+    /id="wkManagementDownloads"/.test(SRC) && !/id="wkNoteRows"/.test(SRC) && /id="mnNoteRows"/.test(SRC) &&
     /id="mnSel"/.test(SRC) && /previewMonthlyPPT\(\)/.test(SRC) && /id="mnGo"/.test(SRC));
 }
 

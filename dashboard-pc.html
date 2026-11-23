@@ -1534,7 +1534,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
 }
 </style>
 <script src="auth.js?v=251"></script>
-<link rel="stylesheet" href="css/baz-weekly-report.css?v=312">
+<link rel="stylesheet" href="css/baz-weekly-report.css?v=367">
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
 </head>
@@ -1594,7 +1594,7 @@ function exOpenLevel3Page_(href){
 exApplyLevel3Tools_();
 </script>
 
-<!-- 주간보고 PPT 생성 모달 — 대시보드 내용을 그대로 싣고 VOC 설명만 선택 수정하는 1페이지 보고서 -->
+<!-- 주간보고 PPT 생성 모달 -->
 <div class="modal" id="wkModal">
   <div class="mbox report-box">
     <h2>📑 주간업무보고 PPT 생성</h2>
@@ -1606,22 +1606,18 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">고른 대상의 최근 16주를 꺾은선으로 이어 그리고, 현재 주차를 표시 기간의 주간 평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">선택한 대상의 최근 16주 추이를 표시합니다. VOC / 점검 유형과 병원 현황은 전체 서비스 기준으로 집계합니다.</div>
     </div>
-    <div class="mhint">대시보드 "① 주간 핵심보고"의 KPI·추이·VOC 변화·TOP5·특이사항을 그대로 싣습니다.</div>
     <details class="voc-desc-editor" id="wkVocDescBox">
-      <summary>VOC 유형 설명 확인·수정 (현재 TOP5)</summary>
-      <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
+      <summary>VOC / 점검 유형 · 보조문구</summary>
+      <div class="voc-desc-help">선택한 주차의 유형을 최대 5개 표시합니다. 등록된 보조문구는 자동 입력되며 이번 보고서에서 수정할 수 있습니다.</div>
       <div class="voc-desc-rows" id="wkVocDescRows"></div>
     </details>
-    <details class="voc-desc-editor" id="wkNoteBox">
-      <summary>특이사항 확인·수정 (이 PPT에만 반영)</summary>
-      <div class="voc-desc-help">대시보드 특이사항이 자동으로 채워집니다. 문장을 고치거나 비우면 이 보고서에만 반영되고, 대시보드 화면은 그대로입니다.</div>
-      <div class="voc-desc-rows note-rows" id="wkNoteRows"></div>
-      <div class="note-tools">
-        <button type="button" class="note-reset" onclick="exResetNoteEdits_('week')">↺ 자동 내용으로 되돌리기</button>
-      </div>
-    </details>
+    <section class="wr-management" aria-labelledby="wkManagementTitle">
+      <strong id="wkManagementTitle">교육·재사용 병원 현황</strong>
+      <p class="wr-hint">선택한 주차의 병원 명단을 다운로드해 생성한 PPT에 직접 삽입할 수 있습니다.</p>
+      <div id="wkManagementDownloads"></div>
+    </section>
     <div class="mbtns">
       <button class="mbtn cancel" onclick="closeWeekly()">취소</button>
       <button class="mbtn" onclick="previewWeeklyPPT()" style="background:#EEF2FA;color:var(--navy)">👁 미리보기</button>
@@ -10567,6 +10563,6 @@ loadData(false);
 </script>
 <script src="js/vendor/jszip-3.10.1.min.js"></script>
 <script src="js/baz-report-files.js?v=1"></script>
-<script src="js/baz-weekly-report.js?v=312"></script>
+<script src="js/baz-weekly-report.js?v=367"></script>
 </body>
 </html>
