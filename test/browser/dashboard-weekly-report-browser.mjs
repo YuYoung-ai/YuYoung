@@ -48,6 +48,7 @@ try{
    counts:items.filter(o=>o.weeklyManagementCount).map(o=>o.t),
    captions:items.filter(o=>o.manualFileCaption).map(o=>o.t),
    dividers:items.filter(o=>o.weeklyVocDivider).length,
+   firstRowY:card.y+card.top,
    hasNotes:items.some(o=>o.t?.includes('특이사항')),
    previousVocHeight:L.change.h,bodyBottom:L.notes.y+L.notes.h,
    applied:items.some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel),
@@ -63,6 +64,10 @@ try{
  assert(vocCard.h>state.previousVocHeight&&vocCard.y+vocCard.h<managementCard.y);
  assert.equal(managementCard.y+managementCard.h,state.bodyBottom);
  assert(state.vocTexts.slice(1).every(o=>o.weeklyVoc!=null||o.weeklyDescription!=null),'VOC card shows only names and descriptions');
+ const firstName=state.vocTexts.find(o=>o.weeklyVoc===0);
+ const firstDescription=state.vocTexts.find(o=>o.weeklyDescription===0);
+ assert(Math.abs(firstName.y-state.firstRowY-.04)<.0001,'symptom is lowered by the approved amount');
+ assert(Math.abs(firstDescription.y-firstName.y-firstName.h-.05)<.0001,'description keeps the approved gap');
  console.log('PASS weekly VOC types, no symptoms, expanded card, bottom placement, current hospital counts, and unchanged savings');
  // Save a description, clear per-report edit, then prove it is reused from the saved dictionary.
  const unregistered=page.locator('.wr-voc').filter({has:page.locator('.missing')}).first();
