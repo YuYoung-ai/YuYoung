@@ -38,6 +38,16 @@ source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice,
 ${source}`;
 
 const listAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack})';
+const existingAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;';
+const linkedAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자", sub:admin.sub} : null;';
+const adminDirectory = `      getCsAdmins: async () => {
+        const admins = [];
+        for await (const entry of kv.list({prefix:["user_email"]})) {
+          const account = entry.value;
+          if (account.status === "active" && Number(account.level) >= 3) admins.push({email: account.email, name: account.name || "BAZ CS 관리자", linked:Boolean(account.sub), lastLogin:account.lastLogin});
+        }
+        return admins;
+      },`;
 if (previousExtension) {
   if (!source.includes(listAdapter)) insert(`      requestPage: async cursor => {
         const limit = 128, rows = [];
@@ -45,6 +55,8 @@ if (previousExtension) {
         for await (const entry of scan) rows.push(entry.value);
         return {rows, cursor: rows.length === limit ? scan.cursor : ""};
       }`, listAdapter);
+  if (!source.includes(adminDirectory)) insert(listAdapter, `${adminDirectory}\n${listAdapter}`);
+  if (!source.includes(linkedAdmin)) insert(existingAdmin, linkedAdmin);
 } else {
 const routing = '  async function handleAction(action, p, clientIp, origin = "") {';
 insert(routing, `  function salesService(kv) {
@@ -54,8 +66,9 @@ insert(routing, `  function salesService(kv) {
       validateSubscription,
       getCsAdmin: async email => {
         const admin = (await kv.get(["user_email", email])).value;
-        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;
+${linkedAdmin}
       },
+${adminDirectory}
       verifyGoogle: async idToken => {
         try { return await verifyGoogleIdToken(String(idToken || "")); }
         catch { throw Object.assign(new Error("Google 계정을 확인해 주세요."), {status: 401, code: "LOGIN_REQUIRED"}); }

@@ -204,3 +204,40 @@ test('current BAZ CS administrators can start with domestic requests before the 
   activeAdmin = false;
   await assert.rejects(service.handle(request), {status:403});
 });
+
+test('Lv.3 can manage sales Google accounts and revoke remembered sessions', async () => {
+  const kv = new Kv(), admin = 'admin@example.com', member = 'member@example.com';
+  await kv.set(['hospitalwork-v2','meta'],{ready:true});
+  const service = createSalesService(kv, {
+    now:()=>kv.clock,
+    hash:value=>createHash('sha256').update(value).digest('base64url'),
+    getCsAdmin:async email=>email===admin ? {name:'관리자',sub:'admin-sub'} : null,
+    getCsAdmins:async()=>[{email:admin,name:'관리자',linked:true}],
+    verifyGoogle:async ({email,sub})=>({email,sub,email_verified:true}),
+    requestPage:async()=>({rows:[{id:'own',region:'서울 / 경기',sales:'영업 A'},{id:'another',region:'인천',sales:'영업 B'}],cursor:''}),
+  });
+  const login = (email, sub, remember = false) => service.handle({action:'sales_google_login',idToken:{email,sub},remember,__ua:'fixture-device'});
+  const call = (token,action,fields={}) => service.handle({action:'sales_'+action,token,...fields});
+  await assert.rejects(login(admin,'other-sub'),{code:'GOOGLE_ACCOUNT_CHANGED'});
+  const {token:chief} = await login(admin,'admin-sub');
+  await assert.rejects(call(chief,'security_save',{email:admin,status:'disabled',level:3}),{code:'SELF_ADMIN'});
+  await call(chief,'security_add',{email:'Member@example.com',name:'영업 A',level:1});
+  const {token:staff} = await login(member,'member-sub',true);
+  assert.deepEqual((await call(staff,'list')).items.map(x=>x.id),['own']);
+  await assert.rejects(call(staff,'security_list'),{status:403});
+  await assert.rejects(login(member,'new-member-sub'),{code:'GOOGLE_ACCOUNT_CHANGED'});
+  const current = await call(chief,'security_list');
+  assert.equal(current.users.find(u=>u.email===member)?.linked,true);
+  assert.equal(current.devices[0].ua,'fixture-device');
+  assert.equal(current.devices.length,1);
+  await call(chief,'security_save',{email:member,status:'active',level:2});
+  assert.deepEqual((await call(staff,'list')).items.map(x=>x.id),['own','another']);
+  await call(chief,'security_revoke',{deviceId:current.devices[0].id});
+  await assert.rejects(call(staff,'list'),{status:401});
+  const {token:second} = await login(member,'member-sub',true);
+  await call(chief,'security_save',{email:member,status:'disabled',level:2});
+  await assert.rejects(login(member,'member-sub'),{status:403});
+  await call(chief,'security_save',{email:member,status:'active',level:2});
+  await assert.rejects(call(second,'list'),{status:403});
+  assert.equal((await call(chief,'security_list')).devices.length,0);
+});
