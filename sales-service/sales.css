@@ -1,0 +1,156 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f7fa;
+  --surface: #fff;
+  --text: #172b40;
+  --muted: #4f647a;
+  --line: #cedbe6;
+  --soft: #eaf3fa;
+  --accent: #205f8d;
+  --error: #9c2c2c;
+}
+
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --bg: #121e2a;
+  --surface: #1b2c3b;
+  --text: #eff6ff;
+  --muted: #b6c9db;
+  --line: #41566b;
+  --soft: #263c50;
+  --accent: #a8d7fa;
+  --error: #ffb4ae;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; color: var(--text); background: var(--bg); line-height: 1.5; }
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: .45rem .8rem;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  line-height: 1.3;
+  text-align: center;
+  cursor: pointer;
+}
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { color: var(--muted); background: var(--soft); cursor: progress; }
+
+.sales-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  flex-wrap: wrap;
+  padding: calc(.65rem + env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) .65rem max(1rem, env(safe-area-inset-left));
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.sales-brand, .sales-controls { display: flex; align-items: center; gap: .5rem; }
+.sales-brand { font-size: .9375rem; font-weight: 750; }
+.sales-controls { margin-left: auto; }
+#theme { width: 44px; padding: 0; flex: 0 0 44px; }
+#theme svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+.sales-main {
+  position: relative;
+  width: min(100%, 44rem);
+  margin: auto;
+  padding: 1.1rem max(1rem, env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+.sales-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .2rem .8rem; }
+h1 { margin: 0; font-size: 1.6rem; line-height: 1.25; }
+.sales-muted { margin: 0; color: var(--muted); font-size: .875rem; }
+.sales-scope { display: flex; flex-wrap: wrap; gap: .5rem; margin: .85rem 0; }
+.sales-scope span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .3rem .65rem;
+  border: 1px solid var(--line);
+  border-radius: .5rem;
+  color: var(--accent);
+  background: var(--soft);
+  font-weight: 650;
+  font-size: .875rem;
+}
+.sales-list { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.sales-card, .sales-empty, .sales-sign-in { border: 1px solid var(--line); border-radius: .85rem; background: var(--surface); padding: .9rem; }
+.sales-card { min-width: 0; overflow-wrap: anywhere; }
+.sales-card h2 { margin: 0; font-size: 1.125rem; }
+.sales-symptom { margin: .25rem 0 .75rem; white-space: pre-line; }
+.sales-badges { justify-content: flex-start; }
+.sales-badges span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: .2rem .55rem;
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  color: var(--text);
+  background: var(--soft);
+  font-size: .875rem;
+  text-align: center;
+  white-space: normal;
+}
+.sales-badges .status-badge[data-work-status] {
+  background: var(--status-bg, var(--soft));
+  color: var(--status-fg, var(--text));
+  border-color: var(--status-line, var(--line));
+}
+.sales-facts { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .65rem .6rem; margin: .75rem 0 0; }
+.sales-facts div { min-width: 0; }
+.sales-facts dt { color: var(--muted); font-size: .875rem; }
+.sales-facts dd { margin: .12rem 0 0; font-weight: 650; }
+.sales-facts .sales-visit { grid-column: 1 / -1; border-bottom: 1px solid var(--line); padding-bottom: .6rem; }
+.sales-empty, .sales-feedback { color: var(--muted); text-align: center; }
+.sales-feedback { margin: .75rem 0 0; font-size: .9rem; overflow-wrap: anywhere; }
+.sales-feedback[data-error] { color: var(--error); }
+.sales-more { text-align: center; margin-top: .7rem; }
+.sales-footer { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: 1rem; color: var(--muted); }
+.sales-footer span { overflow-wrap: anywhere; }
+.sales-sign-in { display: grid; justify-items: center; gap: .7rem; padding: 1.4rem 1rem; margin: 1rem 0; text-align: center; }
+.sales-sign-in p { margin: 0; color: var(--muted); }
+.sales-google { max-width: 100%; min-height: 44px; }
+.sales-remember { display: flex; gap: .45rem; align-items: center; min-height: 44px; }
+.sales-remember input { width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }
+.sales-notice-tools { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+dialog {
+  width: min(calc(100% - 2rem), 36rem);
+  max-height: calc(100dvh - 2.5rem);
+  border: 1px solid var(--line);
+  border-radius: .85rem;
+  padding: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+dialog::backdrop { background: rgb(8 20 32 / 62%); }
+.sales-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .75rem; }
+.sales-dialog-heading h2 { margin: 0; font-size: 1.125rem; }
+.sales-dialog-heading button { white-space: nowrap; }
+#notice-form { display: grid; gap: .45rem; }
+#notice-form select, #notice-form textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: .45rem;
+  padding: .45rem .6rem;
+  color: var(--text);
+  background: var(--bg);
+  font: inherit;
+}
+#notice-send { justify-self: end; }
+.sales-inbox { display: grid; gap: .5rem; padding: 0; margin: 0; list-style: none; }
+.sales-inbox li { border: 1px solid var(--line); border-radius: .5rem; padding: .65rem; }
+.sales-inbox p { white-space: pre-wrap; margin: .3rem 0; }
+@media (max-width: 22rem) { .sales-facts { grid-template-columns: repeat(2, minmax(0,1fr)); } }
