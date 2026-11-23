@@ -7,10 +7,13 @@
   const state = {token: '', rows: new Map(), busy: false, scope: 'mine', period: 'month', criteria: '', shown:80, snapshot:null};
   const periodNames = {week:'이번 주', month:'이번 달', all:'전체 기간'};
   const cache = window.BazWorkCache;
+  const details = new Map();
+  const mobileCards = matchMedia('(max-width: 700px)');
+  let fullReady = false;
   const koreanDate = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
   let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
-  let detailRequest = 0;
+  let detailRequest = 0, swipeTimer;
 
   function feedback(message, error = false) {
     el('feedback').textContent = message;
@@ -86,6 +89,8 @@
     el('table-list').replaceChildren();
     state.rows.clear();
     state.snapshot = null;
+    details.clear();
+    fullReady = false;
     state.criteria = '';
     state.scope = 'mine';
     state.period = 'month';
@@ -150,7 +155,37 @@
   function renderPeriod() {
     for (const button of document.querySelectorAll('[data-period]')) {
       button.setAttribute('aria-pressed', String(button.dataset.period === state.period));
+      if (button.dataset.period === 'all') button.disabled = !fullReady;
     }
+  }
+
+  function periodProgress(message, retry = false) {
+    el('period-progress').textContent = message;
+    el('retry-period').hidden = !retry;
+    renderPeriod();
+  }
+
+  function cardIndex() {
+    const list = el('list');
+    const center = list.scrollTop + list.clientHeight/2;
+    let index = 0;
+    for (let next = 1; next < list.children.length && list.children[next].offsetTop <= center; next++) index=next;
+    return index;
+  }
+
+  function updateCardPosition() {
+    const index = cardIndex(), total = state.rows.size, rendered = el('list').children.length;
+    el('swipe-controls').hidden = !mobileCards.matches || !rendered;
+    const counter = `${index+1} / ${total}`;
+    if (el('swipe-position').textContent !== counter) el('swipe-position').textContent = counter;
+    el('previous-card').disabled = index===0;
+    el('next-card').disabled = index>=total-1;
+  }
+
+  function goToCard(index) {
+    const list = el('list'), card = list.children[index];
+    list.scrollTop = card ? card.offsetTop : 0;
+    updateCardPosition();
   }
 
   function renderRows() {
@@ -158,8 +193,9 @@
     const key = criteria(), query = searchText(), scope = lookupScope(), period = state.period;
     const same = key === state.criteria;
     if (!same) state.shown = 80;
-    const container = matchMedia('(max-width: 700px)').matches ? el('list') : el('table-list');
-    const anchor = same ? [...container.children].find(card => card.getBoundingClientRect().bottom > 0) : null;
+    const mobile = mobileCards.matches, container = mobile ? el('list') : el('table-list');
+    const previousIndex = mobile && same ? cardIndex() : 0;
+    const anchor = same ? (mobile ? container.children[previousIndex] : [...container.children].find(card => card.getBoundingClientRect().bottom > 0)) : null;
     const anchorTop = anchor?.getBoundingClientRect().top;
     const today = koreanDate.format(new Date());
     const range = window.BazWorkFields.range(period,today,today.slice(0,7));
@@ -183,6 +219,8 @@
     rows.sort((a,b)=>b.visitAt.localeCompare(a.visitAt) || b.changed.localeCompare(a.changed) || a.id.localeCompare(b.id));
     state.rows = new Map(rows.map(row=>[row.id,row]));
     state.criteria = key;
+    const keptIndex = mobile && anchor ? rows.findIndex(row=>row.id===anchor.dataset.requestId) : -1;
+    if (keptIndex>=state.shown) state.shown = keptIndex+1;
     const shown = rows.slice(0,state.shown);
     el('list').replaceChildren(...shown.map(row=>renderCard(row)));
     el('table-list').replaceChildren(...shown.map(row=>renderCard(row,'service-row')));
@@ -190,14 +228,16 @@
     el('list-count').textContent = `${rows.length.toLocaleString('ko-KR')}건`;
     el('list-conditions').textContent = [scopeLabel(), `방문일 기준 ${periodNames[period]}`, '방문 일시 내림차순', query ? `검색 “${query}”` : ''].filter(Boolean).join(' · ');
     el('empty').hidden = rows.length>0;
-    if (query && outsidePeriod && !rows.length) {
+    if (query && outsidePeriod && !rows.length && fullReady) {
       el('empty').textContent = `선택한 기간에 검색 결과가 없습니다. 전체 기간에 ${outsidePeriod.toLocaleString('ko-KR')}건이 있습니다.`;
     } else {
       el('empty').textContent = query ? '검색 결과가 없습니다.' : scope === 'mine' ? '선택한 기간에 내 업무로 배정된 접수가 없습니다.' : '선택한 기간에 조회할 처리 내역이 없습니다.';
     }
     el('load-more').hidden = shown.length>=rows.length;
     const replacement = anchor && [...container.children].find(card=>card.dataset.requestId===anchor.dataset.requestId);
-    if (replacement) window.scrollBy(0,replacement.getBoundingClientRect().top-anchorTop);
+    if (mobile) goToCard(keptIndex >= 0 ? keptIndex : Math.min(previousIndex,shown.length-1));
+    else if (replacement) window.scrollBy(0,replacement.getBoundingClientRect().top-anchorTop);
+    updateCardPosition();
   }
 
   async function receiveDelta(previous) {
@@ -216,61 +256,98 @@
     return {...previous,items:[...items.values()],revision,updatedAt:data.updatedAt};
   }
 
-  async function receiveSnapshot(context) {
-    let cursor='', snapshotSeq, ref, data;
+  async function receiveSnapshot(context, preview = false) {
+    let cursor='', snapshotSeq, ref, previewDay, data;
     const items = new Map(), visited = new Set();
     do {
-      data = await api('sales_cache_bootstrap',{cursor,snapshotSeq,stamp:context.stamp,ref});
+      data = await api(preview ? 'sales_cache_preview' : 'sales_cache_bootstrap',{cursor,snapshotSeq,stamp:context.stamp,ref,previewDay});
       for (const row of data.items) items.set(row.syncKey,row);
       snapshotSeq = data.snapshotSeq;
       ref=data.ref;
+      previewDay=data.previewDay;
       cursor=data.cursor;
       if (cursor && visited.has(cursor)) throw new Error('목록을 다시 동기화해 주세요.');
       visited.add(cursor);
     } while(cursor);
     const snapshot = {cacheKey:context.cacheKey,stamp:context.stamp,ref,revision:snapshotSeq,items:[...items.values()],updatedAt:data.updatedAt};
-    return receiveDelta(snapshot);
+    return preview ? {...snapshot,partial:true} : receiveDelta(snapshot);
+  }
+
+  function showWorkspace(context, snapshot) {
+    state.snapshot=snapshot;
+    const available = new Set(snapshot.items.map(item=>item.id));
+    for (const id of details.keys()) if (!available.has(id)) details.delete(id);
+    el('account').textContent = context.name || '영업 계정';
+    el('sync-time').textContent = '마지막 동기화 ' + clock.format(new Date(snapshot.updatedAt));
+    el('sign-in').hidden = true;
+    el('workspace').hidden = false;
+    el('sync').hidden = false;
+    renderRows();
+    el('notice-tools').hidden = !context.notifications;
+    el('notice-open').hidden = !context.canSend || !snapshot.items.length;
+    security.setLevel(context.level);
+    if (context.notifications && new URLSearchParams(location.search).has('notices')) {
+      history.replaceState(null, '', location.pathname);
+      void openInbox();
+    }
   }
 
   async function sync(useSaved = false) {
     if (!state.token || state.busy) return;
     state.busy = true;
     el('sync').disabled = true;
+    el('sign-out').disabled = true;
     feedback(useSaved ? '로그인 확인 중…' : '동기화 중…');
     try {
       const context = await api('sales_cache_context');
       const previous = state.snapshot || await cache.snapshot(context.cacheKey).catch(()=>null);
-      const valid = previous?.cacheKey===context.cacheKey && previous.stamp===context.stamp;
-      if (previous && !valid) {
+      const sameScope = previous?.cacheKey===context.cacheKey && previous.stamp===context.stamp;
+      const valid = sameScope && !previous.partial;
+      if (previous && !sameScope) {
         state.snapshot=null;
+        details.clear();
+        fullReady=false;
         el('workspace').hidden=true;
         await cache.save(previous.cacheKey,null).catch(()=>{});
       }
-      let current, storageError = false;
-      if (useSaved && valid) current=previous;
+      let current;
+      if (useSaved && valid) {
+        fullReady=true;
+        current=previous;
+      }
       else {
+        if (!valid) {
+          fullReady=false;
+          state.period = state.period === 'all' ? 'month' : state.period;
+          periodProgress('전체 기간 준비 중…');
+          feedback('이번 달과 이번 주 목록을 불러오는 중…');
+          const preview = sameScope ? previous : await receiveSnapshot(context,true);
+          showWorkspace(context,preview);
+          feedback('');
+        }
         try { current=valid ? await receiveDelta(previous) : await receiveSnapshot(context); }
         catch (error) {
           if (error.code !== 'SYNC_RESET') throw error;
-          current=await receiveSnapshot(context);
+          // Recheck access before retaining a partial view after a reset.
+          const latest = await api('sales_cache_context');
+          if (latest.stamp !== context.stamp || latest.cacheKey !== context.cacheKey) {
+            state.snapshot=null;
+            details.clear();
+            fullReady=false;
+            el('workspace').hidden=true;
+            await cache.save(context.cacheKey,null).catch(()=>{});
+            throw error;
+          }
+          current = await receiveSnapshot(context);
         }
-        await cache.save(context.cacheKey,current).catch(()=>{storageError=true;});
+        await cache.save(context.cacheKey,current).catch(()=>{
+          throw new Error('이 기기에 동기화 목록을 저장하지 못했습니다.');
+        });
+        fullReady=true;
       }
-      state.snapshot=current;
-      el('account').textContent = context.name || '영업 계정';
-      el('sync-time').textContent = '마지막 동기화 ' + clock.format(new Date(current.updatedAt));
-      el('sign-in').hidden = true;
-      el('workspace').hidden = false;
-      el('sync').hidden = false;
-      renderRows();
-      el('notice-tools').hidden = !context.notifications;
-      el('notice-open').hidden = !context.canSend || !current.items.length;
-      security.setLevel(context.level);
-      feedback(storageError ? '이 기기에 동기화 목록을 저장하지 못했습니다.' : '', storageError);
-      if (context.notifications && new URLSearchParams(location.search).has('notices')) {
-        history.replaceState(null, '', location.pathname);
-        void openInbox();
-      }
+      periodProgress('');
+      showWorkspace(context,current);
+      feedback('');
     } catch (error) {
       if ([401, 403].includes(error.status)) {
         if (state.snapshot) await cache.save(state.snapshot.cacheKey,null).catch(()=>{});
@@ -278,10 +355,12 @@
         await signIn();
       } else {
         el('sync').hidden = false;
+        if (!fullReady) periodProgress('전체 기간 준비를 완료하지 못했습니다.',true);
       }
       feedback(error.message, true);
     } finally {
       el('sync').disabled = false;
+      el('sign-out').disabled = false;
       state.busy = false;
     }
   }
@@ -298,8 +377,11 @@
     dialog.scrollTop = 0;
     history.pushState({salesDetail: true}, '');
     try {
-      const data = await api('sales_detail', {requestId});
+      const saved = details.get(requestId);
+      const fresh = await api('sales_detail', {requestId,detailVersion:saved?.detailVersion});
+      const data = fresh.unchanged ? saved : fresh;
       if (!dialog.open || sequence !== detailRequest) return;
+      if (data.detailVersion) details.set(requestId,data);
       const summary = renderCard(data.request);
       summary.querySelector('.sales-case-open').replaceWith(document.createTextNode(data.request.hospital));
       el('detail-summary').replaceChildren(summary);
@@ -328,6 +410,7 @@
       el('detail-content').hidden = false;
       el('detail-feedback').textContent = '';
     } catch (error) {
+      if ([401,403,404].includes(error.status)) details.delete(requestId);
       if (sequence === detailRequest && dialog.open) el('detail-feedback').textContent = error.message;
     }
   }
@@ -483,7 +566,24 @@
 
   el('retry-login').onclick = () => { feedback(''); void signIn(); };
   el('sync').onclick = () => sync();
+  el('retry-period').onclick = () => sync();
   el('load-more').onclick = () => { state.shown+=80; renderRows(); };
+  el('previous-card').onclick = () => goToCard(cardIndex()-1);
+  el('next-card').onclick = () => {
+    const next = cardIndex()+1;
+    if (next >= el('list').children.length) { state.shown+=80; renderRows(); }
+    goToCard(next);
+  };
+  el('list').addEventListener('scroll', () => {
+    if (!mobileCards.matches) return;
+    updateCardPosition();
+    clearTimeout(swipeTimer);
+    swipeTimer=setTimeout(()=>{
+      const count=el('list').children.length;
+      if (count<state.rows.size && cardIndex()>=count-2) { state.shown+=80; renderRows(); }
+    },150);
+  }, {passive:true});
+  mobileCards.addEventListener('change',updateCardPosition);
   el('sign-out').onclick = signOut;
   el('inbox-open').onclick = openInbox;
   el('notice-open').onclick = openComposer;
@@ -499,7 +599,7 @@
     if (previous !== criteria()) renderRows();
   };
   for (const button of document.querySelectorAll('[data-period]')) button.onclick = () => {
-    if (state.period === button.dataset.period) return;
+    if (state.period === button.dataset.period || button.dataset.period === 'all' && !fullReady) return;
     state.period = button.dataset.period;
     renderPeriod();
     renderRows();
@@ -525,7 +625,10 @@
   el('detail-dialog').onclose = () => {
     detailRequest++;
     for (const id of ['detail-summary', 'detail-receipt', 'detail-results']) el(id).replaceChildren();
-    detailTrigger?.focus({preventScroll: true});
+    const requestId = detailTrigger?.closest('[data-request-id]')?.dataset.requestId;
+    const list = el(mobileCards.matches ? 'list' : 'table-list');
+    const replacement = [...list.children].find(card=>card.dataset.requestId===requestId);
+    replacement?.querySelector('.sales-case-open')?.focus({preventScroll:true});
     detailTrigger = null;
   };
   window.addEventListener('popstate', () => {

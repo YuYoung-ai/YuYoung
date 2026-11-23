@@ -13,11 +13,11 @@
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css?v=375">
+  <link rel="stylesheet" href="sales.css?v=376">
   <script src="../js/baz-work-cache.js" defer></script>
   <script src="../js/baz-work-fields.js?v=354" defer></script>
   <script src="sales-security.js?v=375" defer></script>
-  <script src="sales.js?v=375" defer></script>
+  <script src="sales.js?v=376" defer></script>
 </head>
 <body>
   <header class="sales-bar">
@@ -53,8 +53,10 @@
         <div class="sales-period-actions" role="group" aria-label="조회 기간">
           <button type="button" data-period="week" aria-pressed="false">이번 주</button>
           <button type="button" data-period="month" aria-pressed="true">이번 달</button>
-          <button type="button" data-period="all" aria-pressed="false">전체 기간</button>
+          <button type="button" data-period="all" aria-pressed="false" disabled aria-describedby="period-progress">전체 기간</button>
         </div>
+        <span id="period-progress" role="status"></span>
+        <button id="retry-period" type="button" hidden>전체 기간 다시 준비</button>
       </div>
       <section class="sales-list-panel" aria-labelledby="list-title">
         <div class="sales-list-caption">
@@ -72,6 +74,11 @@
           </table>
         </div>
         <ul id="list" class="sales-list" aria-label="처리 내역"></ul>
+        <div id="swipe-controls" class="sales-swipe-controls" hidden>
+          <button id="previous-card" type="button" aria-label="이전 카드">이전</button>
+          <span id="swipe-position" aria-live="polite"></span>
+          <button id="next-card" type="button" aria-label="다음 카드">다음</button>
+        </div>
         <p id="empty" class="sales-empty" hidden></p>
         <div class="sales-more"><button id="load-more" type="button" hidden>더 불러오기</button></div>
       </section>

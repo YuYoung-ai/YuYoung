@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import test from 'node:test';
 import {createSalesService, enqueueSalesNotice, prepareSalesTransition, updateSalesAccess} from '../cloudflare/sales-service/service.mjs';
-import {salesRequestPage} from '../cloudflare/sales-service/d1-page.mjs';
+import {salesRangeVersion, salesRequestPage} from '../cloudflare/sales-service/d1-page.mjs';
 import {Kv} from './notification-test-kv.mjs';
 
 test('sales service enforces the current assignment and returns only card fields', async () => {
@@ -294,4 +294,62 @@ test('sales cache returns only current changes, including removal when access ch
   await assert.rejects(call('delta',params),{code:'SYNC_RESET'});
   await kv.set([ns,'hospitalRef','reference'],{key:'reference',name:'병원',sales:'B'});
   await assert.rejects(call('delta',{...params,revision:7}),{code:'SYNC_RESET'});
+});
+
+test('preview covers both periods and detail reuse checks current access and result versions', async () => {
+  const kv = new Kv(), email='preview@example.com', ns='hospitalwork-v2';
+  kv.clock=Date.parse('2026-11-29T15:01:00Z');
+  await kv.set(['sales-service-v1','access'],{domesticSales:['A','B'],accounts:{[email]:{name:'A',role:'staff',sales:['A']}}});
+  await kv.set([ns,'meta'],{ready:true,seq:5});
+  const row = {id:'case',hospitalName:'병원',sales:'A',status:'완료',visitAt:'2026-12-01T09:00'};
+  await kv.set([ns,'request','case'],row);
+  await kv.set([ns,'hospitalRef','h'],{key:'h',name:'병원'});
+  const historyKey=[ns,'history','case','history'];
+  const history = {id:'history',kind:'result',source:{recordId:'source',detail:'초기 결과'}};
+  await kv.set(historyKey,history);
+  await kv.set([ns,'link','source'],{requestId:'case',historyId:'history'});
+  let hospitalScans=0;
+  const list=kv.list.bind(kv);
+  kv.list=(range,options)=>{if (range.prefix?.[1]==='hospitalRef') hospitalScans++; return list(range,options);};
+  const service=createSalesService(kv,{now:()=>kv.clock,hash:v=>createHash('sha256').update(v).digest('base64url'),
+    verifyGoogle:async()=>({email,email_verified:true}), requestPage:async (_cursor,range)=>{
+      assert.deepEqual(range,['2026-11-01','2026-12-06']);
+      return {rows:[row],cursor:''};
+    }, rangeVersion:async prefix=>{
+      const versions=[];
+      for await (const entry of list({prefix})) versions.push(entry.versionstamp);
+      return JSON.stringify(versions);
+    }});
+  const {token}=await service.handle({action:'sales_google_login',idToken:'fixture'});
+  const call=(action,params={})=>service.handle({action,token,...params});
+  const preview=await call('sales_cache_preview');
+  assert.equal(preview.items.length,1);
+  await call('sales_cache_bootstrap');
+  assert.equal(hospitalScans,1);
+  const detail=await call('sales_detail',{requestId:row.id});
+  assert.equal(detail.results[0].detail,'초기 결과');
+  const requested={requestId:row.id,detailVersion:detail.detailVersion};
+  assert.deepEqual(await call('sales_detail',requested),{success:true,unchanged:true,detailVersion:detail.detailVersion});
+  await kv.set(historyKey,{...history,source:{...history.source,detail:'변경 결과'}});
+  assert.equal((await call('sales_detail',requested)).results[0].detail,'변경 결과');
+  await kv.set([ns,'request','case'],{...row,sales:'B'});
+  await assert.rejects(call('sales_detail',requested),{status:404});
+  await kv.set([ns,'hospitalRef','h'],{key:'h',name:'변경 병원'});
+  await call('sales_cache_bootstrap');
+  assert.equal(hospitalScans,2);
+});
+
+test('D1 range version detects updates and removals without reading the payload', async()=>{
+  const sqlite=new DatabaseSync(':memory:');
+  try {
+    sqlite.exec("CREATE TABLE kv_entries(k TEXT PRIMARY KEY,version TEXT); INSERT INTO kv_entries VALUES('inside:one','00001'),('inside:two','00002'),('outside','00003')");
+    const kv={db:{prepare(sql){const query=sqlite.prepare(sql); return {bind(...params){return {first:async()=>query.get(...params)};}};}}};
+    const codec={keyHex:()=> 'inside:',prefixEnd:p=>p+'\uffff'};
+    const get=()=>salesRangeVersion(kv,['fixture'],codec);
+    assert.equal(await get(),'2:00002');
+    sqlite.exec("UPDATE kv_entries SET version='00004' WHERE k='inside:one'");
+    assert.equal(await get(),'2:00004');
+    sqlite.exec("DELETE FROM kv_entries WHERE k='inside:two'");
+    assert.equal(await get(),'1:00004');
+  } finally {sqlite.close();}
 });

@@ -119,7 +119,9 @@ export function enqueueSalesNotice(tx, {previous, notice}) {
   return tx.check(previous).set(previous.key, notice, notice.stage ? {} : expiry).set(key('due', notice.at, notice.id), true, expiry);
 }
 
-export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requestPage, sender, validateSubscription, getCsAdmin, getCsAdmins} = {}) {
+const salesReferences = new WeakMap();
+
+export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requestPage, rangeVersion, sender, validateSubscription, getCsAdmin, getCsAdmins} = {}) {
   async function accessFor(policy, email) {
     const assigned = scopeFor(policy, email);
     if (assigned || Object.hasOwn(policy?.accounts || {}, email)) return assigned;
@@ -165,7 +167,22 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     for await (const entry of kv.list({prefix: workKey('hospitalRef')})) hospitals.push(entry.value);
     return hospitals;
   }
-  const lookups = async () => workFields.hospitalLookup(await hospitalReferences());
+  async function references() {
+    const prefix = workKey('hospitalRef');
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const version = await rangeVersion?.(prefix);
+      const saved = salesReferences.get(kv);
+      if (version && saved?.version === version) return saved;
+      const hospitals = await hospitalReferences();
+      if (version && version !== await rangeVersion(prefix)) continue;
+      const ref = await hash(JSON.stringify(hospitals.map(h=>[h.key,h.name,h.region,h.sales,h.asType,h.sn,h.origin])));
+      const view = {version, ref, lookup:workFields.hospitalLookup(hospitals)};
+      if (version) salesReferences.set(kv,view);
+      return view;
+    }
+    throw failure(409,'SYNC_RESET','병원 기준 정보가 변경되었습니다. 다시 시도해 주세요.');
+  }
+  const lookups = async () => (await references()).lookup;
 
   async function cacheContext(scope, policy) {
     const notifications = policy?.notifications === true;
@@ -180,9 +197,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const meta = (await kv.get(workKey('meta'))).value;
     if (!meta?.ready) throw failure(503,'TEMPORARY','서비스 현황을 잠시 후 다시 확인해 주세요.');
     const current = Number(meta.seq || 0);
-    const hospitals = await hospitalReferences();
-    const ref = await hash(JSON.stringify(hospitals.map(h=>[h.key,h.name,h.region,h.sales,h.asType,h.sn,h.origin])));
-    const lookup = workFields.hospitalLookup(hospitals);
+    const {ref,lookup} = await references();
     if ((p.stamp && p.stamp !== context.stamp) || (p.ref && p.ref !== ref)) throw resetCache();
     const snapshotSeq = p.snapshotSeq === undefined ? current : p.snapshotSeq;
     if (!Number.isSafeInteger(snapshotSeq) || snapshotSeq < 0 || snapshotSeq > current) throw resetCache();
@@ -197,6 +212,14 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
       if (!allowed) { removed.push(syncKey); return; }
       items.push({...card(row,hospital), syncKey, mine:scope.mine.has(alias(row.sales || hospital?.sales)), changed:row.updatedAt || ''});
     };
+    if (p.action === 'sales_cache_preview') {
+      const today = koreaDate.format(new Date(now()));
+      if (p.previewDay && p.previewDay !== today) throw resetCache();
+      const month = workFields.range('month',today,today.slice(0,7)), week = workFields.range('week',today,today.slice(0,7));
+      const page = await requestPage(p.cursor || '',[month[0] < week[0] ? month[0] : week[0],month[1] > week[1] ? month[1] : week[1]]);
+      for (const row of page.rows) await project(row);
+      return {...context,ref,items,snapshotSeq,updatedAt,cursor:page.cursor,previewDay:today};
+    }
     if (!delta) {
       const limit = 192, list = kv.list({prefix:workKey('request')},{limit,cursor:p.cursor || undefined});
       let count = 0;
@@ -253,10 +276,15 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
 
   async function detail(p, scope) {
     const id = typeof p.requestId === 'string' && p.requestId.length <= 100 ? p.requestId : '';
-    const row = id ? (await kv.get(workKey('request', id))).value : null;
+    const entry = id ? await kv.get(workKey('request', id)) : null;
+    const row = entry?.value;
     if (!isLive(row)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
-    const hospital = (await lookups())(row);
+    const {lookup,ref} = await references();
+    const hospital = lookup(row);
     if (!visibleTo(scope, row, hospital)) throw failure(404, 'NOT_FOUND', '이 접수를 조회할 수 없습니다.');
+    const [historyVersion, linkVersion] = await Promise.all([rangeVersion?.(workKey('history',id)),rangeVersion?.(workKey('link'))]);
+    const detailVersion = historyVersion && linkVersion ? await hash(JSON.stringify([id,entry.versionstamp,ref,historyVersion,linkVersion])) : '';
+    if (detailVersion && detailVersion === p.detailVersion) return {success:true, unchanged:true, detailVersion};
     const results = [];
     let resultPending = false;
     for await (const entry of kv.list({prefix: workKey('history', id)})) {
@@ -269,7 +297,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
         detail: shareableText(source.detail, 4000), result: shareableText(source.result, 1000)});
     }
     results.sort((a, b) => b.date.localeCompare(a.date));
-    return {success: true, request: card(row, hospital), receipt: shareableText(row.salesShareSymptom ?? row.symptom, 4000), results, resultPending};
+    return {success: true, detailVersion, request: card(row, hospital), receipt: shareableText(row.salesShareSymptom ?? row.symptom, 4000), results, resultPending};
   }
 
   async function target(requestId, policy) {
@@ -471,7 +499,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const {scope, entry, policy} = await security(p.token);
     if (p.action === 'sales_list') return list(p, scope, policy);
     if (p.action === 'sales_cache_context') return cacheContext(scope, policy);
-    if (['sales_cache_bootstrap','sales_cache_delta'].includes(p.action)) return cacheUpdate(p, scope, policy);
+    if (['sales_cache_bootstrap','sales_cache_delta','sales_cache_preview'].includes(p.action)) return cacheUpdate(p, scope, policy);
     if (p.action === 'sales_detail') return detail(p, scope);
     if (p.action.startsWith('sales_security_')) return manageSecurity(p, scope, policy);
     if (p.action === 'sales_logout') {

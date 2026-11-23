@@ -3,6 +3,14 @@
 const requestPrefix = ['hospitalwork-v2', 'request'];
 const pageSize = 192;
 
+export async function salesRangeVersion(kv, parts, {keyHex, prefixEnd}) {
+  if (!kv.db) return null;
+  const prefix = keyHex(parts);
+  const row = await kv.db.prepare('SELECT count(*) AS count,max(version) AS latest FROM kv_entries WHERE k>? AND k<?')
+    .bind(prefix,prefixEnd(prefix)).first();
+  return `${row.count}:${row.latest || ''}`;
+}
+
 export async function salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack}, dateRange) {
   if (cursor && !/^\d{1,8}$/.test(cursor)) throw Error('cursor_reset_required');
   const offset = Number(cursor) || 0;
