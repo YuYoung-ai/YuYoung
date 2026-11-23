@@ -8,6 +8,7 @@ const alias = value => String(value || '').normalize('NFKC').trim().replace(/\s+
 const tokenPattern = /^sales_[0-9a-f]{64}$/;
 const isLive = row => Boolean(row?.id && !row.deletedAt && !row.purgedAt);
 const hour = 60 * 60 * 1000;
+const koreaDate = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'});
 const domesticRegions = new Set([
   '서울', '서울특별시', '경기', '경기도', '서울 / 경기', '인천', '인천광역시',
   '대전', '대전광역시', '충청', '대전 / 충청', '충북', '충청북도', '충남', '충청남도', '세종', '세종특별자치시',
@@ -159,10 +160,67 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     return {success: true, token, expiresAt, name: scope.name};
   }
 
-  async function lookups() {
+  async function hospitalReferences() {
     const hospitals = [];
     for await (const entry of kv.list({prefix: workKey('hospitalRef')})) hospitals.push(entry.value);
-    return workFields.hospitalLookup(hospitals);
+    return hospitals;
+  }
+  const lookups = async () => workFields.hospitalLookup(await hospitalReferences());
+
+  async function cacheContext(scope, policy) {
+    const notifications = policy?.notifications === true;
+    return {success:true, cacheKey:'sales:'+await hash(scope.email), name:scope.name, level:scope.level, notifications,
+      canSend:notifications && scope.canSend, stamp:await hash(JSON.stringify([scope.name, scope.level, scope.domesticRegion,
+        [...(scope.allowed || [])].sort(), [...scope.mine].sort(), scope.version]))};
+  }
+
+  const resetCache = () => failure(409, 'SYNC_RESET', '전체 목록을 다시 동기화해 주세요.');
+  async function cacheUpdate(p, scope, policy) {
+    const context = await cacheContext(scope, policy);
+    const meta = (await kv.get(workKey('meta'))).value;
+    if (!meta?.ready) throw failure(503,'TEMPORARY','서비스 현황을 잠시 후 다시 확인해 주세요.');
+    const current = Number(meta.seq || 0);
+    const hospitals = await hospitalReferences();
+    const ref = await hash(JSON.stringify(hospitals.map(h=>[h.key,h.name,h.region,h.sales,h.asType,h.sn,h.origin])));
+    const lookup = workFields.hospitalLookup(hospitals);
+    if ((p.stamp && p.stamp !== context.stamp) || (p.ref && p.ref !== ref)) throw resetCache();
+    const snapshotSeq = p.snapshotSeq === undefined ? current : p.snapshotSeq;
+    if (!Number.isSafeInteger(snapshotSeq) || snapshotSeq < 0 || snapshotSeq > current) throw resetCache();
+    const delta = p.action === 'sales_cache_delta';
+    const updatedAt = new Date(now()).toISOString();
+    const items = [], removed = [];
+    const project = async row => {
+      const hospital = lookup(row);
+      const allowed = isLive(row) && visibleTo(scope, row, hospital);
+      if (!allowed && !delta) return;
+      const syncKey = await hash(context.cacheKey + '|' + row.id);
+      if (!allowed) { removed.push(syncKey); return; }
+      items.push({...card(row,hospital), syncKey, mine:scope.mine.has(alias(row.sales || hospital?.sales)), changed:row.updatedAt || ''});
+    };
+    if (!delta) {
+      const limit = 192, list = kv.list({prefix:workKey('request')},{limit,cursor:p.cursor || undefined});
+      let count = 0;
+      for await (const entry of list) { await project(entry.value); count++; }
+      return {...context, ref, items, snapshotSeq, updatedAt, cursor:count===limit ? list.cursor : ''};
+    }
+    const revision = p.revision;
+    if (!Number.isSafeInteger(revision) || revision < 0 || revision > snapshotSeq || !p.ref || !p.stamp) throw resetCache();
+    const changes = new Map();
+    let next = revision;
+    for await (const entry of kv.list({start:workKey('change', revision+1),end:workKey('change',snapshotSeq+1)},{limit:128})) {
+      const row = entry.value;
+      if (row.seq !== next+1) throw resetCache();
+      next = row.seq;
+      if (row.request?.id) changes.set(row.request.id,row.request);
+    }
+    if (next === revision && next < snapshotSeq) throw resetCache();
+    const ids = [...changes.keys()];
+    for (let i=0;i<ids.length;i+=10) {
+      const batch = ids.slice(i,i+10), keys = batch.map(id=>workKey('request',id));
+      const entries = kv.getMany ? await kv.getMany(keys) : await Promise.all(keys.map(k=>kv.get(k)));
+      for (const [index,entry] of entries.entries()) await project(entry.value || {id:batch[index],deletedAt:true});
+    }
+    return {...context, ref, items, removed, revision:next, snapshotSeq, more:next<snapshotSeq, updatedAt};
   }
 
   async function list(p, scope, policy) {
@@ -170,10 +228,12 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const terms = searchable(String(p.query || '').slice(0, 100)).split(' ').filter(Boolean);
     const compactQuery = terms.join('');
     const mine = p.scope === 'mine' && !compactQuery;
+    const today = koreaDate.format(new Date(now()));
+    const dateRange = ['week','month'].includes(p.period) ? workFields.range(p.period, today, today.slice(0,7)) : null;
     const meta = (await kv.get(workKey('meta'))).value;
     if (!meta?.ready) throw failure(503, 'TEMPORARY', '서비스 현황을 잠시 후 다시 확인해 주세요.');
     const lookup = await lookups();
-    const page = await requestPage(cursor);
+    const page = await requestPage(cursor, dateRange);
     const items = [];
     for (const row of page.rows) {
       if (!isLive(row)) continue;
@@ -181,6 +241,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
       if (!visibleTo(scope, row, hospital)) continue;
       if (mine && !scope.mine.has(alias(row.sales || hospital?.sales))) continue;
       const item = card(row, hospital);
+      const day = item.visitAt.slice(0,10);
+      if (dateRange && (!day || day < dateRange[0] || day > dateRange[1])) continue;
       if (!compactQuery) { items.push(item); continue; }
       const labels = [item.hospital, item.sales].map(value => searchable(value).replaceAll(' ', ''));
       if (labels.some(label => label.includes(compactQuery)) || terms.every(term => labels.some(label => label.includes(term)))) items.push(item);
@@ -408,6 +470,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     if (p.action === 'sales_google_login') return login(p);
     const {scope, entry, policy} = await security(p.token);
     if (p.action === 'sales_list') return list(p, scope, policy);
+    if (p.action === 'sales_cache_context') return cacheContext(scope, policy);
+    if (['sales_cache_bootstrap','sales_cache_delta'].includes(p.action)) return cacheUpdate(p, scope, policy);
     if (p.action === 'sales_detail') return detail(p, scope);
     if (p.action.startsWith('sales_security_')) return manageSecurity(p, scope, policy);
     if (p.action === 'sales_logout') {
