@@ -13,9 +13,11 @@
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css?v=373">
-  <script src="sales-security.js?v=373" defer></script>
-  <script src="sales.js?v=373" defer></script>
+  <link rel="stylesheet" href="sales.css?v=374">
+  <script src="../js/baz-work-cache.js" defer></script>
+  <script src="../js/baz-work-fields.js?v=354" defer></script>
+  <script src="sales-security.js?v=374" defer></script>
+  <script src="sales.js?v=374" defer></script>
 </head>
 <body>
   <header class="sales-bar">
@@ -46,7 +48,14 @@
           <button type="button" data-scope="mine" aria-pressed="true">내 업무</button>
         </div>
       </section>
-      <div class="sales-period" aria-label="조회 기간"><span>방문일 기준</span><strong>전체 기간</strong></div>
+      <div class="sales-period">
+        <span>방문일 기준</span>
+        <div class="sales-period-actions" role="group" aria-label="조회 기간">
+          <button type="button" data-period="week" aria-pressed="false">이번 주</button>
+          <button type="button" data-period="month" aria-pressed="true">이번 달</button>
+          <button type="button" data-period="all" aria-pressed="false">전체 기간</button>
+        </div>
+      </div>
       <section class="sales-list-panel" aria-labelledby="list-title">
         <div class="sales-list-caption">
           <div class="sales-list-heading"><h2 id="list-title">처리 내역</h2><span id="list-count" class="sales-muted" role="status"></span></div>

@@ -73,23 +73,14 @@ h1 { margin: 0; font-size: 1.6rem; line-height: 1.25; }
 .sales-scope h2, .sales-list-heading h2 { margin: 0; font-size: 1.125rem; line-height: 1.4; }
 .sales-scope-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
 .sales-scope-actions button { font-size: .875rem; }
-.sales-scope-actions [aria-pressed=true], .sales-period strong {
+.sales-scope-actions [aria-pressed=true], .sales-period-actions [aria-pressed=true] {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--soft);
 }
-.sales-period { display: flex; align-items: center; gap: .65rem; margin: .85rem 0; color: var(--muted); font-size: .875rem; }
-.sales-period strong {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: .3rem .65rem;
-  border-width: 1px;
-  border-style: solid;
-  border-radius: .5rem;
-  font-weight: 650;
-  font-size: .875rem;
-}
+.sales-period { display: flex; align-items: center; gap: .45rem .65rem; flex-wrap: wrap; margin: .85rem 0; color: var(--muted); font-size: .875rem; }
+.sales-period-actions { display: flex; gap: .35rem; flex-wrap: wrap; }
+.sales-period-actions button { font-size: .875rem; }
 .sales-list-panel { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); overflow: hidden; }
 .sales-list-caption { padding: .9rem 1rem .65rem; border-bottom: 1px solid var(--line); }
 .sales-list-heading { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .75rem; }

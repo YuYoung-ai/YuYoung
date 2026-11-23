@@ -109,7 +109,27 @@ test('D1 orders the full request range by confirmed visit time before paging', a
     assert.deepEqual(next.rows.slice(-2).map(row=>row.id), ['older','provisional']);
     assert.equal(next.cursor,'');
     assert.equal(new Set([...first.rows,...next.rows].map(row=>row.id)).size,195);
+    const month=await salesRequestPage(kv,'',codec,['2026-12-01','2026-12-31']);
+    assert.deepEqual(month.rows.map(row=>row.id),['later']);
+    assert.equal(month.cursor,'');
   } finally {db.close();}
+});
+
+test('period ranges start on Korean calendar dates and exclude unconfirmed appointments', async () => {
+  const kv=new Kv(), email='period@example.com';
+  kv.clock=Date.parse('2026-11-29T15:01:00Z');
+  await kv.set(['hospitalwork-v2','meta'],{ready:true});
+  await kv.set(['sales-service-v1','access'],{domesticSales:['A'],accounts:{[email]:{name:'A',role:'staff',sales:['A']}}});
+  const rows=[['last-week','2026-11-29T12:00'],['monday','2026-11-30T09:00'],['next-month','2026-12-06T12:00'],['outside','2026-12-07T09:00']]
+    .map(([id,visitAt])=>({id,visitAt,sales:'A'}));
+  rows.push({id:'provisional',sales:'A',visitAt:'2026-11-30T12:00',qrIntake:{confirmationRequired:true}});
+  const service=createSalesService(kv,{now:()=>kv.clock,hash:v=>createHash('sha256').update(v).digest('base64url'),verifyGoogle:async()=>({email,email_verified:true}),
+    requestPage:async()=>({rows,cursor:''})});
+  const {token}=await service.handle({action:'sales_google_login',idToken:'fixture'});
+  const list=async period=>(await service.handle({action:'sales_list',period,token})).items.map(x=>x.id);
+  assert.deepEqual(await list('week'),['monday','next-month']);
+  assert.deepEqual(await list('month'),['last-week','monday']);
+  assert.equal((await list('all')).length,5);
 });
 
 test('automatic milestones and manual notices use separate idempotency and the current recipient', async () => {
@@ -240,4 +260,38 @@ test('Lv.3 can manage sales Google accounts and revoke remembered sessions', asy
   await call(chief,'security_save',{email:member,status:'active',level:2});
   await assert.rejects(call(second,'list'),{status:403});
   assert.equal((await call(chief,'security_list')).devices.length,0);
+});
+
+test('sales cache returns only current changes, including removal when access changes', async () => {
+  const kv = new Kv(), email='cache@example.com';
+  await kv.set(['sales-service-v1','access'],{domesticSales:['A','B'],accounts:{[email]:{name:'A',role:'staff',sales:['A']}}});
+  const ns = 'hospitalwork-v2';
+  await kv.set([ns,'meta'],{ready:true,seq:5});
+  const original = {id:'known',hospitalName:'병원',sales:'A',visitAt:'2026-11-30T11:00'};
+  await kv.set([ns,'request','known'],original);
+  const service=createSalesService(kv,{now:()=>kv.clock,hash:v=>createHash('sha256').update(v).digest('base64url'),
+    verifyGoogle:async()=>({email,sub:'fixture',email_verified:true})});
+  const {token}=await service.handle({action:'sales_google_login',idToken:'fixture'});
+  const call=(name,p={})=>service.handle({action:'sales_cache_'+name,token,...p});
+  const context=await call('context');
+  assert.equal(context.items,undefined);
+  const snapshot=await call('bootstrap',{stamp:context.stamp});
+  assert.deepEqual(snapshot.items.map(x=>[x.id,x.mine]),[['known',true]]);
+  const params={stamp:context.stamp,ref:snapshot.ref,revision:snapshot.snapshotSeq};
+  const empty=await call('delta',params);
+  assert.deepEqual([empty.items,empty.removed,empty.revision,empty.more],[[],[],5,false]);
+  const moved = {...original,sales:'B'}, added={...original,id:'new',hospitalName:'추가 병원',status:'완료'};
+  await kv.set([ns,'request','known'],moved);
+  await kv.set([ns,'request','new'],added);
+  await kv.set([ns,'change',6],{seq:6,request:original}); // Later allocation is authoritative.
+  await kv.set([ns,'change',7],{seq:7,request:added});
+  await kv.set([ns,'meta'],{ready:true,seq:7});
+  const update=await call('delta',params);
+  assert.deepEqual(update.items.map(x=>x.id),['new']);
+  assert.deepEqual(update.removed,[snapshot.items[0].syncKey]);
+  assert.equal(update.revision,7);
+  await kv.delete([ns,'change',6]);
+  await assert.rejects(call('delta',params),{code:'SYNC_RESET'});
+  await kv.set([ns,'hospitalRef','reference'],{key:'reference',name:'병원',sales:'B'});
+  await assert.rejects(call('delta',{...params,revision:7}),{code:'SYNC_RESET'});
 });

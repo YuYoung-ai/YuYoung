@@ -37,7 +37,8 @@ source = `const {createSalesService, prepareSalesTransition, enqueueSalesNotice,
 })();
 ${source}`;
 
-const listAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack})';
+const oldListAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack})';
+const listAdapter = '      requestPage: (cursor, dateRange) => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack}, dateRange)';
 const existingAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;';
 const linkedAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자", sub:admin.sub} : null;';
 const adminDirectory = `      getCsAdmins: async () => {
@@ -49,7 +50,7 @@ const adminDirectory = `      getCsAdmins: async () => {
         return admins;
       },`;
 if (previousExtension) {
-  if (!source.includes(listAdapter)) insert(`      requestPage: async cursor => {
+  if (!source.includes(listAdapter)) insert(source.includes(oldListAdapter) ? oldListAdapter : `      requestPage: async cursor => {
         const limit = 128, rows = [];
         const scan = kv.list({prefix: ["hospitalwork-v2", "request"]}, {limit, cursor: cursor || undefined, reverse: true});
         for await (const entry of scan) rows.push(entry.value);
