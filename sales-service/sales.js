@@ -4,16 +4,19 @@
   const apiUrl = 'https://yuyoung-production.coaptation.workers.dev';
   const storageKey = 'baz_sales_service_session';
   const el = id => document.getElementById(id);
-  const state = {token: '', rows: new Map(), busy: false, scope: 'mine', period: 'month', criteria: '', shown:80, snapshot:null};
+  const pageSize = 80;
+  const state = {token: '', rows: new Map(), busy: false, scope: 'mine', period: 'month', criteria: '', shown:pageSize, snapshot:null};
   const periodNames = {week:'이번 주', month:'이번 달', all:'전체 기간'};
   const cache = window.BazWorkCache;
   const details = new Map();
   const mobileCards = matchMedia('(max-width: 700px)');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const cardList = el('list');
   let fullReady = false;
   const koreanDate = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short'});
-  let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
-  let detailRequest = 0, swipeTimer;
+  let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger, detailOffset;
+  let detailRequest = 0, cardJump, swipeStart, suppressCardClick, scrollFrame;
   let installPrompt, appInstalled = false;
   const installDialog = el('app-install-dialog');
 
@@ -193,36 +196,69 @@
   }
 
   function cardIndex() {
-    const list = el('list');
-    const center = list.scrollTop + list.clientHeight/2;
-    let index = 0;
-    for (let next = 1; next < list.children.length && list.children[next].offsetTop <= center; next++) index=next;
-    return index;
+    const cards = cardList.children;
+    if (cardJump?.card.parentElement === cardList && Math.abs(window.scrollY - cardJump.scrollY) <= 2) {
+      return Array.prototype.indexOf.call(cards, cardJump.card);
+    }
+    cardJump = null;
+    const top = Math.max(0, el('swipe-controls').getBoundingClientRect().bottom);
+    let first = 0, last = Math.max(0, cards.length - 1);
+    while (first < last) {
+      const middle = Math.floor((first + last) / 2);
+      if (cards[middle].getBoundingClientRect().bottom <= top) first = middle + 1;
+      else last = middle;
+    }
+    return first;
   }
 
   function updateCardPosition() {
-    const index = cardIndex(), total = state.rows.size, rendered = el('list').children.length;
-    el('swipe-controls').hidden = !mobileCards.matches || !rendered;
+    const total = state.rows.size, controls = el('swipe-controls');
+    controls.hidden = !mobileCards.matches || total < 2 || !cardList.childElementCount;
+    if (controls.hidden) return;
+    const index = cardIndex();
     const counter = `${index+1} / ${total}`;
     if (el('swipe-position').textContent !== counter) el('swipe-position').textContent = counter;
     el('previous-card').disabled = index===0;
     el('next-card').disabled = index>=total-1;
   }
 
-  function goToCard(index) {
-    const list = el('list'), card = list.children[index];
-    list.scrollTop = card ? card.offsetTop : 0;
+  function loadMore() {
+    if (state.shown >= state.rows.size) return;
+    state.shown += pageSize;
+    renderRows();
+  }
+
+  function goToCard(index, direction) {
+    if (index < 0 || index >= state.rows.size) return;
+    if (index >= cardList.childElementCount) loadMore();
+    const card = cardList.children[index];
+    if (!card) return;
+    const controls = el('swipe-controls');
+    const top = controls.offsetHeight + (parseFloat(getComputedStyle(controls).top) || 0);
+    window.scrollBy({top: card.getBoundingClientRect().top - top - 8, behavior: 'instant'});
+    cardJump = {card, scrollY: window.scrollY};
+    if (!reducedMotion.matches) {
+      card.animate(
+        [{transform: `translateX(${direction * 20}px)`}, {transform: 'translateX(0)'}],
+        {duration: 180, easing: 'ease-out'},
+      );
+    }
     updateCardPosition();
+    el('swipe-announcement').textContent = `${index + 1} / ${state.rows.size} · ${card.querySelector('.sales-case-open').textContent}`;
   }
 
   function renderRows() {
     if (!state.snapshot) return;
     const key = criteria(), query = searchText(), scope = lookupScope(), period = state.period;
     const same = key === state.criteria;
-    if (!same) state.shown = 80;
+    if (!same) {
+      state.shown = pageSize;
+      cardJump = null;
+      el('swipe-announcement').textContent = '';
+    }
     const mobile = mobileCards.matches, container = mobile ? el('list') : el('table-list');
-    const previousIndex = mobile && same ? cardIndex() : 0;
-    const anchor = same ? (mobile ? container.children[previousIndex] : [...container.children].find(card => card.getBoundingClientRect().bottom > 0)) : null;
+    const anchor = same ? (mobile ? container.children[cardIndex()] : [...container.children].find(card => card.getBoundingClientRect().bottom > 0)) : null;
+    const restoreJump = cardJump?.card === anchor;
     const anchorTop = anchor?.getBoundingClientRect().top;
     const today = koreanDate.format(new Date());
     const range = window.BazWorkFields.range(period,today,today.slice(0,7));
@@ -262,8 +298,10 @@
     }
     el('load-more').hidden = shown.length>=rows.length;
     const replacement = anchor && [...container.children].find(card=>card.dataset.requestId===anchor.dataset.requestId);
-    if (mobile) goToCard(keptIndex >= 0 ? keptIndex : Math.min(previousIndex,shown.length-1));
-    else if (replacement) window.scrollBy(0,replacement.getBoundingClientRect().top-anchorTop);
+    if (replacement) {
+      window.scrollBy({top: replacement.getBoundingClientRect().top - anchorTop, behavior: 'instant'});
+      if (restoreJump) cardJump = {card: replacement, scrollY: window.scrollY};
+    }
     updateCardPosition();
   }
 
@@ -402,16 +440,18 @@
   }
 
   async function openDetail(button) {
-    const requestId = button.closest('[data-request-id]').dataset.requestId;
+    const card = button.closest('[data-request-id]');
+    const requestId = card.dataset.requestId;
     const dialog = el('detail-dialog');
     if (dialog.open) return;
     const sequence = ++detailRequest;
     detailTrigger = button;
+    detailOffset = card.getBoundingClientRect().top;
     el('detail-feedback').textContent = '접수 상세를 불러오는 중…';
     el('detail-content').hidden = true;
+    history.pushState({salesDetail: true}, '');
     dialog.showModal();
     dialog.scrollTop = 0;
-    history.pushState({salesDetail: true}, '');
     try {
       const saved = details.get(requestId);
       const fresh = await api('sales_detail', {requestId,detailVersion:saved?.detailVersion});
@@ -643,21 +683,40 @@
     }
   };
   el('retry-period').onclick = () => sync();
-  el('load-more').onclick = () => { state.shown+=80; renderRows(); };
-  el('previous-card').onclick = () => goToCard(cardIndex()-1);
-  el('next-card').onclick = () => {
-    const next = cardIndex()+1;
-    if (next >= el('list').children.length) { state.shown+=80; renderRows(); }
-    goToCard(next);
+  el('load-more').onclick = loadMore;
+  el('previous-card').onclick = () => goToCard(cardIndex() - 1, -1);
+  el('next-card').onclick = () => goToCard(cardIndex() + 1, 1);
+  if ('IntersectionObserver' in window) {
+    const end = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && mobileCards.matches) loadMore();
+    }, {rootMargin: '200px'});
+    end.observe(el('load-more'));
+  }
+  cardList.onpointerdown = event => {
+    suppressCardClick = false;
+    const card = event.target.closest('.sales-card');
+    swipeStart = event.isPrimary && event.pointerType === 'touch' && card
+      ? {card, id: event.pointerId, x: event.clientX, y: event.clientY}
+      : null;
   };
-  el('list').addEventListener('scroll', () => {
-    if (!mobileCards.matches) return;
-    updateCardPosition();
-    clearTimeout(swipeTimer);
-    swipeTimer=setTimeout(()=>{
-      const count=el('list').children.length;
-      if (count<state.rows.size && cardIndex()>=count-2) { state.shown+=80; renderRows(); }
-    },150);
+  cardList.onpointercancel = () => { swipeStart = null; };
+  cardList.onpointerup = event => {
+    const start = swipeStart;
+    swipeStart = null;
+    if (!start || start.id !== event.pointerId || start.card.parentElement !== cardList) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    if (Math.abs(dx) < 54 || Math.abs(dx) < 1.5 * Math.abs(dy)) return;
+    suppressCardClick = true;
+    const direction = dx < 0 ? 1 : -1;
+    const index = Array.prototype.indexOf.call(cardList.children, start.card);
+    goToCard(index + direction, direction);
+  };
+  window.addEventListener('scroll', () => {
+    if (!mobileCards.matches || el('workspace').hidden || el('detail-dialog').open || scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = null;
+      updateCardPosition();
+    });
   }, {passive:true});
   mobileCards.addEventListener('change',updateCardPosition);
   el('sign-out').onclick = signOut;
@@ -693,6 +752,10 @@
     renderRows();
   };
   for (const id of ['list', 'table-list']) el(id).onclick = event => {
+    if (id === 'list' && suppressCardClick && event.detail) {
+      suppressCardClick = false;
+      return;
+    }
     const button = event.target.closest('.sales-case-open') || (id === 'list' ? event.target.closest('.sales-card')?.querySelector('.sales-case-open') : null);
     if (button) void openDetail(button);
   };
@@ -705,6 +768,11 @@
     const list = el(mobileCards.matches ? 'list' : 'table-list');
     const replacement = [...list.children].find(card=>card.dataset.requestId===requestId);
     replacement?.querySelector('.sales-case-open')?.focus({preventScroll:true});
+    if (replacement && mobileCards.matches) {
+      window.scrollBy({top: replacement.getBoundingClientRect().top - detailOffset, behavior: 'instant'});
+      if (cardJump) cardJump.scrollY = window.scrollY;
+      updateCardPosition();
+    }
     detailTrigger = null;
   };
   window.addEventListener('popstate', () => {
