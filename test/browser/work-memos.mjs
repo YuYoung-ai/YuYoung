@@ -58,7 +58,8 @@ try {
       }
       if (p.action === 'work_memo_list' || p.action === 'work_memo_summary') {
         const rows = [...memos.values()].filter(m => (!p.requestId || m.requestId === p.requestId) &&
-          (!p.groups?.length || p.groups.includes(m.group)) && (!p.source || p.source === m.source) && (!p.impact || m.impacts?.includes(p.impact)));
+          (!p.groups?.length || p.groups.includes(m.group)) && (!p.source || p.source === m.source) && (!p.impact || m.impacts?.includes(p.impact)))
+          .sort((a,b) => b.occurredAt - a.occurredAt);
         const version = {revision:String(revision),updatedAt:new Date().toISOString()};
         if (p.action === 'work_memo_list') return json({...version,memos:rows,cursor:''});
         if (p.revision === version.revision) return json({...version,nochange:true});
@@ -103,15 +104,10 @@ try {
   assert.equal(memos.size,1);
 
   await page.locator('#field-records-filters [name=source]').selectOption('sales');
-  const cell = page.getByRole('button',{name:'가온의원 · 서울 일정 변경 1건',exact:true});
-  await cell.click();
-  await page.getByText(note,{exact:true}).waitFor();
-  await page.getByRole('button',{name:'상하',exact:true}).click();
-  assert.equal(await page.locator('.field-records-hospital-card #field-records-detail').count(),1);
-  assert.equal(await page.getByText(note,{exact:true}).isVisible(),true);
-  await page.getByRole('button',{name:'좌우',exact:true}).click();
-  assert.equal(await page.locator('#field-records-grid > #field-records-detail').count(),1);
-  if (process.env.MEMO_SCREENSHOT) await page.screenshot({path:process.env.MEMO_SCREENSHOT});
+  const firstHospital = page.locator('.field-records-hospital-card').filter({has:page.getByRole('button',{name:/가온의원/})});
+  await firstHospital.getByText(note,{exact:true}).waitFor();
+  assert.equal(await page.locator('[data-memo-layout]').count(),0);
+  assert.equal(await firstHospital.getByText('1건',{exact:true}).count(),0);
   await page.getByRole('button',{name:'관련 접수',exact:true}).click();
   await page.locator('#detail [data-receipt-request=r1]').waitFor();
   assert.equal(await page.locator('#list th.read-receipts-column').textContent(),'현장 메모');
@@ -126,13 +122,18 @@ try {
   await dialog.getByRole('button',{name:'저장',exact:true}).click();
   await page.waitForFunction(() => document.getElementById('field-memo-feedback').textContent.includes('저장 완료'));
   await page.locator('#field-records-filters [name=source]').selectOption('');
-  await page.getByRole('button',{name:'나래의원 · 서울 전체 1건',exact:true}).waitFor();
+  const secondHospital = page.locator('.field-records-hospital-card').filter({has:page.getByRole('button',{name:/나래의원/})});
+  await secondHospital.waitFor();
+  await page.getByRole('button',{name:'모두 펼치기',exact:true}).click();
+  await secondHospital.getByText('접수 없이 받은 병원 요청',{exact:true}).waitFor();
+  assert.equal(await firstHospital.getByText(note,{exact:true}).isVisible(),true);
+  await page.getByRole('button',{name:'모두 접기',exact:true}).click();
+  assert.equal(await secondHospital.getByText('접수 없이 받은 병원 요청',{exact:true}).isHidden(),true);
   await page.locator('#field-records-hospitals summary').click();
   await page.locator('#field-records-hospital-options').getByText('나래의원 · 서울',{exact:true}).click();
   await page.getByRole('button',{name:'조회',exact:true}).click();
-  await page.getByRole('button',{name:'나래의원 · 서울 전체 1건',exact:true}).click();
-  await page.getByText('접수 없이 받은 병원 요청',{exact:true}).waitFor();
-  assert.equal(await cell.count(),0);
+  await secondHospital.getByText('접수 없이 받은 병원 요청',{exact:true}).waitFor();
+  assert.equal(await firstHospital.count(),0);
   assert.equal(memos.size,2);
 
   await page.setViewportSize({width:390,height:844});
@@ -143,8 +144,48 @@ try {
   await page.locator('.mobile-cards [data-field-request=r1]').click();
   await dialog.getByText(note,{exact:true}).waitFor();
   assert.equal(await dialog.isVisible(),true);
+  await dialog.getByRole('button',{name:'닫기',exact:true}).click();
+  const newest = [...memos.values()].find(memo => memo.requestId === 'r1');
+  for (let offset = 1; offset <= 4; offset++) {
+    const id = crypto.randomUUID();
+    memos.set(id,{...newest,id,occurredAt:newest.occurredAt-offset*86400000,body:'가온의원 이전 요청 '+offset+'\n'+'기존 업무 일정을 조정해 현장에 방문했습니다.\n'.repeat(4)});
+  }
+  revision++;
+  await page.locator('#field-records-tab').click();
+  const firstToggle = firstHospital.getByRole('button',{name:/가온의원/});
+  await firstToggle.waitFor();
+  if (await firstToggle.getAttribute('aria-expanded') === 'false') await firstToggle.click();
+  assert.equal(await firstToggle.evaluate(el => getComputedStyle(el).justifyContent),'space-between');
+  const scroll = firstHospital.locator('.field-records-scroll');
+  await scroll.locator('.field-memo-entry').first().waitFor();
+  const dates = await scroll.locator('.field-records-day h3').allTextContents();
+  assert.equal(dates.length,5);
+  assert.deepEqual(dates,[...dates].sort().reverse());
+  await scroll.scrollIntoViewIfNeeded();
+  const client = await context.newCDPSession(page);
+  await client.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  const swipe = async (x,y,dx,dy) => {
+    await client.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+    for (let index = 1; index <= 8; index++) {
+      await client.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:x+dx*index/8,y:y+dy*index/8}]});
+    }
+    await client.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  };
+  const box = await scroll.boundingBox();
+  const target = scroll.locator('[data-memo-current]');
+  await swipe(box.x+box.width-45,box.y+90,-165,0);
+  await target.getByText(/가온의원 이전 요청 1/).waitFor();
+  await swipe(box.x+55,box.y+90,165,0);
+  await target.getByText(note,{exact:true}).waitFor();
+  await swipe(box.x+box.width/2,box.y+170,0,-115);
+  await page.waitForFunction(() => document.querySelector('[aria-label^="가온의원"][role=region]').scrollTop > 0);
+  if (process.env.MEMO_SCREENSHOT) {
+    await page.evaluate(() => window.BazTheme.set('dark'));
+    await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.field-records-hospital-toggle')).backgroundColor.match(/\d+/)[0]) < 70);
+    await page.screenshot({path:process.env.MEMO_SCREENSHOT});
+  }
   assert.deepEqual(errors,[]);
-  console.log('field memos: existing card, offline replay, saved counts, detail link, both layouts and standalone hospital filters passed.');
+  console.log('field memos: date grouping, multi-hospital expansion, touch swipes, offline replay, detail link and filters passed.');
 } finally {
   await browser.close();
 }

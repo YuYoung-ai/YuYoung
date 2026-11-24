@@ -4,9 +4,10 @@
   const api = root.BazWorkAPI, cache = root.BazWorkCache;
   const panel = byId('field-records-panel'), dialog = byId('field-memo-dialog');
   const filters = byId('field-records-filters'), form = byId('field-memo-form');
-  const summary = byId('field-records-summary'), detail = byId('field-records-detail');
+  const directory = byId('field-records-directory'), empty = byId('field-records-empty');
+  const template = byId('field-records-hospital-template');
   const pendingElement = byId('field-records-pending');
-  const filterStatus = byId('field-records-status'), detailStatus = byId('field-records-detail-status');
+  const filterStatus = byId('field-records-status');
   const error = byId('field-memo-error'), feedback = byId('field-memo-feedback');
   const sourceLabels = { sales: '영업팀', hospital: '병원', cs: 'CS 내부', other: '기타', unclassified: '미분류' };
   const impactLabels = { schedule: '일정 변경', extra_visit: '추가 방문', after_hours: '업무시간 외 대응', cost: '추가 비용', none: '영향 없음', unset: '미입력' };
@@ -15,11 +16,19 @@
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', hour:'2-digit', minute:'2-digit'});
   const counts = new Map(), hospitalSelection = new Set();
   let bridge, owner = '', registered = false, noteContext, queueBusy = false, queueRequested = false, feedbackTimer, pending = [];
-  let groups = [], knownGroups = new Map(), selection = null, activeFilters, revision = '', summarySeq = 0, summaryBusy = false;
-  let detailSeq = 0, detailCursor = '', detailRevision = '', recentSeq = 0, recentCursor = '';
+  const timelines = new Map(), knownGroups = new Map();
+  const timelineObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      const timeline = timelines.get(entry.target.dataset.hospitalGroup);
+      if (entry.isIntersecting && timeline?.expanded && visible()) {
+        timelineObserver.unobserve(entry.target);
+        void loadTimeline(timeline);
+      }
+    }
+  }, {rootMargin:'180px'});
+  let activeFilters, revision = '', summarySeq = 0, summaryBusy = false, firstResult = true;
+  let timelineId = 0, recentSeq = 0, recentCursor = '';
   let visibleIds = [], countSeq = 0, submitBusy = false;
-  let layout = root.matchMedia('(max-width: 720px)').matches ? 'vertical' : 'horizontal';
-  try { layout = localStorage.getItem('baz-field-records-layout') || layout; } catch {}
 
   function escape(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
@@ -65,7 +74,6 @@
     owner = next;
     registered = true;
     setPeriod('month');
-    setLayout(layout);
     root.BazWorkTabs.register('field-records', byId('field-records-tab'), panel);
     void flushQueue();
   }
@@ -76,11 +84,11 @@
     root.BazWorkTabs.unregister('field-records');
     registered = false;
     owner = '';
-    summarySeq++; detailSeq++; recentSeq++; countSeq++;
-    activeFilters = undefined; revision = ''; selection = null;
-    groups = []; knownGroups.clear(); hospitalSelection.clear(); counts.clear(); visibleIds = []; pending = [];
-    for (const element of [summary, pendingElement, filterStatus, feedback, byId('field-records-total'), byId('field-records-entries'), byId('field-memo-recent-entries')]) element.textContent = '';
-    feedback.hidden = detail.hidden = true;
+    summarySeq++; recentSeq++; countSeq++; summaryBusy = false;
+    activeFilters = undefined; revision = '';
+    resetTimelines(); knownGroups.clear(); hospitalSelection.clear(); counts.clear(); visibleIds = []; pending = [];
+    for (const element of [pendingElement, filterStatus, feedback, byId('field-memo-recent-entries')]) element.textContent = '';
+    feedback.hidden = true;
     form.reset();
     entryRecords.clear();
     if (dialog.open) dialog.close();
@@ -142,56 +150,86 @@
     }
     activeFilters = {from:fields.from.value, to:fields.to.value, source:fields.source.value, impact:fields.impact.value, groups:[...hospitalSelection]};
     revision = '';
-    selection = null;
-    detailSeq++;
-    groups = [];
-    renderSummary();
-    byId('field-records-total').textContent = '';
+    resetTimelines();
     filterStatus.textContent = '현장 기록을 불러오는 중…';
     void refreshSummary(true);
   }
 
-  function setLayout(next) {
-    layout = next === 'vertical' ? 'vertical' : 'horizontal';
-    byId('field-records-grid').dataset.layout = layout;
-    for (const el of panel.querySelectorAll('[data-memo-layout]')) el.setAttribute('aria-pressed', String(el.dataset.memoLayout === layout));
-    renderSummary();
+  function resetTimelines() {
+    timelineObserver.disconnect();
+    timelines.clear();
+    directory.replaceChildren();
+    empty.hidden = true;
+    byId('field-records-expand').hidden = true;
+    firstResult = true;
   }
 
-  function countButton(row, column, label) {
-    const count = column ? row.impacts[column] || 0 : row.total;
-    const selected = selection?.group === row.group && selection.impact === column;
-    return count ? '<button type="button" data-memo-group="' + escape(row.group) + '" data-memo-impact="' + column +
-      '" aria-pressed="' + Boolean(selected) + '" aria-label="' + escape(hospitalName(row) + ' ' + label + ' ' + count + '건') + '">' + count + '건</button>' : '<span>0건</span>';
+  function makeTimeline(row) {
+    const card = template.content.firstElementChild.cloneNode(true);
+    const trigger = card.querySelector('.field-records-hospital-toggle');
+    const section = card.querySelector('.field-records-timeline');
+    const scroll = card.querySelector('.field-records-scroll');
+    const entries = card.querySelector('.field-records-entries');
+    const status = card.querySelector('.field-records-timeline-status');
+    const refresh = card.querySelector('.field-records-refresh');
+    const more = card.querySelector('.field-records-more');
+    const hint = card.querySelector('.field-records-gesture');
+    const timeline = {row, card, trigger, section, scroll, entries, status, refresh, more, hint,
+      expanded:false, loaded:false, loading:false, revision:'', cursor:'', date:'', ids:new Set()};
+
+    card.dataset.hospitalGroup = row.group;
+    section.id = 'field-records-timeline-' + (++timelineId);
+    trigger.setAttribute('aria-controls', section.id);
+    card.querySelector('[data-hospital-name]').textContent = row.hospitalName;
+    const region = card.querySelector('[data-hospital-region]');
+    region.textContent = row.region;
+    region.hidden = !row.region;
+    scroll.setAttribute('aria-label', hospitalName(row) + ' 날짜별 기록');
+    trigger.onclick = () => expandTimeline(timeline, !timeline.expanded);
+    refresh.onclick = () => loadTimeline(timeline);
+    more.onclick = () => loadTimeline(timeline, true);
+    scroll.addEventListener('scroll', () => {
+      if (scroll.scrollTop > 0 && timeline.cursor && scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop < 80) {
+        void loadTimeline(timeline, true);
+      }
+    }, {passive:true});
+    enableTimelineGestures(timeline);
+    return timeline;
   }
 
-  function renderSummary() {
-    const focus = document.activeElement?.dataset;
-    const focusedGroup = focus?.memoGroup, focusedImpact = focus?.memoImpact;
-    const grid = byId('field-records-grid');
-    const restoreDetailFocus = detail.contains(document.activeElement);
-    if (detail.parentNode !== grid) grid.append(detail);
-    detail.hidden = !selection;
-    if (!groups.length) {
-      summary.textContent = activeFilters && revision ? '조건에 맞는 현장 기록이 없습니다.' : '';
-      return;
+  function expandTimeline(timeline, expand, defer = false) {
+    timeline.expanded = expand;
+    timeline.trigger.setAttribute('aria-expanded', String(expand));
+    timeline.section.hidden = !expand;
+    if (!expand) timelineObserver.unobserve(timeline.card);
+    else if (!timeline.loaded && !timeline.loading) {
+      if (defer) timelineObserver.observe(timeline.card);
+      else void loadTimeline(timeline);
     }
-    const cards = layout === 'vertical';
-    if (cards) {
-      summary.innerHTML = groups.map(row => '<article class="field-records-hospital-card"><div><h3>' + escape(hospitalName(row)) +
-        '</h3>' + countButton(row, '', '전체') + '</div><div class="field-records-impact-row">' + columns.map(column =>
-          '<span>' + impactLabels[column] + ' ' + countButton(row, column, impactLabels[column]) + '</span>').join('') + '</div></article>').join('');
-      const index = groups.findIndex(row => row.group === selection?.group);
-      if (index >= 0) summary.children[index].append(detail);
-    } else {
-      summary.innerHTML = '<div class="field-records-table"><table><thead><tr><th scope="col">병원</th><th scope="col">전체</th>' +
-        columns.map(column => '<th scope="col">' + impactLabels[column] + '</th>').join('') + '</tr></thead><tbody>' +
-        groups.map(row => '<tr><th scope="row">' + escape(hospitalName(row)) + '</th><td>' + countButton(row, '', '전체') + '</td>' +
-          columns.map(column => '<td>' + countButton(row, column, impactLabels[column]) + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+  }
+
+  function renderDirectory(groups) {
+    const current = new Set(groups.map(row => row.group));
+    for (const [id, timeline] of timelines) {
+      if (current.has(id)) continue;
+      timelineObserver.unobserve(timeline.card);
+      timeline.card.remove();
+      timelines.delete(id);
     }
-    if (focusedGroup !== undefined) {
-      [...summary.querySelectorAll('[data-memo-group]')].find(el => el.dataset.memoGroup === focusedGroup && el.dataset.memoImpact === focusedImpact)?.focus({preventScroll:true});
-    } else if (restoreDetailFocus && !detail.contains(document.activeElement)) byId('field-records-detail-title').focus({preventScroll:true});
+    for (const row of groups) {
+      knownGroups.set(row.group, row);
+      if (timelines.has(row.group)) continue;
+      const timeline = makeTimeline(row);
+      timelines.set(row.group, timeline);
+      directory.append(timeline.card);
+    }
+    empty.hidden = groups.length !== 0;
+    byId('field-records-expand').hidden = groups.length === 0;
+    if (firstResult && groups.length) expandTimeline(timelines.get(groups[0].group), true, true);
+    firstResult = false;
+    for (const timeline of timelines.values()) {
+      timeline.refresh.hidden = !timeline.loaded || !timeline.revision || revision === timeline.revision;
+    }
   }
 
   async function refreshSummary(force = false) {
@@ -203,13 +241,9 @@
       if (seq !== summarySeq || !visible()) return;
       if (!data.nochange) {
         revision = data.revision;
-        groups = (data.groups || []).sort((a, b) => b.total - a.total || hospitalName(a).localeCompare(hospitalName(b), 'ko'));
-        for (const group of groups) knownGroups.set(group.group, group);
-        byId('field-records-total').textContent = '전체 ' + data.total + '건 · ' + groups.length + '개 병원';
-        renderSummary();
+        renderDirectory(data.groups || []);
       }
       filterStatus.textContent = '최근 갱신 ' + clock.format(new Date(data.updatedAt));
-      byId('field-records-changed').hidden = !selection || !detailRevision || revision === detailRevision;
     } catch (err) {
       if (seq === summarySeq && visible()) filterStatus.textContent = err.message + (revision ? ' · 이전 조회 결과 표시 중' : '');
     } finally {
@@ -217,47 +251,156 @@
     }
   }
 
-  function entryMarkup(memo, allowRequest) {
-    const impacts = memo.impacts === null ? ['unset'] : memo.impacts.length ? memo.impacts : ['none'];
-    return '<article class="field-memo-entry"><div class="field-memo-meta"><time>' + escape(dateTime(new Date(memo.occurredAt)).replace('T', ' ')) +
-      '</time><span>' + escape(sourceLabels[memo.source]) + '</span><span>' + escape(memo.author) + '</span></div><p>' + escape(memo.body) +
-      '</p><div class="field-memo-meta">' + impacts.map(id => '<span>' + escape(impactLabels[id]) + '</span>').join('') + '</div><div class="field-memo-actions">' +
+  function entryMarkup(memo, allowRequest, inTimeline = false) {
+    const impacts = memo.impacts?.length ? memo.impacts : memo.impacts?.length === 0 ? ['none'] : [];
+    const stamp = dateTime(new Date(memo.occurredAt));
+    const time = inTimeline ? stamp.slice(11) : stamp.replace('T', ' ');
+    return '<article class="field-memo-entry"><div class="field-memo-meta"><time datetime="' + escape(new Date(memo.occurredAt).toISOString()) + '">' + escape(time) +
+      '</time><span>' + escape(memo.source === 'unclassified' ? '' : sourceLabels[memo.source]) + '</span><span>' + escape(memo.author) + '</span></div><p>' + escape(memo.body) +
+      '</p>' + (impacts.length ? '<div class="field-memo-meta">' + impacts.map(id => '<span>' + escape(impactLabels[id]) + '</span>').join('') + '</div>' : '') +
+      '<div class="field-memo-actions">' +
       (allowRequest && memo.requestId ? '<button type="button" data-field-open-request="' + escape(memo.requestId) + '">관련 접수</button>' : '') +
       (memo.canEdit ? '<button type="button" data-field-edit="' + escape(memo.id) + '">수정</button><button type="button" data-field-archive="' +
         escape(memo.id) + '">보관</button>' : '') + '</div></article>';
   }
 
   const entryRecords = new Map();
-  async function loadEntries(context, more = false) {
-    const recent = context === 'recent';
-    const seq = recent ? ++recentSeq : ++detailSeq;
-    const out = byId(recent ? 'field-memo-recent-entries' : 'field-records-entries');
-    const status = recent ? byId('field-memo-recent-status') : detailStatus;
-    const next = byId(recent ? 'field-memo-recent-more' : 'field-records-more');
-    const cursor = more ? (recent ? recentCursor : detailCursor) : '';
-    if (!recent && !selection) return;
-    const params = recent ? {requestId:noteContext.requestId, cursor} :
-      {...activeFilters, groups:[selection.group], impact:selection.impact || activeFilters.impact, cursor};
+  function appendTimelineEntries(timeline, memos) {
+    for (const memo of memos) {
+      if (timeline.ids.has(memo.id)) continue;
+      timeline.ids.add(memo.id);
+      entryRecords.set(memo.id, memo);
+      const date = dateTime(new Date(memo.occurredAt)).slice(0,10);
+      if (date !== timeline.date) {
+        const day = document.createElement('section');
+        day.className = 'field-records-day';
+        day.innerHTML = '<h3><time datetime="' + date + '">' + date + '</time></h3>';
+        timeline.entries.append(day);
+        timeline.date = date;
+      }
+      timeline.entries.lastElementChild.insertAdjacentHTML('beforeend', entryMarkup(memo, true, true));
+    }
+  }
+
+  async function loadTimeline(timeline, nextPage = false) {
+    if (!active() || timeline.loading || (nextPage && !timeline.cursor)) return;
+    timelineObserver.unobserve(timeline.card);
+    const applied = activeFilters;
+    timeline.loading = true;
+    timeline.status.textContent = '기록을 불러오는 중…';
+    timeline.more.disabled = timeline.refresh.disabled = true;
+    const current = () => active() && activeFilters === applied && timelines.get(timeline.row.group) === timeline;
+    try {
+      const data = requireSuccess(await api.get('work_memo_list', {
+        ...applied, groups:[timeline.row.group], cursor:nextPage ? timeline.cursor : '',
+      }));
+      if (!current()) return;
+      if (!nextPage) {
+        timeline.entries.replaceChildren();
+        timeline.ids.clear();
+        timeline.date = '';
+        timeline.scroll.scrollTop = 0;
+        timeline.revision = data.revision;
+      }
+      appendTimelineEntries(timeline, data.memos);
+      timeline.cursor = data.cursor;
+      timeline.loaded = true;
+      timeline.refresh.hidden = !revision || revision === timeline.revision;
+      timeline.more.hidden = !timeline.cursor;
+      timeline.hint.hidden = timeline.ids.size < 2 && !timeline.cursor;
+      timeline.status.textContent = timeline.ids.size ? '' : '표시할 기록이 없습니다.';
+    } catch (err) {
+      if (current()) {
+        timeline.status.textContent = err.message;
+        if (!nextPage) timeline.refresh.hidden = false;
+      }
+    } finally {
+      timeline.loading = false;
+      timeline.more.disabled = timeline.refresh.disabled = false;
+    }
+  }
+
+  async function moveToRecord(timeline, direction) {
+    const {scroll, entries} = timeline;
+    const records = Array.from(entries.querySelectorAll('.field-memo-entry'));
+    if (!records.length) return;
+    const top = scroll.getBoundingClientRect().top;
+    const previous = records.findIndex(record => record.hasAttribute('data-memo-current'));
+    let index = previous >= 0 && Math.abs(scroll.scrollTop - timeline.jumpTop) < 2
+      ? previous : Math.max(0, records.findLastIndex(record => record.getBoundingClientRect().top <= top + 44));
+    index += direction;
+    if (index === records.length && timeline.cursor && !timeline.loading) {
+      await loadTimeline(timeline, true);
+      if (!timeline.expanded) return;
+      records.push(...Array.from(entries.querySelectorAll('.field-memo-entry')).slice(records.length));
+    }
+    const record = records[index];
+    if (!record) return;
+    if (previous >= 0) records[previous].removeAttribute('data-memo-current');
+    const dateLabelHeight = record.parentElement.firstElementChild.getBoundingClientRect().height;
+    scroll.scrollTop += record.getBoundingClientRect().top - top - dateLabelHeight - 4;
+    timeline.jumpTop = scroll.scrollTop;
+    record.setAttribute('data-memo-current','');
+  }
+
+  function enableTimelineGestures(timeline) {
+    const {scroll} = timeline;
+    let start = null;
+    scroll.addEventListener('pointerdown', event => {
+      if (!event.isPrimary || event.button !== 0 || event.target.closest('button,a,input,select,textarea')) return;
+      start = {id:event.pointerId, x:event.clientX, y:event.clientY, top:scroll.scrollTop, axis:'',
+        mouse:event.pointerType === 'mouse', text:event.target.closest('p,time,.field-memo-meta')};
+    });
+    scroll.addEventListener('pointermove', event => {
+      if (!start || start.id !== event.pointerId) return;
+      const dx = event.clientX - start.x, dy = event.clientY - start.y;
+      if (!start.axis && Math.max(Math.abs(dx), Math.abs(dy)) > 14) {
+        if (start.mouse && start.text) { start = null; return; }
+        start.axis = Math.abs(dx) > Math.abs(dy) * 1.25 ? 'horizontal' : 'vertical';
+        if (start.mouse) scroll.setPointerCapture(event.pointerId);
+      }
+      if (start?.axis && start.mouse) {
+        event.preventDefault();
+        if (start.axis === 'vertical') scroll.scrollTop = start.top - dy;
+      }
+    });
+    scroll.addEventListener('pointerup', event => {
+      if (!start || start.id !== event.pointerId) return;
+      const dx = event.clientX - start.x, dy = event.clientY - start.y;
+      if (start.axis === 'horizontal' && Math.abs(dx) >= 45 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+        void moveToRecord(timeline, dx < 0 ? 1 : -1);
+      }
+      start = null;
+    });
+    scroll.addEventListener('pointercancel', () => { start = null; });
+    scroll.addEventListener('keydown', event => {
+      if (event.target !== scroll || !['ArrowLeft','ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      void moveToRecord(timeline, event.key === 'ArrowLeft' ? 1 : -1);
+    });
+  }
+
+  async function loadRecent(more = false) {
+    const seq = ++recentSeq;
+    const out = byId('field-memo-recent-entries');
+    const status = byId('field-memo-recent-status');
+    const next = byId('field-memo-recent-more');
+    const cursor = more ? recentCursor : '';
     status.textContent = '메모를 불러오는 중…';
     next.disabled = true;
     if (!more) out.textContent = '';
     try {
-      const data = requireSuccess(await api.get('work_memo_list', params));
-      if (seq !== (recent ? recentSeq : detailSeq) || !active()) return;
+      const data = requireSuccess(await api.get('work_memo_list', {requestId:noteContext.requestId, cursor}));
+      if (seq !== recentSeq || !active()) return;
       for (const item of data.memos) entryRecords.set(item.id, item);
-      out.insertAdjacentHTML('beforeend', data.memos.map(item => entryMarkup(item, !recent)).join(''));
-      next.hidden = !data.cursor;
+      out.insertAdjacentHTML('beforeend', data.memos.map(item => entryMarkup(item, false)).join(''));
+      recentCursor = data.cursor;
+      next.hidden = !recentCursor;
       status.textContent = out.childElementCount ? '' : '저장된 메모가 없습니다.';
-      if (recent) recentCursor = data.cursor;
-      else {
-        detailCursor = data.cursor;
-        detailRevision = data.revision;
-        byId('field-records-changed').hidden = !revision || revision === detailRevision;
-      }
     } catch (err) {
-      if (seq === (recent ? recentSeq : detailSeq) && active()) status.textContent = err.message;
+      if (seq === recentSeq && active()) status.textContent = err.message;
     } finally {
-      if (seq === (recent ? recentSeq : detailSeq)) next.disabled = false;
+      if (seq === recentSeq) next.disabled = false;
     }
   }
 
@@ -295,7 +438,7 @@
     byId('field-memo-recent-more').hidden = true;
     if (!dialog.open) dialog.showModal();
     (choose ? byId('field-memo-hospital-search') : form.elements.body).focus();
-    if (!recent.hidden) void loadEntries('recent');
+    if (!recent.hidden) void loadRecent();
   }
 
   function announce(message, persistent = false) {
@@ -318,12 +461,23 @@
     return api.post(item.action, item.payload);
   }
 
+  async function refreshAfterWrite(groups) {
+    void hydrate();
+    if (!visible()) return;
+    await refreshSummary(true);
+    for (const group of groups) {
+      const timeline = timelines.get(group);
+      if (timeline?.expanded && timeline.scroll.scrollTop < 24) void loadTimeline(timeline);
+    }
+  }
+
   async function flushQueue(manual = false) {
     if (!active()) return;
     if (queueBusy) { queueRequested = true; return; }
     const account = owner;
     queueBusy = true;
     let sent = 0;
+    const savedGroups = new Set();
     try {
       const items = await cache.memoPending(account);
       if (!active() || owner !== account) return;
@@ -336,6 +490,7 @@
         try { data = await send(item); } catch { break; }
         if (data.success) {
           await cache.saveMemoPending(account, item.payload.operationId, null);
+          if (data.memo?.group) savedGroups.add(data.memo.group);
           sent++;
         } else if (!data.retrySameOperation) {
           item.error = data.error || '서버에서 메모를 저장하지 못했습니다.';
@@ -347,10 +502,7 @@
       if (!active() || owner !== account) return;
       pending = remaining;
       showPending();
-      if (sent) {
-        void hydrate();
-        if (visible()) void refreshSummary(true);
-      }
+      if (sent) void refreshAfterWrite(savedGroups);
       if (pending.length) announce('현장 메모 전송 대기 ' + pending.length + '건 · 현장 기록 탭에서 확인', true);
       else if (sent) announce('현장 메모 서버 저장 완료');
     } catch {
@@ -396,7 +548,7 @@
         const data = requireSuccess(await send(item));
         if (data.success && active() && owner === account) {
           announce('현장 메모 서버 저장 완료');
-          void hydrate(); void refreshSummary(true);
+          void refreshAfterWrite([data.memo?.group]);
         }
       }
       if (active() && owner === account && dialog.open) dialog.close();
@@ -411,13 +563,12 @@
 
   async function archive(id) {
     const memo = entryRecords.get(id), account = owner;
-    if (!memo?.canEdit || !root.confirm('이 메모를 보관할까요? 현황판 집계에서 제외됩니다.')) return;
+    if (!memo?.canEdit || !root.confirm('이 메모를 보관할까요? 병원 기록에서 숨겨집니다.')) return;
     try {
       await enqueue({action:'work_memo_archive', payload:{id, baseRevision:memo.revision, operationId:api.id()}});
       await flushQueue();
       if (active() && owner === account) {
-        if (dialog.open && !byId('field-memo-recent').hidden) void loadEntries('recent');
-        if (visible() && selection) void loadEntries('detail');
+        if (dialog.open && !byId('field-memo-recent').hidden) void loadRecent();
       }
     } catch (err) { if (active() && owner === account) announce(err.message); }
   }
@@ -431,12 +582,12 @@
   for (const el of filters.querySelectorAll('[data-memo-period]')) {
     el.onclick = () => { setPeriod(el.dataset.memoPeriod); applyFilters(); };
   }
-  for (const el of panel.querySelectorAll('[data-memo-layout]')) {
-    el.onclick = () => {
-      setLayout(el.dataset.memoLayout);
-      try { localStorage.setItem('baz-field-records-layout', layout); } catch {}
-    };
-  }
+  byId('field-records-open-all').onclick = () => {
+    for (const timeline of timelines.values()) expandTimeline(timeline, true, true);
+  };
+  byId('field-records-close-all').onclick = () => {
+    for (const timeline of timelines.values()) expandTimeline(timeline, false);
+  };
   byId('field-records-hospitals').addEventListener('toggle', event => { if (event.target.open && active()) renderHospitalFilters(); });
   byId('field-records-hospital-search').oninput = renderHospitalFilters;
   byId('field-records-hospital-clear').onclick = () => { hospitalSelection.clear(); renderHospitalFilters(); };
@@ -452,9 +603,7 @@
   byId('field-memo-close').onclick = () => { if (!submitBusy) dialog.close(); };
   dialog.addEventListener('cancel', event => { if (submitBusy) event.preventDefault(); });
   dialog.addEventListener('close', () => { recentSeq++; });
-  byId('field-records-more').onclick = () => loadEntries('detail', true);
-  byId('field-records-changed').onclick = () => loadEntries('detail');
-  byId('field-memo-recent-more').onclick = () => loadEntries('recent', true);
+  byId('field-memo-recent-more').onclick = () => loadRecent(true);
   root.addEventListener('baz-work-tab', event => {
     if (event.detail.name !== 'field-records' || !active()) return;
     if (!activeFilters) applyFilters();
@@ -462,6 +611,13 @@
     void flushQueue();
   });
   root.addEventListener('online', () => { void flushQueue(); void refreshSummary(); });
+  document.addEventListener('visibilitychange', () => {
+    if (!visible()) return;
+    void refreshSummary();
+    for (const timeline of timelines.values()) {
+      if (timeline.expanded && !timeline.loaded && !timeline.loading) timelineObserver.observe(timeline.card);
+    }
+  });
   root.addEventListener('baz-auth-logout', disable);
   setInterval(() => {
     if (visible()) void refreshSummary();
@@ -474,20 +630,6 @@
     if (!button) return;
     const data = button.dataset;
     if (data.fieldRequest) openForm({requestId:data.fieldRequest, name:data.fieldHospital});
-    if (data.memoGroup) {
-      const row = groups.find(item => item.group === data.memoGroup);
-      if (!row) return;
-      if (selection?.group === row.group && selection.impact === data.memoImpact) {
-        selection = null; detailSeq++; renderSummary(); return;
-      }
-      selection = {group:row.group, impact:data.memoImpact};
-      detailRevision = '';
-      byId('field-records-changed').hidden = byId('field-records-more').hidden = true;
-      byId('field-records-detail-title').textContent = hospitalName(row) + (data.memoImpact ? ' · ' + impactLabels[data.memoImpact] : '');
-      renderSummary();
-      if (!detail.hidden) byId('field-records-detail-title').focus({preventScroll:true});
-      void loadEntries('detail');
-    }
     if (data.fieldOpenRequest) {
       root.BazWorkTabs.show('service');
       bridge.openRequest(data.fieldOpenRequest);
