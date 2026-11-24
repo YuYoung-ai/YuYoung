@@ -172,6 +172,8 @@ test('automatic milestones and manual notices use separate idempotency and the c
   assert.equal(await service.deliver(), false);
   assert.equal(sent.length, 1);
   assert.equal(sent[0].payload.binding, hash(prospect));
+  assert.equal(sent[0].payload.body, '방문 일정 확정 · 2026-12-01 14:00');
+  assert.ok((await call(a, 'inbox')).items.some(item => item.message === '2026-12-01 14:00'));
 
   const requestId = 'case';
   const {recipient} = await call(l, 'notice_target', {requestId});
@@ -182,6 +184,7 @@ test('automatic milestones and manual notices use separate idempotency and the c
   await call(l, 'notice_send', request);
   await service.deliver();
   assert.equal(sent.length, 2);
+  assert.equal(sent[1].payload.body, '영업 업무 메시지');
   assert.ok(!(JSON.stringify(sent[1]).includes(message)), 'manual body stays in the authenticated inbox');
   assert.ok((await call(a, 'inbox')).items.some(item => item.message === message));
   assert.deepEqual((await call(b, 'inbox')).items, []);
@@ -195,6 +198,7 @@ test('automatic milestones and manual notices use separate idempotency and the c
   await service.deliver();
   assert.equal(sent.length, 3);
   assert.equal(sent[2].payload.binding, hash(substitute));
+  assert.equal(sent[2].payload.body, '서비스 처리 완료');
 });
 
 test('current BAZ CS administrators can start with domestic requests before the sales roster is configured', async () => {
