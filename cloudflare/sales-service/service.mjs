@@ -4,6 +4,8 @@ const namespace = 'sales-service-v1';
 const key = (...parts) => [namespace, ...parts];
 const workKey = (...parts) => ['hospitalwork-v2', ...parts];
 const emailKey = value => String(value || '').trim().toLowerCase();
+const isRemoved = (policy, email) => Object.hasOwn(policy?.removedAccounts || {}, email);
+const deviceLinks = (email, version) => version ? key('deviceForGrant', email, version) : key('deviceFor', email);
 const alias = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
 const tokenPattern = /^sales_[0-9a-f]{64}$/;
 const isLive = row => Boolean(row?.id && !row.deletedAt && !row.purgedAt);
@@ -69,7 +71,7 @@ function scopeFor(policy, email) {
   const mine = new Set(assigned.length ? assigned : [alias(account.name)].filter(Boolean));
   const allowed = account.domesticRegion ? mine : new Set(level >= 2 ? domestic : assigned);
   return {email, name: account.name || '', level, allowed, mine, domesticRegion: account.domesticRegion === true,
-    canSend: account.canSend === true, version: account.version || '', boundSub:account.boundSub};
+    canSend: account.canSend === true, version: account.version || '', deviceVersion:account.deviceVersion, boundSub:account.boundSub};
 }
 
 export async function updateSalesAccess(kv, input, now = Date.now()) {
@@ -80,19 +82,23 @@ export async function updateSalesAccess(kv, input, now = Date.now()) {
   const primary = new Set();
   const entries = Object.entries(input.accounts);
   if (entries.length > 200 || domestic.size > 200) throw invalid();
+  const previous = await kv.get(key('access'));
   for (const [rawEmail, record] of entries) {
     const email = emailKey(rawEmail);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || Object.hasOwn(accounts, email) || !['lead', 'staff'].includes(record?.role)) throw invalid();
+    const stored = Object.hasOwn(previous.value?.accounts || {},email) ? previous.value.accounts[email] : null;
+    if (!stored && isRemoved(previous.value,email)) throw failure(409,'ACCOUNT_REMOVED','삭제된 계정은 영업 앱 보안 관리에서 다시 추가해 주세요.');
     const sales = Array.isArray(record.sales) ? [...new Set(record.sales.map(alias))] : [];
     const primaryFor = Array.isArray(record.primaryFor) ? [...new Set(record.primaryFor.map(alias))] : [];
     if (sales.some(name => !domestic.has(name)) || primaryFor.some(name => !domestic.has(name) || primary.has(name) || record.role === 'staff' && !sales.includes(name))) throw invalid();
     primaryFor.forEach(name => primary.add(name));
-    accounts[email] = {name: String(record.name || '').trim().slice(0, 80), role: record.role, sales, primaryFor, canSend: record.canSend === true};
+    accounts[email] = {name: String(record.name || '').trim().slice(0, 80), role: record.role, sales, primaryFor, canSend: record.canSend === true,
+      ...(stored?.version && {version:stored.version}), ...(stored?.deviceVersion && {deviceVersion:stored.deviceVersion})};
   }
-  const previous = await kv.get(key('access'));
   const notifications = input.notifications === true;
   const enabledAt = notifications ? previous.value?.enabledAt || now : 0;
-  const policy = {domesticSales: [...domestic], accounts, notifications, enabledAt};
+  const policy = {domesticSales: [...domestic], accounts, notifications, enabledAt,
+    ...(previous.value?.removedAccounts && {removedAccounts:previous.value.removedAccounts})};
   if (!(await kv.atomic().check(previous).set(previous.key, policy).commit()).ok) throw failure(409, 'ACCESS_CHANGED', '영업 앱 설정을 다시 저장해 주세요.');
   return {success: true, accounts: entries.length, notifications};
 }
@@ -124,7 +130,7 @@ const salesReferences = new WeakMap();
 export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requestPage, rangeVersion, sender, validateSubscription, getCsAdmin, getCsAdmins} = {}) {
   async function accessFor(policy, email) {
     const assigned = scopeFor(policy, email);
-    if (assigned || Object.hasOwn(policy?.accounts || {}, email)) return assigned;
+    if (assigned || isRemoved(policy, email) || Object.hasOwn(policy?.accounts || {}, email)) return assigned;
     const admin = await getCsAdmin?.(email);
     return admin ? {email, name: admin.name, level:3, domesticRegion:true, mine: new Set([alias(admin.name)].filter(Boolean)), canSend: true, version:'', boundSub:admin.sub} : null;
   }
@@ -146,7 +152,8 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     if (!email || claims.email_verified !== true && claims.email_verified !== 'true') {
       throw failure(401, 'LOGIN_REQUIRED', 'Google 계정을 확인해 주세요.');
     }
-    const scope = await accessFor((await kv.get(key('access'))).value, email);
+    const access = await kv.get(key('access'));
+    const scope = await accessFor(access.value, email);
     if (!scope) throw failure(403, 'ACCESS_DENIED', '이 계정에 영업 앱 이용 권한이 없습니다.');
     const identity = await kv.get(key('identity', email));
     const sub = String(claims.sub || '');
@@ -155,7 +162,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const random = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
     const token = `sales_${random}`, ttl = p.remember === true ? 30 * 24 * hour : 8 * hour;
     const loggedAt = now(), expiresAt = loggedAt + ttl;
-    const saved = await kv.atomic().check(identity).set(identity.key, {sub, lastLogin:loggedAt})
+    const saved = await kv.atomic().check(access,identity).set(identity.key, {sub, lastLogin:loggedAt})
       .set(key('session', await hash(token)), {email, expiresAt, loggedAt, remembered:p.remember === true,
         ua:String(p.__ua || '').slice(0,220), version:scope.version}, {expireIn:ttl}).commit();
     if (!saved.ok) throw failure(503, 'TEMPORARY', '로그인 저장을 다시 시도해 주세요.');
@@ -321,7 +328,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const recipient = await hash(current.recipient.email + ':' + requestId);
     if (p.action === 'sales_notice_target') {
       let connected = false;
-      for await (const entry of kv.list({prefix: key('deviceFor', current.recipient.email)}, {limit: 1})) connected = Boolean(entry.value);
+      for await (const entry of kv.list({prefix: deviceLinks(current.recipient.email,current.recipient.deviceVersion)}, {limit: 1})) connected = Boolean(entry.value);
       return {success: true, recipient, name: current.recipient.name || current.owner, connected};
     }
     if (p.recipient !== recipient) throw failure(409, 'RECIPIENT_CHANGED', '담당자가 변경되었습니다. 수신자를 다시 확인해 주세요.');
@@ -344,17 +351,23 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     catch { throw failure(400, 'INVALID_SUBSCRIPTION', '이 기기의 알림 연결을 다시 확인해 주세요.'); }
     const id = await hash(subscription.endpoint);
     const entry = await kv.get(key('device', id));
+    const linked = [...deviceLinks(scope.email,scope.deviceVersion),id];
     let tx = kv.atomic().check(entry);
-    if (entry.value) tx = tx.delete(key('deviceFor', entry.value.email, id));
-    const result = await tx.set(entry.key, {email: scope.email, subscription})
-      .set(key('deviceFor', scope.email, id), true).commit();
+    if (entry.value) {
+      const previous = deviceLinks(entry.value.email,entry.value.deviceVersion);
+      if (entry.value.email !== scope.email || entry.value.deviceVersion !== scope.deviceVersion) tx = tx.delete([...previous,id]);
+    }
+    const result = await tx.set(entry.key, {email: scope.email, subscription, ...(scope.deviceVersion && {deviceVersion:scope.deviceVersion})})
+      .set(linked, true).commit();
     if (!result.ok) throw failure(409, 'DEVICE_CHANGED', '기기 연결을 다시 시도해 주세요.');
     return {success: true};
   }
 
   async function detach(email, id) {
     const entry = await kv.get(key('device', id));
-    if (entry.value?.email === email) await kv.atomic().check(entry).delete(entry.key).delete(key('deviceFor', email, id)).commit();
+    if (entry.value?.email === email) {
+      await kv.atomic().check(entry).delete(entry.key).delete([...deviceLinks(email,entry.value.deviceVersion),id]).commit();
+    }
   }
 
   async function inbox(scope, policy) {
@@ -370,7 +383,9 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
 
   async function securityDirectory(policy) {
     const users = new Map();
-    for (const admin of await getCsAdmins?.() || []) users.set(admin.email, {...admin, level:3, status:'active'});
+    for (const admin of await getCsAdmins?.() || []) {
+      if (!isRemoved(policy,admin.email)) users.set(admin.email, {...admin, level:3, status:'active'});
+    }
     for (const [email, record] of Object.entries(policy?.accounts || {})) {
       const level = record.level ?? {staff:1, lead:2, admin:3}[record.role];
       users.set(email, {email, name:record.name, level, status:record.status || 'active', version:record.version || ''});
@@ -415,28 +430,44 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
       }
       return {success:true};
     }
-    if (p.action !== 'sales_security_add' && p.action !== 'sales_security_save') throw failure(400,'UNKNOWN_ACTION','지원하지 않는 보안 관리 요청입니다.');
+    const adding = p.action === 'sales_security_add', deleting = p.action === 'sales_security_delete';
+    if (!adding && !deleting && p.action !== 'sales_security_save') throw failure(400,'UNKNOWN_ACTION','지원하지 않는 보안 관리 요청입니다.');
     const email = emailKey(p.email), level = Number(p.level), name = typeof p.name === 'string' ? p.name.trim() : '';
-    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || ![1,2,3].includes(level)) {
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || !deleting && ![1,2,3].includes(level)) {
       throw failure(400,'INVALID_ACCESS','Google 이메일과 권한을 확인해 주세요.');
     }
     const entry = await kv.get(key('access'));
     const current = entry.value || {};
-    if ((await accessFor(current,scope.email))?.level !== 3) throw failure(403,'FORBIDDEN','Lv.3 관리자 권한이 필요합니다.');
+    const actor = await accessFor(current,scope.email);
+    if (actor?.level !== 3 || actor.version !== scope.version) throw failure(403,'FORBIDDEN','Lv.3 관리자 권한이 필요합니다.');
     const accounts = {...current.accounts};
     const stored = Object.hasOwn(accounts,email) ? accounts[email] : null;
     const inherited = !stored && await getCsAdmin?.(email);
-    const exists = Boolean(stored || inherited);
-    const adding = p.action === 'sales_security_add';
+    const removed = isRemoved(current,email);
+    const exists = Boolean(stored || inherited && !removed);
+    if (deleting) {
+      if (email === scope.email) throw failure(409,'SELF_ADMIN','본인 관리자 계정은 삭제할 수 없습니다.');
+      if (removed && !exists) return {success:true};
+      if (!exists) throw failure(404,'NOT_FOUND','등록된 영업 계정을 찾을 수 없습니다.');
+      const identity = await kv.get(key('identity',email));
+      delete accounts[email];
+      // Remember the exclusion so a BAZ CS administrator cannot regain access through fallback.
+      const removedAccounts = {...current.removedAccounts, [email]:true};
+      if (!(await kv.atomic().check(entry,identity).set(entry.key,{...current,accounts,removedAccounts}).delete(identity.key).commit()).ok) {
+        throw failure(409,'ACCESS_CHANGED','계정 설정이 변경됐습니다. 새로고침 후 다시 삭제해 주세요.');
+      }
+      return {success:true};
+    }
     if (adding && (exists || !name || name.length>80 || Object.keys(accounts).length>=200)) throw failure(409,'ACCOUNT_NOT_ADDED','이미 등록된 계정이거나 입력한 이름을 확인해 주세요.');
     if (!adding && !exists) throw failure(404,'NOT_FOUND','등록된 영업 계정을 찾을 수 없습니다.');
     const status = p.status === 'disabled' ? 'disabled' : 'active';
     if (email === scope.email && (status !== 'active' || level !== 3)) throw failure(409,'SELF_ADMIN','본인 관리자 권한이나 사용 상태는 변경할 수 없습니다.');
-    accounts[email] = {...stored, name: stored?.name || inherited?.name || name,
+    const version = status==='disabled' || adding ? crypto.randomUUID() : stored?.version || '';
+    accounts[email] = {...stored, name: adding ? name : stored?.name || inherited?.name,
       level, role:['','staff','lead','admin'][level], status,
       domesticRegion:stored?.domesticRegion ?? true, canSend:level>=2,
       boundSub:stored?.boundSub || inherited?.sub || '',
-      version:status==='disabled' ? crypto.randomUUID() : stored?.version || ''};
+      version, ...(adding && removed && {deviceVersion:version})};
     if (!(await kv.atomic().check(entry).set(entry.key,{...current,accounts}).commit()).ok) throw failure(409,'ACCESS_CHANGED','계정 설정이 변경됐습니다. 새로고침 후 다시 저장해 주세요.');
     return {success:true};
   }
@@ -473,9 +504,9 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
         await kv.set(key('inbox', recipient.email, notice.at, notice.id), {
           requestId: notice.requestId, id: notice.id, hospital: current.row.hospitalName || '', headline, message, from: notice.from || '', at: notice.at,
         }, {expireIn: 30 * 24 * hour});
-        for await (const link of kv.list({prefix: key('deviceFor', recipient.email)}, {limit: 8})) {
+        for await (const link of kv.list({prefix: deviceLinks(recipient.email,recipient.deviceVersion)}, {limit: 8})) {
           const id = link.key.at(-1), device = (await kv.get(key('device', id))).value;
-          if (device?.email !== recipient.email) continue;
+          if (device?.email !== recipient.email || device.deviceVersion !== recipient.deviceVersion) continue;
           try {
             await sender.send(device.subscription, {title: 'BAZ 영업', body: pushBody, binding: await hash(recipient.email)}, 1800,
               {deliveryId: 'sales:' + await hash(notice.id + ':' + id)});

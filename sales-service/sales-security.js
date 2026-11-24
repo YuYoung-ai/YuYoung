@@ -37,10 +37,14 @@ window.BazSalesSecurity = api => {
       if (!inactive && !confirm(`${user.name || user.email} 계정의 사용을 중지할까요?`)) return;
       void save(inactive ? 'active' : 'disabled',user.level,inactive ? '계정을 다시 활성화했습니다.' : '계정 사용을 중지했습니다.');
     }, inactive ? 'security-positive' : 'security-danger');
+    const remove = button('삭제',() => {
+      if (!confirm(`${user.name || user.email} (${user.email}) 계정을 영업 앱 허용 목록에서 삭제할까요? 기억된 로그인과 기기 알림 연결이 해제됩니다.`)) return;
+      void run('sales_security_delete',{email:user.email},'허용 사용자를 삭제했습니다.');
+    },'security-danger');
     if (user.email === currentEmail) {
-      for (const element of [permission, saveButton, toggle]) element.disabled = true;
+      for (const element of [permission, saveButton, toggle, remove]) element.disabled = true;
     }
-    actions.append(permission,saveButton,toggle);
+    actions.append(permission,saveButton,toggle,remove);
     card.append(header,actions);
     return card;
   }

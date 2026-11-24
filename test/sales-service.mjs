@@ -266,6 +266,54 @@ test('Lv.3 can manage sales Google accounts and revoke remembered sessions', asy
   assert.equal((await call(chief,'security_list')).devices.length,0);
 });
 
+test('deleting a sales user blocks fallback access and re-adding requires a new login and push connection', async () => {
+  const kv = new Kv();
+  const chief = 'chief@example.com', user = 'inherited@example.com';
+  const admins = [
+    {email:chief,name:'관리자',sub:'chief-sub'},
+    {email:user,name:'영업 A',sub:'user-sub'},
+  ];
+  const accounts = {[user]:{name:'영업 A',role:'staff',sales:['영업 A'],primaryFor:['영업 A']}};
+  const roster = {domesticSales:['영업 A'],accounts,notifications:true};
+  const hash = value => createHash('sha256').update(value).digest('base64url');
+  const service = createSalesService(kv,{
+    hash, now:()=>kv.clock, getCsAdmins:async()=>admins,
+    getCsAdmin:async email=>admins.find(admin=>admin.email===email),
+    verifyGoogle:async ({email,sub})=>({email,sub,email_verified:true}),
+    validateSubscription: subscription=>subscription,
+  });
+  const login = async (email, sub, remember = false) => (await service.handle({action:'sales_google_login',idToken:{email,sub},remember})).token;
+  const call = (token,action,fields={}) => service.handle({action:'sales_'+action,token,...fields});
+  await updateSalesAccess(kv,{...roster,accounts:{}},kv.clock);
+  await kv.set(['hospitalwork-v2','request','case'],{id:'case',sales:'영업 A',region:'서울'});
+  const admin = await login(chief,'chief-sub');
+  const inheritedToken = await login(user,'user-sub',true);
+  const subscription = {endpoint:'https://push.example/endpoint'};
+  await call(inheritedToken,'push_subscribe',{subscription});
+  await assert.rejects(call(admin,'security_delete',{email:chief}),{code:'SELF_ADMIN'});
+  await call(admin,'security_delete',{email:user.toUpperCase()});
+  await call(admin,'security_delete',{email:user});
+  assert.deepEqual((await call(admin,'security_list')).users.map(record=>record.email),[chief]);
+  assert.equal((await call(admin,'security_list')).devices.length,0);
+  assert.equal((await kv.get(['sales-service-v1','identity',user])).value,null);
+  await assert.rejects(call(inheritedToken,'cache_context'),{status:403});
+  await assert.rejects(login(user,'user-sub'),{status:403});
+  await updateSalesAccess(kv,{...roster,accounts:{}},kv.clock);
+  await assert.rejects(updateSalesAccess(kv,roster,kv.clock),{code:'ACCOUNT_REMOVED'});
+  await call(admin,'security_add',{email:user,name:'영업 A',level:1});
+  await updateSalesAccess(kv,roster,kv.clock);
+  await assert.rejects(call(inheritedToken,'cache_context'),{status:403});
+  const registered = await login(user,'user-sub',true);
+  await assert.rejects(call(registered,'security_delete',{email:chief}),{status:403});
+  assert.equal((await call(admin,'notice_target',{requestId:'case'})).connected,false);
+  await call(registered,'push_subscribe',{subscription});
+  assert.equal((await call(admin,'notice_target',{requestId:'case'})).connected,true);
+  await call(admin,'security_save',{email:user,status:'disabled',level:1});
+  await call(admin,'security_delete',{email:user});
+  await assert.rejects(call(registered,'cache_context'),{status:403});
+  await assert.rejects(login(user,'user-sub'),{status:403});
+});
+
 test('sales cache returns only current changes, including removal when access changes', async () => {
   const kv = new Kv(), email='cache@example.com';
   await kv.set(['sales-service-v1','access'],{domesticSales:['A','B'],accounts:{[email]:{name:'A',role:'staff',sales:['A']}}});
