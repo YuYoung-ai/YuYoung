@@ -24,6 +24,7 @@ try{
   const req=route.request(),url=new URL(req.url());
   const json=result=>route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':base},body:JSON.stringify(result)});
   if(url.origin===base){
+   if(url.pathname==='/hospital-work.html')return route.fulfill({contentType:typeFromFile['.html'],body:'<main>CS 서비스 현황</main>'});
    if(url.pathname==='/auth.js')return route.fulfill({contentType:'application/javascript',
     body:"window.BazAuth={name:()=> '검증 담당자',token:()=> 'synthetic-token',withToken:u=>u,currentLevel:async()=>3,cachedLevel:()=>3};"});
    const file=path.join(root,decodeURIComponent(url.pathname));
@@ -67,10 +68,11 @@ try{
    if(p.action==='work_document_status'||p.action==='work_document_retry')
     return json({success:true,request,source,sourceLinked:linked,records:linked?[{recordId:source.recordId}]:[]});
    if(p.action==='work_handover_detail')return json({success:true,source,workDetail:{request:{...request,revision:1},history:[]}});
-   if(p.action==='work_field_result_link'){
+   if(p.action==='work_inspection_source_link'){
+    assert.equal(p.sheetVersion,receipt.version);
     if(linkFailure){linkFailure=false;return json({success:false,error:'합성 접수 연결 지연'});}
     linked=true;
-    return json({success:true});
+    return json({success:true,request,recordId:p.recordId,sourceLinked:true});
    }
   }
   return json({success:true,data:[]});
@@ -139,7 +141,9 @@ try{
   await generatePDF(false);
  });
  assert.equal(writes.length,1);assert.equal(uploads.length,0);
- assert.match(await form.locator('#pdfGenerationState').textContent(),/PDF 준비 실패/);
+ assert.deepEqual(queries,[writes[0].reqId]);
+ assert.match(await form.locator('#pdfUploadStatus').textContent(),/합성 접수 연결 지연/);
+ assert.equal(page.url(),address,'the form stays open while delivery is pending');
  await page.reload();
  await ready();
  await render();
@@ -147,13 +151,17 @@ try{
  await frame().evaluate(()=>generatePDF(false));
  assert.deepEqual(queries,[writes[0].reqId]);
  assert.equal(writes.length,1);assert.equal(uploads.length,0);
- assert.match(await form.locator('#pdfGenerationState').textContent(),/합성 접수 연결 지연/);
+ assert.equal(page.url(),address,'the entry stays open until delivery and comment attachment succeed');
  assert.equal(await form.getByRole('link',{name:'기존 내역서에서 이어쓰기'}).getAttribute('href'),
   'inspection.html?request='+request.id+'&record='+source.recordId);
- await frame().evaluate(()=>generatePDF(false));
- await frame().waitForFunction(()=>window.BazPerf.samples().some(s=>s.name==='pdf_delivery_total'));
- assert.equal(await form.locator('#doneTitle').textContent(),'점검 내역서 저장 완료');
+ await Promise.all([
+  page.waitForURL(base+'/hospital-work.html?request='+request.id),
+  form.locator('#pdfUploadRetry').click()
+ ]);
+ assert.equal(await page.locator('main').innerText(),'CS 서비스 현황');
  assert.equal(writes.length,1);assert.equal(uploads.length,1);
+ await page.goto(address);
+ await ready();
  const legacyCurrent=await frame().evaluate(async()=>{
   const repo=BazInspectionRepository.create({indexedDB,storage:localStorage,owner:draftRepository.owner});
   await repo.ready();return repo.current();

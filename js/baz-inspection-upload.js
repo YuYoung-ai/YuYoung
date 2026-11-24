@@ -334,6 +334,7 @@
      s.startedAt=null;
     }
     if(options.onIdle&&options.token()===s.owner)try{options.onIdle(s.context);}catch{}
+    if(s.complete&&s.stages.comment==='done'&&visible(s)&&options.token()===s.owner)options.onComplete?.(s.context);
    });
    transferChain=s.running;return s.running;
   }

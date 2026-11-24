@@ -15,7 +15,7 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 const baseFiles=fileURLToPath(new URL('../../../delivery-v2/',import.meta.url));
 const base='http://localhost:8256';
 const request={id:'request_combined_multiple',hospitalName:'합성 병원',sn:'BWA101',engineer:'검증 담당자',
-  registeredAt:'2026-11-19T09:00',visitAt:'2026-11-19T12:00',gubun:'점검',revision:1};
+  registeredAt:'2026-11-19T09:00',visitAt:'2026-11-20T12:00',gubun:'점검',revision:1};
 const serials=['BWA101','BX102','BW103'];
 const rows=new Map(),links=new Set(),jobs=new Map(),uploads=[],resumes=[],renders=[];
 let allowSecondComment=false;
@@ -30,6 +30,7 @@ try{
     const json=value=>route.fulfill({status:200,contentType:'application/json',
       headers:{'access-control-allow-origin':base},body:JSON.stringify(value)});
     if(url.origin===base){
+      if(url.pathname==='/hospital-work.html')return route.fulfill({contentType:media['.html'],body:'<main>CS 서비스 현황</main>'});
       if(url.pathname==='/auth.js')return route.fulfill({contentType:media['.js'],
         body:"window.BazAuth={name:()=> '검증 담당자',token:()=> 'synthetic-token',withToken:u=>u,currentLevel:async()=>3,cachedLevel:()=>3};"});
       const file=[root,baseFiles].map(dir=>path.join(dir,decodeURIComponent(url.pathname))).find(name=>fs.existsSync(name)&&fs.statSync(name).isFile());
@@ -85,9 +86,9 @@ try{
           const source=rows.get(id).source;return {recordId:id,sn:source.sn,date:source.date};
         })});
       if(p.action==='work_handover_detail')return json({success:true,source:row?.source,workDetail:{request,history:[]}});
-      if(p.action==='work_field_result_link'){
-        assert.equal(p.requestId,request.id);assert.equal(p.sourceVersion,row.source.version);
-        links.add(p.recordId);return json({success:true});
+      if(p.action==='work_inspection_source_link'){
+        assert.equal(p.requestId,request.id);assert.equal(p.sheetVersion,row.receipt.version);
+        links.add(p.recordId);return json({success:true,request,recordId:p.recordId,sourceLinked:true});
       }
     }
     return json({success:true,data:[]});
@@ -173,7 +174,8 @@ try{
   assert.deepEqual(await frame().evaluate(()=>state.results),{});
   await fill(serials[0]);
   await publish.click();
-  await frame().waitForFunction(()=>document.querySelector('#combinedDevices [role=status]').textContent.includes('중복'));
+  await frame().waitForFunction(()=>document.querySelector('#combinedDevices [role=status]').textContent.includes('중복'),undefined,{timeout:4000})
+    .catch(async error=>{throw new Error(await panel.locator('[role=status]').textContent()||errors.join('; ')||error.message);});
   assert.equal(rows.size,0);
   await fill(serials[1]);
   await add.click();
@@ -193,6 +195,7 @@ try{
   assert.equal(new Set(uploads.map(item=>item.uploadId)).size,3);
   assert.equal(await device(1).getAttribute('aria-pressed'),'true');
   assert.equal(await publish.textContent(),'남은 장비 발행');
+  assert.equal(page.url(),address,'partial success stays in the combined publication form');
   assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),true);
 
   // Reopen with the server receipt as the only remaining copy of the job state.
@@ -208,13 +211,14 @@ try{
   assert.equal(await device(1).getAttribute('aria-pressed'),'true');
   assert.equal(await form.locator('#actionDetail').inputValue(),'조치 '+serials[1]);
   allowSecondComment=true;
-  await publish.click();
-  await frame().waitForFunction(()=>document.getElementById('generateBtn').textContent==='전체 발행 완료');
-  assert.ok(await publish.isDisabled());
-  assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),false);
+  await Promise.all([page.waitForURL(base+'/hospital-work.html?request='+request.id),publish.click()]);
   assert.equal(rows.size,3);assert.equal(uploads.length,3);assert.equal(renders.length,3);
   assert.deepEqual(resumes,[uploads[1].uploadId,uploads[1].uploadId]);
   assert.ok([...jobs.values()].every(job=>job.commentAttached));
+  await page.goto(address);await ready();
+  await frame().waitForFunction(()=>document.getElementById('generateBtn').textContent==='전체 발행 완료');
+  assert.ok(await publish.isDisabled());
+  assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),false);
   assert.equal(await panel.getByRole('link',{name:'선택 장비 PDF 보기'}).getAttribute('href'),jobs.get(uploads[1].uploadId).pdf.url);
   assert.deepEqual(errors,[]);
   console.log(engine+' PASS: shared fields, independent photos and records, three-device cap, duplicate check and same-job recovery after reload');

@@ -651,7 +651,7 @@
 
 <script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=366"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=381"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 
 
@@ -1717,7 +1717,11 @@ prepareContext(context){if(!window.BazInspectionFlow)throw new Error('접수 연
   document.getElementById('doneFname').textContent=job.filename||job.saved?.pdf?.filename||'AS/점검 내역서';
   const size=job.blob?.size||job.saved?.pdf?.bytes||job.bytes||0;document.getElementById('doneFsize').textContent=(size/1000000).toFixed(1)+' MB';
   if(job.blob)window.BazInspectionShare.capture(job.blob,job.filename,()=>{const href=URL.createObjectURL(job.blob),a=document.createElement('a');a.href=href;a.download=job.filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);});else window.BazInspectionShare.reset();
-},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);if(!combinedDeviceBusy&&!pdfPublisher.isBusy())flushSyncQueue().catch(()=>{});},onSaved:storeInspectionPdf});
+},onIdle(context){if(_currentTaskId===context.taskId)clearTimeout(_cloudSyncTimer);if(!combinedDeviceBusy&&!pdfPublisher.isBusy())flushSyncQueue().catch(()=>{});},
+onComplete(context){
+  if(context.requireSheetLink&&context.requestId===combinedRequest&&!combinedDeviceBusy&&combinedFlow?.slots().every(slot=>combinedDeviceInfo(slot).complete))
+    openPublishedRequest(context.requestId);
+},onSaved:storeInspectionPdf});
 async function storeInspectionPdf(saved,context){
   const task=await draftRepository.get(context.taskId);
   const identity={hospital:context.hospital,inspectDate:context.date,serialNo:context.sn||''};
@@ -1868,6 +1872,17 @@ function removeCombinedDevice(){
   });
 }
 
+function openPublishedRequest(requestId){
+  const entryPage=new URL('handover-inspection.html',location.href);
+  const destination=new URL(BazWorkFlow.url('hospital-work.html',requestId),location.href);
+  let target=window;
+  try{
+    if(window.parent!==window&&window.parent.location.origin===entryPage.origin&&window.parent.location.pathname===entryPage.pathname)
+      target=window.parent;
+  }catch{}
+  target.location.replace(destination.href);
+}
+
 function publishCombinedDevices(){
   return combinedDeviceAction(async()=>{
     const slots=combinedFlow.slots(),serials=new Set();
@@ -1900,8 +1915,8 @@ function publishCombinedDevices(){
       await loadCombinedDevice(pending[0].slot);
       combinedDevicePanel.status(slots.length-pending.length+'/'+slots.length+'대 발행 완료 · 남은 장비는 다시 발행할 수 있습니다.\n'+
         pending.map(result=>'장비 '+(result.slot+1)+' · '+result.sn+' · '+result.message).join('\n'));
-    }else combinedDevicePanel.status(slots.length+'대의 Drive 저장·Handover 연결·댓글 첨부가 완료되었습니다.');
-    document.getElementById('combinedDevices').scrollIntoView({block:'start'});
+      document.getElementById('combinedDevices').scrollIntoView({block:'start'});
+    }else openPublishedRequest(combinedRequest);
   },true);
 }
 
