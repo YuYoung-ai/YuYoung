@@ -133,7 +133,7 @@
     const values = {
       ...row,
       symptom: row.symptom || '접수 증상 미기록',
-      visitAt: row.visitPending ? '접수 확인 중' : row.visitAt ? row.visitAt.slice(0, 16).replace('T', ' ') : '미정',
+      visitAt: row.visitPending ? '접수 확인 중' : row.visitAt ? row.visitAt.slice(0, 10) : '미정',
       engineer: row.engineer || '미배정', cs: row.cs || '미기록', sales: row.sales || '미배정',
     };
     for (const field of card.querySelectorAll('[data-card]')) field.textContent = values[field.dataset.card];
@@ -226,7 +226,7 @@
     el('table-list').replaceChildren(...shown.map(row=>renderCard(row,'service-row')));
     el('desktop-list').hidden = !shown.length;
     el('list-count').textContent = `${rows.length.toLocaleString('ko-KR')}건`;
-    el('list-conditions').textContent = [scopeLabel(), `방문일 기준 ${periodNames[period]}`, '방문 일시 내림차순', query ? `검색 “${query}”` : ''].filter(Boolean).join(' · ');
+    el('list-conditions').textContent = [scopeLabel(), `방문일 기준 ${periodNames[period]}`, '방문일 내림차순', query ? `검색 “${query}”` : ''].filter(Boolean).join(' · ');
     el('empty').hidden = rows.length>0;
     if (query && outsidePeriod && !rows.length && fullReady) {
       el('empty').textContent = `선택한 기간에 검색 결과가 없습니다. 전체 기간에 ${outsidePeriod.toLocaleString('ko-KR')}건이 있습니다.`;
