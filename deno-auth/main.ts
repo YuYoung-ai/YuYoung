@@ -46,6 +46,7 @@
  ************************************************************/
 
 import { createWorkStore } from './work-store.ts';
+import { isWorkMemoAction } from './work-memos.ts';
 import { createWorkNotifications,notificationActivation,notificationKey } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
 import { accountVersionKey,removeAuthorizedUser } from './user-access.mjs';
@@ -512,7 +513,7 @@ function workReply(out: WorkOutput, mode: string, started: number): Response {
 async function workForward(action: string, p: Record<string, unknown>): Promise<Response> {
   const started = performance.now();
   const fail = (error: string, status: number) => workReply({ body: { success: false, error }, status, upstreamMs: 0 }, "error", started);
-  if (!WORK_READS.has(action) && !WORK_WRITES.has(action)) return fail("지원하지 않는 업무 API입니다.", 400);
+  if (!WORK_READS.has(action) && !WORK_WRITES.has(action) && !isWorkMemoAction(action)) return fail("지원하지 않는 업무 API입니다.", 400);
   if (!WORK_API_ENABLED) return fail("업무 중계가 비활성 상태입니다. 다시 접속해 주세요.", 503);
   const verified = await verifyToken(String(p.token || ""));
   if (!verified.ok) return fail("로그인이 만료되었습니다.", 401);
@@ -581,6 +582,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
         catch{return fail('본인의 담당자 연결을 확인하지 못했습니다. 앱 설치·알림 설정을 확인하세요.',403);}
       }
       const body=await store.handle({...p,action},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0,engineer});
+      if(body.success&&(action==="work_bootstrap"||action==="work_sync"))body.fieldMemos=true;
       if(body.success&&WORK_WRITES.has(action)){
         // Delivery failure must never roll back a successfully saved request.
         try{await (await notificationService(kv)).process(undefined,4);}
@@ -589,6 +591,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
       return workReply({body:body as WorkBody,status:200,upstreamMs:0},'kv',started);
     }
   }
+  if(isWorkMemoAction(action))return fail('현장 기록 서버를 사용할 수 없습니다. 잠시 후 다시 시도하세요.',503);
   if(action.startsWith('work_roster'))return fail('근무 일정은 활성화된 Deno KV에서만 가능합니다.',503);
   if(action==='work_claim')return fail('담당 가져오기는 활성화된 Deno KV에서만 가능합니다.',503);
   if(action==='work_request_edit')return fail('목록 수정은 활성화된 Deno KV에서만 가능합니다.',503);

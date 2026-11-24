@@ -3,5 +3,15 @@
  function open(){if(!dbPromise)dbPromise=new Promise(function(resolve,reject){if(!root.indexedDB){reject(new Error('IndexedDB 사용 불가'));return;}var r=root.indexedDB.open('baz-hospitalwork-v2',1);r.onupgradeneeded=function(){var db=r.result;['snapshot','detail','pending'].forEach(function(n){if(!db.objectStoreNames.contains(n))db.createObjectStore(n);});};r.onsuccess=function(){r.result.onversionchange=function(){r.result.close();dbPromise=null;};resolve(r.result);};r.onerror=function(){reject(r.error);};r.onblocked=function(){reject(new Error('다른 탭을 닫고 다시 시도하세요.'));};});return dbPromise;}
  async function read(store,key){var db=await open();return new Promise(function(resolve,reject){var tx=db.transaction(store,'readonly'),r=tx.objectStore(store).get(key);r.onsuccess=function(){resolve(r.result||null);};r.onerror=function(){reject(r.error);};});}
  async function write(store,key,value){var db=await open();return new Promise(function(resolve,reject){var tx=db.transaction(store,'readwrite');value===null?tx.objectStore(store).delete(key):tx.objectStore(store).put(value,key);tx.oncomplete=function(){resolve();};tx.onabort=tx.onerror=function(){reject(tx.error||new Error('브라우저 저장 실패'));};});}
- root.BazWorkCache={snapshot:function(a){return read('snapshot',a);},save:function(a,s){return write('snapshot',a,s);},detail:function(a,id){return read('detail',[a,id]);},saveDetail:function(a,id,d){return write('detail',[a,id],d);},pending:function(a){return read('pending',a);},savePending:function(a,p){return write('pending',a,p);}};
+ async function memoPending(owner){
+  var db=await open(),range=IDBKeyRange.bound(['fieldMemo',owner],['fieldMemo',owner,'\uffff']);
+  return new Promise(function(resolve,reject){
+   var request=db.transaction('pending','readonly').objectStore('pending').getAll(range);
+   request.onsuccess=function(){resolve(request.result);};
+   request.onerror=function(){reject(request.error);};
+  });
+ }
+ root.BazWorkCache={snapshot:function(a){return read('snapshot',a);},save:function(a,s){return write('snapshot',a,s);},detail:function(a,id){return read('detail',[a,id]);},saveDetail:function(a,id,d){return write('detail',[a,id],d);},pending:function(a){return read('pending',a);},savePending:function(a,p){return write('pending',a,p);},
+  memoPending:memoPending,saveMemoPending:function(owner,id,memo){return write('pending',['fieldMemo',owner,id],memo);}
+ };
 })(window);

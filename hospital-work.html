@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
 <link rel="stylesheet" href="css/hospital-work-layout.css?v=3">
+<link rel="stylesheet" href="css/baz-work-memos.css?v=1">
 <link rel="preload" href="fonts/pretendard/common.woff2" as="font" type="font/woff2" crossorigin>
 </head><body class="staff-work">
 <script src="js/baz-work-viewmode.js?v=1"></script>
@@ -16,7 +17,7 @@
 <div id="receipt-launch-status" hidden role="status"><p id="receipt-launch-message">접수 양식을 불러오는 중…</p><button id="receipt-launch-retry" type="button" hidden>다시 불러오기</button></div>
 <main>
   <div class="work-view-toolbar"><span>화면 보기</span><div id="modeToggle" class="mode-toggle" role="group" aria-label="화면 모드"><button type="button" data-mode="window" aria-pressed="false">🖥 Window</button><button type="button" data-mode="mobile" aria-pressed="false">📱 Mobile</button></div></div>
-  <nav id="work-management-tabs" class="work-management-tabs" role="tablist" aria-label="CS 관리" hidden><button id="service-tab" type="button" role="tab" aria-selected="true">서비스 현황</button><button id="demo-tab" type="button" role="tab" aria-selected="false" hidden>데모장비</button><button id="qr-workflow-open" type="button" hidden>고객 AS 접수 관리</button><button id="reservation-open" type="button" hidden>예약 시간 관리</button></nav>
+  <nav id="work-management-tabs" class="work-management-tabs" role="tablist" aria-label="CS 관리" hidden><button id="service-tab" type="button" role="tab" aria-selected="true">서비스 현황</button><button id="field-records-tab" type="button" role="tab" hidden>현장 기록</button><button id="demo-tab" type="button" role="tab" aria-selected="false" hidden>데모장비</button><button id="qr-workflow-open" type="button" hidden>고객 AS 접수 관리</button><button id="reservation-open" type="button" hidden>예약 시간 관리</button></nav>
  <div id="service-panel">
   <div id="notification-launch" class="notification-launch" role="status" aria-live="polite" hidden><span id="notification-launch-message"></span><button id="notification-launch-open" type="button">알림 접수 열기 / 다시 확인</button></div>
   <div class="page-heading"><h1>CS 서비스 현황</h1><div class="heading-actions"><div class="sync-line"><div class="sync-summary"><div class="sync-overview"><span id="sync-state" class="sync-state" data-state="loading" role="status" aria-live="polite" aria-atomic="true">동기화 진행 중</span><details class="bridge-summary"><summary id="handover-pending" class="sync-state handover-state" data-state="unknown">Handover 대기 미확인</summary><p id="handover-status-detail"></p></details></div><div class="sync-times"><span id="sync-time">최신 현황을 불러오는 중…</span><span id="handover-checked">대기 현황은 동기화로 확인</span><span id="save-status" role="status" aria-live="polite"></span></div></div></div><div class="request-heading-buttons"><button id="advanced-toggle" type="button" aria-expanded="false" aria-controls="advanced-filters">⚙ 상세 필터</button><button id="edit-mode" type="button" aria-pressed="false" aria-controls="list" disabled>수정</button><button id="new" class="primary" type="button">＋ 접수 등록</button></div></div></div>
@@ -41,6 +42,77 @@
     <dialog id="detail" class="detail-panel" hidden aria-label="선택 업무 상세"></dialog>
   </section>
  </div>
+<section id="field-records-panel" class="field-records" hidden>
+  <div class="field-records-heading">
+    <h1>현장 기록</h1>
+    <button id="field-memo-new" type="button" class="primary">＋ 현장 메모</button>
+  </div>
+  <form id="field-records-filters" class="field-records-filters" aria-label="현장 기록 필터">
+    <div class="field-records-period" role="group" aria-label="빠른 기간 선택">
+      <button type="button" data-memo-period="today" aria-pressed="false">오늘</button>
+      <button type="button" data-memo-period="week" aria-pressed="false">이번 주</button>
+      <button type="button" data-memo-period="month" aria-pressed="true">이번 달</button>
+    </div>
+    <label>발생일 시작 <input name="from" type="date" required></label>
+    <label>발생일 종료 <input name="to" type="date" required></label>
+    <details id="field-records-hospitals" class="field-records-hospitals">
+      <summary>전체 병원</summary>
+      <div class="field-records-hospital-options">
+        <label>병원 찾기 <input type="search" id="field-records-hospital-search"></label>
+        <button type="button" id="field-records-hospital-clear">전체 병원</button>
+        <div id="field-records-hospital-options"></div>
+      </div>
+    </details>
+    <label>요청 출처 <select name="source"></select></label>
+    <label>업무 영향 <select name="impact"></select></label>
+    <button type="submit">조회</button>
+  </form>
+  <div class="field-records-toolbar">
+    <strong id="field-records-total"></strong>
+    <span id="field-records-status" role="status"></span>
+    <div class="field-records-period" role="group" aria-label="목록 배치">
+      <button type="button" data-memo-layout="vertical" aria-pressed="false">상하</button>
+      <button type="button" data-memo-layout="horizontal" aria-pressed="false">좌우</button>
+    </div>
+  </div>
+  <div id="field-records-pending"></div>
+  <div id="field-records-grid" class="field-records-grid">
+    <div id="field-records-summary"></div>
+    <section id="field-records-detail" class="field-records-detail" aria-label="선택한 현장 기록" hidden>
+      <h2 id="field-records-detail-title" tabindex="-1"></h2>
+      <p id="field-records-detail-status" role="status"></p>
+      <button id="field-records-changed" type="button" hidden>변경된 기록 보기</button>
+      <div id="field-records-entries"></div>
+      <button id="field-records-more" type="button" hidden>더 보기</button>
+    </section>
+  </div>
+</section>
+<dialog id="field-memo-dialog" class="field-memo-dialog" aria-labelledby="field-memo-title">
+  <div class="field-records-heading">
+    <h2 id="field-memo-title">현장 메모</h2>
+    <button type="button" id="field-memo-close">닫기</button>
+  </div>
+  <p id="field-memo-context"></p>
+  <form id="field-memo-form" class="field-memo-form">
+    <div id="field-memo-hospital" hidden>
+      <label>병원 찾기 <input type="search" id="field-memo-hospital-search"></label>
+      <label>병원 <select name="hospitalKey"></select></label>
+    </div>
+    <label>메모 <textarea name="body" rows="4" maxlength="2000" required placeholder="어떤 요청을 받았고 어떻게 대응했나요?"></textarea></label>
+    <label>발생 일시 <input name="occurredAt" type="datetime-local" required></label>
+    <label>요청 출처 <select name="source"></select></label>
+    <fieldset><legend>업무 영향</legend><div id="field-memo-impacts"></div></fieldset>
+    <p id="field-memo-error" role="status"></p>
+    <button type="submit" id="field-memo-save" class="primary">저장</button>
+  </form>
+  <section id="field-memo-recent" aria-labelledby="field-memo-recent-title" hidden>
+    <h3 id="field-memo-recent-title">이 접수의 현장 메모</h3>
+    <p id="field-memo-recent-status" role="status"></p>
+    <div id="field-memo-recent-entries"></div>
+    <button type="button" id="field-memo-recent-more" hidden>더 보기</button>
+  </section>
+</dialog>
+<div id="field-memo-feedback" class="field-memo-feedback" role="status" hidden></div>
 <section id="reservation-panel" class="reservation-panel" hidden aria-labelledby="reservation-title">
  <div class="reservation-heading"><div><h1 id="reservation-title">예약 시간 관리</h1><p>방문 시작 · 월~수 10:00~16:00 · 목~금 10:00~15:00</p><p>예약 접수는 24시간 가능 · 방문 시작까지 2시간 이하이면 마감</p></div><button id="reservation-refresh" type="button">새로고침</button></div>
  <div class="schedule-navigation"><button id="reservation-prev-week" type="button" aria-label="이전 주">‹</button><label class="field">조회 날짜<input id="reservation-date" type="date" required></label><button id="reservation-next-week" type="button" aria-label="다음 주">›</button><button id="reservation-today" type="button">오늘</button></div>
@@ -105,6 +177,6 @@
 </form></dialog>
 <dialog id="result-dialog"><form id="result-form"><div class="dialog-heading"><div><div class="eyebrow">HANDOVER RESULT</div><h2>현장 결과 불러오기</h2></div><button id="close-result" type="button" aria-label="결과 창 닫기">✕</button></div><div class="form-body"><p class="hint">해당 접수의 A/S·점검 기록을 직접 선택하세요. 결과 등록 시 저장된 PDF·Drive 링크도 댓글에 첨부합니다.</p><p id="source-status" class="hint" role="status" aria-live="polite"></p><div id="source-list"></div><div id="source-preview" hidden></div><label class="field">고객센터 보완 메모<textarea id="result-memo" maxlength="2000" rows="2" placeholder="필요한 경우에만 입력"></textarea></label><div id="result-error" class="notice" hidden role="alert"></div></div><div class="form-footer"><button id="save-result" type="submit" class="primary">결과 등록</button><button id="save-complete" type="button">결과 등록 후 완료</button></div></form></dialog>
 <dialog id="lifecycle-dialog" aria-labelledby="lifecycle-title" aria-describedby="lifecycle-description"><form id="lifecycle-form"><div class="dialog-heading"><div><div class="eyebrow">SERVICE REQUEST</div><h2 id="lifecycle-title">선택한 접수 삭제</h2></div><button id="close-lifecycle" type="button" aria-label="선택 관리 창 닫기">✕</button></div><div class="form-body"><p id="lifecycle-description" class="hint"></p><ul id="lifecycle-list" class="lifecycle-list"></ul><label id="restore-duplicate-label" class="check" hidden><input id="restore-duplicate" type="checkbox">중복된 접수를 별도 요청으로 복원합니다.</label><label id="purge-confirm-label" class="check" hidden><input id="purge-confirm" type="checkbox">위 접수 전체를 영구 삭제하며 복원할 수 없음을 확인했습니다.</label><p id="lifecycle-progress" role="status" aria-live="polite"></p></div><div class="form-footer"><button id="cancel-lifecycle" type="button">취소</button><button id="confirm-lifecycle" class="danger selection-delete" type="submit">휴지통으로 이동</button></div></form></dialog>
-<script src="js/baz-notification-route.js?v=339"></script><script src="js/baz-notifications.js?v=382"></script><script src="js/baz-work-cache.js"></script><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-comments.js?v=238"></script><script src="js/baz-source-review.js?v=249"></script><script src="js/baz-work-fields.js?v=386"></script><script src="js/baz-work-launch.js?v=217"></script><script src="js/baz-work-hospital-search.js?v=269"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-handover-review.js?v=249"></script><script src="js/baz-read-receipts.js?v=260"></script><script src="js/baz-work-inspections.js?v=358"></script><script src="js/baz-work-hospital-groups.js?v=267"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-handover-inspection.js?v=358"></script><script src="js/baz-work-tabs.js?v=386"></script><script src="js/baz-work-manager.js?v=386"></script>
+<script src="js/baz-notification-route.js?v=339"></script><script src="js/baz-notifications.js?v=382"></script><script src="js/baz-work-cache.js?v=2"></script><script src="js/baz-work-api.js?v=245"></script><script src="js/baz-work-comments.js?v=238"></script><script src="js/baz-source-review.js?v=249"></script><script src="js/baz-work-fields.js?v=386"></script><script src="js/baz-work-launch.js?v=217"></script><script src="js/baz-work-hospital-search.js?v=269"></script><script src="js/baz-work-flow.js?v=244"></script><script src="js/baz-handover-review.js?v=249"></script><script src="js/baz-read-receipts.js?v=260"></script><script src="js/baz-work-inspections.js?v=358"></script><script src="js/baz-work-hospital-groups.js?v=267"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-handover-inspection.js?v=358"></script><script src="js/baz-work-tabs.js?v=387"></script><script src="js/baz-work-memos.js?v=1"></script><script src="js/baz-work-manager.js?v=387"></script>
 <script src="js/qr-design.js?v=350"></script><script src="js/baz-qr-bootstrap.js?v=386"></script></body></html>
 

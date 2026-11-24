@@ -1,5 +1,6 @@
 // Shared work data only. Authentication keys and databases are never changed here.
 import {parseFlowRow,matchFlowHospital,flowName} from './work-flow.ts';
+import {createWorkMemos} from './work-memos.ts';
 import {createWorkRoster} from './work-roster.ts';
 import {requestNotifications,appendNotification,notificationActivation,notificationKey,removeRequestNotifications} from './work-notifications.ts';
 import {sourceReview,pdfBasis} from './work-source-review.ts';
@@ -57,6 +58,7 @@ async function hash(v:any){return [...new Uint8Array(await crypto.subtle.digest(
 function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48000)throw new Error('기록이 너무 큽니다. 내용을 줄여주세요.');return v;}
 
 export function createWorkStore(kv:any,options:Obj={}){
+ const memos=createWorkMemos(kv);
  const roster=createWorkRoster(kv);
  const indexes=createWorkIndexes(kv);
  const matching=createWorkMatching(kv);
@@ -458,6 +460,7 @@ export function createWorkStore(kv:any,options:Obj={}){
   try{
    await access(who);if(!(await status()).ready)throw new Error('업무 데이터 전환 중입니다.');
    switch(p.action){
+    case 'work_memo_save':case 'work_memo_archive':case 'work_memo_counts':case 'work_memo_summary':case 'work_memo_list':return await memos(p,who);
     case 'work_review_config':return await review.config(who);
     case 'work_review_get':return await review.read(p,who);
     case 'work_review_history':return await review.history(p,who);
