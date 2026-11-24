@@ -94,7 +94,9 @@ self.addEventListener('push',(event)=>{
    tag:p.test?'baz-push-test':'baz-work-'+(p.notificationId||p.requestId),renotify:!!p.reminder,
    data:{requestId:p.requestId||'',notificationId:p.notificationId||'',kind:p.kind||'',registrationId:p.registrationId||'',test:!!p.test}
   });
-  for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage({type:'BAZ_NOTIFICATION_RECEIVED'});
+  const message={type:'BAZ_NOTIFICATION_RECEIVED'};
+  if(p.kind==='receipt'&&!p.reminder&&!p.test&&/^[A-Za-z0-9_-]{8,90}$/.test(p.notificationId||''))message.receiptId=p.notificationId;
+  for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage(message);
  })());
 });
 

@@ -60,9 +60,52 @@
  }
  async function test(){var reg=await worker(),sub=await reg.pushManager.getSubscription();if(!sub)throw new Error('접수 알림 받기를 먼저 설정하세요.');await call('notification_test',{endpoint:sub.endpoint});}
  function counts(d){document.querySelectorAll('[data-notification-count]').forEach(function(el){el.textContent=d.unread?String(d.unread)+(d.unreadMore?'+':''):'';el.hidden=!d.unread;});}
- async function refreshCount(){
+ async function refreshCount(receiptId){
   if(!root.BazAuth.token()||document.hidden||Date.now()-lastCheck<60000)return;
-  lastCheck=Date.now();try{var d=await call('notification_list');counts(d);}catch(e){}
+  lastCheck=Date.now();try{
+   var d=await call('notification_list');counts(d);
+   if(receiptId)queueReceipt((d.items||[]).find(function(item){return item.id===receiptId;}));
+  }catch(e){}
+ }
+ var receiptDialog=null,receipt=null,receiptQueue=[],seenReceipts=new Set();
+ function mobileAppOpen(){
+  return root.parent===root&&!document.hidden&&standalone()&&matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+ }
+ function queueReceipt(item){
+  if(!mobileAppOpen()||!item||item.kind!=='receipt'||item.readAt||!/^A\s*\/?\s*S$/i.test(String(item.gubun||'').normalize('NFKC').trim()))return;
+  if(!root.BazNotificationRoute.valid(item.requestId)||seenReceipts.has(item.id))return;
+  seenReceipts.add(item.id);
+  if(seenReceipts.size>100)seenReceipts.delete(seenReceipts.values().next().value);
+  receiptQueue.push(item);
+  showReceipt();
+ }
+ function showReceipt(){
+  if(!receiptQueue.length||!mobileAppOpen()||document.querySelector('dialog[open]:not(#detail)'))return;
+  if(document.activeElement?.matches('input, textarea, select, [contenteditable=true]')||
+     document.querySelector('#comment-body')?.value.trim()||document.getElementById('notification-launch-open')?.disabled)return;
+  if(!receiptDialog){
+   receiptDialog=document.createElement('dialog');
+   receiptDialog.className='baz-notification-dialog baz-receipt-popup';
+   receiptDialog.setAttribute('aria-labelledby','baz-receipt-title');
+   receiptDialog.setAttribute('aria-describedby','baz-receipt-hospital');
+   receiptDialog.innerHTML='<h2 id="baz-receipt-title">신규 A/S 접수가 등록되었습니다</h2><p id="baz-receipt-hospital"></p><div class="baz-receipt-actions"><button type="button" data-receipt-close>닫기</button><button type="button" data-receipt-open autofocus>접수 보기</button></div>';
+   receiptDialog.querySelector('[data-receipt-close]').onclick=function(){receiptDialog.close();};
+   receiptDialog.querySelector('[data-receipt-open]').onclick=function(){
+    var target={requestId:receipt.requestId,notificationId:receipt.id};
+    receiptQueue.length=0;
+    receiptDialog.close();
+    if(root.location.pathname.endsWith('/hospital-work.html'))root.dispatchEvent(new CustomEvent('baz-open-notification',{detail:target}));
+    else root.location.assign(root.BazNotificationRoute.url(target));
+   };
+   document.body.append(receiptDialog);
+  }
+  receipt=receiptQueue.shift();
+  receiptDialog.querySelector('#baz-receipt-hospital').textContent=receipt.hospitalName||'';
+  receiptDialog.showModal();
+ }
+ function clearReceipts(){
+  receiptQueue.length=0;seenReceipts.clear();receipt=null;
+  if(receiptDialog?.open)receiptDialog.close();
  }
  var dialog=null,cursor='',items=[],selected=new Set(),inboxBusy=false,inboxSeq=0,readThrough='',inboxUnread=0,retentionReady=false,inboxExpiryTimer=null;
  function scheduleInboxExpiry(delay){
@@ -143,13 +186,18 @@
   if(root.parent!==root&&new URLSearchParams(root.location.search).get('embed')==='1')return;
   document.querySelectorAll('[data-notification-open]').forEach(function(b){b.onclick=showInbox;});
   if(root.BazAuth.token()){reconcile().catch(function(){});refreshCount();}
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&dialog&&dialog.open&&!inboxBusy)loadInbox(false);else refreshCount();});
-  root.addEventListener('baz-auth-login',function(){clearInbox();config=null;lastCheck=0;reconcile().catch(function(){});refreshCount();});
-  root.addEventListener('baz-auth-logout',function(){clearInbox();config=null;lastCheck=0;counts({unread:0});});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&dialog&&dialog.open&&!inboxBusy)loadInbox(false);else refreshCount();showReceipt();});
+  document.addEventListener('close',showReceipt,true);
+  document.addEventListener('focusout',function(){if(receiptQueue.length)setTimeout(showReceipt,0);});
+  root.addEventListener('baz-auth-login',function(){clearInbox();clearReceipts();config=null;lastCheck=0;reconcile().catch(function(){});refreshCount();});
+  root.addEventListener('baz-auth-logout',function(){clearInbox();clearReceipts();config=null;lastCheck=0;counts({unread:0});});
   if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',function(event){
    var d=event.data||{};
    if(d.type==='BAZ_OPEN_NOTIFICATION'&&root.BazNotificationRoute.valid(d.requestId))root.dispatchEvent(new CustomEvent('baz-open-notification',{detail:d}));
-   if(d.type==='BAZ_NOTIFICATION_RECEIVED'){lastCheck=0;refreshCount();}
+   if(d.type==='BAZ_NOTIFICATION_RECEIVED'){
+    lastCheck=0;
+    refreshCount(mobileAppOpen()&&root.BazNotificationRoute.valid(d.receiptId)?d.receiptId:'');
+   }
   });
  }
  root.BazNotifications={call:call,config:getConfig,reconcile:reconcile,enable:enable,disable:disable,test:test,platform:platform,standalone:standalone,supported:supported,worker:worker,refresh:function(){lastCheck=0;return refreshCount();},showInbox:showInbox};
