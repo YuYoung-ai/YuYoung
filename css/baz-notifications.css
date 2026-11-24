@@ -22,3 +22,37 @@
 .baz-notification-row{display:flex;align-items:stretch;margin-top:9px;border:1px solid #e2e8f0;border-radius:10px;background:#fff}.baz-notification-row.unread{background:#f2f6ff;border-color:#d2def4}.baz-inbox-check{display:flex;align-items:center;justify-content:center;min-width:42px;cursor:pointer}.baz-notification-row .baz-notification-item{flex:1;min-width:0;border:0;background:transparent;margin:0;padding:15px 16px 15px 0;border-radius:0}.baz-notification-row:hover{border-color:#9bb9e6}.baz-notification-row:has(input:checked){outline:2px solid #6794db;outline-offset:-2px}
 html[data-theme=dark] .baz-notification-dialog{background:#172438;color:#e7eef8}html[data-theme=dark] .baz-notification-dialog button{background:#202f45;border-color:#435169;color:inherit}html[data-theme=dark] .baz-notification-row{background:#1c2b40;border-color:#37465d}html[data-theme=dark] .baz-notification-row.unread{background:#253c60;border-color:#476797}html[data-theme=dark] .baz-notification-item span,html[data-theme=dark] .baz-notification-item small,html[data-theme=dark] [data-inbox-status],html[data-theme=dark] .baz-inbox-select-all{color:#b4c4da}html[data-theme=dark] .baz-notification-item p{color:#d0dced}html[data-theme=dark] .baz-notification-toolbar a{color:#a9c7ff}
 @media(max-width:600px){.baz-inbox-actions{margin-left:0;width:100%}.baz-inbox-actions button{flex:1;min-height:44px;font-size:11px;padding:7px 6px}.baz-notification-item div{display:grid;gap:4px}.baz-notification-row .baz-notification-item{padding:13px 12px 13px 0}.baz-inbox-check{min-width:38px}.baz-notification-dialog{max-height:90dvh}}
+
+.baz-notification-dialog.baz-receipt-popup {
+ width:min(360px,calc(100vw - 32px));
+ padding:22px;
+ text-align:center;
+}
+.baz-receipt-popup h2 {
+ margin:0 0 8px;
+ font-size:19px;
+ line-height:1.4;
+ word-break:keep-all;
+}
+.baz-receipt-popup p {
+ margin:0 0 20px;
+ font-size:15px;
+ line-height:1.5;
+ overflow-wrap:anywhere;
+}
+.baz-receipt-actions {
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:8px;
+}
+.baz-receipt-popup button[data-receipt-open] {
+ border-color:#24578b;
+ background:#24578b;
+ color:#fff;
+ font-weight:700;
+}
+html[data-theme=dark] .baz-receipt-popup button[data-receipt-open] {
+ border-color:#3376aa;
+ background:#3376aa;
+ color:#fff;
+}

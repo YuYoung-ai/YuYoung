@@ -34,3 +34,16 @@ await fire('push',{data:{json:()=>({recipient:uid,kind:'roster',notificationId:'
 
 await fire('push',{data:{json:()=>({recipient:uid,requestId:req,notificationId:notice,title:'재알림',reminder:true})}});
 assert.equal(shown.at(-1).o.renotify,true,'explicit reminder can alert again with the original notification tag');assert.equal(shown.at(-1).o.tag,'baz-work-'+notice);
+windows=[{url:scope+'hospital-work.html',postMessage:m=>messages.push(m)}];
+for(const payload of [
+ {kind:'receipt'},
+ {kind:'visit'},
+ {kind:'receipt',reminder:true},
+ {kind:'receipt',test:true},
+ {kind:'receipt',notificationId:'not valid'}
+]){
+ await fire('push',{data:{json:()=>({recipient:uid,requestId:req,notificationId:notice,title:'알림',body:'병원 정보',...payload})}});
+ assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-1))),
+   payload.kind==='receipt'&&!payload.reminder&&!payload.test&&!payload.notificationId
+     ?{type:'BAZ_NOTIFICATION_RECEIVED',receiptId:notice}:{type:'BAZ_NOTIFICATION_RECEIVED'});
+}
