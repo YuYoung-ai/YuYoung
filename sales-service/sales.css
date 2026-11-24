@@ -57,6 +57,12 @@ button:disabled { color: var(--muted); background: var(--soft); cursor: progress
 .sales-brand, .sales-controls { display: flex; align-items: center; gap: .5rem; }
 .sales-brand { font-size: .9375rem; font-weight: 750; }
 .sales-controls { margin-left: auto; }
+#app-install-open { color: var(--accent); background: var(--soft); white-space: nowrap; }
+@media (max-width: 550px) {
+  .sales-bar { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+  #app-install-open { grid-area: 1 / 2; }
+  .sales-controls { grid-area: 2 / 1 / 3 / -1; justify-content: flex-end; flex-wrap: wrap; }
+}
 #theme { width: 44px; padding: 0; flex: 0 0 44px; }
 #theme svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
 
@@ -158,7 +164,12 @@ h1 { margin: 0; font-size: 1.6rem; line-height: 1.25; }
 .sales-google { max-width: 100%; min-height: 44px; }
 .sales-remember { display: flex; gap: .45rem; align-items: center; min-height: 44px; }
 .sales-remember input { width: 1.15rem; height: 1.15rem; accent-color: var(--accent); }
-.sales-notice-tools { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.sales-notice-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
+.sales-install-section { padding: .75rem 0; border-top: 1px solid var(--line); }
+.sales-install-section h3 { margin: 0 0 .35rem; font-size: 1rem; }
+#app-install, #install-notice-status { margin-top: .6rem; }
+#install-notice-status:empty { display: none; }
+#install-notice-status[data-error] { color: var(--error); }
 dialog {
   width: min(calc(100% - 2rem), 36rem);
   max-height: calc(100dvh - 2.5rem);
