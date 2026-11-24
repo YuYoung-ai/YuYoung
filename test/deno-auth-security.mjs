@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {Kv} from './notification-test-kv.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SOURCE_PATH = path.join(ROOT, 'deno-auth', 'main.ts');
@@ -11,45 +13,6 @@ let passed = 0;
 function ok(name) {
   passed++;
   console.log('✅ ' + name);
-}
-
-class MockKv {
-  constructor() {
-    this.rows = new Map();
-    this.version = 0;
-  }
-  id(key) { return JSON.stringify(key); }
-  async get(key) {
-    const row = this.rows.get(this.id(key));
-    return { key, value: row ? structuredClone(row.value) : null, versionstamp: row ? row.versionstamp : null };
-  }
-  async set(key, value) {
-    this.rows.set(this.id(key), { key, value: structuredClone(value), versionstamp: String(++this.version) });
-  }
-  async delete(key) { this.rows.delete(this.id(key)); }
-  atomic() {
-    const kv = this;
-    let checked = null;
-    let pending = null;
-    const op = {
-      check(entry) { checked = entry; return op; },
-      set(key, value) { pending = { key, value }; return op; },
-      async commit() {
-        const current = await kv.get(checked.key);
-        if (current.versionstamp !== checked.versionstamp) return { ok: false };
-        await kv.set(pending.key, pending.value);
-        return { ok: true, versionstamp: String(kv.version) };
-      },
-    };
-    return op;
-  }
-  async *list({ prefix }) {
-    for (const row of this.rows.values()) {
-      if (prefix.every((v, i) => row.key[i] === v)) {
-        yield { key: row.key, value: structuredClone(row.value), versionstamp: row.versionstamp };
-      }
-    }
-  }
 }
 
 const env = new Map(Object.entries({
@@ -68,7 +31,7 @@ const env = new Map(Object.entries({
   GOOGLE_USERS: JSON.stringify([{ email: 'allowed@gmail.com', level: 2, name: '허용 사용자' },{ email:'admin@gmail.com',level:3,name:'테스트 관리자'}]),
 }));
 
-const kv = new MockKv();
+const kv = new Kv();
 let handler = null;
 let adminToken = '';
 const googleKeyPair = await crypto.subtle.generateKey(
@@ -260,20 +223,14 @@ async function googleIdToken(overrides = {}) {
 
 {
   env.set('DEVICE_AUTH_ENABLED', 'true');
-  const rememberedKv = new MockKv();
+  const rememberedKv = new Kv();
   globalThis.Deno = {
     cron: () => Promise.resolve(),
     env: { get: (name) => env.get(name) },
     openKv: async () => rememberedKv,
     serve: (fn) => { handler = fn; return { finished: Promise.resolve() }; },
   };
-  const rememberedSource = path.join(ROOT, 'test', '.tmp-deno-auth-remember.ts');
-  fs.writeFileSync(rememberedSource, SOURCE.replace(/'\.\/(work-(?:store|notifications|push)\.ts)'/g, "'../deno-auth/$1'"));
-  try {
-    await import(pathToFileURL(rememberedSource).href);
-  } finally {
-    fs.unlinkSync(rememberedSource);
-  }
+  await import(pathToFileURL(SOURCE_PATH).href + '?security-test=remember');
   const admin = await post({ action: 'google_login', idToken: await googleIdToken({sub:'google-sub-admin',email:'admin@gmail.com'}) }, { ip: '203.0.113.30' });
   const google = await post({ action: 'google_login', idToken: await googleIdToken(), remember: true }, { ip: '203.0.113.31' });
   assert.equal(google.body.ok, true, JSON.stringify(google.body));
@@ -292,6 +249,42 @@ async function googleIdToken(overrides = {}) {
   await rememberedKv.set(['dev','retired-password-device'],{n:'테스트 관리자',l:3,ep:1,created:Date.now(),seen:Date.now(),ua:'fixture'});
   const oldDevice=await post({action:'device_login',device:'retired-password-device'});assert.equal(oldDevice.res.status,403);assert.equal(oldDevice.body.error,'google_login_required');
   const deviceList=await post({action:'devices',token:admin.body.token});assert.equal(deviceList.body.devices.length,0,'retired password devices are absent from the active list');
+  const email='allowed@gmail.com', token=admin.body.token;
+  const uid='g:'+createHash('sha256').update(email).digest('base64url');
+  const otherUid='g:'+createHash('sha256').update('admin@gmail.com').digest('base64url');
+  await post({action:'user_save',token,email,name:'허용 사용자',level:2,status:'active',edit:true});
+  const before = await post({action:'google_login',idToken:await googleIdToken(),remember:true},{ip:'203.0.113.33'});
+  assert.ok(before.body.device);
+  const ns='work-notifications-v1';
+  await rememberedKv.set([ns,'device',uid,'mine'],{id:'mine',binding:'old'});
+  await rememberedKv.set([ns,'subscription','mine'],{uid,binding:'old'});
+  await rememberedKv.set([ns,'device',uid,'moved'],{id:'moved',binding:'old'});
+  await rememberedKv.set([ns,'subscription','moved'],{uid:otherUid,binding:'current'});
+  assert.equal((await post({action:'user_delete', token:before.body.token,email})).res.status,403);
+  assert.equal((await post({action:'user_delete',token,email:'admin@gmail.com'})).body.error,'self_delete');
+  assert.equal((await handler(new Request('https://auth.example/?action=user_delete'),info('203.0.113.34'))).status,405);
+  const usersBefore = await post({action:'users',token});
+  assert.equal(usersBefore.body.currentEmail,'admin@gmail.com');
+  assert.equal((await post({action:'user_delete',token,email})).body.ok,true);
+  assert.equal((await post({action:'user_delete',token,email})).body.ok,true);
+  assert.equal((await post({action:'users',token})).body.users.length,1);
+  assert.equal((await post({action:'devices',token})).body.devices.length,0);
+  assert.equal((await rememberedKv.get(['user_sub','google-sub-allowed'])).value,null);
+  assert.equal((await rememberedKv.get([ns,'subscription','mine'])).value,null);
+  assert.equal((await rememberedKv.get([ns,'subscription','moved'])).value.uid,otherUid);
+  assert.equal((await post({action:'verify',token:before.body.token})).body.error,'revoked');
+  await rememberedKv.delete(['meta','google_users_seed_v1']);
+  assert.equal((await post({action:'google_login',idToken:await googleIdToken()},{ip:'203.0.113.35'})).body.error,'access_denied');
+  assert.equal((await post({action:'user_save',token,email,level:2,status:'active'})).body.error,'user_not_found');
+  assert.equal((await post({action:'user_save',token,email,name:'허용 사용자',level:2,status:'active',create:true})).body.ok,true);
+  assert.equal((await post({action:'verify',token:before.body.token})).body.error,'revoked');
+  assert.equal((await post({action:'device_login',device:before.body.device})).body.error,'revoked');
+  const after = await post({action:'google_login',idToken:await googleIdToken(),remember:true},{ip:'203.0.113.36'});
+  assert.equal((await post({action:'verify',token:after.body.token})).body.ok,true);
+  assert.equal((await post({action:'device_login',device:after.body.device})).body.ok,true);
+  const audit = await post({action:'audits',token});
+  assert.equal(audit.body.audits.filter(record=>record.event==='user_delete'&&record.target===email).length,1);
+  ok('삭제한 계정의 세션·기기·알림을 해지하고 재등록 후 새 로그인만 허용한다');
   // ACL/reference preparation is covered by the notification tests; no password
   // account provider is generated in main.ts regardless of CREDENTIALS contents.
   assert.ok(!SOURCE.includes('for(const cred of CREDS)'));assert.ok(!SOURCE.includes('Deno.env.get("CREDENTIALS")'));

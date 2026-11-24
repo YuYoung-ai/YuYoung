@@ -132,7 +132,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     const assigned = scopeFor(policy, email);
     if (assigned || isRemoved(policy, email) || Object.hasOwn(policy?.accounts || {}, email)) return assigned;
     const admin = await getCsAdmin?.(email);
-    return admin ? {email, name: admin.name, level:3, domesticRegion:true, mine: new Set([alias(admin.name)].filter(Boolean)), canSend: true, version:'', boundSub:admin.sub} : null;
+    return admin ? {email, name: admin.name, level:3, domesticRegion:true, mine: new Set([alias(admin.name)].filter(Boolean)), canSend: true, version:admin.accessVersion || '', boundSub:admin.sub} : null;
   }
 
   async function security(token) {
@@ -384,7 +384,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
   async function securityDirectory(policy) {
     const users = new Map();
     for (const admin of await getCsAdmins?.() || []) {
-      if (!isRemoved(policy,admin.email)) users.set(admin.email, {...admin, level:3, status:'active'});
+      if (!isRemoved(policy,admin.email)) users.set(admin.email, {...admin, level:3, status:'active', version:admin.accessVersion || ''});
     }
     for (const [email, record] of Object.entries(policy?.accounts || {})) {
       const level = record.level ?? {staff:1, lead:2, admin:3}[record.role];
@@ -462,7 +462,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
     if (!adding && !exists) throw failure(404,'NOT_FOUND','등록된 영업 계정을 찾을 수 없습니다.');
     const status = p.status === 'disabled' ? 'disabled' : 'active';
     if (email === scope.email && (status !== 'active' || level !== 3)) throw failure(409,'SELF_ADMIN','본인 관리자 권한이나 사용 상태는 변경할 수 없습니다.');
-    const version = status==='disabled' || adding ? crypto.randomUUID() : stored?.version || '';
+    const version = status==='disabled' || adding ? crypto.randomUUID() : stored?.version || inherited?.accessVersion || '';
     accounts[email] = {...stored, name: adding ? name : stored?.name || inherited?.name,
       level, role:['','staff','lead','admin'][level], status,
       domesticRegion:stored?.domesticRegion ?? true, canSend:level>=2,

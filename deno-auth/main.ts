@@ -46,8 +46,9 @@
  ************************************************************/
 
 import { createWorkStore } from './work-store.ts';
-import { createWorkNotifications,notificationActivation } from './work-notifications.ts';
+import { createWorkNotifications,notificationActivation,notificationKey } from './work-notifications.ts';
 import { createPushSender } from './work-push.ts';
+import { accountVersionKey,removeAuthorizedUser } from './user-access.mjs';
 const VER = "deno-1.12.0-notification-reminders";
 
 const enc = new TextEncoder();
@@ -172,9 +173,9 @@ async function sha256B64u(str: string): Promise<string> {
 }
 
 /* ── 토큰 발급/검증 (baz_token_lib.gs 와 동일 규칙) ── */
-async function issueToken(name: string, level: number, hours: number, uid = '') {
+async function issueToken(name: string, level: number, hours: number, uid = '', accessVersion = '') {
   const expSec = Math.floor(Date.now() / 1000) + (hours > 0 ? hours : 6) * 3600;
-  const payload = JSON.stringify({ n: String(name || ""), l: Number(level) || 0, e: expSec, ep: EPOCH, ...(uid ? {u:uid} : {}) });
+  const payload = JSON.stringify({ n: String(name || ""), l: Number(level) || 0, e: expSec, ep: EPOCH, ...(uid ? {u:uid} : {}), ...(accessVersion && {av:accessVersion}) });
   const p = b64urlStr(payload);
   const sig = await hmacB64u(p);
   return { token: p + "." + sig, expires: new Date(expSec * 1000).toISOString() };
@@ -188,13 +189,17 @@ async function verifyToken(token: string) {
   let calc: string;
   try { calc = await hmacB64u(p); } catch (_e) { return { ok: false, error: "hmac_error" }; }
   if (!safeEq(calc, sig)) return { ok: false, error: "bad_signature" };
-  let o: { n?: string; l?: number; e?: number; ep?: number; u?: string };
+  let o: { n?: string; l?: number; e?: number; ep?: number; u?: string; av?: string };
   try { o = JSON.parse(b64urlDecodeToStr(p)); } catch (_e) { return { ok: false, error: "bad_payload" }; }
   if (!o || typeof o.e === "undefined") return { ok: false, error: "bad_payload" };
   if (Math.floor(Date.now() / 1000) > Number(o.e)) return { ok: false, error: "expired" };
   if (Number(o.ep || 0) < EPOCH) return { ok: false, error: "revoked" };
   if (!/^g:[A-Za-z0-9_-]{43}$/.test(String(o.u||""))) return {ok:false,error:"google_login_required"};
-  return { ok: true, level: Number(o.l) || 0, name: String(o.n || ""), uid:String(o.u||'') };
+  const uid = String(o.u), accessVersion = String(o.av || '');
+  const kv = await getKv();
+  if (!kv) return {ok:false,error:'kv_unavailable'};
+  if (((await kv.get<string>(accountVersionKey(uid))).value || '') !== accessVersion) return {ok:false,error:'revoked'};
+  return { ok: true, level: Number(o.l) || 0, name: String(o.n || ""), uid, accessVersion };
 }
 
 /* ── Google OpenID Connect ID 토큰 검증 ── */
@@ -285,6 +290,7 @@ type UserRec = {
   created: number;
   updated: number;
   lastLogin?: number;
+  accessVersion?: string;
 };
 const GOOGLE_SEED_MARKER: Deno.KvKey = ["meta", "google_users_seed_v1"];
 
@@ -297,40 +303,36 @@ async function ensureGoogleUserSeed(kv: Deno.Kv): Promise<void> {
     const key: Deno.KvKey = ["user_email", seed.email];
     const old = await kv.get<UserRec>(key);
     if (!old.value) {
-      await kv.set(key, {
+      const version = await kv.get(accountVersionKey(await notificationUid('g',seed.email)));
+      if (version.value) continue;
+      await kv.atomic().check(marker,old,version).set(key, {
         email: seed.email,
         name: seed.name,
         level: seed.level,
         status: "active",
         created: now,
         updated: now,
-      } satisfies UserRec);
+      } satisfies UserRec).commit();
     }
   }
   /* 이 마커 뒤에는 GOOGLE_USERS를 다시 seed하지 않는다. 삭제한 사용자의 부활을 막는다. */
-  await kv.set(GOOGLE_SEED_MARKER, { seededAt: now, count: GOOGLE_SEEDS.length });
+  await kv.atomic().check(marker).set(GOOGLE_SEED_MARKER, { seededAt: now, count: GOOGLE_SEEDS.length }).commit();
 }
 
 async function findAndBindGoogleUser(kv: Deno.Kv, claims: GoogleClaims): Promise<UserRec | null> {
   await ensureGoogleUserSeed(kv);
   const sub = String(claims.sub);
   const email = String(claims.email).trim().toLowerCase();
-  const subMap = await kv.get<{ email: string }>(["user_sub", sub]);
-  const lookupEmail = subMap.value ? subMap.value.email : email;
-  const entry = await kv.get<UserRec>(["user_email", lookupEmail]);
-  const user = entry.value;
-  if (!user || user.status !== "active") return null;
-  if (user.sub && user.sub !== sub) return null;
-  const next: UserRec = {
-    ...user,
-    sub,
-    name: user.name || String(claims.name || ""),
-    updated: Date.now(),
-    lastLogin: Date.now(),
-  };
-  await kv.set(["user_email", user.email], next);
-  await kv.set(["user_sub", sub], { email: user.email });
-  return next;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const subMap = await kv.get<{ email: string }>(["user_sub", sub]);
+    const entry = await kv.get<UserRec>(["user_email", subMap.value?.email || email]);
+    const user = entry.value;
+    if (!user || user.status !== "active" || user.sub && user.sub !== sub) return null;
+    const now = Date.now();
+    const next = {...user,sub,name:user.name || String(claims.name || ""),updated:now,lastLogin:now};
+    if ((await kv.atomic().check(entry,subMap).set(entry.key,next).set(subMap.key,{email:user.email}).commit()).ok) return next;
+  }
+  throw new Error("google_account_changed");
 }
 
 /* ── 로그인 시도 제한(IP 기준, 사용자 ID 도입 전 1차 방어) ── */
@@ -438,7 +440,7 @@ async function writeAudit(
 }
 
 /* ── 기기 토큰 ── */
-type DevRec = { n: string; l: number; ep: number; created: number; seen: number; ua: string; uid?: string };
+type DevRec = { n: string; l: number; ep: number; created: number; seen: number; ua: string; uid?: string; accessVersion?: string };
 function newDeviceToken(): string {
   const b = new Uint8Array(32);
   crypto.getRandomValues(b);
@@ -448,7 +450,7 @@ async function requireAdmin(p: Record<string, unknown>) {
   const r = await verifyToken(String(p.token ?? ""));
   if (!r.ok) return { ok: false as const, error: "unauthorized" };
   if ((r.level || 0) < 3) return { ok: false as const, error: "forbidden" };
-  return { ok: true as const, name: r.name || "Lv.3", level: r.level || 3 };
+  return { ok: true as const, name: r.name || "Lv.3", level: r.level || 3, uid:r.uid!, accessVersion:r.accessVersion! };
 }
 
 /* ── HTTP ── */
@@ -650,7 +652,7 @@ async function notificationAccounts(kv:Deno.Kv){
   const accounts=new Map<string,any>();
   if(GOOGLE_AUTH_ENABLED)for await(const entry of kv.list<UserRec>({prefix:['user_email']})){
     const user=entry.value;if(user.status!=='active')continue;
-    const uid=await notificationUid('g',user.email);accounts.set(uid,{uid,name:user.name||user.email,level:user.level,label:'Google · '+user.email});
+    const uid=await notificationUid('g',user.email);accounts.set(uid,{uid,name:user.name||user.email,level:user.level,label:'Google · '+user.email,accessVersion:user.accessVersion});
   }
   return [...accounts.values()];
 }
@@ -713,7 +715,7 @@ async function handleAction(
         return json({ ok: false, error: "access_denied" }, 403);
       }
       await clearLoginFailures(clientIp);
-      const iss = await issueToken(user.name || user.email, user.level, TTL_HOURS, await notificationUid('g',user.email));
+      const iss = await issueToken(user.name || user.email, user.level, TTL_HOURS, await notificationUid('g',user.email), user.accessVersion);
       let device = "";
       if (p.remember && DEVICE_AUTH_ENABLED) {
         device = newDeviceToken();
@@ -726,6 +728,7 @@ async function handleAction(
           seen: now,
           ua: String(p.__ua || ""),
           uid: user.email,
+          accessVersion:user.accessVersion || '',
         };
         await kv.set(["dev", device], rec, { expireIn: DEVICE_TTL_MS });
       }
@@ -770,20 +773,18 @@ async function handleAction(
     if (!v) return json({ ok: false, error: "device_not_found" });
     if(!v.uid)return json({ok:false,error:"google_login_required"},403);
     if (Number(v.ep || 0) < EPOCH) { await kv.delete(["dev", dev]); return json({ ok: false, error: "revoked" }); }
-    let name = v.n;
-    let level = v.l;
-    if (v.uid) {
-      const user = (await kv.get<UserRec>(["user_email", v.uid])).value;
-      if (!user || user.status !== "active") {
-        await kv.delete(["dev", dev]);
-        await writeAudit("device_login", v.uid, "", "revoked", clientIp);
-        return json({ ok: false, error: "revoked" }, 403);
-      }
-      name = user.name || user.email;
-      level = user.level; // 관리 화면에서 바꾼 최신 권한을 즉시 반영한다.
+    const account = await kv.get<UserRec>(["user_email", v.uid]);
+    const user = account.value;
+    if (!user || user.status !== "active" || (user.accessVersion || '') !== (v.accessVersion || '')) {
+      await kv.atomic().check(r).delete(r.key).commit();
+      await writeAudit("device_login", v.uid, "", "revoked", clientIp);
+      return json({ ok:false,error:"revoked" },403);
     }
-    const iss = await issueToken(name, level, TTL_HOURS, await notificationUid('g',v.uid));
-    await kv.set(["dev", dev], { ...v, n: name, l: level, seen: Date.now() }, { expireIn: DEVICE_TTL_MS });
+    const name = user.name || user.email, level = user.level;
+    const iss = await issueToken(name, level, TTL_HOURS, await notificationUid('g',v.uid),user.accessVersion);
+    if (!(await kv.atomic().check(r,account).set(r.key,{...v,n:name,l:level,seen:Date.now()},{expireIn:DEVICE_TTL_MS}).commit()).ok) {
+      return json({ok:false,error:"revoked"},403);
+    }
     await writeAudit("device_login", v.uid || name, "", "ok", clientIp, { level });
     return json({ ok: true, token: iss.token, level, name, expires: iss.expires, device: dev });
   }
@@ -802,10 +803,14 @@ async function handleAction(
     const kv = await getKv();
     if (!kv) return json({ ok: false, error: "kv_unavailable" });
     const out: Array<Record<string, unknown>> = [];
+    const accounts = new Map<string,UserRec|null>();
     for await (const e of kv.list<DevRec>({ prefix: ["dev"] })) {
       const tok = String(e.key[1]);
       const did = (await sha256B64u(tok)).slice(0, 10);
       const v = e.value;if(!v.uid)continue;
+      if (!accounts.has(v.uid)) accounts.set(v.uid,(await kv.get<UserRec>(["user_email",v.uid])).value);
+      const user = accounts.get(v.uid);
+      if (!user || (user.accessVersion || '') !== (v.accessVersion || '')) continue;
       out.push({ did, name: v.n, email: v.uid || "", level: v.l, created: v.created, seen: v.seen, ua: v.ua });
     }
     out.sort((a, b) => Number(b.seen || 0) - Number(a.seen || 0));
@@ -819,8 +824,10 @@ async function handleAction(
     if (!kv) return json({ ok: false, error: "kv_unavailable" });
     await ensureGoogleUserSeed(kv);
     const users: Array<Record<string, unknown>> = [];
+    let currentEmail = '';
     for await (const e of kv.list<UserRec>({ prefix: ["user_email"] })) {
       const u = e.value;
+      if (await notificationUid('g',u.email) === gate.uid) currentEmail = u.email;
       users.push({
         email: u.email,
         name: u.name,
@@ -833,7 +840,7 @@ async function handleAction(
       });
     }
     users.sort((a, b) => String(a.name || a.email).localeCompare(String(b.name || b.email), "ko"));
-    return json({ ok: true, users });
+    return json({ ok:true, users, currentEmail });
   }
 
   if (action === "audits") {
@@ -862,6 +869,9 @@ async function handleAction(
     const status = p.status === "disabled" ? "disabled" : "active";
     const key: Deno.KvKey = ["user_email", email];
     const old = await kv.get<UserRec>(key);
+    const version = await kv.get<string>(accountVersionKey(await notificationUid('g',email)));
+    if (!old.value && (p.edit === true || version.value && p.create !== true)) return json({ok:false,error:'user_not_found'},404);
+    if (old.value && p.create === true) return json({ok:false,error:'user_exists'},409);
     const now = Date.now();
     const user: UserRec = {
       email,
@@ -872,10 +882,25 @@ async function handleAction(
       created: old.value?.created || now,
       updated: now,
       lastLogin: old.value?.lastLogin,
+      accessVersion:old.value?.accessVersion || version.value || '',
     };
-    await kv.set(key, user);
+    if (!(await kv.atomic().check(old,version).set(key,user).commit()).ok) return json({ok:false,error:'user_changed'},409);
     await writeAudit("user_save", gate.name, email, "ok", clientIp, { level, status });
     return json({ ok: true, user: { email, name: user.name, level, status, linked: !!user.sub } });
+  }
+
+  if (action === "user_delete") {
+    const gate = await requireAdmin(p);
+    if (!gate.ok) return json(gate,gate.error === 'forbidden' ? 403 : 401);
+    const kv = await getKv();
+    if (!kv) return json({ok:false,error:'kv_unavailable'},503);
+    const email = String(p.email || '').trim().toLowerCase();
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ok:false,error:'invalid_email'},400);
+    const uidForEmail = (email:string) => notificationUid('g',email);
+    const result = await removeAuthorizedUser(kv,gate,email,await uidForEmail(email),uidForEmail,notificationKey);
+    if (!result.ok) return json({ok:false,error:result.error},result.status);
+    if (result.removed) await writeAudit('user_delete',gate.name,email,'ok',clientIp);
+    return json({ok:true});
   }
 
   if (action === "device_revoke") {
@@ -942,6 +967,7 @@ Deno.serve(async (req: Request, info: Deno.ServeHandlerInfo) => {
     if (req.method === "GET") {
       const u = new URL(req.url);
       const action = u.searchParams.get("action") || "ping";
+      if (action === 'user_delete') return withCors(json({ok:false,error:'post_required'},405),req);
       if (action.startsWith("work_")||action.startsWith('notification_')) return withCors(json({ success: false, error: "업무·알림 API는 POST로 호출하세요." }, 405), req);
       const p: Record<string, unknown> = {};
       u.searchParams.forEach((v, k) => (p[k] = v));
