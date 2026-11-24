@@ -14,6 +14,8 @@
   const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
   let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
   let detailRequest = 0, swipeTimer;
+  let installPrompt, appInstalled = false;
+  const installDialog = el('app-install-dialog');
 
   function feedback(message, error = false) {
     el('feedback').textContent = message;
@@ -83,6 +85,10 @@
   async function signIn() {
     security.setLevel(0);
     for (const id of ['notice-dialog', 'inbox-dialog', 'detail-dialog']) if (el(id).open) el(id).close();
+    el('notice-tools').hidden = true;
+    el('install-notice-help').hidden = false;
+    el('install-notice-help').textContent = '로그인 후 알림을 설정할 수 있습니다.';
+    noticeStatus('');
     el('workspace').hidden = true;
     el('sync').hidden = true;
     el('list').replaceChildren();
@@ -285,6 +291,8 @@
     renderRows();
     el('notice-tools').hidden = !context.notifications;
     el('notice-open').hidden = !context.canSend || !snapshot.items.length;
+    el('install-notice-help').hidden = Boolean(context.notifications);
+    el('install-notice-help').textContent = context.notifications ? '' : '현재 알림 서비스가 활성화되지 않았습니다.';
     security.setLevel(context.level);
     if (context.notifications && new URLSearchParams(location.search).has('notices')) {
       history.replaceState(null, '', location.pathname);
@@ -510,12 +518,39 @@
     }
   }
 
+  function noticeStatus(message, error = false) {
+    el('install-notice-status').textContent = message;
+    el('install-notice-status').toggleAttribute('data-error',error);
+  }
+
+  function renderInstall() {
+    const installed = appInstalled || navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+    const appleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    el('app-install').hidden = installed || !installPrompt;
+    el('app-install-help').textContent = installed ? '영업 앱이 설치되어 있습니다.'
+      : installPrompt ? '홈 화면에 BAZ 영업 아이콘을 추가합니다.'
+      : appleMobile ? 'Safari에서 공유 → 홈 화면에 추가를 누르고 웹 앱으로 열기를 켠 뒤 추가하세요.'
+      : '브라우저 메뉴에서 앱 설치 또는 홈 화면에 추가를 선택하세요.';
+  }
+
+  window.addEventListener('beforeinstallprompt',event=>{
+    event.preventDefault();
+    installPrompt=event;
+    renderInstall();
+  });
+  window.addEventListener('appinstalled',()=>{
+    installPrompt=null;
+    appInstalled=true;
+    renderInstall();
+  });
+
   async function enablePush() {
     if (!window.Notification || !window.PushManager || !navigator.serviceWorker) {
-      feedback('아이폰에서는 홈 화면에 추가한 영업 앱을 열어 알림을 연결해 주세요.', true);
+      noticeStatus('아이폰에서는 홈 화면에 추가한 영업 앱을 열어 알림을 연결해 주세요.', true);
       return;
     }
     el('push-enable').disabled = true;
+    noticeStatus('이 기기의 알림을 연결하는 중…');
     try {
       if (await Notification.requestPermission() !== 'granted') throw new Error('아이폰 설정에서 알림을 허용해 주세요.');
       if (!registrationTask) registrationTask = navigator.serviceWorker.register('sw.js').catch(error => { registrationTask = null; throw error; });
@@ -530,8 +565,8 @@
       }
       await api('sales_push_subscribe', {subscription: sub.toJSON()});
       await bindDevice(active, cfg.binding);
-      feedback('이 기기에 영업 알림을 연결했습니다.');
-    } catch (error) { feedback(error.message, true); }
+      noticeStatus('이 기기에 영업 알림을 연결했습니다.');
+    } catch (error) { noticeStatus(error.message, true); }
     finally { el('push-enable').disabled = false; }
   }
 
@@ -566,6 +601,19 @@
 
   el('retry-login').onclick = () => { feedback(''); void signIn(); };
   el('sync').onclick = () => sync();
+  el('app-install-open').onclick = () => { renderInstall(); installDialog.showModal(); };
+  el('app-install').onclick = async () => {
+    const prompt=installPrompt;
+    if (!prompt) return;
+    installPrompt=null;
+    try {
+      await prompt.prompt();
+      if ((await prompt.userChoice).outcome === 'accepted') appInstalled=true;
+      renderInstall();
+    } catch {
+      renderInstall();
+    }
+  };
   el('retry-period').onclick = () => sync();
   el('load-more').onclick = () => { state.shown+=80; renderRows(); };
   el('previous-card').onclick = () => goToCard(cardIndex()-1);
@@ -585,8 +633,8 @@
   }, {passive:true});
   mobileCards.addEventListener('change',updateCardPosition);
   el('sign-out').onclick = signOut;
-  el('inbox-open').onclick = openInbox;
-  el('notice-open').onclick = openComposer;
+  el('inbox-open').onclick = () => { installDialog.close(); void openInbox(); };
+  el('notice-open').onclick = () => { installDialog.close(); openComposer(); };
   el('notice-request').onchange = selectRecipient;
   el('notice-message').oninput = () => { noticeOperation = ''; };
   el('notice-form').onsubmit = sendNotice;

@@ -22,7 +22,7 @@ self.addEventListener('push', event => {
     if (!entry || await entry.text() !== message.binding) return;
     await self.registration.showNotification('BAZ 영업', {
       body: message.body || '영업 서비스 알림을 확인해 주세요.',
-      icon: new URL('../icon-192.png', self.registration.scope).href,
+      icon: new URL('app-icon-192.png', self.registration.scope).href,
     });
   })());
 });
