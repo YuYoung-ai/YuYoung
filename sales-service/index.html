@@ -14,18 +14,17 @@
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css?v=378">
+  <link rel="stylesheet" href="sales.css?v=379">
   <script src="../js/baz-work-cache.js" defer></script>
   <script src="../js/baz-work-fields.js?v=354" defer></script>
   <script src="sales-security.js?v=375" defer></script>
-  <script src="sales.js?v=378" defer></script>
+  <script src="sales.js?v=379" defer></script>
 </head>
 <body>
   <header class="sales-bar">
     <div class="sales-brand"><img src="app-icon-192.png" alt="" width="32" height="32">BAZ 영업</div>
     <div class="sales-controls">
       <button id="security-open" type="button" hidden>보안 관리</button>
-      <button id="sync" type="button" hidden>↻ 동기화</button>
       <button id="theme" type="button" aria-label="테마 전환"></button>
     </div>
     <button id="app-install-open" type="button" aria-haspopup="dialog">앱 설치 및 알림</button>
@@ -38,11 +37,20 @@
       <label class="sales-remember"><input id="remember" type="checkbox"> 이 기기 기억하기</label>
       <button id="retry-login" type="button" hidden>다시 시도</button>
     </section>
+    <header id="workspace-header" hidden>
+      <h1 id="workspace-title">CS 서비스 현황</h1>
+      <section class="sales-sync" aria-labelledby="sync-title">
+        <div>
+          <h2 id="sync-title">마지막 동기화</h2>
+          <time id="sync-time" hidden></time>
+          <p id="sync-empty" class="sales-muted">아직 동기화한 기록이 없습니다.</p>
+        </div>
+        <button id="sync" type="button" aria-describedby="sync-help">동기화</button>
+        <p id="sync-help" class="sales-muted">최신 처리 내역을 확인하려면 동기화를 눌러 주세요.</p>
+        <p id="sync-status" class="sales-muted" role="status"></p>
+      </section>
+    </header>
     <section id="workspace" aria-labelledby="workspace-title" hidden>
-      <div class="sales-heading">
-        <h1 id="workspace-title">CS 서비스 현황</h1>
-        <p id="sync-time" class="sales-muted"></p>
-      </div>
       <section class="sales-scope" aria-labelledby="scope-title">
         <h2 id="scope-title">내 업무</h2>
         <div class="sales-scope-actions" role="group" aria-label="업무 범위">

@@ -11,7 +11,7 @@
   const mobileCards = matchMedia('(max-width: 700px)');
   let fullReady = false;
   const koreanDate = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
-  const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit'});
+  const clock = new Intl.DateTimeFormat('ko-KR', {timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short'});
   let googleScript, noticeRecipient = '', noticeOperation = '', registrationTask, searchTimer, detailTrigger;
   let detailRequest = 0, swipeTimer;
   let installPrompt, appInstalled = false;
@@ -20,6 +20,26 @@
   function feedback(message, error = false) {
     el('feedback').textContent = message;
     el('feedback').toggleAttribute('data-error', error);
+  }
+
+  function syncFeedback(message, error = false) {
+    el('sync-status').textContent = message;
+    el('sync-status').toggleAttribute('data-error', error);
+  }
+
+  function renderSyncTime(snapshot) {
+    const timestamp = snapshot?.partial ? '' : snapshot?.updatedAt;
+    const valid = Boolean(timestamp) && Number.isFinite(Date.parse(timestamp));
+    const time = el('sync-time');
+    time.hidden = !valid;
+    el('sync-empty').hidden = valid;
+    if (valid) {
+      time.dateTime = timestamp;
+      time.textContent = clock.format(new Date(timestamp));
+    } else {
+      time.removeAttribute('datetime');
+      time.textContent = '';
+    }
   }
 
   async function api(action, args = {}) {
@@ -89,8 +109,8 @@
     el('install-notice-help').hidden = false;
     el('install-notice-help').textContent = '로그인 후 알림을 설정할 수 있습니다.';
     noticeStatus('');
+    el('workspace-header').hidden = true;
     el('workspace').hidden = true;
-    el('sync').hidden = true;
     el('list').replaceChildren();
     el('table-list').replaceChildren();
     state.rows.clear();
@@ -103,7 +123,8 @@
     el('search').value = '';
     renderScope();
     renderPeriod();
-    el('sync-time').textContent = '';
+    renderSyncTime();
+    syncFeedback('');
     el('sign-in').hidden = false;
     if (el('google-sign-in').childElementCount) return;
     el('retry-login').hidden = true;
@@ -284,10 +305,8 @@
     const available = new Set(snapshot.items.map(item=>item.id));
     for (const id of details.keys()) if (!available.has(id)) details.delete(id);
     el('account').textContent = context.name || '영업 계정';
-    el('sync-time').textContent = '마지막 동기화 ' + clock.format(new Date(snapshot.updatedAt));
-    el('sign-in').hidden = true;
+    renderSyncTime(snapshot);
     el('workspace').hidden = false;
-    el('sync').hidden = false;
     renderRows();
     el('notice-tools').hidden = !context.notifications;
     el('notice-open').hidden = !context.canSend || !snapshot.items.length;
@@ -305,7 +324,8 @@
     state.busy = true;
     el('sync').disabled = true;
     el('sign-out').disabled = true;
-    feedback(useSaved ? '로그인 확인 중…' : '동기화 중…');
+    if (useSaved) feedback('로그인 확인 중…');
+    else syncFeedback('동기화 중…');
     try {
       const context = await api('sales_cache_context');
       const previous = state.snapshot || await cache.snapshot(context.cacheKey).catch(()=>null);
@@ -316,8 +336,12 @@
         details.clear();
         fullReady=false;
         el('workspace').hidden=true;
+        renderSyncTime();
         await cache.save(previous.cacheKey,null).catch(()=>{});
       }
+      el('sign-in').hidden = true;
+      el('workspace-header').hidden = false;
+      feedback('');
       let current;
       if (useSaved && valid) {
         fullReady=true;
@@ -328,10 +352,10 @@
           fullReady=false;
           state.period = state.period === 'all' ? 'month' : state.period;
           periodProgress('전체 기간 준비 중…');
-          feedback('이번 달과 이번 주 목록을 불러오는 중…');
+          syncFeedback('이번 달과 이번 주 목록을 불러오는 중…');
           const preview = sameScope ? previous : await receiveSnapshot(context,true);
           showWorkspace(context,preview);
-          feedback('');
+          syncFeedback('');
         }
         try { current=valid ? await receiveDelta(previous) : await receiveSnapshot(context); }
         catch (error) {
@@ -343,6 +367,7 @@
             details.clear();
             fullReady=false;
             el('workspace').hidden=true;
+            renderSyncTime();
             await cache.save(context.cacheKey,null).catch(()=>{});
             throw error;
           }
@@ -355,17 +380,20 @@
       }
       periodProgress('');
       showWorkspace(context,current);
-      feedback('');
+      syncFeedback(useSaved ? '' : '동기화가 완료되었습니다.');
     } catch (error) {
       if ([401, 403].includes(error.status)) {
         if (state.snapshot) await cache.save(state.snapshot.cacheKey,null).catch(()=>{});
         setSession(null);
         await signIn();
+        feedback(error.message, true);
       } else {
-        el('sync').hidden = false;
+        el('sign-in').hidden = true;
+        el('workspace-header').hidden = false;
+        feedback('');
         if (!fullReady) periodProgress('전체 기간 준비를 완료하지 못했습니다.',true);
+        syncFeedback(error.message, true);
       }
-      feedback(error.message, true);
     } finally {
       el('sync').disabled = false;
       el('sign-out').disabled = false;
