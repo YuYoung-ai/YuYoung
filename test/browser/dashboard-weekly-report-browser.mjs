@@ -63,6 +63,16 @@ try{
  assert.deepEqual(state.cards.map(o=>o.weeklyCard),['VOC / 점검 유형','교육·재사용 병원 현황']);
  assert(vocCard.h>state.previousVocHeight&&vocCard.y+vocCard.h<managementCard.y);
  assert.equal(managementCard.y+managementCard.h,state.bodyBottom);
+ const managementGrid=await page.evaluate(()=>{
+  const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;
+  return ['교육 필요 병원','노즐 재사용 병원'].map(name=>{
+   const row=items.find(o=>o.t===name);
+   return items.filter(o=>o.k==='text'&&o.y===row.y&&o.x>=row.x)
+    .map(o=>[o.x,o.w,o.h,o.align]);
+  });
+ });
+ assert.equal(managementGrid[0].length,3);
+ assert.deepEqual(managementGrid[0],managementGrid[1]);
  assert(state.vocTexts.slice(1).every(o=>o.weeklyVoc!=null||o.weeklyDescription!=null),'VOC card shows only names and descriptions');
  const firstName=state.vocTexts.find(o=>o.weeklyVoc===0);
  const firstDescription=state.vocTexts.find(o=>o.weeklyDescription===0);
@@ -100,6 +110,9 @@ try{
  assert.equal(await page.getByRole('button',{name:'사용자 교육 현황.xlsx 다운로드'}).count(),1);
  await page.locator('#wkModal .report-box').screenshot({path:path.join(out,'implemented-editor.png')});
  await page.evaluate(()=>previewWeeklyPPT());await page.waitForSelector('#wkPvModal.show');await page.locator('#wkPvSlides > div').first().screenshot({path:path.join(out,'implemented-weekly-report.png')});
+ const number=page.locator('#wkPvSlides [data-graph-label-key]').first();
+ await number.click();assert(await number.evaluate(e=>e.classList.contains('is-selected')));
+ await number.click();assert.equal(await number.evaluate(e=>e.classList.contains('is-selected')),false);
  for(const kind of ['education','nozzle']){const bytes=await page.evaluate(async kind=>Array.from(await BazWeeklyReport.workbook(exReportSnapFromSel_('week'),kind)),kind);await fs.writeFile(path.join(out,'sample-'+kind+'.xlsx'),Buffer.from(bytes));const zip=await JSZip.loadAsync(Buffer.from(bytes));const sheet=await zip.file('xl/worksheets/sheet2.xml').async('string');assert(sheet.includes('예시 A병원'));assert(!sheet.includes('강남'));}
  await page.evaluate(async()=>{
   closeWkPreview();await loadPptxLib();window.qaWriteFileCalls=[];
@@ -114,7 +127,15 @@ try{
  assert.equal((slide.match(/<p:oleObj /g)||[]).length,0);
  assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);
  assert(!slide.includes('bazAttach'));
- const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>{openMonthly();return makeMonthlyPPT();});await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
+ await page.evaluate(()=>openMonthly());
+ const monthlyRows=await page.evaluate(()=>{
+  const snap=exReportSnapFromSel_('month');
+  return {editor:Array.from(document.querySelectorAll('#mnVocDescRows label'),e=>e.textContent),
+   slide:snap.change.up.concat(snap.change.down).map(r=>r.k)};
+ });
+ assert(monthlyRows.slide.length>0);
+ assert.deepEqual(monthlyRows.editor,monthlyRows.slide);
+ const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>makeMonthlyPPT());await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
  const monthlyZip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-monthly-report.pptx')));
  assert.match(await monthlyZip.file('ppt/slides/slide1.xml').async('string'),/특이사항/);
  assert.equal(await page.evaluate(()=>qaWriteFileCalls.length),2,'weekly and monthly both use original writeFile');

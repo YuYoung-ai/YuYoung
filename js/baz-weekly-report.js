@@ -67,7 +67,7 @@
   var bottom=L.notes.y+L.notes.h,managementH=1.17,managementY=bottom-managementH;
   return {
    voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:managementY-.10-L.change.y,pad:.14,top:.39,pitch:.59},
-   management:{x:L.notes.x,y:managementY,w:L.notes.w,h:managementH,pad:.14,top:.35,pitch:.41,countX:2.34,countW:.55,fileX:3.17}
+   management:{x:L.notes.x,y:managementY,w:L.notes.w,h:managementH,pad:.14,top:.52,pitch:.30}
   };
  }
  function wrap(text,width,size){
@@ -106,11 +106,25 @@
   });
   T=B.management;
   shell(T,MANAGEMENT_TITLE);
+  var inner=T.w-2*T.pad, columns=[
+   {w:inner*.43,align:'left',heading:'구분'},
+   {w:inner*.19,align:'right',heading:'병원 수'},
+   {w:inner*.38,align:'center',heading:'관련 명단'}
+  ];
+  function managementRow(y,h,values,header){
+   var left=T.x+T.pad;
+   columns.forEach(function(col,j){
+    var cellW=col.w-.10,size=header?6.8:root.exFitSize_(values[j],cellW,[8.5,8,7.5,7]);
+    text(left+.05,y,cellW,h,values[j],size,header?C.mut:C.navy,!header&&j!==2,
+     {align:col.align,weeklyManagementCount:!header&&j===1,manualFileCaption:!header&&j===2?values[j]:undefined});
+    left+=col.w;
+   });
+  }
+  managementRow(T.y+.33,.16,columns.map(function(col){return col.heading;}),true);
   s.management.items.forEach(function(r,i){
    var y=T.y+T.top+i*T.pitch;
-   text(T.x+T.pad,y,T.countX-T.pad,.22,r.name,8.5,C.navy,true);
-   text(T.x+T.countX,y,T.countW,.22,r.cur+'곳',8.5,C.navy,true,{align:'center',weeklyManagementCount:true});
-   text(T.x+T.fileX,y+.12,T.w-T.fileX-T.pad,.16,r.sub,8,C.navy,false,{align:'center',manualFileCaption:r.sub});
+   items.push({k:'line',x:T.x+T.pad,y:y,w:inner,color:C.line,width:.5});
+   managementRow(y+.015,T.pitch-.03,[r.name,r.cur+'곳',r.sub],false);
   });
   return items;
  }

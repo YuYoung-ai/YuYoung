@@ -1151,14 +1151,14 @@ if (false) {
     fi.filter(o=>o.trendSeriesLegend).length===3 &&
     fi.some(o=>o.trendSeriesLegend&&o.t==='노즐 누수 발생 건 수'));
   ck('V9-c-2. 노즐 누수 발생 그래프는 마지막 보고 기간을 민트 영역과 이번 주·당월 표기로 강조',
-    fi.some(o=>o.trendCurrentPeriodBand) && fi.some(o=>o.trendCurrentPeriodLabel&&o.t==='이번 주') &&
+    fi.some(o=>o.trendCurrentPeriodBand) && fi.some(o=>o.trendCurrentPeriodLabel==='이번 주'&&o.trendDeltaLabel) &&
     D.buildExecutivePptDeck(D.buildExecutiveReportSnapshot(Object.assign({vocFocus:'노즐누수(약액 유입)'},MONTH)))[0].items
-      .some(o=>o.trendCurrentPeriodLabel&&o.t==='당월'));
+      .some(o=>o.trendCurrentPeriodLabel==='당월'&&o.trendDeltaLabel));
   const trendTargets=fi.filter(o=>o.trendPointValue).slice(0,2);
   D.setActionLabelEdits('week',Object.fromEntries(trendTargets.map(o=>[o.graphLabelEditKey,'bottom'])));
   const movedTrend=itemsOf(leak).filter(o=>trendTargets.some(t=>t.graphLabelEditKey===o.graphLabelEditKey));
   ck('V9-c-3. 노즐 누수 발생 추이도 여러 숫자의 위·아래 위치를 함께 지정해 PPT에 반영',
-    movedTrend.length===2 && movedTrend.every((o,i)=>o.graphLabelPlacement==='bottom'&&o.y>trendTargets[i].y),
+    movedTrend.length===2 && movedTrend.every(o=>o.graphLabelPlacement==='bottom'&&o.y>points[o.trendIdx].cy),
     JSON.stringify(movedTrend.map(o=>o.graphLabelPlacement)));
   D.setActionLabelEdits('week',{});
   ck('V10. 모든 점과 선이 그래프 카드 안에 머문다', (() => {
@@ -1193,6 +1193,54 @@ if (false) {
     paidSplit.some(r=>r.k==="Handpiece Ass'y(유상 판매)"&&r.cur===2) &&
     paidSplit.some(r=>r.k==="Handpiece Ass'y"&&r.cur===0)===false,
     JSON.stringify(paidSplit));
+}
+
+/* 수치 범위와 모양만 바꿔 두 보고서의 실제 표시 목록을 검사한다. */
+for(const [title,pattern] of Object.entries({
+  동일값:[3,3], 교차:[1,12,1,12], 극값:[0,0,3000,0,1], 소폭변화:[100,101,99,100], 영건:[0]
+})){
+  for(const [kind,count] of [['week',16],['month',12],['month',1]]){
+    const snap=structuredClone(kind==='week'?wSnap:mSnap);
+    const values=Array.from({length:count},(_,i)=>pattern[i%pattern.length]);
+    snap.trend.line.pts=values.map((main,i)=>({label:String(i+1),main}));
+    snap.trend.line.sum=values.at(-1);
+    snap.trend.line.prevSum=values.reduce((a,b)=>a+b)/count;
+    snap.action.pts=values.map((clean,i)=>({label:String(i+1),clean,replacement:pattern[(i+1)%pattern.length]}));
+    const items=itemsOf(snap);
+    const crosses=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
+    const boxes=items.filter(o=>o.graphPointValue||o.trendDeltaLabel);
+    const markers=items.filter(o=>o.actionPoint||o.trendPoint||o.trendCurrentHalo||o.actionCurrentHalo)
+      .map(o=>({x:o.cx-o.r,y:o.cy-o.r,w:o.r*2,h:o.r*2}));
+    const strokes=items.filter(o=>o.actionSegment||o.trendSegment||o.trendAverage);
+    function crossesStroke(box,line){
+      const x1=line.x1??line.x, x2=line.x2??(line.x+line.w), y1=line.y1??line.y, y2=line.y2??line.y;
+      const pad=line.width/144, left=Math.max(x1,box.x-pad), right=Math.min(x2,box.x+box.w+pad);
+      if(left>right)return false;
+      const slope=(y2-y1)/(x2-x1);
+      const a=y1+slope*(left-x1),b=y1+slope*(right-x1);
+      return Math.min(a,b)<=box.y+box.h+pad&&Math.max(a,b)>=box.y-pad;
+    }
+    const visible=boxes.every(o=>{
+      const width=D.exTxtW_(o.t,o.size),height=o.size/72*1.15;
+      const text={x:o.x+(o.w-width)/2,y:o.y+(o.h-height)/2,w:width,h:height};
+      return !strokes.some(line=>crossesStroke(text,line));
+    });
+    const clean=boxes.every((box,i)=>!boxes.slice(i+1).some(b=>crosses(box,b))&&!markers.some(b=>crosses(box,b)));
+    const delta=items.find(o=>o.trendDeltaLabel),g=D.L.trend.graph;
+    const insidePlot=delta.x>=g.plotL&&delta.x+delta.w<=g.plotR&&delta.y>=g.plotTop&&delta.y+delta.h<=g.plotBot;
+    const points=items.filter(o=>o.trendPoint);
+    const grouped=delta.t.startsWith(kind==='week'?'이번 주 · ':'당월 · ')&&
+      D.exPptRuns_(delta).map(r=>r.text).join('')===delta.t&&
+      items.filter(o=>o.trendCurrentPeriodLabel).length===1;
+    const fullWidth=count===1||
+      (Math.abs(points[0].cx-(g.plotL+0.18))<1e-8&&Math.abs(points.at(-1).cx-(g.plotR-0.18))<1e-8);
+    const averageRule=boxes.filter(o=>o.trendPointValue).every(o=>{
+      const point=points[o.trendIdx];
+      return values[o.trendIdx]<snap.trend.line.prevSum ? o.y>point.cy : o.y+o.h<point.cy;
+    });
+    ck('자동 배치 '+title+' '+kind+' '+count+'개 기간',
+      clean&&visible&&insidePlot&&averageRule&&grouped&&fullWidth);
+  }
 }
 
 console.log('\n──────────────────────────────');

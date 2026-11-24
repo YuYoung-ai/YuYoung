@@ -303,6 +303,7 @@ body.dark .hp-clean-status.stable{background:#173326}body.dark .hp-clean-warn{ba
 .note-reset{border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);
   color:var(--navy);cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;padding:6px 10px}
 .note-reset:hover{background:var(--teal-soft)}
+[data-graph-label-key].is-selected{outline:2px solid #1E355F;border-radius:3px;background:#EEF5FF}
 .note-reset:focus-visible{outline:2px solid var(--navy);outline-offset:1px}
 @media(max-width:560px){.voc-desc-row{grid-template-columns:1fr}.voc-desc-row input{font-size:12px}}
 /* PPT 생성·미리보기 모달은 다크에서도 라이트 그대로 둔다 — 슬라이드 디자인이 바뀌면 안 된다.
@@ -1657,11 +1658,10 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="mnVocSel" onchange="exOnReportVocChange_('month')"></select>
-      <div class="mhint">고른 대상의 1월부터 현재 월까지를 꺾은선으로 이어 그리고, 현재 월을 월평균과 비교합니다. KPI·TOP5·특이사항은 전체 기준 그대로입니다.</div>
+      <div class="mhint">선택한 달의 건수를 1월부터 선택한 달까지의 월평균과 비교합니다. VOC 유형을 고르면 해당 유형의 KPI도 표시합니다.</div>
     </div>
-    <div class="mhint">주간업무보고와 같은 배치이며, 해당 연도 1월부터 현재 월까지의 월별 추이를 싣습니다.</div>
     <details class="voc-desc-editor" id="mnVocDescBox">
-      <summary>VOC 유형 설명 확인·수정 (현재 TOP5)</summary>
+      <summary>VOC 유형 설명 확인·수정 (증가·감소 각 상위 3개)</summary>
       <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
       <div class="voc-desc-rows" id="mnVocDescRows"></div>
     </details>
@@ -4217,14 +4217,11 @@ var L=(function(){
                     textX:page.left+0.18, textW:2.18},
             graphX:page.left+2.58, graphY:rowA.y+0.04,
             graphW:trendW-2.62, graphH:rowA.h-0.08,
-            graph:{headY:rowA.y+0.12, headH:0.22, avgY:rowA.y+0.34, avgH:0.18,
-                   /* 기준 이미지처럼 Y축 여백을 충분히 두고, 마지막 주차 뒤에는 증감 문구 영역을 남긴다. */
-                   /* 그래프 시작선은 하단 판단 근거의 시작선과 맞춘다. */
+            graph:{headY:rowA.y+0.12, headH:0.22,
                    plotL:page.left+2.75, plotR:page.left+trendW-0.21,
-                   plotTop:rowA.y+0.68, plotBot:rowA.y+1.91,
+                   plotTop:rowA.y+0.67, plotBot:rowA.y+1.81,
                    axisW:0.27, axisH:0.16, ticks:3,
-                   valueH:0.18, valueDY:0.04, labelY:rowA.y+1.94, labelH:0.15,
-                   avgLabelH:0.20, deltaW:0.72} },
+                   valueH:0.18, labelY:rowA.y+2.15, labelH:0.15} },
     change:{ x:page.left+trendW+gap, y:rowA.y, w:changeW, h:rowA.h,
              g1Y:rowA.y+0.39, g2Y:rowA.y+1.44, grpH:0.20, grpDY:0.04,
              /* 증감 표시는 짧으므로 필요한 폭만 남기고, 여유는 설명 칸에 준다. */
@@ -4249,7 +4246,7 @@ var L=(function(){
               graph:{periodY:rowB.y+0.14, periodH:0.18, subY:rowB.y+0.34, subH:0.16,
                      legendY:rowB.y+0.14, legendW:1.12, reasonY:rowB.y+0.34, reasonH:0.14,
                      plotL:page.left+2.75, plotR:page.left+trendW-0.20,
-                     plotTop:rowB.y+0.64, plotBot:rowB.y+1.72,
+                     plotTop:rowB.y+0.78, plotBot:rowB.y+1.51,
                      axisW:0.24, axisH:0.14, ticks:3, valueH:0.15, valueDY:0.025,
                      labelY:rowB.y+1.79, labelH:0.13} },
     notes:{ x:page.left+trendW+gap, y:rowB.y, w:notesW, h:rowB.h,
@@ -4424,6 +4421,71 @@ function buildExecutivePptDeck(snap){
   function text(o){ o.k='text'; items.push(o); return o; }
   function tone(t){ return EX_TONE_COLOR[t]||C.text; }
 
+  /* Both renderers consume the resulting boxes. Reserve manual choices first,
+     then try positions nearest each point, accounting for both plotted series. */
+  function placeGraphValues(labels, points, segments, bounds, averageY, annotation){
+    var used=[];
+    function intersects(a,b){
+      return a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h;
+    }
+    function crosses(box,s){
+      var left=Math.max(box.x,s.x1), right=Math.min(box.x+box.w,s.x2);
+      if(left>right) return false;
+      var slope=(s.y2-s.y1)/(s.x2-s.x1);
+      var a=s.y1+slope*(left-s.x1), b=s.y1+slope*(right-s.x1);
+      return Math.min(a,b)<=box.y+box.h && Math.max(a,b)>=box.y;
+    }
+    function obstructionCost(box){
+      var cost=0;
+      used.forEach(function(other){if(intersects(box,other)) cost+=1000;});
+      points.forEach(function(p){
+        if(intersects(box,{x:p.cx-p.r,y:p.cy-p.r,w:2*p.r,h:2*p.r})) cost+=100;
+      });
+      segments.forEach(function(s){if(crosses(box,s)) cost+=10;});
+      if(averageY!=null && averageY>=box.y && averageY<=box.y+box.h) cost+=5;
+      return cost;
+    }
+    labels.sort(function(a,b){return Number(b.manual)-Number(a.manual);});
+    labels.forEach(function(entry){
+      var o=entry.item, best=null, bestCost=Infinity;
+      var allowed=entry.manual||entry.fixedSide?[entry.side]:[entry.side,-entry.side];
+      var width=Math.max(0.14,exTxtW_(o.t,o.size)+0.045);
+      o.w=Math.min(bounds.right-bounds.left,width);
+      o.x=Math.max(bounds.left,Math.min(entry.px-o.w/2,bounds.right-o.w));
+      allowed.forEach(function(side, preference){
+        for(var gap=entry.radius+(entry.clearance||0.025);gap<=bounds.bottom-bounds.top;gap+=0.035){
+          var y=entry.py+(side>0?gap:-gap-o.h);
+          if(y<bounds.top || y+o.h>bounds.bottom) break;
+          var box={x:o.x-0.008,y:y-0.008,w:o.w+0.016,h:o.h+0.016};
+          var cost=gap+preference*0.025+obstructionCost(box);
+          if(cost<bestCost){best=box;bestCost=cost;}
+        }
+      });
+      if(best){o.y=best.y+0.008;used.push(best);}
+    });
+    if(!annotation) return;
+    /* 숫자를 모두 놓은 뒤 최신 점 근처부터 그래프 내부의 빈 칸을 찾는다. */
+    var note=annotation.item, minX=bounds.left+0.04, maxX=bounds.right-note.w-0.04;
+    var minY=annotation.top+0.02, maxY=annotation.bottom-note.h-0.02;
+    var nx=Math.max(1,Math.ceil((maxX-minX)/0.08)), ny=Math.max(1,Math.ceil((maxY-minY)/0.035));
+    var bestCost=Infinity, clear=false;
+    for(var ix=0;ix<=nx;ix++){
+      var x=maxX-(maxX-minX)*ix/nx;
+      for(var iy=0;iy<=ny;iy++){
+        var y=minY+(maxY-minY)*iy/ny;
+        var box={x:x-0.032,y:y-0.032,w:note.w+0.064,h:note.h+0.064};
+        var dx=x+note.w/2-annotation.px, dy=y+note.h/2-annotation.py;
+        var obstruction=obstructionCost(box);
+        var cost=obstruction*100+dx*dx+dy*dy*2;
+        if(annotation.grid.some(function(gy){return gy>=box.y&&gy<=box.y+box.h;})) cost+=0.4;
+        if((annotation.py<averageY && y+note.h>averageY) ||
+           (annotation.py>averageY && y<averageY)) cost+=0.35;
+        if(cost<bestCost){note.x=x;note.y=y;bestCost=cost;clear=obstruction===0;}
+      }
+    }
+    return clear;
+  }
+
   var P=L.page, CD=L.card;
   /* 흰 본문 배경 — 대시보드가 다크모드여도 보고서는 항상 라이트 양식 */
   rect({x:0, y:0, w:P.w, h:P.h, fill:C.white});
@@ -4441,7 +4503,7 @@ function buildExecutivePptDeck(snap){
   /* 보고서만 따로 전달돼도 집계 기준을 알 수 있게 제목 아래에 작게 적는다(새 카드를 만들지 않는다) */
   text({x:P.left, y:H.basisY, w:H.basisW, h:H.basisH, t:snap.basis, size:FT.basis, color:C.mut});
   text({x:P.right-H.basisW, y:H.basisY, w:H.basisW, h:H.basisH,
-        t:'증감 기준 · '+snap.cmpLabel+' 대비', size:FT.basis, color:C.mut, align:'right'});
+        t:'KPI 증감 · '+snap.cmpLabel+' 대비', size:FT.basis, color:C.mut, align:'right'});
 
   /* ── ② KPI 3 (한 줄) ── */
   var K=L.kpi, kw=K.widthFor(snap.kpi.length);
@@ -4499,7 +4561,7 @@ function buildExecutivePptDeck(snap){
   /* ── ③ 대상 발생 추이 ──
      주간은 최근 16주부터 현재 주까지, 월간은 1월부터 현재 월까지 한 선으로 잇는다.
      현재값은 기간 평균과 비교하고, 그래프 안의 점선도 같은 평균을 뜻한다. */
-  (function(){
+  function renderTrend(extraHeadroom){
     var T=L.trend, G=T.graph, tr=snap.trend, ln=tr.line, pts=ln.pts;
     var isVoc=exTrendIsVocType_(ln.focus), isAs=ln.focus===EX_TREND_METRIC_AS,
         isNozzleLeak=hpCleanKey_(ln.focus)==='노즐누수(약액유입)';
@@ -4614,22 +4676,27 @@ function buildExecutivePptDeck(snap){
 
     /* 눈금선은 판단 근거 구분선의 끝까지 잇고, 첫·마지막 주차는 양 끝에서 여백을 둔다.
        주차 값·라벨이 카드 테두리에 붙지 않으며 모든 주차 간격은 동일하다. */
-    var n=pts.length||1, gridR=G.plotR, dataL=G.plotL+0.28, dataR=gridR-0.28, plotW=dataR-dataL;
+    var chartDeltaText=d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
+    var n=pts.length||1, gridR=G.plotR, dataL=G.plotL+0.18, dataR=gridR-0.18;
+    var plotW=dataR-dataL;
     var step=n>1?plotW/(n-1):0, cx=function(i){return n>1?dataL+step*i:dataL+plotW/2;};
     var maxV=Math.max(ln.prevSum||0,1);
     pts.forEach(function(p){ maxV=Math.max(maxV,p.main||0); });
-    var ny=ycNice_(maxV,G.ticks), sy=function(v){ return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop); };
+    var ny=ycNice_(maxV,G.ticks);
+    if(extraHeadroom) ny=ycNice_(ny.max+1,G.ticks);
+    var sy=function(v){ return G.plotBot-(v/ny.max)*(G.plotBot-G.plotTop); };
     /* 노즐 누수 발생 추이는 마지막 보고 주·월만 연한 민트 영역으로 구분한다.
        마지막 데이터 점이 있는 구간의 절반 폭부터 우측 여백까지를 하나의 보고 기간으로 본다. */
-    var currentPeriodLabel=tr.kind==='month'?'당월':'이번 주', currentBandX=null, currentBandW=0;
+    var currentPeriodLabel=tr.kind==='month'?'당월':'이번 주';
     if(isNozzleLeak && n){
-      currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18));
-      currentBandW=gridR-currentBandX;
-      rect({x:currentBandX, y:G.plotTop, w:currentBandW, h:G.labelY+G.labelH-G.plotTop,
+      var currentBandX=Math.max(G.plotL,cx(n-1)-(n>1?step/2:0.18));
+      rect({x:currentBandX, y:G.plotTop, w:gridR-currentBandX, h:G.labelY+G.labelH-G.plotTop,
             fill:C.mintBg, trendCurrentPeriodBand:true});
     }
+    var gridY=[];
     for(var gi=0;gi<=G.ticks;gi++){
       var gv=ny.step*gi, gy=sy(gv);
+      gridY.push(gy);
       line({x:G.plotL, y:gy, w:gridR-G.plotL, color:C.line, width:gi?0.5:0.75});
       text({x:G.plotL-G.axisW-0.04, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
             t:exNum(gv), size:FT.legend, color:C.mut, align:'right'});
@@ -4642,6 +4709,7 @@ function buildExecutivePptDeck(snap){
       seg({x1:cx(si-1), y1:sy(pts[si-1].main||0), x2:cx(si), y2:sy(pts[si].main||0),
            color:C.navy, width:1.6, trendSeries:'main', trendSegment:true, trendIdx:si});
     }
+    var trendLabels=[];
     for(var pi=0;pi<n;pi++){
       var py=sy(pts[pi].main||0), last=pi===n-1;
       if(last) dot({cx:cx(pi),cy:py,r:0.085,fill:C.mintRing,trendCurrentHalo:true});
@@ -4650,34 +4718,38 @@ function buildExecutivePptDeck(snap){
       var pointLabelW=n>10?Math.min(0.32,Math.max(0.26,step)):Math.min(0.52,Math.max(0.44,step)), pointLabelX=Math.max(G.plotL+0.02,
         Math.min(cx(pi)-pointLabelW/2,gridR-pointLabelW-0.02));
       var trendManualPlacement=exTrendLabelPlacement_(tr.kind,pts[pi].label,'main');
-      var trendLabelY=trendManualPlacement==='bottom'
-        ? Math.min(G.plotBot-G.valueH,py+0.045)
-        : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
-      text({x:pointLabelX, y:trendLabelY,
+      var valueItem=text({x:pointLabelX, y:py,
             w:pointLabelW, h:G.valueH, t:exNum(pts[pi].main||0), size:n>10?6.6:7.2,
             bold:last, color:last?stateColor:C.navy, align:'center', trendPointValue:true, trendIdx:pi,
             graphPointValue:true, graphLabelChart:'trend',
             graphLabelEditKey:exTrendLabelEditKey_(pts[pi].label,'main'),
             graphLabelPlacement:trendManualPlacement||'auto', graphLabelPeriod:pts[pi].label,
             graphLabelSeries:'main', graphLabelKind:tr.kind});
+      var below=trendManualPlacement?trendManualPlacement==='bottom':pts[pi].main<ln.prevSum;
+      trendLabels.push({item:valueItem,px:cx(pi),py:py,radius:last?0.085:0.036,clearance:0.042,
+        manual:!!trendManualPlacement,fixedSide:true,side:below?1:-1});
       /* 16주도 시작일(월/일)만 써서 각 주차를 빠짐없이 읽는다. */
       var pointAxisLabel=pts[pi].label||'';
       text({x:pointLabelX, y:G.labelY,
             w:pointLabelW, h:G.labelH, t:pointAxisLabel, size:n>10?5.2:6.2,
             bold:last, color:last?C.navy:C.mut, align:'center', trendPointLabel:true, trendIdx:pi});
     }
-    if(currentBandX!=null){
-      text({x:gridR-0.60, y:G.avgY, w:0.60, h:G.valueH,
-            t:currentPeriodLabel, size:6.0, bold:true, color:C.green, align:'center', trendCurrentPeriodLabel:true});
-    }
-    var deltaY=G.avgY, deltaX=currentBandX!=null ? gridR-0.68-G.deltaW : gridR-G.deltaW;
-    var chartDeltaText=d===0?'± 0건':(d>0?'▲ ':'▼ ')+exTrendCountText_(Math.abs(d))+' '+(d>0?'증가':'감소');
-    var chartDeltaSize=exFitSize_(chartDeltaText,G.deltaW,[7.2,6.8,6.4,6]);
-    text({x:deltaX, y:deltaY, w:G.deltaW, h:G.valueH,
-          t:exFitTxt_(chartDeltaText,G.deltaW,chartDeltaSize),
-          size:chartDeltaSize, bold:true, color:stateColor, align:'right', trendDeltaLabel:true});
-
-  })();
+    var periodPrefix=currentPeriodLabel+' · ';
+    var deltaLabel=text({x:0,y:0,w:exTxtW_(periodPrefix,6.8)+exTxtW_(chartDeltaText,6.8)+0.10,
+          h:G.valueH,align:'center',size:6.8,bold:true,
+          t:periodPrefix+chartDeltaText,trendDeltaLabel:true,trendCurrentPeriodLabel:currentPeriodLabel,
+          runs:[{text:periodPrefix,color:C.navy},{text:chartDeltaText,color:stateColor}]});
+    return placeGraphValues(trendLabels,items.filter(function(o){return o.trendPoint||o.trendCurrentHalo;}),
+      items.filter(function(o){return o.trendSegment;}),
+      {left:G.plotL,right:gridR,top:G.headY+G.headH+0.02,bottom:G.labelY-0.02},avgY,
+      {item:deltaLabel,px:cx(n-1),py:sy(ln.sum),top:G.plotTop,bottom:G.plotBot,grid:gridY});
+  }
+  var trendStart=items.length;
+  if(!renderTrend(false)){
+    /* 선이 빽빽할 때도 주차 간격을 유지하고, 위쪽 눈금을 늘려 문구 공간을 확보한다. */
+    items.length=trendStart;
+    renderTrend(true);
+  }
 
   /* ── ④ VOC 유형 변화 (증가 TOP3 · 감소 TOP3) ── */
   (function(){
@@ -4808,9 +4880,8 @@ function buildExecutivePptDeck(snap){
       text({x:G.plotL-G.axisW-0.03, y:gy-G.axisH/2, w:G.axisW, h:G.axisH,
             t:exNum(gv), size:6.6, color:C.mut, align:'right'});
     }
-    /* 0건 라벨은 축선과 겹치므로 생략하고, 점만 남겨 값이 없음을 분명히 한다.
-       두 계열 수치가 겹치는 경우에는 미리보기에서 사용자가 위·아래를 직접 선택한다.
-       선택 좌표는 이 표시 목록에도 그대로 쓰므로 PPT 생성 결과와 항상 일치한다. */
+    /* 0건은 점으로 표시한다. 두 계열을 모두 그린 뒤 수치의 위치를 결정한다. */
+    var actionLabels=[];
     var actionCX=function(key,i){ return cx(i)+(key==='clean'?-0.025:0.025); };
     ['clean','replacement'].forEach(function(key){
       var color=key==='clean'?C.green:C.navy;
@@ -4825,17 +4896,7 @@ function buildExecutivePptDeck(snap){
         dot({cx:px, cy:py, r:last?0.043:0.034, fill:color, actionPoint:key, actionIdx:j, actionCurrent:last});
         if(!val) continue;
         var manualPlacement=exActionLabelPlacement_(ac.kind,pts[j].label,key);
-        var below=(key==='replacement') && py+G.valueH+0.055<=G.plotBot-0.01;
-        if(manualPlacement==='top') below=false;
-        else if(manualPlacement==='bottom') below=true;
-        var ly=below
-          ? Math.min(G.plotBot-G.valueH,py+0.045)
-          : Math.max(G.plotTop,py-G.valueH-G.valueDY-0.02);
-        /* 기본 상태에서는 동률일 때만 아주 조금 나눠 읽기 쉽게 한다.
-           수동으로 위치를 고른 숫자는 사용자의 선택을 우선한다. */
-        if(!manualPlacement && !below && val===other) px+=key==='clean'?-0.055:0.055;
-        var labelX=Math.max(G.plotL,Math.min(px-lw/2,G.plotR-lw));
-        text({x:labelX, y:ly, w:lw, h:G.valueH,
+        var valueItem=text({x:px, y:py, w:lw, h:G.valueH,
               t:exNum(val), size:n>10?6.2:6.8, bold:true, color:color, align:'center',
               actionPointValue:key, actionIdx:j,
               graphPointValue:true, graphLabelChart:'action',
@@ -4845,15 +4906,21 @@ function buildExecutivePptDeck(snap){
               actionLabelEditKey:exActionLabelEditKey_(pts[j].label,key),
               actionLabelPlacement:manualPlacement||'auto', actionLabelPeriod:pts[j].label,
               actionLabelKind:ac.kind});
+        var below=manualPlacement?manualPlacement==='bottom':val<other||(val===other&&key==='replacement');
+        actionLabels.push({item:valueItem,px:px,py:py,radius:last?0.066:0.034,
+          manual:!!manualPlacement,side:below?1:-1});
       }
     });
+    placeGraphValues(actionLabels,items.filter(function(o){return o.actionPoint||o.actionCurrentHalo;}),
+      items.filter(function(o){return o.actionSegment;}),
+      {left:G.plotL,right:G.plotR,top:G.subY+G.valueH+0.02,bottom:G.labelY-0.02});
     pts.forEach(function(p,i){
       var lw=n>10?Math.min(0.32,Math.max(0.25,step)):0.44;
       text({x:Math.max(G.plotL,cx(i)-lw/2), y:G.labelY, w:lw, h:G.labelH,
             t:p.label||'', size:n>10?4.8:5.8, bold:!!p.sel, color:p.sel?C.navy:C.mut,
             align:'center', actionPointLabel:true, actionIdx:i});
     });
-    text({x:G.plotR-0.60, y:G.subY, w:0.60, h:G.valueH,
+    text({x:cx(n-1)-0.30, y:G.subY, w:0.60, h:G.valueH,
           t:currentPeriodLabel, size:5.8, bold:true, color:C.green, align:'center', actionCurrentPeriodLabel:true});
     /* 좌측 요약 패널의 하단에 단가 산정 근거를 고정한다. */
     text({x:T.x+0.12, y:SV.basisTitleY, w:T.leftW-0.24, h:SV.basisTitleH,
@@ -5032,8 +5099,7 @@ function exPptRenderHtml_(items){
         var selected=EX_ACTION_LABEL_SELECTED[o.graphLabelKind||o.actionLabelKind]||[];
         if(!Array.isArray(selected)) selected=[selected];
         if(selected.some(function(s){ return s&&s.key===(o.graphLabelEditKey||o.actionLabelEditKey); })){
-          te.style.outline='2px solid #1E355F'; te.style.borderRadius='3px';
-          te.style.background='#EEF5FF';
+          te.classList.add('is-selected');
         }
       }
     }else if(o.k==='logo'){
@@ -5195,12 +5261,13 @@ function exRefreshVocDescEditor_(type){
   if(!p){ rowsEl.innerHTML='<div class="voc-desc-empty">보고 기간을 먼저 선택하세요.</div>'; return; }
   var overrides=EX_VOC_DESC_OVERRIDES[type]||{};
   var snap=buildExecutiveReportSnapshot({type:type, from:p.from, to:p.to, vocDescriptions:overrides});
-  if(!snap.vocTop.rows.length){
-    rowsEl.innerHTML='<div class="voc-desc-empty">해당 기간의 VOC 유형이 없습니다.</div>';
+  var visibleRows=snap.change.hasPrev?snap.change.up.concat(snap.change.down):[];
+  if(!visibleRows.length){
+    rowsEl.innerHTML='<div class="voc-desc-empty">해당 기간에 표시할 VOC 증감 유형이 없습니다.</div>';
     box.open=false; return;
   }
   var missing=false;
-  rowsEl.innerHTML=snap.vocTop.rows.map(function(r){
+  rowsEl.innerHTML=visibleRows.map(function(r){
     var k=exVocDescKey_(r.k), v=Object.prototype.hasOwnProperty.call(overrides,k)
       ? String(overrides[k]||'') : (EX_VOC_DESC[k]||'');
     if(!v.trim()) missing=true;
@@ -5334,7 +5401,7 @@ function exUpdateActionLabelTools_(type){
   });
   if(hint) hint.textContent=selected.length
     ? (selected.length===1
-      ? selected[0].period+' · '+(selected[0].chart==='trend'?'노즐 누수 발생':'수리 조치')+' 숫자 위치'
+      ? selected[0].period+' · '+(selected[0].chart==='trend'?'발생 추이':'수리 조치')+' 숫자 위치'
       : selected.length+'개 숫자 선택됨 · 위 또는 아래를 한 번에 적용')
     : '발생·조치 추이 그래프의 숫자를 여러 개 선택한 뒤 위치를 정하세요.';
   Array.prototype.forEach.call(tools.querySelectorAll('[data-action-label-pos]'),function(b){
@@ -5354,6 +5421,7 @@ function exSelectActionLabel_(type, target){
   else selected.push({key:key, chart:target.getAttribute('data-graph-label-chart')||'action',
     period:target.getAttribute('data-graph-label-period')||'',
     series:target.getAttribute('data-graph-label-series')||''});
+  target.classList.toggle('is-selected',at<0);
   exUpdateActionLabelTools_(type);
 }
 function exSetActionLabelPlacement_(type, placement){
@@ -10563,6 +10631,6 @@ loadData(false);
 </script>
 <script src="js/vendor/jszip-3.10.1.min.js"></script>
 <script src="js/baz-report-files.js?v=1"></script>
-<script src="js/baz-weekly-report.js?v=368"></script>
+<script src="js/baz-weekly-report.js?v=369"></script>
 </body>
 </html>
