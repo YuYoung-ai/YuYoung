@@ -22,9 +22,12 @@ const data=[
  {date:'2026-10-28',hosp:'예시 C병원',gubun:'A/S',type:'핸드피스 작동 불량',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'X'},
  {date:'2026-10-28',hosp:'예시 A병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
  {date:'2026-10-29',hosp:'예시 B병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
- {date:'2026-10-29',hosp:'예시 D병원',gubun:'점검',type:'냉각수 부족'},
+ {date:'2026-10-29',hosp:'예시 D병원',gubun:'A/S',type:'이상 없음'},
+ {date:'2026-10-30',hosp:'예시 E병원',gubun:'A/S',type:''},
+ {date:'2026-10-29',hosp:'예시 D병원',gubun:'점검',type:'냉각수 부족',cost:'20,000'},
  {date:'2026-10-30',hosp:'예시 D병원',gubun:'점검',type:'이상 없음'},
- {date:'2026-10-30',hosp:'예시 E병원',gubun:'점검',type:'무증상'},
+ {date:'2026-10-30',hosp:'예시 E병원',gubun:'점검',type:'무증상',cost:'10,000'},
+ {date:'2026-10-30',hosp:'예시 D병원',gubun:'점검',type:'점검이상무',cost:'5,000'},
  {date:'2026-07-13',hosp:'예시 A병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'}
 ];
 const phrases={};const errors=[];const browser=await chromium.launch({channel:process.env.PLAYWRIGHT_CHANNEL||undefined,headless:true});
@@ -45,6 +48,7 @@ try{
   const card=layout.voc;
   const vocTexts=items.filter(o=>o.k==='text'&&o.x>=card.x&&o.y>=card.y&&o.y<card.y+card.h);
   return {voc:s.weeklyVoc,cards:items.filter(o=>o.weeklyCard),vocTexts,
+   inspection:s.kpi.find(k=>k.key==='insp'),inspectionLines:items.filter(o=>o.inspectionDetail).map(o=>o.t),
    counts:items.filter(o=>o.weeklyManagementCount).map(o=>o.t),
    captions:items.filter(o=>o.manualFileCaption).map(o=>o.t),
    dividers:items.filter(o=>o.weeklyVocDivider).length,
@@ -57,10 +61,16 @@ try{
  assert.equal(state.applied,false);assert.equal(state.cumulative,false);assert.deepEqual(state.saving,['₩562,400']);
  assert.equal(state.voc.length,5);assert.equal(state.voc[0].name,'노즐 누수(약액 유입)');
  assert.equal(state.voc.at(-1).name,'무증상');assert.match(state.voc.at(-1).desc,/정상 동작/);
+ assert.equal(state.voc[0].metric,'2건 · 28.6%');assert.equal(state.voc.at(-1).metric,'1건 · 14.3%');
+ assert(!state.voc.some(r=>r.name==='냉각수 부족'));
+ assert.equal(state.inspection.value,'4');
+ assert.equal(state.inspection.detail,'무증상 3건 (유상 판매 2건 · 15,000원), 냉각수 부족 1건 (유상 판매 20,000원)');
+ assert.equal(state.inspectionLines.join('').replaceAll(' ',''),state.inspection.detail.replaceAll(' ',''));
+ assert(state.inspectionLines.some(line=>line.includes('15,000원')));
  assert.equal(state.dividers,5);assert.equal(state.hasNotes,false);
  assert.deepEqual(state.counts,['2곳','1곳']);assert.deepEqual(state.captions,['사용자 교육 현황','노즐 재사용 현황']);
  const [vocCard,managementCard]=state.cards;
- assert.deepEqual(state.cards.map(o=>o.weeklyCard),['VOC / 점검 유형','교육·재사용 병원 현황']);
+ assert.deepEqual(state.cards.map(o=>o.weeklyCard),['VOC 유형','교육·재사용 병원 현황']);
  assert(vocCard.h>state.previousVocHeight&&vocCard.y+vocCard.h<managementCard.y);
  assert.equal(managementCard.y+managementCard.h,state.bodyBottom);
  const managementGrid=await page.evaluate(()=>{
@@ -73,7 +83,8 @@ try{
  });
  assert.equal(managementGrid[0].length,3);
  assert.deepEqual(managementGrid[0],managementGrid[1]);
- assert(state.vocTexts.slice(1).every(o=>o.weeklyVoc!=null||o.weeklyDescription!=null),'VOC card shows only names and descriptions');
+ assert.deepEqual(state.vocTexts.filter(o=>o.weeklyVocMetric!=null).map(o=>o.t),state.voc.map(r=>r.metric));
+ assert.deepEqual(await page.locator('#wkVocDescRows .wr-voc-metric').allTextContents(),state.voc.map(r=>r.metric));
  const firstName=state.vocTexts.find(o=>o.weeklyVoc===0);
  const firstDescription=state.vocTexts.find(o=>o.weeklyDescription===0);
  assert(Math.abs(firstName.y-state.firstRowY-.04)<.0001,'symptom is lowered by the approved amount');
@@ -122,7 +133,7 @@ try{
  });
  const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
  const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');
- assert.match(slide,/VOC \/ 점검 유형/);assert.match(slide,/교육·재사용 병원 현황/);
+ assert.match(slide,/>VOC 유형</);assert.match(slide,/2건 · 28.6%/);assert.match(slide,/유상 판매/);assert.match(slide,/교육·재사용 병원 현황/);
  assert.doesNotMatch(slide,/특이사항|VOC 증가 현황|A\/S 처리 내역서/);
  assert.equal((slide.match(/<p:oleObj /g)||[]).length,0);
  assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);

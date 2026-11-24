@@ -1,5 +1,7 @@
 .wr-voc,.wr-management{padding:14px;margin:10px 0;border:1px solid var(--gray-line);border-radius:9px;background:var(--surface)}
 .wr-symptom{display:block;font-size:14px;color:var(--navy)}
+.wr-voc-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.wr-voc-metric{flex:none;font-size:13px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums}
 .wr-status{display:inline-block;margin:8px 0 4px;padding:3px 8px;border-radius:12px;color:var(--green);background:#e8f5ee;font-size:11px}.wr-status.missing{color:#986000;background:#fff3d9}
 .wr-label{display:block;font-size:12px;color:var(--text-muted);margin:8px 0}.wr-desc{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:9px 11px;border:1px solid var(--gray-line);border-radius:7px;background:var(--surface);color:var(--text);font:inherit;resize:vertical;min-height:58px}
 .wr-button{font:inherit;font-size:12px;color:var(--navy);background:var(--surface);border:1px solid var(--gray-line);border-radius:6px;padding:6px 10px;cursor:pointer;margin:3px 5px 3px 0}.wr-button:disabled{opacity:.5;cursor:wait}.wr-hint{display:block;color:var(--text-muted);font-size:11px;margin:5px 0}

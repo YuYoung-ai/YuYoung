@@ -3,10 +3,10 @@
  'use strict';
  var drafts=Object.create(null),phrases=Object.create(null),loading=null;
  var NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main',templates={};
- var VOC_TITLE='VOC / 점검 유형',MANAGEMENT_TITLE='교육·재사용 병원 현황',VOC_LIMIT=5;
+ var VOC_TITLE='VOC 유형',MANAGEMENT_TITLE='교육·재사용 병원 현황',VOC_LIMIT=5;
  var WEEKLY_DESCRIPTIONS={
   '냉각수부족':'냉각수 부족에 의한 냉각 순환 장애 및 에러 발생',
-  '무증상':'A/S·점검 방문에서 정상 동작 상태를 확인함'
+  '무증상':'A/S 방문에서 정상 동작 상태를 확인함'
  };
  function key(s){return root.exVocDescKey_(s);}
  function period(){return root.exReportPeriodFromSel_('week');}
@@ -26,24 +26,51 @@
   try{var response=await fetch(root.HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}),r=await response.json();if(!r.success)throw new Error(r.error||'기본 문구 저장 실패');phrases[k]=r.item;currentDraft[k]=text;badge.textContent='등록 문구 자동 입력';badge.className='wr-status';tell('기본 문구를 저장했습니다. 같은 증상에 자동 입력됩니다.');}
   catch(e){tell(e);}finally{b.disabled=false;}
  }
+ function noSymptom(type){return key(type)==='무증상'||root.isOK(type);}
  function vocTypes(rows,d){
-  var service=rows.filter(function(r){var g=String(r.gubun||'').trim();return g==='A/S'||g==='점검';});
-  var noSymptoms=service.some(function(r){return key(r.type)==='무증상'||root.isOK(r.type);});
-  var names=root.exVocTypeCompare_(service,null).filter(function(t){return key(t.k)!=='무증상';})
+  var service=rows.filter(function(r){return r.gubun==='A/S';});
+  var normalCount=service.filter(function(r){return noSymptom(r.type);}).length;
+  var types=root.exVocTypeCompare_(service,null).filter(function(t){return !noSymptom(t.k);})
    .sort(function(a,b){return b.cur-a.cur||root.skCmpKo_(a.k,b.k);})
-   .slice(0,VOC_LIMIT-Number(noSymptoms)).map(function(t){return t.k;});
-  if(noSymptoms)names.push('무증상');
-  return names.map(function(name){return {name:name,desc:desc(key(name),d)};});
+   .slice(0,VOC_LIMIT-Number(normalCount>0));
+  if(normalCount)types.push({k:'무증상',cur:normalCount});
+  return types.map(function(t){
+   var percent=Math.round(t.cur*1000/service.length)/10;
+   return {name:t.k,desc:desc(key(t.k),d),metric:root.exNum(t.cur)+'건 · '+percent+'%'};
+  });
+ }
+ function inspectionSummary(rows){
+  var groups=new Map();
+  rows.forEach(function(r){
+   if(String(r.gubun||'').trim()!=='점검')return;
+   var name=noSymptom(r.type)?'무증상':String(r.type||'').trim()||'증상 미입력';
+   var group=groups.get(name)||{name:name,count:0,paid:0,amount:0};
+   group.count++;
+   if(r._cost>0){group.paid++;group.amount+=r._cost;}
+   groups.set(name,group);
+  });
+  return Array.from(groups.values()).sort(function(a,b){
+   return b.count-a.count||root.skCmpKo_(a.name,b.name);
+  }).map(function(g){
+   var label=g.name+' '+root.exNum(g.count)+'건';
+   if(g.paid){
+    var subset=g.paid<g.count?root.exNum(g.paid)+'건 · ':'';
+    label+=' (유상 판매 '+subset+root.exNum(g.amount)+'원)';
+   }
+   return label;
+  }).join(', ');
  }
  function refreshVoc(){
   var p=period(),host=document.getElementById('wkVocDescRows');if(!host||!p)return;
   var d=draft(p),rows=root.buildExecutiveReportSnapshot({type:'week',from:p.from,to:p.to}).weeklyVoc;
   host.replaceChildren();
-  if(!rows.length)host.append(el('p','voc-desc-empty','선택한 주차에 표시할 VOC / 점검 유형이 없습니다.'));
+  if(!rows.length)host.append(el('p','voc-desc-empty','선택한 주차에 표시할 VOC 유형이 없습니다.'));
   rows.forEach(function(r){
    var k=key(r.name),box=el('section','wr-voc'),registered=!!defaultDesc(k);
    var badge=el('span',registered?'wr-status':'wr-status missing',registered?'등록 문구 자동 입력':'미등록 증상');
-   box.append(el('strong','wr-symptom',r.name),badge);
+   var heading=el('div','wr-voc-heading');
+   heading.append(el('strong','wr-symptom',r.name),el('span','wr-voc-metric',r.metric));
+   box.append(heading,badge);
    var label=el('label','wr-label','보조문구'),input=el('textarea','wr-desc');input.rows=2;input.maxLength=90;input.value=r.desc;input.placeholder='증상에 대한 기본 설명을 작성하세요';input.setAttribute('aria-label',r.name+' 보조문구');input.oninput=function(){d[k]=input.value;};label.append(input);box.append(label);
    var save=button('기본 문구로 저장',function(){savePhrase(r.name,input,badge,save);});
    box.append(save,el('small','wr-hint','저장한 문구는 다음 보고서의 같은 증상에 자동 입력됩니다.'));host.append(box);
@@ -60,6 +87,7 @@
  function augment(s){
   var rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59'));
   s.weeklyVoc=vocTypes(rows,draft(s));
+  s.kpi.find(function(k){return k.key==='insp';}).detail=inspectionSummary(rows);
   s.management=management(rows);
   return s;
  }
@@ -94,7 +122,9 @@
   if(!s.weeklyVoc.length)text(x,T.y+T.top,w,.25,'선택한 주차에 표시할 유형이 없습니다.',9,C.mut);
   s.weeklyVoc.forEach(function(r,i){
    var y=T.y+T.top+i*T.pitch;
-   text(x,y+.04,w,.20,root.exFitTxt_(r.name,w,9.5),9.5,C.navy,true,{weeklyVoc:i});
+   var metricW=root.exTxtW_(r.metric,9)+.12,nameW=w-metricW-.10;
+   text(x,y+.04,nameW,.20,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{weeklyVoc:i});
+   text(x+w-metricW,y+.04,metricW,.20,r.metric,9,C.navy,true,{align:'right',weeklyVocMetric:i});
    var size=8,lines=wrap(r.desc,w,size);
    if(lines.length>2){
     size=7;

@@ -1535,7 +1535,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
 }
 </style>
 <script src="auth.js?v=251"></script>
-<link rel="stylesheet" href="css/baz-weekly-report.css?v=367">
+<link rel="stylesheet" href="css/baz-weekly-report.css?v=387">
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
 </head>
@@ -1607,11 +1607,11 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="wkVocSel" onchange="exOnReportVocChange_('week')"></select>
-      <div class="mhint">선택한 대상의 최근 16주 추이를 표시합니다. VOC / 점검 유형과 병원 현황은 전체 서비스 기준으로 집계합니다.</div>
+      <div class="mhint">선택한 대상의 최근 16주 추이를 표시합니다. 병원 현황은 전체 서비스 기준으로 집계합니다.</div>
     </div>
     <details class="voc-desc-editor" id="wkVocDescBox">
-      <summary>VOC / 점검 유형 · 보조문구</summary>
-      <div class="voc-desc-help">선택한 주차의 유형을 최대 5개 표시합니다. 등록된 보조문구는 자동 입력되며 이번 보고서에서 수정할 수 있습니다.</div>
+      <summary>VOC 유형 · 보조문구</summary>
+      <div class="voc-desc-help">선택한 주차의 A/S(VOC) 유형을 최대 5개 표시합니다. 비중은 해당 주차 전체 A/S(VOC) 건수 기준입니다. 등록된 보조문구는 이번 보고서에서 수정할 수 있습니다.</div>
       <div class="voc-desc-rows" id="wkVocDescRows"></div>
     </details>
     <section class="wr-management" aria-labelledby="wkManagementTitle">
@@ -4335,6 +4335,20 @@ function exWrapRuns_(runs, maxW, size){
   else if(endedWithNewline) lines.push([{text:'', bold:false, color:null}]);
   return lines.length?lines:[[{text:'', bold:false, color:null}]];
 }
+/* 점검 보조문구는 금액과 단위를 한 단어로 유지해 줄을 바꾼다. */
+function exKpiDetailLines_(detail,width,size){
+  var lines=[],line='';
+  detail.split(/\s+/).forEach(function(word){
+    var next=line?line+' '+word:word;
+    if(exTxtW_(next,size)<=width){line=next;return;}
+    if(line)lines.push(line);
+    var parts=exWrapRuns_([{text:word}],width,size);
+    line=parts.pop()[0].text;
+    parts.forEach(function(part){lines.push(part[0].text);});
+  });
+  if(line)lines.push(line);
+  return lines;
+}
 function exUnesc_(s){
   return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"')
                   .replace(/&#39;/g,"'").replace(/&amp;/g,'&');
@@ -4522,12 +4536,30 @@ function buildExecutivePptDeck(snap){
             t:kp.badge, size:FT.kpiBadge, color:C.navy, align:'center'});
     }
     var vs=exFitPair_(kp.value, kp.unit, iw, [FT.kpiValue,16,15,14,13,12,11]);
-    text({x:x+K.pad, y:K.y+K.valDY, w:iw, h:K.valH,
+    var sub=kp.delta?kp.delta.text:(kp.sub||'');
+    var valueW=iw;
+    if(kp.detail){
+      var leftW=Math.max(exTxtW_(kp.value,vs)+exTxtW_(' '+kp.unit,vs*.55),
+                         exTxtW_(lab,FT.kpiLabel),exTxtW_(sub,FT.kpiSub))+.12;
+      valueW=Math.min(leftW,iw*.48);
+      var detailW=iw-valueW-.08, detailH=K.h-.12, size=8.5, lines;
+      do {
+        lines=exKpiDetailLines_(kp.detail,detailW-.04,size);
+        if(lines.length*size/72*1.25<=detailH || size<=1)break;
+        size-=.5;
+      } while(true);
+      var lineH=size/72*1.25, blockH=lines.length*lineH;
+      var top=Math.max(.06,Math.min(K.valDY+(K.valH-blockH)/2,K.h-.06-blockH));
+      lines.forEach(function(line,j){
+        text({x:x+K.pad+valueW+.08,y:K.y+top+j*lineH,w:detailW,h:lineH,
+              t:line,size:size,color:C.mut,inspectionDetail:true});
+      });
+    }
+    text({x:x+K.pad, y:K.y+K.valDY, w:valueW, h:K.valH,
           runs:[{text:kp.value, size:vs, bold:true, color:C.navy},
                 {text:kp.unit?(' '+kp.unit):'', size:Math.max(8,Math.round(vs*0.55)), color:C.navy}]});
-    var sub=kp.delta?kp.delta.text:(kp.sub||'');
-    text({x:x+K.pad, y:K.y+K.subDY, w:iw, h:K.subH,
-          t:exFitTxt_(sub, iw, FT.kpiSub), size:FT.kpiSub,
+    text({x:x+K.pad, y:K.y+K.subDY, w:valueW, h:K.subH,
+          t:exFitTxt_(sub, valueW, FT.kpiSub), size:FT.kpiSub,
           color:kp.delta?tone(kp.delta.tone):C.mut});
   });
 
@@ -10631,6 +10663,6 @@ loadData(false);
 </script>
 <script src="js/vendor/jszip-3.10.1.min.js"></script>
 <script src="js/baz-report-files.js?v=1"></script>
-<script src="js/baz-weekly-report.js?v=369"></script>
+<script src="js/baz-weekly-report.js?v=387"></script>
 </body>
 </html>
