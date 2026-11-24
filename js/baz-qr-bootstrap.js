@@ -10,14 +10,16 @@
    root.BazQrRuntime={environment:'pilot',api:api,file:api,fileAction:'qr_file',pushMode:config.pushMode};
   }
   if(document.getElementById('work-management-tabs')){
+   document.body.classList.add('qr-enhanced');
    function script(path){return new Promise(function(resolve,reject){var el=document.createElement('script');el.src='js/'+path+'.js?v='+(path==='baz-qr-workflow'?'350':'313');el.onload=resolve;el.onerror=function(){reject(Error('관리 화면을 불러오지 못했습니다. 새로고침하세요.'));};document.body.append(el);});}
-   await script('baz-work-tabs');
    await Promise.all([script('baz-work-reservations'),script('baz-qr-workflow')]);
   }
   return root.BazQrRuntime;
  })();
  root.BazQrReady.then(function(runtime){
-  if(!runtime&&new URLSearchParams(location.search).get('view')&&document.getElementById('work-management-tabs'))show('QR 접수·예약 관리가 아직 활성화되지 않았습니다. 관리자에게 운영 설정을 요청하세요.');
+  var params=new URLSearchParams(location.search);
+  var view=params.get('view')||(params.get('qr')?'customers':'');
+  if(!runtime&&['customers','reservations'].includes(view)&&document.getElementById('work-management-tabs'))show('QR 접수·예약 관리가 아직 활성화되지 않았습니다. 관리자에게 운영 설정을 요청하세요.');
  }).catch(function(e){show(e.message);});
  function show(message){var el=document.createElement('p');el.className='notice';el.setAttribute('role','alert');el.textContent=message;document.querySelector('main')?.prepend(el);}
 })(window);

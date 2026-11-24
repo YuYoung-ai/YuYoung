@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import fields from '../js/baz-work-fields.js';
 
 // Exercise the production save queue with a fake transport; never touch live requests.
 const source=fs.readFileSync(new URL('../js/baz-work-manager.js',import.meta.url),'utf8');
@@ -10,13 +11,13 @@ function productionFunction(name){
   const rest=source.slice(start+1),next=rest.search(/^  (?:async )?function /m);
   return source.slice(start,next<0?source.length:start+1+next);
 }
-const functions=['normalizeTime','captureInline','updateInlineBulkControls','inlineFailure','saveInlineDraft','saveAllInline','write','sendPending'].map(productionFunction).join('\n');
+const functions=['requestView','normalizeTime','captureInline','inlineDraftIds','updateInlineBulkControls','inlineFailure','saveInlineDraft','saveAllInline','write','sendPending'].map(productionFunction).join('\n');
 function fixture(){
-  const context=vm.createContext({setTimeout,clearTimeout});
+  const context=vm.createContext({setTimeout,clearTimeout,fields});
   vm.runInContext(`
     var elements=new Map(),saved=new Map(),calls=[],messages=[],responses=[],operation=0,renders=0;
     var busy=false,pending=null,syncing=false,bulkWorking=false,referenceRefreshing=false,inlineBulkWorking=false,inlineBulkMessage='';
-    var editMode=true,activeField=null,inlineDrafts={},pendingKey='pending',account='fixture',lifecyclePlan=null;
+    var editMode=true,activeField=null,inlineDrafts={},pendingKey='pending',account='fixture',lifecyclePlan=null,equipmentView='service';
     var state={loaded:true,filter:'all',requests:[],hospitals:[{key:'h',name:'샘플병원'}],detail:null};
     var detailCache=new Map(),detailLoading=false,detailError='',embedded=false,commentEdit=null;
     var $=id=>{if(!elements.has(id))elements.set(id,{hidden:false,disabled:false,textContent:'',attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelectorAll(){return [];}});return elements.get(id);};
@@ -54,6 +55,16 @@ function fixture(){
   assert.equal(f.run('Object.keys(inlineDrafts).length'),0);
   assert.equal(f.run("$('inline-save-all').disabled"),true);
   assert.equal(f.context.inlineBulkMessage,'3건 저장 완료');
+}
+// Bulk saves apply only to the active tab, leaving the other tab's drafts intact.
+{
+  const f=fixture();f.run("add('clinic');add('demo');state.requests[1].hospitalName='본사 데모장비';equipmentView='demo';");
+  await f.run('saveAllInline()');
+  assert.deepEqual(Array.from(f.context.calls,call=>call.payload.id),['demo']);
+  assert.equal(f.run('Object.keys(inlineDrafts).join()'),'clinic');
+  f.run("equipmentView='service';");
+  await f.run('saveAllInline()');
+  assert.deepEqual(Array.from(f.context.calls,call=>call.payload.id),['demo','clinic']);
 }
 // Validation errors and revision conflicts retain drafts; other valid rows still save.
 {

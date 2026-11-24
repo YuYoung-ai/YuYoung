@@ -3,6 +3,7 @@
   function serials(v){return Array.from(new Set(String(v||'').normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean)));}
   function serialMatch(a,b){return serials(a).some(function(sn){return serials(b).includes(sn);});}
   function kind(v){var s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;}
+  function isDemoHospital(name){return String(name||'').normalize('NFKC').includes('데모');}
   // Build once per DB snapshot; preserve ambiguous-match handling.
   function hospitalLookup(hospitals){
     var keys=new Map(),names=new Map(),serial=new Map();
@@ -89,6 +90,6 @@
     if(view==='changed')return r.handoverReviewCount>0;
     return true;
   }
-  var api={hospitalLookup:hospitalLookup,hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,workspace:workspace,serials:serials,serialMatch:serialMatch,kind:kind};
+  var api={hospitalLookup:hospitalLookup,hospital:hospital,terms:terms,range:range,matches:matches,query:query,counts:counts,workspace:workspace,serials:serials,serialMatch:serialMatch,kind:kind,isDemoHospital:isDemoHospital};
   if(typeof module==='object'&&module.exports)module.exports=api;else root.BazWorkFields=api;
 })(typeof window==='object'?window:globalThis);
