@@ -60,6 +60,7 @@ const page = await ctx.newPage();
 page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
 page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|ERR_ABORTED|ERR_CONNECTION/.test(m.text())) errs.push('CONSOLE: ' + m.text()); });
 await page.route('**yuyoung-ai.deno.net/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, valid: true, level: 3, name: '테스트' }) }));
+await page.route('**yuyoung-production.coaptation.workers.dev/**', r => r.fulfill({json:{ok:true,valid:true,level:3,name:'테스트'}}));
 await page.route('**://script.google.com/**', r => {
   let body = { success: true };
   if (r.request().url().includes('action=all')) body = { success: true, data: DATA, updated: '2026-08-10 09:00' };
@@ -99,18 +100,17 @@ const focus = await pvText();
 ck('4. 노즐 누수 선택 시 간결한 추이 카드 제목을 표시',
   focus.includes('노즐 누수 발생 추이'));
 ck('5. 추이 카드 수치가 고른 대상 기준으로 바뀐다',
-  focus.includes('노즐 누수(약액 유입) · 비율') &&
+  focus.includes('노즐 누수 발생 건 수') &&
   focus.includes('2026.04~2026.08.08') && focus.includes('주간 평균'));
 const focusDir=await page.evaluate(() => exReportSnapFromSel_('week').trend.line.cmp.dir);
 ck('6. 현재 주차를 표시 기간 주간 평균과 비교해 증가·감소를 판정',
   ['up','down','flat'].includes(focusDir) &&
   (focusDir==='up'?focus.includes('증가 추세'):focusDir==='down'?focus.includes('감소 추세'):focus.includes('유지')));
-ck('6-b. 고른 유형의 보고 기간 건수를 KPI 줄에 한 장 더 싣는다', (() => {
-  const kpiRow = focus.split('전체 서비스 건수')[1] || '';
-  /* 상단 KPI 줄 = 전체 · A/S · 점검 · 선택 유형 순 */
-  const kpiAt = kpiRow.indexOf('노즐 누수(약액 유입) · 비율');
-  return kpiAt >= 0 && kpiAt < kpiRow.indexOf('발생 추이');
-})());
+ck('6-b. 주간 유형 선택 후에도 전체·A/S·점검 KPI 세 장을 표시', await page.evaluate(()=>{
+  const snap=exReportSnapFromSel_('week');
+  return snap.kpi.map(k=>k.key).join(',')==='total,as,insp' &&
+    buildExecutivePptDeck(snap)[0].items.filter(o=>o.card && o.y===L.kpi.y).length===3;
+}));
 ck('6-c. 전체 기준일 때는 KPI 3장 그대로',
   (plain.split('전체 서비스 건수')[1] || '').indexOf('비율') ===
   (plain.split('전체 서비스 건수')[1] || '').lastIndexOf('비율'));

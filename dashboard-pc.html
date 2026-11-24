@@ -1658,7 +1658,7 @@ exApplyLevel3Tools_();
     <div class="mrow">
       <label>추이 그래프 대상</label>
       <select id="mnVocSel" onchange="exOnReportVocChange_('month')"></select>
-      <div class="mhint">선택한 달의 건수를 1월부터 선택한 달까지의 월평균과 비교합니다. VOC 유형을 고르면 해당 유형의 KPI도 표시합니다.</div>
+      <div class="mhint">선택한 대상의 월간 건수를 1월부터 선택한 달까지의 월평균과 비교합니다.</div>
     </div>
     <details class="voc-desc-editor" id="mnVocDescBox">
       <summary>VOC 유형 설명 확인·수정 (증가·감소 각 상위 3개)</summary>
@@ -4189,10 +4189,7 @@ var L=(function(){
     header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.1,
              dateX:6.45, dateW:4.7, basisY:1.20, basisH:0.22, basisW:6.0,
              logo:{x:12.01, y:0.16, w:1.07, h:0.58} },
-    /* 카드 수는 3장(기본) 또는 4장(추이 대상 VOC 유형을 함께 실을 때)이다.
-       한 줄이 본문 폭을 꽉 채우도록 폭만 장수로 나눈다 — y·높이는 그대로다. */
     kpi:{ y:1.44, h:0.92, n:kpiN, w:kpiW, gap:kpiGap, pad:0.10,
-          widthFor:function(n){ return (W-kpiGap*((n||kpiN)-1))/(n||kpiN); },
           lblDY:0.05, lblH:0.22, badgeW:0.62, badgeH:0.18,
           valDY:0.27, valH:0.36, subDY:0.64, subH:0.24 },
     /* 카드 공통 — 제목 줄(제목 좌 · 기준 우), 좁은 카드는 기준을 둘째 줄에 둔다 */
@@ -4520,7 +4517,7 @@ function buildExecutivePptDeck(snap){
         t:'KPI 증감 · '+snap.cmpLabel+' 대비', size:FT.basis, color:C.mut, align:'right'});
 
   /* ── ② KPI 3 (한 줄) ── */
-  var K=L.kpi, kw=K.widthFor(snap.kpi.length);
+  var K=L.kpi, kw=K.w;
   snap.kpi.forEach(function(kp,i){
     var x=P.left+i*(kw+K.gap), iw=kw-K.pad*2;
     rect({x:x, y:K.y, w:kw, h:K.h, r:0.04, card:true,
@@ -5930,12 +5927,6 @@ function exTrendVocType_(r){
   if(!v || v==='없음' || isOK(v) || /^정기\s*점검$/.test(v)) return '';
   return v;
 }
-/* 지정한 행 묶음에서 그 VOC 유형이 몇 건인지 — KPI 카드와 추이 그래프가 같은 판정을 쓴다 */
-function exCountVocType_(rows, focus){
-  var n=0;
-  (rows||[]).forEach(function(r){ if(exTrendVocType_(r)===focus) n++; });
-  return n;
-}
 /* 추이 구간 전체의 유형별 건수 — 생성 모달 드롭다운과 그래프가 같은 집계를 쓴다.
    weekdayOnly 는 주간 추이(보고 요일만 집계)와 목록 건수를 어긋나지 않게 하기 위한 것이다. */
 function exTrendTypeCounts_(a, b, weekdayOnly){
@@ -6495,9 +6486,7 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
   var vc=buildExecutiveVocChange(x);
   var mt=buildMonthTrend(), mc=buildMonthTrendCompare(mt), mNote=exMonthTrendNote_(mc);
 
-  /* ── KPI — 주간·월간 PPT 공통 핵심 지표 ──
-     추이 그래프 대상으로 VOC 유형을 고르면 그 유형의 보고 기간 건수를 같은 줄에 한 장 더 싣는다.
-     한 줄은 언제나 "보고 기간" 기준이다 — 추이 카드의 8주·6개월 합계와 섞지 않는다. */
+  /* 주간·월간 공통 KPI는 선택한 보고 기간의 전체 서비스, A/S, 점검 건수다. */
   var kpi=[
     {key:'total', label:'전체 서비스 건수', value:exNum(k.total), unit:'건',
      delta:exDeltaParts(k.total, p?p.total:null, '건', 'neutral', cmp)},
@@ -6506,14 +6495,6 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     {key:'insp', label:'점검 건수', value:exNum(k.insp), unit:'건',
      delta:exDeltaParts(k.insp, p?p.insp:null, '건', 'neutral', cmp)}
   ];
-  if(exTrendIsVocType_(vocFocus)){
-    /* 유형 판정은 추이 그래프와 같은 함수를 쓴다 — 카드 숫자와 그래프가 갈라질 수 없다 */
-    var fCur=exCountVocType_(x.rows, vocFocus), fPrev=x.prev?exCountVocType_(x.prev, vocFocus):null;
-    kpi.push({key:'vocFocus', label:vocFocus,
-      note:'비율 '+(k.total?Math.round(fCur/k.total*100):0)+'%',
-      value:exNum(fCur), unit:'건',
-      delta:exDeltaParts(fCur, fPrev, '건', 'bad', cmp)});
-  }
 
   /* ── 추이 카드 ──
      주간은 최근 16주부터 현재 주까지, 월간은 1월부터 현재 월까지를 한 선으로 잇는다.

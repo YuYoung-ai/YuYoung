@@ -139,6 +139,10 @@ try{
  assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);
  assert(!slide.includes('bazAttach'));
  await page.evaluate(()=>openMonthly());
+ await page.selectOption('#mnVocSel','노즐 누수(약액 유입)');
+ await page.evaluate(()=>previewMonthlyPPT());
+ assert.match(await page.locator('#mnPvSlides').textContent(),/노즐\s*누수\s*발생\s*추이/);
+ await page.evaluate(()=>closeMnPreview());
  const monthlyRows=await page.evaluate(()=>{
   const snap=exReportSnapFromSel_('month');
   return {editor:Array.from(document.querySelectorAll('#mnVocDescRows label'),e=>e.textContent),
@@ -148,7 +152,15 @@ try{
  assert.deepEqual(monthlyRows.editor,monthlyRows.slide);
  const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>makeMonthlyPPT());await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
  const monthlyZip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-monthly-report.pptx')));
- assert.match(await monthlyZip.file('ppt/slides/slide1.xml').async('string'),/특이사항/);
+ const monthlySlide=await monthlyZip.file('ppt/slides/slide1.xml').async('string');
+ assert.match(monthlySlide,/특이사항/);
+ for(const xml of [slide,monthlySlide]){
+  assert.match(xml,/노즐 누수 발생 추이/);
+  assert.match(xml,/전체 서비스 건수/);
+  assert.match(xml,/A\/S\(VOC\) 건수/);
+  assert.match(xml,/점검 건수/);
+  assert.doesNotMatch(xml,/노즐 누수\(약액 유입\) · 비율/);
+ }
  assert.equal(await page.evaluate(()=>qaWriteFileCalls.length),2,'weekly and monthly both use original writeFile');
  console.log('PASS original writeFile used for both reports, zero embedded files and no attachment postprocessing');
  for(const kind of ['education','nozzle']){

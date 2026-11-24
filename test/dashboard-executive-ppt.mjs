@@ -65,7 +65,7 @@ const FNS = [
   'exWindowBaseRows_', 'exWindowRows',
   'buildComparisonPeriod', 'exPrevRows',
   'exKpiSet', 'buildExecutiveKpis', 'exDim', 'exDimCompare', 'exPartTopLabel_', 'exPartDim_', 'exPartCompare_', 'exVocTypeCompare_',
-  'exTrendVocType_', 'exCountVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
+  'exTrendVocType_', 'exTrendTypeCounts_', 'exTrendMetricVal_', 'exTrendMetricLabel_',
   'exTrendIsVocType_', 'exTrendPeriod_', 'exReportWeekTrend_', 'exReportMonthTrend_',
   'hpCleanKey_', 'hpIsLeakVoc_', 'exNozzleActionIsHandpieceReplacement_', 'exNozzleActionCounts_', 'exNozzleActionSavingSummary_', 'exNozzleActionTrend_', 'exNozzleActionSpec_',
   'exTrendPeriodLabel_', 'exTrendCountText_', 'exTrendLineSpec_', 'ycNice_',
@@ -1121,12 +1121,17 @@ if (false) {
   ck('V5. 노즐 누수 카드 제목과 기준 줄에 전체 기간·주간 평균 기준을 밝힌다',
     leak.trend.title==='노즐 누수 발생 추이' &&
     leak.trend.basis.includes(leak.trend.line.periodLabel) && leak.trend.basis.includes('주간 평균 기준'));
-  ck('V6. 유형 선택은 추이 카드와 보조 KPI 한 장에만 적용된다',
-    JSON.stringify(leak.kpi.slice(0,3))===JSON.stringify(plain.kpi) &&
+  ck('V6. 주간 그래프 대상을 바꿔도 KPI와 상위 유형 집계가 같다',
+    [leak,cable,asOnly,inspOnly].every(s=>JSON.stringify(s.kpi)===JSON.stringify(plain.kpi)) &&
     JSON.stringify(leak.vocTop)===JSON.stringify(plain.vocTop) &&
     JSON.stringify(leak.partTop)===JSON.stringify(plain.partTop));
-  ck('V6-b. 선택 VOC KPI와 현재 주차의 마지막 점은 같은 값이다',
-    leak.kpi.length===4 && leak.kpi[3].value===String(leak.trend.line.last.main));
+  ck('V6-b. 주간·월간 모두 VOC 선택 시 전체·A/S·점검 KPI 세 장이 본문 폭을 채운다',
+    [leak,D.buildExecutiveReportSnapshot({...MONTH,vocFocus:'케이블 단선'})].every(s=>{
+      const cards=itemsOf(s).filter(o=>o.card && o.y===D.L.kpi.y);
+      return s.kpi.map(k=>k.key).join(',')==='total,as,insp' && cards.length===3 &&
+        Math.abs(cards[0].x-D.L.page.left)<0.001 &&
+        Math.abs(cards[2].x+cards[2].w-D.L.page.right)<0.001;
+    }));
 
   const fi=itemsOf(leak), points=fi.filter(o=>o.trendPoint), segs=fi.filter(o=>o.trendSegment);
   ck('V7. 단일 네이비 꺾은선과 모든 주차 점을 그린다',
