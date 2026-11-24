@@ -469,6 +469,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
         }
         const headline = notice.stage === '방문예정' ? '방문 일정 확정' : notice.stage === '완료' ? '서비스 처리 완료' : '영업 업무 메시지';
         const message = notice.message || (notice.stage === '방문예정' ? (current.row.visitAt || '').replace('T', ' ') : '서비스 상태가 완료로 변경되었습니다.');
+        const pushBody = notice.stage === '방문예정' && message ? `${headline} · ${message}` : headline;
         await kv.set(key('inbox', recipient.email, notice.at, notice.id), {
           requestId: notice.requestId, id: notice.id, hospital: current.row.hospitalName || '', headline, message, from: notice.from || '', at: notice.at,
         }, {expireIn: 30 * 24 * hour});
@@ -476,7 +477,7 @@ export function createSalesService(kv, {verifyGoogle, hash, now = Date.now, requ
           const id = link.key.at(-1), device = (await kv.get(key('device', id))).value;
           if (device?.email !== recipient.email) continue;
           try {
-            await sender.send(device.subscription, {title: 'BAZ 영업', body: headline, binding: await hash(recipient.email)}, 1800,
+            await sender.send(device.subscription, {title: 'BAZ 영업', body: pushBody, binding: await hash(recipient.email)}, 1800,
               {deliveryId: 'sales:' + await hash(notice.id + ':' + id)});
           } catch (error) {
             if ([404, 410].includes(error.statusCode)) await detach(recipient.email, id);
