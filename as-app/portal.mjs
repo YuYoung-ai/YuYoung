@@ -29,7 +29,28 @@ function pending(){mode('pending');content.innerHTML='<h1>병원 등록 확인 �
 async function refreshPending(){if(statusTask||view!=='pending'||document.hidden)return;const token=epoch,id=pendingRecord?.requestId;if(!id)return;let pollAllowed=true;statusTask=(async()=>{try{const data=await portalCall('portal_status',{requestId:id});if(token!==epoch)return;statusFailures=0;const r=data.request;if(r.state==='approved'){completed(r);return;}$('pending-summary').innerHTML='<h2>'+esc(r.hospitalName)+'</h2><p>등록한 휴대폰번호 <strong>'+esc(format(r.phone))+'</strong></p><p>'+esc({pending:'승인 대기',rejected:'등록이 승인되지 않았습니다. CS에 확인해 주세요.',expired:'등록 요청 유효기간이 지났습니다. 다시 요청해 주세요.',reconnect:'기기·등록번호 연결을 다시 확인해 주세요. 등록 병원 접속에서 재연결할 수 있습니다.'}[r.state]||'등록 상태 확인 필요')+'</p>'+memo;if(r.state!=='pending'){pollAllowed=false;clearTimeout(timer);const b=document.createElement('button');b.textContent='등록 정보 다시 입력';b.onclick=async()=>{try{await storePending(null);registration('recovery');}catch(e){message(e.message);}};$('pending-summary').append(b);return;}}catch(e){statusFailures++;if(token===epoch)message(e.message);}finally{statusTask=null;if(pollAllowed&&token===epoch&&view==='pending'&&!document.hidden)timer=setTimeout(refreshPending,Math.min(60000,10000*2**Math.min(statusFailures,2)));}})();return statusTask;}
 function completed(r){mode('completed');content.innerHTML='<h1>병원 등록이 완료되었습니다</h1><p>이제 AS 접수를 이용하실 수 있습니다.</p><section class="portal-card"><h2>'+esc(r.hospitalName)+'</h2><div class="portal-note"><strong>다음 접속에 사용할 번호</strong><p class="portal-phone">'+esc(format(r.phone))+'</p>다음에도 이 휴대폰번호로 접속해 주세요.<br>번호를 별도로 기록해 두세요.</div><button id="start-as" class="primary full" type="button">AS 접수 시작하기</button></section>';$('start-as').onclick=()=>connect(r.phone);mountSettings($('portal-install'));}
 function login(){mode('login');const stored=rememberedLogin();content.innerHTML='<h1>등록 병원 접속</h1><p>병원 등록에 사용한 휴대폰번호를 입력해 주세요.</p><form id="login-form" class="portal-card"><label for="login-phone">등록한 휴대폰번호</label><input id="login-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="15" required placeholder="010-0000-0000" value="'+esc(stored?.phone||'')+'"><button class="primary full" type="submit">접속하기</button></form><section class="portal-note"><strong>등록한 번호를 잊으셨나요?</strong><button id="recovery" type="button" class="full">병원 재등록 요청</button></section>'+(phoneLogin?'': '<div class="portal-actions"><button id="new-device" type="button">새 기기 연결 요청</button><button id="consume-handoff" type="button">기존 등록 이어받기</button></div><div id="handoff-box"></div>')+'';$('login-form').onsubmit=e=>{e.preventDefault();connect($('login-phone').value);};$('recovery').onclick=()=>registration('recovery');if($('new-device'))$('new-device').onclick=async()=>{try{await storePending(null);await forgetPortalDevice();registration('device');}catch(e){message(e.message);}};if($('consume-handoff'))$('consume-handoff').onclick=consumeHandoff;mountSettings($('portal-install'));}
-async function connect(phone,explicit=true){if(busy)return;lock(true);message();try{session=await portalCall('portal_session',{phone,...(phoneLogin?{resume:!explicit}:{})});if(explicit)await loginNotification();save('curejet-portal-login',{phone},sessionStorage);if(phoneLogin){try{save('curejet-portal-login',{phone,savedAt:Date.now()});}catch{}await storePending(null);}const returnId=load('curejet-portal-return',sessionStorage);save('curejet-portal-return',null,sessionStorage);if(!await resumeReceipt(returnId)){const action=new URLSearchParams(location.search).get('action');if(action==='recovery')registration('recovery');else openIntake(action==='hospital');}}catch(e){if(phoneLogin&&!explicit){try{sessionStorage.removeItem('curejet-portal-login');localStorage.removeItem('curejet-portal-login');}catch{}}message(e.message+(phoneLogin?'':' 처음 사용하는 앱·기기라면 새 기기 연결 요청 또는 기존 등록 이어받기를 이용해 주세요.'));}finally{lock(false);}}
+async function connect(phone,explicit=true){
+ if(busy)return;
+ lock(true);message();
+ try{
+  session=await portalCall('portal_session',{phone,...(phoneLogin?{resume:!explicit}:{})});
+  if(explicit)await loginNotification();
+  save('curejet-portal-login',{phone},sessionStorage);
+  if(phoneLogin){try{save('curejet-portal-login',{phone,savedAt:Date.now()});}catch{}await storePending(null);}
+  const returnId=load('curejet-portal-return',sessionStorage);
+  save('curejet-portal-return',null,sessionStorage);
+  if(await resumeReceipt(returnId))return;
+  const action=new URLSearchParams(location.search).get('action');
+  if(action==='recovery')registration('recovery');
+  else{
+   if(explicit)await webInstallNotification();
+   openIntake(action==='hospital');
+  }
+ }catch(e){
+  if(phoneLogin&&!explicit){try{sessionStorage.removeItem('curejet-portal-login');localStorage.removeItem('curejet-portal-login');}catch{}}
+  message(e.message+(phoneLogin?'':' 처음 사용하는 앱·기기라면 새 기기 연결 요청 또는 기존 등록 이어받기를 이용해 주세요.'));
+ }finally{lock(false);}
+}
 async function loginNotification(){
  const push=window.QrCustomerPush;if(!push?.standalone())return;
  if(push.permission()==='granted'&&load('curejet-as-app-notify'))return;
@@ -38,6 +59,40 @@ async function loginNotification(){
  document.body.append(dialog);const allow=dialog.querySelector('[data-allow]'),help=dialog.querySelector('[data-login-notice-help]');
  help.textContent=push.guidance(push.permission());allow.hidden=!push.supported();allow.textContent=push.permission()==='granted'?'알림 연결':'알림 허용';
  await new Promise(resolve=>{dialog.addEventListener('close',resolve,{once:true});dialog.querySelector('[data-later]').onclick=()=>dialog.close();allow.onclick=async()=>{allow.disabled=true;try{await push.requestPermission();save('curejet-as-app-notify',true);dialog.close();}catch(e){help.textContent=e.message;}finally{allow.disabled=false;}};dialog.showModal();});dialog.remove();
+}
+async function webInstallNotification(){
+ const key='curejet-web-install-notice-seen',install=window.CurejetInstall;
+ if(matchMedia('(display-mode: standalone)').matches||navigator.standalone===true||load(key))return;
+ const dialog=document.createElement('dialog');
+ dialog.className='login-notification';
+ dialog.setAttribute('aria-labelledby','web-install-title');
+ dialog.setAttribute('aria-describedby','web-install-description');
+ dialog.innerHTML='<h2 id="web-install-title">앱에서 접수 알림을 받을 수 있어요</h2>'+
+  '<p id="web-install-description">CUREJET AS 앱을 설치하고 알림을 허용하면 방문 일정 확정·변경과 처리 완료 소식을 받을 수 있습니다.</p>'+
+  '<p data-install-help class="muted" role="status" hidden></p>'+
+  '<div class="portal-actions"><button type="button" data-later autofocus>나중에</button><button type="button" class="primary" data-install>앱 설치 방법</button></div>';
+ document.body.append(dialog);
+ const button=dialog.querySelector('[data-install]'),help=dialog.querySelector('[data-install-help]');
+ const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1;
+ const instructions=ios?'Safari의 공유 버튼에서 ‘홈 화면에 추가’를 선택하세요.':'Chrome 또는 Edge의 메뉴에서 ‘앱 설치’ 또는 ‘홈 화면에 추가’를 선택하세요.';
+ const showHelp=text=>{help.textContent=text;help.hidden=false;};
+ const unsubscribe=install?.subscribe(state=>{
+  button.disabled=state.busy;
+  button.textContent=state.ready?'앱 설치':'앱 설치 방법';
+  if(state.installed||state.outcome==='accepted')showHelp('설치 후 홈 화면에서 CUREJET AS를 열고 알림을 허용해 주세요.');
+ });
+ button.onclick=()=>{
+  if(install?.state().ready)install.prompt().catch(()=>showHelp(instructions));
+  else showHelp(instructions);
+ };
+ dialog.querySelector('[data-later]').onclick=()=>dialog.close();
+ try{
+  await new Promise(resolve=>{
+   dialog.addEventListener('close',resolve,{once:true});
+   dialog.showModal();
+   try{save(key,true);}catch{}
+  });
+ }finally{unsubscribe?.();dialog.remove();}
 }
 function openIntake(pick=false){const previous=load('curejet-portal-hospital',sessionStorage),hinted=new URLSearchParams(location.search).get('hospital');const h=session.hospitals.find(x=>x.id===hinted)||session.hospitals.find(x=>x.id===previous?.id)||session.hospitals[0];if(!h)throw Error('등록된 번호의 병원을 확인해 주세요.');if(phoneLogin&&session.hospitals.length>1&&!previous&&!hinted)pick=true;save('curejet-portal-hospital',h,sessionStorage);if(!pick){location.replace('as-request.html?hospital='+encodeURIComponent(h.id));return;}mode('hospital');content.innerHTML='<h1>접수할 병원 선택</h1><form id="hospital-choice" class="portal-card"><label for="my-hospital">등록 병원</label><select id="my-hospital">'+session.hospitals.map(x=>'<option value="'+esc(x.id)+'" '+(x.id===h.id?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select><button type="submit" class="primary full">AS 접수로 이동</button></form>';$('hospital-choice').onsubmit=e=>{e.preventDefault();const item=session.hospitals.find(x=>x.id===$('my-hospital').value);if(!item)return;save('curejet-portal-hospital',item,sessionStorage);location.replace('as-request.html?hospital='+encodeURIComponent(item.id));};}
 async function handoff(requestId){if(busy)return;lock(true);try{const code=btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');await portalCall('portal_handoff_create',{code,...(requestId?{requestId}:{})});$('handoff-box').innerHTML='<div class="portal-note"><strong>5분 동안 한 번만 사용할 수 있는 연결 코드</strong><p>설치 앱의 ‘기존 등록 이어받기’에 붙여 넣어 주세요. 다른 사람에게 공유하지 마세요.</p><textarea readonly aria-label="설치 앱 연결 코드">'+esc(code)+'</textarea><button id="copy-handoff" type="button">코드 복사</button></div>';$('copy-handoff').onclick=async()=>{try{await navigator.clipboard.writeText(code);message('연결 코드를 복사했습니다.');}catch{message('표시된 코드를 선택해 복사해 주세요.');}};}catch(e){message(e.message);}finally{lock(false);}}
