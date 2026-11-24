@@ -34,7 +34,7 @@ const op={action:'work_save',form,operationId:crypto.randomUUID()};const created
 const id=created.request.id;
 const stale=await store.handle({action:'work_save',id,baseRevision:0,form,operationId:crypto.randomUUID()},alice);assert.equal(stale.conflict,true);
 const duplicate=await store.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal(duplicate.duplicate,true);
-const source={date:'2026-10-06',hospitalName:'병원',engineer:'엔지니어',sn:'SN1',gubun:'점검',result:'정상',detail:'점검 정상',recordId:'inspection1',version:'v1',observedAt:'2026-10-06T01:00:00Z'};
+const source={date:'2026-10-06',hospitalName:'병원',engineer:'엔지니어',sn:'SN1',gubun:'점검',result:'정상',detail:'점검 정상',recordId:'inspection1',version:'v1',observedAt:'2026-10-06T01:00:00Z',createdAt:created.request.createdAt};
 async function matchingFixture(hospitals=[hospital]){
  const db=new Kv(),s=createWorkStore(db);
  await s.bridge('seed',{hospitals,references:{engineers:['엔지니어'],minimumLevel:1}});
@@ -42,7 +42,7 @@ async function matchingFixture(hospitals=[hospital]){
 }
 {
  const {s}=await matchingFixture(),one=await s.handle({...op,operationId:crypto.randomUUID()},alice);
- const report={...source,sn:'BV5015',gubun:' AS '};
+ const report={...source,sn:'BV5015',gubun:' AS ',createdAt:one.request.createdAt};
  assert.equal((await s.ingestSources([report])).linked,1,'unique hospital/date pair tolerates different serials');
  const d=await s.handle({action:'work_detail',id:one.request.id},alice);
  assert.equal(d.request.gubun,'A/S');assert.equal(d.history[0].source.sn,'BV5015');assert.equal(d.history[0].source.gubun,'A/S');assert.equal(d.request.status,'결과확인');
@@ -53,7 +53,7 @@ for(const overlapping of [false,true]){
  const {s}=await matchingFixture([first,second]);
  const one=await s.handle({...op,form:{...form,hospitalKey:first.key},operationId:crypto.randomUUID()},alice);
  const two=await s.handle({...op,form:{...form,hospitalKey:second.key},acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);
- const report={...source,sn:'bv5015',gubun:'AS'};
+ const report={...source,sn:'bv5015',gubun:'AS',createdAt:two.request.createdAt};
  assert.equal((await s.ingestSources([report])).linked,overlapping?0:1,'serial tokens select only an unambiguous receipt');
  assert.equal((await s.handle({action:'work_detail',id:one.request.id},alice)).history.length,overlapping?0:1);
  assert.equal((await s.handle({action:'work_detail',id:two.request.id},alice)).history.length,0);
@@ -62,7 +62,7 @@ for(const action of ['work_save','work_request_edit']){
  const {db,s}=await matchingFixture();
  const first=await s.handle({...op,form:{...form,visitAt:'2026-10-05T10:00'},operationId:crypto.randomUUID()},alice);
  const note=await s.handle({action:'work_history_add',requestId:first.request.id,body:'DB 수정 전 상담',operationId:crypto.randomUUID()},alice);
- const report={...source,sn:'BV5015',gubun:'점검'};
+ const report={...source,sn:'BV5015',gubun:'점검',createdAt:first.request.createdAt};
  assert.equal((await s.ingestSources([report])).linked,0,'different visit dates do not link');
  const corrected={...hospital,id:'h-corrected',key:'병원\u001fBW4015,BV5015\u001f서울',sn:'BW4015,BV5015'};
  await s.bridge('references',{hospitals:[corrected],references:{}});
@@ -88,25 +88,25 @@ async function multiDeviceFixture(){
 }
 {
  const {s,one}=await multiDeviceFixture();
- const a={...source,recordId:'multi-a',nsFill:'O',nsAmt:'정상',jet:'가능',nozzleReuse:'X'},b={...source,recordId:'multi-b',sn:'SN2',nozzleReuse:'O'};
+ const a={...source,recordId:'multi-a',nsFill:'O',nsAmt:'정상',jet:'가능',nozzleReuse:'X',createdAt:one.request.createdAt},b={...source,recordId:'multi-b',sn:'SN2',nozzleReuse:'O',createdAt:one.request.createdAt};
  assert.equal((await s.ingestSources([a,b])).linked,2,'distinct serials join one visit');
  let d=await s.handle({action:'work_detail',id:one.request.id},alice);assert.equal(d.history.length,2);assert.equal(d.request.status,'결과확인');
  assert.equal(d.history.find(h=>h.source.sn==='SN1').source.jet,'가능');assert.equal(d.history.find(h=>h.source.sn==='SN2').source.nozzleReuse,'O');
  assert.equal((await s.ingestSources([a,b])).linked,0,'redelivery does not duplicate device reports');
- assert.equal((await s.ingestSources([{...source,recordId:'multi-c',sn:'SN3'}])).linked,1,'a later device is added in result review');
+ assert.equal((await s.ingestSources([{...source,recordId:'multi-c',sn:'SN3',createdAt:one.request.createdAt}])).linked,1,'a later device is added in result review');
  d=await s.handle({action:'work_detail',id:one.request.id},alice);assert.equal(d.history.length,3);
  assert.equal((await s.bridge('pending',{})).events.filter(e=>e.kind==='result_auto').length,3,'each device result has a durable mirror event');
 }
 for(const badSn of ['SN1','']){
  const {s,one}=await multiDeviceFixture();
- const response=await s.ingestSources([{...source,recordId:'amb-a'},{...source,recordId:'amb-b',sn:badSn}]);
+ const response=await s.ingestSources([{...source,recordId:'amb-a',createdAt:one.request.createdAt},{...source,recordId:'amb-b',sn:badSn,createdAt:one.request.createdAt}]);
  assert.equal(response.linked,0,'duplicate or missing serials remain manual');assert.equal(response.skipped.length,1);
  assert.equal((await s.handle({action:'work_detail',id:one.request.id},alice)).history.length,0);
 }
 {
  const {s,one,second}=await multiDeviceFixture();
  const two=await s.handle({...op,form:{...form,hospitalKey:second.key},acknowledgeDuplicates:true,operationId:crypto.randomUUID()},alice);
- assert.equal((await s.ingestSources([{...source,recordId:'split-a'},{...source,recordId:'split-b',sn:'SN2'}])).linked,2);
+ assert.equal((await s.ingestSources([{...source,recordId:'split-a',createdAt:two.request.createdAt},{...source,recordId:'split-b',sn:'SN2',createdAt:two.request.createdAt}])).linked,2);
  for(const [id,sn]of [[one.request.id,'SN1'],[two.request.id,'SN2']]){const d=await s.handle({action:'work_detail',id},alice);assert.equal(d.history.length,1);assert.equal(d.history[0].source.sn,sn,'separate requests are assigned by serial');}
 }
 await store.ingestSources([source]);let detail=await store.handle({action:'work_detail',id},alice);assert.equal(detail.request.status,'결과확인');assert.equal(detail.request.gubun,'점검');assert.equal(detail.history[0].auto,true);assert.equal(detail.request.completedAt,'');
@@ -136,7 +136,7 @@ const complete=await store.handle({action:'work_complete',requestId:id,baseRevis
 const pending=await store.bridge('pending',{});assert.ok(pending.events.length>=6,'each commit keeps durable mirror work');const first=pending.events[0];await store.bridge('ack',{items:[{id:'wrong',seq:first.seq}]});assert.ok((await store.bridge('pending',{})).events.some(e=>e.id===first.id));await store.bridge('ack',{items:[{id:first.id,seq:first.seq}]});assert.ok(!(await store.bridge('pending',{})).events.some(e=>e.id===first.id));assert.ok((await store.bridge('pending',{})).events.length,'other pending versions not cleared');
 await store.ingestSources([{...source,version:'v2',detail:'새 내용',observedAt:'2026-10-06T02:00:00Z'}]);await store.ingestSources([source]);assert.equal((await store.sources('병원'))[0].version,'v2','delayed events cannot overwrite newer report');
 const other=await store.handle({...op,form:{...form,visitAt:'2026-10-07T10:00'},operationId:crypto.randomUUID()},alice);assert.equal(other.success,true);
-await store.ingestSources([{...source,date:'2026-10-07',recordId:'as1',gubun:'A/S'},{...source,date:'2026-10-07',recordId:'inspection2'}]);assert.equal((await store.handle({action:'work_detail',id:other.request.id},alice)).request.status,'방문예정','mixed AS/inspection candidates require selection');
+await store.ingestSources([{...source,date:'2026-10-07',recordId:'as1',gubun:'A/S',createdAt:other.request.createdAt},{...source,date:'2026-10-07',recordId:'inspection2',createdAt:other.request.createdAt}]);assert.equal((await store.handle({action:'work_detail',id:other.request.id},alice)).request.status,'방문예정','mixed AS/inspection candidates require selection');
 const manual=await store.handle({action:'work_result_save',requestId:other.request.id,baseRevision:1,recordId:'inspection2',sourceVersion:'v1',memo:'CS 확인',operationId:crypto.randomUUID()},alice);assert.equal(manual.success,true);assert.equal(manual.request.gubun,'점검');
 assert.equal((await store.bridge('status',{})).ready,true);
 const concurrent=await Promise.all([alice,bob,admin].map((who,i)=>store.handle({action:'work_history_add',requestId:id,body:'동시 댓글 '+i,operationId:crypto.randomUUID()},who)));
@@ -174,7 +174,7 @@ assert.match(fields({...source,nozzleReuse:'X'}),/노즐 재사용<\/dt><dd>무/
 assert.match(fields({...source,origin:'flow'},'[사용자 숙련도 평가]NS 충진 여부 : ONS 충진량 : 정상젯 분사 판단[병원담당자] : 가능비고/특이사항 : N/A'),/NS 충진 여부<\/dt><dd>O<\/dd>/);
 assert.match(fields({...source,origin:'flow'},'노즐 재사용 의심'),/노즐 재사용<\/dt><dd>미기록/,'do not infer nozzle reuse from free text');
 const statusPicker=vm.runInNewContext('('+ui.split('\n').find(l=>l.trim().startsWith('function statusPicker(')).trim()+')',{editMode:false,esc:x=>String(x??''),statuses:['접수','방문예정','처리중','결과확인','완료','보류','취소']});
-const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{window:{},fields:workFields,editable:(r,k,v)=>String(v??''),editMode:false,receiptButton:()=>'',statusPicker,statusGroup:statusPicker,esc:x=>String(x??''),time:x=>x||'미정',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
+const fn=ui.slice(ui.indexOf('function detailMarkup('),ui.indexOf('function auditText('));const render=vm.runInNewContext('('+fn.trim()+')',{window:{},fields:workFields,editable:(r,k,v)=>String(v??''),editMode:false,receiptButton:()=>'',statusPicker,statusGroup:statusPicker,esc:x=>String(x??''),time:x=>x||'미정',visitLabel:r=>r.visitAt||'미정',csLabel:r=>r.cs||'미기록',badge:x=>'<span>'+x+'</span>',hospitalTerms:()=>'',resultFields:()=>'',overdue:()=>false,sourceCheckedAt:'',account:'CS A',BazAuth:{cachedLevel:()=>1}});
 const markup=render({requests:[],logs:[],updatedAt:'now'},complete.request,[{source,author:'현장',createdAt:'now'}],[]);assert.match(markup,/<option value="완료" selected>완료<\/option>/);assert.match(markup,/<span class="badge work-kind"[^>]*>점검<\/span>/);assert.ok(!markup.includes('data-action="save-status"'));assert.ok(markup.includes('data-action="delete"'));assert.ok(render({requests:[],logs:[],updatedAt:'now'},deleted.request,[],[]).includes('data-action="restore"'));
 // Existing deleted-owner links must heal without clearing the original result/history.
 async function relinkFixture(gubun='A/S'){
@@ -182,7 +182,7 @@ async function relinkFixture(gubun='A/S'){
  await s.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});
  await s.bridge('activate',{manifest:await s.manifest()});
  const createPayload={...op,operationId:crypto.randomUUID()},first=await s.handle(createPayload,alice);
- const report={...source,gubun,recordId:'reused-report'};
+ const report={...source,gubun,recordId:'reused-report',createdAt:first.request.createdAt};
  await s.ingestSources([report]);
  const found=await s.handle({action:'work_detail',id:first.request.id},alice);
  const completed=await s.handle({action:'work_result_save',requestId:first.request.id,baseRevision:found.request.revision,baseHistoryRevision:found.history[0].revision,recordId:report.recordId,sourceVersion:report.version,memo:'기존 접수 보완',complete:true,operationId:crypto.randomUUID()},alice);
@@ -196,12 +196,12 @@ for(const gubun of ['A/S','점검']){
  const {s,report,trash,original}=await relinkFixture(gubun);
  const fresh=await s.handle({...op,form:{...form,status:gubun==='점검'?'보류':'방문예정'},operationId:crypto.randomUUID()},alice);
  assert.equal(fresh.success,true,'same hospital/date can be re-registered after trash');
- if(gubun==='A/S')assert.equal((await s.ingestSources([report])).linked,1,'auto matching reclaims a trashed owner link');
- else assert.equal((await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,memo:'새 접수 보완',operationId:crypto.randomUUID()},alice)).success,true,'manual selection also reclaims a trashed link');
+ assert.equal((await s.ingestSources([report])).linked,0,'a new request does not auto-link an earlier result from a trashed request');
+ assert.equal((await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,memo:'새 접수 보완',operationId:crypto.randomUUID()},alice)).success,true,'manual selection can reclaim a trashed link');
  const freshDetail=await s.handle({action:'work_detail',id:fresh.request.id},alice);
  assert.equal(freshDetail.request.status,'결과확인');assert.equal(freshDetail.request.gubun,gubun);assert.equal(freshDetail.history.length,1);
  assert.notEqual(freshDetail.history[0].id,original.history[0].id,'re-registration gets its own result entry');
- assert.equal(freshDetail.history[0].memo,gubun==='점검'?'새 접수 보완':'','old CS memo is not copied to the new request');
+ assert.equal(freshDetail.history[0].memo,'새 접수 보완','old CS memo is not copied to the new request');
  const stillTrashed=await s.handle({action:'work_detail',id:trash.request.id},alice);
  for(const field of ['request','history','logs'])assert.deepEqual(stillTrashed[field],original[field],'trash '+field+' is untouched');
  await s.ingestSources([report]);assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'repeated delivery creates no duplicate result');
@@ -241,7 +241,8 @@ for(const gubun of ['A/S','점검']){
 }
 {
  const {db,s,report,trash,createPayload}=await relinkFixture();
- const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);await s.ingestSources([report]);
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ assert.equal((await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice)).success,true);
  const before=await s.handle({action:'work_detail',id:fresh.request.id},alice);
  const payload={action:'work_purge',requestId:trash.request.id,baseRevision:trash.request.revision,confirmPermanentDelete:true,operationId:crypto.randomUUID()};
  assert.equal((await s.handle(payload,alice)).success,false,'even the author cannot empty trash without admin access');
@@ -270,8 +271,10 @@ for(const gubun of ['A/S','점검']){
  assert.ok((await db.get([s.NS,'purgeCleanup',trash.request.id])).value,'cleanup retry is durable');
  await s.bridge('pending',{});assert.equal((await db.get([s.NS,'purgeCleanup',trash.request.id])).value,null);
  assert.equal((await db.get([s.NS,'link',report.recordId])).value,null,'purged owner binding is released');
- const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);assert.equal((await s.ingestSources([report])).linked,1);
- assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'original Handover can be reused after permanent deletion');
+ const fresh=await s.handle({...op,operationId:crypto.randomUUID()},alice);
+ assert.equal((await s.ingestSources([report])).linked,0);
+ assert.equal((await s.handle({action:'work_result_save',requestId:fresh.request.id,baseRevision:1,recordId:report.recordId,sourceVersion:report.version,operationId:crypto.randomUUID()},alice)).success,true);
+ assert.equal((await s.handle({action:'work_detail',id:fresh.request.id},alice)).history.length,1,'earlier Handover can be manually reused after permanent deletion');
 }
 {
  const db=new Kv(),s=createWorkStore(db);await s.bridge('seed',{hospitals:[hospital],references:{engineers:['엔지니어'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});

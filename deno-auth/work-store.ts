@@ -26,9 +26,13 @@ function inspectionPdf(value:any){
  if(!Number.isSafeInteger(value.bytes)||value.bytes<1||value.bytes>7*1024*1024||!Number.isSafeInteger(value.revision)||value.revision<1||!/^[a-f0-9]{64}$/.test(value.sha256))throw new Error('PDF 파일 정보를 확인하세요.');
  return {kind:'inspection_pdf',fileId:id,url,filename:text(value.filename,240,'PDF 파일명'),bytes:value.bytes,sha256:value.sha256,revision:value.revision,uploadedAt:text(value.uploadedAt,40,'PDF 저장 시각'),uploadedBy:text(value.uploadedBy,80,'PDF 등록자'),uploadId:text(value.uploadId,90,'PDF 전송 ID'),...(pdfBasis(value.sourceBasis)?{sourceBasis:pdfBasis(value.sourceBasis)}:{})};
 }
+function savedInstant(value:unknown){
+ return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;
+}
 function autoSources(r:Obj,all:Obj[],records:Obj[]){
  const day=r.visitAt?.slice(0,10),same=all.filter(x=>live(x)&&x.status!=='취소'&&x.hospitalName===r.hospitalName&&x.visitAt?.slice(0,10)===day);
- let matches=records.filter(s=>s.date===day&&kind(s));
+ const receivedAt=savedInstant(r.createdAt);
+ let matches=records.filter(s=>s.date===day&&kind(s)&&savedInstant(s.createdAt)>=receivedAt);
  if(!matches.length)return {matches,ambiguous:false};
  if(same.length>1){
   matches=matches.filter(s=>serialMatch(r.sn,s.sn)&&same.filter(x=>serialMatch(x.sn,s.sn)).length===1);

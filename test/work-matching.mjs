@@ -10,29 +10,39 @@ const source={recordId:'record',version:'v1',hospitalName:'병원',date:'2026-10
 const form={hospitalKey:'h',symptom:'점검',cs:'CS',engineer:'',registeredAt:'2026-10-16T09:00',visitAt:'2026-10-16T12:00',status:'접수'};
 async function setup(){const db=new Kv(),store=createWorkStore(db);await store.bridge('seed',{hospitals:[hospital],references:{minimumLevel:1,engineers:[]}});await store.bridge('activate',{manifest:await store.manifest()});return {db,store};}
 async function create(store,changes={}){return store.handle({action:'work_save',form:{...form,...changes},operationId:crypto.randomUUID()},who);}
+const savedAfter=(r)=>({...source,createdAt:new Date(Date.parse(r.createdAt)+1).toISOString()});
 {
- const {db,store}=await setup();await store.ingestSources([source]);const saved=await create(store);
+ const {db,store}=await setup();
+ const early={...source,createdAt:'2026-10-15T23:55:00Z'};
+ await store.ingestSources([early]);const saved=await create(store);
  assert.equal((await store.handle({action:'work_detail',id:saved.request.id},who)).history.length,0);
  const recreated=createWorkStore(db);await recreated.processPendingMatches();
+ const skipped=await recreated.ingestSources([{...early,observedAt:new Date().toISOString()},{...source,recordId:'no-timestamp'}]);
+ assert.equal(skipped.linked,0,'a newer sync time or absent first-save time does not qualify a source');
+ const unchanged=await recreated.handle({action:'work_detail',id:saved.request.id},who);
+ assert.equal(unchanged.request.status,'접수');
+ assert.equal(unchanged.history.length,0,'pre-existing result stays unlinked after restart');
+ await recreated.ingestSources([{...savedAfter(saved.request),recordId:'new-report'}]);
  const detail=await recreated.handle({action:'work_detail',id:saved.request.id},who);
- assert.equal(detail.history.length,1,'source-first creation links from durable work after store recreation');
- assert.equal(detail.history[0].source.detail,'현장 원문');
+ assert.equal(detail.history.length,1,'a valid result can link even alongside older candidates');
+ assert.equal(detail.history[0].source.recordId,'new-report');
+ assert.equal(detail.request.status,'결과확인');
  await recreated.processPendingMatches();assert.equal((await recreated.handle({action:'work_detail',id:saved.request.id},who)).history.length,1);
 }
 {
- const {store}=await setup(),saved=await create(store,{visitAt:'2026-10-15T12:00'});await store.ingestSources([source]);
+ const {store}=await setup(),saved=await create(store,{visitAt:'2026-10-15T12:00'});await store.ingestSources([savedAfter(saved.request)]);
  const edited=await store.handle({action:'work_request_edit',id:saved.request.id,baseRevision:1,form,operationId:crypto.randomUUID()},who);
  assert.equal(edited.success,true);assert.equal(edited.workDetail.history.length,1,'condition edits link an already-received source');
 }
 {
  const {db,store}=await setup(),saved=await create(store);
  const trash=await store.handle({action:'work_delete',requestId:saved.request.id,baseRevision:1,operationId:crypto.randomUUID()},who);
- await store.ingestSources([source]);assert.equal((await store.handle({action:'work_detail',id:saved.request.id},who)).history.length,0);
+ await store.ingestSources([savedAfter(saved.request)]);assert.equal((await store.handle({action:'work_detail',id:saved.request.id},who)).history.length,0);
  const restored=await createWorkStore(db).handle({action:'work_restore',requestId:saved.request.id,baseRevision:trash.request.revision,operationId:crypto.randomUUID()},who);
  assert.equal(restored.success,true);assert.equal((await store.handle({action:'work_detail',id:saved.request.id},who)).history.length,1,'restore schedules the original-first match');
 }
 {
- const {store}=await setup(),saved=await create(store,{status:'보류'});await store.ingestSources([source]);
+ const {store}=await setup(),saved=await create(store,{status:'보류'});await store.ingestSources([savedAfter(saved.request)]);
  const status=await store.handle({action:'work_status',requestId:saved.request.id,baseRevision:1,status:'접수',operationId:crypto.randomUUID()},who);
  assert.equal(status.success,true);await store.processPendingMatches();assert.equal((await store.handle({action:'work_detail',id:saved.request.id},who)).history.length,1,'reopening a held request also schedules matching');
 }
@@ -46,8 +56,8 @@ for(const count of [100,1000,10000]){
 }
 {
  const {db,store}=await setup();
- for(let i=0;i<17;i++)await db.set([store.NS,'request','legacy'+i],{id:'legacy'+i,hospitalId:'h',hospitalName:i?'다른 병원 '+i:'병원',visitAt:form.visitAt,status:i?'완료':'접수',revision:1});
- await db.set([store.NS,'source','병원',source.recordId],source);
+ for(let i=0;i<17;i++)await db.set([store.NS,'request','legacy'+i],{id:'legacy'+i,hospitalId:'h',hospitalName:i?'다른 병원 '+i:'병원',visitAt:form.visitAt,status:i?'완료':'접수',revision:1,createdAt:'2026-10-16T00:00:00Z'});
+ await db.set([store.NS,'source','병원',source.recordId],{...source,createdAt:'2026-10-16T09:05:00+09:00'});
  await store.processPendingMatches();assert.equal((await store.handle({action:'work_detail',id:'legacy0'},who)).history.length,0,'foreground source handling does not scan legacy requests');
  await store.processPendingMatches({backfill:true});assert.equal((await db.get([store.NS,'matchBackfill'])).value.complete,false,'legacy scan is checkpointed after a bounded page');
  await createWorkStore(db).processPendingMatches({backfill:true});assert.equal((await db.get([store.NS,'matchBackfill'])).value.complete,true);

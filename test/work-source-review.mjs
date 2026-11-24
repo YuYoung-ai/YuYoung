@@ -10,7 +10,7 @@ const form={hospitalKey:'h1',symptom:'증상',cs:'CS',engineer:'FSE',sales:'',re
 const write=(action,p)=>s.handle({action,operationId:crypto.randomUUID(),...p},who);
 await s.bridge('seed',{hospitals:[hospital],references:{engineers:['FSE'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
 const created=await write('work_save',{form}),id=created.request.id;
-const source={recordId:'report1',hospitalName:hospital.name,date:'2026-10-15',sn:'SN1',gubun:'A/S',detail:'원래 내용',result:'수리',version:'v1',observedAt:new Date(Date.now()-10000).toISOString()};
+const source={recordId:'report1',hospitalName:hospital.name,date:'2026-10-15',sn:'SN1',gubun:'A/S',detail:'원래 내용',result:'수리',version:'v1',createdAt:created.request.createdAt,observedAt:new Date(Date.now()-10000).toISOString()};
 await s.ingestSources([source]);let d=await s.handle({action:'work_detail',id},who);
 await write('work_complete',{requestId:id,baseRevision:d.request.revision});d=await s.handle({action:'work_detail',id},who);const completedAt=d.request.completedAt;
 const changed={...source,detail:'변경 내용',result:'',version:'v2',observedAt:new Date(Date.now()-9000).toISOString()};

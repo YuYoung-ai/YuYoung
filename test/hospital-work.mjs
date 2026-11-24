@@ -28,7 +28,7 @@ class Sheet{
 const sheets=new Map(),ss={getId:()=> 'fixture-handover',getSheetByName:n=>sheets.get(n)||null,insertSheet:n=>{const sh=new Sheet(n);sheets.set(n,sh);return sh;},getSheets:()=>[...sheets.values()]};
 const props=new Map();
 const handover=ss.insertSheet('현장 처리 현황(handover)');
-handover.data=[['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용','A/S 결과','비고','장비SN','기록 ID'],
+handover.data=[['처리일','병원명','CS 담당자','점검/AS','대분류','유형','교체품','교체비용','내용','A/S 결과','비고','장비SN','기록 ID','원본 저장 정보'],
  ['2026-10-02','샘플병원','엔지니어 A','A/S','점검','누수','부품','1000','원본 처리 내용','정상','추가 관찰','SN1','report-1'],
  ['2026-10-02','샘플병원 분점','엔지니어 B','A/S','점검','누수','','','다른 지점 내용','','','SN2','report-2'],
  ['2026-09-29','샘플병원','엔지니어 A','A/S','점검','누수','','','과거 내용','','','SN1','']];
@@ -104,13 +104,15 @@ assert.equal(sheets.get('업무변경로그').data.some(r=>r[3]==='prepared'),fa
 assert.equal(post({action:'work_save',form:{...form,symptom:''}}).retrySameOperation,false,'validation error is definite failure');
 assert.ok(read('auth.js').includes("'hospital-work.html':{ tool: 'hospitalwork', level: 1 }"));
 assert.ok(read('index.html').includes('data-toolid="hospitalwork"'));
-assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(read('js/baz-work-manager.js').replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'')),'no work polling or focus sync; roster rollover is independent');
+const manager=read('js/baz-work-manager.js').replace(/setInterval\(checkRosterDay,60000\);document\.addEventListener\('visibilitychange',[^\n]*/,'')
+ .replace("document.addEventListener('visibilitychange',function(){if(document.hidden)flushInlineDrafts();});",'');
+assert.ok(!/setInterval|visibilitychange|window\.onfocus/.test(manager),'no work polling or focus sync; roster rollover and draft flushing are independent');
 assert.equal(lockHeld,false);
 // Automatic linking uses visit date (not registration date), exact hospital, and one-to-one matches.
 const autoRequest=(day,extra={})=>{const saved=post({action:'work_save',form:{...form,visitAt:day+'T14:00',...extra},acknowledgeDuplicates:true});assert.equal(saved.success,true,JSON.stringify(saved));return saved.request;};
 const addSource=(day,extra={})=>{
- const s={hospital:'샘플병원',engineer:'엔지니어 B',gubun:'A/S',result:'정상',sn:'SN1',recordId:crypto.randomUUID(),...extra};
- const row=[day,s.hospital,s.engineer,s.gubun,'점검','누수','','0','자동 연결 현장 내용',s.result,'자동 연결 비고',s.sn,s.recordId];handover.data.push(row);return row;
+ const s={hospital:'샘플병원',engineer:'엔지니어 B',gubun:'A/S',result:'정상',sn:'SN1',recordId:crypto.randomUUID(),createdAt:new Date().toISOString(),...extra};
+ const row=[day,s.hospital,s.engineer,s.gubun,'점검','누수','','0','자동 연결 현장 내용',s.result,'자동 연결 비고',s.sn,s.recordId,JSON.stringify({createdAt:s.createdAt})];handover.data.push(row);return row;
 };
 const hook=(hospital,day)=>copy(sandbox.hwLock_(()=>sandbox.hospitalWorkHandoverSaved_(hospital,day)));
 const journalCount=()=>sheets.get('업무변경로그').data.length;
@@ -130,10 +132,10 @@ assert.equal(journalCount(),afterAuto,'repeated synchronization does not duplica
 assert.equal(get({action:'work_detail',id:auto.id}).request.revision,autoRevision);
 const reopened=post({action:'work_save',id:auto.id,baseRevision:autoRevision,form:{...form,visitAt:auto.visitAt,status:'처리중'},acknowledgeDuplicates:true});assert.equal(reopened.success,true);
 const reopenedDetail=get({action:'work_detail',id:auto.id});assert.equal(reopenedDetail.request.status,'처리중');assert.equal(reopenedDetail.autoMatch.skipped[0].reason,'reopened','old auto result cannot close explicitly reopened work');
-// Existing source before request creation is picked up by sync without a new Handover write.
-addSource('2026-10-11');const preexisting=autoRequest('2026-10-11');
-const synced=get({action:'work_sync'});assert.ok(synced.autoMatch.completed.some(x=>x.requestId===preexisting.id));
-assert.equal(synced.requests.find(x=>x.id===preexisting.id).status,'완료');
+// A pre-existing source with the same visit date does not qualify on sync.
+addSource('2026-10-11',{createdAt:'2026-10-01T00:00:00Z'});const preexisting=autoRequest('2026-10-11');
+const synced=get({action:'work_sync'});assert.ok(!synced.autoMatch.completed.some(x=>x.requestId===preexisting.id));
+assert.equal(synced.requests.find(x=>x.id===preexisting.id).status,'방문예정');
 const ambiguous=autoRequest('2026-10-12');addSource('2026-10-12');addSource('2026-10-12');
 assert.equal(get({action:'work_detail',id:ambiguous.id}).autoMatch.skipped[0].reason,'sources');
 assert.equal(get({action:'work_detail',id:ambiguous.id}).request.status,'방문예정');
@@ -158,6 +160,7 @@ const moved=post({action:'work_save',id:preserve.id,baseRevision:memoImport.requ
 const preserved=get({action:'work_detail',id:preserve.id});assert.equal(preserved.request.status,'완료');assert.equal(preserved.history.length,1);assert.equal(preserved.history[0].memo,'유지할 고객센터 메모');
 const linked=autoRequest('2026-10-22',{status:'방문예정'});
 // Completed same-day requests continue to participate in ambiguity checks.
+addSource('2026-10-22');
 assert.equal(get({action:'work_detail',id:linked.id}).autoMatch.skipped[0].reason,'requests');
 // Legacy IDs and partial automatic writes recover through the same durable journal.
 const legacyAuto=autoRequest('2026-10-23'),legacyRow=addSource('2026-10-23',{recordId:''});failSheet='업무처리이력';

@@ -6,11 +6,12 @@ const fixture=fs.readFileSync(new URL('./work-kv.mjs',import.meta.url),'utf8');
 const Kv=vm.runInNewContext('('+fixture.slice(fixture.indexOf('class Kv{'),fixture.indexOf('const kv=new Kv()')).trim()+')',{Map,structuredClone,JSON,String,Number,Infinity});
 const who={name:'CS',level:3},hospital={id:'h1',key:'h1',name:'검증 병원',sn:'SN1'};
 const form={hospitalKey:'h1',symptom:'원래 증상',cs:'CS',engineer:'FSE',sales:'',registeredAt:'2026-10-14T09:00',visitAt:'2026-10-14T12:00',deadline:'',status:'방문예정'};
-const report={recordId:'report1',hospitalName:hospital.name,date:'2026-10-14',sn:'SN1',engineer:'FSE',gubun:'A/S',detail:'수정 전',result:'수리',version:'v1',observedAt:'2026-10-14T01:00:00Z'};
 const write=(s,action,p)=>s.handle({action,operationId:crypto.randomUUID(),...p},who);
 for(const status of ['결과확인','완료','보류','취소']){
  const kv=new Kv(),s=createWorkStore(kv);await s.bridge('seed',{hospitals:[hospital],references:{engineers:['FSE'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
- const created=await write(s,'work_save',{form}),id=created.request.id;await s.ingestSources([report]);let d=await s.handle({action:'work_detail',id},who);
+ const created=await write(s,'work_save',{form}),id=created.request.id;
+ const report={recordId:'report1',hospitalName:hospital.name,date:'2026-10-14',sn:'SN1',engineer:'FSE',gubun:'A/S',detail:'수정 전',result:'수리',version:'v1',createdAt:created.request.createdAt,observedAt:'2026-10-14T01:00:00Z'};
+ await s.ingestSources([report]);let d=await s.handle({action:'work_detail',id},who);
  const result=d.history[0];await write(s,'work_result_save',{requestId:id,baseRevision:d.request.revision,recordId:report.recordId,sourceVersion:'v1',baseHistoryRevision:result.revision,memo:'보완 메모'});d=await s.handle({action:'work_detail',id},who);
  await write(s,'work_status',{requestId:id,baseRevision:d.request.revision,status});await write(s,'work_history_add',{requestId:id,body:'보존 댓글'});d=await s.handle({action:'work_detail',id},who);
  const before=d,seq=(await s.handle({action:'work_bootstrap'},who)).revision;

@@ -267,6 +267,9 @@ function hwAutoSources_(pairs,recordIds){
   }
   return hits;
 }
+function hwSavedInstant_(value){
+  return typeof value==='string'&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;
+}
 function hwAutoReconcileLocked_(target){
   if(hwKvMode_())return {completed:[],skipped:[]};
   target=target||{};
@@ -282,7 +285,8 @@ function hwAutoReconcileLocked_(target){
   var sources=hwAutoSources_(pairs),histories=hwAutoHistories_(eligible,sources);
   var who={name:'Handover 자동 연결',level:0};
   eligible.forEach(function(r){
-    var date=hwAutoDate_(r),key=hwAutoPair_(r.hospitalName,date),matches=sources.filter(function(x){return hwAutoPair_(x.source.hospitalName,x.source.date)===key;});
+    var date=hwAutoDate_(r),key=hwAutoPair_(r.hospitalName,date),receivedAt=hwSavedInstant_(r.createdAt);
+    var matches=sources.filter(function(x){return hwAutoPair_(x.source.hospitalName,x.source.date)===key&&hwSavedInstant_(x.source.createdAt)>=receivedAt;});
     if(!matches.length)return;
     function skip(reason,message){summary.skipped.push({requestId:r.id,reason:reason,message:message});}
     if(counts[key]!==1){skip('requests','같은 병원·방문일의 업무가 여러 건입니다. Handover 결과를 직접 선택하세요.');return;}

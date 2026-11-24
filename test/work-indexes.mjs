@@ -11,7 +11,7 @@ await assert.rejects(()=>Promise.resolve(kv.atomic()),/AtomicOperation.*not a pr
 try{
 const hospitals=[{id:'h1',key:'h1',name:'첫 병원',sales:'영업'},{id:'h2',key:'h2',name:'둘 병원',sales:'영업'},{id:'h3',key:'h3',name:'셋 병원',sales:'영업'}];
 hospitals.push({id:'h4',key:'h4',name:'넷 병원',sales:'영업'},{id:'h5',key:'h5',name:'다섯 병원',sales:'영업'},{id:'h6',key:'h6',name:'여섯 병원',sales:'영업'});
-const legacy=Array.from({length:150},(_,i)=>({id:'legacy_'+String(i).padStart(4,'0'),hospitalId:'unused_'+i,hospitalName:'과거 병원 '+i,status:'완료',visitAt:'2026-10-15T09:00',revision:1}));legacy[149]={...legacy[149],hospitalId:'h1',hospitalName:'첫 병원',status:'접수'};
+const legacy=Array.from({length:150},(_,i)=>({id:'legacy_'+String(i).padStart(4,'0'),hospitalId:'unused_'+i,hospitalName:'과거 병원 '+i,status:'완료',visitAt:'2026-10-15T09:00',revision:1,createdAt:'2026-10-15T00:00:00Z'}));legacy[149]={...legacy[149],hospitalId:'h1',hospitalName:'첫 병원',status:'접수'};
 await s.bridge('seed',{hospitals,requests:legacy,references:{engineers:['FSE','FSE2'],minimumLevel:1}});await s.bridge('activate',{manifest:await s.manifest()});
 const form={hospitalKey:'h1',symptom:'중복 확인',cs:'CS',sales:'영업',engineer:'FSE',registeredAt:'2026-10-15T08:00',visitAt:'2026-10-15T12:00',status:'접수'};
 const write=(action,p)=>s.handle({action,operationId:crypto.randomUUID(),...p},who);
@@ -36,7 +36,7 @@ assert.equal(await idx.ready(),false);assert.equal((await write('work_save',{for
 while(!(await s.prepareIndexes()).ready){}assert.equal((await idx.conflicts({id:'probe',hospitalId:'h3',engineer:'FSE2',visitAt:'2026-10-20T12:00'})).overlaps[0].id,'legacy_writer');
 let current=(await s.handle({action:'work_detail',id:r.id},who)).request;await write('work_status',{requestId:r.id,baseRevision:current.revision,status:'방문예정'});
 let fullScans=0;const originalList=kv.list.bind(kv);kv.list=(selector,options)=>{if(JSON.stringify(selector.prefix)==JSON.stringify([NS,'request']))fullScans++;return originalList(selector,options);};
-await s.ingestSources([{recordId:'report_indexed',hospitalName:'둘 병원',date:'2026-10-15',sn:'DIFFERENT-SN',gubun:'A/S',detail:'최신 처리 내용',result:'수리',version:'v1',observedAt:new Date().toISOString()}],undefined,r.id);
+await s.ingestSources([{recordId:'report_indexed',hospitalName:'둘 병원',date:'2026-10-15',sn:'DIFFERENT-SN',gubun:'A/S',detail:'최신 처리 내용',result:'수리',version:'v1',createdAt:current.createdAt,observedAt:new Date().toISOString()}],undefined,r.id);
 let detail=await s.handle({action:'work_detail',id:r.id},who);assert.equal(detail.history.filter(h=>h.kind==='result'&&h.source.recordId==='report_indexed').length,1);assert.equal(fullScans,0,'targeted Handover ingestion and automatic linking must not scan all requests');
 assert.equal((await s.handle({action:'work_index_prepare'},{name:'',level:0})).success,false);
 const unassigned=await write('work_save',{form:{...form,hospitalKey:'h6',engineer:'',visitAt:'2026-10-22T12:00'}});assert.ok(unassigned.success,unassigned.error);

@@ -7,10 +7,12 @@ Deno.test('real KV: atomic matching jobs, source-first recovery and pure delta r
   await store.bridge('seed',{hospitals:[{id:'h',key:'h',name:'fixture',sn:'SN'}],references:{minimumLevel:1,engineers:[]}});
   await store.bridge('activate',{manifest:await store.manifest()});
   const empty=await store.handle({action:'work_sync',revision:'0'},who);assert(empty.success&&empty.nochange,'empty KV sync');
-  await store.ingestSources([{recordId:'record',version:'v1',hospitalName:'fixture',date:'2026-10-16',gubun:'점검',sn:'SN',result:'정상',detail:'원문',observedAt:'2026-10-16T00:00:00Z'}]);
+  const source={recordId:'record',version:'v1',hospitalName:'fixture',date:'2026-10-16',gubun:'점검',sn:'SN',result:'정상',detail:'원문',observedAt:'2026-10-16T00:00:00Z'};
+  await store.ingestSources([{...source,recordId:'older-report',createdAt:'2026-10-15T00:00:00Z'}]);
   const saved=await store.handle({action:'work_save',operationId:crypto.randomUUID(),form:{hospitalKey:'h',symptom:'점검',cs:'fixture',engineer:'',registeredAt:'2026-10-16T09:00',visitAt:'2026-10-16T12:00',status:'접수'}},who);
   assert(saved.success,'real atomic request/job transaction: '+JSON.stringify(saved));
   const current=createWorkStore(kv);
+  await current.ingestSources([{...source,createdAt:saved.request.createdAt}]);
   await Promise.all([current.processPendingMatches(),createWorkStore(kv).processPendingMatches()]);
   await current.processPendingMatches();
   const d=await current.handle({action:'work_detail',id:saved.request.id},who);
