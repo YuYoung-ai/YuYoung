@@ -23,14 +23,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
-  deploy:
+  upload:
     env:
       PAGES_ARTIFACT: github-pages-${{ github.run_attempt }}
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.artifact.outputs.name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +40,19 @@ jobs:
           # Upload entire repository
           path: '.'
           name: ${{ env.PAGES_ARTIFACT }}
+      - name: Record the uploaded artifact name
+        id: artifact
+        run: echo "name=$PAGES_ARTIFACT" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: upload
+    env:
+      PAGES_ARTIFACT: ${{ needs.upload.outputs.artifact }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Wait for uploaded artifact
         shell: bash
         env:
