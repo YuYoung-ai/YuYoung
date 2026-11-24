@@ -1,6 +1,7 @@
 // Notification records are isolated from authentication, work audit and Sheet mirror keys.
 type Obj = Record<string, any>;
 import {createWorkRoster} from './work-roster.ts';
+import {accountVersionKey} from './user-access.mjs';
 export const PUSH_NS = 'work-notifications-v1';
 export const notificationKey = (...p:any[]) => [PUSH_NS,...p];
 export async function removeRequestNotifications(kv:any,requestId:string){
@@ -104,7 +105,9 @@ export function createWorkNotifications(kv:any,options:Obj){
   const d=await directory();
   const matches=who.uid?d.accounts.filter(a=>a.uid===who.uid):d.accounts.filter(a=>a.name===who.name);
   if(matches.length!==1)throw new Error('알림 설정을 위해 다시 로그인해 주세요.');
-  const a=matches[0];await options.store.checkAccess({name:a.name,level:Math.min(a.level,who.level)});return {a,d};
+  const a=matches[0];
+  if ((a.accessVersion || '') !== (who.accessVersion || '')) throw new Error('알림 설정을 위해 다시 로그인해 주세요.');
+  await options.store.checkAccess({name:a.name,level:Math.min(a.level,who.level)});return {a,d};
  }
  async function currentEvent(e:Obj){
   if(e.schema===2&&!['receipt','assignment'].includes(e.kind)){
@@ -203,11 +206,13 @@ export function createWorkNotifications(kv:any,options:Obj){
  async function subscribe(p:Obj,a:Obj){
   const subscription=validateSubscription(p.subscription),id=await digest(subscription.endpoint);
   for(let tries=0;tries<8;tries++){
+   const access=await kv.get(accountVersionKey(a.uid));
+   if ((access.value || '') !== (a.accessVersion || '')) throw new Error('알림 설정을 위해 다시 로그인해 주세요.');
    const old=await get('subscription',id),quota=await get('deviceRevision',a.uid),devices=await rows(['device',a.uid],11);
    if(!devices.some(x=>x.value.id===id)&&devices.length>=10)throw new Error('알림 기기는 최대 10개까지 등록할 수 있습니다.');
    const same=old.value?.uid===a.uid&&JSON.stringify(old.value.subscription)===JSON.stringify(subscription);
    const record={id,uid:a.uid,subscription,binding:same?old.value.binding:crypto.randomUUID(),updatedAt:now()};
-   let tx=kv.atomic().check(old,quota).set(quota.key,Number(quota.value||0)+1).set(key('subscription',id),record,{expireIn:DEVICE_TTL}).set(key('device',a.uid,id),{id,binding:record.binding},{expireIn:DEVICE_TTL});
+   let tx=kv.atomic().check(old,quota,access).set(quota.key,Number(quota.value||0)+1).set(key('subscription',id),record,{expireIn:DEVICE_TTL}).set(key('device',a.uid,id),{id,binding:record.binding},{expireIn:DEVICE_TTL});
    if(old.value&&old.value.uid!==a.uid)tx=tx.delete(key('device',old.value.uid,id));
    if((await tx.commit()).ok)return {success:true,uid:a.uid,deviceId:id,engineer:a.engineer||'',broadcast:true};
   }

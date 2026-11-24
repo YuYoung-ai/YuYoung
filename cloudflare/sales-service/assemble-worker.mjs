@@ -41,12 +41,13 @@ const oldListAdapter = '      requestPage: cursor => salesRequestPage(kv, cursor
 const listAdapter = '      requestPage: (cursor, dateRange) => salesRequestPage(kv, cursor, {keyHex, prefixEnd, unpack}, dateRange)';
 const rangeVersion = '      rangeVersion: parts => salesRangeVersion(kv, parts, {keyHex, prefixEnd}),';
 const existingAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자"} : null;';
-const linkedAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자", sub:admin.sub} : null;';
+const previousLinkedAdmin = '        return admin?.status === "active" && Number(admin.level) >= 3 ? {name: admin.name || "BAZ CS 관리자", sub:admin.sub} : null;';
+const linkedAdmin = previousLinkedAdmin.replace('sub:admin.sub','sub:admin.sub, accessVersion:admin.accessVersion');
 const adminDirectory = `      getCsAdmins: async () => {
         const admins = [];
         for await (const entry of kv.list({prefix:["user_email"]})) {
           const account = entry.value;
-          if (account.status === "active" && Number(account.level) >= 3) admins.push({email: account.email, name: account.name || "BAZ CS 관리자", linked:Boolean(account.sub), lastLogin:account.lastLogin});
+          if (account.status === "active" && Number(account.level) >= 3) admins.push({email: account.email, name: account.name || "BAZ CS 관리자", linked:Boolean(account.sub), lastLogin:account.lastLogin, accessVersion:account.accessVersion});
         }
         return admins;
       },`;
@@ -57,8 +58,12 @@ if (previousExtension) {
         for await (const entry of scan) rows.push(entry.value);
         return {rows, cursor: rows.length === limit ? scan.cursor : ""};
       }`, listAdapter);
-  if (!source.includes(adminDirectory)) insert(listAdapter, `${adminDirectory}\n${listAdapter}`);
-  if (!source.includes(linkedAdmin)) insert(existingAdmin, linkedAdmin);
+  if (!source.includes(adminDirectory)) {
+    const previousDirectory = adminDirectory.replace(', accessVersion:account.accessVersion','');
+    if (source.includes(previousDirectory)) insert(previousDirectory, adminDirectory);
+    else insert(listAdapter, `${adminDirectory}\n${listAdapter}`);
+  }
+  if (!source.includes(linkedAdmin)) insert(source.includes(previousLinkedAdmin) ? previousLinkedAdmin : existingAdmin, linkedAdmin);
   if (!source.includes(rangeVersion)) insert(listAdapter, `${rangeVersion}\n${listAdapter}`);
 } else {
 const routing = '  async function handleAction(action, p, clientIp, origin = "") {';

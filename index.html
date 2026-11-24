@@ -64,6 +64,13 @@
     box-shadow:0 0 0 3px rgba(46,125,158,.12);}
   textarea{resize:vertical;min-height:80px;line-height:1.6;}
   .row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .security-user-actions{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,auto);gap:6px;margin-top:8px;}
+  .security-user-actions button:disabled{opacity:.55;cursor:default;}
+  @media(max-width:460px){
+    .security-user-actions{grid-template-columns:repeat(3,minmax(0,1fr));}
+    .security-user-actions select{grid-column:1/-1;}
+    .security-user-actions button{min-height:44px;}
+  }
   .photo-zone{border:2px dashed var(--gray-line);border-radius:12px;padding:20px 14px;
     display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:all .2s;
     background:var(--gray-bg);position:relative;text-align:center;}
@@ -362,7 +369,7 @@
       <div id="securityDeviceList" style="display:flex;flex-direction:column;gap:7px;margin-bottom:15px;"></div>
       <h4 style="margin:0 0 7px;color:#1B2F5E;font-size:13px;">최근 보안 기록 <span style="font-size:10px;color:#8A96AB;font-weight:500;">최대 100건</span></h4>
       <div id="securityAuditList" style="display:flex;flex-direction:column;gap:6px;"></div>
-      <div id="securityAdminStatus" style="font-size:11.5px;color:#6B7A99;min-height:18px;margin-top:10px;text-align:center;"></div>
+      <div id="securityAdminStatus" role="status" style="font-size:11.5px;color:#6B7A99;min-height:18px;margin-top:10px;text-align:center;"></div>
     </div>
   </div>
 
@@ -2133,20 +2140,22 @@ function openSecurityAdmin(){
   loadSecurityAdmin();
 }
 function closeSecurityAdmin(){document.getElementById('securityAdminModal').style.display='none';}
-function renderSecurityUsers_(users){
+function renderSecurityUsers_(users,currentEmail){
   var box=document.getElementById('securityUserList');
   if(!users||!users.length){box.innerHTML='<div style="padding:18px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:12px;">등록된 Google 사용자가 없습니다.</div>';return;}
   box.innerHTML=users.map(function(u){
     var active=u.status!=='disabled';
+    var deleteDisabled=!currentEmail||u.email===currentEmail;
     return '<div data-sec-user data-email="'+securityEsc_(u.email)+'" data-name="'+securityEsc_(u.name||'')+'" data-status="'+(active?'active':'disabled')+'" style="border:1px solid #DDE3EE;border-radius:9px;padding:10px;background:'+(active?'#fff':'#F6F7F9')+';">'
       +'<div style="display:flex;gap:8px;align-items:flex-start;"><div style="flex:1;min-width:0;"><b style="font-size:13px;color:#1B2F5E;">'+securityEsc_(u.name||'이름 없음')+'</b>'
       +'<div style="font-size:11px;color:#6B7A99;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+securityEsc_(u.email)+'</div>'
       +'<div style="font-size:10px;color:#8A96AB;margin-top:3px;">'+(u.linked?'Google 연결됨':'첫 로그인 대기')+' · 최근 '+securityDate_(u.lastLogin)+'</div></div>'
       +'<span style="font-size:10px;font-weight:700;padding:3px 7px;border-radius:12px;background:'+(active?'#E8F5EE':'#FBEAE8')+';color:'+(active?'#1E7E4E':'#C0392B')+';">'+(active?'사용 중':'중지')+'</span></div>'
-      +'<div style="display:flex;gap:6px;margin-top:8px;"><select data-sec-level style="flex:1;padding:7px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;">'
+      +'<div class="security-user-actions"><select data-sec-level aria-label="권한" style="padding:7px;border:1px solid #DDE3EE;border-radius:7px;font-family:inherit;">'
       +[1,2,3].map(function(l){return '<option value="'+l+'"'+(Number(u.level)===l?' selected':'')+'>Lv.'+l+'</option>';}).join('')+'</select>'
       +'<button type="button" data-sec-save style="padding:7px 10px;border:0;border-radius:7px;background:#1B2F5E;color:#fff;font-family:inherit;font-weight:700;cursor:pointer;">권한 저장</button>'
-      +'<button type="button" data-sec-toggle style="padding:7px 10px;border:1px solid '+(active?'#C0392B':'#1E7E4E')+';border-radius:7px;background:#fff;color:'+(active?'#C0392B':'#1E7E4E')+';font-family:inherit;font-weight:700;cursor:pointer;">'+(active?'사용 중지':'다시 활성')+'</button></div></div>';
+      +'<button type="button" data-sec-toggle style="padding:7px 10px;border:1px solid '+(active?'#C0392B':'#1E7E4E')+';border-radius:7px;background:#fff;color:'+(active?'#C0392B':'#1E7E4E')+';font-family:inherit;font-weight:700;cursor:pointer;">'+(active?'사용 중지':'다시 활성')+'</button>'
+      +'<button type="button" data-sec-delete'+(deleteDisabled?' disabled':'')+' style="padding:7px 10px;border:1px solid #C0392B;border-radius:7px;background:#fff;color:#C0392B;font-family:inherit;font-weight:700;cursor:pointer;">삭제</button></div></div>';
   }).join('');
 }
 function renderSecurityDevices_(d, error){
@@ -2163,7 +2172,7 @@ function renderSecurityAudits_(items,error){
   var box=document.getElementById('securityAuditList');
   if(error){box.innerHTML='<div style="padding:11px;text-align:center;color:#C0392B;border:1px dashed #E6C6C3;border-radius:9px;font-size:11.5px;">보안 기록을 불러오지 못했습니다.</div>';return;}
   if(!items||!items.length){box.innerHTML='<div style="padding:11px;text-align:center;color:#7A879F;border:1px dashed #DDE3EE;border-radius:9px;font-size:11.5px;">아직 보안 기록이 없습니다.</div>';return;}
-  var labels={google_login:'Google 로그인',password_login:'이전 인증 기록',device_login:'기기 자동 로그인',user_save:'사용자 변경',device_revoke:'기기 해지'};
+  var labels={google_login:'Google 로그인',password_login:'이전 인증 기록',device_login:'기기 자동 로그인',user_save:'사용자 변경',user_delete:'허용 사용자 삭제',device_revoke:'기기 해지'};
   box.innerHTML=items.map(function(a){
     var ok=a.result==='ok', target=a.target?' → '+securityEsc_(a.target):'';
     return '<div style="display:flex;gap:8px;align-items:flex-start;border:1px solid #E5E9F0;border-radius:8px;padding:8px;background:#FAFBFC;">'
@@ -2172,16 +2181,16 @@ function renderSecurityAudits_(items,error){
       +'<div style="color:#8A96AB;">'+securityDate_(a.at)+' · 기기 '+securityEsc_(a.client||'-')+'</div></div></div>';
   }).join('');
 }
-async function loadSecurityAdmin(){
+async function loadSecurityAdmin(message){
   var status=document.getElementById('securityAdminStatus');
   status.style.color='#6B7A99';status.textContent='불러오는 중…';
   var results=await Promise.all([BazAuth.adminRequest('users',{}),BazAuth.adminRequest('devices',{}),BazAuth.adminRequest('audits',{})]);
   var u=results[0],d=results[1],a=results[2];
   if(!u.ok){status.style.color='#C0392B';status.textContent='사용자 목록을 불러오지 못했습니다: '+(u.error||'오류');return;}
-  renderSecurityUsers_(u.users||[]);
+  renderSecurityUsers_(u.users||[],u.currentEmail);
   renderSecurityDevices_(d.devices||[],d.ok?'':d.error);
   renderSecurityAudits_(a.audits||[],a.ok?'':a.error);
-  status.textContent='';
+  status.textContent=message||'';
 }
 async function saveSecurityUser_(data){
   var status=document.getElementById('securityAdminStatus');
@@ -2196,15 +2205,33 @@ document.getElementById('securityAddUser').addEventListener('click',async functi
   var email=document.getElementById('securityNewEmail').value.trim();
   var level=Number(document.getElementById('securityNewLevel').value);
   if(!name||!email){document.getElementById('securityAdminStatus').textContent='이름과 Google 이메일을 입력하세요.';return;}
-  if(await saveSecurityUser_({name:name,email:email,level:level,status:'active'})){
+  if(await saveSecurityUser_({name:name,email:email,level:level,status:'active',create:true})){
     document.getElementById('securityNewName').value='';document.getElementById('securityNewEmail').value='';
   }
 });
-document.getElementById('securityUserList').addEventListener('click',function(e){
+document.getElementById('securityUserList').addEventListener('click',async function(e){
   var row=e.target.closest('[data-sec-user]');if(!row)return;
+  var remove=e.target.closest('[data-sec-delete]');
+  var email=row.getAttribute('data-email'), name=row.getAttribute('data-name');
+  if(remove){
+    if(remove.disabled||!confirm((name||email)+' ('+email+') 계정을 BAZ CS 허용 목록에서 삭제할까요? 기억된 로그인과 기기 알림 연결이 해제됩니다.'))return;
+    remove.disabled=true;
+    var message=document.getElementById('securityAdminStatus');
+    message.style.color='#6B7A99';message.textContent='삭제 중…';
+    var result=await BazAuth.adminRequest('user_delete',{email:email});
+    if(result.ok){
+      row.remove();
+      await loadSecurityAdmin('허용 사용자를 삭제했습니다.');
+    }else{
+      remove.disabled=false;
+      var errors={self_delete:'본인 관리자 계정은 삭제할 수 없습니다.',forbidden:'Lv.3 관리자 권한이 필요합니다.',user_changed:'사용자 정보가 변경됐습니다. 새로고침 후 다시 시도해 주세요.',user_not_found:'등록된 사용자를 찾을 수 없습니다.'};
+      message.style.color='#C0392B';message.textContent=errors[result.error]||'사용자를 삭제하지 못했습니다. 다시 시도해 주세요.';
+    }
+    return;
+  }
   var save=e.target.closest('[data-sec-save]'),toggle=e.target.closest('[data-sec-toggle]');if(!save&&!toggle)return;
   var status=row.getAttribute('data-status');
-  saveSecurityUser_({email:row.getAttribute('data-email'),name:row.getAttribute('data-name'),level:Number(row.querySelector('[data-sec-level]').value),status:toggle?(status==='active'?'disabled':'active'):status});
+  saveSecurityUser_({email:email,name:name,level:Number(row.querySelector('[data-sec-level]').value),status:toggle?(status==='active'?'disabled':'active'):status,edit:true});
 });
 document.getElementById('securityDeviceList').addEventListener('click',async function(e){
   var b=e.target.closest('[data-device-revoke]');if(!b)return;
