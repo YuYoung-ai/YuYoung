@@ -49,8 +49,10 @@ async function assertVocCentered(type){
    const metric=items.find(o=>o.reportVocMetric===i);
    const description=items.filter(o=>o.reportVocDescription===i);
    const last=description.at(-1)||name;
+   const shift=description.length?description[0].y-name.y-name.h-card.descGap:0;
    return {center:card.y+card.top+(i+.5)*card.pitch,
-    textCenter:(name.y+last.y+last.h)/2,metricCenter:metric.y+metric.h/2,
+    textCenter:(name.y+last.y+last.h-shift)/2,metricCenter:metric.y+metric.h/2,
+    shift:pvIn(shift),hasDescription:description.length>0,
     overlap:description.some(o=>o.x+o.w>metric.x)};
   });
  },type);
@@ -58,6 +60,7 @@ async function assertVocCentered(type){
  for(const row of rows){
   assert(Math.abs(row.textCenter-row.center)<.0001);
   assert(Math.abs(row.metricCenter-row.center)<.0001);
+  assert(Math.abs(row.shift-(row.hasDescription?3:0))<.0001);
   assert(!row.overlap);
  }
 }

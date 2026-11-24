@@ -225,7 +225,7 @@
    items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},reportCard:title});
    text(T.x+T.pad,T.y+.07,T.w-T.pad*2,.25,title,10.5,C.navy,true);
   }
-  var T=B.voc,x=T.x+T.pad,w=T.w-T.pad*2;
+  var T=B.voc,x=T.x+T.pad,w=T.w-T.pad*2,descShift=3/root.PVK;
   shell(T,VOC_TITLE);
   if(!s.reportVoc.length)text(x,T.y+T.top,w,.25,'선택한 기간에 표시할 유형이 없습니다.',9,C.mut);
   s.reportVoc.forEach(function(r,i){
@@ -238,11 +238,13 @@
    }
    if(lines.length>3)throw new Error(r.name+' 보조문구를 세 줄 이내로 줄여주세요.');
    var blockH=T.nameH+(lines.length?T.descGap+lines.length*T.descH:0);
-   var nameY=center-blockH/2,descY=nameY+T.nameH+T.descGap;
+   var nameY=center-blockH/2,descY=nameY+T.nameH+T.descGap+descShift;
    text(x,nameY,nameW,T.nameH,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{reportVoc:i});
    text(x+w-metricW,center-T.nameH/2,metricW,T.nameH,r.metric,9,C.navy,true,{align:'right',reportVocMetric:i});
    lines.forEach(function(line,j){text(x,descY+j*T.descH,nameW,T.descH,line,size,C.mut,false,{reportVocDescription:i});});
-   items.push({k:'line',x:x,y:y+T.pitch-T.dividerGap,w:w,color:C.line,width:.5,reportVocDivider:true});
+   var dividerY=y+T.pitch-T.dividerGap;
+   if(lines.length)dividerY=Math.max(dividerY,descY+lines.length*T.descH+.005);
+   items.push({k:'line',x:x,y:dividerY,w:w,color:C.line,width:.5,reportVocDivider:true});
   });
   T=B.management;
   shell(T,MANAGEMENT_TITLE);
