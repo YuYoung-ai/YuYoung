@@ -179,6 +179,7 @@ body.is-dirty .dirty-badge{display:inline-block}
 <!-- 공용 모듈 (빌드 없음 · 정적 배포 그대로 동작 · node require() 로 테스트도 같은 파일을 본다) -->
 <script src="js/baz-dom.js"></script>
 <script src="js/baz-handover-core.js?v=349"></script>
+<script src="js/baz-handover-parts.js?v=385"></script>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-handover.css?v=295">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
@@ -719,9 +720,7 @@ function loadLiveDB(){
     });
 }
 
-/* 교체품 마스터 (병원 점검 현황 시트 기준) */
-var PARTS=["없음","Handpiece Ass'y","Foot-SW Ass'y","Foot-SW Connector(장비)","Top Cover Ass'y","Main Board","RFID Module","LCD + Raspberry Pi Ass'y","SD Card","HP / SD Card","On / Off Swich","On / Off Key","Emergency Switch","Power Adaptor","Power Cable","Water Tank","Water Pump","Caster","Arm","Arm Holder","AC Cord","Cradle (거치대)","Nozzle","Nozzle Spanner","Perm-Holder","Piston (V 1.0)","Piston (V 1.1)","Piston (V 1.2)","Bush Bobbin","Spring","Plunger (V 1.2.1)","Plunger (V 1.2.2)","Adaptor(1.0)","Adaptor(1.1)","Damper","Spacer","Wrench Bolt (수평)","Wrench Bolt (수직)","대체장비입고","재체결","내부 세척","Spring(1.0)","Power Key","Plunger(1.2.1)","HP-Cradle Ass'y(거치대)","Adaptor","Holder","Water tank Ass'y","RFID Module A'ssy","Fan","Foot-SW cable","Foot-SW Ass'y (Repair)"];
-function fillParts(){ var s=document.getElementById('part'); PARTS.forEach(function(p){var o=document.createElement('option');o.textContent=p;s.appendChild(o);}); }
+var parts;
 function todayISO(){ var d=new Date(),z=function(n){return (n<10?'0':'')+n;}; return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate()); }
 
 /* ▼▼ 현장 처리 현황(handover) 확장 웹앱 URL — handover_gas.gs 배포 후 붙여넣기 ▼▼ */
@@ -1357,10 +1356,7 @@ function applyMaster(d){
       .sort(function(a,b){ return String(a[0]).localeCompare(String(b[0])); });
     if(coded.length){ AS_TAX[cat]=coded; changed++; }
   });
-  (d.parts||[]).forEach(function(pp){
-    if(PARTS.indexOf(pp)<0){ PARTS.push(pp);
-      var op=document.createElement('option'); op.textContent=pp; el('part').appendChild(op); }
-  });
+  parts.merge(d.parts);
 
   if(changed){
     var catSel=el('cat'); catSel.innerHTML='';
@@ -1389,7 +1385,7 @@ function applyMaster(d){
     if(lost.length) toast('⚠️ 시트 마스터가 바뀌어 '+lost.join(', ')+' 항목을 찾지 못했습니다.\n직접입력으로 옮겨 두었으니 확인해 주세요.');
   }
   /* ③ 교체품 복원 */
-  if(before.part && PARTS.indexOf(before.part)>=0) setVal('part', before.part);
+  if(before.part && parts.has(before.part)) setVal('part', before.part);
   if(d.fse) fillFseList(d.fse);
   var badge=el('syncBadge'); if(badge && !document.body.classList.contains('is-dirty')) badge.textContent='· 시트 동기화됨';
   /* ★ 상태를 바꿨으면 반드시 미리보기를 다시 그린다(화면=저장값 유지) */
@@ -1457,7 +1453,7 @@ function applyRecent(i){
   var sub=document.getElementById('sub'), found=false;
   Array.prototype.forEach.call(sub.options,function(o){ if(o.textContent===c.type){ sub.value=o.value; found=true; } });
   if(!found&&c.type){ sub.value='__c'; toggleCustom('sub'); document.getElementById('subCustom').value=c.type; }
-  if(c.part) document.getElementById('part').value = PARTS.indexOf(c.part)>=0 ? c.part : '없음';
+  if(c.part) document.getElementById('part').value = parts.has(c.part) ? c.part : '없음';
   if(c.detail) document.getElementById('detail').value=c.detail;
   if(c.nozzleReuse) document.getElementById('nozzleReuse').value = (c.nozzleReuse==='O'?'O':'X');
   render(); toast('이전 처리 내용을 불러왔어요');
@@ -1566,7 +1562,7 @@ function measureActions(){
 }
 
 /* ═══ 초기화 ══════════════════════════════════════════════════════════════ */
-initTax(); fillParts(); fillSN([]); loadFse();
+initTax(); parts=BazHandoverParts.create(el('part')); parts.set('없음'); fillSN([]); loadFse();
 setVal('date', todayISO());
 bindAll();
 setSaveState(BazHandover.SAVE.IDLE);

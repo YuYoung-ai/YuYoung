@@ -73,7 +73,7 @@ node('hospital').value='보관 병원 수정';node('serialNo').value='OLD';node(
 assert.equal(node('serialNo').value,'','restored tasks also invalidate the former hospital serial');
 vm.runInContext('hospitalBinding.restore({});',picker);node('hospital').value='직접 입력 병원';node('serialNo').value='NEW-MANUAL';config.onInput();
 assert.equal(node('serialNo').value,'NEW-MANUAL','manual entry from a new task remains supported');
-assert.ok(html.includes('hospitalAutocomplete.reset();partAutocomplete.reset();'));
+assert.ok(html.includes('hospitalAutocomplete.reset();partAutocomplete?.reset();'));
 assert.match(html,/const HOSPITAL_DB = \[\];/);
 assert.match(html,/hospitalDb.load\(false\)/);
 console.log('PASS: authenticated Sheet source, refresh deduplication, same-name equipment, deleted/cleared rows, offline cache, auth errors and selection fields');
@@ -93,6 +93,6 @@ assert.equal(vm.runInContext('fillInspectionSales()',picker),true);assert.equal(
 node('receiver').value='수동 담당';assert.equal(vm.runInContext('fillInspectionSales()',picker),false);assert.equal(node('receiver').value,'수동 담당');
 assert.match(html,/<label for="receiver">영업 담당자<\/label>/);
 assert.match(html,/hospitalBinding.restore\(d.basic\);\s*fillInspectionSales\(\);/);
-assert.match(html,/if\(!blank\)fillInspectionSales\(\);\s*if\(!blank && !validate/);
+assert.match(html,/if\(!blank\)\{fillInspectionSales\(\);fillInspectionSubscription\(\);\}\s*if\(!blank && !validate/);
 console.log('PASS: missing salesperson backfill, manual/request precedence, serial disambiguation, unknown data and restored/PDF paths');
 

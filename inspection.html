@@ -498,7 +498,7 @@
         </div>
         <div class="row-2">
           <div class="field-group" style="position:relative;">
-            <label>교환품 <span id="partMatch" style="font-weight:500;font-size:11px;color:var(--teal);"></span></label>
+            <label for="replacedPart">교환품 <span id="partMatch" style="font-weight:500;font-size:11px;color:var(--teal);"></span></label>
             <input type="text" id="replacedPart" placeholder="부품명 입력 (자동완성)" maxlength="40" autocomplete="off">
             <div id="partDropdown" class="ac-dropdown" style="max-height:240px;"></div>
           </div>
@@ -653,6 +653,7 @@
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
 <script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=381"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
+<script src="js/baz-handover-parts.js?v=385"></script>
 
 
 <script>
@@ -685,6 +686,9 @@ const SHEET_WIDTH = 794;                   // PDF 렌더 시트 폭 (px, A4 @96d
 const PDF_SCALE = 2;                       // html2canvas 배율
 const A4_W = 210, A4_H = 297;              // A4 (mm)
 const PDF_MARGIN = 8;                      // A4 균일 여백 (mm)
+const inspectionView=BazInspectionSession.view(),inspectionEntry=BazInspectionSession.intent(location.search);
+const combinedRequest=new URLSearchParams(location.search).get('combined');
+const combinedTaskId=inspectionEntry.kind==='general'&&BazWorkFlow.valid(combinedRequest)&&'handover-'+combinedRequest;
 
 // ===== Selector Cache (자주 쓰는 요소 1회 조회) =====
 const els = {
@@ -765,8 +769,44 @@ document.getElementById('hospitalDbRefresh').addEventListener('click',()=>hospit
 // ===== 부품 단가표 (자동완성용) =====
 const PARTS_DB = [{"p":"Handpiece Ass'y","c":"HP","pr":1650000},{"p":"Permanent-Holder","c":"HP","pr":88000},{"p":"Spring(1.0)","c":"HP","pr":10000},{"p":"Plunger","c":"HP","pr":30000},{"p":"Piston","c":"HP","pr":66000},{"p":"HP-Cradle Ass'y","c":"BODY","pr":50000},{"p":"Cable-ARM Ass'y","c":"BODY","pr":400000},{"p":"Raspberry Pi Touch Display","c":"BODY","pr":190000},{"p":"Raspberry Pi 4 4G","c":"BODY","pr":160000},{"p":"RFID Module Ass'y","c":"BODY","pr":150000},{"p":"Main Board Ass'y","c":"BODY","pr":1000000},{"p":"Power Supply","c":"BODY","pr":1500000},{"p":"Water hose (200mm→350mm)","c":"BODY","pr":80000},{"p":"원터치 피팅 PLM-06C","c":"BODY","pr":10000},{"p":"원터치 피팅 PMM-06C","c":"BODY","pr":10000},{"p":"Key Switch","c":"BODY","pr":15158},{"p":"ON/OFF KEY","c":"BODY","pr":10000},{"p":"Emergency Switch","c":"BODY","pr":50000},{"p":"POWER ADAPTOR Ass'y","c":"BODY","pr":200000},{"p":"Caster","c":"BODY","pr":50000},{"p":"Water pump Assy","c":"모듈","pr":300000},{"p":"Touch screen Assy","c":"모듈","pr":450000},{"p":"Foot-SW-Assy (BAZ, Linemaster)","c":"모듈","pr":500000}];
 
-// 교환품(부품) 자동완성 + 단가 자동입력
-const partAutocomplete=setupAutocomplete({
+function showPartPrice(part){
+  document.getElementById('cost').value=comma(part.pr);
+  const matchInfo=document.getElementById('partMatch');
+  matchInfo.textContent='✓ 단가 '+comma(part.pr)+'원';
+  setTimeout(()=>{ matchInfo.textContent=''; },3000);
+}
+
+function mountCombinedParts(){
+  const input=document.getElementById('replacedPart');
+  const select=document.createElement('select');
+  select.id=input.id;
+  input.replaceWith(select);
+  document.getElementById('partDropdown').remove();
+  const parts=BazHandoverParts.create(select);
+  const blank=new Option('선택 안 함','');
+  blank.hidden=true;
+  select.add(blank);
+  parts.set('');
+  select.addEventListener('change',()=>{
+    delete generatedAsDefaults.replacedPart;
+    parts.set(select.value);
+    const price=PARTS_DB.find(part=>part.p===select.value);
+    if(price) showPartPrice(price);
+    else document.getElementById('partMatch').textContent='';
+    autoSave();
+  });
+  return parts;
+}
+
+const combinedParts=combinedTaskId?mountCombinedParts():null;
+
+function setReplacedPart(value){
+  if(combinedParts) combinedParts.set(value);
+  else document.getElementById('replacedPart').value=value;
+}
+
+// 일반 점검 양식의 교환품 자동완성
+const partAutocomplete=combinedParts?null:setupAutocomplete({
   inputId:'replacedPart', dropdownId:'partDropdown',
   db: PARTS_DB,
   itemText: p => p.p,
@@ -776,11 +816,8 @@ const partAutocomplete=setupAutocomplete({
         <span style="font-size:12px;color:#2E7D9E;font-weight:700;white-space:nowrap;">${comma(p.pr)}원</span>`,
   onInput: ()=>{ document.getElementById('partMatch').textContent=''; },
   onPick: (p)=>{
-    document.getElementById('replacedPart').value = p.p;
-    document.getElementById('cost').value = comma(p.pr);  // 단가 자동입력
-    const matchInfo = document.getElementById('partMatch');
-    matchInfo.textContent = '✓ 단가 ' + comma(p.pr) + '원';
-    setTimeout(()=>{ matchInfo.textContent=''; }, 3000);
+    setReplacedPart(p.p);
+    showPartPrice(p);
     autoSave();
   },
 });
@@ -794,6 +831,12 @@ var AS_TAX={
   "노즐":[["N01","보증샷 초과"],["N02","재사용 노즐"],["N03","RFID 스캔 불량"],["N04","젯팅 불량"],["N05","노즐 막힘"],["N06","체결력 강함"],["N07","체결력 약함"],["N08","노즐 누수"],["N09","크랙"],["N10","후크 파손"],["N11","멤브레인 파손"],["N12","이물"],["N13","볼트 체결"],["N14","작업불량"],["N15","고점도 약물"],["N16","사용 설명"],["N17","기타"]],
   "기타":[["G01","사용 설명"],["G02","재현 안됨"]]
 };
+
+const AS_ACTION_DEFAULTS={
+  H03:'약액 누수로 인한 HP 외, 내부 세척 완료',
+  E24:'약액 유입 미발생 및 예방 차원 내부 세척 실시'
+};
+let generatedAsDefaults={};
 
 const INSP_ITEMS = [
   {n:1, name:'본체 외관', desc:'외관 및 내부 먼지 제거, 소독 처리'},
@@ -1065,7 +1108,10 @@ document.querySelectorAll('.sig-clear').forEach(b=>{
 
 // ===== 텍스트/날짜 입력 자동저장 (본문 폼 전체 위임) =====
 document.querySelector('.body').addEventListener('input', (e)=>{
-  if(e.target.matches('input,textarea,select')) autoSave();
+  if(e.target.matches('input,textarea,select')){
+    delete generatedAsDefaults[e.target.id];
+    autoSave();
+  }
 });
 
 // ===== 날짜 기본값: 오늘 =====
@@ -1129,6 +1175,24 @@ function asSubName(){
 }
 function asItemCode(){ const s=document.getElementById('asSub'); return (s.value==='__c')?'':s.value; }
 function asItemText(){ const c=v('asCat'), n=asSubName(); if(!c) return ''; return n ? c+' / '+n : c; }
+function applyAsDefaults(){
+  if(!combinedParts) return;
+  const detail=AS_ACTION_DEFAULTS[asItemCode()]||'';
+  const next={};
+  for(const [id,value] of Object.entries({replacedPart:detail?'내부 세척':'',actionDetail:detail})){
+    const field=document.getElementById(id);
+    if(field.value!==generatedAsDefaults[id]&&(!value||field.value.trim())) continue;
+    if(value) next[id]=value;
+    if(id==='replacedPart'){
+      setReplacedPart(value);
+      document.getElementById('partMatch').textContent='';
+    }else{
+      field.value=value;
+      document.getElementById('cc_action').textContent=value.length;
+    }
+  }
+  generatedAsDefaults=next;
+}
 // 유형명으로 select 값 맞추기 (이력 채우기용)
 function setAsClassification(cat, typeName){
   if(!cat || !AS_TAX[cat]) return false;
@@ -1140,14 +1204,15 @@ function setAsClassification(cat, typeName){
   toggleSubCustom(); updateAsCode();
   return true;
 }
-document.getElementById('asCat').addEventListener('change', ()=>{ fillSub(); autoSave(); });
-document.getElementById('asSub').addEventListener('change', ()=>{ toggleSubCustom(); updateAsCode(); autoSave(); });
+document.getElementById('asCat').addEventListener('change', ()=>{ fillSub(); applyAsDefaults(); autoSave(); });
+document.getElementById('asSub').addEventListener('change', ()=>{ toggleSubCustom(); updateAsCode(); applyAsDefaults(); autoSave(); });
 
 // 시트 유형마스터 동기화 — 코드 있는 카테고리만 교체 (handover.html masterSync 동일 규칙)
 function masterSync(){
   if(!historyUrl()) return;
   histGet('master',{}).then(d=>{
     if(!d || !d.success) return;
+    combinedParts?.merge(d.parts);
     let changed=0;
     Object.keys(d.taxonomy||{}).forEach(cat=>{
       const coded=(d.taxonomy[cat]||[])
@@ -1225,7 +1290,7 @@ function applyRecentHistory(i){
   const setIfEmpty=(id,val)=>{ const el=document.getElementById(id); if(el && val && !el.value.trim()){ el.value=val; return true; } return false; };
   setIfEmpty('serialNo', c.sn);
   setIfEmpty('subscription', c.ncare);
-  setIfEmpty('replacedPart', (c.part && c.part!=='없음') ? c.part : '');
+  if(!v('replacedPart')&&c.part&&c.part!=='없음') setReplacedPart(c.part);
   setIfEmpty('cost', c.cost);
   setIfEmpty('actionDetail', c.detail);
   const ccA=document.getElementById('cc_action'); if(ccA) ccA.textContent=v('actionDetail').length;
@@ -1370,9 +1435,6 @@ const BASIC_IDS = ['receiveDate','receiver','product','serialNo','subscription',
   'asCat','asSub','asSubCustom','actionDetail','recommend','inspectDate','nextDate','replacedPart','cost','csName','hospitalName'];
 
 let handoverReference=null,uploadedPdfDocument=null,customerQrDocument=null;
-const inspectionView=BazInspectionSession.view(),inspectionEntry=BazInspectionSession.intent(location.search);
-const combinedRequest=new URLSearchParams(location.search).get('combined');
-const combinedTaskId=inspectionEntry.kind==='general'&&BazWorkFlow.valid(combinedRequest)&&'handover-'+combinedRequest;
 let inspectionPhase='loading',inspectionRefreshQueued=false;
 function inspectionContext(reference=handoverReference){return {...reference,hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo'),taskId:_currentTaskId,sessionEpoch:inspectionView.capture()};}
 function inspectionIsCurrent(context){return inspectionPhase==='ready'&&draftOwner()===_storageIdentity&&BazAuth.name()===_storageAccount&&inspectionView.matches(context.sessionEpoch)&&context.taskId===_currentTaskId&&BazWorkFlow.sameInspectionIdentity(context,{hospital:v('hospital'),date:v('inspectDate'),sn:v('serialNo')})&&(!context.recordId||!handoverReference?.recordId||context.recordId===handoverReference.recordId);}
@@ -1395,6 +1457,7 @@ function checkInspectionIdentity(basic){
 function collectFormData(){
   const basic={};
   BASIC_IDS.forEach(id=>{ basic[id]=v(id); });
+  if(Object.keys(generatedAsDefaults).length) basic.generatedAsDefaults={...generatedAsDefaults};
   if(combinedTaskId&&automaticSubscription===basic.subscription&&automaticSubscription)basic.subscriptionFromDb=automaticSubscription;
   if(typeof combinedTaskId==='string')basic.handoverFields=Object.fromEntries(
     Array.from(document.querySelectorAll('[data-handover-field]'),field=>[field.dataset.handoverField,field.value.trim()])
@@ -1419,14 +1482,20 @@ function collectFormData(){
 function applyFormData(d){
   if(!d) return;
   invalidateInspectionView();
-  hospitalAutocomplete.reset();partAutocomplete.reset();
+  hospitalAutocomplete.reset();partAutocomplete?.reset();
   handoverReference=d.handover&&d.handover.recordId?{...d.handover,recordId:String(d.handover.recordId),requestId:window.BazWorkFlow.valid(d.handover.requestId)?d.handover.requestId:'',identity:d.handover.identity||{hospital:d.basic?.hospital||'',inspectDate:d.basic?.inspectDate||'',serialNo:d.basic?.serialNo||''}}:null;
   uploadedPdfDocument=d.pdfDocument||null;
   customerQrDocument=d.customerQr||null;
   document.getElementById('pdfFormat').value=d.pdfFormat==='simplified'?'simplified':'standard';
   syncPdfFormat();
   // 기본 입력
-  BASIC_IDS.forEach(id=>{ const el=document.getElementById(id); if(el && d.basic && d.basic[id]!=null) el.value=d.basic[id]; });
+  BASIC_IDS.forEach(id=>{
+    const el=document.getElementById(id), value=d.basic?.[id];
+    if(!el||value==null) return;
+    if(id==='replacedPart') setReplacedPart(value);
+    else el.value=value;
+  });
+  generatedAsDefaults={...d.basic?.generatedAsDefaults};
   automaticSubscription=d.basic?.subscriptionFromDb||'';
   fillInspectionSubscription();
   if(combinedTaskId)for(const field of document.querySelectorAll('[data-handover-field]')){
@@ -1809,6 +1878,7 @@ async function loadCombinedDevice(slot,copyFrom){
   basic.receiveDate=basic.receiveDate||String(request.registeredAt||'').slice(0,10)||today;
   basic.handoverFields=data.basic?.handoverFields;
   basic.subscriptionFromDb=data.basic?.subscriptionFromDb;
+  basic.generatedAsDefaults=data.basic?.generatedAsDefaults;
   await setCurrentTaskId(id);
   combinedActiveSlot=slot;
   clearAllInvalid();

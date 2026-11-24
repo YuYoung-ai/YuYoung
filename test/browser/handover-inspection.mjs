@@ -12,6 +12,10 @@ const browser=await pw[engine].launch({headless:true,executablePath:engine==='we
 const base='http://localhost:8256',root=fileURLToPath(new URL('../../',import.meta.url));
 const request={id:'request_combined_123',hospitalName:'통합 검증 병원',sn:'SN123',engineer:'검증 담당자',gubun:'점검',
  registeredAt:'2026-11-19T09:00',visitAt:'2026-11-19T12:00'};
+const handpieceDetail='약액 누수로 인한 HP 외, 내부 세척 완료';
+const equipmentDetail='약액 유입 미발생 및 예방 차원 내부 세척 실시';
+const sheetPart='시트 교체품';
+const master={success:true,parts:['내부 세척',sheetPart,sheetPart]};
 const typeFromFile={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css'};
 try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
@@ -20,7 +24,7 @@ try{
  page.on('pageerror',e=>errors.push(e.message));
  let source,receipt,linked=false,dropResponse=true,linkFailure=true;
  const writes=[],queries=[],uploads=[];
- await page.route('**/*',async route=>{
+ await context.route('**/*',async route=>{
   const req=route.request(),url=new URL(req.url());
   const json=result=>route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':base},body:JSON.stringify(result)});
   if(url.origin===base){
@@ -32,6 +36,9 @@ try{
    if(fs.existsSync(file)&&fs.statSync(file).isFile())return route.fulfill({path:file,contentType:type});
    return route.fulfill({status:404,body:''});
   }
+  if(url.hostname==='script.google.com'&&url.searchParams.get('action')==='master')return json(master);
+  if(url.hostname==='script.google.com'&&url.searchParams.get('action')==='handover_bootstrap')
+   return json({success:true,hospdb:{success:true,data:[]},master});
   if(url.hostname==='script.google.com'&&req.method()==='POST'){
    const p=JSON.parse(req.postData());
    if(p.action==='inspection_pdf_job_source')return json({success:true,receipt});
@@ -50,8 +57,10 @@ try{
     assert.equal(p.hosp,request.hospitalName);assert.equal(p.sn,request.sn);
     assert.equal(p.hpOut,'SYNTHETIC-OUT');assert.equal(p.hpIn,'SYNTHETIC-IN');
     assert.equal(p.result,'교체');
+    assert.equal(p.part,'내부 세척');
+    assert.equal(p.detail,equipmentDetail);
     writes.push(p);
-    source={recordId:p.reqId,hospitalName:p.hosp,sn:p.sn,date:p.date,engineer:p.fse,gubun:p.gubun,detail:p.detail,result:p.result,version:'v1'};
+    source={recordId:p.reqId,hospitalName:p.hosp,sn:p.sn,date:p.date,engineer:p.fse,gubun:p.gubun,part:p.part,detail:p.detail,result:p.result,version:'v1'};
     receipt={recordId:source.recordId,source,version:'sheet-v1',pdfRevision:0,basis:Object.fromEntries(
      ['standard','simplified'].map(format=>[format,{format,fingerprint:'a'.repeat(64)}]))};
     if(dropResponse){dropResponse=false;return route.abort();}
@@ -95,6 +104,21 @@ try{
  assert.equal(await page.getByRole('link',{name:'기존 Handover로 작성'}).getAttribute('href'),'handover.html?request='+request.id);
  await ready();
  await render();
+ const legacyPage=await context.newPage();
+ legacyPage.on('pageerror',e=>errors.push(e.message));
+ await legacyPage.goto(base+'/handover.html');
+ const legacyParts=legacyPage.locator('#part option');
+ const combinedOptions=form.locator('#replacedPart option:not([hidden])');
+ await legacyParts.filter({hasText:sheetPart}).waitFor({state:'attached'});
+ await combinedOptions.filter({hasText:sheetPart}).waitFor({state:'attached'});
+ const orderedParts=await combinedOptions.allTextContents();
+ assert.deepEqual(orderedParts,await legacyParts.allTextContents());
+ assert.deepEqual(orderedParts.slice(0,7),[
+  '내부 세척',"Handpiece Ass'y","Foot-SW Ass'y",'Foot-SW Connector(장비)',
+  'Foot-SW cable','Cradle (거치대)','SD Card'
+ ]);
+ assert.equal(await legacyPage.locator('#part').inputValue(),'없음');
+ await legacyPage.close();
  await form.locator('#inspList').waitFor({state:'visible'});
  await frame().waitForFunction(()=>getComputedStyle(document.getElementById('inspList')).display==='grid');
  assert.equal(await form.locator('#nextDate').count(),0);
@@ -131,11 +155,45 @@ try{
  assert.deepEqual(await layout(),{checksInRow:true,commonInRow:true,stepsHidden:true,sharedFields:true,fits:true});
  assert.deepEqual(await alignedFields(),expectedAlignment);
  await page.setViewportSize({width:390,height:844});
+ const selectAs=async(cat,sub)=>{
+  await form.locator('#asCat').selectOption(cat);
+  await form.locator('#asSub').selectOption(sub);
+ };
+ const checkAction=async(part,detail)=>{
+  assert.equal(await form.locator('#replacedPart').inputValue(),part);
+  assert.equal(await form.locator('#actionDetail').inputValue(),detail);
+  assert.equal(await form.locator('#cc_action').textContent(),String(detail.length));
+ };
+ await selectAs('핸드피스','H03');
+ await checkAction('내부 세척',handpieceDetail);
+ assert.equal(await frame().evaluate(()=>saveCurrentTask()),true);
+ await page.reload();
+ await ready();
+ await render();
+ await checkAction('내부 세척',handpieceDetail);
+ await selectAs('노즐','N08');
+ await checkAction('','');
+ await selectAs('장비','E24');
+ await checkAction('내부 세척',equipmentDetail);
+ await form.locator('#replacedPart').selectOption(sheetPart);
+ await form.locator('#actionDetail').fill('현장 확인 내용');
+ await selectAs('핸드피스','H03');
+ await checkAction(sheetPart,'현장 확인 내용');
+ await frame().evaluate(()=>{
+  const data=collectFormData();
+  data.basic.replacedPart='이전 초안 교체품';
+  applyFormData(data);
+ });
+ await checkAction('이전 초안 교체품','현장 확인 내용');
+ await form.locator('#replacedPart').selectOption('');
+ assert.equal(await combinedOptions.filter({hasText:'이전 초안 교체품'}).count(),0);
+ await form.locator('#actionDetail').fill('');
+ await selectAs('장비','E24');
+ await checkAction('내부 세척',equipmentDetail);
  await form.locator('[data-n="1"] [data-r="수리"]').click();
  await form.locator('[data-n="2"] [data-r="교체"]').click();
  await frame().evaluate(async()=>{
   document.getElementById('pdfFormat').value='simplified';
-  document.getElementById('actionDetail').value='장비 동작 확인 및 조치';
   document.getElementById('combined-hpOut').value='SYNTHETIC-OUT';
   document.getElementById('combined-hpIn').value='SYNTHETIC-IN';
   await generatePDF(false);
@@ -147,7 +205,7 @@ try{
  await page.reload();
  await ready();
  await render();
- assert.equal(await form.locator('#actionDetail').inputValue(),'장비 동작 확인 및 조치');
+ await checkAction('내부 세척',equipmentDetail);
  await frame().evaluate(()=>generatePDF(false));
  assert.deepEqual(queries,[writes[0].reqId]);
  assert.equal(writes.length,1);assert.equal(uploads.length,0);
@@ -169,7 +227,7 @@ try{
  assert.equal(legacyCurrent,null);
  await page.reload();
  await ready();
- assert.equal(await form.locator('#actionDetail').inputValue(),'장비 동작 확인 및 조치');
+ await checkAction('내부 세척',equipmentDetail);
  await frame().evaluate(()=>localStorage.removeItem('baz_handover_inspection_v1:'+draftRepository.owner+':'+combinedRequest));
  await page.reload();
  await form.locator('#generateBtn').waitFor({state:'attached'});
@@ -177,5 +235,5 @@ try{
  assert.match(rejected,/저장된 현장 기록/);
  assert.equal(writes.length,1);
  assert.deepEqual(errors,[]);
- console.log(engine+' PASS: separate route, preserved input after reload, one Sheet row after lost response, link retry, one PDF submit and safe legacy fallback');
+ console.log(engine+' PASS: shared replacement options, A/S defaults, draft recovery, one Sheet row after lost response, link retry, one PDF submit and safe legacy fallback');
 }finally{await browser.close();}
