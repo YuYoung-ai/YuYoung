@@ -14,11 +14,11 @@
   <link rel="stylesheet" href="../css/baz-fonts.css?v=306">
   <link rel="stylesheet" href="../css/baz-brand.css?v=306">
   <link rel="stylesheet" href="../css/hospital-work-cards.css?v=366">
-  <link rel="stylesheet" href="sales.css?v=379">
+  <link rel="stylesheet" href="sales.css?v=380">
   <script src="../js/baz-work-cache.js" defer></script>
   <script src="../js/baz-work-fields.js?v=354" defer></script>
   <script src="sales-security.js?v=375" defer></script>
-  <script src="sales.js?v=379" defer></script>
+  <script src="sales.js?v=380" defer></script>
 </head>
 <body>
   <header class="sales-bar">
@@ -83,12 +83,13 @@
             <tbody id="table-list"></tbody>
           </table>
         </div>
-        <ul id="list" class="sales-list" aria-label="처리 내역"></ul>
-        <div id="swipe-controls" class="sales-swipe-controls" hidden>
-          <button id="previous-card" type="button" aria-label="이전 카드">이전</button>
-          <span id="swipe-position" aria-live="polite"></span>
-          <button id="next-card" type="button" aria-label="다음 카드">다음</button>
+        <div id="swipe-controls" class="sales-swipe-controls" role="group" aria-label="카드 이동" hidden>
+          <button id="previous-card" type="button" aria-label="이전 카드">‹ 이전</button>
+          <span id="swipe-position"></span>
+          <button id="next-card" type="button" aria-label="다음 카드">다음 ›</button>
+          <span id="swipe-announcement" class="sr-only" role="status"></span>
         </div>
+        <ul id="list" class="sales-list" role="list" aria-label="처리 내역"></ul>
         <p id="empty" class="sales-empty" hidden></p>
         <div class="sales-more"><button id="load-more" type="button" hidden>더 불러오기</button></div>
       </section>

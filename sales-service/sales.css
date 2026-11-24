@@ -263,20 +263,22 @@ dialog::backdrop { background: rgb(8 20 32 / 62%); }
 .sales-result dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 body:has(.sales-detail[open]) { overflow: hidden; }
 @media (max-width: 700px) {
+  .sales-list-panel { overflow: visible; overflow: clip; overflow-anchor: none; }
   .sales-table-wrap { display: none; }
-  .sales-list:not(:empty) {
-    position: relative;
-    display: grid;
-    height: clamp(19rem, 50dvh, 33rem);
-    grid-auto-rows: minmax(100%, auto);
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scroll-snap-type: y mandatory;
-    gap: 0;
-    padding: 0;
+  .sales-list:not(:empty) { display: grid; }
+  .sales-list .sales-card { touch-action: pan-y pinch-zoom; }
+  .sales-swipe-controls {
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .5rem;
+    padding: .35rem .65rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
   }
-  .sales-list .sales-card { scroll-snap-align: start; scroll-snap-stop: always; }
-  .sales-swipe-controls { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .5rem .75rem; }
   .sales-detail { position: fixed; inset: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; padding-bottom: env(safe-area-inset-bottom); margin: 0; border: 0; border-radius: 0; }
   .sales-detail-bar { padding-top: calc(.45rem + env(safe-area-inset-top)); }
 }
