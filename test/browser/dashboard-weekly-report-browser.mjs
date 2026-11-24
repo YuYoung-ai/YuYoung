@@ -24,6 +24,8 @@ const data=[
  {date:'2026-10-29',hosp:'예시 B병원',gubun:'A/S',type:'노즐누수(약액 유입)',part:'내부 세척'},
  {date:'2026-10-29',hosp:'예시 D병원',gubun:'A/S',type:'이상 없음'},
  {date:'2026-10-30',hosp:'예시 E병원',gubun:'A/S',type:''},
+ {date:'2026-10-30',hosp:'예시 A병원',gubun:'A/S',type:'화면 꺼짐'},
+ {date:'2026-10-30',hosp:'예시 B병원',gubun:'A/S',type:'화면 멈춤'},
  {date:'2026-10-29',hosp:'예시 D병원',gubun:'점검',type:'냉각수 부족',cost:'20,000'},
  {date:'2026-10-30',hosp:'예시 D병원',gubun:'점검',type:'이상 없음'},
  {date:'2026-10-30',hosp:'예시 E병원',gubun:'점검',type:'무증상',cost:'10,000'},
@@ -61,7 +63,7 @@ try{
  assert.equal(state.applied,false);assert.equal(state.cumulative,false);assert.deepEqual(state.saving,['₩562,400']);
  assert.equal(state.voc.length,5);assert.equal(state.voc[0].name,'노즐 누수(약액 유입)');
  assert.equal(state.voc.at(-1).name,'무증상');assert.match(state.voc.at(-1).desc,/정상 동작/);
- assert.equal(state.voc[0].metric,'2건 · 28.6%');assert.equal(state.voc.at(-1).metric,'1건 · 14.3%');
+ assert.equal(state.voc[0].metric,'2건 · 22.2%');assert.equal(state.voc.at(-1).metric,'1건 · 11.1%');
  assert(!state.voc.some(r=>r.name==='냉각수 부족'));
  assert.equal(state.inspection.value,'4');
  assert.equal(state.inspection.detail,'무증상 3건 (유상 판매 2건 · 15,000원), 냉각수 부족 1건 (유상 판매 20,000원)');
@@ -84,7 +86,7 @@ try{
  assert.equal(managementGrid[0].length,3);
  assert.deepEqual(managementGrid[0],managementGrid[1]);
  assert.deepEqual(state.vocTexts.filter(o=>o.weeklyVocMetric!=null).map(o=>o.t),state.voc.map(r=>r.metric));
- assert.deepEqual(await page.locator('#wkVocDescRows .wr-voc-metric').allTextContents(),state.voc.map(r=>r.metric));
+ assert.deepEqual(await page.locator('#wkVocDescRows .wr-voc .wr-voc-metric').allTextContents(),state.voc.map(r=>r.metric));
  const firstName=state.vocTexts.find(o=>o.weeklyVoc===0);
  const firstDescription=state.vocTexts.find(o=>o.weeklyDescription===0);
  assert(Math.abs(firstName.y-state.firstRowY-.04)<.0001,'symptom is lowered by the approved amount');
@@ -119,8 +121,46 @@ try{
  assert.equal(await page.locator('#wkNoteBox, .wr-delta').count(),0);
  assert.equal(await page.locator('#wkVocDescBox + .wr-management').count(),1);
  assert.equal(await page.getByRole('button',{name:'사용자 교육 현황.xlsx 다운로드'}).count(),1);
+ const [firstHidden,secondHidden]=await page.locator('.wr-voc-excluded-row .wr-symptom').allTextContents();
+ const [target,firstRow,removed]=state.voc.map(r=>r.name);
+ const action=(name,label)=>page.getByRole('button',{name:name+' '+label,exact:true});
+ const merge=name=>page.getByRole('combobox',{name:name+' 편입 대상',exact:true});
+ const selectedNames=()=>page.locator('.wr-voc .wr-symptom').allTextContents();
+ const current=()=>page.evaluate(()=>exReportSnapFromSel_('week').weeklyVoc);
+ assert(await action(firstHidden,'반영').isDisabled());
+ await merge(firstHidden).selectOption(target);
+ await merge(secondHidden).selectOption(target);
+ assert.equal((await current())[0].metric,'4건 · 44.4%');
+ await action(target,'제외').click();
+ assert.equal(await merge(firstHidden).inputValue(),'');
+ assert.equal(await merge(secondHidden).inputValue(),'');
+ await action(target,'반영').click();
+ assert.equal((await current()).at(-1).metric,'2건 · 22.2%');
+ await page.getByRole('button',{name:'기본 선택으로 되돌리기'}).click();
+ assert.deepEqual(await selectedNames(),state.voc.map(r=>r.name));
+
+ await action(removed,'제외').click();
+ await merge(firstHidden).selectOption(target);
+ await action(firstHidden,'반영').click();
+ assert.equal((await current())[0].metric,'2건 · 22.2%');
+ await merge(removed).selectOption(target);
+ await merge(secondHidden).selectOption(target);
+ await action(target,'아래로').click();
+ const custom=await current();
+ assert.deepEqual(custom.slice(0,2).map(r=>r.name),[firstRow,target]);
+ assert.deepEqual(await selectedNames(),custom.map(r=>r.name));
+ assert.equal(custom[1].metric,'4건 · 44.4%');
+ assert.deepEqual(new Set(custom[1].merged),new Set([removed,secondHidden]));
+ assert.equal(custom.at(-1).name,firstHidden);
+ await page.locator('#wkSel').selectOption('2026-10-19');
+ assert.deepEqual(await selectedNames(),['기타 이전 증상']);
+ await page.locator('#wkSel').selectOption('2026-10-26');
+ assert.deepEqual(await current(),custom);
+ console.log('PASS weekly VOC selection, ordering, merge, reset, and period isolation');
  await page.locator('#wkModal .report-box').screenshot({path:path.join(out,'implemented-editor.png')});
  await page.evaluate(()=>previewWeeklyPPT());await page.waitForSelector('#wkPvModal.show');await page.locator('#wkPvSlides > div').first().screenshot({path:path.join(out,'implemented-weekly-report.png')});
+ const previewText=(await page.locator('#wkPvSlides').textContent()).replaceAll('\u00a0',' ');
+ assert.match(previewText,/4건 · 44\.4%/);
  const number=page.locator('#wkPvSlides [data-graph-label-key]').first();
  await number.click();assert(await number.evaluate(e=>e.classList.contains('is-selected')));
  await number.click();assert.equal(await number.evaluate(e=>e.classList.contains('is-selected')),false);
@@ -133,7 +173,16 @@ try{
  });
  const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
  const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');
- assert.match(slide,/>VOC 유형</);assert.match(slide,/2건 · 28.6%/);assert.match(slide,/유상 판매/);assert.match(slide,/교육·재사용 병원 현황/);
+ const vocSlide=slide.slice(slide.indexOf('>VOC 유형<'),slide.indexOf('>교육·재사용 병원 현황<'));
+ assert.match(vocSlide,/4건 · 44\.4%/);
+ let lastIndex=-1;
+ for(const r of custom){
+  const index=vocSlide.indexOf('>'+r.name+'<');
+  assert(index>lastIndex,'PPT shows the selected symptoms in the chosen order');
+  lastIndex=index;
+ }
+ for(const name of [removed,secondHidden])assert(!vocSlide.includes('>'+name+'<'));
+ assert.match(slide,/유상 판매/);assert.match(slide,/교육·재사용 병원 현황/);
  assert.doesNotMatch(slide,/특이사항|VOC 증가 현황|A\/S 처리 내역서/);
  assert.equal((slide.match(/<p:oleObj /g)||[]).length,0);
  assert.equal(Object.entries(zip.files).filter(([n,part])=>n.includes('/embeddings/')&&!part.dir).length,0);

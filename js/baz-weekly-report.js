@@ -10,7 +10,10 @@
  };
  function key(s){return root.exVocDescKey_(s);}
  function period(){return root.exReportPeriodFromSel_('week');}
- function draft(p){p=p||period();var k=p.from+'_'+p.to;return drafts[k]||(drafts[k]=Object.create(null));}
+ function draft(p){
+  var k=p.from+'_'+p.to;
+  return drafts[k]||(drafts[k]={descriptions:Object.create(null),order:null,merges:new Map()});
+ }
  function defaultDesc(k){return phrases[k]?phrases[k].text:WEEKLY_DESCRIPTIONS[k]||root.EX_VOC_DESC[k]||'';}
  function desc(k,d){return Object.prototype.hasOwnProperty.call(d,k)?d[k]:defaultDesc(k);}
  function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
@@ -20,24 +23,41 @@
   if(loading)return loading;
   loading=root.gv('report_phrases',{},15000).then(function(r){if(!r.success)throw new Error(r.error||'기본 문구 조회 실패');phrases=Object.create(null);(r.items||[]).forEach(function(x){phrases[key(x.name)]=x;});refreshVoc();}).catch(function(e){tell('공유 기본 문구를 불러오지 못했습니다. '+(e.message||e));}).finally(function(){loading=null;});return loading;
  }
- async function savePhrase(name,input,badge,b){
+ async function savePhrase(name,input,badge,b,currentDraft){
   var text=input.value.trim().replace(/\s+/g,' ');if(!text){tell('저장할 보조문구를 입력하세요.');return;}
-  var k=key(name),currentDraft=draft(),previous=phrases[k],body={action:'report_phrase_save',token:root.BazAuth.token(),name:name,text:text,revision:previous?previous.revision:0};b.disabled=true;
+  var k=key(name),previous=phrases[k],body={action:'report_phrase_save',token:root.BazAuth.token(),name:name,text:text,revision:previous?previous.revision:0};b.disabled=true;
   try{var response=await fetch(root.HANDOVER_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)}),r=await response.json();if(!r.success)throw new Error(r.error||'기본 문구 저장 실패');phrases[k]=r.item;currentDraft[k]=text;badge.textContent='등록 문구 자동 입력';badge.className='wr-status';tell('기본 문구를 저장했습니다. 같은 증상에 자동 입력됩니다.');}
   catch(e){tell(e);}finally{b.disabled=false;}
  }
  function noSymptom(type){return key(type)==='무증상'||root.isOK(type);}
- function vocTypes(rows,d){
+ function vocSource(rows){
   var service=rows.filter(function(r){return r.gubun==='A/S';});
   var normalCount=service.filter(function(r){return noSymptom(r.type);}).length;
   var types=root.exVocTypeCompare_(service,null).filter(function(t){return !noSymptom(t.k);})
-   .sort(function(a,b){return b.cur-a.cur||root.skCmpKo_(a.k,b.k);})
-   .slice(0,VOC_LIMIT-Number(normalCount>0));
-  if(normalCount)types.push({k:'무증상',cur:normalCount});
-  return types.map(function(t){
-   var percent=Math.round(t.cur*1000/service.length)/10;
-   return {name:t.k,desc:desc(key(t.k),d),metric:root.exNum(t.cur)+'건 · '+percent+'%'};
+   .sort(function(a,b){return b.cur-a.cur||root.skCmpKo_(a.k,b.k);});
+  var defaults=types.slice(0,VOC_LIMIT-Number(normalCount>0)).map(function(t){return t.k;});
+  if(normalCount){
+   defaults.push('무증상');
+   types.push({k:'무증상',cur:normalCount});
+  }
+  return {types:types,total:service.length,defaults:defaults};
+ }
+ function vocSelection(source,d){
+  var types=new Map(source.types.map(function(t){return [t.k,t];}));
+  var order=(d.order||source.defaults).filter(function(name){return types.has(name);});
+  var selected=new Map(order.map(function(name){
+   return [name,{name:name,desc:desc(key(name),d.descriptions),count:types.get(name).cur,merged:[]}];
+  }));
+  var unselected=source.types.filter(function(t){return !selected.has(t.k);});
+  unselected.forEach(function(t){
+   var target=selected.get(d.merges.get(t.k));
+   if(target){target.count+=t.cur;target.merged.push(t.k);}
   });
+  selected.forEach(function(row){
+   var percent=Math.round(row.count*1000/source.total)/10;
+   row.metric=root.exNum(row.count)+'건 · '+percent+'%';
+  });
+  return {selected:Array.from(selected.values()),unselected:unselected,order:order};
  }
  function inspectionSummary(rows){
   var groups=new Map();
@@ -61,21 +81,103 @@
   }).join(', ');
  }
  function refreshVoc(){
-  var p=period(),host=document.getElementById('wkVocDescRows');if(!host||!p)return;
-  var d=draft(p),rows=root.buildExecutiveReportSnapshot({type:'week',from:p.from,to:p.to}).weeklyVoc;
+  var p=period();
+  if(!p){document.getElementById('wkVocDescRows').replaceChildren();return;}
+  var s=root.buildExecutiveReportSnapshot({type:'week',from:p.from,to:p.to});
+  renderVoc(s.weeklyVocSource,draft(p));
+  document.getElementById('wkVocDescBox').open=true;
+ }
+ function renderVoc(source,d,focusName,focusAction){
+  var host=document.getElementById('wkVocDescRows'),selection=vocSelection(source,d);
+  var order=selection.order,focusTarget;
+  function keepFocus(control,name,action){
+   if(name===focusName&&action===focusAction&&!control.disabled)focusTarget=control;
+  }
+  function labeledButton(text,name,fn){
+   var b=button(text,fn);
+   b.setAttribute('aria-label',name+' '+text);
+   return b;
+  }
   host.replaceChildren();
-  if(!rows.length)host.append(el('p','voc-desc-empty','선택한 주차에 표시할 VOC 유형이 없습니다.'));
-  rows.forEach(function(r){
+  if(!source.types.length){
+   host.append(el('p','voc-desc-empty','선택한 주차에 표시할 VOC 유형이 없습니다.'));
+   return;
+  }
+  var grid=el('div','wr-voc-grid'),included=el('section','wr-voc-included'),excluded=el('section','wr-voc-excluded');
+  var selectedTitle=el('h3','wr-voc-title','반영 증상 '+order.length+'/'+VOC_LIMIT);
+  selectedTitle.tabIndex=-1;
+  var toolbar=el('div','wr-voc-heading');
+  var reset=button('기본 선택으로 되돌리기',function(){
+   d.order=null;d.merges.clear();renderVoc(source,d,null,'reset');
+  });
+  reset.disabled=d.order===null&&d.merges.size===0;
+  toolbar.append(selectedTitle,reset);included.append(toolbar);
+  if(!order.length)included.append(el('p','voc-desc-empty','미반영 증상에서 반영할 항목을 추가하세요.'));
+  selection.selected.forEach(function(r,i){
    var k=key(r.name),box=el('section','wr-voc'),registered=!!defaultDesc(k);
    var badge=el('span',registered?'wr-status':'wr-status missing',registered?'등록 문구 자동 입력':'미등록 증상');
    var heading=el('div','wr-voc-heading');
-   heading.append(el('strong','wr-symptom',r.name),el('span','wr-voc-metric',r.metric));
-   box.append(heading,badge);
-   var label=el('label','wr-label','보조문구'),input=el('textarea','wr-desc');input.rows=2;input.maxLength=90;input.value=r.desc;input.placeholder='증상에 대한 기본 설명을 작성하세요';input.setAttribute('aria-label',r.name+' 보조문구');input.oninput=function(){d[k]=input.value;};label.append(input);box.append(label);
-   var save=button('기본 문구로 저장',function(){savePhrase(r.name,input,badge,save);});
-   box.append(save,el('small','wr-hint','저장한 문구는 다음 보고서의 같은 증상에 자동 입력됩니다.'));host.append(box);
+   var name=el('strong','wr-symptom',r.name);
+   name.tabIndex=-1;
+   heading.append(name,el('span','wr-voc-metric',r.metric));
+   var actions=el('div','wr-voc-actions');
+   function move(step,action){
+    var next=i+step;
+    if(next<0||next>=order.length)return;
+    order.splice(i,1);order.splice(next,0,r.name);d.order=order;
+    renderVoc(source,d,r.name,action);
+   }
+   var up=labeledButton('위로',r.name,function(){move(-1,'up');});
+   var down=labeledButton('아래로',r.name,function(){move(1,'down');});
+   up.disabled=i===0;down.disabled=i===order.length-1;
+   var remove=labeledButton('제외',r.name,function(){
+    d.order=order.filter(function(name){return name!==r.name;});
+    d.merges.forEach(function(target,from){if(target===r.name)d.merges.delete(from);});
+    renderVoc(source,d,r.name,'add');
+   });
+   actions.append(up,down,remove);
+   box.append(heading,actions);
+   if(r.merged.length)box.append(el('p','wr-hint','편입 증상 · '+r.merged.join(', ')));
+   box.append(badge);
+   var label=el('label','wr-label','보조문구'),input=el('textarea','wr-desc');input.rows=2;input.maxLength=90;input.value=r.desc;input.placeholder='증상에 대한 기본 설명을 작성하세요';input.setAttribute('aria-label',r.name+' 보조문구');input.oninput=function(){d.descriptions[k]=input.value;};label.append(input);box.append(label);
+   var save=button('기본 문구로 저장',function(){savePhrase(r.name,input,badge,save,d.descriptions);});
+   box.append(save,el('small','wr-hint','저장한 문구는 다음 보고서의 같은 증상에 자동 입력됩니다.'));included.append(box);
+   keepFocus(up.disabled?down:up,r.name,'up');
+   keepFocus(down.disabled?up:down,r.name,'down');
+   keepFocus(name,r.name,'selected');
   });
-  document.getElementById('wkVocDescBox').open=true;
+  excluded.append(el('h3','wr-voc-title','미반영 증상'));
+  if(order.length===VOC_LIMIT&&selection.unselected.length){
+   excluded.append(el('p','wr-hint','다른 증상을 추가하려면 반영 증상에서 한 항목을 제외하세요.'));
+  }
+  if(!selection.unselected.length)excluded.append(el('p','voc-desc-empty','미반영 증상이 없습니다.'));
+  selection.unselected.forEach(function(t){
+   var row=el('div','wr-voc-excluded-row'),heading=el('div','wr-voc-heading');
+   heading.append(el('strong','wr-symptom',t.k),el('span','wr-voc-metric',root.exNum(t.cur)+'건'));
+   var actions=el('div','wr-voc-actions');
+   var add=labeledButton('반영',t.k,function(){
+    if(order.length>=VOC_LIMIT)return;
+    d.merges.delete(t.k);d.order=order.concat(t.k);renderVoc(source,d,t.k,'selected');
+   });
+   add.disabled=order.length>=VOC_LIMIT;
+   var select=el('select','wr-merge-select');
+   select.setAttribute('aria-label',t.k+' 편입 대상');
+   select.append(new Option('편입 안 함',''));
+   order.forEach(function(target){select.append(new Option(target+'에 편입',target));});
+   select.value=order.includes(d.merges.get(t.k))?d.merges.get(t.k):'';
+   select.disabled=!order.length;
+   select.onchange=function(){
+    if(select.value)d.merges.set(t.k,select.value);
+    else d.merges.delete(t.k);
+    renderVoc(source,d,t.k,'merge');
+   };
+   actions.append(add,select);row.append(heading,actions);excluded.append(row);
+   keepFocus(add,t.k,'add');
+   keepFocus(select,t.k,'merge');
+  });
+  grid.append(included,excluded);host.append(grid);
+  if(focusTarget)focusTarget.focus();
+  else if(focusAction==='reset')selectedTitle.focus();
  }
  function management(rows){
   var skill=root.buildSkillData(rows),nz=root.buildNozzleData(rows);
@@ -86,7 +188,8 @@
  }
  function augment(s){
   var rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59'));
-  s.weeklyVoc=vocTypes(rows,draft(s));
+  s.weeklyVocSource=vocSource(rows);
+  s.weeklyVoc=vocSelection(s.weeklyVocSource,draft(s)).selected;
   s.kpi.find(function(k){return k.key==='insp';}).detail=inspectionSummary(rows);
   s.management=management(rows);
   return s;
