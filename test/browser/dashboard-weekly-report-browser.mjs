@@ -16,7 +16,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),ou
 const server=http.createServer(async(q,r)=>{try{let p=path.resolve(root,'.'+decodeURIComponent(q.url.split('?')[0]));if(!p.startsWith(root+path.sep))throw Error();let b=await fs.readFile(p);r.writeHead(200,{'Content-Type':p.endsWith('.js')?'application/javascript':p.endsWith('.css')?'text/css':p.endsWith('.html')?'text/html':p.endsWith('.json')?'application/json':'application/octet-stream'});r.end(b);}catch{r.writeHead(404);r.end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const data=[
  {date:'2026-10-19',hosp:'예시 A병원',gubun:'A/S',type:'기타 이전 증상',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'O'},
- {date:'2026-10-20',hosp:'예시 B병원',gubun:'점검',type:'이상 없음',nsFill:'O',nsAmt:'적정',jet:'정상',nozzleReuse:'O',ncare:'Pro'},
+ {date:'2026-10-20',hosp:'예시 월간 전용병원',gubun:'점검',type:'이상 없음',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'O',ncare:'Pro'},
  {date:'2026-10-26',hosp:'예시 A병원',gubun:'A/S',type:'노즐 체결 약함',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'X'},
  {date:'2026-10-27',hosp:'예시 B병원',gubun:'A/S',type:'흡입 약함',nsFill:'O',nsAmt:'적정',jet:'정상',nozzleReuse:'O',ncare:'Pro'},
  {date:'2026-10-28',hosp:'예시 C병원',gubun:'A/S',type:'핸드피스 작동 불량',nsFill:'X',nsAmt:'부족',jet:'교육 필요',nozzleReuse:'X'},
@@ -41,6 +41,27 @@ await page.route('**yuyoung-production.coaptation.workers.dev/**',r=>r.fulfill({
 await page.route('**yuyoung-ai.deno.net/**',r=>r.fulfill({json:{ok:true,valid:true,level:3,name:'테스트'}}));
 await page.route('**://script.google.com/**',r=>{let a=new URL(r.request().url()).searchParams.get('action'),b={success:true};if(r.request().method()==='POST'){const p=JSON.parse(r.request().postData());phrases[p.name]={name:p.name,text:p.text,revision:1};b.item=phrases[p.name];}else if(a==='all')b={success:true,data,updated:'2026-10-30 09:00'};else if(a==='hospdb')b.data=[];else if(a==='report_phrases')b.items=Object.values(phrases);return r.fulfill({json:b});});
 
+async function assertVocCentered(type){
+ const rows=await page.evaluate(type=>{
+  const items=buildExecutivePptDeck(exReportSnapFromSel_(type))[0].items;
+  const card=BazWeeklyReport.layout(L).voc;
+  return items.filter(o=>o.reportVoc!=null).map((name,i)=>{
+   const metric=items.find(o=>o.reportVocMetric===i);
+   const description=items.filter(o=>o.reportVocDescription===i);
+   const last=description.at(-1)||name;
+   return {center:card.y+card.top+(i+.5)*card.pitch,
+    textCenter:(name.y+last.y+last.h)/2,metricCenter:metric.y+metric.h/2,
+    overlap:description.some(o=>o.x+o.w>metric.x)};
+  });
+ },type);
+ assert.equal(rows.length,5);
+ for(const row of rows){
+  assert(Math.abs(row.textCenter-row.center)<.0001);
+  assert(Math.abs(row.metricCenter-row.center)<.0001);
+  assert(!row.overlap);
+ }
+}
+
 try{
  await page.goto('http://127.0.0.1:'+server.address().port+'/dashboard-pc.html');await page.waitForFunction(()=>window.DATA_READY&&window.BazWeeklyReport);
  await page.evaluate(()=>{F.from='2026-10-26';F.to='2026-10-31';buildFilters();apply();openWeekly();document.getElementById('wkSel').value='2026-10-26';exOnReportPeriodChange_('week');EX_PPT_VOC_FOCUS.week=Array.from(document.getElementById('wkVocSel').options).map(o=>o.value).find(v=>/노즐.*누수/.test(v));});
@@ -51,10 +72,9 @@ try{
   const vocTexts=items.filter(o=>o.k==='text'&&o.x>=card.x&&o.y>=card.y&&o.y<card.y+card.h);
   return {voc:s.reportVoc,cards:items.filter(o=>o.reportCard),vocTexts,
    inspection:s.kpi.find(k=>k.key==='insp'),inspectionLines:items.filter(o=>o.inspectionDetail).map(o=>o.t),
-   counts:items.filter(o=>o.weeklyManagementCount).map(o=>o.t),
+   counts:items.filter(o=>o.reportManagementCount).map(o=>o.t),
    captions:items.filter(o=>o.manualFileCaption).map(o=>o.t),
    dividers:items.filter(o=>o.reportVocDivider).length,
-   firstRowY:card.y+card.top,
    hasNotes:items.some(o=>o.t?.includes('특이사항')),
    previousVocHeight:L.change.h,bodyBottom:L.notes.y+L.notes.h,
    applied:items.some(o=>o.actionRepairStartBand||o.actionRepairStartHalo||o.actionRepairStartLabel),
@@ -87,10 +107,7 @@ try{
  assert.deepEqual(managementGrid[0],managementGrid[1]);
  assert.deepEqual(state.vocTexts.filter(o=>o.reportVocMetric!=null).map(o=>o.t),state.voc.map(r=>r.metric));
  assert.deepEqual(await page.locator('#wkVocDescRows .wr-voc .wr-voc-metric').allTextContents(),state.voc.map(r=>r.metric));
- const firstName=state.vocTexts.find(o=>o.reportVoc===0);
- const firstDescription=state.vocTexts.find(o=>o.reportVocDescription===0);
- assert(Math.abs(firstName.y-state.firstRowY-.04)<.0001,'symptom is lowered by the approved amount');
- assert(Math.abs(firstDescription.y-firstName.y-firstName.h-.05)<.0001,'description keeps the approved gap');
+ await assertVocCentered('week');
  console.log('PASS weekly VOC types, no symptoms, expanded card, bottom placement, current hospital counts, and unchanged savings');
  // Save a description, clear per-report edit, then prove it is reused from the saved dictionary.
  const unregistered=page.locator('.wr-voc').filter({has:page.locator('.missing')}).first();
@@ -193,6 +210,15 @@ try{
  assert(!slide.includes('bazAttach'));
  await page.evaluate(()=>openMonthly());
  await page.selectOption('#mnVocSel','노즐 누수(약액 유입)');
+ assert.equal(await page.locator('#mnNoteBox').count(),0);
+ for(const name of ['사용자 교육 현황','노즐 재사용 현황']){
+  const pending=page.waitForEvent('download');
+  await page.locator('#mnManagementDownloads').getByRole('button',{name:name+'.xlsx 다운로드'}).click();
+  const file=await pending;
+  assert.equal(file.suggestedFilename(),name+'(2026.10.01~2026.10.31).xlsx');
+  const wb=await JSZip.loadAsync(await fs.readFile(await file.path()));
+  assert((await wb.file('xl/worksheets/sheet2.xml').async('string')).includes('예시 월간 전용병원'));
+ }
  const monthEditor=page.locator('#mnVocDescRows');
  const monthBefore=await monthEditor.locator('.wr-voc .wr-symptom').allTextContents();
  const monthlyHidden=await monthEditor.locator('.wr-voc-excluded-row .wr-symptom').first().textContent();
@@ -209,20 +235,27 @@ try{
   const card=items.find(o=>o.reportCard==='VOC 유형');
   const descriptions=items.filter(o=>o.reportVocDescription===4);
   return {names:snap.reportVoc.map(r=>r.name),metrics:snap.reportVoc.map(r=>r.metric),
+   counts:items.filter(o=>o.reportManagementCount).map(o=>o.t),
+   cards:items.filter(o=>o.reportCard).map(o=>o.reportCard),
    description:descriptions.map(o=>o.t).join(''),
    descEnd:descriptions.at(-1).y+descriptions.at(-1).h,cardBottom:card.y+card.h};
  });
  assert.deepEqual(monthlyRows.names,[monthBefore[1],target,...monthBefore.slice(3),monthlyHidden]);
  assert.equal(monthlyRows.metrics[1],'3건 · 30%');
+ assert.deepEqual(monthlyRows.counts,['3곳','2곳']);
+ assert.deepEqual(monthlyRows.cards,['VOC 유형','교육·재사용 병원 현황']);
  assert.equal(monthlyRows.description,longDescription);
  assert(monthlyRows.descEnd<monthlyRows.cardBottom);
  assert.deepEqual(await current(),custom);
+ await assertVocCentered('month');
  await page.evaluate(()=>previewMonthlyPPT());
  const monthPreview=(await page.locator('#mnPvSlides').textContent()).replaceAll('\u00a0',' ');
  const monthlyTitle='CS 월간업무보고(2026.10.1~2026.10.31)';
  assert(monthPreview.includes(monthlyTitle));
  assert.match(monthPreview,/노즐 누수 발생 추이/);
  assert.match(monthPreview,/3건 · 30%/);
+ assert.match(monthPreview,/교육·재사용 병원 현황/);
+ assert.doesNotMatch(monthPreview,/특이사항/);
  await page.locator('#mnPvSlides > div').first().screenshot({path:path.join(out,'implemented-monthly-report.png')});
  await page.evaluate(()=>closeMnPreview());
  const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>makeMonthlyPPT());const monthFile=await monthlyDownload;
@@ -241,7 +274,8 @@ try{
   lastMonthIndex=index;
  }
  assert(!monthVocSlide.includes('>'+monthlyExcluded+'<'));
- assert.match(monthlySlide,/특이사항/);
+ assert.match(monthlySlide,/교육·재사용 병원 현황/);
+ assert.doesNotMatch(monthlySlide,/특이사항/);
  for(const xml of [slide,monthlySlide]){
   assert.match(xml,/노즐 누수 발생 추이/);
   assert.match(xml,/전체 서비스 건수/);

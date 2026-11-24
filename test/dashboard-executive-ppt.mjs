@@ -79,8 +79,8 @@ const FNS = [
   'buildExecutiveVocChange', 'buildExecutiveNotes',
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
-  'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
-  'exNoteOverride_', 'exGraphLabelEditKey_', 'exGraphLabelPlacement_',
+  'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_',
+  'exGraphLabelEditKey_', 'exGraphLabelPlacement_',
   'exActionLabelEditKey_', 'exActionLabelPlacement_', 'exTrendLabelEditKey_', 'exTrendLabelPlacement_',
   'buildExecutivePptDeck', 'exPptRuns_',
   'exWeekPeriod_', 'exMonthPeriod_'
@@ -102,7 +102,6 @@ const src = [
   grabVar('var EX_PPT_BASIS='),
   grabVar('var EX_TREND_METRIC_AS='),
   grabVar('var EX_TONE_CLS='),
-  grabVar('var EX_NOTE_EDITS='),
   grabVar('var EX_ACTION_LABEL_EDITS='),
   grabVar('var EX_ACTION_LABEL_SELECTED='),
   grabObj('var C={navy:'), grabObj('var FT={face:'), grabObj('var L=(function(){'),
@@ -112,7 +111,6 @@ const src = [
   'return {' + FNS.join(',') + ', L:L, C:C, FT:FT, EX_VOC_DESC:EX_VOC_DESC,' +
   ' setRAW:function(v){RAW=v;}, setHOSPDB:function(v){HOSPDB=v;},' +
   ' setF:function(v){F=v;}, getF:function(){return F;}, getEXCMP:function(){return EX_CMP;},'+
-  ' setNoteEdits:function(t,v){EX_NOTE_EDITS[t]=v;}, getNoteEdits:function(t){return EX_NOTE_EDITS[t];},'+
   ' setActionLabelEdits:function(t,v){EX_ACTION_LABEL_EDITS[t]=v;}, getActionLabelEdits:function(t){return EX_ACTION_LABEL_EDITS[t];}};'
 ].join('\n');
 const D = new Function(src)();
@@ -397,10 +395,11 @@ if(false){
   ck('13-c. 모달에 수기 입력 항목이 남아 있지 않다',
     !/id="wkDetail"/.test(SRC) && !/id="mnDetail"/.test(SRC) &&
     !/id="inv1"/.test(SRC) && !/id="callInInp"/.test(SRC) && !/id="mnCallInInp"/.test(SRC));
-  ck('13-d. 주간 모달은 VOC 설명과 병원 명단 다운로드, 월간 모달은 특이사항 편집을 제공한다',
+  ck('13-d. 주간·월간 모달은 VOC 설정과 병원 명단 다운로드를 제공한다',
     /id="wkSel"/.test(SRC) && /previewWeeklyPPT\(\)/.test(SRC) && /id="wkGo"/.test(SRC) &&
     /id="wkVocDescRows"/.test(SRC) && /id="mnVocDescRows"/.test(SRC) &&
-    /id="wkManagementDownloads"/.test(SRC) && !/id="wkNoteRows"/.test(SRC) && /id="mnNoteRows"/.test(SRC) &&
+    /id="wkManagementDownloads"/.test(SRC) && /id="mnManagementDownloads"/.test(SRC) &&
+    !/id="(?:wk|mn)NoteRows"/.test(SRC) &&
     /id="mnSel"/.test(SRC) && /previewMonthlyPPT\(\)/.test(SRC) && /id="mnGo"/.test(SRC));
 }
 
@@ -707,18 +706,7 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     allText(itemsOf(s1)).replace(/\s+/g, '')
       .indexOf('현장 재방문이 필요한 병원 2곳을 다음 주에 우선 처리합니다.'.replace(/\s+/g, '')) >= 0);
 
-  /* 빈 문장 제외 — exNoteOverride_ 가 걸러낸다 */
-  D.setNoteEdits('week', [autoW[0], '', '   ', autoW[3] || autoW[0]]);
-  const ov = D.exNoteOverride_('week');
-  ck('E3. 비운 문장은 override 에서 제외된다', ov.length === 2, JSON.stringify(ov.length));
-  ck('E3-b. 빈 문장을 제외한 목록만 PPT에 실린다',
-    snapOf(WEEK, ov).notes.items.length === 2);
-
-  /* 전부 제거 */
-  D.setNoteEdits('week', autoW.map(() => ''));
-  const none = D.exNoteOverride_('week');
-  ck('E4. 전부 지우면 override 는 빈 배열', Array.isArray(none) && none.length === 0);
-  const emptySnap = snapOf(WEEK, none);
+  const emptySnap = snapOf(WEEK, []);
   const emptyItems = itemsOf(emptySnap);
   ck('E4-b. 전부 제거해도 카드 제목은 유지되고 본문은 "특이사항 없음"',
     has(emptyItems, '특이사항') && has(emptyItems, '특이사항 없음'),
@@ -728,13 +716,10 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     has(emptyItems, 'BAZ BIOMEDIC'));
 
   /* 손대지 않은 상태 복귀 */
-  D.setNoteEdits('week', null);
-  ck('E5. 되돌리면 override 가 undefined 로 돌아간다', D.exNoteOverride_('week') === undefined);
   ck('E5-b. 되돌린 뒤 자동 특이사항과 다시 정확히 동일',
     JSON.stringify(snapOf(WEEK).notes.items) === JSON.stringify(autoW));
 
   /* 대시보드 자동 특이사항은 영향 없음 */
-  D.setNoteEdits('week', ['편집된 문장']);
   const xNow = (() => {
     const f = D.getF(); f.from = WEEK.from; f.to = WEEK.to; D.setF(f);
     return D.exBuild(D.exWindowRows(new Date(WEEK.from + 'T00:00:00'),
@@ -742,9 +727,6 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
   })();
   ck('E6. 대시보드 자동 특이사항(buildExecutiveNotes)은 편집에 영향받지 않는다',
     JSON.stringify(D.buildExecutiveNotes(xNow)) === JSON.stringify(autoW));
-  ck('E6-b. 월간 편집이 주간에 섞이지 않는다',
-    D.exNoteOverride_('month') === undefined && D.exNoteOverride_('week').length === 1);
-  D.setNoteEdits('week', null);
 
   /* 미리보기 == 실제 PPT (같은 스냅샷 → 같은 표시 목록) */
   const eW = autoW.slice(); eW[0] = D.esc('주간 편집 확인 문장');
@@ -770,22 +752,10 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
     /data-key="'\+escAttr\(k\)/.test(vocEditorSrc) &&
     /value="'\+escAttr\(v\)/.test(vocEditorSrc));
 
-  /* 평문 변환 — 편집 입력창에 넣을 값 */
-  ck('E9. exNotePlain_ 은 강조 태그만 벗기고 문장은 유지',
-    D.exNotePlain_('전주보다 A/S가 <b class="ex-up">3건 증가</b>했습니다.')
-      === '전주보다 A/S가 3건 증가했습니다.');
-  ck('E9-b. escape 된 편집 문장도 원래 글자로 되읽는다',
-    D.exNotePlain_(D.esc('A & B <C>')) === 'A & B <C>');
-
   /* 자동 생성 함수를 새로 만들지 않았는지 */
   ck('E10. PPT 전용 자동 특이사항 생성 함수를 만들지 않았다',
     (SRC.match(/function buildExecutiveNotes\(/g) || []).length === 1 &&
-    /snap\.notes\.items/.test(SRC) &&
     !/function build(Ppt|Report)Notes/.test(SRC));
-  ck('E11. 편집 내용은 저장하지 않는다 (localStorage·시트 미사용)',
-    !/localStorage[^\n]*NOTE|EX_NOTE_EDITS[^\n]*localStorage/.test(SRC));
-  ck('E12. 보고 기간이 바뀌면 편집이 초기화된다',
-    /function exOnReportPeriodChange_\(type\)\{[\s\S]{0,200}EX_NOTE_EDITS\[type\]=null;/.test(SRC));
   load(SAMPLE);
 }
 

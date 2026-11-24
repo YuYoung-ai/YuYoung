@@ -195,19 +195,15 @@
   s.reportVoc=vocSelection(s.reportVocSource,draft(s.type,s)).selected;
   if(s.type==='week'){
    s.kpi.find(function(k){return k.key==='insp';}).detail=inspectionSummary(rows);
-   s.management=management(rows);
   }
+  s.management=management(rows);
   return s;
  }
- function layout(L,type){
-  if(type==='month')return {
-   voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:L.change.h,pad:.14,top:.33,pitch:.40,
-        nameDY:.012,nameH:.15,descDY:.164,descH:.112,dividerGap:.01}
-  };
+ function layout(L){
   var bottom=L.notes.y+L.notes.h,managementH=1.17,managementY=bottom-managementH;
   return {
    voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:managementY-.10-L.change.y,pad:.14,top:.39,pitch:.59,
-        nameDY:.04,nameH:.20,descDY:.29,descH:.12,dividerGap:.015},
+        nameH:.18,descGap:.025,descH:.115,dividerGap:.015},
    management:{x:L.notes.x,y:managementY,w:L.notes.w,h:managementH,pad:.14,top:.52,pitch:.30}
   };
  }
@@ -223,7 +219,7 @@
   return lines;
  }
  function decorate(s,items){
-  var L=root.L,C=root.C,B=layout(L,s.type),monthly=s.type==='month';
+  var L=root.L,C=root.C,B=layout(L);
   function text(x,y,w,h,t,size,color,bold,extra){items.push(Object.assign({k:'text',x:x,y:y,w:w,h:h,t:t,size:size,color:color||C.navy,bold:!!bold},extra||{}));}
   function shell(T,title){
    items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},reportCard:title});
@@ -233,20 +229,21 @@
   shell(T,VOC_TITLE);
   if(!s.reportVoc.length)text(x,T.y+T.top,w,.25,'선택한 기간에 표시할 유형이 없습니다.',9,C.mut);
   s.reportVoc.forEach(function(r,i){
-   var y=T.y+T.top+i*T.pitch;
+   var y=T.y+T.top+i*T.pitch,center=y+T.pitch/2;
    var metricW=root.exTxtW_(r.metric,9)+.12,nameW=w-metricW-.10;
-   text(x,y+T.nameDY,nameW,T.nameH,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{reportVoc:i});
-   text(x+w-metricW,y+T.nameDY,metricW,T.nameH,r.metric,9,C.navy,true,{align:'right',reportVocMetric:i});
-   var size=8,lines=wrap(r.desc,w,size);
+   var size=8,lines=wrap(r.desc,nameW,size);
    if(lines.length>2){
     size=7;
-    lines=wrap(r.desc,w,size);
+    lines=wrap(r.desc,nameW,size);
    }
-   if(lines.length>2)throw new Error(r.name+' 보조문구를 두 줄 이내로 줄여주세요.');
-   lines.forEach(function(line,j){text(x,y+T.descDY+j*T.descH,w,T.descH,line,size,C.mut,false,{reportVocDescription:i});});
+   if(lines.length>3)throw new Error(r.name+' 보조문구를 세 줄 이내로 줄여주세요.');
+   var blockH=T.nameH+(lines.length?T.descGap+lines.length*T.descH:0);
+   var nameY=center-blockH/2,descY=nameY+T.nameH+T.descGap;
+   text(x,nameY,nameW,T.nameH,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{reportVoc:i});
+   text(x+w-metricW,center-T.nameH/2,metricW,T.nameH,r.metric,9,C.navy,true,{align:'right',reportVocMetric:i});
+   lines.forEach(function(line,j){text(x,descY+j*T.descH,nameW,T.descH,line,size,C.mut,false,{reportVocDescription:i});});
    items.push({k:'line',x:x,y:y+T.pitch-T.dividerGap,w:w,color:C.line,width:.5,reportVocDivider:true});
   });
-  if(monthly)return items;
   T=B.management;
   shell(T,MANAGEMENT_TITLE);
   var inner=T.w-2*T.pad, columns=[
@@ -259,7 +256,7 @@
    columns.forEach(function(col,j){
     var cellW=col.w-.10,size=header?6.8:root.exFitSize_(values[j],cellW,[8.5,8,7.5,7]);
     text(left+.05,y,cellW,h,values[j],size,header?C.mut:C.navy,!header&&j!==2,
-     {align:col.align,weeklyManagementCount:!header&&j===1,manualFileCaption:!header&&j===2?values[j]:undefined});
+     {align:col.align,reportManagementCount:!header&&j===1,manualFileCaption:!header&&j===2?values[j]:undefined});
     left+=col.w;
    });
   }
@@ -298,18 +295,23 @@
   var end=(kind==='education'?'H':'F')+Math.max(1,roster.length+1);list.getElementsByTagNameNS(NS,'dimension')[0].setAttribute('ref','A1:'+end);var af=list.getElementsByTagNameNS(NS,'autoFilter')[0];if(af)af.setAttribute('ref','A1:'+end);
   z.file('xl/worksheets/sheet1.xml',new XMLSerializer().serializeToString(sum));z.file('xl/worksheets/sheet2.xml',new XMLSerializer().serializeToString(list));return z.generateAsync({type:'uint8array',compression:'DEFLATE'});
  }
- async function previewWorkbook(kind,s){try{s=s||root.exReportSnapFromSel_('week');var a=s.management.items.find(function(x){return x.key===kind;}),bytes=await workbook(s,kind);root.BazReportFiles.download(bytes,a.sub+'('+s.from.replaceAll('-','.')+'~'+s.to.replaceAll('-','.')+').xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');}catch(e){tell(e);}}
+ async function previewWorkbook(kind,s){
+  if(!s){tell('보고 기간을 먼저 선택하세요.');return;}
+  try{
+   var a=s.management.items.find(function(x){return x.key===kind;}),bytes=await workbook(s,kind);
+   root.BazReportFiles.download(bytes,a.sub+'('+s.from.replaceAll('-','.')+'~'+s.to.replaceAll('-','.')+').xlsx','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }catch(e){tell(e);}
+ }
  function install(){
-  var downloads=document.getElementById('wkManagementDownloads');
-  downloads.append(
-   button('사용자 교육 현황.xlsx 다운로드',function(){previewWorkbook('education');}),
-   button('노즐 재사용 현황.xlsx 다운로드',function(){previewWorkbook('nozzle');})
-  );
   var originalSnap=root.exReportSnapshot_;root.exReportSnapshot_=function(){return augment(originalSnap.apply(this,arguments));};
   var originalDeck=root.buildExecutivePptDeck;root.buildExecutivePptDeck=function(s){var d=originalDeck(s);if(s.reportVoc)d[0].items=decorate(s,d[0].items);return d;};
   root.exRefreshVocDescEditor_=refreshVoc;
   [['week','wk','Weekly'],['month','mn','Monthly']].forEach(function(report){
-   var type=report[0],modal=document.getElementById(report[1]+'Modal');
+   var type=report[0],prefix=report[1],modal=document.getElementById(prefix+'Modal');
+   document.getElementById(prefix+'ManagementDownloads').append(
+    button('사용자 교육 현황.xlsx 다운로드',function(){previewWorkbook('education',root.exReportSnapFromSel_(type));}),
+    button('노즐 재사용 현황.xlsx 다운로드',function(){previewWorkbook('nozzle',root.exReportSnapFromSel_(type));})
+   );
    var openName='open'+report[2],open=root[openName];
    root[openName]=function(){
     open();
