@@ -11,6 +11,7 @@ on:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
+  actions: read
   contents: read
   pages: write
   id-token: write
@@ -24,6 +25,8 @@ concurrency:
 jobs:
   # Single deploy job since we're just deploying
   deploy:
+    env:
+      PAGES_ARTIFACT: github-pages-${{ github.run_attempt }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -38,6 +41,25 @@ jobs:
         with:
           # Upload entire repository
           path: '.'
+          name: ${{ env.PAGES_ARTIFACT }}
+      - name: Wait for uploaded artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in {1..12}; do
+            count=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              -f "name=$PAGES_ARTIFACT" --jq '[.artifacts[] | select(.expired == false)] | length') || count=0
+            if [[ "$count" == 1 ]]; then
+              echo "Pages artifact $PAGES_ARTIFACT is ready."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::The uploaded Pages artifact could not be resolved uniquely."
+          exit 1
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT }}
