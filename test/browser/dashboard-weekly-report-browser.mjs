@@ -49,11 +49,11 @@ try{
   const s=exReportSnapFromSel_('week'),items=buildExecutivePptDeck(s)[0].items,layout=BazWeeklyReport.layout(L);
   const card=layout.voc;
   const vocTexts=items.filter(o=>o.k==='text'&&o.x>=card.x&&o.y>=card.y&&o.y<card.y+card.h);
-  return {voc:s.weeklyVoc,cards:items.filter(o=>o.weeklyCard),vocTexts,
+  return {voc:s.reportVoc,cards:items.filter(o=>o.reportCard),vocTexts,
    inspection:s.kpi.find(k=>k.key==='insp'),inspectionLines:items.filter(o=>o.inspectionDetail).map(o=>o.t),
    counts:items.filter(o=>o.weeklyManagementCount).map(o=>o.t),
    captions:items.filter(o=>o.manualFileCaption).map(o=>o.t),
-   dividers:items.filter(o=>o.weeklyVocDivider).length,
+   dividers:items.filter(o=>o.reportVocDivider).length,
    firstRowY:card.y+card.top,
    hasNotes:items.some(o=>o.t?.includes('특이사항')),
    previousVocHeight:L.change.h,bodyBottom:L.notes.y+L.notes.h,
@@ -72,7 +72,7 @@ try{
  assert.equal(state.dividers,5);assert.equal(state.hasNotes,false);
  assert.deepEqual(state.counts,['2곳','1곳']);assert.deepEqual(state.captions,['사용자 교육 현황','노즐 재사용 현황']);
  const [vocCard,managementCard]=state.cards;
- assert.deepEqual(state.cards.map(o=>o.weeklyCard),['VOC 유형','교육·재사용 병원 현황']);
+ assert.deepEqual(state.cards.map(o=>o.reportCard),['VOC 유형','교육·재사용 병원 현황']);
  assert(vocCard.h>state.previousVocHeight&&vocCard.y+vocCard.h<managementCard.y);
  assert.equal(managementCard.y+managementCard.h,state.bodyBottom);
  const managementGrid=await page.evaluate(()=>{
@@ -85,10 +85,10 @@ try{
  });
  assert.equal(managementGrid[0].length,3);
  assert.deepEqual(managementGrid[0],managementGrid[1]);
- assert.deepEqual(state.vocTexts.filter(o=>o.weeklyVocMetric!=null).map(o=>o.t),state.voc.map(r=>r.metric));
+ assert.deepEqual(state.vocTexts.filter(o=>o.reportVocMetric!=null).map(o=>o.t),state.voc.map(r=>r.metric));
  assert.deepEqual(await page.locator('#wkVocDescRows .wr-voc .wr-voc-metric').allTextContents(),state.voc.map(r=>r.metric));
- const firstName=state.vocTexts.find(o=>o.weeklyVoc===0);
- const firstDescription=state.vocTexts.find(o=>o.weeklyDescription===0);
+ const firstName=state.vocTexts.find(o=>o.reportVoc===0);
+ const firstDescription=state.vocTexts.find(o=>o.reportVocDescription===0);
  assert(Math.abs(firstName.y-state.firstRowY-.04)<.0001,'symptom is lowered by the approved amount');
  assert(Math.abs(firstDescription.y-firstName.y-firstName.h-.05)<.0001,'description keeps the approved gap');
  console.log('PASS weekly VOC types, no symptoms, expanded card, bottom placement, current hospital counts, and unchanged savings');
@@ -97,21 +97,21 @@ try{
  const savedName=await unregistered.locator('.wr-symptom').innerText();await unregistered.locator('textarea').fill('작동 이상이 반복적으로 발생하는 현상');await unregistered.getByRole('button',{name:'기본 문구로 저장'}).click();await page.waitForTimeout(150);
  const reused=await page.evaluate(name=>{
   const other=buildExecutiveReportSnapshot({type:'week',from:'2026-10-27',to:'2026-10-31'});
-  return other.weeklyVoc.find(r=>r.name===name);
+  return other.reportVoc.find(r=>r.name===name);
  },savedName);
  assert.equal(reused.desc,'작동 이상이 반복적으로 발생하는 현상');
  const periods=await page.evaluate(()=>{
   const isolated=buildExecutiveReportSnapshot({type:'week',from:'2026-07-13',to:'2026-07-18'});
   const empty=buildExecutiveReportSnapshot({type:'week',from:'2026-02-02',to:'2026-02-07'});
-  return {isolated:isolated.weeklyVoc.map(r=>r.name),empty:empty.weeklyVoc.length,zero:empty.management.items.every(r=>r.cur===0),draw:buildExecutivePptDeck(empty).length};
+  return {isolated:isolated.reportVoc.map(r=>r.name),empty:empty.reportVoc.length,zero:empty.management.items.every(r=>r.cur===0),draw:buildExecutivePptDeck(empty).length};
  });
  assert.deepEqual(periods,{isolated:['노즐 누수(약액 유입)'],empty:0,zero:true,draw:1});
  const longDescription='검'.repeat(90);
  await page.locator('.wr-desc').last().fill(longDescription);
  const wrapped=await page.evaluate(()=>{
   const items=buildExecutivePptDeck(exReportSnapFromSel_('week'))[0].items;
-  const lines=items.filter(o=>o.weeklyDescription===4);
-  return {text:lines.map(o=>o.t).join(''),end:lines.at(-1).y+lines.at(-1).h,divider:items.filter(o=>o.weeklyVocDivider).at(-1).y};
+  const lines=items.filter(o=>o.reportVocDescription===4);
+  return {text:lines.map(o=>o.t).join(''),end:lines.at(-1).y+lines.at(-1).h,divider:items.filter(o=>o.reportVocDivider).at(-1).y};
  });
  assert.equal(wrapped.text,longDescription);assert(wrapped.end<wrapped.divider,'long description fits in the final row');
  await page.locator('.wr-desc').last().fill(state.voc.at(-1).desc);
@@ -126,7 +126,7 @@ try{
  const action=(name,label)=>page.getByRole('button',{name:name+' '+label,exact:true});
  const merge=name=>page.getByRole('combobox',{name:name+' 편입 대상',exact:true});
  const selectedNames=()=>page.locator('.wr-voc .wr-symptom').allTextContents();
- const current=()=>page.evaluate(()=>exReportSnapFromSel_('week').weeklyVoc);
+ const current=()=>page.evaluate(()=>exReportSnapFromSel_('week').reportVoc);
  assert(await action(firstHidden,'반영').isDisabled());
  await merge(firstHidden).selectOption(target);
  await merge(secondHidden).selectOption(target);
@@ -173,6 +173,10 @@ try{
  });
  const downloadPromise=page.waitForEvent('download');await page.evaluate(()=>makeWeeklyPPT());const download=await downloadPromise;await download.saveAs(path.join(out,'sample-weekly-report.pptx'));
  const zip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-weekly-report.pptx'))),slide=await zip.file('ppt/slides/slide1.xml').async('string');
+ const weeklyTitle='10월 4주차 CS 주간업무보고_(2026.10.26~2026.10.31)';
+ assert.equal(download.suggestedFilename(),weeklyTitle+'.pptx');
+ assert(slide.includes(weeklyTitle));
+ assert((await zip.file('docProps/core.xml').async('string')).includes('<dc:title>'+weeklyTitle+'</dc:title>'));
  const vocSlide=slide.slice(slide.indexOf('>VOC 유형<'),slide.indexOf('>교육·재사용 병원 현황<'));
  assert.match(vocSlide,/4건 · 44\.4%/);
  let lastIndex=-1;
@@ -189,19 +193,54 @@ try{
  assert(!slide.includes('bazAttach'));
  await page.evaluate(()=>openMonthly());
  await page.selectOption('#mnVocSel','노즐 누수(약액 유입)');
- await page.evaluate(()=>previewMonthlyPPT());
- assert.match(await page.locator('#mnPvSlides').textContent(),/노즐\s*누수\s*발생\s*추이/);
- await page.evaluate(()=>closeMnPreview());
+ const monthEditor=page.locator('#mnVocDescRows');
+ const monthBefore=await monthEditor.locator('.wr-voc .wr-symptom').allTextContents();
+ const monthlyHidden=await monthEditor.locator('.wr-voc-excluded-row .wr-symptom').first().textContent();
+ assert.equal(monthBefore.length,5);
+ assert.equal(monthBefore[0],target);
+ const monthlyExcluded=monthBefore[2];
+ await monthEditor.getByRole('button',{name:monthlyExcluded+' 제외',exact:true}).click();
+ await monthEditor.getByRole('button',{name:monthlyHidden+' 반영',exact:true}).click();
+ await monthEditor.getByRole('combobox',{name:monthlyExcluded+' 편입 대상',exact:true}).selectOption(target);
+ await monthEditor.getByRole('button',{name:target+' 아래로',exact:true}).click();
+ await monthEditor.getByRole('textbox',{name:monthlyHidden+' 보조문구',exact:true}).fill(longDescription);
  const monthlyRows=await page.evaluate(()=>{
-  const snap=exReportSnapFromSel_('month');
-  return {editor:Array.from(document.querySelectorAll('#mnVocDescRows label'),e=>e.textContent),
-   slide:snap.change.up.concat(snap.change.down).map(r=>r.k)};
+  const snap=exReportSnapFromSel_('month'),items=buildExecutivePptDeck(snap)[0].items;
+  const card=items.find(o=>o.reportCard==='VOC 유형');
+  const descriptions=items.filter(o=>o.reportVocDescription===4);
+  return {names:snap.reportVoc.map(r=>r.name),metrics:snap.reportVoc.map(r=>r.metric),
+   description:descriptions.map(o=>o.t).join(''),
+   descEnd:descriptions.at(-1).y+descriptions.at(-1).h,cardBottom:card.y+card.h};
  });
- assert(monthlyRows.slide.length>0);
- assert.deepEqual(monthlyRows.editor,monthlyRows.slide);
- const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>makeMonthlyPPT());await (await monthlyDownload).saveAs(path.join(out,'sample-monthly-report.pptx'));
+ assert.deepEqual(monthlyRows.names,[monthBefore[1],target,...monthBefore.slice(3),monthlyHidden]);
+ assert.equal(monthlyRows.metrics[1],'3건 · 30%');
+ assert.equal(monthlyRows.description,longDescription);
+ assert(monthlyRows.descEnd<monthlyRows.cardBottom);
+ assert.deepEqual(await current(),custom);
+ await page.evaluate(()=>previewMonthlyPPT());
+ const monthPreview=(await page.locator('#mnPvSlides').textContent()).replaceAll('\u00a0',' ');
+ const monthlyTitle='CS 월간업무보고(2026.10.1~2026.10.31)';
+ assert(monthPreview.includes(monthlyTitle));
+ assert.match(monthPreview,/노즐 누수 발생 추이/);
+ assert.match(monthPreview,/3건 · 30%/);
+ await page.locator('#mnPvSlides > div').first().screenshot({path:path.join(out,'implemented-monthly-report.png')});
+ await page.evaluate(()=>closeMnPreview());
+ const monthlyDownload=page.waitForEvent('download');await page.evaluate(()=>makeMonthlyPPT());const monthFile=await monthlyDownload;
+ assert.equal(monthFile.suggestedFilename(),monthlyTitle+'.pptx');
+ await monthFile.saveAs(path.join(out,'sample-monthly-report.pptx'));
  const monthlyZip=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-monthly-report.pptx')));
  const monthlySlide=await monthlyZip.file('ppt/slides/slide1.xml').async('string');
+ assert((await monthlyZip.file('docProps/core.xml').async('string')).includes('<dc:title>'+monthlyTitle+'</dc:title>'));
+ assert(monthlySlide.includes(monthlyTitle));
+ const monthVocSlide=monthlySlide.slice(monthlySlide.indexOf('>VOC 유형<'));
+ assert.match(monthVocSlide,/3건 · 30%/);
+ let lastMonthIndex=-1;
+ for(const name of monthlyRows.names){
+  const index=monthVocSlide.indexOf('>'+name+'<');
+  assert(index>lastMonthIndex,'monthly PPT shows selected symptoms in the chosen order');
+  lastMonthIndex=index;
+ }
+ assert(!monthVocSlide.includes('>'+monthlyExcluded+'<'));
  assert.match(monthlySlide,/특이사항/);
  for(const xml of [slide,monthlySlide]){
   assert.match(xml,/노즐 누수 발생 추이/);
@@ -211,6 +250,7 @@ try{
   assert.doesNotMatch(xml,/노즐 누수\(약액 유입\) · 비율/);
  }
  assert.equal(await page.evaluate(()=>qaWriteFileCalls.length),2,'weekly and monthly both use original writeFile');
+ console.log('PASS weekly and monthly title, filename, metadata, and monthly VOC grouping');
  console.log('PASS original writeFile used for both reports, zero embedded files and no attachment postprocessing');
  for(const kind of ['education','nozzle']){
   const wb=await JSZip.loadAsync(await fs.readFile(path.join(out,'sample-'+kind+'.xlsx'))),tpl=await JSZip.loadAsync(await fs.readFile(path.join(root,'assets/report-templates/'+kind+'.xlsx')));

@@ -1,27 +1,26 @@
-/* Weekly report editor, reusable symptom descriptions and matching PPT display list. */
+/* Weekly and monthly VOC editor, shared descriptions and PPT cards. */
 (function(root){
  'use strict';
  var drafts=Object.create(null),phrases=Object.create(null),loading=null;
  var NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main',templates={};
  var VOC_TITLE='VOC 유형',MANAGEMENT_TITLE='교육·재사용 병원 현황',VOC_LIMIT=5;
- var WEEKLY_DESCRIPTIONS={
+ var VOC_DESCRIPTIONS={
   '냉각수부족':'냉각수 부족에 의한 냉각 순환 장애 및 에러 발생',
   '무증상':'A/S 방문에서 정상 동작 상태를 확인함'
  };
  function key(s){return root.exVocDescKey_(s);}
- function period(){return root.exReportPeriodFromSel_('week');}
- function draft(p){
-  var k=p.from+'_'+p.to;
+ function draft(type,p){
+  var k=type+'_'+p.from+'_'+p.to;
   return drafts[k]||(drafts[k]={descriptions:Object.create(null),order:null,merges:new Map()});
  }
- function defaultDesc(k){return phrases[k]?phrases[k].text:WEEKLY_DESCRIPTIONS[k]||root.EX_VOC_DESC[k]||'';}
+ function defaultDesc(k){return phrases[k]?phrases[k].text:VOC_DESCRIPTIONS[k]||root.EX_VOC_DESC[k]||'';}
  function desc(k,d){return Object.prototype.hasOwnProperty.call(d,k)?d[k]:defaultDesc(k);}
  function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
  function button(text,fn){var b=el('button','wr-button',text);b.type='button';b.onclick=fn;return b;}
  function tell(e){root.toast(e&&e.message||String(e));}
  async function loadPhrases(){
   if(loading)return loading;
-  loading=root.gv('report_phrases',{},15000).then(function(r){if(!r.success)throw new Error(r.error||'기본 문구 조회 실패');phrases=Object.create(null);(r.items||[]).forEach(function(x){phrases[key(x.name)]=x;});refreshVoc();}).catch(function(e){tell('공유 기본 문구를 불러오지 못했습니다. '+(e.message||e));}).finally(function(){loading=null;});return loading;
+  loading=root.gv('report_phrases',{},15000).then(function(r){if(!r.success)throw new Error(r.error||'기본 문구 조회 실패');phrases=Object.create(null);(r.items||[]).forEach(function(x){phrases[key(x.name)]=x;});}).catch(function(e){tell('공유 기본 문구를 불러오지 못했습니다. '+(e.message||e));}).finally(function(){loading=null;});return loading;
  }
  async function savePhrase(name,input,badge,b,currentDraft){
   var text=input.value.trim().replace(/\s+/g,' ');if(!text){tell('저장할 보조문구를 입력하세요.');return;}
@@ -80,15 +79,19 @@
    return label;
   }).join(', ');
  }
- function refreshVoc(){
-  var p=period();
-  if(!p){document.getElementById('wkVocDescRows').replaceChildren();return;}
-  var s=root.buildExecutiveReportSnapshot({type:'week',from:p.from,to:p.to});
-  renderVoc(s.weeklyVocSource,draft(p));
-  document.getElementById('wkVocDescBox').open=true;
+ function refreshVoc(type){
+  var prefix=type==='month'?'mn':'wk',host=document.getElementById(prefix+'VocDescRows');
+  var p=root.exReportPeriodFromSel_(type);
+  if(!p){
+   host.replaceChildren(el('p','voc-desc-empty','보고 기간을 먼저 선택하세요.'));
+   return;
+  }
+  var s=root.buildExecutiveReportSnapshot({type:type,from:p.from,to:p.to});
+  renderVoc(host,s.reportVocSource,draft(type,p));
+  document.getElementById(prefix+'VocDescBox').open=true;
  }
- function renderVoc(source,d,focusName,focusAction){
-  var host=document.getElementById('wkVocDescRows'),selection=vocSelection(source,d);
+ function renderVoc(host,source,d,focusName,focusAction){
+  var selection=vocSelection(source,d);
   var order=selection.order,focusTarget;
   function keepFocus(control,name,action){
    if(name===focusName&&action===focusAction&&!control.disabled)focusTarget=control;
@@ -100,7 +103,7 @@
   }
   host.replaceChildren();
   if(!source.types.length){
-   host.append(el('p','voc-desc-empty','선택한 주차에 표시할 VOC 유형이 없습니다.'));
+   host.append(el('p','voc-desc-empty','선택한 기간에 표시할 VOC 유형이 없습니다.'));
    return;
   }
   var grid=el('div','wr-voc-grid'),included=el('section','wr-voc-included'),excluded=el('section','wr-voc-excluded');
@@ -108,7 +111,7 @@
   selectedTitle.tabIndex=-1;
   var toolbar=el('div','wr-voc-heading');
   var reset=button('기본 선택으로 되돌리기',function(){
-   d.order=null;d.merges.clear();renderVoc(source,d,null,'reset');
+   d.order=null;d.merges.clear();renderVoc(host,source,d,null,'reset');
   });
   reset.disabled=d.order===null&&d.merges.size===0;
   toolbar.append(selectedTitle,reset);included.append(toolbar);
@@ -125,7 +128,7 @@
     var next=i+step;
     if(next<0||next>=order.length)return;
     order.splice(i,1);order.splice(next,0,r.name);d.order=order;
-    renderVoc(source,d,r.name,action);
+    renderVoc(host,source,d,r.name,action);
    }
    var up=labeledButton('위로',r.name,function(){move(-1,'up');});
    var down=labeledButton('아래로',r.name,function(){move(1,'down');});
@@ -133,7 +136,7 @@
    var remove=labeledButton('제외',r.name,function(){
     d.order=order.filter(function(name){return name!==r.name;});
     d.merges.forEach(function(target,from){if(target===r.name)d.merges.delete(from);});
-    renderVoc(source,d,r.name,'add');
+    renderVoc(host,source,d,r.name,'add');
    });
    actions.append(up,down,remove);
    box.append(heading,actions);
@@ -157,7 +160,7 @@
    var actions=el('div','wr-voc-actions');
    var add=labeledButton('반영',t.k,function(){
     if(order.length>=VOC_LIMIT)return;
-    d.merges.delete(t.k);d.order=order.concat(t.k);renderVoc(source,d,t.k,'selected');
+    d.merges.delete(t.k);d.order=order.concat(t.k);renderVoc(host,source,d,t.k,'selected');
    });
    add.disabled=order.length>=VOC_LIMIT;
    var select=el('select','wr-merge-select');
@@ -169,7 +172,7 @@
    select.onchange=function(){
     if(select.value)d.merges.set(t.k,select.value);
     else d.merges.delete(t.k);
-    renderVoc(source,d,t.k,'merge');
+    renderVoc(host,source,d,t.k,'merge');
    };
    actions.append(add,select);row.append(heading,actions);excluded.append(row);
    keepFocus(add,t.k,'add');
@@ -188,16 +191,23 @@
  }
  function augment(s){
   var rows=root.exWindowRows(new Date(s.from+'T00:00:00'),new Date(s.to+'T23:59:59'));
-  s.weeklyVocSource=vocSource(rows);
-  s.weeklyVoc=vocSelection(s.weeklyVocSource,draft(s)).selected;
-  s.kpi.find(function(k){return k.key==='insp';}).detail=inspectionSummary(rows);
-  s.management=management(rows);
+  s.reportVocSource=vocSource(rows);
+  s.reportVoc=vocSelection(s.reportVocSource,draft(s.type,s)).selected;
+  if(s.type==='week'){
+   s.kpi.find(function(k){return k.key==='insp';}).detail=inspectionSummary(rows);
+   s.management=management(rows);
+  }
   return s;
  }
- function layout(L){
+ function layout(L,type){
+  if(type==='month')return {
+   voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:L.change.h,pad:.14,top:.33,pitch:.40,
+        nameDY:.012,nameH:.15,descDY:.164,descH:.112,dividerGap:.01}
+  };
   var bottom=L.notes.y+L.notes.h,managementH=1.17,managementY=bottom-managementH;
   return {
-   voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:managementY-.10-L.change.y,pad:.14,top:.39,pitch:.59},
+   voc:{x:L.change.x,y:L.change.y,w:L.change.w,h:managementY-.10-L.change.y,pad:.14,top:.39,pitch:.59,
+        nameDY:.04,nameH:.20,descDY:.29,descH:.12,dividerGap:.015},
    management:{x:L.notes.x,y:managementY,w:L.notes.w,h:managementH,pad:.14,top:.52,pitch:.30}
   };
  }
@@ -213,30 +223,30 @@
   return lines;
  }
  function decorate(s,items){
-  var L=root.L,C=root.C,B=layout(L);
-  items=items.filter(function(o){return !((o.x>=L.change.x-.001&&o.y>=L.change.y-.001&&o.y<L.change.y+L.change.h)|| (o.x>=L.notes.x-.001&&o.y>=L.notes.y-.001&&o.y<L.notes.y+L.notes.h));});
+  var L=root.L,C=root.C,B=layout(L,s.type),monthly=s.type==='month';
   function text(x,y,w,h,t,size,color,bold,extra){items.push(Object.assign({k:'text',x:x,y:y,w:w,h:h,t:t,size:size,color:color||C.navy,bold:!!bold},extra||{}));}
   function shell(T,title){
-   items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},weeklyCard:title});
+   items.push({k:'rect',x:T.x,y:T.y,w:T.w,h:T.h,r:.05,fill:C.white,line:{color:C.line,width:1},reportCard:title});
    text(T.x+T.pad,T.y+.07,T.w-T.pad*2,.25,title,10.5,C.navy,true);
   }
   var T=B.voc,x=T.x+T.pad,w=T.w-T.pad*2;
   shell(T,VOC_TITLE);
-  if(!s.weeklyVoc.length)text(x,T.y+T.top,w,.25,'선택한 주차에 표시할 유형이 없습니다.',9,C.mut);
-  s.weeklyVoc.forEach(function(r,i){
+  if(!s.reportVoc.length)text(x,T.y+T.top,w,.25,'선택한 기간에 표시할 유형이 없습니다.',9,C.mut);
+  s.reportVoc.forEach(function(r,i){
    var y=T.y+T.top+i*T.pitch;
    var metricW=root.exTxtW_(r.metric,9)+.12,nameW=w-metricW-.10;
-   text(x,y+.04,nameW,.20,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{weeklyVoc:i});
-   text(x+w-metricW,y+.04,metricW,.20,r.metric,9,C.navy,true,{align:'right',weeklyVocMetric:i});
+   text(x,y+T.nameDY,nameW,T.nameH,root.exFitTxt_(r.name,nameW,9.5),9.5,C.navy,true,{reportVoc:i});
+   text(x+w-metricW,y+T.nameDY,metricW,T.nameH,r.metric,9,C.navy,true,{align:'right',reportVocMetric:i});
    var size=8,lines=wrap(r.desc,w,size);
    if(lines.length>2){
     size=7;
     lines=wrap(r.desc,w,size);
    }
    if(lines.length>2)throw new Error(r.name+' 보조문구를 두 줄 이내로 줄여주세요.');
-   lines.forEach(function(line,j){text(x,y+.29+j*.12,w,.12,line,size,C.mut,false,{weeklyDescription:i});});
-   items.push({k:'line',x:x,y:y+T.pitch-.015,w:w,color:C.line,width:.5,weeklyVocDivider:true});
+   lines.forEach(function(line,j){text(x,y+T.descDY+j*T.descH,w,T.descH,line,size,C.mut,false,{reportVocDescription:i});});
+   items.push({k:'line',x:x,y:y+T.pitch-T.dividerGap,w:w,color:C.line,width:.5,reportVocDivider:true});
   });
+  if(monthly)return items;
   T=B.management;
   shell(T,MANAGEMENT_TITLE);
   var inner=T.w-2*T.pad, columns=[
@@ -295,11 +305,21 @@
    button('사용자 교육 현황.xlsx 다운로드',function(){previewWorkbook('education');}),
    button('노즐 재사용 현황.xlsx 다운로드',function(){previewWorkbook('nozzle');})
   );
-  var originalSnap=root.exReportSnapshot_;root.exReportSnapshot_=function(){var s=originalSnap.apply(this,arguments);return s.type==='week'?augment(s):s;};
-  var originalDeck=root.buildExecutivePptDeck;root.buildExecutivePptDeck=function(s){var d=originalDeck(s);if(s.type==='week')d[0].items=decorate(s,d[0].items);return d;};
-  var oldVoc=root.exRefreshVocDescEditor_;root.exRefreshVocDescEditor_=function(type){if(type==='week')refreshVoc();else oldVoc(type);};
-  var open=root.openWeekly;root.openWeekly=function(){open();loadPhrases();};
-  var preview=root.previewWeeklyPPT;root.previewWeeklyPPT=function(){try{return preview();}catch(e){tell(e);}};
+  var originalSnap=root.exReportSnapshot_;root.exReportSnapshot_=function(){return augment(originalSnap.apply(this,arguments));};
+  var originalDeck=root.buildExecutivePptDeck;root.buildExecutivePptDeck=function(s){var d=originalDeck(s);if(s.reportVoc)d[0].items=decorate(s,d[0].items);return d;};
+  root.exRefreshVocDescEditor_=refreshVoc;
+  [['week','wk','Weekly'],['month','mn','Monthly']].forEach(function(report){
+   var type=report[0],modal=document.getElementById(report[1]+'Modal');
+   var openName='open'+report[2],open=root[openName];
+   root[openName]=function(){
+    open();
+    if(modal.classList.contains('show'))loadPhrases().then(function(){
+     if(modal.classList.contains('show'))refreshVoc(type);
+    });
+   };
+   var previewName='preview'+report[2]+'PPT',preview=root[previewName];
+   root[previewName]=function(){try{return preview();}catch(e){tell(e);}};
+  });
   // Weekly and monthly exports both use the original exMakeReportPPT/writeFile path.
   // Use the same supplied templates for the existing dashboard Excel actions as well.
   ['exportSkillManagementExcel','exportNozzleReuseExcel'].forEach(function(name,i){root[name]=async function(){try{var days=root.EX_ROWS.map(root.rowDate).filter(Boolean).map(root.ymd).sort(),s={from:root.F.from||days[0]||root.ymd(root.exBaseDate()),to:root.F.to||days[days.length-1]||root.ymd(root.exBaseDate()),management:management(root.EX_ROWS)};await previewWorkbook(i?'nozzle':'education',s);}catch(e){tell(e);}};});

@@ -1535,7 +1535,7 @@ body.ex-narrow .nl-matrix{grid-template-columns:76px repeat(2,minmax(0,1fr))}
 }
 </style>
 <script src="auth.js?v=251"></script>
-<link rel="stylesheet" href="css/baz-weekly-report.css?v=390">
+<link rel="stylesheet" href="css/baz-weekly-report.css?v=391">
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-quality.css?v=309">
 </head>
@@ -1646,7 +1646,7 @@ exApplyLevel3Tools_();
   </div>
 </div>
 
-<!-- 월간보고 PPT 생성 모달 — 주간과 같은 1페이지 구성(VOC 설명 선택 수정) -->
+<!-- 월간보고 PPT 생성 모달 -->
 <div class="modal" id="mnModal">
   <div class="mbox report-box">
     <h2>📅 월간업무보고 PPT 생성</h2>
@@ -1661,8 +1661,8 @@ exApplyLevel3Tools_();
       <div class="mhint">선택한 대상의 월간 건수를 1월부터 선택한 달까지의 월평균과 비교합니다.</div>
     </div>
     <details class="voc-desc-editor" id="mnVocDescBox">
-      <summary>VOC 유형 설명 확인·수정 (증가·감소 각 상위 3개)</summary>
-      <div class="voc-desc-help">고정 설명이 자동 입력됩니다. 필요한 항목만 이번 보고서용으로 수정할 수 있습니다.</div>
+      <summary>VOC 유형 카드 설정</summary>
+      <div class="voc-desc-help">A/S(VOC) 증상을 최대 5개까지 선택하고 표시 순서를 정하세요. 미반영 증상은 선택한 유형에 편입할 수 있습니다. 비중은 선택한 월의 보고 기간 전체 A/S(VOC) 건수 기준입니다.</div>
       <div class="voc-desc-rows" id="mnVocDescRows"></div>
     </details>
     <details class="voc-desc-editor" id="mnNoteBox">
@@ -4186,8 +4186,8 @@ var L=(function(){
   var notesW=changeW;                               /* 4.67 */
   return {
     page:page, W:W, gap:gap,
-    header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:6.1,
-             dateX:6.45, dateW:4.7, basisY:1.20, basisH:0.22, basisW:6.0,
+    header:{ barY:0.5, barH:0.68, barW:11.3, padX:0.25, titleW:9.4,
+             fieldX:9.8, fieldW:1.35, basisY:1.20, basisH:0.22, basisW:6.0,
              logo:{x:12.01, y:0.16, w:1.07, h:0.58} },
     kpi:{ y:1.44, h:0.92, n:kpiN, w:kpiW, gap:kpiGap, pad:0.10,
           lblDY:0.05, lblH:0.22, badgeW:0.62, badgeH:0.18,
@@ -4506,9 +4506,8 @@ function buildExecutivePptDeck(snap){
   rect({x:0, y:H.barY, w:H.barW, h:H.barH, fill:C.navy});
   text({x:H.padX, y:H.barY, w:H.titleW, h:H.barH, t:snap.docTitle,
         size:exFitSize_(snap.docTitle, H.titleW, [FT.title,17,16,15]), bold:true, color:C.white});
-  text({x:H.dateX, y:H.barY, w:H.dateW, h:H.barH, t:snap.periodLabel,
-        size:exFitSize_(snap.periodLabel, H.dateW, [FT.period,10.5,10,9.5,9]),
-        bold:true, color:C.white, align:'right'});
+  text({x:H.fieldX, y:H.barY, w:H.fieldW, h:H.barH, t:'필드 현황',
+        size:FT.period, bold:true, color:C.white, align:'right'});
   items.push({k:'logo', x:H.logo.x, y:H.logo.y, w:H.logo.w, h:H.logo.h,
               fbText:'baz', fbSize:FT.logo, fbColor:C.navy});
   /* 보고서만 따로 전달돼도 집계 기준을 알 수 있게 제목 아래에 작게 적는다(새 카드를 만들지 않는다) */
@@ -4782,6 +4781,7 @@ function buildExecutivePptDeck(snap){
 
   /* ── ④ VOC 유형 변화 (증가 TOP3 · 감소 TOP3) ── */
   (function(){
+    if(snap.reportVoc)return;
     var T=L.change, ch=snap.change;
     cardShell(T, ch.title, ch.basis);
     if(!ch.hasPrev){ emptyLine(T, T.y+T.h/2-0.15, '비교 데이터 없음'); return; }
@@ -4960,6 +4960,7 @@ function buildExecutivePptDeck(snap){
 
   /* ── ⑥ 특이사항 (대시보드 특이사항 카드와 같은 문장 — 새로 만들지 않는다) ── */
   (function(){
+    if(snap.type==='week' && snap.management)return;
     var T=L.notes, nb=snap.notes;
     cardShell(T, nb.title, nb.basis);
     var boxY=T.listY, boxH=T.y+T.h-T.listPadB-T.listY;
@@ -5509,6 +5510,7 @@ async function exMakeReportPPT(type){
       var logo=await exLoadLogo_();
       var pptx=new PptxGenJS();
       pptx.defineLayout({name:'BAZ169', width:L.page.w, height:L.page.h}); pptx.layout='BAZ169';
+      pptx.title=snap.docTitle;
       pptx.theme={headFontFace:FT.face, bodyFontFace:FT.face};
       buildExecutivePptDeck(snap).forEach(function(sl){ exPptRenderSlide_(pptx, sl.items, logo); });
       await pptx.writeFile({fileName:snap.fileName});
@@ -6299,7 +6301,6 @@ function buildExecutiveNotes(x, o){
    바꿔 기존 집계 함수를 그대로 호출한 뒤 원래 상태로 되돌린다.
    PPT 전용 집계 기준·전용 문장은 만들지 않는다 — 미리보기와 실제 PPT도 이 결과 하나만 쓴다. */
 var EX_PPT_BASIS='처리일 기준 · 고객 서비스 · 데모 운영 제외';
-function exDayLabel_(d){ return (d.getMonth()+1)+'월 '+d.getDate()+'일'; }
 /* 추이 그래프의 구간명은 "최근/직전 N주" 대신 실제 날짜를 쓴다.
    같은 해는 짧게, 연도를 넘는 구간은 두 해를 모두 밝혀 오해를 막는다. */
 function exTrendPeriod_(from,to,monthOnly){
@@ -6557,16 +6558,14 @@ function exReportSnapshot_(type, from, to, vocDescriptions, notesOverride, vocFo
     return {k:t.k, prev:t.prev, cur:t.cur, d:t.d,
             desc:withDesc?exVocDesc_(t.k, vocDescriptions):''};
   }
+  function titleDate(d){return [d.getFullYear(),d.getMonth()+1,d.getDate()].join('.');}
+  var range='('+titleDate(a)+'~'+titleDate(b)+')';
+  var docTitle=type==='month'?'CS 월간업무보고'+range:wkLabel(a)+' CS 주간업무보고_'+range;
   return {
     type:type, from:from, to:to,
-    /* 회사 기본 양식의 제목·'필드 현황' 표기를 그대로 유지한다. */
-    docTitle:'CS팀 '+(type==='month'?'월간업무보고':'주간업무보고'),
-    periodLabel:'필드 현황 ('+(type==='month'?(a.getMonth()+1)+'월':wkLabel(a))+') '
-      +exDayLabel_(a)+' ~ '+exDayLabel_(b),
+    docTitle:docTitle,
     basis: EX_PPT_BASIS,
-    fileName: type==='month'
-      ? ('월간업무보고_'+a.getFullYear()+'년'+(a.getMonth()+1)+'월.pptx')
-      : ('주간업무보고_'+a.getFullYear()+'년'+wkLabel(a).replace(' ','')+'.pptx'),
+    fileName:docTitle+'.pptx',
     cmp:cmp, cmpLabel:cmpLb, rowCount:x.rows.length,
     kpi:kpi, trend:trend, action:exNozzleActionSpec_(type, x.rows, from, to), vocFocus:focus, vocOptions:vocOptions,
     change:{ title:'VOC 유형 변화', basis:cmpLb+' 대비 · A/S·점검 통합 · 이상 없음 제외',
@@ -10644,6 +10643,6 @@ loadData(false);
 </script>
 <script src="js/vendor/jszip-3.10.1.min.js"></script>
 <script src="js/baz-report-files.js?v=1"></script>
-<script src="js/baz-weekly-report.js?v=390"></script>
+<script src="js/baz-weekly-report.js?v=391"></script>
 </body>
 </html>

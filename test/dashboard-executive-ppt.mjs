@@ -77,7 +77,6 @@ const FNS = [
   'exDeltaParts', 'exDeltaHtml',
   'exVocDescKey_', 'exVocDesc_',
   'buildExecutiveVocChange', 'buildExecutiveNotes',
-  'exDayLabel_',
   'buildExecutiveReportSnapshot', 'exReportSnapshot_',
   'exTxtW_', 'exFitTxt_', 'exFitSize_', 'exFitPair_',
   'exWrapRuns_', 'exUnesc_', 'exHtmlRuns_', 'exNotesLayout_', 'exNotesPlan_', 'exNotePlain_',
@@ -545,11 +544,12 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
 
 /* ══════ 21. 회사 제목·로고·푸터 ══════ */
 {
-  ck('21. 회사 기본 양식 제목 문구 유지', has(wItems, 'CS팀 주간업무보고') &&
-    has(mItems, 'CS팀 월간업무보고'));
-  ck('21-b. 회사 기본 양식의 필드 현황·보고기간 표기',
-    /필드 현황 \(8월 1주차\) 8월 3일 ~ 8월 8일/.test(allText(wItems)) &&
-    /필드 현황 \(8월\) 8월 1일 ~ 8월 31일/.test(allText(mItems)));
+  ck('21. 표지 제목에 주차 및 선택한 보고 기간을 표시',
+    has(wItems, '8월 1주차 CS 주간업무보고_(2026.8.3~2026.8.8)') &&
+    has(mItems, 'CS 월간업무보고(2026.8.1~2026.8.31)'));
+  ck('21-b. 제목 오른쪽에 필드 현황 표기를 표시',
+    wItems.some(o=>o.t==='필드 현황'&&o.align==='right') &&
+    mItems.some(o=>o.t==='필드 현황'&&o.align==='right'));
   ck('21-c. 우측 BAZ 로고 유지',
     wItems.some(o => o.k === 'logo' && o.x > 11.5) && mItems.some(o => o.k === 'logo'));
   ck('21-d. 상단 네이비 제목 영역 · 하단 네이비 푸터',
@@ -564,8 +564,12 @@ ck('16:9 비율(13.33 × 7.5 inch)', Math.abs(D.L.page.w / D.L.page.h - 16 / 9) 
 
 /* ══════ 22. 파일명 규칙 ══════ */
 {
-  ck('22. 주간 파일명 규칙 유지', wSnap.fileName === '주간업무보고_2026년8월1주차.pptx', wSnap.fileName);
-  ck('22-b. 월간 파일명 규칙 유지', mSnap.fileName === '월간업무보고_2026년8월.pptx', mSnap.fileName);
+  const novWeek=D.buildExecutiveReportSnapshot({type:'week',from:'2026-11-16',to:'2026-11-21'});
+  const novMonth=D.buildExecutiveReportSnapshot({type:'month',from:'2026-11-01',to:'2026-11-23'});
+  ck('22. 주간 파일명에 주차 및 월~토 날짜를 포함',
+    novWeek.fileName==='11월 3주차 CS 주간업무보고_(2026.11.16~2026.11.21).pptx',novWeek.fileName);
+  ck('22-b. 월간 파일명에 월초부터 기준일까지 포함',
+    novMonth.fileName==='CS 월간업무보고(2026.11.1~2026.11.23).pptx',novMonth.fileName);
 }
 
 /* ══════ 추가 권장 문구 ══════ */
