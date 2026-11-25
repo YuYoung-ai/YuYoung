@@ -341,8 +341,8 @@
    }
    return {receipt:accept(result,id)};
   }
-  async function pdfStatus(context){
-   const result=await api.get('work_document_status',{requestId,recordId:context.recordId});
+  async function pdfStatus(context,transport){
+   const result=await api.get('work_document_status',{requestId,recordId:context.recordId},transport);
    checkAccount();
    if(!result.success||result.request?.id!==requestId||result.source?.recordId!==context.recordId||
       !flow.sameInspectionIdentity(context,result.source))

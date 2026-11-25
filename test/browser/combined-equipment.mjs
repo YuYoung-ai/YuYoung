@@ -22,7 +22,7 @@ let allowSecondComment=false;
 const media={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css'};
 
 try{
-  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+  const context=await browser.newContext({...pw.devices['iPhone 13'],serviceWorkers:'block'});
   const page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',async route=>{
@@ -50,10 +50,11 @@ try{
         assert.match(Buffer.from(p.base64,'base64').toString(),new RegExp(row.source.sn+' '+row.source.sn+'-photo'));
         assert.equal(jobs.has(p.uploadId),false);
         uploads.push(p);
-        const complete=p.sn!==serials[1];
+        const complete=p.sn===serials[2];
         const job={success:true,state:complete?'complete':'handover',jobId:p.uploadId,filename:p.filename,bytes:p.bytes,
           sha256:p.sha256,recordId:p.recordId,requestId:p.requestId,received:true,commentAttached:complete,
-          message:complete?'':'합성 댓글 연결 지연',pdf:{url:'https://drive.google.com/file/d/'+p.recordId+'/view',revision:1,sha256:p.sha256}};
+          message:complete?'':'합성 댓글 연결 지연',pdf:{url:'https://drive.google.com/file/d/'+p.recordId+'/view',
+            uploadId:p.uploadId,filename:p.filename,revision:1,sha256:p.sha256}};
         jobs.set(p.uploadId,job);
         return json(job);
       }
@@ -61,8 +62,9 @@ try{
       if(p.action==='inspection_pdf_job_resume'){
         assert.equal(p.base64,undefined);
         const prior=jobs.get(p.uploadId);resumes.push(p.uploadId);
-        assert.equal(prior.recordId,uploads[1].recordId);
-        const result=allowSecondComment?{...prior,state:'complete',commentAttached:true,message:''}:prior;
+        assert.ok(uploads.slice(0,2).some(upload=>upload.recordId===prior.recordId));
+        const result=allowSecondComment&&prior.recordId===uploads[1].recordId
+          ?{...prior,state:'complete',commentAttached:true,message:''}:prior;
         jobs.set(p.uploadId,result);return json(result);
       }
       if(p.reqId){
@@ -81,8 +83,21 @@ try{
     }
     if(url.hostname==='yuyoung-production.coaptation.workers.dev'){
       const row=rows.get(p.recordId),linked=links.has(p.recordId);
+      let source=row?.source,pdfStored=false,commentAttached=false;
+      if(p.action==='work_document_status'&&uploads.length===3&&p.recordId===uploads[0].recordId){
+        const id=uploads[0].uploadId,job=jobs.get(id);
+        // The first PDF finished on the server while the browser continued with other devices.
+        jobs.set(id,{...job,state:'complete',commentAttached:true,message:''});
+        source={...source,pdf:job.pdf};
+        pdfStored=commentAttached=true;
+      }
+      if(p.action==='work_document_status'&&uploads.length===3&&p.recordId===uploads[1].recordId){
+        // A different upload for the same record is not proof that this attempt completed.
+        source={...source,pdf:{...jobs.get(uploads[1].uploadId).pdf,uploadId:'different-upload'}};
+        pdfStored=commentAttached=true;
+      }
       if(p.action==='work_document_status'||p.action==='work_document_retry')return json({success:true,request,
-        source:row?.source,sourceLinked:linked,records:[...links].map(id=>{
+        source,pdfStored,commentAttached,sourceLinked:linked,records:[...links].map(id=>{
           const source=rows.get(id).source;return {recordId:id,sn:source.sn,date:source.date};
         })});
       if(p.action==='work_handover_detail')return json({success:true,source:row?.source,workDetail:{request,history:[]}});
@@ -195,6 +210,8 @@ try{
   assert.equal(new Set(uploads.map(item=>item.uploadId)).size,3);
   assert.equal(await device(1).getAttribute('aria-pressed'),'true');
   assert.equal(await publish.textContent(),'남은 장비 발행');
+  assert.match(await device(0).textContent(),/발행 완료/);
+  assert.doesNotMatch(await device(1).textContent(),/발행 완료/);
   assert.equal(page.url(),address,'partial success stays in the combined publication form');
   assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),true);
 
@@ -204,16 +221,18 @@ try{
     open.onerror=()=>reject(open.error);
     open.onsuccess=()=>{
       const db=open.result,tx=db.transaction('jobs','readwrite');
-      tx.objectStore('jobs').clear();tx.oncomplete=()=>{db.close();resolve();};tx.onabort=()=>reject(tx.error);
+      const store=tx.objectStore('jobs'),queued=store.getAll();
+      queued.onsuccess=()=>{store.clear();};
+      tx.oncomplete=()=>{db.close();resolve(queued.result.map(job=>job.uploadId));};tx.onabort=()=>reject(tx.error);
     };
-  }));
+  })).then(queued=>assert.deepEqual(queued,[uploads[1].uploadId]));
   await page.reload();await ready();
   assert.equal(await device(1).getAttribute('aria-pressed'),'true');
   assert.equal(await form.locator('#actionDetail').inputValue(),'조치 '+serials[1]);
   allowSecondComment=true;
   await Promise.all([page.waitForURL(base+'/hospital-work.html?request='+request.id),publish.click()]);
   assert.equal(rows.size,3);assert.equal(uploads.length,3);assert.equal(renders.length,3);
-  assert.deepEqual(resumes,[uploads[1].uploadId,uploads[1].uploadId]);
+  assert.deepEqual(resumes,[uploads[0].uploadId,uploads[1].uploadId,uploads[1].uploadId]);
   assert.ok([...jobs.values()].every(job=>job.commentAttached));
   await page.goto(address);await ready();
   await frame().waitForFunction(()=>document.getElementById('generateBtn').textContent==='전체 발행 완료');
@@ -221,5 +240,5 @@ try{
   assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),false);
   assert.equal(await panel.getByRole('link',{name:'선택 장비 PDF 보기'}).getAttribute('href'),jobs.get(uploads[1].uploadId).pdf.url);
   assert.deepEqual(errors,[]);
-  console.log(engine+' PASS: shared fields, independent photos and records, three-device cap, duplicate check and same-job recovery after reload');
+  console.log(engine+' PASS: independent device records, late completion, wrong-receipt rejection and same-job recovery after reload');
 }finally{await browser.close();}

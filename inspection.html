@@ -651,7 +651,7 @@
 
 <script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=381"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=395"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 <script src="js/baz-handover-parts.js?v=385"></script>
 
@@ -1820,6 +1820,25 @@ async function restorePendingPdf({duringGeneration=false,show=true,deliveryUploa
   return false;
 }
 
+async function checkCombinedPublication(batchDevice){
+  const context=inspectionContext(),entry=combinedFlow.entry(context.taskId);
+  if(!entry?.pdfStarted||!entry.id||context.recordId!==entry.id||context.requestId!==combinedRequest)return {};
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
+  let status;
+  try{status=await combinedFlow.pdfStatus(context,{signal:controller.signal});}
+  catch{return {};}
+  finally{clearTimeout(timer);}
+  const pdf=status.source.pdf;
+  if(!status.pdfStored||!status.commentAttached||!status.sourceLinked||
+     !entry.uploadId||entry.uploadId!==pdf?.uploadId||!inspectionIsCurrent(context))
+    return {checked:true,pdfStored:status.pdfStored};
+  const complete=await pdfPublisher.confirmPublished({
+    ...context,batchDevice,deliveryUploadId:entry.uploadId,
+    sourceBasis:pdf.sourceBasis||context.sourceBasis
+  },pdf);
+  return {checked:true,complete,pdfStored:true};
+}
+
 function combinedDeviceInfo(slot){
   const id=combinedFlow.taskIdFor(slot),task=getTask(id),entry=combinedFlow.entry(id);
   const active=slot===combinedActiveSlot;
@@ -1981,10 +2000,16 @@ function publishCombinedDevices(){
           document.getElementById('pdfGenerationState')?.textContent||'저장 상태를 확인하세요.').trim()
       });
     }
-    if(pending.length){
-      await loadCombinedDevice(pending[0].slot);
-      combinedDevicePanel.status(slots.length-pending.length+'/'+slots.length+'대 발행 완료 · 남은 장비는 다시 발행할 수 있습니다.\n'+
-        pending.map(result=>'장비 '+(result.slot+1)+' · '+result.sn+' · '+result.message).join('\n'));
+    const remaining=[];
+    for(const result of pending){
+      if(result.slot!==combinedActiveSlot)await loadCombinedDevice(result.slot);
+      showLoading('장비 '+(result.slot+1)+' · '+result.sn+' 발행 완료 여부를 확인하는 중…');
+      if(!(await checkCombinedPublication(true)).complete)remaining.push(result);
+    }
+    if(remaining.length){
+      if(remaining[0].slot!==combinedActiveSlot)await loadCombinedDevice(remaining[0].slot);
+      combinedDevicePanel.status(slots.length-remaining.length+'/'+slots.length+'대 발행 완료 · 남은 장비는 다시 발행할 수 있습니다.\n'+
+        remaining.map(result=>'장비 '+(result.slot+1)+' · '+result.sn+' · '+result.message).join('\n'));
       document.getElementById('combinedDevices').scrollIntoView({block:'start'});
     }else openPublishedRequest(combinedRequest);
   },true);
@@ -2570,19 +2595,14 @@ async function renderInspectionPdf(arg,deliveryStarted){
     const entry=combinedFlow.entry(_currentTaskId);
     if(handoverReference?.recordId&&entry?.pdfStarted){
       showLoading('이전에 발행한 PDF의 전송 상태를 확인하는 중…');
-      const context={...inspectionContext(),deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice};
+      const prior=await checkCombinedPublication(!!opts.batchDevice);
+      if(prior.complete)return true;
       if(await restorePendingPdf({duringGeneration:true,show:!opts.batchDevice,deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice})){
         if(opts.batchDevice)await pdfPublisher.retry();
         return true;
       }
-      if(opts.batchDevice){
-        const prior=await combinedFlow.pdfStatus(context);
-        if(prior.pdfStored){
-          if(!prior.commentAttached)throw new Error('Drive에 보관된 PDF가 있습니다. 기존 내역서에서 댓글 연결 상태를 확인하세요.');
-          await storeInspectionPdf({recordId:context.recordId,pdf:prior.source.pdf},context);
-          return true;
-        }
-      }
+      if(prior.pdfStored)throw new Error('Drive에 보관된 PDF가 있습니다. 기존 내역서에서 댓글 연결 상태를 확인하세요.');
+      if(opts.batchDevice&&!prior.checked)throw new Error('이 장비의 이전 발행 결과를 확인하지 못했습니다. 같은 장비의 발행 상태를 다시 확인해 주세요.');
     }
     pdfGenerationStatus('시트 기록을 확인하는 중…');
     showLoading('시트 기록을 확인하는 중…');
@@ -2750,7 +2770,7 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=365')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=395')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,

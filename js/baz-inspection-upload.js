@@ -192,26 +192,7 @@
      }
     }
    }
-   if(result.state==='complete'&&result.commentAttached&&s.saved){
-    s.deliveryConfirmed=true;
-    if(!s.recorded){
-     const measured=root.BazPerf?.start('pdf_delivery_local_save');
-     try{await options.onSaved(s.saved,s.context);s.recorded=true;}
-     catch(error){
-      checkAccount(s.owner);
-      await persist(s);
-      notice(s,'Drive 저장·Handover 연결·댓글 첨부 완료 · 기기 보관을 다시 확인해 주세요. '+error.message);
-      if(visible(s)){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}
-      return;
-     }
-     finally{measured?.({jobId:s.uploadId});}
-    }
-    s.complete=true;s.autoResumeEligible=false;
-    notice(s,'PDF 생성·Drive 저장·Handover 연결·접수 댓글 첨부 완료');
-    if(visible(s))retry.hidden=true;
-    if(outbox&&s.ownerKey)try{await outbox.remove(s.ownerKey+':'+s.uploadId);}catch{}
-    return;
-   }
+   if(result.state==='complete'&&result.commentAttached&&s.saved)return finishJob(s);
    const waitingForTarget=result.code==='TARGET_PENDING'&&!s.context.requestId;
    s.needsTarget=waitingForTarget;
    const error=new Error(waitingForTarget?'Drive에 PDF를 보관했습니다. 이 현장 기록을 기존 접수에 연결하면 서버가 댓글 첨부를 이어갑니다.':result.message||(result.received?'서버에서 같은 PDF의 연결을 계속 확인합니다.':'원래 PDF의 수신을 확인하지 못했습니다. 이어서 전송을 눌러 주세요.'));
@@ -219,6 +200,28 @@
    error.sourceConflict=['SOURCE_CHANGED','VERSION_CHANGED','TARGET_CHANGED'].includes(result.code);
    error.noRetry=result.state==='blocked'&&result.code!=='COMMENT_DELETED';
    throw error;
+  }
+  async function finishJob(s){
+   s.deliveryConfirmed=true;
+   if(!s.recorded){
+    const measured=root.BazPerf?.start('pdf_delivery_local_save');
+    try{await options.onSaved(s.saved,s.context);s.recorded=true;}
+    catch(error){
+     checkAccount(s.owner);
+     await persist(s);
+     notice(s,'Drive 저장·Handover 연결·댓글 첨부 완료 · 기기 보관을 다시 확인해 주세요. '+error.message);
+     if(visible(s)){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}
+     return;
+    }
+    finally{measured?.({jobId:s.uploadId});}
+   }
+   s.complete=true;s.autoResumeEligible=false;
+   notice(s,'PDF 생성·Drive 저장·Handover 연결·접수 댓글 첨부 완료');
+   if(visible(s))retry.hidden=true;
+   if(outbox)try{
+    const key=s.ownerKey||await ownerKey(s.owner);
+    await outbox.remove(key+':'+s.uploadId);
+   }catch{}
   }
   async function execute(s,automatic){
    s.busy=true;if(visible(s)){retry.hidden=true;retry.disabled=true;newButton.disabled=false;}
@@ -359,6 +362,26 @@
   if(root.addEventListener)root.addEventListener('online',resume);
   return {
    retry:retryCurrent,
+   async confirmPublished(context,pdf){
+    if(!context.deliveryUploadId||pdf.uploadId!==context.deliveryUploadId||
+       current?.busy||options.isCurrent&&!options.isCurrent(context))return false;
+    const sameJob=current?.uploadId===pdf.uploadId;
+    if(sameJob&&current.sha256&&current.sha256!==pdf.sha256)return false;
+    const saved={success:true,recordId:context.recordId,pdf};
+    const href=safeLink(saved);
+    const s=select({
+     context:{...context,transferVersion:2},owner:options.token(),uploadId:pdf.uploadId,
+     sha256:pdf.sha256,filename:pdf.filename,saved,stages:{pdf:'done'},busy:true,
+     recorded:sameJob&&current.recorded
+    });
+    try{
+     progress(s,'drive','done');progress(s,'handover','done');progress(s,'comment','done');
+     if(visible(s)){link.href=href;link.hidden=false;}
+     await finishJob(s);
+    }finally{s.busy=false;}
+    if(s.complete&&visible(s)&&options.token()===s.owner)options.onComplete?.(s.context);
+    return !!s.complete;
+   },
    async source(context){
     try{return (await call('inspection_pdf_job_source',context,options.token())).receipt;}
     catch(error){if(error.code==='DELIVERY_DISABLED'||/지원하지 않는 PDF 요청/.test(error.message))return null;throw error;}
