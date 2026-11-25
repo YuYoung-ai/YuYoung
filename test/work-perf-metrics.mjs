@@ -16,4 +16,6 @@ const finish=window.BazPerf.start('pdf_delivery_batch');clock+=600;
 const batch=finish({count:2,completed:true});
 assert.deepEqual({...batch},{name:'pdf_delivery_batch',ms:600,count:2,completed:true});
 batch.ms=0;assert.equal(window.BazPerf.samples().at(-1).ms,600);
+window.BazPerf.start('inspection_pdf_job_submit')({stageTimings:{driveShare:650,sheetLink:250,workConfirmation:36,jobWrite:-1,hospital:'private',token:385}});
+assert.deepEqual({...window.BazPerf.samples().at(-1)},{name:'inspection_pdf_job_submit',ms:0,sheetLinkMs:250,driveShareMs:650,workConfirmationMs:36});
 console.log('work-perf-metrics: bounded local numeric samples, private-field exclusion, immutable copies and summary passed.');
