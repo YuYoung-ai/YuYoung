@@ -16,6 +16,9 @@ const copy=(v:any)=>JSON.parse(JSON.stringify(v));
 const text=(v:any,max:number,label:string)=>{const s=String(v??'').trim();if(s.length>max)throw new Error(label+'은 '+max+'자 이하로 입력하세요.');return s;};
 const live=(r:Obj)=>!r.deletedAt&&!r.purgedAt;
 const active=(r:Obj)=>live(r)&&!['완료','취소'].includes(r.status);
+const inspectionOwner=(r?:Obj)=>!!r&&live(r)&&r.status!=='취소';
+const inspectionResult=(h:Obj|undefined,recordId:string)=>h?.kind==='result'&&!h.deletedAt&&h.source?.recordId===recordId&&h.source.origin!=='flow';
+const sameInspectionFile=(a:Obj|undefined,b:Obj)=>a?.fileId===b.fileId&&a?.revision===b.revision&&a?.sha256===b.sha256;
 const serials=(v:any)=>[...new Set(String(v||'').normalize('NFKC').toUpperCase().split(/[,;\s/|、，]+/).filter(Boolean))];
 const serialMatch=(a:any,b:any)=>serials(a).some(sn=>serials(b).includes(sn));
 const workKind=(v:any)=>{const s=String(v||'').normalize('NFKC').trim();return /^a\s*\/?\s*s$/i.test(s)?'A/S':s;};
@@ -624,18 +627,19 @@ export function createWorkStore(kv:any,options:Obj={}){
  async function inspectionTarget(p:Obj){
   const recordId=text(p.recordId,120,'기록 ID');
   const owner=await sourceLink(recordId);
-  const linkedId=owner.inUse?String(owner.entry.value?.requestId||''):'';
+  const linkedId=String(owner.entry.value?.requestId||'');
   if(p.requestId&&linkedId&&p.requestId!==linkedId)
    return {success:true,ready:false,code:'TARGET_CHANGED',message:'다른 접수에 연결된 Handover 기록입니다.'};
   if(!linkedId)
    return {success:true,ready:false,code:'TARGET_PENDING',message:'Handover의 접수 연결을 확인하고 있습니다.'};
-  const r=await get('request',linkedId);
-  if(!r.value||!live(r.value))
+  if(!inspectionOwner(owner.owner?.value))
    return {success:true,ready:false,code:'TARGET_CHANGED',message:'연결된 접수를 열 수 없습니다.'};
-  const h=await get('history',linkedId,owner.entry.value.historyId);
-  if(h.value?.kind!=='result'||h.value?.deletedAt||h.value?.source?.recordId!==recordId||h.value?.source?.origin==='flow')
+  const [h,comment]=await Promise.all([
+   get('history',linkedId,owner.entry.value.historyId),
+   hash(recordId).then(id=>get('history',linkedId,'pdf_'+id))
+  ]);
+  if(!inspectionResult(h.value,recordId))
    return {success:true,ready:false,code:'TARGET_PENDING',message:'접수에서 현장 처리 기록을 확인하고 있습니다.'};
-  const comment=await get('history',linkedId,'pdf_'+await hash(recordId));
   if(comment.value?.deletedAt)
    return {success:true,ready:false,code:'COMMENT_DELETED',message:'접수에서 삭제된 내역서 댓글을 확인해 주세요.'};
   return {success:true,ready:true,recordId,requestId:linkedId};
@@ -644,15 +648,24 @@ export function createWorkStore(kv:any,options:Obj={}){
   if(!Array.isArray(items)||items.length>20)throw new Error('문서 전송 수를 확인하세요.');
   for(const item of items){const recordId=text(item.recordId,120,'기록 ID'),pdf=inspectionPdf(item.pdf),context={hospitalName:text(item.context?.hospitalName,300,'병원'),date:text(item.context?.date,10,'처리일'),sn:text(item.context?.sn,300,'S/N')};if(!pdf||!recordId||!context.hospitalName||!/^\d{4}-\d{2}-\d{2}$/.test(context.date))throw new Error('문서 등록 정보를 확인하세요.');
    for(let attempt=0;attempt<12;attempt++){
-    const old=await get('document',recordId),version=await get('documentVersion',recordId,pdf.revision),owner=await sourceLink(recordId);
-    if(version.value&&version.value.pdf.sha256!==pdf.sha256)throw new Error('같은 문서 버전의 파일이 다릅니다.');
-    if(old.value&&old.value.pdf.revision>=pdf.revision)break;
-    const requestId=String(item.requestId||owner.entry.value?.requestId||''),r=requestId?await request(requestId):null;
+    const [old,version,owner]=await Promise.all([get('document',recordId),get('documentVersion',recordId,pdf.revision),sourceLink(recordId)]);
+    if(version.value&&version.value.pdf.sha256!==pdf.sha256){
+     if(targeted)return {success:false,code:'VERSION_CHANGED'};
+     throw new Error('같은 문서 버전의 파일이 다릅니다.');
+    }
+    const requestId=String(item.requestId||owner.entry.value?.requestId||'');
     const exactLink=owner.inUse&&owner.entry.value?.requestId===requestId;
-    if(targeted&&!exactLink)throw new Error('현장 기록의 접수 연결이 변경되었습니다.');
+    if(targeted&&(!exactLink||!inspectionOwner(owner.owner?.value)))return {success:false,code:'TARGET_CHANGED'};
+    if(old.value&&old.value.pdf.revision>=pdf.revision){
+     if(targeted&&(old.value.requestId!==requestId||old.value.recordId!==recordId))return {success:false,code:'TARGET_CHANGED'};
+     if(targeted&&!sameInspectionFile(old.value.pdf,pdf))return {success:false,code:'VERSION_CHANGED'};
+     break;
+    }
+    if(targeted&&version.value&&!sameInspectionFile(version.value.pdf,pdf))return {success:false,code:'VERSION_CHANGED'};
+    const r=targeted?owner.owner:requestId?await request(requestId):null;
     if(!targeted&&r&&(r.value.hospitalName!==context.hospitalName||r.value.visitAt?.slice(0,10)!==context.date||context.sn&&r.value.sn&&!serialMatch(context.sn,r.value.sn)))throw new Error('문서와 접수의 병원·처리일·장비가 다릅니다.');
     if(owner.inUse&&owner.entry.value?.requestId!==requestId)throw new Error('다른 접수에 연결된 문서입니다.');
-    const doc=bounded({recordId,pdf,context,requestId,registeredAt:new Date().toISOString()});
+    const doc=bounded({recordId,pdf,context,requestId,registeredAt:new Date().toISOString(),...(targeted?{linkedDelivery:true}:{})});
     let tx=kv.atomic().check(old,version,owner.entry,...(r?[r]:[])).set(old.key,doc).set(version.key,doc).set(key('documentPending',recordId),{recordId});
     if((await tx.commit()).ok)break;if(attempt===11)throw new Error('문서 등록이 겹쳤습니다. 같은 파일로 재시도하세요.');
    }
@@ -666,31 +679,65 @@ export function createWorkStore(kv:any,options:Obj={}){
    if(!targetRecordId)continue;
    const doc=await get('document',targetRecordId),d=doc.value;if(!d)continue;
    const owner=await sourceLink(d.recordId),requestId=d.requestId||owner.entry.value?.requestId;if(!requestId)continue;
-   const r=await get('request',requestId);if(!r.value||!live(r.value))continue;
+   const requiresLink=!!(recordId||d.linkedDelivery);
+   const r=owner.owner?.value?.id===requestId?owner.owner:await get('request',requestId);
+   if(!r.value||!live(r.value)||requiresLink&&!inspectionOwner(r.value))continue;
    if(owner.inUse&&owner.entry.value?.requestId!==requestId)continue;
+   if(requiresLink&&owner.entry.value?.requestId!==requestId)continue;
    const id='pdf_'+await hash(d.recordId),entry=await get('history',requestId,id);
    if(!entry.value?.deletedAt&&(entry.value?.attachment?.sha256!==d.pdf.sha256||entry.value?.attachment?.revision!==d.pdf.revision)){
     const saved=await mutate({action:'work_document_attach',recordId:d.recordId,requestId,documentRevision:d.pdf.revision,operationId:'doc_'+await hash([requestId,d.recordId,d.pdf.revision,d.pdf.sha256])},{name:d.pdf.uploadedBy||'내역서 자동 연결',level:0},async()=>{
-     const current=await request(requestId),latest=await get('document',d.recordId),comment=await get('history',requestId,id),link=await sourceLink(d.recordId);
-     if(latest.value?.pdf.sha256!==d.pdf.sha256||latest.value?.pdf.revision!==d.pdf.revision||link.inUse&&link.entry.value?.requestId!==requestId)return {response:{success:false}};
+     const [current,latest,comment,binding]=await Promise.all([
+      get('request',requestId),get('document',d.recordId),get('history',requestId,id),
+      requiresLink?get('link',d.recordId):sourceLink(d.recordId)
+     ]);
+     if(!current.value||!live(current.value)||!sameInspectionFile(latest.value?.pdf,d.pdf)||comment.value?.deletedAt)return {response:{success:false}};
+     const link=requiresLink?binding:binding.entry;
+     if((requiresLink?(!inspectionOwner(current.value)||link.value?.requestId!==requestId):
+       (binding.inUse&&link.value?.requestId!==requestId)))return {response:{success:false}};
+     const result=requiresLink?await get('history',requestId,link.value.historyId):null;
+     if(result&&!inspectionResult(result.value,d.recordId))return {response:{success:false}};
      const now=new Date().toISOString(),next={...current.value,revision:current.value.revision+1,updatedAt:now,updatedBy:d.pdf.uploadedBy,latest:'AS/점검 내역서'},h={id,requestId,kind:'comment',body:'AS/점검 내역서',sourceRecordId:d.recordId,attachment:d.pdf,author:comment.value?.author||d.pdf.uploadedBy,createdAt:comment.value?.createdAt||now,updatedAt:now,revision:(comment.value?.revision||0)+1,deletedAt:'',deletedBy:''};
-     return {kind:'pdf_attachment',request:next,history:h,before:comment.value,checks:[current,latest,comment,link.entry],response:{success:true,request:next,history:h}};
+     return {kind:'pdf_attachment',request:next,history:h,before:comment.value,checks:[current,latest,comment,link,...(result?[result]:[])],response:{success:true,request:next,history:h}};
     });if(!saved.success)continue;
    }
-   await kv.atomic().check(pending,doc,owner.entry).delete(pending.key).commit();
+   if(pending.value)await kv.atomic().check(pending,doc,owner.entry).delete(pending.key).commit();
   }
  }
  async function completeInspectionDelivery(p:Obj){
+  const started=Date.now();
   const target=await inspectionTarget(p);
-  if(!target.ready)return {...target,complete:false};
+  const stageTimings={targetMs:Date.now()-started,registrationMs:0,confirmationMs:0};
+  if(!target.ready)return {...target,complete:false,stageTimings};
+  const {recordId,requestId}=target;
   const document=p.document;
-  if(!document||document.recordId!==p.recordId||document.requestId!==target.requestId||document.pdf?.sha256!==p.sha256||document.pdf?.revision!==p.revision)
+  if(!document||document.recordId!==recordId||document.requestId!==requestId||document.pdf?.sha256!==p.sha256||document.pdf?.revision!==p.revision)
    throw new Error('내역서 전송 결과가 일치하지 않습니다.');
-  await registerDocuments([document],true);
-  const state=await documentStatus({requestId:target.requestId,recordId:p.recordId,sha256:p.sha256});
-  if(state.commentDeleted)return {success:true,complete:false,code:'COMMENT_DELETED',message:'접수에서 삭제된 내역서 댓글을 확인해 주세요.'};
-  if(state.documentChanged)return {success:true,complete:false,code:'VERSION_CHANGED',message:'더 최신 PDF가 저장되었습니다.'};
-  return {success:true,complete:state.pdfStored&&state.commentAttached===true,code:'COMMENT_PENDING',message:'접수 댓글 첨부를 확인하고 있습니다.'};
+  const registration=await registerDocuments([document],true);
+  const registeredAt=Date.now();
+  stageTimings.registrationMs=registeredAt-started-stageTimings.targetMs;
+  const pending=(code:string,message:string)=>({success:true,complete:false,code,message,stageTimings});
+  const changed=()=>pending('TARGET_CHANGED','현장 기록의 접수 연결이 변경되었습니다.');
+  const versionChanged=()=>pending('VERSION_CHANGED','현재 PDF의 버전 또는 Drive 파일이 변경되었습니다.');
+  if(registration.code==='VERSION_CHANGED')return versionChanged();
+  if(!registration.success)return changed();
+  const commentId='pdf_'+await hash(recordId);
+  const [link,r,saved,comment]=await Promise.all([
+   get('link',recordId),get('request',requestId),get('document',recordId),get('history',requestId,commentId)
+  ]);
+  const h=link.value?.requestId===requestId?await get('history',requestId,link.value.historyId):null;
+  stageTimings.confirmationMs=Date.now()-registeredAt;
+  if(!h||!inspectionOwner(r.value))return changed();
+  if(!inspectionResult(h.value,recordId))return pending('TARGET_PENDING','접수에서 현장 처리 기록을 확인하고 있습니다.');
+  if(comment.value?.deletedAt)return pending('COMMENT_DELETED','접수에서 삭제된 내역서 댓글을 확인해 주세요.');
+  if(saved.value&&(saved.value.requestId!==requestId||saved.value.recordId!==recordId))return changed();
+  if(saved.value&&!sameInspectionFile(saved.value.pdf,document.pdf))return versionChanged();
+  if(comment.value?.attachment?.revision===p.revision&&comment.value.attachment.sha256===p.sha256&&
+     comment.value.attachment.fileId!==document.pdf.fileId)
+   return pending('FILE_CONFLICT','접수 댓글의 Drive 파일이 현재 PDF와 다릅니다.');
+  if(saved.value&&comment.value?.kind==='comment'&&comment.value.requestId===requestId&&comment.value.sourceRecordId===recordId&&sameInspectionFile(comment.value.attachment,document.pdf))
+   return {success:true,complete:true,requestId,recordId,sha256:p.sha256,revision:p.revision,fileId:document.pdf.fileId,checkedAt:new Date().toISOString(),stageTimings};
+  return pending('COMMENT_PENDING','접수 댓글 첨부를 확인하고 있습니다.');
  }
  async function seed(p:Obj){
   if((await status()).ready)throw new Error('활성화된 KV에는 기존 시트를 다시 가져올 수 없습니다.');

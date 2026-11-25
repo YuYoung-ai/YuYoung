@@ -1,6 +1,7 @@
 (function(root){
  'use strict';
  const MAX_BYTES=7*1024*1024;
+ const BATCH_CHECKPOINT_DELAY=8000;
  function id(){if(typeof crypto.randomUUID==='function')return crypto.randomUUID();const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;return Array.from(b,(n,i)=>([4,6,8,10].includes(i)?'-':'')+n.toString(16).padStart(2,'0')).join('');}
  async function hash(blob){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())),b=>b.toString(16).padStart(2,'0')).join('');}
  async function ownerKey(token){
@@ -48,7 +49,7 @@
    // uploadId/hash/baseRevision in the body remain fixed across retries.
    url.searchParams.set('pdfRequest',id());
    const duration=action==='inspection_pdf_job_status'?10000:action==='inspection_pdf_job_resume'?20000:action==='inspection_pdf_job_submit'?35000:action==='inspection_pdf_resolve'||action==='inspection_pdf_job_source'?30000:120000;
-   const ctl=new AbortController(),expires=Date.now()+duration;let timer,rejectLocal,serverMs;
+   const ctl=new AbortController(),expires=Date.now()+duration;let timer,rejectLocal,serverMs,stageTimings;
    const timeout=new Promise((_,reject)=>{rejectLocal=reject;});
    function cancel(){ctl.abort();const e=new Error('응답 대기 시간이 지났거나 전송 확인을 중단했습니다. 같은 파일로 다시 확인해 주세요.');e.transient=true;rejectLocal(e);}
    timer=setTimeout(cancel,duration);
@@ -61,11 +62,12 @@
      const value=await response.json();checkAccount(owner);return value;
     })()]);
     serverMs=result?.serverMs;
+    stageTimings=result?.stageTimings;
     if(!result||typeof result.success!=='boolean'){const e=new Error('저장 서버 응답을 확인하지 못했습니다. 같은 파일로 다시 시도해 주세요.');e.transient=true;throw e;}
     if(!result.success){const e=new Error(result.error||'PDF 저장 응답을 확인하지 못했습니다.');e.code=result.code||'';e.sourceConflict=!!result.sourceConflict||['SOURCE_REQUIRED','SOURCE_CHANGED','VERSION_CHANGED','TARGET_CHANGED'].includes(e.code);e.noRetry=!!result.conflict||['WRONG_OWNER','INVALID_JOB','INVALID_FILE'].includes(e.code);e.transient=!e.sourceConflict&&!e.noRetry&&(!!result.retryable||e.code==='LOCK_BUSY'||/(잠금.*시간\s*초과|lock.*(?:timeout|timed out)|timed out.*lock)/i.test(e.message));throw e;}
     return result;
    }catch(e){checkAccount(owner);if(e.name==='AbortError'||e.transient==null&&!e.noRetry)e.transient=true;throw e;}
-   finally{clearTimeout(timer);if(s){s.cancel=null;s.expires=0;}measured?.({bytes:data.bytes,serverMs,jobId:data.uploadId});}
+   finally{clearTimeout(timer);if(s){s.cancel=null;s.expires=0;}measured?.({bytes:data.bytes,serverMs,jobId:data.uploadId,stageTimings});}
   }
   function encoded(blob,s){return new Promise((resolve,reject)=>{
    const reader=new FileReader();let settled=false;const timer=setTimeout(()=>finish(new Error('PDF 파일 읽기가 지연되고 있습니다. 같은 파일로 다시 시도해 주세요.')),30000);
@@ -106,12 +108,24 @@
    if(visible(s)){retry.hidden=false;retry.textContent='댓글 연결 다시 확인';}
    try{return await Promise.race([local,options.confirmAttachment(s.saved,s.context,{signal:ctl.signal})]);}finally{clearTimeout(timer);s.cancel=null;s.expires=0;}
   }
-  async function jobRequest(s,action,data){
-   const result=await call('inspection_pdf_job_'+action,{uploadId:s.uploadId,...data},s.owner,s);
+  async function jobRequest(s,action,data,trackTimeout=true){
+   const result=await call('inspection_pdf_job_'+action,{uploadId:s.uploadId,...data},s.owner,trackTimeout?s:null);
    if(result.state!=='missing'&&(result.jobId!==s.uploadId||result.recordId!==s.context.recordId||result.sha256!==s.sha256||s.context.requestId&&(result.requestId||result.state==='complete')&&result.requestId!==s.context.requestId)){
     const error=new Error('전송 결과가 현재 내역서와 일치하지 않습니다.');error.noRetry=true;throw error;
    }
    return result;
+  }
+  function prepareNext(s,result){
+   const pdf=result.pdf;
+   if(!s.prepareNext||!visible(s)||result.state!=='handover'||!result.received||
+      !result.requestId||result.requestId!==s.context.requestId||pdf?.uploadId!==s.uploadId||
+      pdf.sha256!==s.sha256||pdf.revision!==Number(s.context.sourcePdfRevision)+1||
+      !/^[A-Za-z0-9_-]+$/.test(pdf.fileId||''))return;
+   const href=new URL(safeLink({pdf}));
+   if(href.pathname!=='/file/d/'+pdf.fileId+'/view')return;
+   const run=s.prepareNext;
+   s.prepareNext=null;
+   run();
   }
   async function showJob(s,result){
    if(result.state==='missing')return;
@@ -173,7 +187,19 @@
      if(s.context.batchDevice)options.onBeforeBatchSubmit?.(s.context);
     }finally{prepared?.({bytes:s.blob.size,jobId:s.uploadId});}
     notice(s,'PDF 저장 및 접수 댓글 연결 중…');progress(s,'drive','working');
-    result=await jobRequest(s,'submit',{...payload(s.context),filename:s.filename,bytes:s.blob.size,sha256:s.sha256,base64,baseRevision:s.context.sourcePdfRevision});
+    // Observe a slow submission once. The read never adopts a receipt or
+    // takes over the in-flight request's timeout, lease or visible state.
+    let submitting=true;
+    const checkpoint=s.prepareNext?setTimeout(()=>{
+     if(!visible(s)||!navigator.onLine||doc.hidden)return;
+     jobRequest(s,'status',undefined,false).then(value=>{
+      if(submitting)prepareNext(s,value);
+     }).catch(()=>{});
+    },BATCH_CHECKPOINT_DELAY):null;
+    try{
+     result=await jobRequest(s,'submit',{...payload(s.context),filename:s.filename,bytes:s.blob.size,sha256:s.sha256,base64,baseRevision:s.context.sourcePdfRevision});
+    }finally{submitting=false;clearTimeout(checkpoint);}
+    try{prepareNext(s,result);}catch{} // Rendering ahead is optional.
     await showJob(s,result);
    }
    if(result.received&&result.state!=='complete'&&(result.state!=='blocked'||!automatic&&result.code==='COMMENT_DELETED')){
@@ -426,10 +452,10 @@
    async prepare(context){const owner=options.token();let prepared,retryable=false;try{prepared=await prepareContext(context,owner);}catch(e){retryable=!!e.transient&&!e.sourceConflict&&!e.noRetry;prepared={...context,sourcePreparationError:e.message||'AS 처리 현황 원본 확인 실패'};}preparations.set(prepared,{owner,retryable});return prepared;},
    isBusy(){return active.size>0;},
    recover(context){if(current?.busy&&current.context.taskId===context.taskId&&visible(current))return current.running;return run(select({recovering:true,context:{...context},owner:options.token(),busy:false,stages:{pdf:'waiting',drive:'working'}}));},
-   publish(blob,filename,context,startedAt,initialSheetLink){
+   publish(blob,filename,context,startedAt,initialSheetLink,prepareNext){
     if(current?.busy&&current.blob===blob&&current.context.taskId===context.taskId&&visible(current))return current.running;
     const p=preparations.get(context),s=select({blob,filename,context:{...context},owner:p?p.owner:options.token(),
-      uploadId:context.deliveryUploadId||undefined,preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'},startedAt,originalBytes:blob.size,initialSheetLink});
+      uploadId:context.deliveryUploadId||undefined,preparationRetryable:!!p?.retryable,busy:false,stages:{pdf:'done'},startedAt,originalBytes:blob.size,initialSheetLink,prepareNext});
     progress(s,'drive','waiting');
     return run(s);
    },

@@ -20,7 +20,9 @@ const reopen=process.env.COMBINED_TEST_REOPEN==='1';
 const reconnect=process.env.COMBINED_TEST_RECONNECT==='1';
 const twoDevices=reopen||reconnect;
 const serials=twoDevices?['BWA101','BX102']:['BWA101','BX102','BW103'];
-const rows=new Map(),links=new Set(),jobs=new Map(),uploads=[],resumes=[],renders=[];
+const photoCount=twoDevices?6:1;
+const photoNotes=serial=>Array.from({length:photoCount},(_,index)=>serial+'-photo'+(index?'-'+(index+1):''));
+const rows=new Map(),links=new Set(),jobs=new Map(),uploads=[],resumes=[],renders=[],bodies=[];
 const sheetRequests=[],linkRequests=[],saveChecks=[];
 let startFirstUpload,releaseFirstResponse,releaseFirstLink,finishFirstRender;
 const firstUploadStarted=new Promise(resolve=>{startFirstUpload=resolve;});
@@ -67,7 +69,7 @@ try{
         const complete=p.sn===serials[2];
         const job={success:true,state:complete?'complete':'handover',jobId:p.uploadId,filename:p.filename,bytes:p.bytes,
           sha256:p.sha256,recordId:p.recordId,requestId:p.requestId,received:true,commentAttached:complete,
-          message:complete?'':'합성 댓글 연결 지연',pdf:{url:'https://drive.google.com/file/d/'+p.recordId+'/view',
+          message:complete?'':'합성 댓글 연결 지연',pdf:{fileId:p.recordId,url:'https://drive.google.com/file/d/'+p.recordId+'/view',
             uploadId:p.uploadId,filename:p.filename,revision:1,sha256:p.sha256}};
         jobs.set(p.uploadId,job);
         if(p.sn===serials[0]){
@@ -149,13 +151,22 @@ try{
     renders.push(value);
     if(value.serial===serials[0])finishFirstRender();
   });
+  await page.exposeFunction('recordFixtureBody',serial=>{
+    bodies.push(serial);
+    if(serial!==serials[0])assert.ok(links.has([...rows].find(([,row])=>row.source.sn===serial)?.[0]));
+  });
   async function ready(){
     await form.locator('#combinedDevices').waitFor({state:'visible'});
     const status=await frame().evaluate(()=>inspectionSessionReady);
     assert.equal(status.success,true);
-    await frame().evaluate(()=>{
+    await frame().evaluate(serials=>{
+      const schedule=window.setTimeout.bind(window);
+      window.setTimeout=(run,ms,...args)=>schedule(run,ms===8000?200:ms,...args);
       BazInspectionPdf.libraries=async()=>{};
-      BazInspectionPdf.body=async html=>[html];
+      BazInspectionPdf.body=async html=>{
+        await window.recordFixtureBody(serials.find(serial=>html.includes(serial)));
+        return [html];
+      };
       BazInspectionPdf.assemble=async([html],photos)=>{
         const serial=document.getElementById('serialNo').value.trim();
         if(!html.includes(serial))throw new Error('wrong serial in printed body');
@@ -166,10 +177,10 @@ try{
         await window.recordFixturePdf({serial,note,subscription});
         return {blob:new Blob(['%PDF-1.7 '+serial+' '+note]),pdf:null,passes:1};
       };
-    });
+    },serials);
   }
   async function fill(serial){
-    await frame().evaluate(value=>{
+    await frame().evaluate(({value,notes})=>{
       document.getElementById('serialNo').value=value;
       document.getElementById('actionDetail').value='조치 '+value;
       document.getElementById('combined-hpOut').value=value+'-HP';
@@ -179,9 +190,9 @@ try{
       document.getElementById('combined-jet').value='가능';
       document.getElementById('pdfFormat').value='simplified';
       state.results[1]='정상';
-      state.photos=[{slot:'sn',memo:value+'-photo',
-        data:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}];
-    },serial);
+      state.photos=notes.map((memo,index)=>({slot:index?'fixture-'+index:'sn',memo,
+        data:'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'}));
+    },{value:serial,notes:photoNotes(serial)});
   }
   const panel=form.locator('#combinedDevices');
   const add=panel.getByRole('button',{name:'+ 장비 추가'});
@@ -259,6 +270,10 @@ try{
   }),true,'every device status remains within the mobile panel');
   assert.deepEqual(uploads.map(item=>item.sn),[serials[0]],'next sheet and link finish while the original PDF request is still open');
   assert.equal(await form.locator('#serialNo').inputValue(),serials[0]);
+  await frame().waitForFunction(()=>BazPerf.samples().some(item=>item.name==='pdf_body_prefetch'));
+  assert.deepEqual(bodies,serials.slice(0,2),'prepare the next body only after its link and before the first response');
+  assert.equal(renders.length,1,'defer next-device photo assembly and upload until the first device settles');
+  assert.doesNotMatch(await device(0).textContent(),/발행 완료/);
   const secondId=sheetRequests.find(item=>item.sn===serials[1]).id;
   const timing=await frame().evaluate(()=>BazPerf.samples());
   assert.equal(timing.filter(item=>item.name==='pdf_delivery_sheet_response'&&item.recordId===secondId).length,2);
@@ -290,7 +305,7 @@ try{
   releaseFirstResponse();
   await frame().waitForFunction(()=>document.querySelector('#combinedDevices [role=status]').textContent.includes('2/3대 발행 완료'));
   assert.deepEqual(uploads.map(item=>item.sn),serials);
-  assert.deepEqual(renders,serials.map((serial,index)=>({serial,note:serial+'-photo',subscription:'구독 '+(index+1)})));
+  assert.deepEqual(renders,serials.map((serial,index)=>({serial,note:photoNotes(serial).join(','),subscription:'구독 '+(index+1)})));
   assert.equal(rows.size,3);assert.equal(links.size,3);
   assert.equal(new Set(uploads.map(item=>item.recordId)).size,3);
   assert.equal(new Set(uploads.map(item=>item.uploadId)).size,3);

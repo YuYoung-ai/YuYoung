@@ -649,9 +649,9 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=398"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-perf.js?v=399"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=396"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=399"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 <script src="js/baz-handover-parts.js?v=385"></script>
 
@@ -2027,7 +2027,7 @@ async function runCombinedStep(device,stage,run){
   }
 }
 
-async function publishCombinedDevice(device,prepared){
+async function publishCombinedDevice(device,prepared,prepareNext){
   const prior=combinedFlow.entry(device.taskId);
   let restored=false;
   if(prior?.pdfStarted){
@@ -2043,7 +2043,8 @@ async function publishCombinedDevice(device,prepared){
     if(!restored&&!published.checked)throw Object.assign(new Error('기존 PDF의 저장 결과를 확인하지 못했습니다.'),{pending:true});
   }
   if(restored)await pdfPublisher.retry();
-  else await generatePDF({batchDevice:true,batchPreparation:prepared,batchDraft:device.draft,batchAsLine:device.asLine});
+  else await generatePDF({batchDevice:true,batchPreparation:prepared,batchDraft:device.draft,batchAsLine:device.asLine,
+    batchBody:device.prefetch,batchPrepareNext:prepareNext});
   if(combinedDeviceInfo(device.slot).complete)return;
   const error=pdfPublisher.batchResult(device.taskId)?.error;
   if(error)throw error;
@@ -2104,11 +2105,16 @@ async function runCombinedPublication(){
       }).catch(error=>{markFailure(device,error);return null;});
       sheetQueue=device.preparation.then(prepared=>prepared?.linking);
     }
-    // Only this loop switches the form and uses the PDF canvas. Sheet work uses
-    // the captured data, so the next record can be prepared during transmission.
-    for(const device of devices){
+    // Only this loop switches the form and submits PDFs. A confirmed checkpoint
+    // may free the already idle canvas to prepare one following body.
+    for(const [index,device] of devices.entries()){
       const prepared=await device.preparation;
       if(!prepared)continue;
+      const next=devices[index+1];
+      const prepareNext=next&&!next.prefetch?()=>{
+        if(!next.prefetch&&!combinedFlow.entry(next.taskId)?.pdfStarted)
+          next.prefetch=prepareCombinedPdfBody(next).catch(()=>null);
+      }:null;
       try{
         if(device.slot!==combinedActiveSlot)await loadCombinedDevice(device.slot);
         if(_currentTaskId!==device.taskId||_currentTaskRevision!==device.revision){
@@ -2117,8 +2123,11 @@ async function runCombinedPublication(){
         device.preparingPdf=true;
         const linked=combinedFlow.entry(device.taskId)?.linkedVersion===prepared.reference.deliveryReceipt.version;
         setCombinedProgress(device.taskId,linked?'PDF 준비 중':'접수 연결 · PDF 준비 중');
-        await runCombinedStep(device,null,()=>publishCombinedDevice(device,prepared));
+        await runCombinedStep(device,null,()=>publishCombinedDevice(device,prepared,prepareNext));
       }catch(error){markFailure(device,error);}
+      // A shortcut or failed preparation must still release the shared canvas.
+      await device.prefetch;
+      device.prefetch=null;
       const completed=slots.filter(slot=>combinedDeviceInfo(slot).complete).length;
       combinedDevicePanel.status('발행 진행 중 · '+completed+'/'+slots.length+'대 완료');
     }
@@ -2715,6 +2724,37 @@ function inspectionPdfFilename(snapshot=collectFormData(),includeSerial=false){
   const date=safe(snapshot.basic.inspectDate||today);
   return [type,hospital,includeSerial?safe(snapshot.basic.serialNo):'',date].filter(Boolean).join('_')+'.pdf';
 }
+function inspectionDocumentStamp(suffix='',blank=false){
+  if(blank)return {docNo:'',genAt:''};
+  const now=new Date(),pad=n=>String(n).padStart(2,'0');
+  const year=now.getFullYear(),month=pad(now.getMonth()+1),day=pad(now.getDate());
+  const hour=pad(now.getHours()),minute=pad(now.getMinutes());
+  return {docNo:'BAZ-AS-'+year+month+day+'-'+hour+minute+suffix,
+    genAt:year+'-'+month+'-'+day+' '+hour+':'+minute};
+}
+function inspectionLinkedDraft(draft,reference){
+  const canonical=BazWorkFlow.inspectionData(reference.sourceSnapshot,{id:combinedRequest});
+  const basic={...draft.basic};
+  for(const field of ['hospital','serialNo','inspectDate','csName','replacedPart','cost','actionDetail','recommend'])
+    basic[field]=canonical.basic[field];
+  return BazInspectionSession.freeze({...draft,basic,handover:reference});
+}
+async function prepareCombinedPdfBody(device){
+  const prepared=await device.preparation;
+  if(!prepared||await prepared.linking||combinedFlow.entry(device.taskId)?.pdfStarted||
+     document.hidden||!navigator.onLine)return null;
+  checkStorageAccount();
+  const draft=inspectionLinkedDraft(device.draft,prepared.reference);
+  const simplified=draft.pdfFormat==='simplified';
+  const stamp=inspectionDocumentStamp('-'+(device.slot+1));
+  const measure=BazPerf.start('pdf_body_prefetch');
+  try{
+    await BazInspectionPdf.libraries();
+    const html=buildSheetHTML({...stamp,simplified,snapshot:draft,asLine:device.asLine,omitNextDate:true});
+    const pages=await BazInspectionPdf.body(html,renderSheetCanvas);
+    return {reference:prepared.reference,simplified,stamp,pages};
+  }finally{measure();}
+}
 // generatePDF(false|true) 하위호환 + generatePDF({preview, blank})
 let _generationPromise=null;
 function generatePDF(arg){
@@ -2794,12 +2834,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
       combinedLink=prepared.linking.then(()=>null,error=>error).finally(()=>linkTime());
     }
     handoverReference=prepared.reference;
-    const canonical=BazWorkFlow.inspectionData(prepared.reference.sourceSnapshot,{id:combinedRequest});
-    const basic={...captured.basic};
-    for(const field of ['hospital','serialNo','inspectDate','csName','replacedPart','cost','actionDetail','recommend']){
-      basic[field]=canonical.basic[field];
-    }
-    captured=BazInspectionSession.freeze({...captured,basic,handover:prepared.reference});
+    captured=inspectionLinkedDraft(captured,prepared.reference);
     document.getElementById('combinedFallback').href=BazWorkFlow.url('inspection.html',combinedRequest,prepared.reference.recordId);
     document.getElementById('combinedFallback').hidden=false;
     if(!opts.batchPreparation)bindingSave=saveCurrentTask();
@@ -2817,15 +2852,11 @@ async function renderInspectionPdf(arg,deliveryStarted){
   if(_lastPreviewUrl){ try{ URL.revokeObjectURL(_lastPreviewUrl); }catch(e){} _lastPreviewUrl=null; }
 
   try{
-    const now=new Date();
-    const pad=(n)=>String(n).padStart(2,'0');
-    const hhmm=pad(now.getHours())+pad(now.getMinutes());
-    const ymd=`${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+    const preparedBody=await opts.batchBody;
+    const reused=preparedBody?.reference===opts.batchPreparation?.reference&&preparedBody?.simplified===simplified?preparedBody:null;
     const documentSuffix=qrDraft?'-'+BazInspectionSession.id().slice(0,8):opts.batchDevice?'-'+(combinedActiveSlot+1):'';
-    const docNo = blank ? '' : `BAZ-AS-${ymd}-${hhmm}${documentSuffix}`;
-    const genAt = blank ? '' : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    const {docNo,genAt}=reused?.stamp||inspectionDocumentStamp(documentSuffix,blank);
 
-    const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft,snapshot:captured,asLine,omitNextDate:!!combinedFlow});
     let delivery=BazInspectionSession.deliveryContext(basis,uploadContext.pdfFormat);
     if(!delivery&&basis?.recordId&&!preview&&!blank&&!localOnly&&!qrDraft){
       try{delivery=await step('Handover 원본 확인','pdf_source',()=>BazInspectionFlow.upgradeDraft(basis,uploadContext));}
@@ -2834,10 +2865,11 @@ async function renderInspectionPdf(arg,deliveryStarted){
     if(delivery)Object.assign(uploadContext,delivery);
     else if(basis?.sourceSnapshot)uploadContext.sourceBasis=await BazInspectionSession.basis(basis.sourceSnapshot,uploadContext.pdfFormat);
     else if(basis?.sourceBasis?.format===uploadContext.pdfFormat)uploadContext.sourceBasis=basis.sourceBasis;
-    await step('PDF 도구·글꼴 준비','pdf_libraries',()=>window.BazInspectionPdf.libraries());
+    if(!reused)await step('PDF 도구·글꼴 준비','pdf_libraries',()=>window.BazInspectionPdf.libraries());
 
     let qrSlots=[];
-    const mainPages=await step('본문·서명 페이지 생성','pdf_body',async()=>{
+    const mainPages=reused?.pages||await step('본문·서명 페이지 생성','pdf_body',async()=>{
+      const mainHTML=buildSheetHTML({blank,simplified,docNo,genAt,customerQr:qrDraft,snapshot:captured,asLine,omitNextDate:!!combinedFlow});
       if(!qrDraft)return window.BazInspectionPdf.body(mainHTML,renderSheetCanvas);
       let position;const pages=await renderSheetCanvas(mainHTML,p=>{position=p;},true);
       if(!position)throw new Error('기본 양식에서만 고객 QR 서명을 사용할 수 있습니다.');
@@ -2901,7 +2933,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
       }
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
       if(combinedLink)showLoading('Drive 저장과 접수 댓글 연결을 준비하는 중…');
-      const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted,combinedLink);
+      const delivery=pdfPublisher.publish(pdfBlob,shareFilename,uploadContext,deliveryStarted,combinedLink,opts.batchPrepareNext);
       if(combinedLink||opts.batchDevice)await delivery;
       // onIdle sends the final task snapshot after PDF delivery, replacing the
       // pending debounce instead of uploading the same photos simultaneously.

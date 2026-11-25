@@ -1,10 +1,19 @@
 (function(root){
  'use strict';
- const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|photos|assemble|total|draft_save|delivery_(sheet|sheet_response|sheet_check|link|queue|prepare|local_save|total|incomplete|batch))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
+ const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|body_prefetch|photos|assemble|total|draft_save|delivery_(sheet|sheet_response|sheet_check|link|queue|prepare|local_save|total|incomplete|batch))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
+ const deliveryStages=['jobRead','validateBytes','lockWait','lockHeld','source','target','driveId','driveUpload','driveVerify','driveLink',
+  'sheetLinkCheck','sheetLink','cacheDrop','driveShare','jobWrite','comment',
+  'workTarget','workRegistration','workConfirmation'];
  function record(name,ms,extra){
   if(!allowed.test(name)||!Number.isFinite(ms))return;
   const item={name,ms:name==='layout_shift'?Math.round(ms*10000)/10000:Math.round(ms*10)/10};
   for(const k of ['count','bytes','pass','worker','serverMs','googleMs'])if(Number.isFinite(extra?.[k]))item[k]=extra[k];
+  if(/^inspection_pdf_job_(submit|resume)$/.test(name)){
+   for(const stage of deliveryStages){
+    const value=extra?.stageTimings?.[stage];
+    if(Number.isFinite(value)&&value>=0)item[stage+'Ms']=Math.round(value);
+   }
+  }
   if(typeof extra?.jobId==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(extra.jobId))item.jobId=extra.jobId;
   if(/^(pdf_delivery_(sheet|sheet_response|sheet_check|link)|work_inspection_source_link)$/.test(name)&&
     typeof extra?.recordId==='string'&&/^[a-f0-9]{32}$/i.test(extra.recordId))item.recordId=extra.recordId;

@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
-import {createWorkStore} from '../deno-auth/work-store.ts';
+import {pathToFileURL} from 'node:url';
+
+const candidate=process.env.INSPECTION_TEST_STORE;
+if(candidate)globalThis.Deno={env:{get:()=>''},cron(){},serve(){}};
+const {createWorkStore}=await import(candidate?pathToFileURL(candidate):'../deno-auth/work-store.ts');
 
 const data=new Map();
 let version=0;
+let exactReadsOnly=false;
 const get=key=>data.get(JSON.stringify(key))||{key,value:null,versionstamp:null};
 const set=(key,value)=>data.set(JSON.stringify(key),{key,value:structuredClone(value),versionstamp:String(++version)});
 const kv={
  async get(key){return structuredClone(get(key));},
  async set(key,value){set(key,value);},
- async *list({prefix}){for(const entry of [...data.values()])if(prefix.every((part,i)=>entry.key[i]===part))yield structuredClone(entry);},
+ async *list({prefix}){
+  if(exactReadsOnly)throw new Error('Targeted PDF completion must not scan KV ranges');
+  for(const entry of [...data.values()])if(prefix.every((part,i)=>entry.key[i]===part))yield structuredClone(entry);
+ },
  atomic(){
   const checks=[],writes=[],removals=[];
   const transaction={
@@ -42,7 +50,13 @@ assert.equal((await store.bridge('inspection_complete',delivery)).code,'TARGET_P
 set([namespace,'link',recordId],{requestId,historyId:history.id});
 assert.equal((await store.bridge('inspection_target',{...delivery,requestId:'wrong_request'})).code,'TARGET_CHANGED');
 set([namespace,'documentPending','unrelated_fixture'],{recordId:'unrelated_fixture'});
-assert.equal((await store.bridge('inspection_complete',delivery)).complete,true,'exact linked record permits actual service date different from scheduled date');
+exactReadsOnly=true;
+const completed=await store.bridge('inspection_complete',delivery);
+assert.equal(completed.complete,true,'exact linked record permits actual service date different from scheduled date');
+for(const field of ['requestId','recordId','sha256','revision'])assert.equal(completed[field],delivery[field]);
+assert.equal(completed.fileId,pdf.fileId);
+assert.ok(Number.isFinite(Date.parse(completed.checkedAt)));
+assert.equal(Object.values(completed.stageTimings).length,3);
 assert.equal((await store.bridge('inspection_complete',delivery)).complete,true);
 const comments=[...data.values()].filter(x=>x.key[1]==='history'&&x.value.kind==='comment');
 assert.equal(comments.length,1);
@@ -56,6 +70,17 @@ set([namespace,'document',recordId],{recordId,requestId,context,pdf:later});
 const repaired=await store.bridge('inspection_complete',{...delivery,revision:later.revision,sha256:later.sha256,document:{...delivery.document,pdf:later}});
 assert.equal(repaired.complete,true,'registered PDF can recover even when its pending checkpoint is missing');
 assert.equal(get(comments[0].key).value.attachment.sha256,later.sha256);
+assert.equal((await store.bridge('inspection_complete',delivery)).code,'VERSION_CHANGED');
+const laterDelivery={...delivery,revision:later.revision,sha256:later.sha256,document:{...delivery.document,pdf:later}};
+const wrongFile={...later,fileId:'other-file',url:'https://drive.google.com/file/d/other-file/view'};
+assert.equal((await store.bridge('inspection_complete',{...laterDelivery,document:{...laterDelivery.document,pdf:wrongFile}})).code,'VERSION_CHANGED');
+const attached=get(comments[0].key).value;
+set(comments[0].key,{...attached,attachment:wrongFile});
+assert.equal((await store.bridge('inspection_complete',laterDelivery)).code,'FILE_CONFLICT');
+set([namespace,'request',requestId],{...request,status:'취소'});
+assert.equal((await store.bridge('inspection_target',laterDelivery)).code,'TARGET_CHANGED');
+assert.equal((await store.bridge('inspection_complete',laterDelivery)).code,'TARGET_CHANGED');
+set([namespace,'request',requestId],request);
 set(comments[0].key,{...comments[0].value,deletedAt:'2026-11-19T01:00:00Z'});
 assert.equal((await store.bridge('inspection_complete',delivery)).code,'COMMENT_DELETED');
 console.log('PASS: actual KV target validation, exact record attachment, replay safety, targeted processing and preservation of deleted comments.');
