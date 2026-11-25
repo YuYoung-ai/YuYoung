@@ -16,12 +16,12 @@
   function message(s,text){
    if(!visible(s))return;
    status.textContent=text;
-   options.onStatus?.(text);
+   options.onStatus?.(text,s.context);
   }
   function progress(s,stage,value){s.stages[stage]=value;if(visible(s)&&options.onProgress)options.onProgress({...s.stages},s.context);}
   function notice(s,text){message(s,text+(s.storageWarning?' · 이 기기에 재전송 파일을 보관하지 못했습니다. 화면을 닫기 전에 PDF를 따로 저장하세요.':''));}
   async function persist(s){
-   if(!outbox)return;try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
+   if(!outbox){if(s.context.batchDevice)s.storageWarning=true;return;}try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
     await outbox.put({key:s.ownerKey+':'+s.uploadId,owner:s.ownerKey,blob:s.blob||null,filename:s.filename,context:{...s.context},uploadId:s.uploadId,sha256:s.sha256||'',baseRevision:s.baseRevision??null,saved:s.saved||null,recorded:!!s.recorded,recovering:!!s.recovering,uploadAttempted:!!s.uploadAttempted,preparationRetryable:!!s.preparationRetryable,autoResumeEligible:!!s.autoResumeEligible,needsTarget:!!s.needsTarget,stages:{...s.stages},updatedAt:Date.now()});s.storageWarning=false;
    }catch{s.storageWarning=true;}
   }
@@ -34,7 +34,7 @@
    }
    return {...context,recordId:resolved.recordId,sourceBasis:context.sourceBasis||resolved.sourceBasis,sourcePdfRevision:context.sourcePdfRevision??resolved.pdf?.revision??0,sourcePrepared:true};
   }
-  function payload(context){const {sourcePreparationError,attachmentApplicable,requireSheetLink,...rest}=context;return rest;}
+  function payload(context){const {sourcePreparationError,attachmentApplicable,requireSheetLink,batchLinkConfirmed,...rest}=context;return rest;}
   async function prepareContext(context,owner){
    let prepared=sourceContext(payload(context),await call('inspection_pdf_resolve',payload(context),owner));
    if(options.prepareContext)prepared={...prepared,...await options.prepareContext(prepared)};
@@ -137,13 +137,18 @@
     result=await jobRequest(s,'resume',{requestId:s.context.requestId||''});
     await showJob(s,result);
    }
+   if(s.context.batchDevice&&!result.received&&result.processing){
+    const error=new Error('서버에서 같은 PDF의 수신을 확인하고 있습니다.');
+    error.pending=true;
+    throw error;
+   }
    if(!result.received&&result.state!=='blocked'&&!automatic&&s.blob){
     if(s.blob.size>MAX_BYTES){const error=new Error('PDF는 최대 7MB까지 전송할 수 있습니다.');error.noRetry=true;throw error;}
-    if(s.context.requireSheetLink&&!s.linkConfirmed){
+    if(s.context.requireSheetLink&&!s.linkConfirmed&&!s.context.batchLinkConfirmed){
      notice(s,'PDF 생성 완료 · 시트 원본과 접수 연결을 확인하는 중…');
      progress(s,'handover','working');
      try{
-      if(s.initialSheetLink){
+     if(s.initialSheetLink){
        const failure=await s.initialSheetLink;
        s.initialSheetLink=null;
        if(failure)throw failure;
@@ -163,7 +168,9 @@
      s.sha256=s.sha256||await hash(s.blob);
      s.uploadAttempted=true;
      await persist(s);
+     if(s.context.batchDevice&&s.storageWarning)throw new Error('PDF를 기기에 보관하지 못했습니다. 저장 공간을 확인한 뒤 이어서 진행하세요.');
      base64=await encoded(s.blob,s);
+     if(s.context.batchDevice)options.onBeforeBatchSubmit?.(s.context);
     }finally{prepared?.({bytes:s.blob.size,jobId:s.uploadId});}
     notice(s,'PDF 저장 및 접수 댓글 연결 중…');progress(s,'drive','working');
     result=await jobRequest(s,'submit',{...payload(s.context),filename:s.filename,bytes:s.blob.size,sha256:s.sha256,base64,baseRevision:s.context.sourcePdfRevision});
@@ -209,6 +216,7 @@
     catch(error){
      checkAccount(s.owner);
      await persist(s);
+    if(s.context.batchDevice)s.lastError=Object.assign(new Error(error.message),{pending:true});
      notice(s,'Drive 저장·Handover 연결·댓글 첨부 완료 · 기기 보관을 다시 확인해 주세요. '+error.message);
      if(visible(s)){retry.hidden=false;retry.textContent='기기 연결 정보 다시 보관';}
      return;
@@ -224,13 +232,14 @@
    }catch{}
   }
   async function execute(s,automatic){
+   s.lastError=null;
    s.busy=true;if(visible(s)){retry.hidden=true;retry.disabled=true;newButton.disabled=false;}
    try{
     checkAccount(s.owner);if(!s.uploadId)s.uploadId=id();
     if(s.context.transferVersion===2){
      try{await executeJob(s,automatic);}
      catch(error){
-      if(automatic||!retryable(error)||error.pending)throw error;
+      if(automatic||s.context.batchDevice||!retryable(error)||error.pending)throw error;
       await pause(1200);
       await executeJob(s,false);
      }
@@ -307,6 +316,7 @@
     s.complete=true;s.autoResumeEligible=false;if(visible(s))retry.hidden=true;
     if(outbox&&s.ownerKey)try{await outbox.remove(s.ownerKey+':'+s.uploadId);}catch{}
    }catch(e){
+    s.lastError=e;
     s.autoResumeEligible=!s.needsTarget&&retryable(e);s.nextAutoResumeAt=Date.now()+5000;
     if(s.context.sourcePreparationError&&!e.transient)s.preparationRetryable=false;
     if(e.sheetLink){progress(s,'handover','pending');}
@@ -356,12 +366,16 @@
   }
   retry.addEventListener('click',retryCurrent);
   // Safari may suspend timers/network while sharing or locking the screen.
-  function resume(){const s=current;if(!s||!visible(s))return;if(s?.busy&&s.cancel&&Date.now()>=s.expires)s.cancel();else if(s&&!s.busy&&!s.complete&&s.autoResumeEligible&&Date.now()>=(s.nextAutoResumeAt||0)&&(s.resumeAttempts||0)<3){s.resumeAttempts=(s.resumeAttempts||0)+1;run(s,true);}}
+  function resume(){const s=current;if(!s||!visible(s))return;if(s.busy&&s.cancel&&Date.now()>=s.expires)s.cancel();else if(!s.context.batchDevice&&!s.busy&&!s.complete&&s.autoResumeEligible&&Date.now()>=(s.nextAutoResumeAt||0)&&(s.resumeAttempts||0)<3){s.resumeAttempts=(s.resumeAttempts||0)+1;run(s,true);}}
   if(doc.addEventListener)doc.addEventListener('visibilitychange',()=>{if(!doc.hidden)resume();});
   if(root.addEventListener)root.addEventListener('pageshow',resume);
   if(root.addEventListener)root.addEventListener('online',resume);
   return {
    retry:retryCurrent,
+   batchResult(taskId){
+    if(current?.context.taskId!==taskId||!current.context.batchDevice)return null;
+    return {complete:!!current.complete,error:current.lastError,uploadId:current.uploadId};
+   },
    async confirmPublished(context,pdf){
     if(!context.deliveryUploadId||pdf.uploadId!==context.deliveryUploadId||
        current?.busy||options.isCurrent&&!options.isCurrent(context))return false;
@@ -393,10 +407,13 @@
     const id=context.deliveryUploadId;
     try{result=await call(id?'inspection_pdf_job_status':'inspection_pdf_job_lookup',
       id?{uploadId:id}:{recordId:context.recordId,hospital:context.hospital,date:context.date,sn:context.sn},owner);}
-    catch(error){if(error.code==='DELIVERY_DISABLED'||/지원하지 않는 PDF 요청/.test(error.message))return false;throw error;}
+    catch(error){if(!context.batchDevice&&(error.code==='DELIVERY_DISABLED'||/지원하지 않는 PDF 요청/.test(error.message)))return false;throw error;}
     if(!result.received&&!(id&&result.state==='receiving')||id&&result.jobId!==id||
       result.recordId!==context.recordId||current!==previous||options.isCurrent&&!options.isCurrent(context)||
-      context.requestId&&result.requestId&&context.requestId!==result.requestId)return false;
+      context.requestId&&result.requestId&&context.requestId!==result.requestId){
+     if(context.batchDevice&&result.state!=='missing')throw new Error('이 장비의 PDF 전송 기록을 확인할 수 없습니다. 원래 접수와 기록을 확인하세요.');
+     return false;
+    }
     const s=select({context:{...context,transferVersion:2,requestId:result.requestId||context.requestId},owner,uploadId:result.jobId,sha256:result.sha256,
       filename:result.filename,uploadAttempted:true,needsTarget:result.code==='TARGET_PENDING'&&!result.requestId&&!context.requestId,stages:{pdf:'done'},busy:false});
     if(visible(s)&&options.onRecovered)options.onRecovered({filename:s.filename,saved:result.pdf?{pdf:result.pdf}:null,bytes:result.bytes});
@@ -425,7 +442,8 @@
       options.isCurrent&&!options.isCurrent(context))return false;
     const requestId=job.context.requestId||(
       context.recordId&&context.recordId===job.context.recordId?context.requestId:'');
-    current={...job,ownerKey:job.owner,owner:token,context:{...job.context,requestId,sessionEpoch:context.sessionEpoch},
+    current={...job,ownerKey:job.owner,owner:token,context:{...job.context,requestId,sessionEpoch:context.sessionEpoch,
+     ...(context.batchDevice?{batchDevice:true,batchLinkConfirmed:context.batchLinkConfirmed}:{})},
       needsTarget:!requestId&&!!job.needsTarget,uploadAttempted:!!(job.uploadAttempted||!job.saved&&job.sha256),busy:false};
     // Earlier clients classified this incomplete success response as a terminal
     // failure. Recheck the real source before sending the preserved file.

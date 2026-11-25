@@ -16,8 +16,15 @@ const baseFiles=fileURLToPath(new URL('../../../delivery-v2/',import.meta.url));
 const base='http://localhost:8256';
 const request={id:'request_combined_multiple',hospitalName:'합성 병원',sn:'BWA101',engineer:'검증 담당자',
   registeredAt:'2026-11-19T09:00',visitAt:'2026-11-20T12:00',gubun:'점검',revision:1};
-const serials=['BWA101','BX102','BW103'];
+const reopen=process.env.COMBINED_TEST_REOPEN==='1';
+const reconnect=process.env.COMBINED_TEST_RECONNECT==='1';
+const twoDevices=reopen||reconnect;
+const serials=twoDevices?['BWA101','BX102']:['BWA101','BX102','BW103'];
 const rows=new Map(),links=new Set(),jobs=new Map(),uploads=[],resumes=[],renders=[];
+const sheetRequests=[],linkRequests=[],saveChecks=[];
+let startFirstUpload,releaseFirstResponse;
+const firstUploadStarted=new Promise(resolve=>{startFirstUpload=resolve;});
+const firstResponseGate=new Promise(resolve=>{releaseFirstResponse=resolve;});
 let allowSecondComment=false;
 const media={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css'};
 
@@ -39,6 +46,11 @@ try{
     const p=JSON.parse(req.postData()||'{}');
     if(url.hostname==='script.google.com'&&url.searchParams.get('action')==='hospdbrich')
       return json({success:true,data:serials.map((sn,index)=>({name:request.hospitalName,sn,ncare:'구독 '+(index+1)}))});
+    if(url.hostname==='script.google.com'&&url.searchParams.get('action')==='savecheck'){
+      const reqId=url.searchParams.get('reqId'),row=rows.get(reqId);
+      saveChecks.push(reqId);
+      return json({success:true,reqId,found:!!row,result:row?.response});
+    }
     if(url.hostname==='script.google.com'&&req.method()==='POST'){
       if(p.action==='inspection_pdf_job_source')return json({success:true,receipt:rows.get(p.recordId)?.receipt});
       if(p.action==='inspection_pdf_job_lookup')return json({success:true,state:'missing'});
@@ -56,6 +68,12 @@ try{
           message:complete?'':'합성 댓글 연결 지연',pdf:{url:'https://drive.google.com/file/d/'+p.recordId+'/view',
             uploadId:p.uploadId,filename:p.filename,revision:1,sha256:p.sha256}};
         jobs.set(p.uploadId,job);
+        if(p.sn===serials[0]){
+          startFirstUpload();
+          await firstResponseGate;
+          // Drive accepted the file, but the iPhone never received the reply.
+          return route.abort('failed');
+        }
         return json(job);
       }
       if(p.action==='inspection_pdf_job_status')return json(jobs.get(p.uploadId)||{success:true,state:'missing'});
@@ -63,11 +81,17 @@ try{
         assert.equal(p.base64,undefined);
         const prior=jobs.get(p.uploadId);resumes.push(p.uploadId);
         assert.ok(uploads.slice(0,2).some(upload=>upload.recordId===prior.recordId));
-        const result=allowSecondComment&&prior.recordId===uploads[1].recordId
+        const result=prior.recordId===uploads[0].recordId||allowSecondComment&&prior.recordId===uploads[1].recordId
           ?{...prior,state:'complete',commentAttached:true,message:''}:prior;
         jobs.set(p.uploadId,result);return json(result);
       }
       if(p.reqId){
+        assert.equal(url.searchParams.get('inspectionBatch'),'1');
+        sheetRequests.push({id:p.reqId,sn:p.sn});
+        if(p.sn===serials[1]&&sheetRequests.filter(item=>item.sn===p.sn).length===1){
+          await firstUploadStarted;
+          return json({success:false,code:'LOCK_BUSY',retryable:true,error:'합성 Apps Script 잠금 사용 중'});
+        }
         assert.equal(rows.has(p.reqId),false,'a device retry must not write its sheet row again');
         assert.equal(p.hosp,request.hospitalName);assert.equal(p.date,'2026-11-20');
         assert.equal(p.detail,'조치 '+p.sn);assert.equal(p.hpOut,p.sn+'-HP');
@@ -77,21 +101,23 @@ try{
           detail:p.detail,result:p.result,version:'source-'+p.sn};
         const receipt={recordId:source.recordId,source,version:'sheet-'+p.sn,pdfRevision:0,basis:Object.fromEntries(
           ['standard','simplified'].map(format=>[format,{format,fingerprint:'a'.repeat(64)}]))};
-        rows.set(p.reqId,{source,receipt});
-        return json({success:true,row:rows.size+1,recordId:p.reqId,inspectionReceipt:receipt});
+        const response={success:true,row:rows.size+2,recordId:p.reqId,inspectionReceipt:receipt};
+        rows.set(p.reqId,{source,receipt,response});
+        if(p.sn===serials[1])return route.abort('failed');
+        return json(response);
       }
     }
     if(url.hostname==='yuyoung-production.coaptation.workers.dev'){
       const row=rows.get(p.recordId),linked=links.has(p.recordId);
       let source=row?.source,pdfStored=false,commentAttached=false;
-      if(p.action==='work_document_status'&&uploads.length===3&&p.recordId===uploads[0].recordId){
+      if(p.action==='work_document_status'&&uploads.length===serials.length&&p.recordId===uploads[0].recordId){
         const id=uploads[0].uploadId,job=jobs.get(id);
         // The first PDF finished on the server while the browser continued with other devices.
         jobs.set(id,{...job,state:'complete',commentAttached:true,message:''});
         source={...source,pdf:job.pdf};
         pdfStored=commentAttached=true;
       }
-      if(p.action==='work_document_status'&&uploads.length===3&&p.recordId===uploads[1].recordId){
+      if(p.action==='work_document_status'&&uploads.length===serials.length&&p.recordId===uploads[1].recordId){
         // A different upload for the same record is not proof that this attempt completed.
         source={...source,pdf:{...jobs.get(uploads[1].uploadId).pdf,uploadId:'different-upload'}};
         pdfStored=commentAttached=true;
@@ -103,6 +129,7 @@ try{
       if(p.action==='work_handover_detail')return json({success:true,source:row?.source,workDetail:{request,history:[]}});
       if(p.action==='work_inspection_source_link'){
         assert.equal(p.requestId,request.id);assert.equal(p.sheetVersion,row.receipt.version);
+        linkRequests.push(p.recordId);
         links.add(p.recordId);return json({success:true,request,recordId:p.recordId,sourceLinked:true});
       }
     }
@@ -193,15 +220,55 @@ try{
     .catch(async error=>{throw new Error(await panel.locator('[role=status]').textContent()||errors.join('; ')||error.message);});
   assert.equal(rows.size,0);
   await fill(serials[1]);
-  await add.click();
-  await device(2).and(panel.locator('[aria-pressed="true"]')).waitFor();
-  assert.equal(await add.isVisible(),false);
-  await panel.getByRole('button',{name:'작성 대상에서 빼기'}).click();
-  await device(0).and(panel.locator('[aria-pressed="true"]')).waitFor();
-  await add.click();
-  await device(2).and(panel.locator('[aria-pressed="true"]')).waitFor();
-  await fill(serials[2]);
+  if(!twoDevices){
+    await add.click();
+    await device(2).and(panel.locator('[aria-pressed="true"]')).waitFor();
+    assert.equal(await add.isVisible(),false);
+    await panel.getByRole('button',{name:'작성 대상에서 빼기'}).click();
+    await device(0).and(panel.locator('[aria-pressed="true"]')).waitFor();
+    await add.click();
+    await device(2).and(panel.locator('[aria-pressed="true"]')).waitFor();
+    await fill(serials[2]);
+  }
   await publish.click();
+  await device(1).filter({hasText:'자동 재시도 대기'}).waitFor();
+  assert.match(await device(0).textContent(),/PDF 전송 확인 중/);
+  assert.ok(await publish.isDisabled());
+  assert.equal(await form.locator('#loading').isVisible(),false);
+  assert.equal(await frame().evaluate(()=>publishCombinedDevices()===combinedBatchRequest),true);
+  await device(1).filter({hasText:'시트 기록 완료 · PDF 대기'}).waitFor();
+  assert.equal(await panel.evaluate(element=>{
+    const panelBounds=element.getBoundingClientRect();
+    return [...element.querySelectorAll('[data-device-slot]')].every(tab=>{
+      const bounds=tab.getBoundingClientRect();
+      return bounds.left>=panelBounds.left&&bounds.right<=Math.min(panelBounds.right,window.innerWidth);
+    });
+  }),true,'every device status remains within the mobile panel');
+  assert.deepEqual(uploads.map(item=>item.sn),[serials[0]],'next sheet and link finish while the original PDF request is still open');
+  assert.equal(await form.locator('#serialNo').inputValue(),serials[0]);
+  if(reconnect){
+    await context.setOffline(true);
+    releaseFirstResponse();
+    await device(0).filter({hasText:'네트워크 연결 대기'}).waitFor();
+    await device(1).filter({hasText:'네트워크 연결 대기'}).waitFor();
+    assert.equal(await frame().evaluate(()=>combinedFlow.batchActive()),true);
+    allowSecondComment=true;
+    await context.setOffline(false);
+    await page.waitForURL(base+'/hospital-work.html?request='+request.id).catch(async error=>{
+      const state=frame()&&await frame().evaluate(()=>({online:navigator.onLine,hidden:document.hidden,busy:combinedDeviceBusy,
+        batch:combinedFlow.batchActive(),status:document.querySelector('#combinedDevices [role=status]').textContent}));
+      throw new Error(JSON.stringify(state),{cause:error});
+    });
+  }else if(reopen){
+    releaseFirstResponse();
+    await device(0).filter({hasText:'발행 완료'}).waitFor();
+    await device(1).filter({hasText:'자동 재시도 대기'}).waitFor();
+    assert.equal(await frame().evaluate(()=>combinedFlow.batchActive()),true);
+    allowSecondComment=true;
+    await page.reload({waitUntil:'commit'});
+    await page.waitForURL(base+'/hospital-work.html?request='+request.id);
+  }else{
+  releaseFirstResponse();
   await frame().waitForFunction(()=>document.querySelector('#combinedDevices [role=status]').textContent.includes('2/3대 발행 완료'));
   assert.deepEqual(uploads.map(item=>item.sn),serials);
   assert.deepEqual(renders,serials.map((serial,index)=>({serial,note:serial+'-photo',subscription:'구독 '+(index+1)})));
@@ -231,14 +298,24 @@ try{
   assert.equal(await form.locator('#actionDetail').inputValue(),'조치 '+serials[1]);
   allowSecondComment=true;
   await Promise.all([page.waitForURL(base+'/hospital-work.html?request='+request.id),publish.click()]);
-  assert.equal(rows.size,3);assert.equal(uploads.length,3);assert.equal(renders.length,3);
-  assert.deepEqual(resumes,[uploads[0].uploadId,uploads[1].uploadId,uploads[1].uploadId]);
+  }
+  assert.equal(rows.size,serials.length);assert.equal(uploads.length,serials.length);assert.equal(renders.length,serials.length);
+  assert.equal(new Set(uploads.map(item=>item.recordId)).size,serials.length);
+  assert.equal(new Set(uploads.map(item=>item.uploadId)).size,serials.length);
+  assert.deepEqual(uploads.map(item=>item.sn),serials);
+  assert.equal(resumes.filter(id=>id===uploads[0].uploadId).length,1);
+  assert.equal(resumes.filter(id=>id===uploads[1].uploadId).length,reconnect?1:reopen?2:5);
+  assert.deepEqual(sheetRequests.filter(item=>item.sn===serials[1]).map(item=>item.id),[uploads[1].recordId,uploads[1].recordId]);
+  assert.ok(saveChecks.includes(uploads[1].recordId));
+  assert.deepEqual(linkRequests,uploads.map(item=>item.recordId));
   assert.ok([...jobs.values()].every(job=>job.commentAttached));
   await page.goto(address);await ready();
   await frame().waitForFunction(()=>document.getElementById('generateBtn').textContent==='전체 발행 완료');
   assert.ok(await publish.isDisabled());
-  assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)),false);
+  assert.equal(await frame().evaluate(()=>BazHandoverInspection.hasPending(localStorage,draftRepository.owner,combinedRequest)||combinedFlow.batchActive()),false);
+  await device(1).click();
   assert.equal(await panel.getByRole('link',{name:'선택 장비 PDF 보기'}).getAttribute('href'),jobs.get(uploads[1].uploadId).pdf.url);
   assert.deepEqual(errors,[]);
-  console.log(engine+' PASS: independent device records, late completion, wrong-receipt rejection and same-job recovery after reload');
+  const recovery=reconnect?'automatic recovery after reconnect':reopen?'automatic reload recovery':'manual recovery after retry limit';
+  console.log(engine+' PASS: '+serials.length+' devices, overlapping operations, lock and lost replies, accurate status and same-job '+recovery);
 }finally{await browser.close();}

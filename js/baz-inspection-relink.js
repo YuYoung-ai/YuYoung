@@ -22,7 +22,9 @@
   const response=await api.post('work_inspection_source_link',{requestId,recordId,date,sn,sheetVersion,operationId});
   if(response.code==='SHEET_LINK_DISABLED'||/지원하지 않는 업무 API/.test(response.error||''))
    throw new Error('서버의 시트 직접 연결이 아직 준비되지 않았습니다. 보관된 PDF로 이어서 전송할 수 있습니다.');
-  checked(response);
+  if(!response.success)throw Object.assign(new Error(response.error||'접수 연결을 확인하지 못했습니다.'),{
+   code:response.code,retryable:response.retryable===true||response.code==='LOCK_BUSY'||response.code==='SOURCE_PENDING'
+  });
   if(response.request?.id!==requestId||response.recordId!==recordId||response.sourceLinked!==true)
    throw new Error('원래 접수와 Handover 기록의 연결을 확인하지 못했습니다.');
   return response;

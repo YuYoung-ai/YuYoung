@@ -14,6 +14,7 @@
  ************************************************************/
 import fs from 'fs';
 import path from 'path';
+import vm from 'node:vm';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
@@ -236,6 +237,39 @@ ck('락 안에서 중복 여부를 다시 확인한다',
 ck('중복 요청은 자기가 올린 사진을 정리하고 최초 결과를 반환한다',
   /if\(dup\)\{[\s\S]{0,200}photoDiscard_\(photoFile\);[\s\S]{0,120}return json_\(dup\.result\);/.test(doPost));
 ck('보관 건수·기간 초과분을 정리한다', /function reqPrune_/.test(GAS) && /REQ_TTL_MS/.test(GAS));
+
+// A PDF commit owns the shared script lock when the next Sheet request arrives.
+let sharedLockOwner='pdf', lockWaitLimit, readsUnderLock=0, released=0;
+const batchLogs=[], receipt={success:true,recordId:'same-inspection-id',row:42};
+const batchGas=vm.createContext({
+  requireWrite_:()=>null, json_:value=>value, syncRevOf_:()=> 'same-payload',
+  hvPhotoRefs_:()=>[], photoDiscard_:()=>{}, reqPrune_:()=>{},
+  reqGet_(){
+    if(sharedLockOwner!=='sheet')return null;
+    readsUnderLock++;
+    return {result:receipt,fingerprint:'same-payload'};
+  },
+  Logger:{log:(...params)=>batchLogs.push(params)},
+  LockService:{getScriptLock:()=>({
+    tryLock(ms){
+      lockWaitLimit=ms;
+      if(sharedLockOwner)return false;
+      sharedLockOwner='sheet';
+      return true;
+    },
+    releaseLock(){released++;sharedLockOwner=null;}
+  })}
+});
+vm.runInContext(doPost,batchGas);
+const batchRequest={parameter:{inspectionBatch:'1'},postData:{contents:JSON.stringify({reqId:receipt.recordId})}};
+const busy=batchGas.doPost(batchRequest);
+ck('다중 발행 시트 요청은 PDF 잠금 대기를 제한하고 다시 시도할 수 있다고 응답한다',
+  lockWaitLimit===4000&&busy.code==='LOCK_BUSY'&&busy.retryable===true);
+ck('잠금을 획득하지 못한 시트 요청은 PDF의 잠금을 해제하거나 행을 쓰지 않는다',
+  sharedLockOwner==='pdf'&&released===0&&readsUnderLock===0&&batchLogs[0]?.[3]===false);
+sharedLockOwner=null;
+ck('같은 ID로 재시도하면 잠금 안에서 기존 영수증을 확인하고 잠금을 해제한다',
+  batchGas.doPost(batchRequest)===receipt&&readsUnderLock===1&&released===1&&batchLogs[1]?.[3]===true);
 
 /* 동시 요청 시뮬레이션: 저장소를 흉내 내 "락 안 재확인"이 실제로 한 번만 통과하는지 */
 const store = new Map();

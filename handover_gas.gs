@@ -650,7 +650,17 @@ function doPost(e){
        기록을 올리는 동안 편집 저장이 통째로 실패한다. */
     if(payload && payload.action==='history_save') return json_(histSave_(payload));
 
-    lock.waitLock(20000);
+    var batchLockStarted = 0, batchLockAcquired = 0;
+    if(isHandover && e.parameter && e.parameter.inspectionBatch==='1'){
+      // Keep contention below the browser's 20-second Sheet request deadline.
+      // The original record ID is retained by both the client and the lock guard.
+      batchLockStarted=Date.now();
+      if(!lock.tryLock(4000)){
+        photoDiscard_(photoFile);
+        return json_({success:false,code:'LOCK_BUSY',retryable:true,error:'다른 시트 저장을 처리 중입니다.'});
+      }
+      batchLockAcquired=Date.now();
+    }else lock.waitLock(20000);
 
     /* [v2.1] JSON 파싱 직후 신규 액션 라우팅 — handover 행 기록보다 먼저
        (아래 액션들은 자체 락이 없어 전역 락 안에 둔다) */
@@ -892,7 +902,15 @@ function doPost(e){
       photo: photoResult_(!!(payload && payload.snPhoto), false, '', String(err)),
       error:String(err) + ((!committed && !rollbackOk) ? ' · 행 롤백 실패 — 관리자 확인 필요(행 '+writeRow+')' : '')});
   }finally{
-    var workLockReleased=false;try{ lock.releaseLock();workLockReleased=true; }catch(_){}
+    var workLockReleased=false;
+    if(!batchLockStarted||batchLockAcquired){
+      try{lock.releaseLock();workLockReleased=true;}catch(_){}
+    }
+    if(batchLockStarted){
+      var lockFinished=Date.now();
+      Logger.log('[inspection-batch-sheet] lockWaitMs=%s lockHeldMs=%s acquired=%s',
+        (batchLockAcquired||lockFinished)-batchLockStarted,batchLockAcquired?lockFinished-batchLockAcquired:0,!!batchLockAcquired);
+    }
     // The response/receipt is already fixed. A status failure cannot turn the
     // committed Handover into a failed save, and no HTTP call holds ScriptLock.
     if(workLockReleased&&out&&out.workAuto&&out.workAuto.statusPending&&typeof hwKvPublishStatus_==='function'){
@@ -930,7 +948,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1,
+      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, inspectionBatchLockMs:4000,
         inventorySchema:typeof INV_REPLACEMENT!=='undefined'?INV_REPLACEMENT.VERSION:0,
         warmed:warmed, pong:new Date().toISOString()});
     }

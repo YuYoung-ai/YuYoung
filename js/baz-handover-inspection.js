@@ -39,7 +39,7 @@
     devices.replaceChildren(...slots.map(slot=>{
      const tab=document.createElement('button');
      tab.type='button';tab.dataset.deviceSlot=slot.index;tab.setAttribute('aria-pressed',String(slot.index===active));
-     tab.textContent=['장비 '+(slot.index+1),slot.sn,slot.complete?'발행 완료':''].filter(Boolean).join(' · ');
+     tab.textContent=['장비 '+(slot.index+1),slot.sn,slot.complete?'발행 완료':slot.progress].filter(Boolean).join(' · ');
      tab.disabled=busy;tab.onclick=()=>options.select(slot.index);return tab;
     }));
     const selected=slots.find(slot=>slot.index===active);
@@ -272,7 +272,7 @@
    return {previous,form};
   }
 
-  async function prepare(draft,fields,taskId){
+  async function prepare(draft,fields,taskId,{deferLink=false}={}){
    const {previous,form}=validateDraft(draft,fields,taskId);
    const journal=entryKey(taskId);
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+taskId));
@@ -290,20 +290,24 @@
       const checked=await checkSaved(id);
       if(checked.found)receipt=accept(checked.result,id);
       else if(draft.handover?.recordId===id)receipt=draft.handover.deliveryReceipt;
-      else entry=await submit(payload,id,journal);
-     }else entry=await submit(payload,id,journal);
+      else entry=await submit(payload,id,journal,deferLink);
+     }else entry=await submit(payload,id,journal,deferLink);
      receipt=receipt||entry.receipt;
-     entry={...entry,id,payload,state:'confirmed'};
+     entry={...entry,id,payload,receipt,state:'confirmed'};
      storage.setItem(journal,JSON.stringify(entry));
     }
     const identity={hospital:form.hosp,date:form.date,sn:form.sn};
-    receipt=receipt||await source({recordId:id,...identity});
+    receipt=receipt||(deferLink?entry.receipt:null)||await source({recordId:id,...identity});
     checkAccount();
     const previousReceipt=draft.handover?.deliveryReceipt;
     if(previousReceipt?.basis?.standard?.fingerprint!==undefined&&
        previousReceipt.basis.standard.fingerprint!==receipt?.basis?.standard?.fingerprint)
      throw new Error('시트의 원본 내용이 변경되었습니다. 서명과 변경 내용을 기존 내역서에서 확인하세요.');
     const reference=session.sourceReference({requestId,recordId:id,identity},receipt,draft.basic,flow);
+    if(deferLink){
+     if(!entry.receipt)storage.setItem(journal,JSON.stringify({...entry,receipt}));
+     return {reference};
+    }
     return {reference,linking:Promise.resolve().then(()=>link({requestId,recordId:id,...identity,sheetVersion:receipt.version}))};
    }finally{finishSheet();}
   }
@@ -316,11 +320,13 @@
    return result.inspectionReceipt;
   }
 
-  async function submit(payload,id,journal){
+  async function submit(payload,id,journal,batch){
    checkAccount();
+   const endpoint=new URL(url);
+   if(batch)endpoint.searchParams.set('inspectionBatch','1');
    let result;
    try{
-    result=await transport(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    result=await transport(endpoint.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
      body:JSON.stringify({...payload,token:auth.token()})});
     if(typeof result?.success!=='boolean'||result.success&&result.recordId&&result.recordId!==id)
      throw sheetPending('시트의 저장 결과를 확인하지 못했습니다.');
@@ -357,7 +363,34 @@
    storage.setItem(entryKey(taskId),JSON.stringify({...saved,pdfStarted:true,...(savedId?{uploadId:savedId}:{})}));
    return savedId;
   }
-  return {readRequest,prepare,validateDraft,taskIdFor,slots,setSlots,entry,pdfStatus,rememberPdf,markPending};
+  async function linkDevice(taskId,reference){
+   checkAccount();
+   const saved=entry(taskId),version=reference.deliveryReceipt.version;
+   if(saved?.id!==reference.recordId||saved.state!=='confirmed')throw new Error('이 장비의 시트 기록을 확인하지 못했습니다.');
+   if(saved.linkedVersion===version)return;
+   const finish=measure('pdf_delivery_link');
+   try{
+    await link({requestId,recordId:saved.id,...reference.identity,sheetVersion:version});
+    checkAccount();
+    storage.setItem(entryKey(taskId),JSON.stringify({...entry(taskId),linkedVersion:version}));
+   }finally{finish();}
+  }
+
+  function rememberAttempt(taskId,uploadId){
+   checkAccount();
+   const saved=entry(taskId);
+   if(saved?.uploadId!==uploadId)throw new Error('이 장비의 PDF 전송 ID를 확인하지 못했습니다.');
+   if(!saved.pdfAttempted)storage.setItem(entryKey(taskId),JSON.stringify({...saved,pdfAttempted:true}));
+  }
+
+  function batchActive(active){
+   const marker=key+':active-batch';
+   if(active===undefined)return storage.getItem(marker)==='yes';
+   checkAccount();
+   if(active)storage.setItem(marker,'yes');else storage.removeItem(marker);
+  }
+
+  return {readRequest,prepare,linkDevice,validateDraft,taskIdFor,slots,setSlots,entry,pdfStatus,rememberPdf,rememberAttempt,markPending,batchActive};
  }
  root.BazHandoverInspection={create,mountFields,mountLayout,mountDevices,deviceSlots,sharedFields,copiedEquipmentFields,hasPending};
 })(window);
