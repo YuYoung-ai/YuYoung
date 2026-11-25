@@ -22,9 +22,11 @@ const twoDevices=reopen||reconnect;
 const serials=twoDevices?['BWA101','BX102']:['BWA101','BX102','BW103'];
 const rows=new Map(),links=new Set(),jobs=new Map(),uploads=[],resumes=[],renders=[];
 const sheetRequests=[],linkRequests=[],saveChecks=[];
-let startFirstUpload,releaseFirstResponse;
+let startFirstUpload,releaseFirstResponse,releaseFirstLink,finishFirstRender;
 const firstUploadStarted=new Promise(resolve=>{startFirstUpload=resolve;});
 const firstResponseGate=new Promise(resolve=>{releaseFirstResponse=resolve;});
+const firstLinkGate=new Promise(resolve=>{releaseFirstLink=resolve;});
+const firstRenderReady=new Promise(resolve=>{finishFirstRender=resolve;});
 let allowSecondComment=false;
 const media={'.html':'text/html; charset=utf-8','.js':'application/javascript','.css':'text/css'};
 
@@ -130,6 +132,7 @@ try{
       if(p.action==='work_inspection_source_link'){
         assert.equal(p.requestId,request.id);assert.equal(p.sheetVersion,row.receipt.version);
         linkRequests.push(p.recordId);
+        if(row.source.sn===serials[0])await firstLinkGate;
         links.add(p.recordId);return json({success:true,request,recordId:p.recordId,sourceLinked:true});
       }
     }
@@ -140,7 +143,10 @@ try{
   await page.goto(address);
   const form=page.frameLocator('#inspectionForm');
   const frame=()=>page.frames().find(f=>f.url().includes('inspection.html?combined='));
-  await page.exposeFunction('recordFixturePdf',value=>renders.push(value));
+  await page.exposeFunction('recordFixturePdf',value=>{
+    renders.push(value);
+    if(value.serial===serials[0])finishFirstRender();
+  });
   async function ready(){
     await form.locator('#combinedDevices').waitFor({state:'visible'});
     const status=await frame().evaluate(()=>inspectionSessionReady);
@@ -231,6 +237,11 @@ try{
     await fill(serials[2]);
   }
   await publish.click();
+  await device(0).filter({hasText:'접수 연결 · PDF 준비 중'}).waitFor();
+  await firstRenderReady;
+  assert.equal(links.size,0,'the PDF body is prepared while the first source link is still pending');
+  assert.equal(uploads.length,0,'PDF bytes are never sent before source link confirmation');
+  releaseFirstLink();
   await device(1).filter({hasText:'자동 재시도 대기'}).waitFor();
   assert.match(await device(0).textContent(),/PDF 전송 확인 중/);
   assert.ok(await publish.isDisabled());
