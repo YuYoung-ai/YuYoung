@@ -905,7 +905,10 @@ function doPost(e){
     if(isHandover && typeof hospitalWorkHandoverSaved_==='function'){
       if(batchTiming)phaseStarted=Date.now();
       try{
-        out.workAuto=hospitalWorkHandoverSaved_(P.hosp,P.date);
+        var savedSource=batchTiming&&committedMeta?Object.assign({},committedMeta.snapshot,{
+          originalAuthor:committedMeta.createdBy,createdAt:committedMeta.createdAt
+        }):null;
+        out.workAuto=hospitalWorkHandoverSaved_(P.hosp,P.date,savedSource);
         if(out.workAuto.completed)out.msg+='\n✅ 병원 A/S 업무 자동 완료';
         if(out.workAuto.needsReview)out.msg+='\n병원 업무에서 Handover 연결 대상을 직접 확인하세요.';
       }catch(workError){
@@ -992,7 +995,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, inspectionBatchLockMs:4000, inspectionBatchTiming:1,
+      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, inspectionBatchLockMs:4000, inspectionBatchTiming:1, inspectionBatchQueueLookup:1,
         inventorySchema:typeof INV_REPLACEMENT!=='undefined'?INV_REPLACEMENT.VERSION:0,
         warmed:warmed, pong:new Date().toISOString()});
     }

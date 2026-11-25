@@ -328,9 +328,13 @@ function hwAutoHistories_(eligible,sources){
   return Object.keys(rows).map(function(row){return JSON.parse(rows[row]);});
 }
 // doPost가 원본 행/사진 저장을 확정한 뒤, 기존 ScriptLock 안에서 호출한다.
-function hospitalWorkHandoverSaved_(hospitalName,date){
+function hospitalWorkHandoverSaved_(hospitalName,date,savedSource){
   if(hwKvMode_()){
-    var added=hwKvQueueSources_(hospitalName,date);
+    var sameSource=savedSource&&savedSource.date===_issueDateNorm_(date)&&
+      hwSourceName_(savedSource.hospitalName)===hwSourceName_(hospitalName);
+    var added=sameSource
+      ?hwKvQueueRecord_(hwSourceAlias_(savedSource,String(hospitalName).trim()))
+      :hwKvQueueSources_(hospitalName,date);
     // Only durable Sheet writes here: doPost still holds its ScriptLock.
     // Status publication runs after releaseLock, or in the periodic worker.
     return {enabled:true,pending:true,completed:0,statusPending:added>0};
