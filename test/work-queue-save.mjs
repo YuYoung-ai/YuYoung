@@ -16,6 +16,11 @@ const candidateHook=actualHook;
 const baselineHook='function hospitalWorkHandoverSaved_(hospitalName,date){if(hwKvMode_()){hwKvQueueSources_(hospitalName,date);return {enabled:true,pending:true,completed:0};}}';
 const badgeCode=uiCode.slice(uiCode.indexOf('  function renderBridgeStatus('),uiCode.indexOf('  function err('));
 const results=[];
+const handoverCode=fs.readFileSync(new URL('handover_gas.gs',root),'utf8').replaceAll('\r\n','\n');
+const finallyStart=handoverCode.indexOf('    var workLockReleased=false;');
+const finallyEnd=handoverCode.indexOf('\n  }\n}',finallyStart);
+assert.ok(finallyStart>=0&&finallyEnd>finallyStart);
+const finishSave=new vm.Script(handoverCode.slice(finallyStart,finallyEnd));
 
 async function scenario(mode){
  let clock=Date.now()-3600000,raw=[],sources=[],calls=[],failStatus=false,failDelivery=false,broken=new Set();
@@ -46,8 +51,42 @@ async function scenario(mode){
  const $=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',dataset:{}});return nodes.get(id);};
  const page={bridgeStatus:null,Date:ClockDate,Number,time:x=>x,$};vm.createContext(page);vm.runInContext(badgeCode,page);
  async function view(stage){await flush();const sync=await store.handle({action:'work_sync',revision:'0'},{name:'가상 CS',level:1});page.bridgeStatus=sync.bridgeStatus;page.renderBridgeStatus();const rows=context.hwKvPendingRows_();const item={mode,stage,actualPending:new Set(rows.map(r=>r.id)).size,events:rows.length,displayedCount:sync.bridgeStatus?.pendingCount??null,badge:$('handover-pending').textContent,failed:sync.bridgeStatus?.failedCount??null};results.push(item);return item;}
- const save=async(id,version=1,gubun='A/S')=>{clock+=1000;const source={recordId:id,version:String(version),hospitalName:'가상 병원 '+id,date:'2026-10-12',gubun};sources=sources.filter(s=>s.recordId!==id).concat(source);const result=context.hospitalWorkHandoverSaved_('가상 병원 '+id,'2026-10-12');if(result?.statusPending){try{context.hwKvPublishStatus_();}catch{}}await flush();};
+ const save=async(id,version=1,gubun='A/S')=>{
+  clock+=1000;
+  const source={recordId:id,version:String(version),hospitalName:'가상 병원 '+id,date:'2026-10-12',gubun};
+  sources=sources.filter(s=>s.recordId!==id).concat(source);
+  const workAuto=context.hospitalWorkHandoverSaved_(source.hospitalName,source.date);
+  Object.assign(context,{out:{workAuto},lock:{releaseLock(){}},batchLockStarted:clock-10,batchLockAcquired:clock-8,
+   batchTiming:mode==='batch'?{}:null,startedAt:clock-11,reqPrune_(){}});
+  finishSave.runInContext(context);
+  if(mode==='batch')assert.equal(context.batchTiming.statusDeferred,true);
+  await flush();
+ };
  context.hwKvPublishStatus_('',[]);await view('초기 대기 0건');
+ if(mode==='batch'){
+  const statusCalls=()=>calls.filter(call=>call.verb==='sync_status').length;
+  const initialCalls=statusCalls();
+  await save('A');await save('B',1,'점검');
+  assert.equal(statusCalls(),initialCalls,'batch receipts return without publishing global counts');
+  const queued=await view('2대 기록 후 주기 동기화 대기');
+  assert.equal(queued.actualPending,2);assert.equal(queued.displayedCount,0);
+  Object.assign(context,{
+   hwResetContext_(){},hwKvPrepareSheets_(){},hwKvRecoverFields_(){},hwKvRefreshSources_:()=>[],
+   hwKvDeliverDocuments_(){},hwKvRefs_:()=>({hospitals:[],references:{}}),hwKvHash_:()=>'fixture'
+  });
+  const call=context.hwKvCall_;
+  context.hwKvCall_=(verb,payload)=>verb==='pending'?{events:[],more:false}:call(verb,payload);
+  failDelivery=true;
+  assert.throws(()=>context.syncHospitalWorkKv(),/전송 오류/);
+  const stalled=await view('주기 전송 실패');
+  assert.equal(stalled.actualPending,2);assert.equal(stalled.displayedCount,2);
+  failDelivery=false;clock+=5*60000;
+  assert.equal(context.syncHospitalWorkKv(),'업무 연동 완료');
+  const done=await view('주기 전송 복구');
+  assert.equal(done.actualPending,0);assert.equal(done.displayedCount,0);
+  assert.equal(calls.filter(call=>call.verb==='sources').at(-1).payload.sources.length,2);
+  return;
+ }
  await save('A');const first=await view('A/S 1건 저장 직후');assert.equal(first.actualPending,1);assert.equal(first.displayedCount,mode==='current'?0:1);
  await save('B',1,'점검');const second=await view('점검 추가 · 총 2건');assert.equal(second.actualPending,2);assert.equal(second.displayedCount,mode==='current'?0:2);
  await save('A',2);const repeated=await view('동일 기록 재수정');assert.equal(repeated.actualPending,2);assert.equal(repeated.events,3);assert.equal(repeated.displayedCount,mode==='current'?0:2);
@@ -64,26 +103,22 @@ async function scenario(mode){
  page.bridgeStatus={...(await store.handle({action:'work_sync',revision:'0'},{name:'가상 CS',level:1})).bridgeStatus};clock+=11*60000;page.renderBridgeStatus();assert.ok($('handover-pending').textContent.includes('이전 집계'));
  results.push({mode,stage:'11분간 PC 동기화 없음',actualPending:1,events:1,displayedCount:1,badge:$('handover-pending').textContent,failed:0});
 }
-await scenario('current');await scenario('candidate');
+await scenario('current');await scenario('candidate');await scenario('batch');
 console.log('work-queue-save: status publication after the save hook, saved snapshots, preserved errors and queue after failures, worker recovery, batch remainder and stale display passed.');
 
 // Execute the production save hook and production finally block with a held
 // lock. Any status HTTP request while it is held fails this regression test.
 {
- const handoverCode=fs.readFileSync(new URL('handover_gas.gs',root),'utf8');
- const start=handoverCode.indexOf('    var workLockReleased=false;');
- const end=handoverCode.indexOf('    /* 멱등성 정리',start);
- const finallyCode=handoverCode.slice(start,end);assert.ok(start>=0&&end>start);
  let held=true,calls=0;
- const context={Logger:{log(){}},hwKvMode_:()=>true,hwKvQueueSources_:()=>1,hwKvPublishStatus_:()=>{assert.equal(held,false,'HTTP outside ScriptLock only');calls++;},lock:{releaseLock:()=>{held=false;}}};
+ const context={Logger:{log(){}},hwKvMode_:()=>true,hwKvQueueSources_:()=>1,hwKvPublishStatus_:()=>{assert.equal(held,false,'HTTP outside ScriptLock only');calls++;},lock:{releaseLock:()=>{held=false;}},batchLockStarted:0,batchTiming:null,reqPrune_(){}};
  vm.createContext(context);vm.runInContext(actualHook,context);
  context.out={workAuto:context.hospitalWorkHandoverSaved_('fixture','2026-10-16')};
  assert.equal(calls,0,'the locked save hook only persists an event');
- vm.runInContext(finallyCode,context);assert.equal(calls,1);
+ finishSave.runInContext(context);assert.equal(calls,1);
  held=true;context.lock.releaseLock=()=>{throw new Error('release failure');};
- vm.runInContext(finallyCode,context);assert.equal(calls,1,'failed unlock leaves status publication to the worker');
+ finishSave.runInContext(context);assert.equal(calls,1,'failed unlock leaves status publication to the worker');
  context.lock.releaseLock=()=>{held=false;};context.hwKvPublishStatus_=()=>{throw new Error('offline');};
- assert.doesNotThrow(()=>vm.runInContext(finallyCode,context),'status failure cannot turn a committed save into an error');
+ assert.doesNotThrow(()=>finishSave.runInContext(context),'status failure cannot turn a committed save into an error');
  assert.equal(context.out.workAuto.pending,true);
 }
 console.log('GAS save boundary: durable hook before unlock, status HTTP after unlock, failed-unlock deferral and committed-save preservation passed.');

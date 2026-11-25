@@ -524,6 +524,7 @@ function photoResult_(required, saved, fileId, error){
 
 /* ================= POST: 행 기록 ================= */
 function doPost(e){
+  var startedAt = Date.now(), batchTiming = null, phaseStarted = 0;
   _readAllMemo = null;          /* GAS 실행 컨테이너 재사용에 대비한 요청 스코프 초기화 */
   var lock = LockService.getScriptLock();
   var payload = {};
@@ -581,13 +582,21 @@ function doPost(e){
         photo:photoResult_(true, false, '', 'reqId-missing'),
         error:'안전한 중복 방지를 위해 reqId가 필요합니다 — 화면을 새로고침한 뒤 다시 저장해 주세요.'});
     }
+    if(isHandover && e.parameter && e.parameter.inspectionBatch==='1'){
+      batchTiming={outcome:'rejected'};
+      if(/^[a-f0-9]{32}$/i.test(reqId))batchTiming.recordId=reqId;
+    }
     var requestClean=JSON.parse(JSON.stringify(payload));delete requestClean.token;delete requestClean.__ua;var requestFingerprint=syncRevOf_(requestClean);
     /* 빠른 경로: 이미 처리된 요청이면 사진 업로드도 하지 않고 첫 결과를 그대로 돌려준다.
        ★ 이것만으로는 부족하다 — 동시 요청 두 개는 둘 다 여기를 통과한다.
          락을 잡은 뒤 아래에서 한 번 더 확인한다(double-checked). */
     if(reqId){
       var early = reqGet_(reqId);
-      if(early){if(early.fingerprint&&early.fingerprint!==requestFingerprint)return json_({success:false,error:'이미 저장한 작업 ID의 본문이 다릅니다. 관리자 검수를 사용하세요.'});return json_(early.result);}
+      if(early){
+        if(early.fingerprint&&early.fingerprint!==requestFingerprint)return json_({success:false,error:'이미 저장한 작업 ID의 본문이 다릅니다. 관리자 검수를 사용하세요.'});
+        if(batchTiming)batchTiming.outcome='duplicate';
+        return json_(early.result);
+      }
     }
 
     /* [v2.8] 사진 업로드는 락 "밖"에서 먼저 끝낸다.
@@ -651,11 +660,12 @@ function doPost(e){
     if(payload && payload.action==='history_save') return json_(histSave_(payload));
 
     var batchLockStarted = 0, batchLockAcquired = 0;
-    if(isHandover && e.parameter && e.parameter.inspectionBatch==='1'){
+    if(batchTiming){
       // Keep contention below the browser's 20-second Sheet request deadline.
       // The original record ID is retained by both the client and the lock guard.
       batchLockStarted=Date.now();
       if(!lock.tryLock(4000)){
+        batchTiming.outcome='lock_busy';
         photoDiscard_(photoFile);
         return json_({success:false,code:'LOCK_BUSY',retryable:true,error:'다른 시트 저장을 처리 중입니다.'});
       }
@@ -678,6 +688,7 @@ function doPost(e){
       if(dup){
       if(dup.fingerprint&&dup.fingerprint!==requestFingerprint)throw new Error('같은 저장 ID에 다른 본문이 전달되었습니다.');
         photoDiscard_(photoFile);            /* 중복 업로드된 Drive 파일 정리 */
+        if(batchTiming)batchTiming.outcome='duplicate';
         return json_(dup.result);
       }
     }
@@ -860,16 +871,27 @@ function doPost(e){
     /* 여기부터는 행과 사진 메타데이터가 함께 확정됐다. */
     if(isHandover&&typeof hwKvMode_==='function'&&hwKvMode_()){var committedMeta={recordId:reqId,createdAt:new Date().toISOString(),createdBy:authUser||P.fse,operationFingerprint:requestFingerprint,committed:true,savedFields:savedFields,snapshot:hwKvSourceById_(reqId)};put_(originalCol,JSON.stringify(committedMeta));}
     committed = true;
+    if(batchTiming){
+      phaseStarted=Date.now();
+      batchTiming.committedAtMs=phaseStarted;
+      if(committedMeta)batchTiming.sourceRecordedAtMs=Date.parse(committedMeta.createdAt);
+      batchTiming.commitMs=phaseStarted-batchLockAcquired;
+    }
     log_('OK', hdr, logSafe_(payload));
     /* 방금 쓴 기록이 조회에 바로 보이도록 관련 캐시를 전부 비운다.
        (조각 캐시라 remove 하나로는 안 되고 bazCacheDrop_ 를 써야 한다) */
     try{ bazDropHandoverCaches_(P.hosp); }catch(e){}
+    if(batchTiming){
+      batchTiming.cacheAndLogMs=Date.now()-phaseStarted;
+      phaseStarted=Date.now();
+    }
     /* 재고 원장 사용처 자동 기입 (실패해도 본 기록에는 영향 없음) */
     var inv = {done:false, msg:''};
     try{ inv = typeof invRecordUsage_==='function' ? (invRecordUsage_(payload) || inv)
       : {done:false, pending:true, msg:'교체품 재고 서버 파일을 추가해야 합니다.'};
     }catch(e){ inv = {done:false, pending:true, msg:'재고 반영대기: '+e}; }
     if(inv.msg) log_(inv.done?'INV_OK':'INV_SKIP', hdr, {inv:inv.msg});
+    if(batchTiming)batchTiming.inventoryMs=Date.now()-phaseStarted;
     var msg = '✅ '+ P.hosp +' 기록 완료 (행 '+row+')';
     warnings.forEach(function(w){ msg += '\n⚠️ ' + w; });
     if(inv.msg) msg += '\n' + (inv.done?'✅ ':'⚠️ ') + inv.msg;
@@ -881,6 +903,7 @@ function doPost(e){
                inv:inv, msg:msg, error:''};
     // 원본 저장 성공과 자동 연결 성공은 분리한다. 보조 작업 실패로 원본을 재저장하지 않는다.
     if(isHandover && typeof hospitalWorkHandoverSaved_==='function'){
+      if(batchTiming)phaseStarted=Date.now();
       try{
         out.workAuto=hospitalWorkHandoverSaved_(P.hosp,P.date);
         if(out.workAuto.completed)out.msg+='\n✅ 병원 A/S 업무 자동 완료';
@@ -888,12 +911,20 @@ function doPost(e){
       }catch(workError){
         out.workAuto={enabled:true,pending:true};out.msg+='\n원본 저장 완료 · 업무 자동 연결은 동기화에서 다시 확인합니다.';
         log_('WORK_AUTO_PENDING',null,{reqId:reqId});
+      }finally{
+        if(batchTiming)batchTiming.queueMs=Date.now()-phaseStarted;
       }
     }
     /* 재전송·동시 요청이 같은 결과를 받도록 영속 저장 (위 double-checked 확인과 한 쌍) */
+    if(batchTiming)phaseStarted=Date.now();
     if(reqId) reqPut_(reqId, {ts:Date.now(), result:out, row:row,fingerprint:requestFingerprint});
+    if(batchTiming){
+      batchTiming.receiptMs=Date.now()-phaseStarted;
+      batchTiming.outcome='saved';
+    }
     return json_(out);
   }catch(err){
+    if(batchTiming)batchTiming.outcome='error';
     log_('ERR:'+err, null, logSafe_(payload));
     var rollbackOk = true;
     if(!committed && writeSheet && writeRow) rollbackOk = rowRollback_(writeSheet, writeRow, written);
@@ -906,18 +937,31 @@ function doPost(e){
     if(!batchLockStarted||batchLockAcquired){
       try{lock.releaseLock();workLockReleased=true;}catch(_){}
     }
-    if(batchLockStarted){
+    if(batchTiming&&batchLockStarted){
       var lockFinished=Date.now();
-      Logger.log('[inspection-batch-sheet] lockWaitMs=%s lockHeldMs=%s acquired=%s',
-        (batchLockAcquired||lockFinished)-batchLockStarted,batchLockAcquired?lockFinished-batchLockAcquired:0,!!batchLockAcquired);
+      batchTiming.lockWaitMs=(batchLockAcquired||lockFinished)-batchLockStarted;
+      batchTiming.lockHeldMs=batchLockAcquired?lockFinished-batchLockAcquired:0;
+      batchTiming.lockAcquired=!!batchLockAcquired;
     }
     // The response/receipt is already fixed. A status failure cannot turn the
     // committed Handover into a failed save, and no HTTP call holds ScriptLock.
     if(workLockReleased&&out&&out.workAuto&&out.workAuto.statusPending&&typeof hwKvPublishStatus_==='function'){
-      try{hwKvPublishStatus_();}catch(statusError){Logger.log('Handover 대기 집계 전달은 주기 작업에서 재시도합니다.');}
+      if(batchTiming){
+        // The periodic worker publishes the aggregate. The client links this record directly.
+        batchTiming.statusDeferred=true;
+      }else{
+        try{hwKvPublishStatus_();}catch(statusError){Logger.log('Handover 대기 집계 전달은 주기 작업에서 재시도합니다.');}
+      }
     }
     /* 멱등성 정리는 응답 작성·전역 락 해제 뒤에만 확률 실행한다. */
+    if(batchTiming)phaseStarted=Date.now();
     try{ reqPrune_(); }catch(_){}
+    if(batchTiming){
+      var finishedAt=Date.now();
+      batchTiming.pruneMs=finishedAt-phaseStarted;
+      batchTiming.totalMs=finishedAt-startedAt;
+      Logger.log('[inspection-batch-sheet] '+JSON.stringify(batchTiming));
+    }
   }
 }
 
@@ -948,7 +992,7 @@ function doGet(e){
          늦었다. 여기서 기록 대상 시트를 한 번 여는 것만으로 첫 실데이터 요청의 시트 지연이 사라진다. */
       var warmed = false;
       if(p.warm){ try{ ss_().getSheetByName(CONFIG.SHEET_NAME); warmed = true; }catch(_){} }
-      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, inspectionBatchLockMs:4000,
+      return json_({success:true, ver:'3.9.0', reviewSchema:2, documentRegistry:1, inspectionBatchLockMs:4000, inspectionBatchTiming:1,
         inventorySchema:typeof INV_REPLACEMENT!=='undefined'?INV_REPLACEMENT.VERSION:0,
         warmed:warmed, pong:new Date().toISOString()});
     }

@@ -6,6 +6,7 @@
    URL=root.BazQrRuntime.api;
   }
   var measured=root.BazPerf?root.BazPerf.start(action):function(){},timing={};
+  if(action==='work_inspection_source_link')timing.recordId=params.recordId;
   var ctl=new AbortController(),parent=options&&options.signal,rejectLocal,timedOut=false;
   var local=new Promise(function(_,reject){rejectLocal=reject;});
   function stop(timeout){timedOut=timeout;ctl.abort();var e=new Error(timeout?'응답 대기 시간이 지났습니다.':'확인이 중단되었습니다.');e.name='AbortError';rejectLocal(e);}

@@ -7,4 +7,13 @@ const rows=window.BazPerf.samples();assert.equal(rows.length,200);assert.deepEqu
 rows[0].ms=123456;assert.equal(window.BazPerf.samples()[0].ms,1,'callers cannot alter stored measurements');
 window.BazPerf.start('private patient name')({count:4});assert.equal(window.BazPerf.samples().length,200);
 const summary=window.BazPerf.report()[0];assert.equal(summary.mean,1);assert.equal(summary.p95,1);
+const recordId='a'.repeat(32);
+window.BazPerf.start('pdf_delivery_sheet_response')({recordId,token:'secret'});
+assert.deepEqual({...window.BazPerf.samples().at(-1)},{name:'pdf_delivery_sheet_response',ms:0,recordId});
+window.BazPerf.start('work_inspection_source_link')({recordId:'private clinic name',serverMs:36,googleMs:22});
+assert.deepEqual({...window.BazPerf.samples().at(-1)},{name:'work_inspection_source_link',ms:0,serverMs:36,googleMs:22});
+const finish=window.BazPerf.start('pdf_delivery_batch');clock+=600;
+const batch=finish({count:2,completed:true});
+assert.deepEqual({...batch},{name:'pdf_delivery_batch',ms:600,count:2,completed:true});
+batch.ms=0;assert.equal(window.BazPerf.samples().at(-1).ms,600);
 console.log('work-perf-metrics: bounded local numeric samples, private-field exclusion, immutable copies and summary passed.');

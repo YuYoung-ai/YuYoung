@@ -326,7 +326,7 @@
   .task-actions .ta-cloud-tag{flex:1.2;justify-content:center;padding:8px 4px;}
   .task-cloud-note{font-size:11.5px;color:var(--text-muted);text-align:center;padding:4px 0 8px;}
 </style>
-<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=315"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-work-cache.js"></script><script src="js/baz-inspection-relink.js?v=396"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
+<script src="auth.js?v=251"></script><link rel="stylesheet" href="css/work-flow.css?v=282"><script src="js/baz-work-api.js?v=398"></script><script src="js/baz-work-flow.js?v=282"></script><script src="js/baz-work-cache.js"></script><script src="js/baz-inspection-relink.js?v=396"></script><script src="js/baz-inspection-session.js?v=349"></script><script src="js/baz-inspection-workflow.js?v=352"></script>
 <style>.inspection-relink .work-flow-records button[aria-pressed=true]{outline:2px solid var(--teal);outline-offset:1px;font-weight:700}#pdfOpenLink[hidden],#pdfUploadRetry[hidden]{display:none!important}#pdfUploadStatus{font-size:13px;line-height:1.65;white-space:pre-wrap}#pdfOpenLink{display:inline-block;margin:5px 0 12px;color:#1b5da8;font-weight:700}#pdfUploadRetry{margin:5px 0 12px;padding:10px 15px;border:1px solid #c9d7e5;border-radius:9px;cursor:pointer}</style>
 <link rel="stylesheet" href="css/baz-theme.css?v=307">
 <link rel="stylesheet" href="css/baz-dark-inspection.css?v=295">
@@ -649,7 +649,7 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=352"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-perf.js?v=398"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
 <script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=396"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
@@ -2131,7 +2131,7 @@ async function runCombinedPublication(){
     const waitingForConnection=[...remaining.values()].some(error=>error.code==='OFFLINE');
     if(!waitingForConnection)combinedFlow.batchActive(false);
     else waitForCombinedConnection();
-    if(!remaining.size){openPublishedRequest(combinedRequest);return;}
+    if(!remaining.size)return true;
     const firstPending=remaining.keys().next().value;
     if(firstPending!==combinedActiveSlot)await loadCombinedDevice(firstPending);
     combinedDevicePanel.status(slots.length-remaining.size+'/'+slots.length+'대 발행 완료\n'+
@@ -2141,10 +2141,22 @@ async function runCombinedPublication(){
 
 function publishCombinedDevices(){
   if(combinedBatchRequest)return combinedBatchRequest;
-  const publish=()=>combinedDeviceAction(async()=>{
-    try{await runCombinedPublication();}
-    catch(error){combinedFlow.batchActive(false);throw error;}
-  },true);
+  const started=performance.now();
+  const publish=async()=>{
+    const finish=BazPerf.start('pdf_delivery_batch',started);
+    const count=combinedFlow.slots().length;
+    let completed=false;
+    try{
+      await combinedDeviceAction(async()=>{
+        try{completed=await runCombinedPublication()===true;}
+        catch(error){combinedFlow.batchActive(false);throw error;}
+      },true);
+    }finally{
+      const sample=finish({count,completed});
+      try{sessionStorage.setItem('baz_inspection_batch_timing',JSON.stringify(sample));}catch{}
+    }
+    if(completed)openPublishedRequest(combinedRequest);
+  };
   const running=navigator.locks?navigator.locks.request(
     'baz-inspection:'+draftRepository.owner+':'+combinedRequest,{ifAvailable:true},lock=>{
       if(lock)return publish();
@@ -2948,7 +2960,7 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=396')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=398')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,

@@ -221,7 +221,10 @@
    checkAccount();
    const status=new URL(url);
    status.search=new URLSearchParams({action:'savecheck',reqId:id});
-   const checked=await transport(auth.withToken(status.href));
+   const finish=measure('pdf_delivery_sheet_check');
+   let checked;
+   try{checked=await transport(auth.withToken(status.href));}
+   finally{finish({recordId:id});}
    checkAccount();
    if(checked?.success!==true||checked.reqId!==id||typeof checked.found!=='boolean'||checked.found&&checked.result?.success!==true)
     throw sheetPending('같은 Handover 기록의 저장 상태를 확인하지 못했습니다.');
@@ -309,7 +312,7 @@
      return {reference};
     }
     return {reference,linking:Promise.resolve().then(()=>link({requestId,recordId:id,...identity,sheetVersion:receipt.version}))};
-   }finally{finishSheet();}
+   }finally{finishSheet({recordId:id});}
   }
 
   function accept(data,id){
@@ -326,8 +329,11 @@
    if(batch)endpoint.searchParams.set('inspectionBatch','1');
    let result;
    try{
-    result=await transport(endpoint.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-     body:JSON.stringify({...payload,token:auth.token()})});
+    const finish=measure('pdf_delivery_sheet_response');
+    try{
+     result=await transport(endpoint.href,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({...payload,token:auth.token()})});
+    }finally{finish({recordId:id});}
     if(typeof result?.success!=='boolean'||result.success&&result.recordId&&result.recordId!==id)
      throw sheetPending('시트의 저장 결과를 확인하지 못했습니다.');
    }catch(error){
@@ -373,7 +379,7 @@
     await link({requestId,recordId:saved.id,...reference.identity,sheetVersion:version});
     checkAccount();
     storage.setItem(entryKey(taskId),JSON.stringify({...entry(taskId),linkedVersion:version}));
-   }finally{finish();}
+   }finally{finish({recordId:saved.id});}
   }
 
   function rememberAttempt(taskId,uploadId){

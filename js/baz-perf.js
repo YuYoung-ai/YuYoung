@@ -1,12 +1,16 @@
 (function(root){
  'use strict';
- const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|photos|assemble|total|draft_save|delivery_(sheet|link|queue|prepare|local_save|total|incomplete))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
+ const samples=[],allowed=/^(lcp_candidate|interaction_duration|layout_shift|tab_paint|screen|search|photos|pdf_(libraries|source|body|photos|assemble|total|draft_save|delivery_(sheet|sheet_response|sheet_check|link|queue|prepare|local_save|total|incomplete|batch))|work_[a-z_]+|qr_(config|cases|case|customer_info|customer_status|customer_create|customer_survey_link)|inspection_pdf_(resolve|upload|job_(source|lookup|submit|status|resume)))$/;
  function record(name,ms,extra){
   if(!allowed.test(name)||!Number.isFinite(ms))return;
   const item={name,ms:name==='layout_shift'?Math.round(ms*10000)/10000:Math.round(ms*10)/10};
   for(const k of ['count','bytes','pass','worker','serverMs','googleMs'])if(Number.isFinite(extra?.[k]))item[k]=extra[k];
   if(typeof extra?.jobId==='string'&&/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(extra.jobId))item.jobId=extra.jobId;
+  if(/^(pdf_delivery_(sheet|sheet_response|sheet_check|link)|work_inspection_source_link)$/.test(name)&&
+    typeof extra?.recordId==='string'&&/^[a-f0-9]{32}$/i.test(extra.recordId))item.recordId=extra.recordId;
+  if(name==='pdf_delivery_batch'&&typeof extra?.completed==='boolean')item.completed=extra.completed;
   samples.push(item);if(samples.length>200)samples.shift();
+  if(name==='pdf_delivery_batch')return {...item};
  }
  function start(name,at=performance.now()){return extra=>record(name,performance.now()-at,extra);}
  function report(){return [...new Set(samples.map(x=>x.name))].map(name=>{const values=samples.filter(x=>x.name===name).map(x=>x.ms).sort((a,b)=>a-b);return {name,count:values.length,unit:name==='layout_shift'?'score':'ms',mean:Math.round(values.reduce((a,b)=>a+b,0)/values.length*10000)/10000,p95:values[Math.ceil(values.length*.95)-1]};});}

@@ -36,8 +36,8 @@ try{
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());
-    const json=value=>route.fulfill({status:200,contentType:'application/json',
-      headers:{'access-control-allow-origin':base},body:JSON.stringify(value)});
+    const json=(value,headers={})=>route.fulfill({status:200,contentType:'application/json',
+      headers:{'access-control-allow-origin':base,...headers},body:JSON.stringify(value)});
     if(url.origin===base){
       if(url.pathname==='/hospital-work.html')return route.fulfill({contentType:media['.html'],body:'<main>CS 서비스 현황</main>'});
       if(url.pathname==='/auth.js')return route.fulfill({contentType:media['.js'],
@@ -133,7 +133,9 @@ try{
         assert.equal(p.requestId,request.id);assert.equal(p.sheetVersion,row.receipt.version);
         linkRequests.push(p.recordId);
         if(row.source.sn===serials[0])await firstLinkGate;
-        links.add(p.recordId);return json({success:true,request,recordId:p.recordId,sourceLinked:true});
+        links.add(p.recordId);return json({success:true,request,recordId:p.recordId,sourceLinked:true},{
+          'access-control-expose-headers':'Server-Timing','server-timing':'work;dur=210, gas;dur=160'
+        });
       }
     }
     return json({success:true,data:[]});
@@ -257,6 +259,12 @@ try{
   }),true,'every device status remains within the mobile panel');
   assert.deepEqual(uploads.map(item=>item.sn),[serials[0]],'next sheet and link finish while the original PDF request is still open');
   assert.equal(await form.locator('#serialNo').inputValue(),serials[0]);
+  const secondId=sheetRequests.find(item=>item.sn===serials[1]).id;
+  const timing=await frame().evaluate(()=>BazPerf.samples());
+  assert.equal(timing.filter(item=>item.name==='pdf_delivery_sheet_response'&&item.recordId===secondId).length,2);
+  assert.ok(timing.some(item=>item.name==='pdf_delivery_sheet_check'&&item.recordId===secondId));
+  assert.ok(timing.some(item=>item.name==='work_inspection_source_link'&&item.recordId===secondId&&
+    item.serverMs===210&&item.googleMs===160));
   if(reconnect){
     await context.setOffline(true);
     releaseFirstResponse();
@@ -320,6 +328,10 @@ try{
   assert.ok(saveChecks.includes(uploads[1].recordId));
   assert.deepEqual(linkRequests,uploads.map(item=>item.recordId));
   assert.ok([...jobs.values()].every(job=>job.commentAttached));
+  const batchTiming=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('baz_inspection_batch_timing')));
+  assert.equal(batchTiming?.completed,true);
+  assert.equal(batchTiming?.count,serials.length);
+  assert.ok(batchTiming?.ms>0);
   await page.goto(address);await ready();
   await frame().waitForFunction(()=>document.getElementById('generateBtn').textContent==='전체 발행 완료');
   assert.ok(await publish.isDisabled());
