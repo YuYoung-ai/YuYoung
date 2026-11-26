@@ -59,6 +59,7 @@ function datetime(v:any,required:boolean,label:string){
 }
 async function hash(v:any){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(v))))].map(b=>b.toString(16).padStart(2,'0')).join('');}
 function bounded(v:any){if(new TextEncoder().encode(JSON.stringify(v)).length>48000)throw new Error('기록이 너무 큽니다. 내용을 줄여주세요.');return v;}
+function hospitalReferenceValue(h:Obj){return JSON.stringify(h,Object.keys(h).sort());}
 
 export function createWorkStore(kv:any,options:Obj={}){
  const memos=createWorkMemos(kv);
@@ -751,6 +752,76 @@ export function createWorkStore(kv:any,options:Obj={}){
   return {success:true};
  }
  async function manifest(){const tables:Obj={requests:await values(['request']),history:[],operations:[]};for await(const e of kv.list({prefix:key('history')}))tables.history.push(e.value);for await(const e of kv.list({prefix:key('operation')}))tables.operations.push({id:e.key.at(-1),actor:e.value.actor,fingerprint:e.value.fingerprint,response:e.value.response});const out:Obj={};for(const [name,rows]of Object.entries(tables)){const sorted=(rows as Obj[]).sort((a,b)=>String(a.id).localeCompare(String(b.id),'en'));out[name]={count:sorted.length,hash:await hash(sorted)};}return out;}
+ async function refreshReferences(p:Obj){
+  if(!Array.isArray(p.hospitals)||!p.hospitals.length||p.hospitalCount!==undefined&&p.hospitalCount!==p.hospitals.length)
+   throw new Error('병원정보DB 전체 목록을 확인한 뒤 다시 갱신하세요.');
+  const hospitals=new Map<string,Obj>();
+  for(const h of p.hospitals){
+   if(!h||typeof h.key!=='string'||!h.key.trim()||typeof h.name!=='string'||!h.name.trim()||!h.id||h.origin==='flow')
+    throw new Error('병원정보DB에 올바르지 않은 항목이 있습니다.');
+   const prior=hospitals.get(h.key);
+   if(prior&&hospitalReferenceValue(prior)!==hospitalReferenceValue(h))
+    throw new Error('병원정보DB에 내용이 다른 중복 항목이 있습니다.');
+   hospitals.set(h.key,bounded(h));
+  }
+  const checkedAt=p.snapshotStartedAt||new Date().toISOString(),at=savedInstant(checkedAt);
+  if(!Number.isFinite(at)||at>Date.now()+60000)throw new Error('병원 기준정보의 확인 시각을 확인하세요.');
+  const nonce=crypto.randomUUID();
+  let generation=await get('referenceRefresh');
+  for(let attempt=0;;attempt++){
+   if(savedInstant(generation.value?.checkedAt)>at)return {success:true,stale:true};
+   if((await kv.atomic().check(generation).set(generation.key,{checkedAt,nonce}).commit()).ok)break;
+   if(attempt===11)throw new Error('병원 기준정보 갱신이 겹쳤습니다.');
+   generation=await get('referenceRefresh');
+  }
+  // Use the committed version stamp before diffing. A newer snapshot fences
+  // off all remaining writes from this one, including removals.
+  const marker=await get('referenceRefresh');
+  if(marker.value?.nonce!==nonce)return {success:true,stale:true};
+  const old=new Map((await values(['hospitalRef'])).map(h=>[h.key,h]));
+  const writes=[...hospitals].filter(([id,h])=>{
+   const previous=old.get(id);
+   if(previous?.origin==='flow')throw new Error('이전 업무의 병원 식별자와 충돌합니다.');
+   return !previous||hospitalReferenceValue(previous)!==hospitalReferenceValue(h);
+  });
+  const removals=[...old.values()].filter(h=>h.origin!=='flow'&&!hospitals.has(h.key)).map(h=>h.key);
+  const changes=[...writes.map(([id,h])=>({id,h})),...removals.map(id=>({id,h:null}))];
+  const applyHospitalChanges=(tx:any,batch:typeof changes)=>{
+   for(const {id,h} of batch)tx=h?tx.set(key('hospitalRef',id),h):tx.delete(key('hospitalRef',id));
+   return tx;
+  };
+  // Keep transactions within the supported mutation size in Deno KV and D1.
+  const batchSize=8;
+  let offset=0;
+  for(;offset+batchSize<changes.length;offset+=batchSize){
+   if(!(await applyHospitalChanges(kv.atomic().check(marker),changes.slice(offset,offset+batchSize)).commit()).ok)
+    return {success:true,stale:true};
+  }
+  for(let attempt=0;attempt<12;attempt++){
+   const [current,bridge]=await Promise.all([get('refs'),p.reportSync?get('bridgeStatus'):null]);
+   let tx=applyHospitalChanges(kv.atomic().check(marker,current),changes.slice(offset))
+    .set(current.key,bounded({...current.value,...p.references}));
+   if(bridge&&!(savedInstant(bridge.value?.referenceSync?.checkedAt)>at)){
+    tx=tx.check(bridge).set(bridge.key,{...bridge.value,referenceSync:{checkedAt,lastSuccessAt:new Date().toISOString(),error:''}});
+   }
+   if((await tx.commit()).ok)return {success:true,upserted:writes.length,removed:removals.length};
+   if((await get('referenceRefresh')).versionstamp!==marker.versionstamp)return {success:true,stale:true};
+  }
+  throw new Error('병원 기준정보 갱신을 확정하지 못했습니다.');
+ }
+ async function recordReferenceFailure(p:Obj){
+  const checkedAt=String(p.checkedAt||''),at=savedInstant(checkedAt),error=text(p.error,500,'기준정보 갱신 오류');
+  if(!Number.isFinite(at)||at>Date.now()+60000||!error)throw new Error('병원 기준정보 갱신 상태를 확인하세요.');
+  for(let attempt=0;attempt<12;attempt++){
+   const old=await get('bridgeStatus'),prior=old.value?.referenceSync;
+   // A success may have committed just before the sender timed out.
+   const previous=savedInstant(prior?.checkedAt);
+   if(previous>at||previous===at&&!prior.error)return {success:true,stale:true};
+   if((await kv.atomic().check(old).set(old.key,{...old.value,referenceSync:{checkedAt,lastSuccessAt:prior?.lastSuccessAt||'',error}}).commit()).ok)
+    return {success:true};
+  }
+  throw new Error('병원 기준정보 갱신 상태 저장이 겹쳤습니다.');
+ }
  async function bridge(verb:string,p:Obj){
   if(verb==='status')return {success:true,...await status(),manifest:await manifest()};
   if(verb==='seed')return seed(p);
@@ -760,17 +831,20 @@ export function createWorkStore(kv:any,options:Obj={}){
    if(!(await refs()))throw new Error('기준 정보 없음');
    if(!(await kv.atomic().check(state).set(key('meta'),{...state.value,ready:true,seq:0,activatedAt:new Date().toISOString()}).commit()).ok)throw new Error('전환 상태가 변경되었습니다.');return {success:true,ready:true};
   }
-  if(verb==='references'){
-   const old=await values(['hospitalRef']);for(const h of p.hospitals||[])await kv.set(key('hospitalRef',h.key),bounded(h));
-   const keep=new Set((p.hospitals||[]).map((h:Obj)=>h.key));for(const h of old)if(!keep.has(h.key)&&h.origin!=='flow')await kv.delete(key('hospitalRef',h.key));
-   const current=await refs();await kv.set(key('refs'),bounded({...current,...p.references}));return {success:true};
-  }
+  if(verb==='references')return refreshReferences(p);
+  if(verb==='references_status')return recordReferenceFailure(p);
   if(verb==='sync_status'){
    const checkedAt=String(p.checkedAt||'');if(!checkedAt||!Number.isFinite(Date.parse(checkedAt))||Date.parse(checkedAt)>Date.now()+60000)throw new Error('연동 확인 시각을 확인하세요.');
    for(const field of ['pendingCount','pendingEvents','failedCount'])if(!Number.isSafeInteger(p[field])||p[field]<0)throw new Error('연동 대기 건수를 확인하세요.');
    if(p.failedCount>p.pendingCount||p.pendingCount>p.pendingEvents)throw new Error('연동 대기 집계가 다릅니다.');
    const value={legacyHistoryEdits:Number(p.legacyHistoryEdits||0),reviewSchema:p.reviewSchema===2?2:1,checkedAt,pendingCount:p.pendingCount,pendingEvents:p.pendingEvents,failedCount:p.failedCount,oldestPendingAt:text(p.oldestPendingAt,40,'최초 대기 시각'),lastSuccessAt:text(p.lastSuccessAt,40,'연동 성공 시각'),error:text(p.error,500,'연동 오류'),intervalMinutes:5,batchSize:20};
-   for(let i=0;i<12;i++){const old=await get('bridgeStatus');if(old.value&&Date.parse(old.value.checkedAt)>=Date.parse(checkedAt))return {success:true,stale:true};if((await kv.atomic().check(old).set(old.key,value).commit()).ok)return {success:true};}
+   for(let i=0;i<12;i++){
+    const old=await get('bridgeStatus');
+    if(old.value&&Date.parse(old.value.checkedAt)>=Date.parse(checkedAt))return {success:true,stale:true};
+    const next={...value,...(p.handoverStatusVersion===2?{handoverStatusVersion:2}:{}),
+     ...(old.value?.referenceSync?{referenceSync:old.value.referenceSync}:{})};
+    if((await kv.atomic().check(old).set(old.key,next).commit()).ok)return {success:true};
+   }
    throw new Error('연동 현황 저장이 겹쳤습니다.');
   }
   if(verb==='documents')return registerDocuments(p.documents||[]);

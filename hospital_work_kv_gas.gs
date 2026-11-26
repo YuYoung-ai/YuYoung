@@ -29,6 +29,8 @@ function hwKvPrepareSheets_(){
 function hwKvControl_(key,value){var sh=hwKvSheet_(HW_KV_CONTROL,['항목','값']),n=sh.getLastRow()-1,c=n>0?sh.getRange(2,1,n,1).createTextFinder(key).matchEntireCell(true).findNext():null;sh.getRange(c?c.getRow():sh.getLastRow()+1,1,1,2).setValues([[key,safeCell_(String(value))]]);}
 function hwKvRefs_(){
  var raw=getHospDBRich_({force:'1'});if(!raw.success)throw new Error(raw.error);
+ if(!Array.isArray(raw.data)||!raw.data.length||raw.count!==undefined&&raw.count!==raw.data.length)
+  throw new Error('병원정보DB 전체 목록을 확인할 수 없습니다.');
  var stored={};hwRows_(HW.HOSPITALS,3).forEach(function(row){stored[row[1]]=JSON.parse(row[2]);});
  var hospitals=raw.data.map(function(h){var key=hwKey_(h);return {id:stored[key]?stored[key].id:'hosp_'+hwHash_(key),key:key,name:h.name,sn:h.sn||'',region:h.region||'',sales:h.sales||'',asType:h.asType||'',ncare:h.ncare||''};});
  var master=getMaster_({force:'1'}),minimum=1;(menuGet_().menu||[]).forEach(function(m){if(m.id==='hospitalwork')minimum=Number(m.level)||1;});
@@ -105,7 +107,7 @@ function hwKvPublishStatus_(error,failedIds){
  if(arguments.length===0){error=props.getProperty('HOSPITAL_WORK_KV_STATUS_ERROR')||'';try{failedIds=JSON.parse(props.getProperty('HOSPITAL_WORK_KV_FAILED_IDS')||'[]');}catch(e){failedIds=[];}}
  else{props.setProperty('HOSPITAL_WORK_KV_STATUS_ERROR',String(error||'').slice(0,500));props.setProperty('HOSPITAL_WORK_KV_FAILED_IDS',JSON.stringify(failedIds||[]));}
  var rows=hwKvPendingRows_(),ids={},failed=0;rows.forEach(function(r){ids[r.id]=true;});Object.keys(ids).forEach(function(id){if((failedIds||[]).indexOf(id)>=0)failed++;});
- var payload={reviewSchema:2,legacyHistoryEdits:typeof histReadAll_==='function'?Object.keys(histReadAll_()).length:0,checkedAt:new Date().toISOString(),pendingCount:Object.keys(ids).length,pendingEvents:rows.length,failedCount:failed,oldestPendingAt:rows.map(function(r){return r.createdAt;}).sort()[0]||'',lastSuccessAt:PropertiesService.getScriptProperties().getProperty('HOSPITAL_WORK_KV_LAST_SUCCESS')||'',error:String(error||'').slice(0,500)};
+ var payload={handoverStatusVersion:2,reviewSchema:2,legacyHistoryEdits:typeof histReadAll_==='function'?Object.keys(histReadAll_()).length:0,checkedAt:new Date().toISOString(),pendingCount:Object.keys(ids).length,pendingEvents:rows.length,failedCount:failed,oldestPendingAt:rows.map(function(r){return r.createdAt;}).sort()[0]||'',lastSuccessAt:props.getProperty('HOSPITAL_WORK_KV_LAST_SUCCESS')||'',error:String(error||'').slice(0,500)};
  hwKvControl_('Handover 대기 건수',payload.pendingCount);hwKvControl_('Handover 대기 확인',payload.checkedAt);hwKvControl_('Handover 오류 건수',failed);hwKvCall_('sync_status',payload);
 }
 /** Find the current source by stable ID even after its hospital name is edited. */
@@ -210,19 +212,52 @@ function hwKvApply_(events){
 /** One background worker. Empty runs do not read/transfer the full Handover history. */
 function syncHospitalWorkKv(){
  hwResetContext_();var props=PropertiesService.getScriptProperties();if(props.getProperty('HOSPITAL_WORK_KV_STAGE')!=='active')return 'KV 미활성';
- var started=Date.now();try{
-  hwKvPrepareSheets_();var pending=hwKvCall_('pending',{}),batches=0;
+ var started=Date.now(),delivery,pending;
+ try{
+  hwKvPrepareSheets_();
+  // The deployed trigger gives the independent PDF outbox its own retry.
+  try{hwKvDeliverDocuments_();}catch(documentError){Logger.log('PDF 문서 전달 대기: '+String(documentError.message||documentError));}
+  pending=hwKvCall_('pending',{});var batches=0;
   while(pending.events.length&&batches<5&&Date.now()-started<120000){hwKvCall_('ack',{items:hwKvApply_(pending.events)});batches++;if(!pending.more)break;pending=hwKvCall_('pending',{});}
   hwKvRecoverFields_();
   // Recover missing save-hook events by rechecking only visit-date pairs in current work.
   hwLock_(function(){hwKvQueueHits_(hwKvRefreshSources_().map(function(s){return {source:s};}));});
-  var delivery=hwKvDeliverSources_();hwKvDeliverDocuments_();
-  // Check reference/ACL changes each run; only transfer changed snapshots.
-  var refs=hwKvRefs_(),refsHash=hwKvHash_({hospitals:refs.hospitals,engineers:refs.references.engineers,minimumLevel:refs.references.minimumLevel,reviewCatalog:refs.references.reviewCatalog});
-  if(refsHash!==props.getProperty('HOSPITAL_WORK_KV_REFS_HASH')){hwKvCall_('references',refs);props.setProperty('HOSPITAL_WORK_KV_REFS_HASH',refsHash);}
-  var succeededAt=new Date().toISOString();if(!delivery.error){props.setProperty('HOSPITAL_WORK_KV_LAST_SUCCESS',succeededAt);hwKvControl_('마지막 성공',succeededAt);}hwKvControl_('소요 ms',Date.now()-started);hwKvControl_('반영 대기',pending.more?'추가 반영 대기 있음':'이번 배치 반영 완료');hwKvControl_('오류',delivery.error);hwKvPublishStatus_(delivery.error,delivery.failedIds);
-  return '업무 연동 완료';
+  delivery=hwKvDeliverSources_();
  }catch(e){hwKvControl_('오류',String(e.message||e));try{hwKvPublishStatus_(String(e.message||e),[]);}catch(statusError){Logger.log('업무 대기 현황 전달 실패: '+String(statusError.message||statusError));}throw e;}
+ var succeededAt=new Date().toISOString();
+ if(!delivery.error){props.setProperty('HOSPITAL_WORK_KV_LAST_SUCCESS',succeededAt);hwKvControl_('마지막 성공',succeededAt);}
+ hwKvControl_('소요 ms',Date.now()-started);
+ hwKvControl_('반영 대기',pending.more?'추가 반영 대기 있음':'이번 배치 반영 완료');
+ hwKvControl_('오류',delivery.error);
+ try{hwKvPublishStatus_(delivery.error,delivery.failedIds);}
+ catch(statusError){Logger.log('업무 대기 현황 전달 실패: '+String(statusError.message||statusError));throw statusError;}
+ // Publish the durable Handover receipt before independent reference work.
+ return hwKvRefreshReferences_(props)?'업무 연동 완료':'Handover 전송 처리 · 병원 기준정보 재시도 예정';
+}
+function hwKvRefreshReferences_(props){
+ var started=Date.now(),snapshotStartedAt=new Date(started).toISOString();
+ try{
+  var refs=hwKvRefs_();
+  var ordered=refs.hospitals.slice().sort(function(a,b){return a.key<b.key?-1:a.key>b.key?1:0;});
+  var refsHash=hwKvHash_({hospitals:ordered,engineers:refs.references.engineers,minimumLevel:refs.references.minimumLevel,reviewCatalog:refs.references.reviewCatalog});
+  if(refsHash===props.getProperty('HOSPITAL_WORK_KV_REFS_HASH')&&!props.getProperty('HOSPITAL_WORK_KV_REFS_ERROR'))return true;
+  var result=hwKvCall_('references',Object.assign(refs,{reportSync:true,snapshotStartedAt:snapshotStartedAt,hospitalCount:refs.hospitals.length}));
+  if(result.stale)return false;
+  props.setProperty('HOSPITAL_WORK_KV_REFS_HASH',refsHash);
+  props.setProperty('HOSPITAL_WORK_KV_REFS_ERROR','');
+  hwKvControl_('병원 기준정보 오류','');
+  hwKvControl_('병원 기준정보 소요 ms',Date.now()-started);
+  Logger.log('병원 기준정보 저장 '+(result.upserted||0)+'건 · 제거 '+(result.removed||0)+'건');
+  return true;
+ }catch(e){
+  var error=String(e.message||e).slice(0,500);
+  props.setProperty('HOSPITAL_WORK_KV_REFS_ERROR',error);
+  hwKvControl_('병원 기준정보 오류',error);
+  Logger.log('병원 기준정보 갱신 재시도: '+error);
+  try{hwKvCall_('references_status',{checkedAt:snapshotStartedAt,error:error});}
+  catch(statusError){Logger.log('병원 기준정보 상태 전달 지연: '+String(statusError.message||statusError));}
+  return false;
+ }
 }
 
 // Independent document outbox. Only metadata crosses the Deno bridge.

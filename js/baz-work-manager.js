@@ -86,10 +86,15 @@
   function renderBridgeStatus(){
     var s=bridgeStatus,known=s&&Number.isSafeInteger(s.pendingCount)&&s.pendingCount>=0&&Number.isFinite(Date.parse(s.checkedAt));
     var stale=known&&Date.now()-Date.parse(s.checkedAt)>10*60*1000;
-    $('handover-pending').textContent=known?'Handover 대기 '+s.pendingCount+'건'+(s.error?' · 연동 오류':stale?' · 이전 집계':''):'Handover 대기 미확인';
-    $('handover-pending').dataset.state=!known?'unknown':s.error?'error':stale||s.pendingCount?'waiting':'done';
-    $('handover-checked').textContent=known?'대기 확인 '+time(s.checkedAt):'대기 현황은 동기화로 확인';
-    $('handover-status-detail').textContent=known?'확인 시각: '+time(s.checkedAt)+'\n대기 '+s.pendingCount+'건 / 전송 이벤트 '+s.pendingEvents+'개'+(s.failedCount?' / 원본 확인 필요 '+s.failedCount+'건':'')+(s.oldestPendingAt?'\n최초 대기: '+time(s.oldestPendingAt):'')+(s.error?'\n오류: '+s.error:'')+(stale?'\n10분 이상 지난 집계입니다. 동기화하여 확인하세요.':'')+'\nHandover 저장 직후 대기 집계를 전달하고, 결과는 약 5분 간격으로 최대 20건씩 전달합니다. 이 PC의 동기화 버튼은 서버에 반영된 최신 현황을 가져옵니다. 대기 0건은 전송 대기가 없다는 뜻이며 모든 접수의 완료를 뜻하지 않습니다.':'서버에서 확인한 대기 현황이 아직 없습니다. 확인 전에는 0건으로 표시하지 않습니다. 동기화 버튼으로 최신 집계를 가져오세요.';
+    var delayed=stale||$('sync-state')?.dataset.state==='error';
+    var suffix=known&&(s.error?' · 연동 오류':stale?' · 이전 집계':delayed?' · 확인 지연':s.handoverStatusVersion===2&&!s.pendingCount&&s.lastSuccessAt?' · 전송 정상':'');
+    $('handover-pending').textContent=known?'Handover 대기 '+s.pendingCount+'건'+suffix:'Handover 대기 미확인';
+    $('handover-pending').dataset.state=!known?'unknown':s.error?'error':delayed||s.pendingCount?'waiting':'done';
+    $('handover-checked').textContent=known?(delayed?'최신 상태 확인 지연 · ':'대기 확인 ')+time(s.checkedAt):'대기 현황은 동기화로 확인';
+    var referenceError=s?.referenceSync?.error,refState=$('work-reference-sync');
+    if(refState){refState.hidden=!referenceError;refState.textContent=referenceError?'병원 기준정보 갱신 실패 · 재시도 예정':'';}
+    var detail=known?'확인 시각: '+time(s.checkedAt)+'\n대기 '+s.pendingCount+'건 / 전송 이벤트 '+s.pendingEvents+'개'+(s.failedCount?' / 원본 확인 필요 '+s.failedCount+'건':'')+(s.oldestPendingAt?'\n최초 대기: '+time(s.oldestPendingAt):'')+(s.lastSuccessAt?'\n마지막 전송 성공: '+time(s.lastSuccessAt):'')+(s.error?'\n전송 오류: '+s.error:'')+(stale?'\n10분 이상 지난 집계입니다. 동기화하여 확인하세요.':'')+'\nHandover 저장 직후 대기 집계를 전달하고, 결과는 약 5분 간격으로 최대 20건씩 전달합니다. 이 PC의 동기화 버튼은 서버에 반영된 최신 현황을 가져옵니다. 대기 0건은 전송 대기가 없다는 뜻이며 모든 접수의 완료를 뜻하지 않습니다.':'서버에서 확인한 대기 현황이 아직 없습니다. 확인 전에는 0건으로 표시하지 않습니다. 동기화 버튼으로 최신 집계를 가져오세요.';
+    $('handover-status-detail').textContent=detail+(referenceError?'\n병원 기준정보 갱신 오류: '+referenceError:'');
   }
   function err(id,message){$(id).textContent=message||'';$(id).hidden=!message;}
   function updatePending(){ $('pending').hidden=!pending; $('retry').disabled=busy||bulkWorking;updateSelection();updateRosterControls(); }
