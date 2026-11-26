@@ -524,13 +524,14 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
       if(action==='work_references_refresh'){
         try{await store.checkAccess({uid:verified.uid||'',name:verified.name||'',level:verified.level||0});}
         catch{return fail('업무관리 접근 권한이 없습니다.',403);}
+        const snapshotStartedAt=new Date().toISOString();
         const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),28000);
         try{
           // Existing authenticated GAS read endpoint. Keep operational sync on KV;
           // only this explicit DB-refresh action reads the original spreadsheet.
           const url=new URL(WORK_GAS_URL);url.searchParams.set('action','hospdbrich');url.searchParams.set('force','1');url.searchParams.set('token',String(p.token||''));
           const upstreamAt=performance.now(),response=await fetch(url,{signal:ctl.signal,redirect:'follow'}),body=await response.json(),upstreamMs=Math.round(performance.now()-upstreamAt);
-          if(!body.success||!Array.isArray(body.data))throw new Error('병원정보DB 조회 실패');
+          if(!body.success||!Array.isArray(body.data)||!body.data.length||body.count!==undefined&&body.count!==body.data.length)throw new Error('병원정보DB 조회 실패');
           const existing=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
           const hospitals=[];
           for(const row of body.data){
@@ -539,7 +540,7 @@ async function workForward(action: string, p: Record<string, unknown>): Promise<
             const id=previous?.id||'hosp_'+[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(key))))].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);
             hospitals.push({id,key,name:String(row.name||'').trim(),sn:String(row.sn||'').trim(),region:String(row.region||'').trim(),sales:String(row.sales||'').trim(),asType:String(row.asType||'').trim(),ncare:String(row.ncare||'').trim()});
           }
-          await store.bridge('references',{hospitals,references:{referenceCheckedAt:new Date().toISOString()}});
+          await store.bridge('references',{hospitals,hospitalCount:hospitals.length,snapshotStartedAt,references:{referenceCheckedAt:new Date().toISOString()}});
           const data=await store.handle({action:'work_sync',revision:String((await store.status()).seq)},{uid:verified.uid||'',name:verified.name||'',level:verified.level||0});
           return workReply({body:data as WorkBody,status:200,upstreamMs},'kv-references',started);
         }catch{return fail('병원정보DB 최신 조회에 실패했습니다. 기존 값은 보관되어 있습니다. 다시 시도하세요.',502);}
