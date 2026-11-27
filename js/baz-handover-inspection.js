@@ -151,12 +151,13 @@
   after.after(panel);
  }
  function create(options){
-  const {requestId,storage,owner,checkAccount,auth,api,flow,session,handover,url,source,link,measure}=options;
+  const {requestId,storage,owner,checkAccount,auth,api,flow,session,handover,url,source,link,measure,readDraft}=options;
   const key=requestKey(owner,requestId);
   const groupKey=key+':devices',primaryTask='handover-'+requestId;
   const taskIdFor=slot=>slot===0?primaryTask:primaryTask+'-device-'+(slot+1);
   const entryKey=taskId=>taskId===primaryTask?key:key+':'+taskId;
   const entry=taskId=>JSON.parse(storage.getItem(entryKey(taskId))||'null');
+  const linking=new Map();
   let request,records=[];
 
   function slots(){
@@ -185,9 +186,28 @@
    if(!result.success||result.request?.id!==requestId||result.request.deletedAt||result.request.status==='취소')
     throw new Error(result.error||'접수 정보를 확인하지 못했습니다.');
    records=result.records||[];
-   if(!slots().some(slot=>entry(taskIdFor(slot)))&&records.length)
-    throw new Error('이 접수에 저장된 현장 기록이 있습니다. 접수 관리에서 기존 내역서를 이어서 작성하세요.');
    request=result.request;
+   if(records.length){
+    const claimed=new Set(deviceSlots.map(slot=>entry(taskIdFor(slot))?.id).filter(Boolean));
+    const unclaimed=records.filter(record=>flow.valid(record.recordId)&&!claimed.has(record.recordId));
+    for(const slot of unclaimed.length?deviceSlots:[]){
+     const taskId=taskIdFor(slot);
+     if(entry(taskId)||!readDraft)continue;
+     const draft=(await readDraft(taskId))?.data;
+     checkAccount();
+     if(!draft?.basic)continue;
+     const matches=unclaimed.filter(record=>!claimed.has(record.recordId)&&
+      (!draft.handover?.recordId||draft.handover.recordId===record.recordId)&&
+      flow.sameInspectionIdentity(draft.basic,{hospital:request.hospitalName,date:record.date,sn:record.sn}));
+     if(matches.length!==1)continue;
+     const record=matches[0];
+     storage.setItem(entryKey(taskId),JSON.stringify({id:record.recordId,payload:{sn:record.sn},state:'confirmed',recovered:true}));
+     claimed.add(record.recordId);
+    }
+    if(!claimed.size)throw Object.assign(new Error('이 접수에 저장된 현장 기록이 있습니다. 기존 내역서에서 이어서 발행하세요.'),{
+     records:records.filter(record=>flow.valid(record.recordId)),requestId
+    });
+   }
    return request;
   }
 
@@ -266,7 +286,7 @@
    if(!draft.types.includes('A/S')&&!draft.types.includes('장비 점검'))
     throw new Error('A/S 또는 장비 점검을 선택해 주세요.');
    const previous=entry(taskId),form=toHandover(draft,fields,previous,taskId);
-   if(previous){
+   if(previous&&!previous.recovered){
     const payload=handover.buildPayload(form,{reqId:previous.id});
     delete payload.token;
     if(JSON.stringify(previous.payload)!==JSON.stringify(payload))
@@ -278,6 +298,14 @@
   async function prepare(draft,fields,taskId,{deferLink=false}={}){
    const {previous,form}=validateDraft(draft,fields,taskId);
    const journal=entryKey(taskId);
+   const identity={hospital:form.hosp,date:form.date,sn:form.sn};
+   if(previous?.recovered){
+    const receipt=await source({recordId:previous.id,...identity});
+    checkAccount();
+    const reference=checkedReference(draft,previous.id,identity,receipt);
+    storage.setItem(journal,JSON.stringify({...previous,receipt,linkedVersion:receipt.version}));
+    return deferLink?{reference}:{reference,linking:Promise.resolve()};
+   }
    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key+'|'+taskId));
    const id=Array.from(new Uint8Array(digest).slice(0,16),byte=>byte.toString(16).padStart(2,'0')).join('');
    const payload=handover.buildPayload(form,{reqId:id});
@@ -299,20 +327,20 @@
      entry={...entry,id,payload,receipt,state:'confirmed'};
      storage.setItem(journal,JSON.stringify(entry));
     }
-    const identity={hospital:form.hosp,date:form.date,sn:form.sn};
-    receipt=receipt||(deferLink?entry.receipt:null)||await source({recordId:id,...identity});
+    receipt=receipt||entry.receipt||await source({recordId:id,...identity});
     checkAccount();
-    const previousReceipt=draft.handover?.deliveryReceipt;
-    if(previousReceipt?.basis?.standard?.fingerprint!==undefined&&
-       previousReceipt.basis.standard.fingerprint!==receipt?.basis?.standard?.fingerprint)
-     throw new Error('시트의 원본 내용이 변경되었습니다. 서명과 변경 내용을 기존 내역서에서 확인하세요.');
-    const reference=session.sourceReference({requestId,recordId:id,identity},receipt,draft.basic,flow);
-    if(deferLink){
-     if(!entry.receipt)storage.setItem(journal,JSON.stringify({...entry,receipt}));
-     return {reference};
-    }
-    return {reference,linking:Promise.resolve().then(()=>link({requestId,recordId:id,...identity,sheetVersion:receipt.version}))};
+    const reference=checkedReference(draft,id,identity,receipt);
+    if(!entry.receipt)storage.setItem(journal,JSON.stringify({...entry,receipt}));
+    return deferLink?{reference}:{reference,linking:linkDevice(taskId,reference)};
    }finally{finishSheet({recordId:id});}
+  }
+
+  function checkedReference(draft,id,identity,receipt){
+   const previous=draft.handover?.deliveryReceipt;
+   if(previous?.basis?.standard?.fingerprint!==undefined&&
+      previous.basis.standard.fingerprint!==receipt?.basis?.standard?.fingerprint)
+    throw new Error('시트의 원본 내용이 변경되었습니다. 서명과 변경 내용을 기존 내역서에서 확인하세요.');
+   return session.sourceReference({requestId,recordId:id,identity},receipt,draft.basic,flow);
   }
 
   function accept(data,id){
@@ -374,12 +402,15 @@
    const saved=entry(taskId),version=reference.deliveryReceipt.version;
    if(saved?.id!==reference.recordId||saved.state!=='confirmed')throw new Error('이 장비의 시트 기록을 확인하지 못했습니다.');
    if(saved.linkedVersion===version)return;
+   if(linking.has(taskId))return linking.get(taskId);
    const finish=measure('pdf_delivery_link');
-   try{
+   const pending=(async()=>{
     await link({requestId,recordId:saved.id,...reference.identity,sheetVersion:version});
     checkAccount();
     storage.setItem(entryKey(taskId),JSON.stringify({...entry(taskId),linkedVersion:version}));
-   }finally{finish({recordId:saved.id});}
+   })().finally(()=>{linking.delete(taskId);finish({recordId:saved.id});});
+   linking.set(taskId,pending);
+   return pending;
   }
 
   function rememberAttempt(taskId,uploadId){

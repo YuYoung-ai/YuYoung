@@ -22,7 +22,7 @@
   function progress(s,stage,value){s.stages[stage]=value;if(visible(s)&&options.onProgress)options.onProgress({...s.stages},s.context);}
   function notice(s,text){message(s,text+(s.storageWarning?' · 이 기기에 재전송 파일을 보관하지 못했습니다. 화면을 닫기 전에 PDF를 따로 저장하세요.':''));}
   async function persist(s){
-   if(!outbox){if(s.context.batchDevice)s.storageWarning=true;return;}try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
+   if(!outbox){if(s.context.requireSheetLink||s.context.batchDevice)s.storageWarning=true;return;}try{if(!s.ownerKey)s.ownerKey=await ownerKey(s.owner);checkAccount(s.owner);
     await outbox.put({key:s.ownerKey+':'+s.uploadId,owner:s.ownerKey,blob:s.blob||null,filename:s.filename,context:{...s.context},uploadId:s.uploadId,sha256:s.sha256||'',baseRevision:s.baseRevision??null,saved:s.saved||null,recorded:!!s.recorded,recovering:!!s.recovering,uploadAttempted:!!s.uploadAttempted,preparationRetryable:!!s.preparationRetryable,autoResumeEligible:!!s.autoResumeEligible,needsTarget:!!s.needsTarget,stages:{...s.stages},updatedAt:Date.now()});s.storageWarning=false;
    }catch{s.storageWarning=true;}
   }
@@ -182,9 +182,9 @@
      s.sha256=s.sha256||await hash(s.blob);
      s.uploadAttempted=true;
      await persist(s);
-     if(s.context.batchDevice&&s.storageWarning)throw new Error('PDF를 기기에 보관하지 못했습니다. 저장 공간을 확인한 뒤 이어서 진행하세요.');
+     if((s.context.requireSheetLink||s.context.batchDevice)&&s.storageWarning)throw new Error('PDF를 기기에 보관하지 못했습니다. 저장 공간을 확인한 뒤 이어서 진행하세요.');
      base64=await encoded(s.blob,s);
-     if(s.context.batchDevice)options.onBeforeBatchSubmit?.(s.context);
+     if(s.context.requireSheetLink)options.onBeforeSubmit?.(s.context);
     }finally{prepared?.({bytes:s.blob.size,jobId:s.uploadId});}
     notice(s,'PDF 저장 및 접수 댓글 연결 중…');progress(s,'drive','working');
     // Observe a slow submission once. The read never adopts a receipt or
@@ -434,13 +434,13 @@
     try{result=await call(id?'inspection_pdf_job_status':'inspection_pdf_job_lookup',
       id?{uploadId:id}:{recordId:context.recordId,hospital:context.hospital,date:context.date,sn:context.sn},owner);}
     catch(error){if(!context.batchDevice&&(error.code==='DELIVERY_DISABLED'||/지원하지 않는 PDF 요청/.test(error.message)))return false;throw error;}
-    if(!result.received&&!(id&&result.state==='receiving')||id&&result.jobId!==id||
+    if(!result.received&&result.state!=='receiving'||id&&result.jobId!==id||
       result.recordId!==context.recordId||current!==previous||options.isCurrent&&!options.isCurrent(context)||
       context.requestId&&result.requestId&&context.requestId!==result.requestId){
      if(context.batchDevice&&result.state!=='missing')throw new Error('이 장비의 PDF 전송 기록을 확인할 수 없습니다. 원래 접수와 기록을 확인하세요.');
      return false;
     }
-    const s=select({context:{...context,transferVersion:2,requestId:result.requestId||context.requestId},owner,uploadId:result.jobId,sha256:result.sha256,
+    const s=select({context:{...context,transferVersion:2,requestId:result.requestId||context.requestId,deliveryUploadId:result.jobId},owner,uploadId:result.jobId,sha256:result.sha256,
       filename:result.filename,uploadAttempted:true,needsTarget:result.code==='TARGET_PENDING'&&!result.requestId&&!context.requestId,stages:{pdf:'done'},busy:false});
     if(visible(s)&&options.onRecovered)options.onRecovered({filename:s.filename,saved:result.pdf?{pdf:result.pdf}:null,bytes:result.bytes});
     await showJob(s,result);

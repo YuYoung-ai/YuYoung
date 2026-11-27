@@ -27,7 +27,7 @@ const api=window.BazInspectionPdf;
 const height=3000,width=794,scale=2,step=Math.floor(281/194*width*scale);
 const pages=await api.capturePages(async viewport=>{
  assert.ok(surfaces.every(c=>c.width===0&&c.height===0),'previous surface is freed before the next capture');
- draws.push(viewport);const c={width:width*scale,height:Math.round(viewport.height*scale)};surfaces.push(c);return c;
+ draws.push(viewport);const c={width:width*scale,height:Math.round(viewport.height*scale),toDataURL:()=> 'data:image/jpeg;base64,body'};surfaces.push(c);return c;
 },height,width,scale);
 assert.equal(pages.length,Math.ceil(height*scale/step));
 assert.equal(draws.reduce((sum,p)=>sum+p.height,0),height,'all source rows are covered exactly once');
