@@ -6,7 +6,7 @@
  // Keep persisted IDs stable. Slot 3 is retired, never relabel it as an HP photo.
  const PHOTO_ORDER=[0,4,1,2,5,6];
  function normalizePhotos(photos){const used=new Set();return photos.map(p=>{if(p.slot===3)return {...p};const slot=PHOTO_ORDER.includes(p.slot)&&!used.has(p.slot)?p.slot:null;if(slot!==null)used.add(slot);return {...p,slot};});}
- function bounded(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms);})]).finally(()=>clearTimeout(timer));}
+ function bounded(promise,ms,message){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(typeof message==='string'?new Error(message):message),ms);})]).finally(()=>clearTimeout(timer));}
  function load(src,ready){
   if(ready())return Promise.resolve();if(scripts.has(src))return scripts.get(src);
   const job=new Promise((resolve,reject)=>{
@@ -47,20 +47,59 @@
   for(let y=0;y<canvas.height;y+=step){const part=document.createElement('canvas');part.width=canvas.width;part.height=Math.min(step,canvas.height-y);part.getContext('2d').drawImage(canvas,0,y,canvas.width,part.height,0,0,canvas.width,part.height);pages.push({data:part.toDataURL('image/jpeg',.92),height:CW*part.height/part.width});part.width=part.height=0;}
   return pages;
  }
+ function renderPage(target,options,cloned){
+  const doc=target.ownerDocument;
+  const existing=new Set(doc.body.querySelectorAll('iframe.html2canvas-container'));
+  const pending=root.html2canvas(target,{...options,
+   // Preserve the source sheet and its CSS. Other body subtrees contain
+   // images and canvases that WebKit would otherwise clone and load.
+   ignoreElements:node=>doc.body.contains(node)&&!node.contains(target)&&!target.contains(node),
+   onclone:cloned
+  });
+  // html2canvas inserts its clone before its first await.
+  const frame=Array.from(doc.body.querySelectorAll('iframe.html2canvas-container')).find(node=>!existing.has(node));
+  return {pending,dispose:()=>frame?.remove()};
+ }
  // Capture and release one A4-sized surface at a time. A tall 2x canvas can
  // terminate WebKit before JavaScript has a chance to report an error.
- async function capturePages(render,height,width,scale){
+ async function capturePages(render,height,width,scale,{canRetry,measure,timeoutMs=45000}={}){
   const step=Math.floor(CH/CW*width*scale),total=Math.ceil(height*scale);
   if(!Number.isFinite(total)||total<1||Math.ceil(total/step)>20)throw new Error('본문이 20페이지를 초과했거나 크기를 확인할 수 없습니다. 내용을 확인해 주세요.');
   const pages=[];
+  let retried=false;
   for(let y=0;y<total;y+=step){
-   let canvas,expired=false;
-   const pending=Promise.resolve().then(()=>render({y:y/scale,height:Math.min(step,total-y)/scale}));
-   pending.then(c=>{if(expired)c.width=c.height=0;},()=>{});
-   try{
-    canvas=await bounded(pending,45000,'본문 페이지 생성이 지연되고 있습니다. 화면을 유지하고 다시 생성해 주세요.');
-    pages.push(...bodyPages(canvas));
-   }finally{expired=true;if(canvas)canvas.width=canvas.height=0;}
+   const viewport={y:y/scale,height:Math.min(step,total-y)/scale};
+   for(let attempt=0;;attempt++){
+    const stats={count:pages.length+1,pass:attempt+1};
+    const cloneDone=measure?.('pdf_body_clone');
+    let drawDone,canvas,expired=false;
+    const rendering=render(viewport,()=>{if(!expired){cloneDone?.(stats);drawDone=measure?.('pdf_body_draw');}});
+    const pending=Promise.resolve(rendering.pending||rendering);
+    pending.then(c=>{if(expired)c.width=c.height=0;},()=>{});
+    const deadline=new Error('본문 페이지 생성이 지연되고 있습니다. 화면을 유지하고 다시 생성해 주세요.');
+    deadline.code='PDF_BODY_TIMEOUT';
+    const timeout=measure?.('pdf_body_timeout');
+    try{
+     canvas=await bounded(pending,attempt?8000:timeoutMs,deadline);
+     drawDone?.(stats);
+     const encode=measure?.('pdf_body_encode');
+     try{
+      const data=canvas.toDataURL('image/jpeg',.92);
+      if(!canvas.width||!canvas.height||data==='data:,')throw new Error('본문 페이지 이미지를 만들지 못했습니다.');
+      pages.push({data,height:CW*canvas.height/canvas.width});
+     }finally{encode?.(stats);}
+     break;
+    }catch(error){
+     if(error!==deadline)throw error;
+     timeout?.({...stats,cloneReady:!!drawDone});
+     if(retried||!canRetry?.())throw error;
+     retried=true;
+    }finally{
+     expired=true;
+     rendering.dispose?.();
+     if(canvas)canvas.width=canvas.height=0;
+    }
+   }
    await new Promise(resolve=>setTimeout(resolve,0));
   }
   return pages;
@@ -118,5 +157,5 @@
   if(cachedBody?.html===html)return cachedBody.pages;
   const c=await render(html,undefined,true);try{const pages=Array.isArray(c)?c:bodyPages(c);cachedBody={html,pages};return pages;}finally{if(!Array.isArray(c))c.width=c.height=0;}
  }
- root.BazInspectionPdf={libraries,assemble,body,waitImages,fit,photoGroups,normalizePhotos,PHOTO_LABELS,PHOTO_ORDER,bodyPages,capturePages,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
+ root.BazInspectionPdf={libraries,assemble,body,waitImages,fit,photoGroups,normalizePhotos,PHOTO_LABELS,PHOTO_ORDER,bodyPages,capturePages,renderPage,reset(){cachedBody=null;labels.clear();},MAX_BYTES};
 })(window);

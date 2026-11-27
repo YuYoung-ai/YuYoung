@@ -90,11 +90,11 @@ try{
  await page.goto(address);
  const form=page.frameLocator('#inspectionForm');
  const frame=()=>page.frames().find(f=>f.url().includes('inspection.html?combined='));
- const ready=async()=>{
+ const ready=async(buttonText='시트 기록 및 PDF 발행')=>{
   await form.locator('#generateBtn').waitFor({state:'attached'});
   const state=await frame().evaluate(async()=>await inspectionSessionReady);
   assert.equal(state.success,true,state.error||errors.join('; '));
-  assert.equal(await form.locator('#generateBtn').textContent(),'시트 기록 및 PDF 발행');
+  assert.equal(await form.locator('#generateBtn').textContent(),buttonText);
  };
  const render=()=>frame().evaluate(()=>{
   BazInspectionPdf.libraries=async()=>{};
@@ -203,36 +203,39 @@ try{
  assert.match(await form.locator('#pdfUploadStatus').textContent(),/합성 접수 연결 지연/);
  assert.equal(page.url(),address,'the form stays open while delivery is pending');
  await page.reload();
- await ready();
+ await ready('PDF 발행 이어서 진행');
  await render();
  await checkAction('내부 세척',equipmentDetail);
- await frame().evaluate(()=>generatePDF(false));
- assert.deepEqual(queries,[writes[0].reqId]);
- assert.equal(writes.length,1);assert.equal(uploads.length,0);
- assert.equal(page.url(),address,'the entry stays open until delivery and comment attachment succeed');
  assert.equal(await form.getByRole('link',{name:'기존 내역서에서 이어쓰기'}).getAttribute('href'),
   'inspection.html?request='+request.id+'&record='+source.recordId);
  await Promise.all([
   page.waitForURL(base+'/hospital-work.html?request='+request.id),
-  form.locator('#pdfUploadRetry').click()
+  form.locator('#generateBtn').click()
  ]);
  assert.equal(await page.locator('main').innerText(),'CS 서비스 현황');
+ assert.deepEqual(queries,[writes[0].reqId]);
  assert.equal(writes.length,1);assert.equal(uploads.length,1);
  await page.goto(address);
- await ready();
+ await ready('PDF 발행 이어서 진행');
  const legacyCurrent=await frame().evaluate(async()=>{
   const repo=BazInspectionRepository.create({indexedDB,storage:localStorage,owner:draftRepository.owner});
   await repo.ready();return repo.current();
  });
  assert.equal(legacyCurrent,null);
  await page.reload();
- await ready();
+ await ready('PDF 발행 이어서 진행');
  await checkAction('내부 세척',equipmentDetail);
- await frame().evaluate(()=>localStorage.removeItem('baz_handover_inspection_v1:'+draftRepository.owner+':'+combinedRequest));
+ await frame().evaluate(async()=>{
+  const task=await draftRepository.get(_currentTaskId);
+  await draftRepository.remove(task);
+  localStorage.removeItem('baz_handover_inspection_v1:'+_storageIdentity+':'+combinedRequest);
+ });
  await page.reload();
  await form.locator('#generateBtn').waitFor({state:'attached'});
  const rejected=await frame().evaluate(()=>inspectionSessionReady.then(()=>'',error=>error.message));
  assert.match(rejected,/저장된 현장 기록/);
+ assert.equal(await form.getByRole('link',{name:/기존 시트 기록에서 PDF 이어서 발행/}).getAttribute('href'),
+  'inspection.html?request='+request.id+'&record='+source.recordId);
  assert.equal(writes.length,1);
  assert.deepEqual(errors,[]);
  console.log(engine+' PASS: shared replacement options, A/S defaults, draft recovery, one Sheet row after lost response, link retry, one PDF submit and safe legacy fallback');

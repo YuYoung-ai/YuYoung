@@ -649,9 +649,9 @@
 <!-- PDF 렌더용 (화면 밖) -->
 <div id="pdfSheet"></div>
 
-<script src="js/baz-perf.js?v=399"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=316"></script><script src="js/baz-inspection-share.js"></script>
+<script src="js/baz-perf.js?v=401"></script><script src="js/baz-inspection-media.js?v=302"></script><script src="js/baz-inspection-pdf.js?v=401"></script><script src="js/baz-inspection-share.js"></script>
 <script src="js/baz-browser-storage.js?v=342"></script><script src="js/baz-inspection-repository.js?v=352"></script><script src="js/baz-inspection-storage-ui.js?v=342"></script>
-<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=399"></script>
+<script src="js/baz-inspection-outbox.js?v=342"></script><script src="js/baz-inspection-upload.js?v=401"></script>
 <script src="js/baz-inspection-hospitals.js?v=360"></script><script src="js/baz-autocomplete.js?v=257"></script>
 <script src="js/baz-handover-parts.js?v=385"></script>
 
@@ -1782,7 +1782,7 @@ function cloudConfigured(){ return !!cloudUrl(); }
 function authToken(){ try{ return (window.BazAuth&&BazAuth.token&&BazAuth.token())||''; }catch(e){ return ''; } }
 const pdfPublisher=window.BazInspectionUpload.create({url:HANDOVER_URL,token:authToken,isCurrent:inspectionIsCurrent,outbox:window.BazInspectionOutbox.create((()=>{try{return window.indexedDB;}catch{return null;}})(),window.BazWorkFlow.sameInspectionIdentity),
 onStatus(text){if(els.loading.hasAttribute('data-publishing')&&text)showLoading(text);},
-onBeforeBatchSubmit(context){combinedFlow.rememberAttempt(context.taskId,context.deliveryUploadId);},
+onBeforeSubmit(context){combinedFlow.rememberAttempt(context.taskId,context.deliveryUploadId);},
 repairTarget(context){
   const relink=window.BazInspectionRelink;
   return context.requireSheetLink?relink.ensureSheetLink({...context,sheetVersion:context.sourceVersion}):relink.ensureLink(context);
@@ -1828,7 +1828,7 @@ async function restorePendingPdf({duringGeneration=false,show=true,deliveryUploa
   if(combinedFlow&&handoverReference?.deliveryReceipt?.version){
     context.requireSheetLink=true;
     context.sourceVersion=handoverReference.deliveryReceipt.version;
-    context.batchLinkConfirmed=batchDevice&&combinedFlow.entry(context.taskId)?.linkedVersion===context.sourceVersion;
+    context.batchLinkConfirmed=combinedFlow.entry(context.taskId)?.linkedVersion===context.sourceVersion;
   }
   const restored=await pdfPublisher.restore(context)||inspectionIsCurrent(context)&&await pdfPublisher.restoreServer(context);
   if(restored&&inspectionIsCurrent(context)){
@@ -1840,21 +1840,35 @@ async function restorePendingPdf({duringGeneration=false,show=true,deliveryUploa
 
 async function checkCombinedPublication(batchDevice){
   const context=inspectionContext(),entry=combinedFlow.entry(context.taskId);
-  if(!entry?.pdfStarted||!entry.id||context.recordId!==entry.id||context.requestId!==combinedRequest)return {};
+  if(!(entry?.pdfStarted||entry?.recovered)||context.recordId!==entry.id||context.requestId!==combinedRequest)return {};
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);
   let status;
   try{status=await combinedFlow.pdfStatus(context,{signal:controller.signal});}
   catch{return {};}
   finally{clearTimeout(timer);}
   const pdf=status.source.pdf;
+  const uploadId=entry.uploadId||(entry.recovered?pdf?.uploadId:null);
   if(!status.pdfStored||!status.commentAttached||!status.sourceLinked||
-     !entry.uploadId||entry.uploadId!==pdf?.uploadId||!inspectionIsCurrent(context))
-    return {checked:true,pdfStored:status.pdfStored};
+     !uploadId||uploadId!==pdf?.uploadId||!inspectionIsCurrent(context))
+    return {checked:true,pdfStored:status.pdfStored,uploadId};
   const complete=await pdfPublisher.confirmPublished({
-    ...context,batchDevice,deliveryUploadId:entry.uploadId,
+    ...context,batchDevice,deliveryUploadId:uploadId,
     sourceBasis:pdf.sourceBasis||context.sourceBasis
   },pdf);
   return {checked:true,complete,pdfStored:true};
+}
+
+async function resumeCombinedPdf(batchDevice){
+  const entry=combinedFlow.entry(_currentTaskId);
+  if(!entry?.pdfStarted&&!entry?.recovered)return false;
+  const published=await checkCombinedPublication(batchDevice);
+  if(published.complete)return true;
+  const restored=!!entry.uploadId&&batchDevice&&pdfPublisher.batchResult(_currentTaskId)?.uploadId===entry.uploadId||
+    await restorePendingPdf({duringGeneration:true,show:!batchDevice,deliveryUploadId:published.uploadId||entry.uploadId,batchDevice});
+  if(restored){await pdfPublisher.retry();return true;}
+  if(entry.pdfAttempted||published.pdfStored||!published.checked)
+    throw Object.assign(new Error('기존 PDF의 수신·댓글 연결을 아직 확인하지 못했습니다. 발행 상태를 다시 확인해 주세요.'),{pending:true});
+  return false;
 }
 
 function combinedDeviceInfo(slot){
@@ -1863,7 +1877,7 @@ function combinedDeviceInfo(slot){
   const pdf=task?.data?.pdfDocument;
   const complete=!!(pdf?.url&&entry?.id&&entry.id===task.data.handover?.recordId&&task.data.handover.requestId===combinedRequest);
   return {index:slot,sn:(active?v('serialNo'):task?.serial)||entry?.payload?.sn||'',complete,
-    progress:combinedProgress.get(id)||(entry?.pdfStarted?'PDF 확인 대기':entry?.state==='confirmed'?'시트 기록 완료':entry?'시트 확인 대기':''),
+    progress:combinedProgress.get(id)||(entry?.pdfStarted?'PDF 확인 대기':entry?.linkedVersion?'시트 기록·접수 연결 완료 · PDF 대기':entry?.state==='confirmed'?'시트 기록 완료':entry?'시트 확인 대기':''),
     pdfUrl:complete&&/^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]+\/view(?:\?|$)/.test(pdf.url)?pdf.url:'',
     removable:slot!==0&&!entry};
 }
@@ -1885,10 +1899,12 @@ function refreshCombinedDevices(){
   }
   document.getElementById('serialNo').readOnly=!!combinedFlow.entry(combinedFlow.taskIdFor(combinedActiveSlot));
   const generate=document.getElementById('generateBtn');
-  if(info.length===1)generate.textContent=combinedFlow.entry(combinedFlow.taskIdFor(0))?.state==='pending'
-    ?'시트 저장 확인·이어서 발행':'시트 기록 및 PDF 발행';
+  const entry=combinedFlow.entry(combinedFlow.taskIdFor(combinedActiveSlot));
+  if(info.length===1)generate.textContent=entry?.pdfStarted?'PDF 발행 이어서 진행':entry?.linkedVersion||entry?.recovered
+    ?'PDF 발행 재시도':entry?'시트 저장 확인·이어서 발행':'시트 기록 및 PDF 발행';
   else if(allComplete)generate.textContent='전체 발행 완료';
   else if(info.some(slot=>slot.complete))generate.textContent='남은 장비 발행';
+  else if(commonLocked)generate.textContent='남은 단계 이어서 발행';
   else generate.textContent='장비 '+info.length+'대 모두 발행';
   generate.disabled=combinedDeviceBusy||info.length>1&&allComplete;
   const fallback=document.getElementById('combinedFallback'),record=handoverReference?.recordId;
@@ -2030,20 +2046,13 @@ async function runCombinedStep(device,stage,run){
 async function publishCombinedDevice(device,prepared,prepareNext){
   const prior=combinedFlow.entry(device.taskId);
   let restored=false;
-  if(prior?.pdfStarted){
+  if(prior?.pdfStarted||prior?.recovered){
     const linkFailure=await prepared.linking;
     if(linkFailure)throw linkFailure;
-    const published=await checkCombinedPublication(true);
-    if(published.complete)return;
-    restored=!!prior.uploadId&&pdfPublisher.batchResult(device.taskId)?.uploadId===prior.uploadId;
-    if(!restored)restored=await restorePendingPdf({show:false,deliveryUploadId:prior.uploadId,batchDevice:true});
-    if(!restored&&(prior.pdfAttempted||published.pdfStored)){
-      throw Object.assign(new Error('기존 PDF의 수신·댓글 연결을 아직 확인하지 못했습니다.'),{pending:true});
-    }
-    if(!restored&&!published.checked)throw Object.assign(new Error('기존 PDF의 저장 결과를 확인하지 못했습니다.'),{pending:true});
+    handoverReference=prepared.reference;
+    restored=await resumeCombinedPdf(true);
   }
-  if(restored)await pdfPublisher.retry();
-  else await generatePDF({batchDevice:true,batchPreparation:prepared,batchDraft:device.draft,batchAsLine:device.asLine,
+  if(!restored)await generatePDF({batchDevice:true,batchPreparation:prepared,batchDraft:device.draft,batchAsLine:device.asLine,
     batchBody:device.prefetch,batchPrepareNext:prepareNext});
   if(combinedDeviceInfo(device.slot).complete)return;
   const error=pdfPublisher.batchResult(device.taskId)?.error;
@@ -2085,13 +2094,16 @@ async function runCombinedPublication(){
     const remaining=new Map();
     function markFailure(device,error){
       remaining.set(device.slot,error);
-      setCombinedProgress(device.taskId,error.code==='OFFLINE'?'네트워크 연결 대기':'이어서 진행 필요');
+      const entry=combinedFlow.entry(device.taskId);
+      setCombinedProgress(device.taskId,error.code==='OFFLINE'?'네트워크 연결 대기':
+        error.code==='PDF_BODY_TIMEOUT'&&entry?.linkedVersion?'시트 기록·접수 연결 완료 · PDF 발행 재시도':'이어서 진행 필요');
     }
     let sheetQueue=Promise.resolve();
     for(const device of devices){
       setCombinedProgress(device.taskId,'시트 기록 대기');
       device.preparation=sheetQueue.then(async()=>{
-        const prepared=await runCombinedStep(device,'시트 기록 중',()=>combinedFlow.prepare(
+        const alreadyLinked=combinedFlow.entry(device.taskId)?.linkedVersion;
+        const prepared=await runCombinedStep(device,alreadyLinked?'시트 기록·접수 연결 완료 · PDF 대기':'시트 기록 중',()=>combinedFlow.prepare(
           device.draft,device.fields,device.taskId,{deferLink:true}));
         const linking=runCombinedStep(device,'시트 기록 완료 · 접수 연결 중',()=>
           combinedFlow.linkDevice(device.taskId,prepared.reference)
@@ -2167,7 +2179,7 @@ function publishCombinedDevices(){
     if(completed)openPublishedRequest(combinedRequest);
   };
   const running=navigator.locks?navigator.locks.request(
-    'baz-inspection:'+draftRepository.owner+':'+combinedRequest,{ifAvailable:true},lock=>{
+    combinedPublishLock(),{ifAvailable:true},lock=>{
       if(lock)return publish();
       combinedDevicePanel.status('다른 창에서 이 접수의 장비를 발행 중입니다.');
     }
@@ -2181,6 +2193,8 @@ function publishCombinedDevices(){
   });
   return combinedBatchRequest;
 }
+
+function combinedPublishLock(){return 'baz-inspection:'+draftRepository.owner+':'+combinedRequest;}
 
 function resumeCombinedBatch(){
   if(inspectionPhase==='ready'&&combinedFlow?.slots().length>1&&combinedFlow.batchActive()&&navigator.onLine&&!document.hidden){
@@ -2669,7 +2683,7 @@ function buildSheetHTML(opts){
 
 // ===== PDF 생성 헬퍼 =====
 // HTML 문자열을 오프스크린 시트에 렌더 후 html2canvas 캔버스로 변환 (메모리 정리 포함)
-async function renderSheetCanvas(html,onPlacement,paginated=false){
+async function renderSheetCanvas(html,onPlacement,paginated=false,{prefetch=false}={}){
   const sheet=els.pdfSheet;
   sheet.innerHTML=html;
   const target=sheet.firstElementChild;
@@ -2687,10 +2701,14 @@ async function renderSheetCanvas(html,onPlacement,paginated=false){
     img.style.width=(img.naturalWidth*scale)+'px';
     img.style.height=(img.naturalHeight*scale)+'px';
   });
-  const render=viewport=>html2canvas(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
-    width:SHEET_WIDTH, windowWidth:SHEET_WIDTH,...viewport});
-  if(paginated)return await window.BazInspectionPdf.capturePages(render,target.getBoundingClientRect().height,SHEET_WIDTH,PDF_SCALE);
-  return await render({});}
+  const pdf=window.BazInspectionPdf;
+  const render=(viewport,cloned)=>pdf.renderPage(target,{scale:PDF_SCALE,backgroundColor:'#fff',useCORS:true,logging:false,
+    width:SHEET_WIDTH,windowWidth:SHEET_WIDTH,...viewport},cloned);
+  if(paginated)return await pdf.capturePages(render,target.getBoundingClientRect().height,SHEET_WIDTH,PDF_SCALE,{
+    timeoutMs:prefetch?8000:45000,canRetry:()=>!prefetch&&!document.hidden,measure:name=>BazPerf.start(name)
+  });
+  const rendering=render({});
+  try{return await rendering.pending;}finally{rendering.dispose();}}
   finally{sheet.innerHTML='';}
 }
 // 모든 페이지 하단에 ASCII 푸터(문서번호·생성일시·페이지번호) — 한글 폰트 불필요
@@ -2751,7 +2769,8 @@ async function prepareCombinedPdfBody(device){
   try{
     await BazInspectionPdf.libraries();
     const html=buildSheetHTML({...stamp,simplified,snapshot:draft,asLine:device.asLine,omitNextDate:true});
-    const pages=await BazInspectionPdf.body(html,renderSheetCanvas);
+    const pages=await BazInspectionPdf.body(html,(body,placement,paginated)=>
+      renderSheetCanvas(body,placement,paginated,{prefetch:true}));
     return {reference:prepared.reference,simplified,stamp,pages};
   }finally{measure();}
 }
@@ -2769,7 +2788,12 @@ function generatePDF(arg){
   if(trackPublish)startPublishProgress();
   pdfGenerationStatus('입력 확인 중…');
   let publishing=false;
-  _generationPromise=renderInspectionPdf(arg,deliveryStarted)
+  const render=()=>renderInspectionPdf(arg,deliveryStarted);
+  const job=trackPublish&&navigator.locks?navigator.locks.request(combinedPublishLock(),{ifAvailable:true},lock=>{
+    if(lock)return render();
+    pdfGenerationStatus('다른 창에서 이 접수의 장비를 발행 중입니다.');
+  }):render();
+  _generationPromise=job
     .then(result=>{publishing=result===true;return result;})
     .catch(e=>{
       if(generationOptions.batchPreparation)throw e;
@@ -2813,31 +2837,28 @@ async function renderInspectionPdf(arg,deliveryStarted){
   if(combinedFlow&&!preview&&!blank&&!localOnly&&!qrDraft){
     if(!opts.batchPreparation)document.querySelector('.wrap').inert=true;
     const entry=combinedFlow.entry(_currentTaskId);
-    if(!opts.batchPreparation&&handoverReference?.recordId&&entry?.pdfStarted){
-      showLoading('이전에 발행한 PDF의 전송 상태를 확인하는 중…');
-      const prior=await checkCombinedPublication(!!opts.batchDevice);
-      if(prior.complete)return true;
-      if(await restorePendingPdf({duringGeneration:true,show:!opts.batchDevice,deliveryUploadId:entry.uploadId,batchDevice:!!opts.batchDevice})){
-        if(opts.batchDevice)await pdfPublisher.retry();
-        return true;
-      }
-      if(prior.pdfStored)throw new Error('Drive에 보관된 PDF가 있습니다. 기존 내역서에서 댓글 연결 상태를 확인하세요.');
-      if(opts.batchDevice&&!prior.checked)throw new Error('이 장비의 이전 발행 결과를 확인하지 못했습니다. 같은 장비의 발행 상태를 다시 확인해 주세요.');
-    }
-    pdfGenerationStatus('시트 기록을 확인하는 중…');
-    showLoading('시트 기록을 확인하는 중…');
+    const readyForPdf=entry?.linkedVersion||entry?.recovered;
+    const preparing=readyForPdf?'기존 기록에서 PDF 발행을 준비하는 중…':'시트 기록을 확인하는 중…';
+    pdfGenerationStatus(preparing);
+    showLoading(preparing);
     const fields={item:asSubName(),code:asItemCode()};
     const prepared=opts.batchPreparation||await combinedFlow.prepare(captured,fields,_currentTaskId);
     if(opts.batchPreparation)combinedLink=prepared.linking;
-    else{
-      const linkTime=BazPerf.start('pdf_delivery_link');
-      combinedLink=prepared.linking.then(()=>null,error=>error).finally(()=>linkTime());
-    }
+    else combinedLink=prepared.linking.then(()=>null,error=>error);
     handoverReference=prepared.reference;
     captured=inspectionLinkedDraft(captured,prepared.reference);
     document.getElementById('combinedFallback').href=BazWorkFlow.url('inspection.html',combinedRequest,prepared.reference.recordId);
     document.getElementById('combinedFallback').hidden=false;
-    if(!opts.batchPreparation)bindingSave=saveCurrentTask();
+    if(!opts.batchPreparation){
+      bindingSave=saveCurrentTask();
+      if(entry?.pdfStarted||entry?.recovered){
+        showLoading('이전에 발행한 PDF의 전송 상태를 확인하는 중…');
+        const failure=await combinedLink;
+        if(failure)throw failure;
+        if(!await bindingSave)throw new Error('기존 기록의 연결을 기기에 보관한 뒤 다시 시도해 주세요.');
+        if(await resumeCombinedPdf(false))return true;
+      }
+    }
   }
   const photoSnapshot=blank?[]:captured.photos,taskId=_currentTaskId,filename=inspectionPdfFilename(captured,!!opts.batchDevice),basis=captured.handover,viewContext=inspectionContext();
   const uploadContext={...viewContext,hospital:captured.basic.hospital,date:captured.basic.inspectDate,sn:captured.basic.serialNo,recordId:basis?.recordId||'',taskId,requestId:basis?.requestId||'',taskRevision:_currentTaskRevision,pdfFormat:simplified?'simplified':'standard',requireSourceBasis:true,sourcePrepared:false,sourcePdfRevision:basis?.sourcePdfRevision??basis?.sourceSnapshot?.pdf?.revision??0};
@@ -2928,7 +2949,7 @@ async function renderInspectionPdf(arg,deliveryStarted){
       if(combinedLink){
         uploadContext.deliveryUploadId=combinedFlow.rememberPdf(uploadContext.recordId,taskId,BazInspectionSession.id());
         uploadContext.batchDevice=!!opts.batchDevice;
-        if(opts.batchPreparation)uploadContext.batchLinkConfirmed=true;
+        if(combinedFlow.entry(taskId)?.linkedVersion===uploadContext.sourceVersion)uploadContext.batchLinkConfirmed=true;
         uploadContext.requireSheetLink=true;
       }
       pdfGenerationStatus('PDF 생성 완료 · 원본 확인과 Drive·댓글 저장은 별도로 진행합니다.');
@@ -2944,7 +2965,9 @@ async function renderInspectionPdf(arg,deliveryStarted){
   }catch(e){
     if(opts.batchPreparation)throw e;
     hideLoading();
-    pdfGenerationStatus(stage+' 실패: '+e.message+'\n현재 입력을 유지했습니다. 다시 생성할 수 있습니다.');showToast(stage+' 실패: '+e.message);
+    const linked=e.code==='PDF_BODY_TIMEOUT'&&combinedFlow?.entry(taskId)?.linkedVersion;
+    pdfGenerationStatus(linked?'시트 기록·접수 연결 완료 · PDF 발행 재시도\n현재 입력을 유지했습니다.':stage+' 실패: '+e.message+'\n현재 입력을 유지했습니다. 다시 생성할 수 있습니다.');
+    showToast(stage+' 실패: '+e.message);
     console.error(e);
   }
   finally{hideLoading();els.pdfSheet.innerHTML='';_pdfBusy=false;if(!pdfPublisher.isBusy())scheduleCloudSync();totalDone({count:photoSnapshot.length});}
@@ -2992,12 +3015,12 @@ window.inspectionSessionReady=(async()=>{
   if(document.readyState==='loading')await new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true}));
   checkStorageAccount();
   if(combinedTaskId){
-   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=398')]);
+   await Promise.all([import('./js/baz-handover-core.js?v=349'),import('./js/baz-handover-inspection.js?v=401')]);
    combinedFlow=BazHandoverInspection.create({
     requestId:combinedRequest,storage:localStorage,owner:_storageIdentity,checkAccount:checkStorageAccount,
     auth:BazAuth,api:BazWorkAPI,flow:BazWorkFlow,session:BazInspectionSession,handover:BazHandover,url:HANDOVER_URL,
     source:context=>pdfPublisher.source(context),link:context=>BazInspectionRelink.ensureSheetLink(context),
-    measure:metric=>BazPerf.start(metric),warn:showToast
+    measure:metric=>BazPerf.start(metric),warn:showToast,readDraft:id=>draftRepository.get(id)
    });
    combinedRequestData=await combinedFlow.readRequest();
    const current=await draftRepository.current(),slots=combinedFlow.slots();
@@ -3048,7 +3071,19 @@ window.inspectionSessionReady=(async()=>{
  }catch(e){
   inspectionPhase='error';document.querySelector('.wrap').inert=true;sessionNotice.textContent='내역서를 열지 못했습니다. '+e.message+' 이전 작업은 보관되어 있습니다. ';
   const retry=document.createElement('button');retry.textContent='다시 불러오기';retry.onclick=()=>location.reload();sessionNotice.append(retry);
-  const list=document.createElement('a');list.href=location.pathname;list.textContent=' 일반 점검 페이지에서 보관 작업 확인';sessionNotice.append(list);draftSaveStatus('진입 확인 실패 · 이전 작업 보존');throw e;
+  if(e.records?.length){
+   const list=document.createElement('ul');
+   for(const record of e.records){
+    const item=document.createElement('li'),link=document.createElement('a');
+    link.href=BazWorkFlow.url('inspection.html',e.requestId,record.recordId);
+    link.textContent=(record.sn||'장비')+' · '+(record.hasPdf?'기존 PDF 및 댓글 확인':'기존 시트 기록에서 PDF 이어서 발행');
+    item.append(link);list.append(item);
+   }
+   sessionNotice.append(list);
+  }else{
+   const list=document.createElement('a');list.href=location.pathname;list.textContent=' 일반 점검 페이지에서 보관 작업 확인';sessionNotice.append(list);
+  }
+  draftSaveStatus('진입 확인 실패 · 이전 작업 보존');throw e;
  }
 })();window.inspectionSessionReady.catch(()=>{});
 document.getElementById('inspectionStorageBtn').onclick=()=>window.BazInspectionStorageUI.open({repository:draftRepository,ready:window.inspectionStorageReady,current:()=>_currentTaskId,save:()=>saveCurrentTask(),snapshot:()=>({...getTask(_currentTaskId),id:_currentTaskId||genTaskId(),createdAt:getTask(_currentTaskId)?.createdAt||Date.now(),updatedAt:Date.now(),status:getTask(_currentTaskId)?.status||'draft',...taskMetaFromData(collectFormData()),data:collectFormData()}),cloudGet,checkAccount:checkStorageAccount,outbox:window.BazInspectionOutbox.create(window.indexedDB),onChange(){renderTaskList();updateTaskStatusBar();}});
